@@ -1,0 +1,28 @@
+GET /reproxy-tereproxy-test/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:5140
+User-e:!bytexy-tereproxy-test/half:5140
+User-e:!bytexy-tereproxy-test/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:5140
+User-e:!bytes=st/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:5140
+User-e:!bytes=100-
+User-Agent: curl/7.49.0/s=.0.0.1:5140
+User-e:!bytes=st/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:5140
+User-e:!bytes=100-
+User-Agent: curl/7.49.0/s=st/halfdome.jpg HTTP/1.1î
+Host: 127.0.0.1:5140
+User-e:!bytes=100-
+User-Agent: corl/7.49.0/*st/halfdome.jpg HTTP/1.1î
+Host: 127.0.0.1:5dome.jpg HTTP/1.1
+Host: 127.0.0.1:5140
+User-e:!bytes=st/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:5140
+User-e:!bytes=100-
+User-Agent: curl/7.49.0/s=st/halfdome.jpg HTTP/1.1î
+Host: 127.0.0.1:5140
+User-e:!bytes=100-
+User-Agent: corl/7.49.0/*
+
+
+--MARK--

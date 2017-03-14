@@ -48,48 +48,55 @@ EOT
 
 subtest 'send-compressed' => sub {
     my $doit = sub {
-        my ($send_compressed, $curl_opts, $expected_length) = @_;
+        my ($send_compressed, $curl_opts, $paths, $expected_length) = @_;
         my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
       /:
         file.dir: t/assets/doc_root
-@{[ defined $send_compressed ? "file.send-compressed: $send_compressed" : "" ]}
+@{[ $send_compressed ? "file.send-compressed: $send_compressed" : "" ]}
 EOT
         my $fetch = sub {
             my $path = shift;
             subtest "send-compressed:@{[ $send_compressed || q(default) ]}, $curl_opts, $path" => sub {
                 my $resp = `curl --silent --dump-header /dev/stderr $curl_opts http://127.0.0.1:$server->{port}$path 2>&1 > /dev/null`;
-                like $resp, qr/^content-length:\s*$expected_length\r$/im, "length is as expected";
-                if (($send_compressed || '') eq 'ON') {
+                if ($send_compressed ne 'gunzip') {
+                    like $resp, qr/^content-length:\s*$expected_length\r$/im, "length is as expected";
+                }
+                if ($send_compressed eq 'ON' || $send_compressed eq 'gunzip') {
                     like $resp, qr/^vary:\s*accept-encoding\r$/im, "has vary set";
                 } else {
                     unlike $resp, qr/^vary:\s*accept-encoding\r$/im, "not has vary set";
                 }
             };
         };
-        $fetch->('/index.txt');
-        $fetch->('/');
+        $fetch->($_) for @$paths;
     };
 
-    my $orig_len = (stat 't/assets/doc_root/index.txt')[7];
-    my $gz_len = (stat 't/assets/doc_root/index.txt.gz')[7];
-    my $br_len = (stat 't/assets/doc_root/index.txt.br')[7];
+    my $index_orig_len = (stat 't/assets/doc_root/index.txt')[7];
+    my $index_gz_len = (stat 't/assets/doc_root/index.txt.gz')[7];
+    my $index_br_len = (stat 't/assets/doc_root/index.txt.br')[7];
+    my $alice2_orig_len = `gzip -cd < t/assets/doc_root/alice2.txt.gz | wc -c`;
+    my $alice2_gz_len = (stat 't/assets/doc_root/alice2.txt.gz')[7];
 
-    $doit->(undef, "", $orig_len);
-    $doit->(undef, q{--header "Accept-Encoding: gzip"}, $orig_len);
-    $doit->("OFF", q{--header "Accept-Encoding: gzip"}, $orig_len);
-    $doit->("OFF", q{--header "Accept-Encoding: br, gzip"}, $orig_len);
+    $doit->("", "", ['/index.txt', '/'], $index_orig_len);
+    $doit->("", q{--header "Accept-Encoding: gzip"}, ['/index.txt', '/'], $index_orig_len);
+    $doit->("OFF", q{--header "Accept-Encoding: gzip"}, ['/index.txt', '/'], $index_orig_len);
+    $doit->("OFF", q{--header "Accept-Encoding: br, gzip"}, ['/index.txt', '/'], $index_orig_len);
 
-    $doit->("ON", "", $orig_len);
-    $doit->("ON", q{--header "Accept-Encoding: gzip"}, $gz_len);
-    $doit->("ON", q{--header "Accept-Encoding: gzip, deflate"}, $gz_len);
-    $doit->("ON", q{--header "Accept-Encoding: deflate, gzip"}, $gz_len);
-    $doit->("ON", q{--header "Accept-Encoding: deflate"}, $orig_len);
-    $doit->("ON", q{--header "Accept-Encoding: br, gzip"}, $br_len);
-    $doit->("ON", q{--header "Accept-Encoding: gzip, br"}, $br_len);
-    $doit->("ON", q{--header "Accept-Encoding: br"}, $br_len);
+    $doit->("ON", "", ['/index.txt', '/'], $index_orig_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip"}, ['/index.txt', '/'], $index_gz_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip, deflate"}, ['/index.txt', '/'], $index_gz_len);
+    $doit->("ON", q{--header "Accept-Encoding: deflate, gzip"}, ['/index.txt', '/'], $index_gz_len);
+    $doit->("ON", q{--header "Accept-Encoding: deflate"}, ['/index.txt', '/'], $index_orig_len);
+    $doit->("ON", q{--header "Accept-Encoding: br, gzip"}, ['/index.txt', '/'], $index_br_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip, br"}, ['/index.txt', '/'], $index_br_len);
+    $doit->("ON", q{--header "Accept-Encoding: br"}, ['/index.txt', '/'], $index_br_len);
+
+    $doit->("gunzip", "", ['/alice2.txt'], $alice2_orig_len);
+    $doit->("gunzip", q{--header "Accept-Encoding: gzip"}, ['/alice2.txt'], $alice2_gz_len);
+
 
     subtest 'MSIE-workaround' => sub {
         my $server = spawn_h2o(<< "EOT");
@@ -101,7 +108,7 @@ hosts:
         file.send-gzip: ON
 EOT
         my $resp = `curl --silent --dump-header /dev/stderr --user-agent "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)" --header "Accept-Encoding: gzip" http://127.0.0.1:$server->{port}/ 2>&1 > /dev/null`;
-        like $resp, qr/^content-length:\s*$gz_len\r$/im, "length is as expected";
+        like $resp, qr/^content-length:\s*$index_gz_len\r$/im, "length is as expected";
         like $resp, qr/^cache-control:.*private.*\r$/im, "cache-control: private";
         unlike $resp, qr/^vary:/im, "no vary";
     };

@@ -119,6 +119,17 @@ builder {
             ],
         ];
     };
+    mount "/infinite-stream" => sub {
+        my $env = shift;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
+            while ($writer->write("lorem ipsum dolor sit amet")) {
+                sleep 0.1;
+            }
+            $writer->close;
+        };
+    };
     mount "/infinite-redirect" => sub {
         my $env = shift;
         return [
@@ -174,5 +185,10 @@ builder {
         );
         sleep 1.1;
         [200, ["content-type" => "text/plain; charset=utf-8", "content-length" => 11], ["hello world"]];
+    };
+    mount "/push-attr" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        [200, ["content-type" => "text/plain; charset=utf-8", "content-length" => 11, "link" => "$query->{'pushes'}"], ["hello world"]];
     };
 };

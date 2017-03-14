@@ -535,6 +535,37 @@ static void run_pending(h2o_evloop_t *loop)
     }
 }
 
+void h2o_evloop_destroy(h2o_evloop_t *loop)
+{
+    struct st_h2o_evloop_socket_t *sock;
+
+    /* timeouts are governed by the application and MUST be destroyed prior to destroying the loop */
+    assert(h2o_linklist_is_empty(&loop->_timeouts));
+
+    /* dispose all socket */
+    while ((sock = loop->_pending_as_client) != NULL) {
+        loop->_pending_as_client = sock->_next_pending;
+        sock->_next_pending = sock;
+        h2o_socket_close((h2o_socket_t *)sock);
+    }
+    while ((sock = loop->_pending_as_server) != NULL) {
+        loop->_pending_as_server = sock->_next_pending;
+        sock->_next_pending = sock;
+        h2o_socket_close((h2o_socket_t *)sock);
+    }
+
+    /* now all socket are disposedand and placed in linked list statechanged
+     * we can freeing memory in cycle by next_statechanged,
+     */
+    while ((sock = loop->_statechanged.head) != NULL) {
+        loop->_statechanged.head = sock->_next_statechanged;
+        free(sock);
+    }
+
+    /* lastly we need to free loop memory */
+    free(loop);
+}
+
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 {
     h2o_linklist_t *node;

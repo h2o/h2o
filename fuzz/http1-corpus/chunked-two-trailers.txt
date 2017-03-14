@@ -1,0 +1,8 @@
+POST / HTTP/1.0
+Transfer-Encoding: chunked
+
+3
+foo
+0
+Foo: Bar
+Xyzzy: Plugh

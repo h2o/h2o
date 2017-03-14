@@ -1,0 +1,15 @@
+GET / HTTP/1.1
+Host: 127.0.0.1:50568
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%User-Agent: curl/7.49.0-DEV
+Accept: */ET / HTTP/1.1
+Host: 127.0.0.1:50568
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+Accept-Encoding: br, gzip
+
+
+--MARK-*
+Accept-Encodi,g bnr: gzip
+
+
+--MARK--

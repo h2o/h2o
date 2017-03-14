@@ -89,12 +89,46 @@ $ctx->{directive}->(
     since   => "2.1",
     default => q{proxy.emit-x-forwarded-headers: ON},
     desc    => "A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server will append or add the <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers.",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.emit-via-header"><code>proxy.emit-via-header</code></a>
+EOT
 )->(sub {
 ?>
 <p>
 By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-proto</code> and <code>x-forwarded-for</code> request headers (or might append its value in the <code>x-forwarded-proto</code> case, see <code>proxy.preserve-x-forwarded-proto</code>). This might not be always desirable. Please keep in mind security implications when setting this of <code>OFF</code>, since it might allow an attacker to spoof the originator or the protocol of a request.
 </p>
 ? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.emit-via-header",
+    levels  => [ qw(global) ],
+    since   => "2.2",
+    default => q{proxy.emit-via-header: ON},
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server adds or appends an entry to the <code>via</code> request header.",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers"><code>proxy.emit-x-forwarded-headers</code></a>
+EOT
+)->(sub {})
+?>
+
+<?
+for my $action (qw(add append merge set setifempty unset)) {
+    $ctx->{directive}->(
+        name    => "proxy.header.$action",
+        levels  => [ qw(global host path extensions) ],
+        since   => "2.2",
+        desc    => "Modifies the request headers sent to the application server.",
+    )->(sub {
+?>
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.<?= $action ?>"><code>header.<?= $action ?></code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+<?
+    });
+}
+?>
 
 <?
 $ctx->{directive}->(

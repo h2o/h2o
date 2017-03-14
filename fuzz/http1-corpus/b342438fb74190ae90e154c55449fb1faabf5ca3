@@ -1,0 +1,36 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connection: ost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+user-agent: nghttp2/1:sc AAMAAABkAAQ../__
+accept: */*
+user-agent: nghUpgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+user-agent: nghttp2/1:sc AAMAAABkAAQ../__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI *ex.txt HTTP 

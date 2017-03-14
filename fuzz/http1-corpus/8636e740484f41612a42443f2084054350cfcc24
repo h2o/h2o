@@ -1,0 +1,76 @@
+GET / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿ:schemÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /re/texy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Ag: 12(7.0.0.1:50492
+User-Agent: curA6ccept:ÿ:schemÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curlown/h1/te/te HTTP/1.1
+Host: 12V
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+CET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/3.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0:schem.1:504920-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿knA6ccept:ÿÿÿl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49ÿÿÿÿ.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 12V
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+CET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/3.49.0teMARK--
+ HTTP/1.well¿known/h1/te/te HTTP/1.1
+Host: 12V
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+CET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/3.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0:schem.1:504920-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿knA6ccept:ÿÿÿl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49ÿÿÿÿ.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 12V
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+CET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/3.49.0teMARK--
+ HTTP/1.1
+Host: ÿÿ */*
+
+
+--MARK--

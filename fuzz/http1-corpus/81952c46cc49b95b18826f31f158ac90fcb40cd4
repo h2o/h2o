@@ -1,0 +1,620 @@
+POST / HTTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: applicatTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0ion/x-www-form-urlencodeGET /š‡†oworld
+2
+
+
+--MAPOST / HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade,../TP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt / HTTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: applicatTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0ion/x-www-form-urlencodeGET /š‡†oworld
+2
+
+
+--MAPOST / HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type:  127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: ttings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt / HTTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: applicatTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0ion/x-www-form-urlencodeGET /š‡†oworld
+2
+
+
+--MAPOST / HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type:  127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt / HTTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: applicatTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0ion/x-www-form-urlencodeGET /š‡†oworld
+2
+
+
+--MAPOST / HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt / HTTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: applicatTP/1.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0ion/x-www-form-urlencodeGET /š‡†oworld
+2
+
+
+--MAPOST / HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP1-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urPRI * HTTR/1.0
+
+SM	
+
+       ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ.0.0.1:50699
+Userg-d:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶¶¶¶¶†À¿¾  %   ¯   ‚ˆ`ÕH_+§Ê†À¿¾  %  TTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0            0%      ‚ˆ`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆupgradÊ†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿
+-¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾              0%      ‚ˆ-M`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡ 9le.com
+UseretA:-gn*
+
+
+--MARK--
+
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 2
+
+--MARK--
+hello world 3
+
+--MARK--
+hello world 4
+
+--MARK--
+hello world 5
+
+--MARK--
+hello world 6
+
+--MARK--
+hello world 7
+
+--MARK--
+     	 GET /reproxy-test/inŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸPRI * HTTP/2TTP/1.1
+host: 127.0.0.1:51046
+connection: Upgrade, HTT      €          ÿ        ÿ
+--M curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-ÿÿÿÿÿÿÿÿ10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP1-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urPRI * HTTR/1.0
+
+SM	
+
+       ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ.0.0.1:50699
+Userg-d:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶¶¶¶¶†À¿¾  %   ¯   ‚ˆ`ÕH_+§Ê†À¿¾  %  TTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0            0%      ‚ˆ`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆupgradÊ†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿
+-¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾              0%      ‚ˆ-M`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡ 9le.com
+UseretA:-gn*
+
+
+--MARK--
+
+
+--MARK--
+hello world 1
+
+-applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: UpgrRade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP1-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urPRI * HTTR/1.0
+
+SM	
+
+       ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ.0.0.1:50699
+Userg-d:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶¶¶¶¶†À¿¾  %   ¯   ‚ˆ`ÕH_+§Ê†À¿¾  %  TTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0            0%      ‚ˆ`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆupgradÊ†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿
+-¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾              0%      ‚ˆ-M`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡ 9le.com
+UseretA:-gn*
+
+
+--MARK--
+
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 2
+
+--MARK--
+hello world 3
+
+--MARK--
+hello world 4
+
+--MARK--
+hello world 5
+
+--MARK--
+hello world 6
+
+--MARK--
+hello world 7
+
+--MARK--
+     	 GET /reproxy-test/inŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸPRI * HTTP/2TTP/1.1
+host: 127.0.0.1:51046
+connection: Upgrade, HTT      €          ÿ        ÿ
+--M curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-ÿÿÿÿÿÿÿÿ10
+Content-Type: applicati27/ HTTP/1.1
+Host: 127.0.0.1:50699
+Userg-d:nAtst: 127.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTP1-Settings
+Upgrade: h2c
+HTTP2-Settings: AAM:AAABkAAQAAP__
+Contant-Length: 10
+Content-Type: applicati27.0.0.1:50699
+Userg-d:nAt curl/7.49.0-DEV
+Accept: */*
+Connecti:n: Upgrade, HTTon/x-www-form-urPRI * HTTR/1.0
+
+SM	
+
+       ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ.0.0.1:50699
+Userg-d:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶¶¶¶¶¶¶¶†À¿¾  %   ¯   ‚ˆ`ÕH_+§Ê†À¿¾  %  TTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0            0%      ‚ˆ`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆupgradÊ†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿
+-¾  %      ‚ˆ`ÕH_+§Ê†À¿¾  %      ‚ˆ`ÕH_+§Ê†À¿¾              0%      ‚ˆ-M`ÕH_+§Ê†A‹\pÜl¾S*/*zŠªiÒšÄÀW‹‡ 9le.com
+UseretA:-gn*
+
+
+--MARK--
+
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 2
+
+--MARK--
+hello world 3
+
+--MARK--
+hello world 4
+
+--MARK--
+hello world 5
+
+--MARK--
+hello world 6
+
+--MARK--
+hello world 7
+
+--MARK--
+     	 GET /reproxy-test/inŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸŸPRI * HTTP/2TTP/1.1
+host: 127.0.0.1:51046
+connection: Upgrade, HTT      €          ÿ        ÿ
+--MARK--
+         €          ³
+--MAR €       y

@@ -1,0 +1,8 @@
+G:schemET /chunked-test/halfdome.jpg HTTP/1.1
+Host: 127.0.0.1:51408
+Range:!bytes=100-
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--

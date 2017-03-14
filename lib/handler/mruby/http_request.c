@@ -26,6 +26,7 @@
 #include <mruby/string.h>
 #include <mruby_input_stream.h>
 #include "h2o/mruby_.h"
+#include "embedded.c.h"
 
 struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_generator_t *generator;
@@ -106,8 +107,8 @@ static void on_dispose(void *_ctx)
     }
 }
 
-static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status,
-                          const h2o_http1client_header_t *headers_sorted, size_t num_headers)
+static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status, const h2o_header_t *headers_sorted,
+                          size_t num_headers)
 {
     mrb_state *mrb = ctx->generator->ctx->shared->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
@@ -122,17 +123,17 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
     mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
     for (i = 0; i < num_headers; ++i) {
         /* skip the headers, we determine the eos! */
-        if (h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, H2O_STRLIT("content-length")) ||
-            h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, H2O_STRLIT("transfer-encoding")))
+        if (h2o_memis(headers_sorted[i].name, headers_sorted[i].name->len, H2O_STRLIT("content-length")) ||
+            h2o_memis(headers_sorted[i].name, headers_sorted[i].name->len, H2O_STRLIT("transfer-encoding")))
             continue;
         /* build and set the hash entry */
-        mrb_value k = mrb_str_new(mrb, headers_sorted[i].name, headers_sorted[i].name_len);
-        mrb_value v = mrb_str_new(mrb, headers_sorted[i].value, headers_sorted[i].value_len);
-        while (i + 1 < num_headers && h2o_memis(headers_sorted[i].name, headers_sorted[i].name_len, headers_sorted[i + 1].name,
-                                                headers_sorted[i + 1].name_len)) {
+        mrb_value k = mrb_str_new(mrb, headers_sorted[i].name->base, headers_sorted[i].name->len);
+        mrb_value v = mrb_str_new(mrb, headers_sorted[i].value.base, headers_sorted[i].value.len);
+        while (i + 1 < num_headers && h2o_memis(headers_sorted[i].name->base, headers_sorted[i].name->len,
+                                                headers_sorted[i + 1].name->base, headers_sorted[i + 1].name->len)) {
             ++i;
             v = mrb_str_cat_lit(mrb, v, "\n");
-            v = mrb_str_cat(mrb, v, headers_sorted[i].value, headers_sorted[i].value_len);
+            v = mrb_str_cat(mrb, v, headers_sorted[i].value.base, headers_sorted[i].value.len);
         }
         mrb_hash_set(mrb, headers_hash, k, v);
     }
@@ -161,8 +162,9 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    static const h2o_http1client_header_t headers_sorted[] = {
-        {H2O_STRLIT("content-type"), H2O_STRLIT("text/plain; charset=utf-8")}};
+    static const h2o_header_t headers_sorted[] = {
+        {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, {H2O_STRLIT("text/plain; charset=utf-8")}},
+    };
 
     ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
@@ -227,17 +229,17 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
 static int headers_sort_cb(const void *_x, const void *_y)
 {
-    const h2o_http1client_header_t *x = _x, *y = _y;
+    const h2o_header_t *x = _x, *y = _y;
 
-    if (x->name_len < y->name_len)
+    if (x->name->len < y->name->len)
         return -1;
-    if (x->name_len > y->name_len)
+    if (x->name->len > y->name->len)
         return 1;
-    return memcmp(x->name, y->name, x->name_len);
+    return memcmp(x->name->base, y->name->base, x->name->len);
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers)
+                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -467,46 +469,21 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
+
+    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_HTTP_REQUEST);
+    h2o_mruby_assert(mrb);
+
     struct RClass *module, *klass;
+    module = mrb_define_module(mrb, "H2O");
 
     mrb_define_method(mrb, mrb->kernel_module, "http_request", http_request_method, MRB_ARGS_ARG(1, 2));
 
-    module = mrb_define_module(mrb, "H2O");
-    klass = mrb_define_class_under(mrb, module, "HttpRequest", mrb->object_class);
+    klass = mrb_class_get_under(mrb, module, "HttpRequest");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS, mrb_obj_value(klass));
 
-    klass = mrb_define_class_under(mrb, module, "HttpInputStream", mrb->object_class);
+    klass = mrb_class_get_under(mrb, module, "HttpInputStream");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
 
     h2o_mruby_define_callback(mrb, "_h2o__http_join_response", H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE);
     h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK);
-
-    h2o_mruby_eval_expr(mrb, "module H2O\n"
-                             "  class HttpRequest\n"
-                             "    def join\n"
-                             "      if !@resp\n"
-                             "        @resp = _h2o__http_join_response(self)\n"
-                             "      end\n"
-                             "      @resp\n"
-                             "    end\n"
-                             "    def _set_response(resp)\n"
-                             "      @resp = resp\n"
-                             "    end\n"
-                             "  end\n"
-                             "  class HttpInputStream\n"
-                             "    def each\n"
-                             "      while c = _h2o__http_fetch_chunk(self)\n"
-                             "        yield c\n"
-                             "      end\n"
-                             "    end\n"
-                             "    def join\n"
-                             "      s = \"\"\n"
-                             "      each do |c|\n"
-                             "        s << c\n"
-                             "      end\n"
-                             "      s\n"
-                             "    end\n"
-                             "  end\n"
-                             "end");
-    h2o_mruby_assert(mrb);
 }

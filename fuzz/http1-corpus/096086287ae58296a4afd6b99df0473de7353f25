@@ -1,0 +1,9 @@
+GET /echo-headers HTTP/1.1
+Host: 127.0.0.1:51353
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.com
+
+
+--MARK--

@@ -170,6 +170,20 @@ The <code style="font-weight: bold;">ssl</code> attribute must be defined as a m
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
 Default is <code>TLSv1</code>
 </dd>
+<dt id="min-version">min-verison:</dt>
+<dd>
+synonym of <code>minimum-version</code> (introduced in version 2.2)
+</dd>
+<dt id="maximum-version">maximum-version:</dt>
+<dd>
+maximum protocol version.
+Introduced in version 2.2.
+Default is the maximum protocol version supported by the server.
+</dd>
+<dt id="maximum-version">max-version:</dt>
+<dd>
+synonym of <code>maximum-version</code>.
+</dd>
 <dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
 <dt id="cipher-preferences">cipher-preference:</dt>
@@ -640,6 +654,21 @@ $ctx->{directive}->(
 standard input of the program.</p>
 
 <p>If the path is not absolute, it is prefixed with <code>${H2O_ROOT}/</code>.</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "crash-handler.wait-pipe-close",
+    levels => [ qw(global) ],
+    desc   => q{Whether <code>h2o</code> should wait for the crash handler pipe to close before exiting.},
+    default  => q{crash-handler.wait-pipe-close: OFF},
+    since    => "2.1",
+)->(sub {
+?>
+<p>When this setting is <code>ON</code>, <code>h2o</code> will wait
+for the pipe to the crash handler to be closed before exiting.
+This can be useful if you use a custom handler that inspects the dying
+process.</p>
 ? })
 
 ? })

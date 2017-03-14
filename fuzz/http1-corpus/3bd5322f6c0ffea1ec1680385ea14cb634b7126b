@@ -1,0 +1,76 @@
+GÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotincn: Upgrade, HTTP2-Sett»ngs
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+““““““““
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotinc:n Upgrade, rrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARKupgradGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+x-traffic:n Upgrade, HTTP2-Settings
+upgrade: 1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+x-traffic:n Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrr.(6.1
+
+““““““““
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotinc:n °pgrade, rrngs
+upgrade: 1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+x-traffic:n Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkhrrrrr.(6.1
+
+““““““““
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.j*g HTTP/1.1
+host: 127.0.0.1
+coneotinc:n Upgrade, zrrrrrrrrrrrrrrrrrrrrrrrrrr!rrrrrrrr.16.1
+
+
+--MARKupgradGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+x-traffic:n Upgrade, HTTP2-Settings
+upgrade: 1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+x-traffic:n Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkrrrrrr.(6.1
+
+““““““““
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+coneotinc:n °pgrade, rrngs
+upgrade: 1
+
+
+--MARK--
+PRIGÿÿÿÿÿÿÿÿET /halfdome.jpg HTTP/1.1
+host: 127.0.0.1:51135
+x-traffic:n Upgrade, HTTP2-Settings
+upgrGET /index.txt HTTP/1.1
+host: 127.0.0.1:50198
+connection: Upgrade, HTTP2-Settingsade

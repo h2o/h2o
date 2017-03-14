@@ -1,0 +1,72 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ
+
+ÖÖÖÖÖÖÖÖngs
+upgrade: h2c
+ããããããããããããããããããããããããããããããããããhttp2-settings: AAMAAABkAAQAAP__
+accept: ÖÖÖÖÖÖÖÖ811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ
+
+ÖÖÖÖÖÖÖÖngs
+upgrade: h2c
+ããããããããããããããããããããããããããããããããããhttp2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI * 

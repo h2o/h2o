@@ -1,0 +1,614 @@
+GET / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.weluser-agen2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../t.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G(T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../t.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-w-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.ww-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+aept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿrl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../t.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+aept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../t.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+aept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+aept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ 'url/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: ing: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+aept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0teMARK--
+ HTTP/.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+ept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ chunkedÿÿÿÿ
+Content-Type: application/x-wwwding: chunkedÿÿÿÿ
+Content-Type: application/x-www-form-url/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Transfer-Encoding: chunked
+Content-Type: application/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=http://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+G¹T /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: ct.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+aept:ÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gapplication/x-www-form-urlencoded
+
+a
+helloworld
+0
+GET /404?resp:status=200&resp:x-reproxy-url›=hôtp://127.0.0.1%3: chunkedÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP/.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.4        €         €  ettings
+upgrade:
+ c2hhttp2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttpPRI * HTTP/2
+--MARK--
+P‚ˆ`ÕH_+§Ê†À¿¾  %      1240
+User-Agent: curl/7.49.0-DEV
+Accept§Ê†À¿¾  % tp2/1:schem
+
+
+--MARK--
+PRI *ex.tx     ‚ˆ`ÕH_+§Ê†À¿¾               
+
+TP4-Settings
+upgrade: h2c
+http2-settings: AAMAAABkK--
+PRI * rrrrrh2

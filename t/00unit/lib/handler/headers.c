@@ -38,10 +38,10 @@ static int headers_are(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char 
 static void setup_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers)
 {
     *headers = (h2o_headers_t){NULL};
-    h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
-    h2o_add_header(pool, headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("public, max-age=86400"));
-    h2o_add_header(pool, headers, H2O_TOKEN_SET_COOKIE, H2O_STRLIT("a=b"));
-    h2o_add_header_by_str(pool, headers, H2O_STRLIT("x-foo"), 0, H2O_STRLIT("bar"));
+    h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain"));
+    h2o_add_header(pool, headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("public, max-age=86400"));
+    h2o_add_header(pool, headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("a=b"));
+    h2o_add_header_by_str(pool, headers, H2O_STRLIT("x-foo"), 0, NULL, H2O_STRLIT("bar"));
 }
 
 void test_lib__handler__headers_c(void)
@@ -58,7 +58,7 @@ void test_lib__handler__headers_c(void)
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, &H2O_TOKEN_SET_COOKIE->buf, {H2O_STRLIT("c=d")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(
         &pool, &headers,
         H2O_STRLIT(
@@ -66,26 +66,26 @@ void test_lib__handler__headers_c(void)
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_APPEND, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("public")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(
         &pool, &headers,
         H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400, public\nset-cookie: a=b\nx-foo: bar\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_MERGE, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("public")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SET, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("no-cache")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\nset-cookie: a=b\nx-foo: bar\ncache-control: no-cache\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SETIFEMPTY, &H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("no-cache")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
@@ -93,33 +93,33 @@ void test_lib__handler__headers_c(void)
     header_str = h2o_iovec_init(H2O_STRLIT("x-foo"));
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_ADD, &header_str, {H2O_STRLIT("baz")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(
         &pool, &headers,
         H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\nx-foo: baz\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_APPEND, &header_str, {H2O_STRLIT("bar")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(
         &pool, &headers,
         H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar, bar\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_MERGE, &header_str, {H2O_STRLIT("bar")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SET, &header_str, {H2O_STRLIT("baz")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: baz\n")));
 
     setup_headers(&pool, &headers);
     cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_SETIFEMPTY, &header_str, {H2O_STRLIT("baz")}};
-    rewrite_headers(&pool, &headers, &cmd);
+    h2o_rewrite_headers(&pool, &headers, &cmd);
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 

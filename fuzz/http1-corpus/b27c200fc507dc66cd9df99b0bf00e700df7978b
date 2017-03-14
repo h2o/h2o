@@ -1,0 +1,328 @@
+GET / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0 / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h0/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/5well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst¯.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+Uscr-Agekt: curl/8.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿know//hn1te/te HTTP/1.1
+H*st:.0-DEV
+Accept: /h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0 / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h0/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/5well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst¯.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+Uscr-Agekt: curl/8.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿know//hn1te/te HTTP/1.1
+H*st:.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host:/..7.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿs/Õwell¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.wellwell¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARBK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccepding:gzip
+ c:schereproxteMARK--
+ HTTP/1.1
+Host: .0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0ARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/5well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst¯.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+Uscr-Agekt: curl/8.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿know//hn1te/te HTTP/1.1
+H*st:.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host:/..7.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿs/Õwell¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.wellwell¿known/h2/../teMARKGET /reproxy-test/.well¿know//hn1te/te HTTP/1.1
+H*st:.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host:/..7.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿs/Õwell¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.wellwell¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host:*/*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host:/..7.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿs/Õwell¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.wellwell¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARBK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccepding:gzip
+ c:schereproxteMARK--
+ HTTP/1.1
+Host: .0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0ARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/5well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst¯.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+Uscr-Agekt: curl/8.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿know//hn1te/te HTTP/1.1
+H*st:.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host:/..7.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿs/Õwell¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.wellwell¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccepding:gzip
+ c:schereproxteMARK--
+ -DEV
+--A6ccept:ÿÿÿst/5well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst¯.well¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+Uscr-Agekt: curl/8.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿know//hn1te/te HTTP/1.1
+H*st:.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host:/..7.0.0.t.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+ c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿs/Õwell¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.wellwell¿known/h2/../teMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HTTP49.0-DEV
+--A6ccept:ÿÿÿst/.well¿known/h2/../teMARK--
+ HT¯P/1.1
+Host: 127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6ccepding:gzip
+ c:schereproxteMARK--
+ HTTP/1.1
+Host: 127.0.0.1:50492
+Uscr-Agekt: curl/8.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well
+User-Agent: c:schemm
+
+
+--MARK--
+PRI *ex.tx     ‚ˆ`ÕH_+§Ê†À¿¾               
+
+TP4-Settings
+upgrade: h2c
+http2-setting0.t.examplÿÿÿÿÿ cur* rrrrrh2

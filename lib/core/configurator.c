@@ -318,8 +318,10 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
         path_ctx->mimemap = &path_ctx->pathconf->mimemap;
 
         yoml_t *config_node = convert_path_config_node(cmd, value);
-        if (config_node == NULL)
+        if (config_node == NULL) {
+            destroy_context(path_ctx);
             return -1;
+        }
 
         int cmd_ret = h2o_configurator_apply_commands(path_ctx, config_node, H2O_CONFIGURATOR_FLAG_PATH, NULL);
         destroy_context(path_ctx);
@@ -412,6 +414,11 @@ static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o
 static int on_config_http2_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return config_timeout(cmd, node, &ctx->globalconf->http2.idle_timeout);
+}
+
+static int on_config_http2_graceful_shutdown_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->http2.graceful_shutdown_timeout);
 }
 
 static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
@@ -870,6 +877,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-idle-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_idle_timeout);
+        h2o_configurator_define_command(&c->super, "http2-graceful-shutdown-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_graceful_shutdown_timeout);
         h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);
@@ -1071,8 +1081,6 @@ char *h2o_configurator_get_cmd_path(const char *cmd)
     /* obtain root */
     if ((root = getenv("H2O_ROOT")) == NULL) {
         root = H2O_TO_STR(H2O_ROOT);
-        if (root == NULL)
-            goto ReturnOrig;
     }
 
     /* build full-path and return */

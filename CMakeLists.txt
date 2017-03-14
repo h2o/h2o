@@ -30,7 +30,7 @@ SET(VERSION_PATCH "0")
 SET(VERSION_PRERELEASE "-DEV")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
-SET(LIBRARY_VERSION_MINOR "12")
+SET(LIBRARY_VERSION_MINOR "13")
 SET(LIBRARY_VERSION_PATCH "0")
 SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
@@ -63,19 +63,14 @@ OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
-SET(MKMF_FOUND "NO")
-IF (RUBY)
-    EXECUTE_PROCESS(COMMAND ruby -e "require 'mkmf'" RESULT_VARIABLE REQUIRE_MKMF_RESULT ERROR_QUIET)
-    IF (${REQUIRE_MKMF_RESULT} EQUAL 0)
-        SET(MKMF_FOUND "YES")
-    ENDIF ()
-ENDIF ()
-IF (RUBY AND BISON AND MKMF_FOUND)
+IF (RUBY AND BISON)
     SET(WITH_MRUBY_DEFAULT "ON")
 ELSE ()
     SET(WITH_MRUBY_DEFAULT "OFF")
 ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
+
+OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
 
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/include")
@@ -194,6 +189,29 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/enc/utf8_util.cc
     lib/handler/compress/brotli.cc)
 
+SET(PICOTLS_INCLUDE_DIRECTORIES
+    deps/picotls/deps/cifra/src/ext
+    deps/picotls/deps/cifra/src
+    deps/picotls/deps/micro-ecc
+    deps/picotls/include)
+
+SET(PICOTLS_SOURCE_FILES
+    deps/picotls/deps/micro-ecc/uECC.c
+    deps/picotls/deps/cifra/src/aes.c
+    deps/picotls/deps/cifra/src/blockwise.c
+    deps/picotls/deps/cifra/src/chash.c
+    deps/picotls/deps/cifra/src/curve25519.c
+    deps/picotls/deps/cifra/src/drbg.c
+    deps/picotls/deps/cifra/src/hmac.c
+    deps/picotls/deps/cifra/src/gcm.c
+    deps/picotls/deps/cifra/src/gf128.c
+    deps/picotls/deps/cifra/src/modes.c
+    deps/picotls/deps/cifra/src/sha256.c
+    deps/picotls/lib/picotls.c
+    deps/picotls/lib/cifra.c
+    deps/picotls/lib/uecc.c
+    deps/picotls/lib/openssl.c)
+
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
     deps/libgkc/gkc.c
@@ -248,6 +266,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
     lib/handler/status.c
+    lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/requests.c
     lib/handler/http2_debug_state.c
@@ -265,6 +284,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/status.c
     lib/handler/configurator/http2_debug_state.c
+    lib/handler/configurator/headers_util.c
 
     lib/http1.c
 
@@ -434,6 +454,11 @@ IF (WITH_MRUBY)
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
+IF (WITH_PICOTLS)
+    LIST(APPEND STANDALONE_SOURCE_FILES ${PICOTLS_SOURCE_FILES})
+    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_PICOTLS=1")
+    INCLUDE_DIRECTORIES(${PICOTLS_INCLUDE_DIRECTORIES})
+ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
 IF (WITH_BUNDLED_SSL)
@@ -451,7 +476,7 @@ IF (WITH_MRUBY)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2o
         "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
-        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onig-5.15.0/.libs/libonig.a"
+        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.1.1/.libs/libonigmo.a"
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
@@ -523,6 +548,39 @@ ENDIF (LIBUV_FOUND)
 ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/90root-*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
+IF (BUILD_FUZZER)
+    IF(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        MESSAGE(FATAL_ERROR "The fuzzer needs clang as a compiler")
+    ENDIF()
+    ADD_EXECUTABLE(h2o-fuzzer-http1 fuzz/driver.cc)
+    ADD_EXECUTABLE(h2o-fuzzer-http2 fuzz/driver.cc)
+    ADD_EXECUTABLE(h2o-fuzzer-url fuzz/driver_url.cc)
+    SET_TARGET_PROPERTIES(h2o-fuzzer-http1 PROPERTIES COMPILE_FLAGS "-DHTTP1")
+    SET_TARGET_PROPERTIES(h2o-fuzzer-http2 PROPERTIES COMPILE_FLAGS "-DHTTP2")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+    IF (OSS_FUZZ)
+        # Use https://github.com/google/oss-fuzz compatible options
+        SET(LIB_FUZZER FuzzingEngine)
+        SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer")
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+    ELSE ()
+        # Default non-oss-fuzz options
+        SET(LIB_FUZZER "${CMAKE_CURRENT_BINARY_DIR}/libFuzzer.a")
+        SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
+
+        ADD_CUSTOM_TARGET(libFuzzer ${CMAKE_CURRENT_SOURCE_DIR}/misc/build_libFuzzer.sh WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+        ADD_DEPENDENCIES(h2o-fuzzer-http1 libFuzzer)
+        ADD_DEPENDENCIES(h2o-fuzzer-http2 libFuzzer)
+        ADD_DEPENDENCIES(h2o-fuzzer-url libFuzzer)
+    ENDIF (OSS_FUZZ)
+
+    TARGET_LINK_LIBRARIES(h2o-fuzzer-http1 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(h2o-fuzzer-http2 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
+
+ENDIF (BUILD_FUZZER)
+
 # environment-specific tweaks
 IF (APPLE)
     SET_SOURCE_FILES_PROPERTIES(lib/socket.c lib/websocket.c src/main.c examples/simple.c examples/websocket.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
@@ -547,4 +605,7 @@ ELSE ()
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
 ENDIF ()
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
+# Retain CXX_FLAGS for std c++ compatiability across fuzz build/test environments
+IF (NOT OSS_FUZZ)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
+ENDIF (NOT OSS_FUZZ)

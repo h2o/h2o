@@ -1,0 +1,108 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, Öproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, ÖupgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÝTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖaÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖec4ion: Upgrade, ÖÖÖÖÖÖÖÖÖGET /echo-ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸¸ÖÖTP/1.1
+Host:.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖTP/1.1
+Host: 127.0.0.1:50811
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖ50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via:
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖFor: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ811
+User-Agent: cGET /echo-headers HTTP/1.1
+Host: 127.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via:
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖ50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖ50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 examplccept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7upgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖ: curl/7.49.0-DEV
+Accept: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ
+
+ÖÖÖÖÖÖÖÖngs
+upgrade: h2c
+ããããããããããããããããããããããããããããããããããhttp2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI * 

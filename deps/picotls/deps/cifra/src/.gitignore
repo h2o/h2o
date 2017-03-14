@@ -1,0 +1,15 @@
+*.o
+*.gcov
+*.gcno
+*.gcda
+testaes
+testmodes
+testsha1
+testsha2
+testsha3
+testsalsa20
+testcurve25519
+testpoly1305
+testnorx
+testchacha20poly1305
+testdrbg

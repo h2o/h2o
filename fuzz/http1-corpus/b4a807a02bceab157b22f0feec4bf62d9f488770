@@ -1,0 +1,6 @@
+GET /foo%0D%0Aa:1 HTTP/1.1
+HoUser.-Agent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--
