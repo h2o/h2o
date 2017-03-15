@@ -223,7 +223,7 @@ subtest 'set-cookie' => sub {
 };
 
 subtest 'escape' => sub {
-    for my $i ([default => qr{^/\\xe3\\x81\\x82$}s], [apache => qr{^/\\xe3\\x81\\x82$}s], [json => qr{^/\\u00e3\\u0081\\u0082$}s]) {
+    for my $i ([default => qr{^/\\xe3\\x81\\x82$}s], [apache => qr{^/\\xe3\\x81\\x82$}s], [json => qr{^"/\\u00e3\\u0081\\u0082"$}s]) {
         my ($escape, $expected) = @$i;
         subtest $escape => sub {
             doit(
@@ -244,8 +244,8 @@ subtest "json-null" => sub {
             my $server = shift;
             system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
         },
-        { format => '\\"%h\\" %l', escape => 'json' },
-        qr{^"127\.0\.0\.1" null$},
+        { format => '%h %p %l', escape => 'json' },
+        qr{^"127\.0\.0\.1" [0-9]{1,5} null$},
     );
 };
 

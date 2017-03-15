@@ -74,13 +74,24 @@ struct log_element_t {
     union {
         const h2o_token_t *header_token;
         h2o_iovec_t name;
-        size_t protocol_specific_callback_index;
+        struct {
+            size_t callback_index;
+            int needs_quote;
+        } protocol_specific;
     } data;
 };
 
 struct st_h2o_logconf_t {
     H2O_VECTOR(struct log_element_t) elements;
     int escape;
+};
+
+struct st_h2o_log_escape_t {
+    h2o_iovec_t nullexpr;
+    size_t unsafe_factor;
+    char *(*append_unsafe_string)(char *pos, const char *src, size_t len);
+    char *(*append_unsafe_string_unquoted)(char *pos, const char *src, size_t len);
+    char quote_char;
 };
 
 static h2o_iovec_t strdup_lowercased(const char *s, size_t len)
@@ -181,11 +192,12 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
         NEW_ELEMENT(id);                                                                                                           \
         goto MAP_EXT_Found;                                                                                                        \
     }
-#define MAP_EXT_TO_PROTO(name, cb)                                                                                                 \
+#define MAP_EXT_TO_PROTO(name, cb, nq)                                                                                             \
     if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
         NEW_ELEMENT(ELEMENT_TYPE_PROTOCOL_SPECIFIC);                                                                               \
-        LAST_ELEMENT()->data.protocol_specific_callback_index =                                                                    \
+        LAST_ELEMENT()->data.protocol_specific.callback_index =                                                                    \
             &((h2o_conn_callbacks_t *)NULL)->log_.cb - ((h2o_conn_callbacks_t *)NULL)->log_.callbacks;                             \
+        LAST_ELEMENT()->data.protocol_specific.needs_quote = (nq);                                                                 \
         goto MAP_EXT_Found;                                                                                                        \
     }
                     MAP_EXT_TO_TYPE("connection-id", ELEMENT_TYPE_CONNECTION_ID);
@@ -197,20 +209,20 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("response-time", ELEMENT_TYPE_RESPONSE_TIME);
                     MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_DURATION);
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
-                    MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
-                    MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
-                    MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);
-                    MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive);
-                    MAP_EXT_TO_PROTO("http2.priority.received.parent", http2.priority_received_parent);
-                    MAP_EXT_TO_PROTO("http2.priority.received.weight", http2.priority_received_weight);
-                    MAP_EXT_TO_PROTO("http2.priority.actual", http2.priority_actual);
-                    MAP_EXT_TO_PROTO("http2.priority.actual.parent", http2.priority_actual_parent);
-                    MAP_EXT_TO_PROTO("http2.priority.actual.weight", http2.priority_actual_weight);
-                    MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);
-                    MAP_EXT_TO_PROTO("ssl.session-reused", ssl.session_reused);
-                    MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
-                    MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits);
-                    MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id);
+                    MAP_EXT_TO_PROTO("http1.request-index", http1.request_index, 0);
+                    MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id, 0);
+                    MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received, 0);
+                    MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive, 0);
+                    MAP_EXT_TO_PROTO("http2.priority.received.parent", http2.priority_received_parent, 0);
+                    MAP_EXT_TO_PROTO("http2.priority.received.weight", http2.priority_received_weight, 0);
+                    MAP_EXT_TO_PROTO("http2.priority.actual", http2.priority_actual, 0);
+                    MAP_EXT_TO_PROTO("http2.priority.actual.parent", http2.priority_actual_parent, 0);
+                    MAP_EXT_TO_PROTO("http2.priority.actual.weight", http2.priority_actual_weight, 0);
+                    MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version, 1);
+                    MAP_EXT_TO_PROTO("ssl.session-reused", ssl.session_reused, 0);
+                    MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher, 1);
+                    MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits, 0);
+                    MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id, 1);
                     { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);
@@ -300,12 +312,6 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf)
     free(logconf);
 }
 
-static inline char *append_safe_string(char *pos, const char *src, size_t len)
-{
-    memcpy(pos, src, len);
-    return pos + len;
-}
-
 static char *append_unsafe_string_apache(char *pos, const char *src, size_t len)
 {
     const char *src_end = src + len;
@@ -324,7 +330,7 @@ static char *append_unsafe_string_apache(char *pos, const char *src, size_t len)
     return pos;
 }
 
-static char *append_unsafe_string_json(char *pos, const char *src, size_t len)
+static char *append_unsafe_string_json_unquoted(char *pos, const char *src, size_t len)
 {
     const char *src_end = src + len;
 
@@ -346,26 +352,42 @@ static char *append_unsafe_string_json(char *pos, const char *src, size_t len)
     return pos;
 }
 
-static char *append_addr(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn, h2o_iovec_t nullexpr)
+static char *append_unsafe_string_json_quoted(char *pos, const char *src, size_t len)
+{
+    *pos++ = '"';
+    pos = append_unsafe_string_json_unquoted(pos, src, len);
+    *pos++ = '"';
+    return pos;
+}
+
+static char *append_addr(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn,
+                         struct st_h2o_log_escape_t *escape)
 {
     struct sockaddr_storage ss;
     socklen_t sslen;
 
     if ((sslen = cb(conn, (void *)&ss)) == 0)
         goto Fail;
-    size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, pos);
+    size_t l = h2o_socket_getnumerichost((void *)&ss, sslen, pos + (escape->quote_char != '\0'));
     if (l == SIZE_MAX)
         goto Fail;
-    pos += l;
+    if (escape->quote_char != '\0') {
+        *pos++ = escape->quote_char;
+        pos += l;
+        *pos++ = escape->quote_char;
+    } else {
+        pos += l;
+    }
     return pos;
 
 Fail:
-    memcpy(pos, nullexpr.base, nullexpr.len);
-    pos += nullexpr.len;
+    memcpy(pos, escape->nullexpr.base, escape->nullexpr.len);
+    pos += escape->nullexpr.len;
     return pos;
 }
 
-static char *append_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn, h2o_iovec_t nullexpr)
+static char *append_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn,
+                         struct st_h2o_log_escape_t *escape)
 {
     struct sockaddr_storage ss;
     socklen_t sslen;
@@ -379,8 +401,8 @@ static char *append_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct soc
     return pos;
 
 Fail:
-    memcpy(pos, nullexpr.base, nullexpr.len);
-    pos += nullexpr.len;
+    memcpy(pos, escape->nullexpr.base, escape->nullexpr.len);
+    pos += escape->nullexpr.len;
     return pos;
 }
 
@@ -428,22 +450,19 @@ static char *expand_line_buf(char *line, size_t cur_size, size_t required, int s
 char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char *buf)
 {
     char *line = buf, *pos = line, *line_end = line + *len;
-    h2o_iovec_t nullexpr;
-    char *(*append_unsafe_string)(char *pos, const char *src, size_t len);
-    size_t element_index, unsafe_factor;
+    struct st_h2o_log_escape_t escape;
+    size_t element_index;
     struct tm localt = {0};
     int should_realloc_on_expand = 0;
 
     switch (logconf->escape) {
     case H2O_LOGCONF_ESCAPE_APACHE:
-        nullexpr = h2o_iovec_init(H2O_STRLIT("-"));
-        append_unsafe_string = append_unsafe_string_apache;
-        unsafe_factor = 4;
+        escape = (struct st_h2o_log_escape_t){h2o_iovec_init(H2O_STRLIT("-")), sizeof("\\xnn") - 1, append_unsafe_string_apache,
+                                              append_unsafe_string_apache, 0};
         break;
     case H2O_LOGCONF_ESCAPE_JSON:
-        nullexpr = h2o_iovec_init(H2O_STRLIT("null"));
-        append_unsafe_string = append_unsafe_string_json;
-        unsafe_factor = 6;
+        escape = (struct st_h2o_log_escape_t){h2o_iovec_init(H2O_STRLIT("null")), sizeof("\\u00nn") - 1,
+                                              append_unsafe_string_json_quoted, append_unsafe_string_json_unquoted, '"'};
         break;
     default:
         h2o_fatal("unexpected escape mode");
@@ -456,12 +475,18 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 /* reserve capacity + suffix.len */
 #define RESERVE(capacity)                                                                                                          \
     do {                                                                                                                           \
-        if ((capacity) + element->suffix.len > line_end - pos) {                                                                   \
+        if ((capacity) + element->suffix.len + 2 /* for double quotes */ > line_end - pos) {                                       \
             size_t off = pos - line;                                                                                               \
             line = expand_line_buf(line, line_end - line, off + (capacity) + element->suffix.len, should_realloc_on_expand);       \
             pos = line + off;                                                                                                      \
             should_realloc_on_expand = 1;                                                                                          \
         }                                                                                                                          \
+    } while (0)
+
+#define APPEND(s, l)                                                                                                               \
+    do {                                                                                                                           \
+        memcpy(pos, (s), (l));                                                                                                     \
+        pos += (l);                                                                                                                \
     } while (0)
 
         switch (element->type) {
@@ -470,7 +495,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_LOCAL_ADDR: /* %A */
             RESERVE(NI_MAXHOST);
-            pos = append_addr(pos, req->conn->callbacks->get_sockname, req->conn, nullexpr);
+            pos = append_addr(pos, req->conn->callbacks->get_sockname, req->conn, &escape);
             break;
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
@@ -478,45 +503,53 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
             RESERVE(sizeof("HTTP/1.1"));
+            if (escape.quote_char != '\0')
+                *pos++ = escape.quote_char;
             pos += h2o_stringify_protocol_version(pos, req->version);
+            if (escape.quote_char != '\0')
+                *pos++ = escape.quote_char;
             break;
         case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
             RESERVE(NI_MAXHOST);
-            pos = append_addr(pos, req->conn->callbacks->get_peername, req->conn, nullexpr);
+            pos = append_addr(pos, req->conn->callbacks->get_peername, req->conn, &escape);
             break;
         case ELEMENT_TYPE_METHOD: /* %m */
-            RESERVE(req->input.method.len * unsafe_factor);
-            pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
+            RESERVE(req->input.method.len * escape.unsafe_factor);
+            pos = escape.append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             break;
         case ELEMENT_TYPE_LOCAL_PORT: /* %p */
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
-            pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn, nullexpr);
+            pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn, &escape);
             break;
         case ELEMENT_TYPE_REMOTE_PORT: /* %{remote}p */
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
-            pos = append_port(pos, req->conn->callbacks->get_peername, req->conn, nullexpr);
+            pos = append_port(pos, req->conn->callbacks->get_peername, req->conn, &escape);
             break;
-        case ELEMENT_TYPE_ENV_VAR:  /* %{..}e */  {
+        case ELEMENT_TYPE_ENV_VAR: /* %{..}e */ {
             h2o_iovec_t *env_var = h2o_req_getenv(req, element->data.name.base, element->data.name.len, 0);
             if (env_var == NULL)
                 goto EmitNull;
-            RESERVE(env_var->len * unsafe_factor);
-            pos = append_safe_string(pos, env_var->base, env_var->len);
-            } break;
+            RESERVE(env_var->len * escape.unsafe_factor);
+            pos = escape.append_unsafe_string(pos, env_var->base, env_var->len);
+        } break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
                 size_t len = req->input.path.len - req->input.query_at;
-                RESERVE(len * unsafe_factor);
-                pos = append_unsafe_string(pos, req->input.path.base + req->input.query_at, len);
+                RESERVE(len * escape.unsafe_factor);
+                pos = escape.append_unsafe_string(pos, req->input.path.base + req->input.query_at, len);
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
-            RESERVE((req->input.method.len + req->input.path.len) * unsafe_factor + sizeof("  HTTP/1.1"));
-            pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
+            RESERVE((req->input.method.len + req->input.path.len) * escape.unsafe_factor + sizeof("  HTTP/1.1"));
+            if (escape.quote_char != '\0')
+                *pos++ = escape.quote_char;
+            pos = escape.append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             *pos++ = ' ';
-            pos = append_unsafe_string(pos, req->input.path.base, req->input.path.len);
+            pos = escape.append_unsafe_string(pos, req->input.path.base, req->input.path.len);
             *pos++ = ' ';
             pos += h2o_stringify_protocol_version(pos, req->version);
+            if (escape.quote_char != '\0')
+                *pos++ = escape.quote_char;
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
             RESERVE(sizeof(H2O_INT32_LONGEST_STR) - 1);
@@ -525,10 +558,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_TIMESTAMP: /* %t */
             if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitNull;
-            RESERVE(H2O_TIMESTR_LOG_LEN + 2);
-            *pos++ = '[';
-            pos = append_safe_string(pos, req->processed_at.str->log, H2O_TIMESTR_LOG_LEN);
-            *pos++ = ']';
+            RESERVE(H2O_TIMESTR_LOG_LEN);
+            *pos++ = escape.quote_char != '\0' ? escape.quote_char : '[';
+            APPEND(req->processed_at.str->log, H2O_TIMESTR_LOG_LEN);
+            *pos++ = escape.quote_char != '\0' ? escape.quote_char : ']';
             break;
         case ELEMENT_TYPE_TIMESTAMP_STRFTIME: /* %{...}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
@@ -539,10 +572,16 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                     localtime_r(&req->processed_at.at.tv_sec, &localt);
                 for (bufsz = 128;; bufsz *= 2) {
                     RESERVE(bufsz);
-                    if ((len = strftime(pos, bufsz, element->data.name.base, &localt)) != 0)
+                    if ((len = strftime(pos + (escape.quote_char != '\0'), bufsz, element->data.name.base, &localt)) != 0)
                         break;
                 }
-                pos += len;
+                if (escape.quote_char != '\0') {
+                    *pos++ = escape.quote_char;
+                    pos += len;
+                    *pos++ = escape.quote_char;
+                } else {
+                    pos += len;
+                }
             }
             break;
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
@@ -579,23 +618,23 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_URL_PATH: /* %U */ {
             size_t path_len = req->input.query_at == SIZE_MAX ? req->input.path.len : req->input.query_at;
-            RESERVE(path_len * unsafe_factor);
-            pos = append_unsafe_string(pos, req->input.path.base, path_len);
+            RESERVE(path_len * escape.unsafe_factor);
+            pos = escape.append_unsafe_string(pos, req->input.path.base, path_len);
         } break;
         case ELEMENT_TYPE_REMOTE_USER: /* %u */ {
             h2o_iovec_t *remote_user = h2o_req_getenv(req, H2O_STRLIT("REMOTE_USER"), 0);
             if (remote_user == NULL)
                 goto EmitNull;
-            RESERVE(remote_user->len * unsafe_factor);
-            pos = append_unsafe_string(pos, remote_user->base, remote_user->len);
+            RESERVE(remote_user->len * escape.unsafe_factor);
+            pos = escape.append_unsafe_string(pos, remote_user->base, remote_user->len);
         } break;
         case ELEMENT_TYPE_AUTHORITY: /* %V */
-            RESERVE(req->input.authority.len * unsafe_factor);
-            pos = append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
+            RESERVE(req->input.authority.len * escape.unsafe_factor);
+            pos = escape.append_unsafe_string(pos, req->input.authority.base, req->input.authority.len);
             break;
         case ELEMENT_TYPE_HOSTCONF: /* %v */
-            RESERVE(req->hostconf->authority.hostport.len * unsafe_factor);
-            pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base, req->hostconf->authority.hostport.len);
+            RESERVE(req->hostconf->authority.hostport.len * escape.unsafe_factor);
+            pos = escape.append_unsafe_string(pos, req->hostconf->authority.hostport.base, req->hostconf->authority.hostport.len);
             break;
 
 #define EMIT_HEADER(headers, findcall, concat)                                                                                     \
@@ -603,21 +642,24 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         ssize_t index = -1;                                                                                                        \
         int found = 0;                                                                                                             \
         while ((index = (findcall)) != -1) {                                                                                       \
+            const h2o_header_t *header = (headers)->entries + index;                                                               \
+            RESERVE(header->value.len *escape.unsafe_factor + 1);                                                                  \
             if (found) {                                                                                                           \
-                RESERVE(2);                                                                                                        \
                 *pos++ = ',';                                                                                                      \
                 *pos++ = ' ';                                                                                                      \
             } else {                                                                                                               \
+                if (escape.quote_char != '\0')                                                                                     \
+                    *pos++ = escape.quote_char;                                                                                    \
                 found = 1;                                                                                                         \
             }                                                                                                                      \
-            const h2o_header_t *header = (headers)->entries + index;                                                               \
-            RESERVE(header->value.len *unsafe_factor);                                                                             \
-            pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                \
+            pos = escape.append_unsafe_string_unquoted(pos, header->value.base, header->value.len);                                \
             if (!concat)                                                                                                           \
                 break;                                                                                                             \
         }                                                                                                                          \
         if (!found)                                                                                                                \
             goto EmitNull;                                                                                                         \
+        if (escape.quote_char != '\0')                                                                                             \
+            *pos++ = escape.quote_char;                                                                                            \
     } while (0)
 
         case ELEMENT_TYPE_IN_HEADER_TOKEN:
@@ -642,7 +684,11 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
         case ELEMENT_TYPE_CONNECTION_ID:
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            if (escape.quote_char != '\0')
+                *pos++ = escape.quote_char;
             pos += sprintf(pos, "%" PRIu64, req->conn->id);
+            if (escape.quote_char != '\0')
+                *pos++ = escape.quote_char;
             break;
 
         case ELEMENT_TYPE_CONNECT_TIME:
@@ -675,26 +721,36 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
         case ELEMENT_TYPE_ERROR: {
             size_t i;
+            if (escape.quote_char != '\0') {
+                RESERVE(0);
+                *pos++ = escape.quote_char;
+            }
             for (i = 0; i != req->error_logs.size; ++i) {
                 h2o_req_error_log_t *log = req->error_logs.entries + i;
                 size_t module_len = strlen(log->module);
-                RESERVE(sizeof("[] ") - 1 + module_len + log->msg.len * unsafe_factor);
+                RESERVE(sizeof("[] ") - 1 + module_len + log->msg.len * escape.unsafe_factor);
                 *pos++ = '[';
-                pos = append_safe_string(pos, log->module, module_len);
+                APPEND(log->module, module_len);
                 *pos++ = ']';
                 *pos++ = ' ';
-                pos = append_unsafe_string(pos, log->msg.base, log->msg.len);
+                pos = escape.append_unsafe_string(pos, log->msg.base, log->msg.len);
             }
+            if (escape.quote_char != '\0')
+                *pos++ = escape.quote_char;
         } break;
 
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
-            h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];
+            h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific.callback_index];
             if (cb != NULL) {
                 h2o_iovec_t s = cb(req);
                 if (s.base == NULL)
                     goto EmitNull;
                 RESERVE(s.len);
-                pos = append_safe_string(pos, s.base, s.len);
+                if (escape.quote_char != '\0')
+                    *pos++ = escape.quote_char;
+                APPEND(s.base, s.len);
+                if (escape.quote_char != '\0')
+                    *pos++ = escape.quote_char;
             } else {
                 goto EmitNull;
             }
@@ -703,9 +759,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_LOGNAME:      /* %l */
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
         EmitNull:
-            RESERVE(nullexpr.len);
-            memcpy(pos, nullexpr.base, nullexpr.len);
-            pos += nullexpr.len;
+            RESERVE(escape.nullexpr.len);
+            APPEND(escape.nullexpr.base, escape.nullexpr.len);
             break;
 
         default:
@@ -715,7 +770,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
 #undef RESERVE
 
-        pos = append_safe_string(pos, element->suffix.base, element->suffix.len);
+        APPEND(element->suffix.base, element->suffix.len);
     }
 
     *len = pos - line;
