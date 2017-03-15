@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.2.0-beta2 TBD
+2.2.0-beta2 2017-03-14 07:25:00+0000
 	- [access-log] add support for JSON-style escapes and null #1208 (Kazuho Oku)
 	- [access-log] add specifier for logging per-request environment variables #1221 (Yannick Koechlin)
 	- [http1] stop reading from socket after sending 400 to avoid the risk of assertion failure #1223 (Frederik Deweerdt)
