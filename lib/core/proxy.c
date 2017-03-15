@@ -460,6 +460,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                     goto Skip;
                 headers[i].value.base = new_value.base;
                 headers[i].value.len = new_value.len;
+            } else if (token == H2O_TOKEN_SERVER) {
+                if (!req->conn->ctx->globalconf->proxy.preserve_server_header)
+                    goto Skip;
             } else if (token == H2O_TOKEN_X_COMPRESS_HINT) {
                 req->compress_hint = compress_hint_to_enum(headers[i].value.base, headers[i].value.len);
                 goto Skip;
