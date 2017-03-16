@@ -59,6 +59,23 @@ redisReplyObjectFunctions reader_object_functions = {
     reader_free_object
 };
 
+static void attach_receiver(struct st_h2o_mruby_redis_command_context_t *ctx, mrb_value receiver)
+{
+    assert(mrb_nil_p(ctx->receiver));
+    ctx->receiver = receiver;
+    mrb_gc_register(ctx->conn->ctx->shared->mrb, receiver);
+}
+
+static mrb_value detach_receiver(struct st_h2o_mruby_redis_command_context_t *ctx, int protect)
+{
+    mrb_value ret = ctx->receiver;
+    assert(!mrb_nil_p(ret));
+    ctx->receiver = mrb_nil_value();
+    mrb_gc_unregister(ctx->conn->ctx->shared->mrb, ret);
+    if (protect) mrb_gc_protect(ctx->conn->ctx->shared->mrb, ret);
+    return ret;
+}
+
 static void on_gc_dispose_redis(mrb_state *mrb, void *_conn)
 {
     struct st_h2o_mruby_redis_conn_t *conn = _conn;
@@ -72,51 +89,14 @@ static void on_gc_dispose_command(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_redis_command_context_t *ctx = _ctx;
     if (ctx == NULL) return;
-
-    ctx->refs.command = mrb_nil_value();
+    if (! mrb_nil_p(ctx->receiver)) {
+        detach_receiver(ctx, 0);
+    }
+    free(ctx);
 }
 
 const static struct mrb_data_type redis_type = {"redis", on_gc_dispose_redis};
 const static struct mrb_data_type command_type = {"redis_command", on_gc_dispose_command};
-
-static mrb_value create_downstream_closed_exception(mrb_state *mrb)
-{
-    return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
-}
-
-static void attach_receiver(struct st_h2o_mruby_redis_command_context_t *ctx, mrb_value receiver)
-{
-    assert(mrb_nil_p(ctx->receiver));
-    ctx->receiver = receiver;
-    mrb_gc_register(ctx->conn->ctx->shared->mrb, receiver);
-}
-
-static mrb_value detach_receiver(struct st_h2o_mruby_redis_command_context_t *ctx)
-{
-    mrb_value ret = ctx->receiver;
-    assert(!mrb_nil_p(ret));
-    ctx->receiver = mrb_nil_value();
-    mrb_gc_unregister(ctx->conn->ctx->shared->mrb, ret);
-    mrb_gc_protect(ctx->conn->ctx->shared->mrb, ret);
-    return ret;
-}
-
-static void on_command_dispose(void *_ctx)
-{
-    struct st_h2o_mruby_redis_command_context_t *ctx = _ctx;
-
-    /* TODO: is this necessary? */
-    if (!mrb_nil_p(ctx->refs.command))
-        DATA_PTR(ctx->refs.command) = NULL;
-
-    /* notify the app, if it is waiting to hear from us */
-    if (!mrb_nil_p(ctx->receiver)) {
-        mrb_state *mrb = ctx->conn->ctx->shared->mrb;
-        int gc_arena = mrb_gc_arena_save(mrb);
-        h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx), create_downstream_closed_exception(mrb), NULL);
-        mrb_gc_arena_restore(mrb, gc_arena);
-    }
-}
 
 static redisReader *create_reader(h2o_redis_conn_t *_conn)
 {
@@ -187,7 +167,7 @@ static void on_redis_command(void *_reply, void *_ctx)
         }
     } else {
         int gc_arena = mrb_gc_arena_save(mrb);
-        h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx), reply, NULL);
+        h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
         mrb_gc_arena_restore(mrb, gc_arena);
     }
 }
@@ -199,7 +179,6 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
 
     /* allocate context and initialize */
     struct st_h2o_mruby_redis_command_context_t *command_ctx = h2o_mem_alloc(sizeof(*command_ctx));
-    // FIXME: who and when free this?
     memset(command_ctx, 0, sizeof(*command_ctx));
     command_ctx->conn = conn;
     command_ctx->receiver = mrb_nil_value();
@@ -212,16 +191,25 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
 
     const char **argv = h2o_mem_alloc(command_len * sizeof(char *));
     size_t *argvlen = h2o_mem_alloc(command_len * sizeof(size_t));
+
+    int gc_arena = mrb_gc_arena_save(mrb);
+
     for (i = 0; i != command_len; ++i) {
-        int gc_arena = mrb_gc_arena_save(mrb);
-        mrb_value s = mrb_obj_as_string(mrb, command_args[i]);
-        argv[i] = mrb_str_to_cstr(mrb, s);
-        argvlen[i] = mrb_string_value_len(mrb, s);
-        mrb_gc_arena_restore(mrb, gc_arena);
+        if (mrb_symbol_p(command_args[i])) {
+            mrb_int len;
+            argv[i] = mrb_sym2name_len(mrb, mrb_symbol(command_args[i]), &len);
+            argvlen[i] = len;
+        } else {
+            mrb_value s = mrb_obj_as_string(mrb, command_args[i]);
+            argv[i] = mrb_string_value_cstr(mrb, &s);
+            argvlen[i] = mrb_string_value_len(mrb, s);
+        }
     }
 
     /* send command to redis */
     h2o_redis_command_argv(&conn->super, on_redis_command, command_ctx, (int)command_len, argv, argvlen);
+
+    mrb_gc_arena_restore(mrb, gc_arena);
 
     free(argv);
     free(argvlen);
