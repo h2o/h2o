@@ -16,7 +16,6 @@
 		0812AB2C1D7FD54700004F23 /* read.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB2A1D7FD54700004F23 /* read.h */; };
 		084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* http2_debug_state.c */; };
 		084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C31D54BB9200E89F66 /* http2_debug_state.c */; };
-		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
 		08790DDA1D80153600A04BC1 /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; };
 		08790DDC1D80154C00A04BC1 /* sds.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DDB1D80154C00A04BC1 /* sds.c */; };
 		08790DDF1D8015A400A04BC1 /* net.h in Headers */ = {isa = PBXBuildFile; fileRef = 08790DDD1D8015A400A04BC1 /* net.h */; };
@@ -25,6 +24,13 @@
 		08790DE51D82782900A04BC1 /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
 		08790E091D8BD7F100A04BC1 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		08790E111D8BD85700A04BC1 /* redis-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DF41D8BD72500A04BC1 /* redis-client.c */; };
+		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
+		08F320DD1E7A9CA60038FA5A /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
+		08F320DE1E7A9CB80038FA5A /* async.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1C1D7FCFEB00004F23 /* async.c */; };
+		08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1E1D7FCFEB00004F23 /* hiredis.c */; };
+		08F320E01E7A9CBD0038FA5A /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; };
+		08F320E11E7A9CBF0038FA5A /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; };
+		08F320E21E7A9CC20038FA5A /* sds.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DDB1D80154C00A04BC1 /* sds.c */; };
 		100A55101C2BB15600C4E3E0 /* http_request.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A550E1C2BB15100C4E3E0 /* http_request.c */; };
 		100A55151C30C5BC00C4E3E0 /* chunked.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A55141C30C5BC00C4E3E0 /* chunked.c */; };
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
@@ -470,7 +476,6 @@
 		0812AB2A1D7FD54700004F23 /* read.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = read.h; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
-		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
 		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
 		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
@@ -479,6 +484,7 @@
 		08790DE31D8276EA00A04BC1 /* redis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redis.c; sourceTree = "<group>"; };
 		08790DF41D8BD72500A04BC1 /* redis-client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "redis-client.c"; sourceTree = "<group>"; };
 		08790E101D8BD7F100A04BC1 /* examples-redis-client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-redis-client"; sourceTree = BUILT_PRODUCTS_DIR; };
+		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
 		100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-http-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2343,6 +2349,7 @@
 				E9708B1D1E49BABC0029E0A5 /* aes.c in Sources */,
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				E9708B531E52C7EE0029E0A5 /* config.c in Sources */,
+				08F320E11E7A9CBF0038FA5A /* read.c in Sources */,
 				E9708B801E52C84A0029E0A5 /* throttle_resp.c in Sources */,
 				107D4D4F1B58970D004A9B21 /* ssl.c in Sources */,
 				E9708B501E52C7E50029E0A5 /* time.c in Sources */,
@@ -2359,12 +2366,16 @@
 				E9708B461E52C7DF0029E0A5 /* filecache.c in Sources */,
 				E9708B5F1E52C80F0029E0A5 /* errordoc.c in Sources */,
 				E9708B3C1E52C7860029E0A5 /* connect.c in Sources */,
+				08F320E01E7A9CBD0038FA5A /* net.c in Sources */,
 				E9708B611E52C80F0029E0A5 /* file.c in Sources */,
 				E9708B7B1E52C83D0029E0A5 /* reproxy.c in Sources */,
+				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
 				E9708B5C1E52C80F0029E0A5 /* access_log.c in Sources */,
 				100A55101C2BB15600C4E3E0 /* http_request.c in Sources */,
 				E9708B1E1E49BAC10029E0A5 /* blockwise.c in Sources */,
+				08F320DE1E7A9CB80038FA5A /* async.c in Sources */,
 				E9708B651E52C80F0029E0A5 /* redirect.c in Sources */,
+				08F320DD1E7A9CA60038FA5A /* redis.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				E9708B6B1E52C81D0029E0A5 /* chunked.c in Sources */,
 				107E33F81C7EAF5A00AEF5F8 /* compress_fragment.cc in Sources */,
@@ -2417,6 +2428,7 @@
 				E9708B511E52C7E50029E0A5 /* timeout.c in Sources */,
 				E9708B431E52C7AA0029E0A5 /* picohttpparser.c in Sources */,
 				E9708B671E52C80F0029E0A5 /* status.c in Sources */,
+				08F320E21E7A9CC20038FA5A /* sds.c in Sources */,
 				E9708B411E52C7860029E0A5 /* strerror.c in Sources */,
 				E9708B3A1E52C7640029E0A5 /* gkc.c in Sources */,
 				E9708B5E1E52C80F0029E0A5 /* expires.c in Sources */,
