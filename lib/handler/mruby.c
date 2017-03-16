@@ -344,22 +344,27 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     handler_ctx->handler = handler;
     handler_ctx->shared = get_shared_context(ctx);
-    handler_ctx->ctx = ctx;
 
     mrb_state *mrb = handler_ctx->shared->mrb;
 
     handler_ctx->pendings = mrb_ary_new(mrb);
 
     /* compile code (must be done for each thread) */
-    int arena = mrb_gc_arena_save(handler_ctx->shared->mrb);
-    h2o_mruby_initializing_context = handler_ctx;
-    mrb_value proc = h2o_mruby_compile_code(handler_ctx->shared->mrb, &handler->config, NULL);
-    h2o_mruby_initializing_context = NULL;
+    int arena = mrb_gc_arena_save(mrb);
 
-    handler_ctx->proc =
-        mrb_funcall_argv(handler_ctx->shared->mrb, mrb_ary_entry(handler_ctx->shared->constants, H2O_MRUBY_PROC_APP_TO_FIBER),
-                         handler_ctx->shared->symbols.sym_call, 1, &proc);
+    mrb_value fibers = prepare_fibers(handler_ctx);
+    if (mrb->exc != NULL) {
+        fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        mrb->exc = NULL;
+        return;
+    }
+    assert(mrb_array_p(fibers));
 
+    handler_ctx->proc = mrb_ary_entry(fibers, 0);
+
+    /* run configurator */
+    mrb_value configurator = mrb_ary_entry(fibers, 1);
+    h2o_mruby_run_fiber(handler_ctx, configurator, mrb_nil_value(), NULL);
     h2o_mruby_assert(handler_ctx->shared->mrb);
 
     mrb_gc_arena_restore(mrb, arena);
@@ -797,6 +802,9 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
                 break;
             case H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK:
                 input = h2o_mruby_http_fetch_chunk_callback(ctx, receiver, args, &run_again);
+                break;
+            case H2O_MRUBY_CALLBACK_ID_REDIS_JOIN_REPLY:
+                input = h2o_mruby_redis_join_reply_callback(ctx, receiver, args, &run_again);
                 break;
             default:
                 input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
