@@ -21,12 +21,17 @@
 module Kernel
 
   def _h2o_chunked_proc_each_to_fiber()
-    Proc.new do |src|
+    Proc.new do |args|
+      src, generator = *args
       fiber = Fiber.new do
-        src.each do |chunk|
-          _h2o_send_chunk(chunk)
+        begin
+          src.each do |chunk|
+            _h2o_send_chunk(chunk, generator)
+          end
+          _h2o_send_chunk_eos(generator)
+        rescue => e
+          Fiber.yield([-1, e, generator])
         end
-        _h2o_send_chunk_eos()
       end
       fiber.resume
     end

@@ -9,7 +9,13 @@ module H2O
     end
     def initialize()
       @values = {}
-      @post_handler_generation_hooks = []
+      @post_handler_generation_hooks = [
+        proc {|handler|
+          if !handler.respond_to?(:call)
+            raise "app is not callable"
+          end
+        }
+      ]
     end
     def get_value(key)
       @values[key]

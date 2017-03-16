@@ -48,34 +48,53 @@ module Kernel
     end
   end
 
-  def _h2o_proc_app_to_fiber()
-    Proc.new do |app|
-      cached = nil
-      Proc.new do |req|
-        fiber = cached
-        cached = nil
-        if !fiber
-          fiber = Fiber.new do
-            self_fiber = Fiber.current
-            req = Fiber.yield
-            while 1
-              begin
-                while 1
-                  resp = app.call(req)
-                  cached = self_fiber
-                  req = Fiber.yield(resp)
-                end
-              rescue => e
-                cached = self_fiber
-                req = Fiber.yield([-1, e])
-              end
-            end
-          end
-          fiber.resume
-        end
-        fiber.resume(req)
-      end
+  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
+  H2O_CALLBACK_ID_CONFIGURING_APP = -2
+  H2O_CALLBACK_ID_CONFIGURED_APP = -3
+  def _h2o_prepare_app(conf_proc)
+    app = Proc.new do |req|
+      [H2O_CALLBACK_ID_CONFIGURING_APP]
     end
+
+    cached = nil
+    runner = Proc.new do |args|
+      fiber = cached || Fiber.new do |req, generator|
+        self_fiber = Fiber.current
+        while 1
+          begin
+            while 1
+              resp = app.call(req)
+              cached = self_fiber
+              (req, generator) = Fiber.yield(*resp, generator)
+            end
+          rescue => e
+            cached = self_fiber
+            (req, generator) = Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e, generator])
+          end
+        end
+      end
+      cached = nil
+      fiber.resume(*args)
+    end
+
+    configurator = Proc.new do
+      fiber = Fiber.new do
+        begin
+          H2O::ConfigurationContext.reset
+          app = conf_proc.call
+          H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)
+          [H2O_CALLBACK_ID_CONFIGURED_APP]
+        rescue => e
+          app = Proc.new do |req|
+            [500, {}, ['Internal Server Error']]
+          end
+          [H2O_CALLBACK_ID_CONFIGURED_APP, e]
+        end
+      end
+      fiber.resume
+    end
+
+    [runner, configurator]
   end
 
 end
