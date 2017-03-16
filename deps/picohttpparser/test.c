@@ -163,7 +163,7 @@ static void test_response(void)
     PARSE("HTTP/1.0 200 OK\r\n\r\n", 0, 0, "simple");
     ok(num_headers == 0);
     ok(status == 200);
-    ok(minor_version = 1);
+    ok(minor_version == 0);
     ok(bufis(msg, msg_len, "OK"));
 
     PARSE("HTTP/1.0 200 OK\r\n\r", 0, -2, "partial");
@@ -314,7 +314,7 @@ static void test_chunked_per_byte(int line, int consume_trailer, const char *enc
         ret = phr_decode_chunked(&dec, buf + bytes_ready, &bufsz);
         if (ret != -2) {
             ok(0);
-            return;
+            goto cleanup;
         }
         bytes_ready += bufsz;
     }
@@ -332,6 +332,7 @@ static void test_chunked_per_byte(int line, int consume_trailer, const char *enc
             ok(0);
     }
 
+cleanup:
     free(buf);
 }
 
@@ -355,16 +356,17 @@ static void test_chunked_failure(int line, const char *encoded, ssize_t expected
         ret = phr_decode_chunked(&dec, buf, &bufsz);
         if (ret == -1) {
             ok(ret == expected);
-            return;
+            goto cleanup;
         } else if (ret == -2) {
             /* continue */
         } else {
             ok(0);
-            return;
+            goto cleanup;
         }
     }
     ok(ret == expected);
 
+cleanup:
     free(buf);
 }
 

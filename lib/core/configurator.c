@@ -416,6 +416,11 @@ static int on_config_http2_idle_timeout(h2o_configurator_command_t *cmd, h2o_con
     return config_timeout(cmd, node, &ctx->globalconf->http2.idle_timeout);
 }
 
+static int on_config_http2_graceful_shutdown_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_timeout(cmd, node, &ctx->globalconf->http2.graceful_shutdown_timeout);
+}
+
 static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
                                                                   yoml_t *node)
 {
@@ -806,15 +811,19 @@ static int on_config_server_name(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_send_server_name(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    ssize_t on;
-
-    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
-        return -1;
-
-    if (!on) {
+    switch(h2o_configurator_get_one_of(cmd, node, "OFF,ON,preserve")) {
+    case 0: /* off */
         ctx->globalconf->server_name = h2o_iovec_init(H2O_STRLIT(""));
+        break;
+    case 1: /* on */
+        break;
+    case 2: /* preserve */
+        ctx->globalconf->server_name = h2o_iovec_init(H2O_STRLIT(""));
+        ctx->globalconf->proxy.preserve_server_header = 1;
+        break;
+    default:
+        return -1;
     }
-
     return 0;
 }
 
@@ -872,6 +881,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-idle-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_idle_timeout);
+        h2o_configurator_define_command(&c->super, "http2-graceful-shutdown-timeout",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_graceful_shutdown_timeout);
         h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);

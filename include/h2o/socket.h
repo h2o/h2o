@@ -260,6 +260,7 @@ const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock);
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock);
+h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock);
 static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
@@ -304,6 +305,14 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
  * @param sock the socket
  */
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+/**
+ *
+ */
+struct st_ptls_context_t *h2o_socket_ssl_get_picotls_context(SSL_CTX *ossl);
+/**
+ * associates a picotls context to SSL_CTX
+ */
+void h2o_socket_ssl_set_picotls_context(SSL_CTX *ossl, struct st_ptls_context_t *ptls);
 /**
  *
  */
@@ -355,7 +364,7 @@ inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     const char *s = h2o_socket_get_ssl_protocol_version(sock);
-    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
+    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }
 
 inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool)
@@ -366,14 +375,14 @@ inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem
     case 1:
         return h2o_iovec_init(H2O_STRLIT("1"));
     default:
-        return h2o_iovec_init(H2O_STRLIT("-"));
+        return h2o_iovec_init(NULL, 0);
     }
 }
 
 inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     const char *s = h2o_socket_get_ssl_cipher(sock);
-    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(H2O_STRLIT("-"));
+    return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }
 
 inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)

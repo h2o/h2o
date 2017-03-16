@@ -257,6 +257,10 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
                 *dst_header->name = h2o_strdup(&req->pool, src_header->name->base, src_header->name->len);
             }
             dst_header->value = h2o_strdup(&req->pool, src_header->value.base, src_header->value.len);
+            if (!src_header->orig_name)
+                dst_header->orig_name = NULL;
+            else
+                dst_header->orig_name = h2o_strdup(&req->pool, src_header->orig_name, src_header->name->len).base;
         }
         if (src->env.size != 0) {
             h2o_vector_reserve(&req->pool, &req->env, src->env.size);
@@ -513,7 +517,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     if ((flags & H2O_SEND_ERROR_KEEP_HEADERS) == 0)
         memset(&req->res.headers, 0, sizeof(req->res.headers));
 
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain; charset=utf-8"));
 
     h2o_send_inline(req, body, SIZE_MAX);
 }
@@ -613,8 +617,8 @@ void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const cha
     req->res.status = status;
     req->res.reason = reason;
     req->res.headers = (h2o_headers_t){NULL};
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, url, url_len);
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LOCATION, NULL, url, url_len);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/html; charset=utf-8"));
     h2o_start_response(req, &generator);
     h2o_send(req, bufs, bufcnt, H2O_SEND_STATE_FINAL);
 }

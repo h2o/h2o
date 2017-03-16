@@ -21,11 +21,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include "h2o/hostinfo.h"
-#include "h2o/socketpool.h"
-#include "h2o/string_.h"
-#include "h2o/url.h"
-#include "h2o/http1client.h"
+#include "h2o.h"
 
 static h2o_socketpool_t *sockpool;
 static h2o_mem_pool_t pool;
@@ -35,7 +31,7 @@ static int cnt_left = 3;
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers);
+                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers);
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
@@ -96,7 +92,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 }
 
 h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                h2o_http1client_header_t *headers, size_t num_headers)
+                                h2o_header_t *headers, size_t num_headers)
 {
     size_t i;
 
@@ -108,7 +104,7 @@ h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, i
 
     printf("HTTP/1.%d %d %.*s\n", minor_version, status, (int)msg.len, msg.base);
     for (i = 0; i != num_headers; ++i)
-        printf("%.*s: %.*s\n", (int)headers[i].name_len, headers[i].name, (int)headers[i].value_len, headers[i].value);
+        printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
     printf("\n");
 
     if (errstr == h2o_http1client_error_is_eos) {
