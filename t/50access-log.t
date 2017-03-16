@@ -244,8 +244,10 @@ subtest "json-null" => sub {
             my $server = shift;
             system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
         },
-        { format => '\\"%h\\" %l', escape => 'json' },
-        qr{^"127\.0\.0\.1" null$},
+        # single specifier surrounded by quotes that consist a string literal in JSON should be converted to `null` if the specifier
+        # resolves to null
+        { format => '\\"%h\\" %l \\"%l\\" \'%l\' \'%l \' \'\\"%l\\"\'', escape => 'json' },
+        qr{^"127\.0\.0\.1" null null null 'null ' '"null"'$},
     );
 };
 
