@@ -568,6 +568,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
+            if (req->res.status == 0)
+                goto EmitNull;
             RESERVE(sizeof(H2O_INT32_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRId32, (int32_t)req->res.status);
             break;

@@ -96,9 +96,9 @@ static int is_msie(h2o_req_t *req)
     return 1;
 }
 
-static void init_request(struct st_h2o_http1_conn_t *conn, int reinit)
+static void init_request(struct st_h2o_http1_conn_t *conn)
 {
-    if (reinit)
+    if (conn->_req_index != 0)
         h2o_dispose_request(&conn->req);
     h2o_init_request(&conn->req, &conn->super, NULL);
 
@@ -503,7 +503,14 @@ static void reqread_on_timeout(h2o_timeout_entry_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
 
-    /* TODO log */
+    if (conn->_req_index == 1) {
+        /* assign hostconf and bind conf so that the request can be logged */
+        h2o_hostconf_t *hostconf = h2o_req_setup(&conn->req);
+        h2o_req_bind_conf(&conn->req, hostconf, &hostconf->fallback_path);
+        /* set error status for logging */
+        conn->req.res.reason = "Request Timeout";
+    }
+
     conn->req.http1_is_persistent = 0;
     close_connection(conn, 1);
 }
@@ -551,7 +558,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     }
 
     /* handle next request */
-    init_request(conn, 1);
+    init_request(conn);
     h2o_buffer_consume(&conn->sock->input, conn->_reqsize);
     conn->_prevreqlen = 0;
     conn->_reqsize = 0;
@@ -810,7 +817,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     sock->data = conn;
     h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
 
-    init_request(conn, 0);
+    init_request(conn);
     reqread_start(conn);
 }
 
