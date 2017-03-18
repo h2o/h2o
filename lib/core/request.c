@@ -277,7 +277,7 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&req->_timeout_entry);
 
-    if (req->version != 0 && req->pathconf != NULL) {
+    if (req->pathconf != NULL) {
         h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);

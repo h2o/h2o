@@ -398,25 +398,10 @@ static int contains_crlf_only(const char *s, size_t len)
     return 1;
 }
 
-static void send_bad_request_on_complete(h2o_socket_t *sock, const char *err)
-{
-    struct st_h2o_http1_conn_t *conn = sock->data;
-    close_connection(conn, 1);
-}
-
 static void send_bad_request(struct st_h2o_http1_conn_t *conn)
 {
-    const static h2o_iovec_t resp = {H2O_STRLIT("HTTP/1.1 400 Bad Request\r\n"
-                                                "Content-Type: text/plain; charset=utf-8\r\n"
-                                                "Connection: close\r\n"
-                                                "Content-Length: 11\r\n"
-                                                "\r\n"
-                                                "Bad Request")};
-
-    assert(conn->req.version == 0 && "request has not been parsed successfully");
-    assert(conn->req.http1_is_persistent == 0);
-    h2o_socket_write(conn->sock, (h2o_iovec_t *)&resp, 1, send_bad_request_on_complete);
     h2o_socket_read_stop(conn->sock);
+    h2o_send_error_400(&conn->req, "Bad Request", "Bad Request", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
