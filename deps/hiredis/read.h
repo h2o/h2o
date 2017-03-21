@@ -38,7 +38,7 @@
 #define REDIS_OK 0
 
 /* When an error occurs, the err flag in a context is set to hold the type of
- * error that occured. REDIS_ERR_IO means there was an I/O error and you
+ * error that occurred. REDIS_ERR_IO means there was an I/O error and you
  * should use the "errno" variable to find out what is wrong.
  * For other values, the "errstr" field will hold a description. */
 #define REDIS_ERR_IO 1 /* Error in read or write */
@@ -100,14 +100,9 @@ void redisReaderFree(redisReader *r);
 int redisReaderFeed(redisReader *r, const char *buf, size_t len);
 int redisReaderGetReply(redisReader *r, void **reply);
 
-/* Backwards compatibility, can be removed on big version bump. */
-#define redisReplyReaderCreate redisReaderCreate
-#define redisReplyReaderFree redisReaderFree
-#define redisReplyReaderFeed redisReaderFeed
-#define redisReplyReaderGetReply redisReaderGetReply
-#define redisReplyReaderSetPrivdata(_r, _p) (int)(((redisReader*)(_r))->privdata = (_p))
-#define redisReplyReaderGetObject(_r) (((redisReader*)(_r))->reply)
-#define redisReplyReaderGetError(_r) (((redisReader*)(_r))->errstr)
+#define redisReaderSetPrivdata(_r, _p) (int)(((redisReader*)(_r))->privdata = (_p))
+#define redisReaderGetObject(_r) (((redisReader*)(_r))->reply)
+#define redisReaderGetError(_r) (((redisReader*)(_r))->errstr)
 
 #ifdef __cplusplus
 }

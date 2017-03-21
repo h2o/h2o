@@ -1,3 +1,42 @@
+### 1.0.0 (unreleased)
+
+**Fixes**:
+
+* Catch a buffer overflow when formatting the error message
+* Import latest upstream sds. This breaks applications that are linked against the old hiredis v0.13
+* Fix warnings, when compiled with -Wshadow
+* Make hiredis compile in Cygwin on Windows, now CI-tested
+
+**BREAKING CHANGES**:
+
+* Change `redisReply.len` to `size_t`, as it denotes the the size of a string
+
+User code should compare this to `size_t` values as well.
+If it was used to compare to other values, casting might be necessary or can be removed, if casting was applied before.
+
+* Remove backwards compatibility macro's
+
+This removes the following old function aliases, use the new name now:
+
+| Old                         | New                    |
+| --------------------------- | ---------------------- |
+| redisReplyReaderCreate      | redisReaderCreate      |
+| redisReplyReaderCreate      | redisReaderCreate      |
+| redisReplyReaderFree        | redisReaderFree        |
+| redisReplyReaderFeed        | redisReaderFeed        |
+| redisReplyReaderGetReply    | redisReaderGetReply    |
+| redisReplyReaderSetPrivdata | redisReaderSetPrivdata |
+| redisReplyReaderGetObject   | redisReaderGetObject   |
+| redisReplyReaderGetError    | redisReaderGetError    |
+
+* The `DEBUG` variable in the Makefile was renamed to `DEBUG_FLAGS`
+
+Previously it broke some builds for people that had `DEBUG` set to some arbitrary value,
+due to debugging other software.
+By renaming we avoid unintentional name clashes.
+
+Simply rename `DEBUG` to `DEBUG_FLAGS` in your environment to make it working again.
+
 ### 0.13.3 (2015-09-16)
 
 * Revert "Clear `REDIS_CONNECTED` flag when connection is closed".
