@@ -76,6 +76,7 @@ struct log_element_t {
         h2o_iovec_t name;
         size_t protocol_specific_callback_index;
     } data;
+    int magically_quoted_json; /* whether to omit surrounding doublequotes when the output is null */
 };
 
 struct st_h2o_logconf_t {
@@ -88,6 +89,43 @@ static h2o_iovec_t strdup_lowercased(const char *s, size_t len)
     h2o_iovec_t v = h2o_strdup(NULL, s, len);
     h2o_strtolower(v.base, v.len);
     return v;
+}
+
+static int determine_magicquote_nodes(h2o_logconf_t *logconf, char *errbuf)
+{
+    size_t element_index;
+    int quote_char = '\0'; /* the quote char being used if the state machine is within a string literal */
+    int just_in = 0;       /* if we just went into the string literal */
+
+    for (element_index = 0; element_index < logconf->elements.size; ++element_index) {
+        h2o_iovec_t suffix = logconf->elements.entries[element_index].suffix;
+        logconf->elements.entries[element_index].magically_quoted_json = just_in && suffix.len != 0 && suffix.base[0] == quote_char;
+
+        just_in = 0;
+
+        size_t i;
+        for (i = 0; i < suffix.len; ++i) {
+            just_in = 0;
+            if (quote_char != '\0') {
+                if (quote_char == suffix.base[i]) {
+                    /* out of quote? */
+                    size_t j, num_bs = 0;
+                    for (j = i; j != 0; ++num_bs)
+                        if (suffix.base[--j] != '\\')
+                            break;
+                    if (num_bs % 2 == 0)
+                        quote_char = '\0';
+                }
+            } else {
+                if (suffix.base[i] == '"' || suffix.base[i] == '\'') {
+                    quote_char = suffix.base[i];
+                    just_in = 1;
+                }
+            }
+        }
+    }
+
+    return 1;
 }
 
 h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
@@ -271,6 +309,11 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
 
 #undef NEW_ELEMENT
 #undef LAST_ELEMENT
+
+    if (escape == H2O_LOGCONF_ESCAPE_JSON) {
+        if (!determine_magicquote_nodes(logconf, errbuf))
+            goto Error;
+    }
 
     return logconf;
 
@@ -704,8 +747,14 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
         EmitNull:
             RESERVE(nullexpr.len);
-            memcpy(pos, nullexpr.base, nullexpr.len);
-            pos += nullexpr.len;
+            /* special case that trims surrounding quotes */
+            if (element->magically_quoted_json) {
+                --pos;
+                pos = append_safe_string(pos, nullexpr.base, nullexpr.len);
+                pos = append_safe_string(pos, element->suffix.base + 1, element->suffix.len - 1);
+                continue;
+            }
+            pos = append_safe_string(pos, nullexpr.base, nullexpr.len);
             break;
 
         default:

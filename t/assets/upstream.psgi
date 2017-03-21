@@ -93,6 +93,16 @@ builder {
             ]
         ];
     };
+    mount "/echo-server-header" => sub {
+        my $env = shift;
+        my @resph = [ 'content-type' => 'text/plain' ];
+        if ($env->{HTTP_SERVER}) {
+            @resph = [ 'content-type' => 'text/plain', 'server' => $env->{HTTP_SERVER} ];
+        }
+        return [
+            200, @resph, [ "Ok" ]
+        ];
+    };
     mount "/streaming-body" => sub {
         my $env = shift;
         return sub {

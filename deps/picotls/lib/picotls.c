@@ -83,6 +83,10 @@
 #define PTLS_DEBUGF(...)
 #endif
 
+#ifndef PTLS_MEMORY_DEBUG
+#define PTLS_MEMORY_DEBUG 0
+#endif
+
 struct st_ptls_traffic_protection_t {
     uint8_t secret[PTLS_MAX_DIGEST_SIZE];
     ptls_aead_context_t *aead;
@@ -362,14 +366,14 @@ int ptls_buffer_reserve(ptls_buffer_t *buf, size_t delta)
     if (buf->base == NULL)
         return PTLS_ERROR_NO_MEMORY;
 
-    if (buf->capacity < buf->off + delta) {
+    if (PTLS_MEMORY_DEBUG || buf->capacity < buf->off + delta) {
         uint8_t *newp;
         size_t new_capacity = buf->capacity;
         if (new_capacity < 1024)
             new_capacity = 1024;
-        do {
+        while (new_capacity < buf->off + delta) {
             new_capacity *= 2;
-        } while (new_capacity < buf->off + delta);
+        }
         if ((newp = malloc(new_capacity)) == NULL)
             return PTLS_ERROR_NO_MEMORY;
         memcpy(newp, buf->base, buf->off);
@@ -2576,12 +2580,14 @@ static int handle_handshake_record(ptls_t *tls, int (*cb)(ptls_t *tls, ptls_buff
 
     /* keep last partial message in buffer */
     if (src != src_end) {
-        if (tls->recvbuf.mess.base == NULL)
+        if (tls->recvbuf.mess.base == NULL) {
             ptls_buffer_init(&tls->recvbuf.mess, "", 0);
-        tls->recvbuf.mess.off = 0;
-        if ((ret = ptls_buffer_reserve(&tls->recvbuf.mess, src_end - src)) != 0)
-            return ret;
-        memcpy(tls->recvbuf.mess.base, src, src_end - src);
+            if ((ret = ptls_buffer_reserve(&tls->recvbuf.mess, src_end - src)) != 0)
+                return ret;
+            memcpy(tls->recvbuf.mess.base, src, src_end - src);
+        } else {
+            memmove(tls->recvbuf.mess.base, src, src_end - src);
+        }
         tls->recvbuf.mess.off = src_end - src;
     } else {
         ptls_buffer_dispose(&tls->recvbuf.mess);
