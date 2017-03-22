@@ -194,7 +194,7 @@ time_update_datetime(mrb_state *mrb, struct mrb_time *self)
     aid = localtime_r(&self->sec, &self->datetime);
   }
   if (!aid) {
-    mrb_raisef(mrb, E_ARGUMENT_ERROR, "%S out of Time range", mrb_float_value(mrb, self->sec));
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "%S out of Time range", mrb_float_value(mrb, (mrb_float)self->sec));
     /* not reached */
     return NULL;
   }
@@ -217,7 +217,7 @@ static struct mrb_time*
 time_alloc(mrb_state *mrb, double sec, double usec, enum mrb_timezone timezone)
 {
   struct mrb_time *tm;
-  time_t tsec;
+  time_t tsec = 0;
 
   if (sizeof(time_t) == 4 && (sec > (double)INT32_MAX || (double)INT32_MIN > sec)) {
     goto out_of_range;
@@ -332,6 +332,15 @@ time_mktime(mrb_state *mrb, mrb_int ayear, mrb_int amonth, mrb_int aday,
   nowtime.tm_min   = (int)amin;
   nowtime.tm_sec   = (int)asec;
   nowtime.tm_isdst = -1;
+
+  if (nowtime.tm_mon  < 0 || nowtime.tm_mon  > 11
+      || nowtime.tm_mday < 1 || nowtime.tm_mday > 31
+      || nowtime.tm_hour < 0 || nowtime.tm_hour > 24
+      || (nowtime.tm_hour == 24 && (nowtime.tm_min > 0 || nowtime.tm_sec > 0))
+      || nowtime.tm_min  < 0 || nowtime.tm_min  > 59
+      || nowtime.tm_sec  < 0 || nowtime.tm_sec  > 60)
+    mrb_raise(mrb, E_RUNTIME_ERROR, "argument out of range");
+
   if (timezone == MRB_TIMEZONE_UTC) {
     nowsecs = timegm(&nowtime);
   }

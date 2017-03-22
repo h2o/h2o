@@ -46,17 +46,6 @@ assert('Proc#arity', '15.2.17.4.2') do
   assert_equal(-1, g)
 end
 
-assert('Proc#arity with unitialized Proc') do
-  begin
-    Proc.alias_method(:original_initialize, :initialize)
-    Proc.remove_method(:initialize)
-    assert_equal 0, Proc.new{|a, b, c| 1}.arity
-  ensure
-    Proc.alias_method(:initialize, :original_initialize)
-    Proc.remove_method(:original_initialize)
-  end
-end
-
 assert('Proc#call', '15.2.17.4.3') do
   a = 0
   b = Proc.new { a += 1 }
@@ -147,6 +136,18 @@ assert('Proc#return_does_not_break_self') do
   assert_equal c, c.block.call
 end
 
+assert('call Proc#initialize if defined') do
+  a = []
+  c = Class.new(Proc) do
+    define_method(:initialize) do
+      a << :ok
+    end
+  end
+
+  assert_kind_of c, c.new{}
+  assert_equal [:ok], a
+end
+
 assert('&obj call to_proc if defined') do
   pr = Proc.new{}
   def mock(&b)
@@ -162,20 +163,4 @@ assert('&obj call to_proc if defined') do
   assert_equal :from_to_proc, mock(&obj).call
 
   assert_raise(TypeError){ mock(&(Object.new)) }
-end
-
-assert('initialize_copy works when initialize is removed') do
-  begin
-    Proc.alias_method(:old_initialize, :initialize)
-    Proc.remove_method(:initialize)
-
-    a = Proc.new {}
-    b = Proc.new {}
-    assert_nothing_raised do
-      a.initialize_copy(b)
-    end
-  ensure
-    Proc.alias_method(:initialize, :old_initialize)
-    Proc.remove_method(:old_initialize)
-  end
 end

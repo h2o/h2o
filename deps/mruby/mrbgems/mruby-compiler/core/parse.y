@@ -768,14 +768,14 @@ new_dsym(parser_state *p, node *a)
   return cons((node*)NODE_DSYM, new_dstr(p, a));
 }
 
-/* (:str . (a . a)) */
+/* (:regx . (s . (opt . enc))) */
 static node*
 new_regx(parser_state *p, const char *p1, const char* p2, const char* p3)
 {
   return cons((node*)NODE_REGX, cons((node*)p1, cons((node*)p2, (node*)p3)));
 }
 
-/* (:dregx . a) */
+/* (:dregx . (a . b)) */
 static node*
 new_dregx(parser_state *p, node *a, node *b)
 {
@@ -2448,7 +2448,7 @@ block_param     : f_arg ',' f_block_optarg ',' f_rest_arg opt_f_block_arg
                     }
                 | f_arg ','
                     {
-                      $$ = new_args(p, $1, 0, 1, 0, 0);
+                      $$ = new_args(p, $1, 0, 0, 0, 0);
                     }
                 | f_arg ',' f_rest_arg ',' f_arg opt_f_block_arg
                     {
@@ -2936,10 +2936,11 @@ var_ref         : variable
                     }
                 | keyword__FILE__
                     {
-                      if (!p->filename) {
-                        p->filename = "(null)";
+                      const char *fn = p->filename;
+                      if (!fn) {
+                        fn = "(null)";
                       }
-                      $$ = new_str(p, p->filename, strlen(p->filename));
+                      $$ = new_str(p, fn, strlen(fn));
                     }
                 | keyword__LINE__
                     {
@@ -3327,7 +3328,7 @@ none            : /* none */
                     }
                 ;
 %%
-#define yylval  (*((YYSTYPE*)(p->ylval)))
+#define pylval  (*((YYSTYPE*)(p->ylval)))
 
 static void
 yyerror(parser_state *p, const char *s)
@@ -3962,7 +3963,7 @@ parse_string(parser_state *p)
         yyerror(p, buf);
         return 0;
       }
-      yylval.nd = new_str(p, tok(p), toklen(p));
+      pylval.nd = new_str(p, tok(p), toklen(p));
       return tHD_STRING_MID;
     }
     if (c < 0) {
@@ -4035,7 +4036,7 @@ parse_string(parser_state *p)
         tokfix(p);
         p->lstate = EXPR_BEG;
         p->cmd_start = TRUE;
-        yylval.nd = new_str(p, tok(p), toklen(p));
+        pylval.nd = new_str(p, tok(p), toklen(p));
         if (hinf) {
           hinf->line_head = FALSE;
           return tHD_STRING_PART;
@@ -4065,9 +4066,13 @@ parse_string(parser_state *p)
       else {
         pushback(p, c);
         tokfix(p);
-        yylval.nd = new_str(p, tok(p), toklen(p));
+        pylval.nd = new_str(p, tok(p), toklen(p));
         return tSTRING_MID;
       }
+    }
+    if (c == '\n') {
+      p->lineno++;
+      p->column = 0;
     }
     tokadd(p, c);
   }
@@ -4077,7 +4082,7 @@ parse_string(parser_state *p)
   end_strterm(p);
 
   if (type & STR_FUNC_XQUOTE) {
-    yylval.nd = new_xstr(p, tok(p), toklen(p));
+    pylval.nd = new_xstr(p, tok(p), toklen(p));
     return tXSTRING;
   }
 
@@ -4127,11 +4132,11 @@ parse_string(parser_state *p)
     } else {
       encp = NULL;
     }
-    yylval.nd = new_regx(p, s, dup, encp);
+    pylval.nd = new_regx(p, s, dup, encp);
 
     return tREGEXP;
   }
-  yylval.nd = new_str(p, tok(p), toklen(p));
+  pylval.nd = new_str(p, tok(p), toklen(p));
   if (IS_LABEL_POSSIBLE()) {
     if (IS_LABEL_SUFFIX(0)) {
       p->lstate = EXPR_BEG;
@@ -4209,7 +4214,7 @@ heredoc_identifier(parser_state *p)
   p->heredocs_from_nextline = push(p->heredocs_from_nextline, newnode);
   p->lstate = EXPR_END;
 
-  yylval.nd = newnode;
+  pylval.nd = newnode;
   return tHEREDOC_BEG;
 }
 
@@ -4313,7 +4318,7 @@ parser_yylex(parser_state *p)
   case '*':
     if ((c = nextc(p)) == '*') {
       if ((c = nextc(p)) == '=') {
-        yylval.id = intern("**",2);
+        pylval.id = intern("**",2);
         p->lstate = EXPR_BEG;
         return tOP_ASGN;
       }
@@ -4322,7 +4327,7 @@ parser_yylex(parser_state *p)
     }
     else {
       if (c == '=') {
-        yylval.id = intern_c('*');
+        pylval.id = intern_c('*');
         p->lstate = EXPR_BEG;
         return tOP_ASGN;
       }
@@ -4438,7 +4443,7 @@ parser_yylex(parser_state *p)
     }
     if (c == '<') {
       if ((c = nextc(p)) == '=') {
-        yylval.id = intern("<<",2);
+        pylval.id = intern("<<",2);
         p->lstate = EXPR_BEG;
         return tOP_ASGN;
       }
@@ -4460,7 +4465,7 @@ parser_yylex(parser_state *p)
     }
     if (c == '>') {
       if ((c = nextc(p)) == '=') {
-        yylval.id = intern(">>",2);
+        pylval.id = intern(">>",2);
         p->lstate = EXPR_BEG;
         return tOP_ASGN;
       }
@@ -4557,7 +4562,7 @@ parser_yylex(parser_state *p)
       tokadd(p, c);
     }
     tokfix(p);
-    yylval.nd = new_str(p, tok(p), toklen(p));
+    pylval.nd = new_str(p, tok(p), toklen(p));
     p->lstate = EXPR_END;
     return tCHAR;
 
@@ -4565,7 +4570,7 @@ parser_yylex(parser_state *p)
     if ((c = nextc(p)) == '&') {
       p->lstate = EXPR_BEG;
       if ((c = nextc(p)) == '=') {
-        yylval.id = intern("&&",2);
+        pylval.id = intern("&&",2);
         p->lstate = EXPR_BEG;
         return tOP_ASGN;
       }
@@ -4577,7 +4582,7 @@ parser_yylex(parser_state *p)
       return tANDDOT;
     }
     else if (c == '=') {
-      yylval.id = intern_c('&');
+      pylval.id = intern_c('&');
       p->lstate = EXPR_BEG;
       return tOP_ASGN;
     }
@@ -4604,7 +4609,7 @@ parser_yylex(parser_state *p)
     if ((c = nextc(p)) == '|') {
       p->lstate = EXPR_BEG;
       if ((c = nextc(p)) == '=') {
-        yylval.id = intern("||",2);
+        pylval.id = intern("||",2);
         p->lstate = EXPR_BEG;
         return tOP_ASGN;
       }
@@ -4612,7 +4617,7 @@ parser_yylex(parser_state *p)
       return tOROP;
     }
     if (c == '=') {
-      yylval.id = intern_c('|');
+      pylval.id = intern_c('|');
       p->lstate = EXPR_BEG;
       return tOP_ASGN;
     }
@@ -4636,7 +4641,7 @@ parser_yylex(parser_state *p)
       return '+';
     }
     if (c == '=') {
-      yylval.id = intern_c('+');
+      pylval.id = intern_c('+');
       p->lstate = EXPR_BEG;
       return tOP_ASGN;
     }
@@ -4664,7 +4669,7 @@ parser_yylex(parser_state *p)
       return '-';
     }
     if (c == '=') {
-      yylval.id = intern_c('-');
+      pylval.id = intern_c('-');
       p->lstate = EXPR_BEG;
       return tOP_ASGN;
     }
@@ -4738,7 +4743,7 @@ parser_yylex(parser_state *p)
           no_digits();
         }
         else if (nondigit) goto trailing_uc;
-        yylval.nd = new_int(p, tok(p), 16);
+        pylval.nd = new_int(p, tok(p), 16);
         return tINTEGER;
       }
       if (c == 'b' || c == 'B') {
@@ -4762,7 +4767,7 @@ parser_yylex(parser_state *p)
           no_digits();
         }
         else if (nondigit) goto trailing_uc;
-        yylval.nd = new_int(p, tok(p), 2);
+        pylval.nd = new_int(p, tok(p), 2);
         return tINTEGER;
       }
       if (c == 'd' || c == 'D') {
@@ -4786,7 +4791,7 @@ parser_yylex(parser_state *p)
           no_digits();
         }
         else if (nondigit) goto trailing_uc;
-        yylval.nd = new_int(p, tok(p), 10);
+        pylval.nd = new_int(p, tok(p), 10);
         return tINTEGER;
       }
       if (c == '_') {
@@ -4819,7 +4824,7 @@ parser_yylex(parser_state *p)
           pushback(p, c);
           tokfix(p);
           if (nondigit) goto trailing_uc;
-          yylval.nd = new_int(p, tok(p), 8);
+          pylval.nd = new_int(p, tok(p), 8);
           return tINTEGER;
         }
         if (nondigit) {
@@ -4836,7 +4841,7 @@ parser_yylex(parser_state *p)
       }
       else {
         pushback(p, c);
-        yylval.nd = new_int(p, "0", 10);
+        pylval.nd = new_int(p, "0", 10);
         return tINTEGER;
       }
     }
@@ -4920,10 +4925,10 @@ parser_yylex(parser_state *p)
         yywarning_s(p, "float %s out of range", tok(p));
         errno = 0;
       }
-      yylval.nd = new_float(p, tok(p));
+      pylval.nd = new_float(p, tok(p));
       return tFLOAT;
     }
-    yylval.nd = new_int(p, tok(p), 10);
+    pylval.nd = new_int(p, tok(p), 10);
     return tINTEGER;
   }
 
@@ -4965,7 +4970,7 @@ parser_yylex(parser_state *p)
       return tREGEXP_BEG;
     }
     if ((c = nextc(p)) == '=') {
-      yylval.id = intern_c('/');
+      pylval.id = intern_c('/');
       p->lstate = EXPR_BEG;
       return tOP_ASGN;
     }
@@ -4984,7 +4989,7 @@ parser_yylex(parser_state *p)
 
   case '^':
     if ((c = nextc(p)) == '=') {
-      yylval.id = intern_c('^');
+      pylval.id = intern_c('^');
       p->lstate = EXPR_BEG;
       return tOP_ASGN;
     }
@@ -5158,7 +5163,7 @@ parser_yylex(parser_state *p)
       }
     }
     if ((c = nextc(p)) == '=') {
-      yylval.id = intern_c('%');
+      pylval.id = intern_c('%');
       p->lstate = EXPR_BEG;
       return tOP_ASGN;
     }
@@ -5212,7 +5217,7 @@ parser_yylex(parser_state *p)
       tokadd(p, '$');
       tokadd(p, c);
       tokfix(p);
-      yylval.id = intern_cstr(tok(p));
+      pylval.id = intern_cstr(tok(p));
       return tGVAR;
 
     case '-':
@@ -5222,7 +5227,7 @@ parser_yylex(parser_state *p)
       pushback(p, c);
       gvar:
       tokfix(p);
-      yylval.id = intern_cstr(tok(p));
+      pylval.id = intern_cstr(tok(p));
       return tGVAR;
 
     case '&':     /* $&: last match */
@@ -5234,7 +5239,7 @@ parser_yylex(parser_state *p)
         tokadd(p, c);
         goto gvar;
       }
-      yylval.nd = new_back_ref(p, c);
+      pylval.nd = new_back_ref(p, c);
       return tBACK_REF;
 
     case '1': case '2': case '3':
@@ -5253,7 +5258,7 @@ parser_yylex(parser_state *p)
           yyerror_i(p, "capture group index must be <= %d", INT_MAX);
           return 0;
         }
-        yylval.nd = new_nth_ref(p, (int)n);
+        pylval.nd = new_nth_ref(p, (int)n);
       }
       return tNTH_REF;
 
@@ -5381,7 +5386,7 @@ parser_yylex(parser_state *p)
           p->lstate = EXPR_BEG;
           nextc(p);
           tokfix(p);
-          yylval.id = intern_cstr(tok(p));
+          pylval.id = intern_cstr(tok(p));
           return tLABEL;
         }
       }
@@ -5392,10 +5397,10 @@ parser_yylex(parser_state *p)
         kw = mrb_reserved_word(tok(p), toklen(p));
         if (kw) {
           enum mrb_lex_state_enum state = p->lstate;
-          yylval.num = p->lineno;
+          pylval.num = p->lineno;
           p->lstate = kw->state;
           if (state == EXPR_FNAME) {
-            yylval.id = intern_cstr(kw->name);
+            pylval.id = intern_cstr(kw->name);
             return kw->id[0];
           }
           if (p->lstate == EXPR_BEG) {
@@ -5442,7 +5447,7 @@ parser_yylex(parser_state *p)
     {
       mrb_sym ident = intern_cstr(tok(p));
 
-      yylval.id = ident;
+      pylval.id = ident;
 #if 0
       if (last_state != EXPR_DOT && islower(tok(p)[0]) && lvar_defined(ident)) {
         p->lstate = EXPR_END;
@@ -6338,8 +6343,14 @@ mrb_parser_dump(mrb_state *mrb, node *tree, int offset)
     dump_recur(mrb, tree->car, offset+1);
     dump_prefix(tree, offset);
     printf("tail: %s\n", (char*)tree->cdr->cdr->car);
-    dump_prefix(tree, offset);
-    printf("opt: %s\n", (char*)tree->cdr->cdr->cdr);
+    if (tree->cdr->cdr->cdr->car) {
+      dump_prefix(tree, offset);
+      printf("opt: %s\n", (char*)tree->cdr->cdr->cdr->car);
+    }
+    if (tree->cdr->cdr->cdr->cdr) {
+      dump_prefix(tree, offset);
+      printf("enc: %s\n", (char*)tree->cdr->cdr->cdr->cdr);
+    }
     break;
 
   case NODE_SYM:
