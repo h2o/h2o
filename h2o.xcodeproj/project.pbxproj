@@ -3258,7 +3258,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
-					build/osx/mruby/host/lib,
+					build/default/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3292,7 +3292,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
-					build/osx/mruby/host/lib,
+					build/default/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3322,7 +3322,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
-					build/osx/mruby/host/lib,
+					build/default/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";
@@ -3352,7 +3352,7 @@
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/lib",
-					build/osx/mruby/host/lib,
+					build/default/mruby/host/lib,
 					/usr/local/lib,
 				);
 				OTHER_CFLAGS = "";

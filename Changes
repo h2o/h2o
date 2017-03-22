@@ -1,6 +1,12 @@
 Revision history for H2O.
 
-2.2.0-beta2 TBD
+2.2.0-beta3 TBD
+	- [core] introduce an option to bypass the `server` header sent from upstream #1226 (Frederik Deweerdt)
+	- [core] apply global- and host-level configuration to requests not applicable to any of the path-level configurations #1231 (Kazuho Oku)
+	- [access-log] in JSON logging, remove surrounding quotes arround `null` #1229 (Kazuho Oku)
+	- [ssl] add doc for `handshake-timeout` #1233 (Kazuho Oku)
+
+2.2.0-beta2 2017-03-14 07:25:00+0000
 	- [access-log] add support for JSON-style escapes and null #1208 (Kazuho Oku)
 	- [access-log] add specifier for logging per-request environment variables #1221 (Yannick Koechlin)
 	- [http1] stop reading from socket after sending 400 to avoid the risk of assertion failure #1223 (Frederik Deweerdt)
