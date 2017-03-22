@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use IO::Socket::INET;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 

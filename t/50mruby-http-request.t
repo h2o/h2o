@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use Net::EmptyPort qw(empty_port check_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 

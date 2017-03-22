@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use IO::Socket::INET;
 use Test::TCP;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Scope::Guard qw(guard);
 use t::Util;

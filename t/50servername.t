@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use t::Util;
 
 plan skip_all => 'curl not found'

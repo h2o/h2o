@@ -4,7 +4,11 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
-use Net::EmptyPort qw(check_port empty_port);
+
+# FIXME
+use Net::EmptyPort qw(check_port);
+# use Net::EmptyPort qw(check_port empty_port);
+
 use POSIX ":sys_wait_h";
 use Path::Tiny;
 use Scope::Guard qw(scope_guard);
@@ -13,6 +17,8 @@ use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
 our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl);
+# FIXME
+push(@EXPORT, 'empty_port');
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -205,6 +211,18 @@ EOT
         pid      => $pid,
     };
     return $ret;
+}
+
+use IO::Socket::IP;
+sub empty_port {
+    my $sock = IO::Socket::IP->new(
+        Proto    => 'tcp',
+        LocalAddr => '127.0.0.1',
+        LocalPort => 0,
+        V6Only   => 1,
+        (($^O eq 'MSWin32') ? () : (ReuseAddr => 1)),
+    ) or die "empty port not found";
+    return $sock->sockport;
 }
 
 sub empty_ports {

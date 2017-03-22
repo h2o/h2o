@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use t::Util;
