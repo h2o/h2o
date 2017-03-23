@@ -499,7 +499,9 @@ static void write_body_chunk_done(h2o_req_t *req, ssize_t written,  int done)
 
     //fprintf(stderr, "%s:%d sid:%u done:%d\n", __func__, __LINE__, stream->stream_id, done);
 
+    update_input_window(conn, 0, &conn->_input_window, written);
     update_input_window(conn, stream->stream_id, &stream->input_window, written);
+
     if (done) {
         conn->_request_body_in_progress = 0;
     }
@@ -512,7 +514,6 @@ static int write_body_chunk(h2o_write_body_chunk_priv priv, h2o_iovec_t payload,
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    //fprintf(stderr, "%s:%d sid:%u is_end_stream:%d\n", __func__, __LINE__, stream->stream_id, is_end_stream);
     h2o_iovec_t buf = h2o_buffer_reserve(&stream->_req_body.body, payload.len);
     if (buf.base == NULL)
         return -1;
@@ -563,6 +564,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     if (stream == NULL) {
         if (frame->stream_id <= conn->pull_stream_ids.max_open) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            stream = NULL;
         } else {
             *err_desc = "invalid DATA frame";
             return H2O_HTTP2_ERROR_PROTOCOL;
@@ -577,17 +579,12 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         stream = NULL;
     } else {
         int ret = stream->req.write_body_chunk(stream->req.write_body_chunk_priv, h2o_iovec_init(payload.data, payload.length), frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM, write_body_chunk_done);
-        switch (ret) {
-        case 0:
-            break;
-        case 1: /*FIXME*/
-            stream = NULL;
-            break;
-        default:
+        if (ret < 0) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);
             return 0;
         }
+        return 0;
     }
 
     /* consume buffer (and set window_update) */
