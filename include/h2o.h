@@ -1038,7 +1038,7 @@ struct st_h2o_req_t {
 
     /* streaming request body */
     h2o_write_body_chunk write_body_chunk;
-    h2o_write_body_chunk_priv write_body_chunk_priv;
+    void *write_body_chunk_priv;
     h2o_write_body_chunk_done write_body_chunk_done;
 
     /* per-request memory pool (placed at the last since the structure is large) */

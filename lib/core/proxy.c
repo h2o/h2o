@@ -517,12 +517,11 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
     return 0;
 }
 
-static int write_body_chunk(h2o_write_body_chunk_priv priv, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
+static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
 {
-    struct rp_generator_t *self = priv.priv;
-    h2o_write_body_chunk_priv npriv = {self->client->sock};
+    struct rp_generator_t *self = priv;
 
-    return self->write_body_chunk(npriv, payload, is_end_stream, write_body_chunk_done);
+    return self->write_body_chunk(self->client->sock, payload, is_end_stream, write_body_chunk_done);
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
@@ -554,7 +553,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         }
     }
     self->src_req->write_body_chunk = write_body_chunk;
-    self->src_req->write_body_chunk_priv = (h2o_write_body_chunk_priv){self};
+    self->src_req->write_body_chunk_priv = self;
     self->client->informational_cb = on_1xx;
     return on_head;
 }

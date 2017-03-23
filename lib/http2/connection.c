@@ -509,9 +509,9 @@ static void write_body_chunk_done(void *req_, size_t written,  int done)
     run_pending_requests(conn);
 }
 
-static int write_body_chunk(h2o_write_body_chunk_priv priv, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
+static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
 {
-    h2o_req_t *req = priv.priv;
+    h2o_req_t *req = priv;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
@@ -648,7 +648,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
     stream->req.write_body_chunk = write_body_chunk;
-    stream->req.write_body_chunk_priv = (h2o_write_body_chunk_priv){&stream->req};
+    stream->req.write_body_chunk_priv = &stream->req;
 
     /* setup container for request body if it is expected to arrive */
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0) {
