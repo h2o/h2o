@@ -51,9 +51,9 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
-    h2o_req_body_done_cb req_body_done;
+    h2o_write_body_chunk_done write_body_chunk_done;
     size_t to_ack;
-    void *req_body_done_ctx;
+    void *write_body_chunk_done_ctx;
     char chunk_len_str[18]; /* SIZE_MAX in hex + CRLF */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
@@ -369,7 +369,7 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_chunk, const char *err, int is_done);
+static int on_req_body(h2o_socket_t *sock, h2o_iovec_t body_chunk, const char *err, int is_done);
 static void on_req_body_done(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
@@ -396,7 +396,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
             on_send_request(client->super.sock, NULL);
     }
 
-    client->req_body_done(client->req_body_done_ctx, to_ack, client->_body_buf_is_done);
+    client->write_body_chunk_done(client->write_body_chunk_done_ctx, to_ack, client->_body_buf_is_done);
 }
 
 static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
@@ -407,7 +407,7 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_chunk, const char *err, int is_done)
+static int on_req_body(h2o_socket_t *sock, h2o_iovec_t body_chunk, const char *err, int is_done)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
 
@@ -415,7 +415,7 @@ static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_
 
     if (err) {
         on_send_request(sock, err);
-        return NO_STREAM_WINDOW_UPDATE;
+        return 0;
     }
 
     client->_body_buf_is_done = is_done;
@@ -428,13 +428,13 @@ static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_
         }
         buf = h2o_buffer_reserve(&client->_body_buf, body_chunk.len);
         if (!buf.base)
-            return ALLOC_ERR;
+            return -1;
         memcpy(buf.base, body_chunk.base, body_chunk.len);
         client->_body_buf->size += body_chunk.len;
     }
 
     if (client->super.sock->_cb.write) {
-        return NO_STREAM_WINDOW_UPDATE;
+        return 0;
     }
     assert(!client->_body_buf_in_flight || !client->_body_buf_in_flight->size);
 
@@ -444,7 +444,7 @@ static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_
     if (client->is_chunked) {
         if (is_done && !client->_body_buf_in_flight->size) {
             on_send_request(sock, err);
-            return NO_STREAM_WINDOW_UPDATE;
+            return 0;
         }
         int i = 0;
         size_t chunk_size = 0;
@@ -477,7 +477,7 @@ static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_
 
         h2o_socket_write(client->super.sock, iov, i, on_req_body_done);
     }
-    return NO_STREAM_WINDOW_UPDATE;
+    return 0;
 }
 
 static void on_send_timeout(h2o_timeout_entry_t *entry)
@@ -498,11 +498,11 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_iovec_t *reqbufs;
     size_t reqbufcnt;
 
-    if ((client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, on_req_body, &client->req_body_done, &client->req_body_done_ctx, &client->cur_body)) == NULL) {
+    if ((client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, on_req_body, &client->write_body_chunk_done, &client->write_body_chunk_done_ctx, &client->cur_body)) == NULL) {
         close_client(client);
         return;
     }
-    if (client->req_body_done) {
+    if (client->write_body_chunk_done) {
         int i;
         client->to_ack = 0;
         for (i = 0; i < reqbufcnt; i++)

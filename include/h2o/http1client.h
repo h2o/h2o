@@ -43,24 +43,17 @@ typedef struct st_h2o_http1client_header_t {
     size_t value_len;
 } h2o_http1client_header_t;
 
+struct st_h2o_req_t;
+typedef void (*h2o_write_body_chunk_done)(struct st_h2o_req_t *req, ssize_t written, int done);
+typedef int (*h2o_receive_body_chunk)(h2o_socket_t *sock, h2o_iovec_t reqbufs, const char *err, int is_end);
+typedef int (*h2o_write_body_chunk)(struct st_h2o_req_t *req, h2o_iovec_t body_chunk, int is_end, void *priv, h2o_write_body_chunk_done write_body_chunk_done);
+
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
                                                            int status, h2o_iovec_t msg, h2o_http1client_header_t *headers,
                                                            size_t num_headers);
-/* TODO should not have to declare that struct */
-struct st_h2o_req_t;
-typedef void (*h2o_req_body_done_cb)(struct st_h2o_req_t *req, size_t written, int done);
-enum req_body_chunk_ret {
-    ALLOC_ERR,
-    NO_STREAM_WINDOW_UPDATE,
-    STREAM_WINDOW_UPDATE,
-};
-typedef enum req_body_chunk_ret (*on_req_body_cb)(h2o_socket_t *sock, h2o_iovec_t reqbufs, const char *err, int is_end);
-typedef enum req_body_chunk_ret (*h2o_req_body_cb)(struct st_h2o_req_t *req, h2o_iovec_t body_chunk, int is_end, void *priv, h2o_req_body_done_cb h2o_req_body_done);
-typedef int (*h2o_req_body_pull_cb)(void *priv, h2o_iovec_t **reqbufs, size_t *reqbufcnt, const char **errstr, on_req_body_cb on_req_body, void *on_req_body_priv);
-
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, on_req_body_cb on_req_body, h2o_req_body_done_cb *req_body_done, void **req_body_done_ctx, h2o_iovec_t *cur_body);
+                                          int *method_is_head, h2o_receive_body_chunk on_req_body, h2o_write_body_chunk_done *req_body_done, void **req_body_done_ctx, h2o_iovec_t *cur_body);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 h2o_http1client_header_t *headers, size_t num_headers);
 
