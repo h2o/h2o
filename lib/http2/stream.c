@@ -341,6 +341,8 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+    /* fallthru */
+    case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
