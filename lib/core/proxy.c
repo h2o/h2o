@@ -41,7 +41,7 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
-    h2o_receive_body_chunk receive_body_chunk;
+    h2o_write_body_chunk write_body_chunk;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -517,15 +517,16 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
     return 0;
 }
 
-static int write_body_chunk(h2o_req_t *req, h2o_iovec_t payload, int is_end_stream, void *priv, h2o_write_body_chunk_done write_body_chunk_done)
+static int write_body_chunk(h2o_write_body_chunk_priv priv, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
 {
-    struct rp_generator_t *self = priv;
+    struct rp_generator_t *self = priv.priv;
+    h2o_write_body_chunk_priv npriv = {self->client->sock};
 
-    return self->receive_body_chunk(self->client->sock, payload, NULL, is_end_stream);
+    return self->write_body_chunk(npriv, payload, is_end_stream, write_body_chunk_done);
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_receive_body_chunk receive_body_chunk, h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body)
+                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk, h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body)
 {
     struct rp_generator_t *self = client->data;
 
@@ -541,8 +542,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *reqbufcnt = 1;
     *method_is_head = self->up_req.is_head;
 
-
-    self->receive_body_chunk = receive_body_chunk;
+    self->write_body_chunk = backend_write_body_chunk;
     *write_body_chunk_done = self->src_req->write_body_chunk_done;
     *write_body_chunk_done_ctx = self->src_req;
     if (self->src_req->entity.base != NULL) {
@@ -554,7 +554,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         }
     }
     self->src_req->write_body_chunk = write_body_chunk;
-    self->src_req->write_body_chunk_priv = self;
+    self->src_req->write_body_chunk_priv = (h2o_write_body_chunk_priv){self};
     self->client->informational_cb = on_1xx;
     return on_head;
 }
