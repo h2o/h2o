@@ -68,7 +68,7 @@ struct RString {
 #define mrb_str_ptr(s)       ((struct RString*)(mrb_ptr(s)))
 #define RSTRING(s)           mrb_str_ptr(s)
 #define RSTRING_PTR(s)       RSTR_PTR(RSTRING(s))
-#define RSTRING_EMBED_LEN(s) RSTR_ENBED_LEN(RSTRING(s))
+#define RSTRING_EMBED_LEN(s) RSTR_EMBED_LEN(RSTRING(s))
 #define RSTRING_LEN(s)       RSTR_LEN(RSTRING(s))
 #define RSTRING_CAPA(s)      RSTR_CAPA(RSTRING(s))
 #define RSTRING_END(s)       (RSTRING_PTR(s) + RSTRING_LEN(s))

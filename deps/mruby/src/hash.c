@@ -159,11 +159,15 @@ mrb_hash_new(mrb_state *mrb)
   return mrb_hash_new_capa(mrb, 0);
 }
 
+static mrb_value mrb_hash_default(mrb_state *mrb, mrb_value hash);
+static mrb_value hash_default(mrb_state *mrb, mrb_value hash, mrb_value key);
+
 MRB_API mrb_value
 mrb_hash_get(mrb_state *mrb, mrb_value hash, mrb_value key)
 {
   khash_t(ht) *h = RHASH_TBL(hash);
   khiter_t k;
+  mrb_sym mid;
 
   if (h) {
     k = kh_get(ht, mrb, h, key);
@@ -171,9 +175,12 @@ mrb_hash_get(mrb_state *mrb, mrb_value hash, mrb_value key)
       return kh_value(h, k).v;
   }
 
-  /* not found */
+  mid = mrb_intern_lit(mrb, "default");
+  if (mrb_func_basic_p(mrb, hash, mid, mrb_hash_default)) {
+    return hash_default(mrb, hash, key);
+  }
   /* xxx mrb_funcall_tailcall(mrb, hash, "default", 1, key); */
-  return mrb_funcall(mrb, hash, "default", 1, key);
+  return mrb_funcall_argv(mrb, hash, mid, 1, &key);
 }
 
 MRB_API mrb_value
@@ -366,6 +373,20 @@ mrb_hash_aget(mrb_state *mrb, mrb_value self)
   return mrb_hash_get(mrb, self, key);
 }
 
+static mrb_value
+hash_default(mrb_state *mrb, mrb_value hash, mrb_value key)
+{
+  if (MRB_RHASH_DEFAULT_P(hash)) {
+    if (MRB_RHASH_PROCDEFAULT_P(hash)) {
+      return mrb_funcall(mrb, RHASH_PROCDEFAULT(hash), "call", 2, hash, key);
+    }
+    else {
+      return RHASH_IFNONE(hash);
+    }
+  }
+  return mrb_nil_value();
+}
+
 /* 15.2.13.4.5  */
 /*
  *  call-seq:
@@ -554,6 +575,7 @@ mrb_hash_delete(mrb_state *mrb, mrb_value self)
   mrb_value key;
 
   mrb_get_args(mrb, "o", &key);
+  mrb_hash_modify(mrb, self);
   return mrb_hash_delete_key(mrb, self, key);
 }
 
@@ -620,6 +642,7 @@ mrb_hash_clear(mrb_state *mrb, mrb_value hash)
 {
   khash_t(ht) *h = RHASH_TBL(hash);
 
+  mrb_hash_modify(mrb, hash);
   if (h) kh_clear(ht, mrb, h);
   return hash;
 }

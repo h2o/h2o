@@ -71,7 +71,7 @@ dirname(mrb_state *mrb, const char *path)
   }
 
   p = strrchr(path, '/');
-  len = p != NULL ? p - path : strlen(path);
+  len = p != NULL ? (size_t)(p - path) : strlen(path);
 
   dir = mrb_malloc(mrb, len + 1);
   strncpy(dir, path, len);

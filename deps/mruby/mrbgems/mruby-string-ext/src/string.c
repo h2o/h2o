@@ -56,8 +56,14 @@ mrb_str_byteslice(mrb_state *mrb, mrb_value str)
       mrb_int beg;
 
       len = RSTRING_LEN(str);
-      if (mrb_range_beg_len(mrb, a1, &beg, &len, len)) {
+      switch (mrb_range_beg_len(mrb, a1, &beg, &len, len, TRUE)) {
+      case 0:                   /* not range */
+        break;
+      case 1:                   /* range */
         return mrb_str_substr(mrb, str, beg, len);
+      case 2:                   /* out of range */
+        mrb_raisef(mrb, E_RANGE_ERROR, "%S out of range", a1);
+        break;
       }
       return mrb_nil_value();
     }
@@ -315,7 +321,7 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "&", &blk);
 
   result = mrb_ary_new(mrb);
-
+  ai = mrb_gc_arena_save(mrb);
   if (!mrb_nil_p(blk)) {
     while (p < e) {
       t = p;
@@ -324,6 +330,7 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
       len = (mrb_int) (p - t);
       arg = mrb_str_new(mrb, t, len);
       mrb_yield_argv(mrb, blk, 1, &arg);
+      mrb_gc_arena_restore(mrb, ai);
       if (b != RSTRING_PTR(self)) {
         ptrdiff_t diff = p - b;
         b = RSTRING_PTR(self);
@@ -334,7 +341,6 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
     return self;
   }
   while (p < e) {
-    ai = mrb_gc_arena_save(mrb);
     t = p;
     while (p < e && *p != '\n') p++;
     if (*p == '\n') p++;
@@ -437,44 +443,6 @@ mrb_str_succ(mrb_state *mrb, mrb_value self)
   return str;
 }
 
-/*
- *  call-seq:
- *     str.prepend(other_str)  -> str
- *
- *  Prepend---Prepend the given string to <i>str</i>.
- *
- *     a = "world"
- *     a.prepend("hello ") #=> "hello world"
- *     a                   #=> "hello world"
- */
-static mrb_value
-mrb_str_prepend(mrb_state *mrb, mrb_value self)
-{
-  struct RString *s1 = mrb_str_ptr(self), *s2, *temp_s;
-  mrb_int len;
-  mrb_value other, temp_str;
-
-  mrb_get_args(mrb, "S", &other);
-
-  mrb_str_modify(mrb, s1);
-  if (!mrb_string_p(other)) {
-    other = mrb_str_to_str(mrb, other);
-  }
-  s2 = mrb_str_ptr(other);
-  len = RSTR_LEN(s1) + RSTR_LEN(s2);
-  temp_str = mrb_str_new(mrb, NULL, RSTR_LEN(s1));
-  temp_s = mrb_str_ptr(temp_str);
-  memcpy(RSTR_PTR(temp_s), RSTR_PTR(s1), RSTR_LEN(s1));
-  if (RSTRING_CAPA(self) < len) {
-    mrb_str_resize(mrb, self, len);
-  }
-  memcpy(RSTR_PTR(s1), RSTR_PTR(s2), RSTR_LEN(s2));
-  memcpy(RSTR_PTR(s1) + RSTR_LEN(s2), RSTR_PTR(temp_s), RSTR_LEN(temp_s));
-  RSTR_SET_LEN(s1, len);
-  RSTR_PTR(s1)[len] = '\0';
-  return self;
-}
-
 #ifdef MRB_UTF8_STRING
 static const char utf8len_codepage_zero[256] =
 {
@@ -562,7 +530,6 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "lines",           mrb_str_lines,           MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ",            mrb_str_succ,            MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ!",           mrb_str_succ_bang,       MRB_ARGS_NONE());
-  mrb_define_method(mrb, s, "prepend",         mrb_str_prepend,         MRB_ARGS_REQ(1));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next"), mrb_intern_lit(mrb, "succ"));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next!"), mrb_intern_lit(mrb, "succ!"));
   mrb_define_method(mrb, s, "ord", mrb_str_ord, MRB_ARGS_NONE());

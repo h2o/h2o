@@ -28,6 +28,8 @@ load "#{MRUBY_ROOT}/tasks/libmruby.rake"
 
 load "#{MRUBY_ROOT}/tasks/benchmark.rake"
 
+load "#{MRUBY_ROOT}/tasks/gitlab.rake"
+
 ##############################
 # generic build targets, rules
 task :default => :all

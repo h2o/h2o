@@ -43,7 +43,7 @@ check_lineno( mrb_irep_debug_info_file *info_file, uint16_t lineno )
 }
 
 static int32_t
-get_break_index( mrb_debug_context *dbg, int32_t bpno )
+get_break_index( mrb_debug_context *dbg, uint32_t bpno )
 {
   uint32_t i;
   int32_t index;
@@ -296,7 +296,7 @@ mrb_debug_get_break_all( mrb_state *mrb, mrb_debug_context *dbg, uint32_t size, 
 int32_t
 mrb_debug_get_break( mrb_state *mrb, mrb_debug_context *dbg, uint32_t bpno, mrb_debug_breakpoint *bp )
 {
-  uint32_t index;
+  int32_t index;
 
   if((mrb == NULL) || (dbg == NULL) || (bp == NULL)) {
     return MRB_DEBUG_INVALID_ARGUMENT;

@@ -74,14 +74,13 @@ static void
 get_backtrace_i(mrb_state *mrb, struct backtrace_location *loc, void *data)
 {
   mrb_value ary, str;
-  int ai;
+  char buf[32];
+  int ai = mrb_gc_arena_save(mrb);
 
-  ai = mrb_gc_arena_save(mrb);
   ary = mrb_obj_value((struct RArray*)data);
 
   str = mrb_str_new_cstr(mrb, loc->filename);
-  mrb_str_cat_lit(mrb, str, ":");
-  mrb_str_concat(mrb, str, mrb_fixnum_to_str(mrb, mrb_fixnum_value(loc->lineno), 10));
+  snprintf(buf, sizeof(buf), ":%d", loc->lineno);
 
   if (loc->method) {
     mrb_str_cat_lit(mrb, str, ":in ");
@@ -118,6 +117,7 @@ each_backtrace(mrb_state *mrb, mrb_int ciidx, mrb_code *pc0, each_backtrace_func
     if (MRB_PROC_CFUNC_P(ci->proc)) continue;
 
     irep = ci->proc->body.irep;
+    if (!irep) continue;
 
     if (mrb->c->cibase[i].err) {
       pc = mrb->c->cibase[i].err;
@@ -219,17 +219,20 @@ print_backtrace(mrb_state *mrb, mrb_value backtrace)
   for (i = 0; i < n; i++) {
     mrb_value entry = RARRAY_PTR(backtrace)[i];
 
-    fprintf(stream, "\t[%d] %.*s\n", i, (int)RSTRING_LEN(entry), RSTRING_PTR(entry));
+    if (mrb_string_p(entry)) {
+      fprintf(stream, "\t[%d] %.*s\n", i, (int)RSTRING_LEN(entry), RSTRING_PTR(entry));
+    }
   }
 }
 
 static void
 print_backtrace_saved(mrb_state *mrb)
 {
-  int i;
+  int i, ai;
   FILE *stream = stderr;
 
   fprintf(stream, "trace:\n");
+  ai = mrb_gc_arena_save(mrb);
   for (i = 0; i < mrb->backtrace.n; i++) {
     mrb_backtrace_entry *entry;
 
@@ -249,6 +252,7 @@ print_backtrace_saved(mrb_state *mrb)
       else {
         fprintf(stream, ":in %s", method_name);
       }
+      mrb_gc_arena_restore(mrb, ai);
     }
 
     fprintf(stream, "\n");
@@ -260,7 +264,7 @@ mrb_print_backtrace(mrb_state *mrb)
 {
   mrb_value backtrace;
 
-  if (!mrb->exc || mrb_obj_is_kind_of(mrb, mrb_obj_value(mrb->exc), E_SYSSTACK_ERROR)) {
+  if (!mrb->exc) {
     return;
   }
 
@@ -394,16 +398,14 @@ mrb_restore_backtrace(mrb_state *mrb)
     int ai;
     mrb_backtrace_entry *entry;
     mrb_value mrb_entry;
+    char buf[32];
 
     ai = mrb_gc_arena_save(mrb);
     entry = &(mrb->backtrace.entries[i]);
 
     mrb_entry = mrb_str_new_cstr(mrb, entry->filename);
-    mrb_str_cat_lit(mrb, mrb_entry, ":");
-    mrb_str_concat(mrb, mrb_entry,
-                   mrb_fixnum_to_str(mrb,
-                                     mrb_fixnum_value(entry->lineno),
-                                     10));
+    snprintf(buf, sizeof(buf), ":%d", entry->lineno);
+    mrb_str_cat_cstr(mrb, mrb_entry, buf);
     if (entry->method_id != 0) {
       mrb_str_cat_lit(mrb, mrb_entry, ":in ");
 

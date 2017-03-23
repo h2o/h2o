@@ -58,17 +58,6 @@ assert('Proc#parameters') do
   assert_equal([[:req, :a], [:req, :b], [:opt, :c], [:opt, :d], [:rest, :e], [:req, :f], [:req, :g], [:block, :h]], lambda {|a,b,c=:c,d=:d,*e,f,g,&h|}.parameters)
 end
 
-assert('Proc#parameters with uninitialized Proc') do
-  begin
-    Proc.alias_method(:original_initialize, :initialize)
-    Proc.remove_method(:initialize)
-    assert_equal [], Proc.new{|a, b, c| 1}.parameters
-  ensure
-    Proc.alias_method(:initialize, :original_initialize)
-    Proc.remove_method(:original_initialize)
-  end
-end
-
 assert('Proc#to_proc') do
   proc = Proc.new {}
   assert_equal proc, proc.to_proc
