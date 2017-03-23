@@ -1037,11 +1037,6 @@ struct st_h2o_req_t {
     void *_req_body_priv;
     h2o_req_body_done_cb _req_body_done_cb;
 
-    struct {
-        h2o_buffer_t *body;
-        size_t streamed_body_size;
-    } _req_body;
-
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
 };

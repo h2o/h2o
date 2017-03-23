@@ -521,12 +521,11 @@ static enum req_body_chunk_ret process_req_body_chunk(h2o_req_t *req, h2o_iovec_
 {
     struct rp_generator_t *self = priv;
 
-    assert(self->src_req->_req_body.body == NULL);
     return self->on_req_body(self->client->sock, payload, NULL, is_end_stream);
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, on_req_body_cb on_req_body, h2o_req_body_done_cb *req_body_done, void **req_body_done_ctx, h2o_buffer_t **body_buf)
+                                          int *method_is_head, on_req_body_cb on_req_body, h2o_req_body_done_cb *req_body_done, void **req_body_done_ctx, h2o_iovec_t *cur_body)
 {
     struct rp_generator_t *self = client->data;
 
@@ -546,12 +545,11 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     self->on_req_body = on_req_body;
     *req_body_done = self->src_req->_req_body_done_cb;
     *req_body_done_ctx = self->src_req;
-    if (self->src_req->_req_body.body != NULL) {
+    if (self->src_req->entity.base != NULL) {
         if (self->src_req->_req_body_done_cb) {
-            *body_buf = self->src_req->_req_body.body;
-            self->src_req->_req_body.body = NULL;
+            *cur_body = self->src_req->entity;
         } else {
-            self->up_req.bufs[1] = h2o_iovec_init(self->src_req->_req_body.body->bytes, self->src_req->_req_body.body->size);
+            self->up_req.bufs[1] = self->src_req->entity;
             *reqbufcnt = 2;
         }
     }

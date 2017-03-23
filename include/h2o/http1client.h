@@ -60,7 +60,7 @@ typedef enum req_body_chunk_ret (*h2o_req_body_cb)(struct st_h2o_req_t *req, h2o
 typedef int (*h2o_req_body_pull_cb)(void *priv, h2o_iovec_t **reqbufs, size_t *reqbufcnt, const char **errstr, on_req_body_cb on_req_body, void *on_req_body_priv);
 
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, on_req_body_cb on_req_body, h2o_req_body_done_cb *req_body_done, void **req_body_done_ctx, h2o_buffer_t **body_buf);
+                                          int *method_is_head, on_req_body_cb on_req_body, h2o_req_body_done_cb *req_body_done, void **req_body_done_ctx, h2o_iovec_t *cur_body);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 h2o_http1client_header_t *headers, size_t num_headers);
 

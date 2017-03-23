@@ -179,6 +179,12 @@ struct st_h2o_http2_stream_t {
         h2o_http2_scheduler_openref_t scheduler;
     } _refs;
     h2o_send_state_t send_state; /* steate of the ostream, only used in push mode */
+
+    struct {
+        h2o_buffer_t *body;
+        size_t streamed_body_size;
+    } _req_body;
+
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
 };
@@ -465,9 +471,9 @@ inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2
 inline size_t h2o_http2_stream_body_size(h2o_http2_stream_t *stream)
 {
     if (stream->req._req_body_done_cb)
-        return stream->req._req_body.streamed_body_size;
-    else if (stream->req._req_body.body)
-        return stream->req._req_body.body->size;
+        return stream->_req_body.streamed_body_size;
+    else if (stream->_req_body.body)
+        return stream->_req_body.body->size;
 
     return 0;
 }
