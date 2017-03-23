@@ -529,7 +529,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
 {
     struct rp_generator_t *self = client->data;
 
-    //fprintf(stderr, "%s:%d, self->src_req->_req_body_done_cb:%p\n", __func__, __LINE__, self->src_req->_req_body_done_cb);
     if (errstr != NULL) {
         self->client = NULL;
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);

@@ -160,7 +160,6 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
         if (stream->req.write_body_chunk_done) {
             if (conn->_request_body_in_progress) {
-                //fprintf(stderr, "not running %p because there's already a connection in progress\n", stream);
                 h2o_linklist_insert(&tmp, &stream->_refs.link);
                 continue;
             }
@@ -186,7 +185,6 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 {
     assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
 
-    //fprintf(stderr, "%s:%d rbdc:%p, rb:%p\n", __func__, __LINE__, stream->req.write_body_chunk_done, stream->_req_body.body);
     if (!stream->req.write_body_chunk_done && stream->_req_body.body != NULL && stream->_expected_content_length != SIZE_MAX &&
         stream->_req_body.body->size != stream->_expected_content_length) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
@@ -499,8 +497,6 @@ static void write_body_chunk_done(void *req_, size_t written, int done, int stre
     h2o_req_t *req = req_;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
-
-    //fprintf(stderr, "%s:%d sid:%u so:%d written:%zu done:%d ss:%d bip:%d\n", __func__, __LINE__, stream->stream_id, stream_only, written, done, stream->state, conn->_request_body_in_progress);
 
     if (!stream_only)
         update_input_window(conn, stream->stream_id, &stream->input_window, written);
