@@ -15,7 +15,7 @@ my $upstream = spawn_server(
 
 
 my $server = spawn_h2o(<< "EOT");
-http2-idle-timeout: 1
+http2-idle-timeout: 2
 hosts:
   default:
     paths:
@@ -45,7 +45,7 @@ my $output = run_with_h2get($server, <<"EOR");
         ":method" => "POST",
         ":authority" => host,
         ":scheme" => "https",
-        ":path" => "/echo",
+        ":path" => "/echo-headers",
     }
     h2g.send_headers(req, 1, END_HEADERS)
     h2g.send_headers(req, 3, END_HEADERS)
@@ -70,6 +70,7 @@ my $output = run_with_h2get($server, <<"EOR");
         end
 
         if f.type == "GOAWAY" or f.type == "RST_STREAM" then
+          puts f.to_s
           puts "error"
           exit 1
         end

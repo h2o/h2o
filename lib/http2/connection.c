@@ -261,6 +261,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
 
     assert(conn->num_streams.pull.open == 0);
+    fprintf(stderr, "hc:%u\n", conn->num_streams.pull.half_closed);
     assert(conn->num_streams.pull.half_closed == 0);
     assert(conn->num_streams.pull.send_body == 0);
     assert(conn->num_streams.push.half_closed == 0);
@@ -493,19 +494,23 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-static void write_body_chunk_done(void *req_, size_t written,  int done)
+static void write_body_chunk_done(void *req_, size_t written, int done)
 {
     h2o_req_t *req = req_;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    //fprintf(stderr, "%s:%d sid:%u done:%d\n", __func__, __LINE__, stream->stream_id, done);
+    //fprintf(stderr, "%s:%d sid:%u written:%zu done:%d ss:%d bip:%d\n", __func__, __LINE__, stream->stream_id, written, done, stream->state, conn->_request_body_in_progress);
 
-    update_input_window(conn, 0, &conn->_input_window, written);
     update_input_window(conn, stream->stream_id, &stream->input_window, written);
+    update_input_window(conn, 0, &conn->_input_window, written);
 
     if (done) {
-        conn->_request_body_in_progress = 0;
+        if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY) {
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+            conn->_request_body_in_progress = 0;
+        }
     }
     run_pending_requests(conn);
 }
@@ -535,15 +540,19 @@ static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, 
                 stream->req.write_body_chunk_done = write_body_chunk_done;
                 stream->_req_body.streamed_body_size = stream->_req_body.body->size;
                 execute_or_enqueue_request(conn, stream);
-                return 0;
             }
         }
     } else {
         if (is_end_stream) {
+            if (stream->req.write_body_chunk == write_body_chunk) {
+                stream->req.write_body_chunk_done = NULL;
+                stream->req.write_body_chunk = NULL;
+            }
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
             run_pending_requests(conn);
         }
-        return 0;
     }
+    write_body_chunk_done(req, payload.len, is_end_stream);
 
     return 0;
 }
