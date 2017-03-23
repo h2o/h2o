@@ -52,8 +52,8 @@ struct st_h2o_http1client_private_t {
         } chunked;
     } _body_decoder;
     h2o_write_body_chunk_done write_body_chunk_done;
-    size_t to_ack;
     void *write_body_chunk_done_ctx;
+    size_t to_ack;
     char chunk_len_str[18]; /* SIZE_MAX in hex + CRLF */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
@@ -413,8 +413,9 @@ static int write_body_chunk(h2o_write_body_chunk_priv priv, h2o_iovec_t body_chu
     h2o_socket_t *sock = priv.priv;
     struct st_h2o_http1client_private_t *client = sock->data;
 
-    //fprintf(stderr, "%s:%d %p chunk:%zu bb:%zu, bbif:%zu err:%s\n", __func__, __LINE__, client, body_chunk.len, client->_body_buf ? client->_body_buf->size : 0, client->_body_buf_in_flight ? client->_body_buf_in_flight->size : 0, err?"(null)":err);
+    //fprintf(stderr, "%s:%d %p chunk:%zu bb:%zu, bbif:%zu is_end:%d\n", __func__, __LINE__, client, body_chunk.len, client->_body_buf ? client->_body_buf->size : 0, client->_body_buf_in_flight ? client->_body_buf_in_flight->size : 0, is_end);
 
+    client->write_body_chunk_done = write_body_chunk_done;
     client->_body_buf_is_done = is_end;
 
     if (body_chunk.len) {

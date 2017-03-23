@@ -46,9 +46,10 @@ typedef struct st_h2o_http1client_header_t {
 typedef struct st_h2o_write_body_chunk_priv_t {
     void *priv;
 } h2o_write_body_chunk_priv;
+#define H2O_TO_WRITE_BODY_CHUNK_PRIV(priv_) ((h2o_write_body_chunk_priv){priv_})
+#define H2O_FROM_WRITE_BODY_CHUNK_PRIV(priv_) (priv_.priv)
 
-struct st_h2o_req_t;
-typedef void (*h2o_write_body_chunk_done)(struct st_h2o_req_t *req, ssize_t written, int done);
+typedef void (*h2o_write_body_chunk_done)(void *done_priv, size_t written, int done);
 typedef int (*h2o_write_body_chunk)(h2o_write_body_chunk_priv priv, h2o_iovec_t body_chunk, int is_end, h2o_write_body_chunk_done write_body_chunk_done);
 
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
