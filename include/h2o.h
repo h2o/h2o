@@ -735,6 +735,13 @@ typedef struct st_h2o_res_t {
      * mime-related attributes (may be NULL)
      */
     h2o_mime_attributes_t *mime_attr;
+    /**
+     * retains the original response header before rewritten by ostream filters
+     */
+    struct {
+        int status;
+        h2o_headers_t headers;
+    } original;
 } h2o_res_t;
 
 /**
