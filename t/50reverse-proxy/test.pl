@@ -92,20 +92,16 @@ EOT
 
 run_with_curl($server, sub {
     my ($proto, $port, $curl) = @_;
-    note("QWE1");
     for my $file (sort keys %files) {
         my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/$file`;
         is length($content), $files{$file}->{size}, "$proto://127.0.0.1/$file (size)";
         is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/$file (md5)";
     }
-    note("QWE2");
     for my $file (sort keys %files) {
-        note($file);
         my $content = `$curl --silent --show-error --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
         is length($content), $files{$file}->{size}, "$proto://127.0.0.1/echo (POST, $file, size)";
         is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, $file, md5)";
     }
-    note("QWE3");
     if ($curl !~ /--http2/) {
         for my $file (sort keys %files) {
             my $content = `$curl --silent --show-error --header 'Transfer-Encoding: chunked' --data-binary \@@{[ DOC_ROOT ]}/$file $proto://127.0.0.1:$port/echo`;
@@ -113,7 +109,6 @@ run_with_curl($server, sub {
             is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
         }
     }
-    note("QWE4");
     my $content = `$curl --silent --show-error --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
     is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
     is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
@@ -122,13 +117,11 @@ run_with_curl($server, sub {
         is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
         is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
     }
-    note("QWE5");
     subtest 'rewrite-redirect' => sub {
         $content = `$curl --silent --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://@{[uri_escape($upstream)]}/abc"`;
         like $content, qr{HTTP/[^ ]+ 302\s}m;
         like $content, qr{^location: ?$proto://127.0.0.1:$port/abc\r$}m;
     };
-    note("QWE6");
     subtest "x-reproxy-url ($proto)" => sub {
         my $fetch_test = sub {
             my $url_prefix = shift;
@@ -197,7 +190,6 @@ subtest 'nghttp' => sub {
         is $out, "hello\n", "$proto://127.0.0.1/echo (POST)";
         $out = `nghttp $opt -m 10 $proto://127.0.0.1:$port/index.txt`;
         is $out, "hello\n" x 10, "$proto://127.0.0.1/index.txt x 10 times";
-        note("nghttp $opt -d $huge_file $proto://127.0.0.1:$port/echo");
         $out = `nghttp $opt -d $huge_file $proto://127.0.0.1:$port/echo`;
         is length($out), $huge_file_size, "$proto://127.0.0.1/echo (mmap-backed, size)";
         is md5_hex($out), $huge_file_md5, "$proto://127.0.0.1/echo (mmap-backed, md5)";

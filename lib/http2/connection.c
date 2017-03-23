@@ -39,7 +39,7 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     4096,     /* header_table_size */
     0,        /* enable_push (clients are never allowed to initiate server push; RFC 7540 Section 8.2) */
     100,      /* max_concurrent_streams */
-    1048576,  /* initial_window_size */
+    65536,    /* initial_window_size */
     16384     /* max_frame_size */
 };
 
@@ -51,7 +51,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* f
                                                          "\x00\x03"
                                                          "\x00\x00\x00\x64" /* max_concurrent_streams = 100 */
                                                          "\x00\x04"
-                                                         "\x00\x10\x00\x00" /* initial_window_size = 1048576 */
+                                                         "\x00\x01\x00\x00" /* initial_window_size = 65536 */
                                                          )};
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
@@ -160,6 +160,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
         if (stream->req.write_body_chunk_done) {
             if (conn->_request_body_in_progress) {
+                //fprintf(stderr, "not running %p because there's already a connection in progress\n", stream);
                 h2o_linklist_insert(&tmp, &stream->_refs.link);
                 continue;
             }
@@ -261,7 +262,6 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
 
     assert(conn->num_streams.pull.open == 0);
-    fprintf(stderr, "hc:%u\n", conn->num_streams.pull.half_closed);
     assert(conn->num_streams.pull.half_closed == 0);
     assert(conn->num_streams.pull.send_body == 0);
     assert(conn->num_streams.push.half_closed == 0);
@@ -494,15 +494,16 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-static void write_body_chunk_done(void *req_, size_t written, int done)
+static void write_body_chunk_done(void *req_, size_t written, int done, int stream_only)
 {
     h2o_req_t *req = req_;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    //fprintf(stderr, "%s:%d sid:%u written:%zu done:%d ss:%d bip:%d\n", __func__, __LINE__, stream->stream_id, written, done, stream->state, conn->_request_body_in_progress);
+    //fprintf(stderr, "%s:%d sid:%u so:%d written:%zu done:%d ss:%d bip:%d\n", __func__, __LINE__, stream->stream_id, stream_only, written, done, stream->state, conn->_request_body_in_progress);
 
-    update_input_window(conn, stream->stream_id, &stream->input_window, written);
+    if (!stream_only)
+        update_input_window(conn, stream->stream_id, &stream->input_window, written);
     update_input_window(conn, 0, &conn->_input_window, written);
 
     if (done) {
@@ -552,7 +553,7 @@ static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, 
             run_pending_requests(conn);
         }
     }
-    write_body_chunk_done(req, payload.len, is_end_stream);
+    write_body_chunk_done(req, payload.len, is_end_stream, 1);
 
     return 0;
 }

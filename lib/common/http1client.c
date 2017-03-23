@@ -397,7 +397,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
             on_send_request(client->super.sock, NULL);
     }
 
-    client->write_body_chunk_done(client->write_body_chunk_done_ctx, to_ack, client->_body_buf_is_done);
+    client->write_body_chunk_done(client->write_body_chunk_done_ctx, to_ack, client->_body_buf_is_done, 0);
 }
 
 static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
@@ -468,6 +468,7 @@ static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end, h2o_
        int i = 0;
        h2o_iovec_t iov[2];
         if (client->cur_body.base) {
+            client->to_ack += client->cur_body.len;
             iov[i++] = client->cur_body;
             client->cur_body.base = NULL;
         }

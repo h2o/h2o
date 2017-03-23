@@ -145,7 +145,7 @@ int fill_body(h2o_iovec_t *reqbuf)
     }
 }
 
-static void http1_write_body_chunk_done(void *sock_, size_t written, int done);
+static void http1_write_body_chunk_done(void *sock_, size_t written, int done, int stream_only);
 static h2o_write_body_chunk http1_write_body_chunk;
 
 static h2o_timeout_t post_body_timeout;
@@ -161,13 +161,13 @@ static void timeout_cb(h2o_timeout_entry_t *entry)
 
     fill_body(&reqbuf);
     h2o_timeout_unlink(&tctx->_timeout);
-    http1_write_body_chunk(H2O_TO_WRITE_BODY_CHUNK_PRIV(tctx->sock), reqbuf, cur_body_size <= 0, http1_write_body_chunk_done);
+    http1_write_body_chunk(tctx->sock, reqbuf, cur_body_size <= 0, http1_write_body_chunk_done);
     free(tctx);
 
     return;
 }
 
-static void http1_write_body_chunk_done(void *sock_, size_t written, int done)
+static void http1_write_body_chunk_done(void *sock_, size_t written, int done, int stream_only)
 {
     h2o_socket_t *sock = sock_;
     h2o_http1client_t *client = (h2o_http1client_t *)sock->data;
@@ -182,7 +182,7 @@ static void http1_write_body_chunk_done(void *sock_, size_t written, int done)
         h2o_iovec_t reqbuf;
         fill_body(&reqbuf);
         if (reqbuf.len > 0)
-            http1_write_body_chunk(H2O_TO_WRITE_BODY_CHUNK_PRIV(sock), reqbuf, cur_body_size <= 0, http1_write_body_chunk_done);
+            http1_write_body_chunk(sock, reqbuf, cur_body_size <= 0, http1_write_body_chunk_done);
     }
 }
 
