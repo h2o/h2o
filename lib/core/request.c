@@ -249,6 +249,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->res.reason = "OK"; /* default to "OK" regardless of the status value, it's not important after all (never sent in HTTP2) */
     req->res.content_length = SIZE_MAX;
     req->preferred_chunk_size = SIZE_MAX;
+    req->content_length = SIZE_MAX;
 
     if (src != NULL) {
         size_t i;

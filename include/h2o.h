@@ -959,6 +959,10 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t entity;
     /**
+     * If different of SIZE_MAX, the numeric value of the received content-length: header
+     */
+    size_t content_length;
+    /**
      * timestamp when the request was processed
      */
     h2o_timestamp_t processed_at;

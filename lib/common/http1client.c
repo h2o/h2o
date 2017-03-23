@@ -471,6 +471,7 @@ static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_
        h2o_iovec_t iov[2];
         if (client->cur_body.base) {
             iov[i++] = client->cur_body;
+            client->cur_body.base = NULL;
         }
         iov[i++] = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
 

@@ -138,7 +138,6 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     struct sockaddr_storage ss;
     socklen_t sslen;
     h2o_iovec_t cookie_buf = {NULL}, xff_buf = {NULL}, via_buf = {NULL};
-    int chunked_or_cl = 0;
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
 
@@ -202,13 +201,20 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
 
-    if (req->_req_body_done_cb) {
-        /* This will forward the `content-length:` header if present,
-           or switch to chunking if not. */
-        chunked_or_cl = 1;
-    } else if (req->entity.base != NULL || req_requires_content_length(req)) {
-        RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
-        offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
+    /* defined the framing, depending on whether we're streaming or not */
+    if (!req->_req_body_done_cb) {
+        if (req->entity.base != NULL || req_requires_content_length(req)) {
+            RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
+            offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
+        }
+    } else {
+        if (req->content_length != SIZE_MAX) {
+            RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
+            offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->content_length);
+        } else {
+            *te_chunked = 1;
+            APPEND_STRLIT("transfer-encoding: chunked\r\n");
+        }
     }
 
     /* rewrite headers if necessary */
@@ -230,10 +236,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
-                if (token == H2O_TOKEN_CONTENT_LENGTH && chunked_or_cl) {
-                    chunked_or_cl = 0;
-                    goto AddHeader;
-                } else if (token->proxy_should_drop) {
+                if (token->proxy_should_drop) {
                     continue;
                 } else if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
@@ -263,10 +266,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             buf.base[offset++] = '\n';
         }
     }
-    if (chunked_or_cl) {
-        *te_chunked = 1;
-        APPEND_STRLIT("transfer-encoding: chunked\r\n");
-    }
+
     if (cookie_buf.len != 0) {
         FLATTEN_PREFIXED_VALUE("cookie: ", cookie_buf, 0);
         buf.base[offset++] = '\r';
