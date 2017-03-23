@@ -491,12 +491,18 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-static void req_body_done(h2o_req_t *req, size_t written)
+static void req_body_done(h2o_req_t *req, size_t written,  int done)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
+    //fprintf(stderr, "%s:%d sid:%u done:%d\n", __func__, __LINE__, stream->stream_id, done);
+
     update_input_window(conn, stream->stream_id, &stream->input_window, written);
+    if (done) {
+        conn->_request_body_in_progress = 0;
+    }
+    run_pending_requests(conn);
 }
 
 static enum req_body_chunk_ret process_req_body_chunk(h2o_req_t *req, h2o_iovec_t payload, int is_end_stream, void *priv, h2o_req_body_done_cb h2o_req_body_done)
@@ -528,13 +534,9 @@ static enum req_body_chunk_ret process_req_body_chunk(h2o_req_t *req, h2o_iovec_
         }
     } else {
         if (is_end_stream) {
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
-            req_body_done(&stream->req, stream->req._req_body.streamed_body_size);
-            stream->req._req_body_done_cb = NULL;
             run_pending_requests(conn);
-            return NO_STREAM_WINDOW_UPDATE;
         }
+        return NO_STREAM_WINDOW_UPDATE;
     }
 
     return STREAM_WINDOW_UPDATE;

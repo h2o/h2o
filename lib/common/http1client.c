@@ -372,20 +372,21 @@ static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_
 static void on_req_body_done(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
+    size_t to_ack;
 
     if (err) {
         on_send_request(client->super.sock, err);
         return;
     }
-
     if (client->to_ack) {
-        client->req_body_done(client->req_body_done_ctx, client->to_ack);
+        to_ack = client->to_ack;
         client->to_ack = 0;
-    } else if (client->_body_buf_in_flight) {
-        client->req_body_done(client->req_body_done_ctx, client->_body_buf_in_flight->size);
+    } else {
+        to_ack = client->_body_buf_in_flight->size;
+    }
+    if (client->_body_buf_in_flight) {
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
     }
-
     if (client->_body_buf && client->_body_buf->size) {
         on_req_body(client->super.sock, h2o_iovec_init(NULL, 0), NULL, client->_body_buf_is_done);
     } else {
@@ -393,6 +394,8 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
         if (client->_body_buf_is_done)
             on_send_request(client->super.sock, NULL);
     }
+
+    client->req_body_done(client->req_body_done_ctx, to_ack, client->_body_buf_is_done);
 }
 
 static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
@@ -407,7 +410,7 @@ static enum req_body_chunk_ret on_req_body(h2o_socket_t *sock, h2o_iovec_t body_
 {
     struct st_h2o_http1client_private_t *client = sock->data;
 
-    //fprintf(stderr, "%s:%d chunk:%zu bb:%zu, bbif:%zu err:%s\n", __func__, __LINE__, body_chunk.len, client->_body_buf ? client->_body_buf->size : 0, client->_body_buf_in_flight ? client->_body_buf_in_flight->size : 0, err?"(null)":err);
+    //fprintf(stderr, "%s:%d %p chunk:%zu bb:%zu, bbif:%zu err:%s\n", __func__, __LINE__, client, body_chunk.len, client->_body_buf ? client->_body_buf->size : 0, client->_body_buf_in_flight ? client->_body_buf_in_flight->size : 0, err?"(null)":err);
 
     if (err) {
         on_send_request(sock, err);

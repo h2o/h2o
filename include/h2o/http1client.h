@@ -49,7 +49,7 @@ typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *cl
                                                            size_t num_headers);
 /* TODO should not have to declare that struct */
 struct st_h2o_req_t;
-typedef void (*h2o_req_body_done_cb)(struct st_h2o_req_t *req, size_t written);
+typedef void (*h2o_req_body_done_cb)(struct st_h2o_req_t *req, size_t written, int done);
 enum req_body_chunk_ret {
     ALLOC_ERR,
     NO_STREAM_WINDOW_UPDATE,
