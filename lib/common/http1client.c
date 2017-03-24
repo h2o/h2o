@@ -85,6 +85,10 @@ static void close_client(struct st_h2o_http1client_private_t *client)
     }
     if (h2o_timeout_is_linked(&client->_timeout))
         h2o_timeout_unlink(&client->_timeout);
+    if (client->_body_buf)
+        h2o_buffer_dispose(&client->_body_buf);
+    if (client->_body_buf_in_flight)
+        h2o_buffer_dispose(&client->_body_buf_in_flight);
     free(client);
 }
 
