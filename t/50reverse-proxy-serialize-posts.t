@@ -30,7 +30,7 @@ my $huge_file = create_data_file($huge_file_size);
 
 my $doit = sub {
     my ($proto, $opt, $port) = @_;
-    my $out = `nghttp $opt -nv -d $huge_file -m 5 $proto://127.0.0.1:$port/echo | grep 'recv WINDOW_UPDATE' | grep -v stream_id=0 | grep -oP stream_id=.. | uniq -c | wc -l`;
+    my $out = `nghttp -t 60 $opt -nv -d $huge_file -m 5 $proto://127.0.0.1:$port/echo | grep 'recv WINDOW_UPDATE' | grep -v stream_id=0 | grep -oP stream_id=.. | uniq -c | wc -l`;
     chomp($out);
     is $out, 5, "No interleaving";
 };
