@@ -4,7 +4,8 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 
-plan skip_all => 'skipping for now';
+plan skip_all => 'nghttp not found'
+    unless prog_exists('nghttp');
 
 my $upstream_port = empty_port();
 
@@ -24,7 +25,7 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
 
-my $huge_file_size = 50 * 1024 * 1024;
+my $huge_file_size = 5 * 1024 * 1024;
 my $huge_file = create_data_file($huge_file_size);
 
 my $doit = sub {
