@@ -163,7 +163,9 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
                 h2o_linklist_insert(&tmp, &stream->_refs.link);
                 continue;
             }
+            fprintf(stderr, "sid:%u becomes in progress, in state: %d\n", stream->stream_id, stream->state);
             conn->_request_body_in_progress++;
+            stream->_conn_stream_in_progress = &conn->_request_body_in_progress;
         } else {
             if (stream->state != H2O_HTTP2_STREAM_STATE_SEND_HEADERS)
                 h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
@@ -174,6 +176,13 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
             conn->pull_stream_ids.max_processed = stream->stream_id;
         h2o_process_request(&stream->req);
     }
+
+    fprintf(stderr, "active:%u, bip:%u\n", conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed, conn->_request_body_in_progress);
+    /*
+    if (!(conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed))
+        assert(!conn->_request_body_in_progress);
+     */
+
     while (!h2o_linklist_is_empty(&tmp)) {
         h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, tmp.next);
         h2o_linklist_unlink(&stream->_refs.link);
@@ -220,6 +229,12 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
     assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
     h2o_http2_scheduler_close(&stream->_refs.scheduler);
+
+    fprintf(stderr, "sid:%u closing, csip:%p\n", stream->stream_id, stream->_conn_stream_in_progress);
+    if (stream->_conn_stream_in_progress) {
+        *stream->_conn_stream_in_progress = *stream->_conn_stream_in_progress - 1;
+        stream->_conn_stream_in_progress = NULL;
+    }
 
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
@@ -506,7 +521,6 @@ static void write_body_chunk_done(void *req_, size_t written, int done, int stre
         if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
-            conn->_request_body_in_progress--;
         }
     }
     run_pending_requests(conn);
@@ -546,7 +560,6 @@ static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, 
                 stream->req.write_body_chunk = NULL;
             }
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-            run_pending_requests(conn);
         }
     }
     write_body_chunk_done(req, payload.len, is_end_stream, 1);
