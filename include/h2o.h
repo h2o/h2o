@@ -1193,7 +1193,9 @@ void h2o_dispose_request(h2o_req_t *req);
  * called by the connection layer to start processing a request that is ready
  */
 void h2o_process_request(h2o_req_t *req);
-/** TODO */
+/**
+ * returns the handler that will be used for the request
+ */
 h2o_handler_t *h2o_find_handler(h2o_req_t *req);
 /**
  * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
