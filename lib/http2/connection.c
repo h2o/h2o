@@ -594,11 +594,13 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         if (ret < 0) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);
-            return 0;
+            stream = NULL;
+            goto UpdateWindow;
         }
         return 0;
     }
 
+UpdateWindow:
     /* consume buffer (and set window_update) */
     update_input_window(conn, 0, &conn->_input_window, frame->length);
     if (stream != NULL)
@@ -661,9 +663,8 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     stream->req._write_body_chunk_priv = &stream->req;
 
     /* setup container for request body if it is expected to arrive */
-    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0) {
+    if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0)
         h2o_buffer_init(&stream->_req_body.body, &h2o_socket_buffer_prototype);
-    }
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
         /* request is complete, handle it */
@@ -987,9 +988,7 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     h2o_socket_read_start(conn->sock, on_read);
 
     /* handle the request */
-    h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, 1);
-
-    execute_or_enqueue_request(conn, stream);
+    execute_or_enqueue_request(conn, h2o_http2_conn_get_stream(conn, 1));
 
     if (conn->_http1_req_input->size > reqsize) {
         size_t remaining_bytes = conn->_http1_req_input->size - reqsize;
