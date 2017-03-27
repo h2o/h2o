@@ -7,8 +7,10 @@
 #ifndef MRB_THROW_H
 #define MRB_THROW_H
 
-#if defined(MRB_ENABLE_CXX_EXCEPTION) && !defined(__cplusplus)
-#error Trying to use C++ exception handling in C code
+#if defined(MRB_ENABLE_CXX_ABI)
+# if !defined(__cplusplus)
+#  error Trying to use C++ exception handling in C code
+# endif
 #endif
 
 #if defined(MRB_ENABLE_CXX_EXCEPTION) && defined(__cplusplus)

@@ -410,6 +410,26 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 </dd>
 </dl>
 
+<div id="handshake-timeout" class="directive-head">
+<h3><a href="configure/base_directives.html#handshake-timeout"><code>"handshake-timeout"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum time (in seconds) that can be spent by a connection before it becomes ready to accept an HTTP request.
+</p>
+
+Times spent for receiving <a href="configure/base_directives.html#listen-proxy-protocol">the PROXY protocol</a> and TLS handshake are counted.
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>handshake-timeout: 10</pre></code>
+</dl>
+
 <div id="limit-request-body" class="directive-head">
 <h3><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
 </div>

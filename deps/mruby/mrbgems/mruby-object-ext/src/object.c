@@ -62,10 +62,11 @@ nil_to_i(mrb_state *mrb, mrb_value obj)
 static mrb_value
 mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
 {
-  mrb_value *argv;
+  const mrb_value *argv;
   mrb_int argc;
   mrb_value blk;
   struct RClass *c;
+  mrb_value args;
 
   mrb_get_args(mrb, "*&", &argv, &argc, &blk);
 
@@ -83,7 +84,8 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
     c = mrb_class_ptr(mrb_singleton_class(mrb, self));
     break;
   }
-
+  args = mrb_ary_new_from_values(mrb, argc, argv);
+  argv = RARRAY_PTR(args);
   return mrb_yield_with_class(mrb, blk, argc, argv, self, c);
 }
 
@@ -96,7 +98,7 @@ mrb_mruby_object_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, n, "to_f", nil_to_f,       MRB_ARGS_NONE());
   mrb_define_method(mrb, n, "to_i", nil_to_i,       MRB_ARGS_NONE());
 
-  mrb_define_method(mrb, mrb->object_class, "instance_exec", mrb_obj_instance_exec, MRB_ARGS_ANY() | MRB_ARGS_BLOCK());
+  mrb_define_method(mrb, mrb->kernel_module, "instance_exec", mrb_obj_instance_exec, MRB_ARGS_ANY() | MRB_ARGS_BLOCK());
 }
 
 void

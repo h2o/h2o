@@ -39,6 +39,12 @@ assert('Hash.[] "c_key", "c_value"') do
   end
 end
 
+assert('Hash.[] for sub class') do
+  sub_hash_class = Class.new(Hash)
+  sub_hash = sub_hash_class[]
+  assert_equal(sub_hash_class, sub_hash.class)
+end
+
 assert('Hash.try_convert') do
   assert_nil Hash.try_convert(nil)
   assert_nil Hash.try_convert("{1=>2}")
@@ -141,6 +147,12 @@ assert("Hash#invert") do
   assert_equal(2, h.length)
   assert_include(%w[a c], h[1])
   assert_equal('b', h[2])
+end
+
+assert("Hash#invert with sub class") do
+  sub_hash_class = Class.new(Hash)
+  sub_hash = sub_hash_class.new
+  assert_equal(sub_hash_class, sub_hash.invert.class)
 end
 
 assert("Hash#keep_if") do

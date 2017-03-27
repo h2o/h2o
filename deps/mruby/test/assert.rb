@@ -44,7 +44,8 @@ def assert(str = 'Assertion failed', iso = '')
   begin
     $mrbtest_assert = []
     $mrbtest_assert_idx = 0
-    if(!yield || $mrbtest_assert.size > 0)
+    yield
+    if($mrbtest_assert.size > 0)
       $asserts.push(assertion_string('Fail: ', str, iso, nil))
       $ko_test += 1
       t_print('F')

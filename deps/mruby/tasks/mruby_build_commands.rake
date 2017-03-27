@@ -41,7 +41,7 @@ module MRuby
   class Command::Compiler < Command
     attr_accessor :flags, :include_paths, :defines, :source_exts
     attr_accessor :compile_options, :option_define, :option_include_path, :out_ext
-    attr_accessor :cxx_compile_flag
+    attr_accessor :cxx_compile_flag, :cxx_exception_flag
 
     def initialize(build, source_exts=[])
       super(build)
