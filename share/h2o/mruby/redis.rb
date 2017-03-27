@@ -20,39 +20,35 @@ module H2O
     end
 
     def call(*command)
-      __call(command)
+      ensure_connected do
+        __call(command)
+      end
     end
 
     def get(key)
-      ensure_connected do
-        call(:get, key)
-      end
+      call(:get, key)
     end
 
     def set(key, value, options = {})
-      ensure_connected do
-        command = [:set, key, value]
+      command = [:set, key, value]
 
-        ex = options[:ex]
-        command.concat(['EX', ex]) if ex
+      ex = options[:ex]
+      command.concat(['EX', ex]) if ex
 
-        px = options[:px]
-        command.concat(['PX', px]) if px
+      px = options[:px]
+      command.concat(['PX', px]) if px
 
-        nx = options[:nx]
-        command.concat(['NX']) if nx
+      nx = options[:nx]
+      command.concat(['NX']) if nx
 
-        xx = options[:xx]
-        command.concat(['XX']) if xx
+      xx = options[:xx]
+      command.concat(['XX']) if xx
 
-        call(*command)
-      end
+      call(*command)
     end
 
     def del(*keys)
-      ensure_connected do
-        call(:del, *keys)
-      end
+      call(:del, *keys)
     end
 
     class Command
