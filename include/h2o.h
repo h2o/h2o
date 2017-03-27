@@ -1037,9 +1037,10 @@ struct st_h2o_req_t {
     h2o_timeout_entry_t _timeout_entry;
 
     /* streaming request body */
-    h2o_write_body_chunk write_body_chunk;
-    void *write_body_chunk_priv;
-    h2o_write_body_chunk_done write_body_chunk_done;
+    h2o_write_body_chunk _write_body_chunk;
+    void *_write_body_chunk_priv;
+    h2o_write_body_chunk_done _write_body_chunk_done;
+    char _found_handler;
 
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;

@@ -202,7 +202,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     assert(offset <= buf.len);
 
     /* defined the framing, depending on whether we're streaming or not */
-    if (!req->write_body_chunk_done) {
+    if (!req->_write_body_chunk_done) {
         if (req->entity.base != NULL || req_requires_content_length(req)) {
             RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
             offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
@@ -543,18 +543,18 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *method_is_head = self->up_req.is_head;
 
     self->write_body_chunk = backend_write_body_chunk;
-    *write_body_chunk_done = self->src_req->write_body_chunk_done;
+    *write_body_chunk_done = self->src_req->_write_body_chunk_done;
     *write_body_chunk_done_ctx = self->src_req;
     if (self->src_req->entity.base != NULL) {
-        if (self->src_req->write_body_chunk_done) {
+        if (self->src_req->_write_body_chunk_done) {
             *cur_body = self->src_req->entity;
         } else {
             self->up_req.bufs[1] = self->src_req->entity;
             *reqbufcnt = 2;
         }
     }
-    self->src_req->write_body_chunk = write_body_chunk;
-    self->src_req->write_body_chunk_priv = self;
+    self->src_req->_write_body_chunk = write_body_chunk;
+    self->src_req->_write_body_chunk_priv = self;
     self->client->informational_cb = on_1xx;
     return on_head;
 }

@@ -157,7 +157,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
         h2o_linklist_unlink(&stream->_refs.link);
 
-        if (stream->req.write_body_chunk_done) {
+        if (stream->req._write_body_chunk_done) {
             if (conn->_request_body_in_progress) {
                 h2o_linklist_insert(&tmp, &stream->_refs.link);
                 continue;
@@ -186,14 +186,14 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 {
     assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
 
-    if (!stream->req.write_body_chunk_done && stream->_req_body.body != NULL && stream->_expected_content_length != SIZE_MAX &&
+    if (!stream->req._write_body_chunk_done && stream->_req_body.body != NULL && stream->_expected_content_length != SIZE_MAX &&
         stream->_req_body.body->size != stream->_expected_content_length) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         h2o_http2_stream_reset(conn, stream);
         return;
     }
 
-    if (!stream->req.write_body_chunk_done)
+    if (!stream->req._write_body_chunk_done)
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
 
     /* TODO schedule the pending reqs using the scheduler */
@@ -531,24 +531,26 @@ static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, 
     stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
 
     /* handle request if request body is complete */
-    if (!stream->req.write_body_chunk_done) {
+    if (!stream->req._write_body_chunk_done) {
         if (is_end_stream) {
             stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
             execute_or_enqueue_request(conn, stream);
         } else {
-            /* TODO, only call it once */
-            h2o_handler_t *h = h2o_find_handler(&stream->req);
-            if (h && h->has_body_stream) {
-                stream->req.write_body_chunk_done = write_body_chunk_done;
-                stream->_req_body.streamed_body_size = stream->_req_body.body->size;
-                execute_or_enqueue_request(conn, stream);
+            if (!stream->req._found_handler) {
+                h2o_handler_t *h = h2o_find_handler(&stream->req);
+                if (h && h->has_body_stream) {
+                    stream->req._write_body_chunk_done = write_body_chunk_done;
+                    stream->_req_body.streamed_body_size = stream->_req_body.body->size;
+                    execute_or_enqueue_request(conn, stream);
+                }
+                stream->req._found_handler = 1;
             }
         }
     } else {
         if (is_end_stream) {
-            if (stream->req.write_body_chunk == write_body_chunk) {
-                stream->req.write_body_chunk_done = NULL;
-                stream->req.write_body_chunk = NULL;
+            if (stream->req._write_body_chunk == write_body_chunk) {
+                stream->req._write_body_chunk_done = NULL;
+                stream->req._write_body_chunk = NULL;
             }
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
         }
@@ -590,8 +592,8 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;
     } else {
-        int ret = stream->req.write_body_chunk(stream->req.write_body_chunk_priv, h2o_iovec_init(payload.data, payload.length),
-                                               frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM, write_body_chunk_done);
+        int ret = stream->req._write_body_chunk(stream->req._write_body_chunk_priv, h2o_iovec_init(payload.data, payload.length),
+                                                frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM, write_body_chunk_done);
         if (ret < 0) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);
@@ -658,8 +660,8 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         set_priority(conn, stream, &payload.priority, 0);
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
-    stream->req.write_body_chunk = write_body_chunk;
-    stream->req.write_body_chunk_priv = &stream->req;
+    stream->req._write_body_chunk = write_body_chunk;
+    stream->req._write_body_chunk_priv = &stream->req;
 
     /* setup container for request body if it is expected to arrive */
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0) {

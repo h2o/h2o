@@ -472,7 +472,7 @@ inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2
 
 inline size_t h2o_http2_stream_body_size(h2o_http2_stream_t *stream)
 {
-    if (stream->req.write_body_chunk_done)
+    if (stream->req._write_body_chunk_done)
         return stream->_req_body.streamed_body_size;
     else if (stream->_req_body.body)
         return stream->_req_body.body->size;
