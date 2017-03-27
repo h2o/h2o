@@ -312,25 +312,19 @@ static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
     return *data;
 }
 
-static void replace_stop_with_return(mrb_state *mrb, mrb_irep *irep)
-{
-    assert(irep->iseq[irep->ilen - 1] == MKOP_A(OP_STOP, 0));
-    irep->iseq[irep->ilen - 1] = MKOP_AB(OP_RETURN, irep->nlocals, OP_R_NORMAL);
-}
-
 mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
-    struct RProc *compiled = h2o_mruby_compile_code(mrb, &ctx->handler->config, NULL);
-
-    /* make compiled RProc* able to be passed as argument */
-    struct RProc *conf_proc = mrb_closure_new(mrb, compiled->body.irep);
-    replace_stop_with_return(mrb, conf_proc->body.irep);
+    h2o_mruby_config_vars_t config = ctx->handler->config;
+    mrb_value conf = mrb_hash_new_capa(mrb, 3);
+    mrb_hash_set(mrb, conf, mrb_symbol_value(mrb_intern_lit(mrb, "code")), mrb_str_new(mrb, config.source.base, config.source.len));
+    mrb_hash_set(mrb, conf, mrb_symbol_value(mrb_intern_lit(mrb, "file")), mrb_str_new(mrb, config.path, strlen(config.path)));
+    mrb_hash_set(mrb, conf, mrb_symbol_value(mrb_intern_lit(mrb, "line")), mrb_fixnum_value(config.lineno));
 
     /* run code and generate handler */
     mrb_value result =
-        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, mrb_obj_value(conf_proc));
+        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, conf);
     assert(mrb_array_p(result));
 
     return result;
