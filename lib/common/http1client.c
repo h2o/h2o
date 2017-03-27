@@ -375,15 +375,15 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
 
-    if (err) {
-        on_send_request(client->super.sock, err);
-        return;
-    }
-
     if (client->_body_buf_in_flight) {
         client->_write_body_chunk_done(client->_write_body_chunk_done_ctx, client->_body_buf_in_flight->size,
                                        client->_body_buf_is_done, 0);
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
+    }
+
+    if (err) {
+        on_send_request(client->super.sock, err);
+        return;
     }
 
     if (client->_body_buf && client->_body_buf->size)
