@@ -523,11 +523,8 @@ static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, 
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    h2o_iovec_t buf = h2o_buffer_reserve(&stream->_req_body.body, payload.len);
-    if (buf.base == NULL)
+    if (h2o_buffer_copy(&stream->_req_body.body, payload) < 0)
         return -1;
-    memcpy(buf.base, payload.base, payload.len);
-    stream->_req_body.body->size += payload.len;
     stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
 
     /* handle request if request body is complete */

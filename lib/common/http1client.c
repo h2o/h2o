@@ -409,16 +409,11 @@ static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end, h2o_
     client->_body_buf_is_done = is_end;
 
     if (body_chunk.len) {
-        h2o_iovec_t buf;
-
-        if (!client->_body_buf) {
+        if (!client->_body_buf)
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-        }
-        buf = h2o_buffer_reserve(&client->_body_buf, body_chunk.len);
-        if (!buf.base)
+
+        if (h2o_buffer_copy(&client->_body_buf, body_chunk) < 0)
             return -1;
-        memcpy(buf.base, body_chunk.base, body_chunk.len);
-        client->_body_buf->size += body_chunk.len;
     }
 
     if (client->super.sock->_cb.write) {
@@ -480,15 +475,11 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     }
     if (client->_write_body_chunk_done) {
         if (cur_body.len) {
-            h2o_iovec_t buf;
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-            buf = h2o_buffer_reserve(&client->_body_buf, cur_body.len);
-            if (!buf.base) {
+            if (h2o_buffer_copy(&client->_body_buf, cur_body) < 0) {
                 on_send_request(client->super.sock, "Internal error");
                 return;
             }
-            memcpy(buf.base, cur_body.base, cur_body.len);
-            client->_body_buf->size += cur_body.len;
         }
         h2o_socket_write(client->super.sock, reqbufs, reqbufcnt, on_req_body_done);
     } else {
