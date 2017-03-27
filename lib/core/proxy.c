@@ -201,7 +201,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
 
-    /* defined the framing, depending on whether we're streaming or not */
+    /* CL or TE? Depends on whether we're streaming the request body or
+       not, and if CL was advertised in the original request */
     if (!req->_write_body_chunk_done) {
         if (req->entity.base != NULL || req_requires_content_length(req)) {
             RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
