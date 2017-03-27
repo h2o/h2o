@@ -441,7 +441,8 @@ static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end, h2o_
         int i = 0;
         h2o_iovec_t chunk_and_reqbufs[3];
 
-        chunk_and_reqbufs[i].len = snprintf(client->chunk_len_str, sizeof(client->chunk_len_str), "%zX\r\n", client->_body_buf_in_flight->size);
+        chunk_and_reqbufs[i].len =
+            snprintf(client->chunk_len_str, sizeof(client->chunk_len_str), "%zX\r\n", client->_body_buf_in_flight->size);
         chunk_and_reqbufs[i++].base = client->chunk_len_str;
 
         if (client->_body_buf_in_flight)
@@ -476,7 +477,9 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     size_t reqbufcnt;
     h2o_iovec_t cur_body;
 
-    if ((client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, write_body_chunk, &client->write_body_chunk_done, &client->write_body_chunk_done_ctx, &cur_body)) == NULL) {
+    if ((client->_cb.on_head =
+             client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, write_body_chunk,
+                                    &client->write_body_chunk_done, &client->write_body_chunk_done_ctx, &cur_body)) == NULL) {
         close_client(client);
         return;
     }
@@ -591,7 +594,8 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                                          h2o_iovec_t ssl_server_name, h2o_http1client_connect_cb cb, int is_chunked)
+                                                          h2o_iovec_t ssl_server_name, h2o_http1client_connect_cb cb,
+                                                          int is_chunked)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 

@@ -36,13 +36,12 @@ const h2o_http2_priority_t h2o_http2_default_priority = {
 };
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
-    4096,     /* header_table_size */
-    0,        /* enable_push (clients are never allowed to initiate server push; RFC 7540 Section 8.2) */
-    100,      /* max_concurrent_streams */
-    65536,    /* initial_window_size */
-    16384     /* max_frame_size */
+    4096,  /* header_table_size */
+    0,     /* enable_push (clients are never allowed to initiate server push; RFC 7540 Section 8.2) */
+    100,   /* max_concurrent_streams */
+    65536, /* initial_window_size */
+    16384  /* max_frame_size */
 };
-
 
 static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* frame size */
                                                          "\x04"             /* settings frame */
@@ -591,7 +590,8 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;
     } else {
-        int ret = stream->req.write_body_chunk(stream->req.write_body_chunk_priv, h2o_iovec_init(payload.data, payload.length), frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM, write_body_chunk_done);
+        int ret = stream->req.write_body_chunk(stream->req.write_body_chunk_priv, h2o_iovec_init(payload.data, payload.length),
+                                               frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM, write_body_chunk_done);
         if (ret < 0) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);
@@ -606,7 +606,6 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         update_input_window(conn, stream->stream_id, &stream->input_window, frame->length);
 
     return 0;
-
 }
 
 static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, const char **err_desc)

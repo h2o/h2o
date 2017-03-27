@@ -29,7 +29,7 @@
 #include "h2o/http1client.h"
 
 #ifndef MIN
-#define MIN(a,b) (((a)>(b))?(b):(a))
+#define MIN(a, b) (((a) > (b)) ? (b) : (a))
 #endif
 
 static h2o_socketpool_t *sockpool;
@@ -44,7 +44,9 @@ static int delay_interval_ms = 0;
 static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk, h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body);
+                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk,
+                                          h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx,
+                                          h2o_iovec_t *cur_body);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers);
 
@@ -67,9 +69,10 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     /* build request */
     req = h2o_mem_alloc_pool(&pool, sizeof(*req));
     req->base = h2o_mem_alloc_pool(&pool, 1024);
-    req->len = snprintf(req->base, 1024, "%s %.*s HTTP/1.1\r\ncontent-length:%d\r\nhost: %.*s\r\n\r\n", method, (int)url_parsed.path.len, url_parsed.path.base,
-                        body_size, (int)url_parsed.authority.len, url_parsed.authority.base);
-    cur_body_size  = body_size;
+    req->len =
+        snprintf(req->base, 1024, "%s %.*s HTTP/1.1\r\ncontent-length:%d\r\nhost: %.*s\r\n\r\n", method, (int)url_parsed.path.len,
+                 url_parsed.path.base, body_size, (int)url_parsed.authority.len, url_parsed.authority.base);
+    cur_body_size = body_size;
     assert(req->len < 1024);
 
     /* initiate the request */
@@ -176,7 +179,7 @@ static void http1_write_body_chunk_done(void *sock_, size_t written, int done, i
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
         tctx->sock = sock;
-        tctx->_timeout.cb  = timeout_cb;
+        tctx->_timeout.cb = timeout_cb;
         h2o_timeout_link(client->ctx->loop, &post_body_timeout, &tctx->_timeout);
     } else {
         h2o_iovec_t reqbuf;
@@ -187,7 +190,9 @@ static void http1_write_body_chunk_done(void *sock_, size_t written, int done, i
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk, h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body)
+                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk,
+                                          h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx,
+                                          h2o_iovec_t *cur_body)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -209,7 +214,9 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
 
 static void usage(const char *progname)
 {
-    fprintf(stderr, "Usage: [-t <times>] [-m <method>] [-b <body size>] [-c <chunk size>] [-i <interval between chunks>] %s <url>\n", progname);
+    fprintf(stderr,
+            "Usage: [-t <times>] [-m <method>] [-b <body size>] [-c <chunk size>] [-i <interval between chunks>] %s <url>\n",
+            progname);
 }
 int main(int argc, char **argv)
 {
@@ -254,8 +261,8 @@ int main(int argc, char **argv)
         }
     }
     if (argc - optind != 1) {
-            usage(argv[0]);
-            exit(EXIT_FAILURE);
+        usage(argv[0]);
+        exit(EXIT_FAILURE);
     }
     url = argv[optind];
 

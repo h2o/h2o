@@ -525,7 +525,9 @@ static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, 
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk, h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body)
+                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk,
+                                          h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx,
+                                          h2o_iovec_t *cur_body)
 {
     struct rp_generator_t *self = client->data;
 
@@ -625,7 +627,8 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (port == 65535)
             port = req->scheme->default_port;
         self = proxy_send_prepare(req, 0, overrides != NULL && overrides->use_proxy_protocol, &te_chunked);
-        h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect, te_chunked);
+        h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect,
+                                te_chunked);
         return;
     }
 }
