@@ -25,15 +25,15 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
 
-my $huge_file_size = 1 * 1024 * 1024;
+my $huge_file_size = 50 * 1024 * 1024;
 my $huge_file = create_data_file($huge_file_size);
 
 my $doit = sub {
     my ($proto, $opt, $port) = @_;
-    note(`nghttp -t 60 $opt -nv -d $huge_file -m 5 $proto://127.0.0.1:$port/echo 2>&1`);
-    my $out = `nghttp -t 60 $opt -nv -d $huge_file -m 5 $proto://127.0.0.1:$port/echo 2>&1 | grep 'recv WINDOW_UPDATE' | grep -v stream_id=0 | grep -oP stream_id=.. | uniq -c | wc -l`;
+    my $posts = 10;
+    my $out = `nghttp -t 60 $opt -nv -d $huge_file -m $posts $proto://127.0.0.1:$port/echo 2>&1 | grep 'recv WINDOW_UPDATE' | grep -v stream_id=0 | grep -oP stream_id=.. | uniq -c | wc -l`;
     chomp($out);
-    is $out, 5, "No interleaving";
+    is $out, $posts, "No interleaving";
 };
 
 subtest 'http (upgrade)' => sub {
