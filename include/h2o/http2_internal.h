@@ -184,7 +184,7 @@ struct st_h2o_http2_stream_t {
         h2o_buffer_t *body; /* NULL unless request body IS expected */
         size_t streamed_body_size;
     } _req_body;
-    unsigned *_conn_stream_in_progress; /* a reference to TODO, NULL if not streaming */
+    unsigned *_conn_stream_in_progress; /* a reference to h2o_conn_t::_request_body_in_progress, NULL if not streaming */
 
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;

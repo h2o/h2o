@@ -124,7 +124,7 @@ typedef struct st_h2o_handler_t {
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
-    int has_body_stream;
+    unsigned has_body_stream : 1;
 } h2o_handler_t;
 
 /**
