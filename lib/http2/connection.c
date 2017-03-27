@@ -39,7 +39,7 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     4096,  /* header_table_size */
     0,     /* enable_push (clients are never allowed to initiate server push; RFC 7540 Section 8.2) */
     100,   /* max_concurrent_streams */
-    65536, /* initial_window_size */
+    65535, /* initial_window_size */
     16384  /* max_frame_size */
 };
 
@@ -50,7 +50,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* f
                                                          "\x00\x03"
                                                          "\x00\x00\x00\x64" /* max_concurrent_streams = 100 */
                                                          "\x00\x04"
-                                                         "\x00\x01\x00\x00" /* initial_window_size = 65536 */
+                                                         "\x00\x00\xff\xff" /* initial_window_size = 65535 */
                                                          )};
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
@@ -513,13 +513,13 @@ static void write_body_chunk_done(void *req_, size_t written, int done, int stre
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         }
+        run_pending_requests(conn);
     }
-    run_pending_requests(conn);
 }
 
-static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
+static int write_body_chunk(void *req_, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
 {
-    h2o_req_t *req = priv;
+    h2o_req_t *req = req_;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
