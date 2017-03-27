@@ -56,7 +56,6 @@ struct st_h2o_http1client_private_t {
     char chunk_len_str[18]; /* SIZE_MAX in hex + CRLF */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
-    unsigned last_crlf_done : 1;
     unsigned is_chunked : 1;
     unsigned _body_buf_is_done : 1;
 };
@@ -359,8 +358,8 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (client->is_chunked && !client->last_crlf_done) {
-        client->last_crlf_done = 1;
+    if (client->is_chunked) {
+        client->is_chunked = 0;
         h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n"));
         h2o_socket_write(client->super.sock, &last, 1, on_send_request);
         return;

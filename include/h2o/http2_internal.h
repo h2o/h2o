@@ -181,7 +181,7 @@ struct st_h2o_http2_stream_t {
     h2o_send_state_t send_state; /* steate of the ostream, only used in push mode */
 
     struct {
-        h2o_buffer_t *body;
+        h2o_buffer_t *body; /* NULL unless request body IS expected */
         size_t streamed_body_size;
     } _req_body;
     unsigned *_conn_stream_in_progress; /* a reference to TODO, NULL if not streaming */
