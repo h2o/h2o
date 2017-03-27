@@ -2199,7 +2199,7 @@ codegen(codegen_scope *s, node *tree, int val)
       char buf[32];
       int sym;
 
-      snprintf(buf, sizeof(buf), "$%" PRId64, (intptr_t)tree);
+      snprintf(buf, sizeof(buf), "$%" MRB_PRId, (mrb_int)(intptr_t)tree);
       sym = new_sym(s, mrb_intern_cstr(mrb, buf));
       genop(s, MKOP_ABx(OP_GETGLOBAL, cursp(), sym));
       push();

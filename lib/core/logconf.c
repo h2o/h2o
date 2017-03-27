@@ -34,6 +34,7 @@ enum {
     ELEMENT_TYPE_METHOD,                        /* %m */
     ELEMENT_TYPE_LOCAL_PORT,                    /* %p, %{local}p */
     ELEMENT_TYPE_REMOTE_PORT,                   /* %{remote}p */
+    ELEMENT_TYPE_ENV_VAR,                       /* %{..}e */
     ELEMENT_TYPE_QUERY,                         /* %q */
     ELEMENT_TYPE_REQUEST_LINE,                  /* %r */
     ELEMENT_TYPE_STATUS,                        /* %s */
@@ -75,6 +76,7 @@ struct log_element_t {
         h2o_iovec_t name;
         size_t protocol_specific_callback_index;
     } data;
+    int magically_quoted_json; /* whether to omit surrounding doublequotes when the output is null */
 };
 
 struct st_h2o_logconf_t {
@@ -87,6 +89,43 @@ static h2o_iovec_t strdup_lowercased(const char *s, size_t len)
     h2o_iovec_t v = h2o_strdup(NULL, s, len);
     h2o_strtolower(v.base, v.len);
     return v;
+}
+
+static int determine_magicquote_nodes(h2o_logconf_t *logconf, char *errbuf)
+{
+    size_t element_index;
+    int quote_char = '\0'; /* the quote char being used if the state machine is within a string literal */
+    int just_in = 0;       /* if we just went into the string literal */
+
+    for (element_index = 0; element_index < logconf->elements.size; ++element_index) {
+        h2o_iovec_t suffix = logconf->elements.entries[element_index].suffix;
+        logconf->elements.entries[element_index].magically_quoted_json = just_in && suffix.len != 0 && suffix.base[0] == quote_char;
+
+        just_in = 0;
+
+        size_t i;
+        for (i = 0; i < suffix.len; ++i) {
+            just_in = 0;
+            if (quote_char != '\0') {
+                if (quote_char == suffix.base[i]) {
+                    /* out of quote? */
+                    size_t j, num_bs = 0;
+                    for (j = i; j != 0; ++num_bs)
+                        if (suffix.base[--j] != '\\')
+                            break;
+                    if (num_bs % 2 == 0)
+                        quote_char = '\0';
+                }
+            } else {
+                if (suffix.base[i] == '"' || suffix.base[i] == '\'') {
+                    quote_char = suffix.base[i];
+                    just_in = 1;
+                }
+            }
+        }
+    }
+
+    return 1;
 }
 
 h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
@@ -148,6 +187,13 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     } else {
                         sprintf(errbuf, "failed to compile log format: unknown specifier for %%{...}p");
                         goto Error;
+                    }
+                    break;
+                case 'e':
+                    {
+                        h2o_iovec_t name = h2o_strdup(NULL, pt, quote_end - pt);
+                        NEW_ELEMENT(ELEMENT_TYPE_ENV_VAR);
+                        LAST_ELEMENT()->data.name = name;
                     }
                     break;
                 case 't':
@@ -213,7 +259,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
 #undef MAP_EXT_TO_PROTO
                     break;
                 default:
-                    sprintf(errbuf, "failed to compile log format: header name is not followed by either `i`, `o`, `x`");
+                    sprintf(errbuf, "failed to compile log format: header name is not followed by either `i`, `o`, `x`, `e`");
                     goto Error;
                 }
                 pt = quote_end + 2;
@@ -232,6 +278,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     TYPE_MAP('l', ELEMENT_TYPE_LOGNAME);
                     TYPE_MAP('m', ELEMENT_TYPE_METHOD);
                     TYPE_MAP('p', ELEMENT_TYPE_LOCAL_PORT);
+                    TYPE_MAP('e', ELEMENT_TYPE_ENV_VAR);
                     TYPE_MAP('q', ELEMENT_TYPE_QUERY);
                     TYPE_MAP('r', ELEMENT_TYPE_REQUEST_LINE);
                     TYPE_MAP('s', ELEMENT_TYPE_STATUS);
@@ -262,6 +309,11 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
 
 #undef NEW_ELEMENT
 #undef LAST_ELEMENT
+
+    if (escape == H2O_LOGCONF_ESCAPE_JSON) {
+        if (!determine_magicquote_nodes(logconf, errbuf))
+            goto Error;
+    }
 
     return logconf;
 
@@ -487,6 +539,13 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
             pos = append_port(pos, req->conn->callbacks->get_peername, req->conn, nullexpr);
             break;
+        case ELEMENT_TYPE_ENV_VAR:  /* %{..}e */  {
+            h2o_iovec_t *env_var = h2o_req_getenv(req, element->data.name.base, element->data.name.len, 0);
+            if (env_var == NULL)
+                goto EmitNull;
+            RESERVE(env_var->len * unsafe_factor);
+            pos = append_safe_string(pos, env_var->base, env_var->len);
+            } break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
                 size_t len = req->input.path.len - req->input.query_at;
@@ -688,8 +747,14 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
         EmitNull:
             RESERVE(nullexpr.len);
-            memcpy(pos, nullexpr.base, nullexpr.len);
-            pos += nullexpr.len;
+            /* special case that trims surrounding quotes */
+            if (element->magically_quoted_json) {
+                --pos;
+                pos = append_safe_string(pos, nullexpr.base, nullexpr.len);
+                pos = append_safe_string(pos, element->suffix.base + 1, element->suffix.len - 1);
+                continue;
+            }
+            pos = append_safe_string(pos, nullexpr.base, nullexpr.len);
             break;
 
         default:

@@ -390,11 +390,19 @@ struct st_h2o_globalconf_t {
         /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
-        int preserve_x_forwarded_proto;
+        unsigned preserve_x_forwarded_proto : 1;
+        /**
+         * a boolean flag if set to true, instructs the proxy to preserve the server header passed by the origin
+         */
+        unsigned preserve_server_header : 1;
         /**
          * a boolean flag if set to true, instructs the proxy to emit x-forwarded-proto and x-forwarded-for headers
          */
-        int emit_x_forwarded_headers;
+        unsigned emit_x_forwarded_headers : 1;
+        /**
+         * a boolean flag if set to true, instructs the proxy to emit a via header
+         */
+        unsigned emit_via_header : 1;
     } proxy;
 
     /**

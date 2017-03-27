@@ -39,7 +39,7 @@ $ctx->{directive}->(
     see_also => render_mt(<<EOT),
 <a href="configure/file_directives.html#file.dirlisting"><code>file.dirlisting</code></a>,
 <a href="configure/file_directives.html#file.file"><code>file.file</code></a>,
-<a href="configure/file_directives.html#file.dirlisting"><code>file.index</code></a>
+<a href="configure/file_directives.html#file.index"><code>file.index</code></a>
 EOT
 )->(sub {
 ?>

@@ -124,15 +124,31 @@ class String
   #
   # ISO 15.2.10.5.36
   def sub(*args, &block)
-    if args.size == 2
-      pre, post = split(args[0], 2)
-      return self unless post # The sub target wasn't found in the string
-      pre + args[1].__sub_replace(pre, args[0], post) + post
-    elsif args.size == 1 && block
-      split(args[0], 2).join(block.call(args[0]))
-    else
-      raise ArgumentError, "wrong number of arguments"
+    unless (1..2).include?(args.length)
+      raise ArgumentError, "wrong number of arguments (given #{args.length}, expected 2)"
     end
+
+    pattern, replace = *args
+    pattern = pattern.to_str
+    if args.length == 2 && block
+      block = nil
+    end
+    if !block
+      replace = replace.to_str
+    end
+    result = []
+    this = dup
+    found = index(pattern)
+    return this unless found
+    result << this[0, found]
+    offset = found + pattern.length
+    result << if block
+      block.call(pattern).to_s
+    else
+      replace.__sub_replace(this[0, found], pattern, this[offset..-1] || "")
+    end
+    result << this[offset..-1] if offset < length
+    result.join
   end
 
   ##

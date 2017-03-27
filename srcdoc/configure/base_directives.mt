@@ -299,6 +299,17 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 
 <?
 $ctx->{directive}->(
+    name    => "handshake-timeout",
+    levels  => [ qw(global) ],
+    default => "handshake-timeout: 10",
+    desc    => q{Maximum time (in seconds) that can be spent by a connection before it becomes ready to accept an HTTP request.},
+)->(sub {
+?>
+Times spent for receiving <a href="configure/base_directives.html#listen-proxy-protocol">the PROXY protocol</a> and TLS handshake are counted.
+? })
+
+<?
+$ctx->{directive}->(
     name   => "limit-request-body",
     levels => [ qw(global) ],
     desc   => q{Maximum size of request body in bytes (e.g. content of POST).},

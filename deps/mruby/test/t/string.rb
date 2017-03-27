@@ -585,6 +585,16 @@ assert('String#sub', '15.2.10.5.36') do
   assert_equal 'aBcabc', 'abcabc'.sub('b', 'B')
   assert_equal 'aBcabc', 'abcabc'.sub('b') { |w| w.capitalize }
   assert_equal 'aa$', 'aa#'.sub('#', '$')
+  assert_equal '.abc', "abc".sub("", ".")
+
+  str = "abc"
+  miss = str.sub("X", "Z")
+  assert_equal str, miss
+  assert_not_equal str.object_id, miss.object_id
+
+  a = []
+  assert_equal '.abc', "abc".sub("") { |i| a << i; "." }
+  assert_equal [""], a
 end
 
 assert('String#sub with backslash') do

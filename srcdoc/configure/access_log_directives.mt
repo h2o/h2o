@@ -30,12 +30,21 @@ EOT
 
 <p>
 If the supplied argument is a mapping, its <code>path</code> property is considered as the path of the log file or the pipe command, and the <code>format</code> property is treated as the format of the log file.
+Starting from version 2.2, <code>escape</code> property can be used to specify the escape sequence that should be used to emit unsafe octets.
+</p>
+
+<p>
+Two forms of escape sequences are supported.
+If <code>apache</code> is specified as the value of the <code>escape</code> property, unsafe octets are emitted in the form of <code>\xNN</code>, where N is a hexadecimal number in lower case.
+If <code>json</code> is specified, unsafe octets are emitted in the form of <code>\u00NN</code>.
+<code>apache</code> is the default escape method.
 </p>
 
 <?= $ctx->{example}->('Emit access log to file using Common Log Format', <<'EOT')
 access-log:
     path: /path/to/access-log-file
     format: "%h %l %u %t \"%r\" %s %b"
+    escape: apache
 EOT
 ?>
 
