@@ -500,9 +500,8 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-static void write_body_chunk_done(void *req_, size_t written, int done)
+static void write_body_chunk_done(h2o_req_t *req, size_t written, int done)
 {
-    h2o_req_t *req = req_;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
