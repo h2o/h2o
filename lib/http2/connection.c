@@ -500,14 +500,13 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-static void write_body_chunk_done(void *req_, size_t written, int done, int stream_only)
+static void write_body_chunk_done(void *req_, size_t written, int done)
 {
     h2o_req_t *req = req_;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    if (!stream_only)
-        update_input_window(conn, stream->stream_id, &stream->input_window, written);
+    update_input_window(conn, stream->stream_id, &stream->input_window, written);
     update_input_window(conn, 0, &conn->_input_window, written);
 
     if (done) {
@@ -554,7 +553,7 @@ static int write_body_chunk(void *req_, h2o_iovec_t payload, int is_end_stream, 
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
         }
     }
-    write_body_chunk_done(req, payload.len, is_end_stream, 1);
+    write_body_chunk_done(req, payload.len, is_end_stream);
 
     return 0;
 }

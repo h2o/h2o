@@ -377,7 +377,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
 
     if (client->_body_buf_in_flight) {
         client->_write_body_chunk_done(client->_write_body_chunk_done_ctx, client->_body_buf_in_flight->size,
-                                       client->_body_buf_is_done, 0);
+                                       client->_body_buf_is_done);
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
     }
 
