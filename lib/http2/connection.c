@@ -43,15 +43,18 @@ const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST = {
     16384  /* max_frame_size */
 };
 
-static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* frame size */
-                                                         "\x04"             /* settings frame */
-                                                         "\x00"             /* no flags */
-                                                         "\x00\x00\x00\x00" /* stream id */
-                                                         "\x00\x03"
-                                                         "\x00\x00\x00\x64" /* max_concurrent_streams = 100 */
-                                                         "\x00\x04"
-                                                         "\x00\x00\xff\xff" /* initial_window_size = 65535 */
-                                                         )};
+static const h2o_iovec_t SERVER_PREFACE = {H2O_STRLIT("\x00\x00\x06"     /* frame size */
+                                                      "\x04"             /* settings frame */
+                                                      "\x00"             /* no flags */
+                                                      "\x00\x00\x00\x00" /* stream id */
+                                                      "\x00\x03"
+                                                      "\x00\x00\x00\x64" /* max_concurrent_streams = 100 */
+                                                      "\x00\x00\x04"     /* frame size */
+                                                      "\x08"             /* window_update */
+                                                      "\x00"             /* no flags */
+                                                      "\x00\x00\x00\x00" /* stream id */
+                                                      "\x00\xff\x00\x01" /* 16777216 - 65535 */
+                                                      )};
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
@@ -915,10 +918,10 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
     }
 
-    { /* send SETTINGS */
-        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SETTINGS_HOST_BIN.len);
-        memcpy(vec.base, SETTINGS_HOST_BIN.base, SETTINGS_HOST_BIN.len);
-        conn->_write.buf->size += SETTINGS_HOST_BIN.len;
+    { /* send SETTINGS and connection-level WINDOW_UPDATE */
+        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
+        memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
+        conn->_write.buf->size += SERVER_PREFACE.len;
         h2o_http2_conn_request_write(conn);
     }
 
@@ -1449,7 +1452,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req, (h2o_iovec_t *)&SETTINGS_HOST_BIN, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req, (h2o_iovec_t *)&SERVER_PREFACE, 1, on_upgrade_complete, http2conn);
 
     return 0;
 Error:
