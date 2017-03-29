@@ -812,6 +812,7 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
     handler->config.source = h2o_strdup(NULL, vars->source.base, vars->source.len);
     if (vars->path != NULL)
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
+    handler->config.lineno = vars->lineno;
 
     return handler;
 }
