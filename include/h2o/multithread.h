@@ -57,6 +57,12 @@ typedef struct st_h2o_sem_t {
     ssize_t _capacity;
 } h2o_sem_t;
 
+typedef struct st_h2o_barrier_t {
+    pthread_mutex_t _mutex;
+    pthread_cond_t _cond;
+    size_t _count;
+} h2o_barrier_t;
+
 /**
  * creates a queue that is used for inter-thread communication
  */
@@ -92,5 +98,9 @@ void h2o_sem_destroy(h2o_sem_t *sem);
 void h2o_sem_wait(h2o_sem_t *sem);
 void h2o_sem_post(h2o_sem_t *sem);
 void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
+
+#define H2O_BARRIER_INIT(count_) ((h2o_barrier_t){PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, count_})
+void h2o_barrier_init(h2o_barrier_t *barrier, size_t count);
+int h2o_barrier_wait(h2o_barrier_t *barrier);
 
 #endif
