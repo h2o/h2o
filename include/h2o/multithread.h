@@ -102,5 +102,6 @@ void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity);
 #define H2O_BARRIER_INIT(count_) ((h2o_barrier_t){PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, count_})
 void h2o_barrier_init(h2o_barrier_t *barrier, size_t count);
 int h2o_barrier_wait(h2o_barrier_t *barrier);
+int h2o_barrier_done(h2o_barrier_t *barrier);
 
 #endif

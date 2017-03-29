@@ -258,6 +258,11 @@ int h2o_barrier_wait(h2o_barrier_t *barrier)
     return ret;
 }
 
+int h2o_barrier_done(h2o_barrier_t *barrier)
+{
+    return barrier->_count == 0;
+}
+
 void h2o_barrier_destroy(h2o_barrier_t *barrier)
 {
     pthread_mutex_destroy(&barrier->_mutex);

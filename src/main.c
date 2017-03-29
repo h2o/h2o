@@ -157,7 +157,7 @@ static struct {
         h2o_multithread_receiver_t memcached;
     } * threads;
     volatile sig_atomic_t shutdown_requested;
-    volatile sig_atomic_t init_done;
+    h2o_barrier_t startup_sync_barrier;
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
@@ -184,7 +184,7 @@ static struct {
     0,                                      /* initialized in main() */
     NULL,                                   /* thread_ids */
     0,                                      /* shutdown_requested */
-    0,                                      /* init_done */
+    H2O_BARRIER_INIT(SIZE_MAX),             /* startup_sync_barrier */
     {{0}},                                  /* state */
     "share/h2o/annotate-backtrace-symbols", /* crash_handler */
     0,                                      /* crash_handler_wait_pipe_close */
@@ -1428,7 +1428,7 @@ static void notify_all_threads(void)
 static void on_sigterm(int signo)
 {
     conf.shutdown_requested = 1;
-    if (!conf.init_done) {
+    if (!h2o_barrier_done(&conf.startup_sync_barrier)) {
         /* initialization hasn't completed yet, exit right away */
         exit(0);
     }
@@ -1587,8 +1587,6 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
     }
 }
 
-static h2o_barrier_t startup_sync_barrier;
-
 H2O_NORETURN static void *run_loop(void *_thread_index)
 {
     size_t thread_index = (size_t)_thread_index;
@@ -1630,8 +1628,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     update_listener_state(listeners);
 
     /* make sure all threads are initialized before starting to serve requests */
-    h2o_barrier_wait(&startup_sync_barrier);
-    conf.init_done = 1;
+    h2o_barrier_wait(&conf.startup_sync_barrier);
 
     /* the main loop */
     while (1) {
@@ -2224,7 +2221,7 @@ int main(int argc, char **argv)
 
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.num_threads);
-    startup_sync_barrier = H2O_BARRIER_INIT(conf.num_threads);
+    conf.startup_sync_barrier = H2O_BARRIER_INIT(conf.num_threads);
     size_t i;
     for (i = 1; i != conf.num_threads; ++i) {
         pthread_t tid;
