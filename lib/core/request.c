@@ -208,6 +208,18 @@ static void reset_response(h2o_req_t *req)
     req->bytes_sent = 0;
 }
 
+static void retain_original_response(h2o_req_t *req)
+{
+    if (req->res.original.status != 0)
+        return;
+
+    req->res.original.status = req->res.status;
+    h2o_vector_reserve(&req->pool, &req->res.original.headers, req->res.headers.size);
+    memcpy(req->res.original.headers.entries, req->res.headers.entries,
+           sizeof(req->res.headers.entries[0]) * req->res.headers.size);
+    req->res.original.headers.size = req->res.headers.size;
+}
+
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 {
     /* clear all memory (expect memory pool, since it is large) */
@@ -325,6 +337,8 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 {
     h2o_hostconf_t *hostconf;
 
+    retain_original_response(req);
+
     /* close generators and filters that are already running */
     close_generator_and_filters(req);
 
@@ -388,6 +402,8 @@ void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2
 
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 {
+    retain_original_response(req);
+
     /* set generator */
     assert(req->_generator == NULL);
     req->_generator = generator;
