@@ -817,14 +817,11 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     }
 
     generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 3));
-    if (generator == NULL) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing generator"));
-        goto GotException;
-    }
 
     /* send the response (unless req is already closed) */
-    if (generator->req == NULL)
+    if (generator == NULL)
         goto Exit;
+    assert(generator->req != NULL);
     if (generator->req->_generator != NULL) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpectedly received a rack response"));
         goto GotException;
@@ -834,13 +831,11 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
 
 GotException:
     if (generator == NULL) {
-        /* exception raised in configuration phase */
-        fprintf(stderr, "mruby raised in configuration phase: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         mrb->exc = NULL;
         goto Exit;
-    }
-
-    if (generator->req != NULL) {
+    } else {
+        assert(generator->req != NULL);
         report_exception(generator->req, mrb);
         if (generator->req->_generator == NULL) {
             h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
@@ -848,6 +843,7 @@ GotException:
             h2o_mruby_send_chunked_close(generator);
         }
     }
+    mrb->exc = NULL;
 
 Exit:
     ctx->shared->current_context = NULL;
