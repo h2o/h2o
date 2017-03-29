@@ -1628,6 +1628,12 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     update_listener_state(listeners);
 
     __sync_fetch_and_add(&conf.initialized_threads, 1);
+
+    /* make sure all threads are initialized before starting to serve requests */
+    while (__sync_fetch_and_add(&conf.initialized_threads, 0) != conf.num_threads) {
+        usleep(1000);
+    }
+
     /* the main loop */
     while (1) {
         if (conf.shutdown_requested)
