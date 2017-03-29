@@ -30,10 +30,13 @@
     "      a\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "  def _h2o_eval_conf(__h2o_conf)\n"                                                                                           \
+    "    eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                                     \
+    "  end\n"                                                                                                                      \
     "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
     "  H2O_CALLBACK_ID_CONFIGURING_APP = -2\n"                                                                                     \
     "  H2O_CALLBACK_ID_CONFIGURED_APP = -3\n"                                                                                      \
-    "  def _h2o_prepare_app(conf_proc)\n"                                                                                          \
+    "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
     "      [H2O_CALLBACK_ID_CONFIGURING_APP]\n"                                                                                    \
     "    end\n"                                                                                                                    \
@@ -61,7 +64,7 @@
     "      fiber = Fiber.new do\n"                                                                                                 \
     "        begin\n"                                                                                                              \
     "          H2O::ConfigurationContext.reset\n"                                                                                  \
-    "          app = conf_proc.call\n"                                                                                             \
+    "          app = _h2o_eval_conf(conf)\n"                                                                                       \
     "          H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)\n"                                       \
     "          [H2O_CALLBACK_ID_CONFIGURED_APP]\n"                                                                                 \
     "        rescue => e\n"                                                                                                        \

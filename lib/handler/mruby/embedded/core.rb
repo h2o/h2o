@@ -48,10 +48,14 @@ module Kernel
     end
   end
 
+  def _h2o_eval_conf(__h2o_conf)
+    eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])
+  end
+
   H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
   H2O_CALLBACK_ID_CONFIGURING_APP = -2
   H2O_CALLBACK_ID_CONFIGURED_APP = -3
-  def _h2o_prepare_app(conf_proc)
+  def _h2o_prepare_app(conf)
     app = Proc.new do |req|
       [H2O_CALLBACK_ID_CONFIGURING_APP]
     end
@@ -81,7 +85,7 @@ module Kernel
       fiber = Fiber.new do
         begin
           H2O::ConfigurationContext.reset
-          app = conf_proc.call
+          app = _h2o_eval_conf(conf)
           H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)
           [H2O_CALLBACK_ID_CONFIGURED_APP]
         rescue => e

@@ -313,25 +313,19 @@ static h2o_mruby_shared_context_t *get_shared_context(h2o_context_t *ctx)
     return *data;
 }
 
-static void replace_stop_with_return(mrb_state *mrb, mrb_irep *irep)
-{
-    assert(irep->iseq[irep->ilen - 1] == MKOP_A(OP_STOP, 0));
-    irep->iseq[irep->ilen - 1] = MKOP_AB(OP_RETURN, irep->nlocals, OP_R_NORMAL);
-}
-
 mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
-    struct RProc *compiled = h2o_mruby_compile_code(mrb, &ctx->handler->config, NULL);
-
-    /* make compiled RProc* able to be passed as argument */
-    struct RProc *conf_proc = mrb_closure_new(mrb, compiled->body.irep);
-    replace_stop_with_return(mrb, conf_proc->body.irep);
+    h2o_mruby_config_vars_t config = ctx->handler->config;
+    mrb_value conf = mrb_hash_new_capa(mrb, 3);
+    mrb_hash_set(mrb, conf, mrb_symbol_value(mrb_intern_lit(mrb, "code")), mrb_str_new(mrb, config.source.base, config.source.len));
+    mrb_hash_set(mrb, conf, mrb_symbol_value(mrb_intern_lit(mrb, "file")), mrb_str_new(mrb, config.path, strlen(config.path)));
+    mrb_hash_set(mrb, conf, mrb_symbol_value(mrb_intern_lit(mrb, "line")), mrb_fixnum_value(config.lineno));
 
     /* run code and generate handler */
     mrb_value result =
-        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, mrb_obj_value(conf_proc));
+        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, conf);
     assert(mrb_array_p(result));
 
     return result;
@@ -827,14 +821,11 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     }
 
     generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 3));
-    if (generator == NULL) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing generator"));
-        goto GotException;
-    }
 
     /* send the response (unless req is already closed) */
-    if (generator->req == NULL)
+    if (generator == NULL)
         goto Exit;
+    assert(generator->req != NULL);
     if (generator->req->_generator != NULL) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpectedly received a rack response"));
         goto GotException;
@@ -844,13 +835,11 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
 
 GotException:
     if (generator == NULL) {
-        /* exception raised in configuration phase */
-        fprintf(stderr, "mruby raised in configuration phase: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         mrb->exc = NULL;
         goto Exit;
-    }
-
-    if (generator->req != NULL) {
+    } else {
+        assert(generator->req != NULL);
         report_exception(generator->req, mrb);
         if (generator->req->_generator == NULL) {
             h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
@@ -858,6 +847,7 @@ GotException:
             h2o_mruby_send_chunked_close(generator);
         }
     }
+    mrb->exc = NULL;
 
 Exit:
     ctx->shared->current_context = NULL;
@@ -874,6 +864,7 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
     handler->config.source = h2o_strdup(NULL, vars->source.base, vars->source.len);
     if (vars->path != NULL)
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
+    handler->config.lineno = vars->lineno;
 
     return handler;
 }
