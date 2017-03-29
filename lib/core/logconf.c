@@ -71,7 +71,7 @@ enum {
 struct log_element_t {
     unsigned type;
     h2o_iovec_t suffix;
-    struct {
+    union {
         const h2o_token_t *header_token;
         h2o_iovec_t name;
         size_t protocol_specific_callback_index;
