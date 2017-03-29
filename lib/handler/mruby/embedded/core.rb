@@ -49,7 +49,6 @@ module Kernel
   end
 
   def _h2o_eval_conf(__h2o_conf)
-    STDERR.p __h2o_conf
     eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])
   end
 

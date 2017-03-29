@@ -31,7 +31,6 @@
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  def _h2o_eval_conf(__h2o_conf)\n"                                                                                           \
-    "    STDERR.p __h2o_conf\n"                                                                                                    \
     "    eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                                     \
     "  end\n"                                                                                                                      \
     "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
