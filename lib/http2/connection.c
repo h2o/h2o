@@ -134,7 +134,8 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
 
-    if (!conn->num_streams.response_blocked_by_server && conn->_write.buf_in_flight == NULL) {
+    if (!conn->num_streams.response_blocked_by_server && !conn->num_streams.request_blocked_by_server &&
+        conn->_write.buf_in_flight == NULL) {
         conn->_timeout_entry.cb = on_idle_timeout;
         h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
     }
@@ -504,6 +505,11 @@ static void write_body_chunk_done(h2o_req_t *req, size_t written, int done)
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
+    if (stream->request_blocked_by_server) {
+        h2o_http2_stream_set_request_blocked_by_server(conn, stream, 0);
+        update_idle_timeout(conn);
+    }
+
     update_input_window(conn, stream->stream_id, &stream->input_window, written);
     update_input_window(conn, 0, &conn->_input_window, written);
 
@@ -595,6 +601,10 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             h2o_http2_stream_reset(conn, stream);
             stream = NULL;
             goto UpdateWindow;
+        }
+        if (!stream->request_blocked_by_server) {
+            h2o_http2_stream_set_request_blocked_by_server(conn, stream, 1);
+            update_idle_timeout(conn);
         }
         return 0;
     }
