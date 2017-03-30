@@ -51,7 +51,7 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
-    h2o_write_body_chunk_done _write_body_chunk_done;
+    h2o_http1client_write_body_chunk_done _write_body_chunk_done;
     void *_write_body_chunk_done_ctx;
     char _chunk_len_str[18]; /* SIZE_MAX in hex + CRLF */
     h2o_buffer_t *_body_buf;
@@ -370,7 +370,7 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end, h2o_write_body_chunk_done write_body_chunk_done);
+static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end);
 static void on_req_body_done(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
@@ -387,7 +387,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     }
 
     if (client->_body_buf && client->_body_buf->size)
-        write_body_chunk(client->super.sock, h2o_iovec_init(NULL, 0), client->_body_buf_is_done, client->_write_body_chunk_done);
+        write_body_chunk(client->super.sock, h2o_iovec_init(NULL, 0), client->_body_buf_is_done);
     else if (client->_body_buf_is_done)
         on_send_request(client->super.sock, NULL);
 }
@@ -400,12 +400,11 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end, h2o_write_body_chunk_done write_body_chunk_done)
+static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end)
 {
     h2o_socket_t *sock = priv;
     struct st_h2o_http1client_private_t *client = sock->data;
 
-    client->_write_body_chunk_done = write_body_chunk_done;
     client->_body_buf_is_done = is_end;
 
     if (body_chunk.len) {
@@ -591,6 +590,7 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
     client->super.data = data;
     client->_cb.on_connect = cb;
     client->_is_chunked = is_chunked;
+    client->super.write_body_chunk = write_body_chunk;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
 
     if (_client != NULL)

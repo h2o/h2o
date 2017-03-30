@@ -517,7 +517,7 @@ static void write_body_chunk_done(h2o_req_t *req, size_t written, int done)
     }
 }
 
-static int write_body_chunk(void *req_, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
+static int write_body_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
 {
     h2o_req_t *req = req_;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
@@ -590,7 +590,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         stream = NULL;
     } else {
         int ret = stream->req._write_body_chunk(stream->req._write_body_chunk_priv, h2o_iovec_init(payload.data, payload.length),
-                                                frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM, write_body_chunk_done);
+                                                frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM);
         if (ret < 0) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);

@@ -43,10 +43,8 @@ typedef struct st_h2o_http1client_header_t {
     size_t value_len;
 } h2o_http1client_header_t;
 
-struct st_h2o_req_t;
-typedef void (*h2o_write_body_chunk_done)(struct st_h2o_req_t *req, size_t written, int done);
-typedef int (*h2o_write_body_chunk)(void *priv, h2o_iovec_t body_chunk, int is_end,
-                                    h2o_write_body_chunk_done write_body_chunk_done);
+typedef void (*h2o_http1client_write_body_chunk_done)(void *priv, size_t written, int done);
+typedef int (*h2o_http1client_write_body_chunk)(void *priv, h2o_iovec_t body_chunk, int is_end);
 
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
@@ -54,8 +52,8 @@ typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *cl
                                                            size_t num_headers);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
                                                               size_t *reqbufcnt, int *method_is_head,
-                                                              h2o_write_body_chunk write_body_chunk,
-                                                              h2o_write_body_chunk_done *req_body_done, void **req_body_done_ctx,
+                                                              h2o_http1client_write_body_chunk write_body_chunk,
+                                                              h2o_http1client_write_body_chunk_done *req_body_done, void **req_body_done_ctx,
                                                               h2o_iovec_t *cur_body);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 h2o_http1client_header_t *headers, size_t num_headers);
@@ -80,6 +78,7 @@ struct st_h2o_http1client_t {
     h2o_socket_t *sock;
     void *data;
     h2o_http1client_informational_cb informational_cb;
+    h2o_http1client_write_body_chunk write_body_chunk;
 };
 
 extern const char *const h2o_http1client_error_is_eos;

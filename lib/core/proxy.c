@@ -41,7 +41,8 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
-    h2o_write_body_chunk write_body_chunk;
+    h2o_http1client_write_body_chunk backend_write_body_chunk;
+    h2o_write_body_chunk_done frontend_write_body_chunk_done;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -518,16 +519,22 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
     return 0;
 }
 
-static int write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream, h2o_write_body_chunk_done write_body_chunk_done)
+static void proxy_write_body_chunk_done(void *priv, size_t written, int done)
+{
+    struct rp_generator_t *self = priv;
+    self->frontend_write_body_chunk_done(self->src_req, written, done);
+}
+
+static int frontend_write_body_chunk(void *priv, h2o_iovec_t payload, int is_end_stream)
 {
     struct rp_generator_t *self = priv;
 
-    return self->write_body_chunk(self->client->sock, payload, is_end_stream, write_body_chunk_done);
+    return self->client->write_body_chunk(self->client->sock, payload, is_end_stream);
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_write_body_chunk backend_write_body_chunk,
-                                          h2o_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx,
+                                          int *method_is_head, h2o_http1client_write_body_chunk backend_write_body_chunk,
+                                          h2o_http1client_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx,
                                           h2o_iovec_t *cur_body)
 {
     struct rp_generator_t *self = client->data;
@@ -543,19 +550,20 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *reqbufcnt = 1;
     *method_is_head = self->up_req.is_head;
 
-    self->write_body_chunk = backend_write_body_chunk;
-    *write_body_chunk_done = self->src_req->_write_body_chunk_done;
-    *write_body_chunk_done_ctx = self->src_req;
+    self->backend_write_body_chunk = backend_write_body_chunk;
     if (self->src_req->entity.base != NULL) {
         if (self->src_req->_write_body_chunk_done) {
             *cur_body = self->src_req->entity;
+            *write_body_chunk_done = proxy_write_body_chunk_done;
+            *write_body_chunk_done_ctx = self;
+            self->frontend_write_body_chunk_done = self->src_req->_write_body_chunk_done;
+            self->src_req->_write_body_chunk = frontend_write_body_chunk;
+            self->src_req->_write_body_chunk_priv = self;
         } else {
             self->up_req.bufs[1] = self->src_req->entity;
             *reqbufcnt = 2;
         }
     }
-    self->src_req->_write_body_chunk = write_body_chunk;
-    self->src_req->_write_body_chunk_priv = self;
     self->client->informational_cb = on_1xx;
     return on_head;
 }

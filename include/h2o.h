@@ -865,6 +865,9 @@ typedef struct st_h2o_req_error_log_t {
     h2o_iovec_t msg;
 } h2o_req_error_log_t;
 
+typedef void (*h2o_write_body_chunk_done)(struct st_h2o_req_t *req, size_t written, int done);
+typedef int (*h2o_write_body_chunk)(void *priv, h2o_iovec_t body_chunk, int is_end);
+
 /**
  * a HTTP request
  */
