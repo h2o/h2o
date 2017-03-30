@@ -432,7 +432,6 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         break;
     case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
         stream->state = new_state;
-        h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         assert(stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);

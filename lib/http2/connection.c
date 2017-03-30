@@ -195,8 +195,10 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
         return;
     }
 
-    if (!stream->req._write_body_chunk_done)
+    if (!stream->req._write_body_chunk_done) {
+        h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+    }
 
     /* TODO schedule the pending reqs using the scheduler */
     h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);

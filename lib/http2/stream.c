@@ -338,8 +338,8 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
     assert(stream->_data.size == 0);
 
-    assert(stream->response_blocked_by_server);
-    h2o_http2_stream_set_response_blocked_by_server(conn, stream, 0);
+    if (stream->response_blocked_by_server)
+        h2o_http2_stream_set_response_blocked_by_server(conn, stream, 0);
 
     stream->send_state = state;
 
@@ -414,8 +414,8 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
         h2o_http2_stream_close(conn, stream);
     } else {
-        assert(!conn->num_streams.response_blocked_by_server);
-        h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
+        if (!conn->num_streams.response_blocked_by_server)
+            h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
         h2o_proceed_response(&stream->req);
     }
 }
