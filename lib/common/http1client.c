@@ -464,7 +464,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
 {
     h2o_iovec_t *reqbufs;
     size_t reqbufcnt;
-    h2o_iovec_t cur_body;
+    h2o_iovec_t cur_body = h2o_iovec_init(NULL, 0);
 
     if ((client->_cb.on_head =
              client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, write_body_chunk,
