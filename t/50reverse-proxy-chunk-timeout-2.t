@@ -20,13 +20,13 @@ EOT
 my $before = time();
 
 
-my $huge_file_size = 50 * 1024 * 1024;
+my $huge_file_size = 100 * 1024 * 1024;
 my $huge_file = create_data_file($huge_file_size);
 
 my $doit = sub {
     my ($proto, $opt, $port) = @_;
 
-    open(my $nc_out, "nc -I1 -q -1 -dl $upstream_port |");
+    open(my $nc_out, "nc -q -1 -dl $upstream_port |");
 
     my $before = time();
     `nghttp -t 10 $opt -nv -d $huge_file $proto://127.0.0.1:$port/echo`;
