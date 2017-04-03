@@ -375,7 +375,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
 
-    if (client->_body_buf_in_flight) {
+    if (client->_body_buf_in_flight != NULL) {
         client->_write_body_chunk_done(client->_write_body_chunk_done_ctx, client->_body_buf_in_flight->size,
                                        client->_body_buf_is_done);
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
@@ -386,7 +386,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (client->_body_buf && client->_body_buf->size)
+    if (client->_body_buf != NULL && client->_body_buf->size != 0)
         write_body_chunk(client->super.sock, h2o_iovec_init(NULL, 0), client->_body_buf_is_done);
     else if (client->_body_buf_is_done)
         on_send_request(client->super.sock, NULL);
@@ -407,23 +407,23 @@ static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end)
 
     client->_body_buf_is_done = is_end;
 
-    if (body_chunk.len) {
+    if (body_chunk.len != 0) {
         if (!client->_body_buf)
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
 
-        if (h2o_buffer_copy(&client->_body_buf, body_chunk) < 0)
+        if (h2o_buffer_append(&client->_body_buf, body_chunk.base, body_chunk.len) == 0)
             return -1;
     }
 
-    if (client->super.sock->_cb.write) {
+    if (client->super.sock->_cb.write != NULL)
         return 0;
-    }
-    assert(!client->_body_buf_in_flight || !client->_body_buf_in_flight->size);
+
+    assert(client->_body_buf_in_flight == NULL || client->_body_buf_in_flight->size == 0);
 
     swap_buffers(&client->_body_buf, &client->_body_buf_in_flight);
 
     if (client->_is_chunked) {
-        if (is_end && !client->_body_buf_in_flight->size) {
+        if (is_end && client->_body_buf_in_flight->size == 0) {
             on_send_request(sock, NULL);
             return 0;
         }
@@ -472,10 +472,10 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
         close_client(client);
         return;
     }
-    if (client->_write_body_chunk_done) {
-        if (cur_body.len) {
+    if (client->_write_body_chunk_done != NULL) {
+        if (cur_body.len != 0) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-            if (h2o_buffer_copy(&client->_body_buf, cur_body) < 0) {
+            if (h2o_buffer_append(&client->_body_buf, cur_body.base, cur_body.len) == 0) {
                 on_send_request(client->super.sock, "Internal error");
                 return;
             }

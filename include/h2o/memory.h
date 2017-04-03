@@ -238,10 +238,10 @@ static void h2o_buffer_dispose(h2o_buffer_t **buffer);
  */
 h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
 /**
- * copies @src to @dst, calling h2o_buffer_reserve
- * @return -1 if the allocation failed, 0 otherwise
+ * copies @len bytes from @src to @dst, calling h2o_buffer_reserve
+ * @return 0 if the allocation failed, 1 otherwise
  */
-static ssize_t h2o_buffer_copy(h2o_buffer_t **dst, h2o_iovec_t src);
+static ssize_t h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len);
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
@@ -379,14 +379,14 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
-inline ssize_t h2o_buffer_copy(h2o_buffer_t **dst, h2o_iovec_t src)
+inline ssize_t h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
 {
-    h2o_iovec_t buf = h2o_buffer_reserve(dst, src.len);
+    h2o_iovec_t buf = h2o_buffer_reserve(dst, len);
     if (!buf.base)
-        return -1;
-    memcpy(buf.base, src.base, src.len);
-    (*dst)->size += src.len;
-    return 0;
+        return 0;
+    memcpy(buf.base, src, len);
+    (*dst)->size += len;
+    return 1;
 }
 
 inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
