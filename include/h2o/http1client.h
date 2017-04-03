@@ -44,7 +44,6 @@ typedef struct st_h2o_http1client_header_t {
 } h2o_http1client_header_t;
 
 typedef void (*h2o_http1client_write_body_chunk_done)(void *priv, size_t written, int done);
-typedef int (*h2o_http1client_write_body_chunk)(void *priv, h2o_iovec_t body_chunk, int is_end);
 
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
