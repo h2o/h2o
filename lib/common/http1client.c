@@ -421,6 +421,12 @@ int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t body_chunk, int is_e
 
     swap_buffers(&client->_body_buf, &client->_body_buf_in_flight);
 
+    if (client->_body_buf_in_flight->size == 0) {
+        /* return immediately if the chunk is empty */
+        on_req_body_done(client->super.sock, NULL);
+        return 0;
+    }
+
     if (client->_is_chunked) {
         if (is_end && client->_body_buf_in_flight->size == 0) {
             on_send_request(sock, NULL);
