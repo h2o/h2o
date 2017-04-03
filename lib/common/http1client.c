@@ -51,7 +51,7 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
-    h2o_http1client_write_body_chunk_done _write_body_chunk_done;
+    h2o_http1client_write_req_chunk_done _write_body_chunk_done;
     void *_write_body_chunk_done_ctx;
     char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
     h2o_buffer_t *_body_buf;

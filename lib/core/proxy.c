@@ -532,7 +532,7 @@ static int frontend_write_body_chunk(void *priv, h2o_iovec_t payload, int is_end
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_body_chunk_done *write_body_chunk_done,
+                                          int *method_is_head, h2o_http1client_write_req_chunk_done *write_body_chunk_done,
                                           void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body)
 {
     struct rp_generator_t *self = client->data;

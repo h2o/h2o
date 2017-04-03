@@ -44,7 +44,7 @@ static int delay_interval_ms = 0;
 static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_body_chunk_done *write_body_chunk_done,
+                                          int *method_is_head, h2o_http1client_write_req_chunk_done *write_body_chunk_done,
                                           void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers);
@@ -182,7 +182,7 @@ static void http1_write_body_chunk_done(void *sock_, size_t written, int done)
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_body_chunk_done *write_body_chunk_done,
+                                          int *method_is_head, h2o_http1client_write_req_chunk_done *write_body_chunk_done,
                                           void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body)
 {
     if (errstr != NULL) {
