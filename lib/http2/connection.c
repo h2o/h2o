@@ -159,7 +159,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
         h2o_linklist_unlink(&stream->_refs.link);
 
-        if (stream->req._write_body_chunk_done) {
+        if (stream->req._write_body_chunk_done != NULL) {
             if (conn->_request_body_in_progress) {
                 h2o_linklist_insert(&tmp, &stream->_refs.link);
                 continue;
@@ -188,14 +188,14 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 {
     assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
 
-    if (!stream->req._write_body_chunk_done && stream->_req_body.body != NULL && stream->_expected_content_length != SIZE_MAX &&
-        stream->_req_body.body->size != stream->_expected_content_length) {
+    if (stream->req._write_body_chunk_done == NULL && stream->_req_body.body != NULL &&
+        stream->_expected_content_length != SIZE_MAX && stream->_req_body.body->size != stream->_expected_content_length) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         h2o_http2_stream_reset(conn, stream);
         return;
     }
 
-    if (!stream->req._write_body_chunk_done) {
+    if (stream->req._write_body_chunk_done == NULL) {
         h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
     }
@@ -542,7 +542,7 @@ static int write_body_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
         } else {
             if (!stream->req._found_handler) {
                 h2o_handler_t *h = h2o_find_handler(&stream->req);
-                if (h && h->has_body_stream) {
+                if (h != NULL && h->has_body_stream) {
                     stream->req._write_body_chunk_done = write_body_chunk_done;
                     stream->_req_body.streamed_body_size = stream->_req_body.body->size;
                     execute_or_enqueue_request(conn, stream);

@@ -268,7 +268,7 @@ int main(int argc, char **argv)
     }
     url = argv[optind];
 
-    if (body_size) {
+    if (body_size != 0) {
         iov_filler.base = h2o_mem_alloc(chunk_size);
         memset(iov_filler.base, 'a', chunk_size);
         iov_filler.len = chunk_size;

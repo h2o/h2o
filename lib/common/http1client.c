@@ -84,9 +84,9 @@ static void close_client(struct st_h2o_http1client_private_t *client)
     }
     if (h2o_timeout_is_linked(&client->_timeout))
         h2o_timeout_unlink(&client->_timeout);
-    if (client->_body_buf)
+    if (client->_body_buf != NULL)
         h2o_buffer_dispose(&client->_body_buf);
-    if (client->_body_buf_in_flight)
+    if (client->_body_buf_in_flight != NULL)
         h2o_buffer_dispose(&client->_body_buf_in_flight);
     free(client);
 }
@@ -408,7 +408,7 @@ static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end)
     client->_body_buf_is_done = is_end;
 
     if (body_chunk.len != 0) {
-        if (!client->_body_buf)
+        if (client->_body_buf == NULL)
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
 
         if (h2o_buffer_append(&client->_body_buf, body_chunk.base, body_chunk.len) == 0)
@@ -434,7 +434,7 @@ static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end)
             snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zX\r\n", client->_body_buf_in_flight->size);
         chunk_and_reqbufs[i++].base = client->_chunk_len_str;
 
-        if (client->_body_buf_in_flight)
+        if (client->_body_buf_in_flight != NULL)
             chunk_and_reqbufs[i++] = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
         chunk_and_reqbufs[i++] = h2o_iovec_init("\r\n", 2);
 

@@ -382,7 +382,7 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
 inline ssize_t h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
 {
     h2o_iovec_t buf = h2o_buffer_reserve(dst, len);
-    if (!buf.base)
+    if (buf.base == NULL)
         return 0;
     memcpy(buf.base, src, len);
     (*dst)->size += len;
