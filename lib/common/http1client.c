@@ -370,7 +370,6 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end);
 static void on_req_body_done(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
@@ -387,7 +386,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     }
 
     if (client->_body_buf != NULL && client->_body_buf->size != 0)
-        write_body_chunk(client->super.sock, h2o_iovec_init(NULL, 0), client->_body_buf_is_done);
+        h2o_http1client_write_req_chunk(client->super.sock, h2o_iovec_init(NULL, 0), client->_body_buf_is_done);
     else if (client->_body_buf_is_done)
         on_send_request(client->super.sock, NULL);
 }
@@ -400,7 +399,7 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-static int write_body_chunk(void *priv, h2o_iovec_t body_chunk, int is_end)
+int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t body_chunk, int is_end)
 {
     h2o_socket_t *sock = priv;
     struct st_h2o_http1client_private_t *client = sock->data;
@@ -456,7 +455,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 static void on_connect_error(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL);
     close_client(client);
 }
 
@@ -467,7 +466,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_iovec_t cur_body = h2o_iovec_init(NULL, 0);
 
     if ((client->_cb.on_head =
-             client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, write_body_chunk,
+             client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head,
                                     &client->_write_body_chunk_done, &client->_write_body_chunk_done_ctx, &cur_body)) == NULL) {
         close_client(client);
         return;
@@ -590,7 +589,6 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
     client->super.data = data;
     client->_cb.on_connect = cb;
     client->_is_chunked = is_chunked;
-    client->super.write_body_chunk = write_body_chunk;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
 
     if (_client != NULL)

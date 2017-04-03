@@ -52,7 +52,6 @@ typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *cl
                                                            size_t num_headers);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
                                                               size_t *reqbufcnt, int *method_is_head,
-                                                              h2o_http1client_write_body_chunk write_body_chunk,
                                                               h2o_http1client_write_body_chunk_done *req_body_done, void **req_body_done_ctx,
                                                               h2o_iovec_t *cur_body);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
@@ -78,11 +77,11 @@ struct st_h2o_http1client_t {
     h2o_socket_t *sock;
     void *data;
     h2o_http1client_informational_cb informational_cb;
-    h2o_http1client_write_body_chunk write_body_chunk;
 };
 
 extern const char *const h2o_http1client_error_is_eos;
 
+int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t body_chunk, int is_end);
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
                              int is_ssl, h2o_http1client_connect_cb cb, int is_chunked);
 void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx,

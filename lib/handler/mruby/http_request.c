@@ -258,8 +258,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_body_chunk write_body_chunk,
-                                          h2o_http1client_write_body_chunk_done *req_body_done, void **req_body_done_ctx, h2o_iovec_t *cur_body)
+                                          int *method_is_head, h2o_http1client_write_body_chunk_done *req_body_done,
+                                          void **req_body_done_ctx, h2o_iovec_t *cur_body)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
