@@ -865,8 +865,8 @@ typedef struct st_h2o_req_error_log_t {
     h2o_iovec_t msg;
 } h2o_req_error_log_t;
 
-typedef void (*h2o_write_body_chunk_done)(struct st_h2o_req_t *req, size_t written, int done);
-typedef int (*h2o_write_body_chunk)(void *priv, h2o_iovec_t body_chunk, int is_end);
+typedef void (*h2o_write_req_chunk_done)(struct st_h2o_req_t *req, size_t written, int done);
+typedef int (*h2o_write_req_chunk)(void *priv, h2o_iovec_t req_chunk, int is_end);
 
 /**
  * a HTTP request
@@ -1040,9 +1040,9 @@ struct st_h2o_req_t {
     h2o_timeout_entry_t _timeout_entry;
 
     /* streaming request body */
-    h2o_write_body_chunk _write_body_chunk;
-    void *_write_body_chunk_priv;
-    h2o_write_body_chunk_done _write_body_chunk_done;
+    h2o_write_req_chunk _write_req_chunk;
+    void *_write_req_chunk_priv;
+    h2o_write_req_chunk_done _write_req_chunk_done;
     char _found_handler;
 
     /* per-request memory pool (placed at the last since the structure is large) */

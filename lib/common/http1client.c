@@ -51,8 +51,8 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
-    h2o_http1client_write_req_chunk_done _write_body_chunk_done;
-    void *_write_body_chunk_done_ctx;
+    h2o_http1client_write_req_chunk_done _write_req_chunk_done;
+    void *_write_req_chunk_done_ctx;
     char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
@@ -166,7 +166,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static void on_body_chunked(h2o_socket_t *sock, const char *err)
+static void on_req_chunked(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
     h2o_buffer_t *inbuf;
@@ -293,7 +293,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
             if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("chunked"))) {
                 /* precond: _body_decoder.chunked is zero-filled */
                 client->_body_decoder.chunked.decoder.consume_trailer = 1;
-                reader = on_body_chunked;
+                reader = on_req_chunked;
             } else if (h2o_memis(headers[i].value, headers[i].value_len, H2O_STRLIT("identity"))) {
                 /* continue */
             } else {
@@ -306,7 +306,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
                 on_error_before_head(client, "invalid content-length");
                 return;
             }
-            if (reader != on_body_chunked)
+            if (reader != on_req_chunked)
                 reader = on_body_content_length;
         }
     }
@@ -375,7 +375,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1client_private_t *client = sock->data;
 
     if (client->_body_buf_in_flight != NULL) {
-        client->_write_body_chunk_done(client->_write_body_chunk_done_ctx, client->_body_buf_in_flight->size,
+        client->_write_req_chunk_done(client->_write_req_chunk_done_ctx, client->_body_buf_in_flight->size,
                                        client->_body_buf_is_done);
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
     }
@@ -399,18 +399,18 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t body_chunk, int is_end)
+int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t req_chunk, int is_end)
 {
     h2o_socket_t *sock = priv;
     struct st_h2o_http1client_private_t *client = sock->data;
 
     client->_body_buf_is_done = is_end;
 
-    if (body_chunk.len != 0) {
+    if (req_chunk.len != 0) {
         if (client->_body_buf == NULL)
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
 
-        if (h2o_buffer_append(&client->_body_buf, body_chunk.base, body_chunk.len) == 0)
+        if (h2o_buffer_append(&client->_body_buf, req_chunk.base, req_chunk.len) == 0)
             return -1;
     }
 
@@ -473,11 +473,11 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
 
     if ((client->_cb.on_head =
              client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head,
-                                    &client->_write_body_chunk_done, &client->_write_body_chunk_done_ctx, &cur_body)) == NULL) {
+                                    &client->_write_req_chunk_done, &client->_write_req_chunk_done_ctx, &cur_body)) == NULL) {
         close_client(client);
         return;
     }
-    if (client->_write_body_chunk_done != NULL) {
+    if (client->_write_req_chunk_done != NULL) {
         if (cur_body.len != 0) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
             if (h2o_buffer_append(&client->_body_buf, cur_body.base, cur_body.len) == 0) {

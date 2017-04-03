@@ -80,7 +80,7 @@ struct st_h2o_http1client_t {
 
 extern const char *const h2o_http1client_error_is_eos;
 
-int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t body_chunk, int is_end);
+int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t req_chunk, int is_end);
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
                              int is_ssl, h2o_http1client_connect_cb cb, int is_chunked);
 void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx,
