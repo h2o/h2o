@@ -44,9 +44,8 @@ static int delay_interval_ms = 0;
 static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_body_chunk backend_write_body_chunk,
-                                          h2o_http1client_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx,
-                                          h2o_iovec_t *cur_body);
+                                          int *method_is_head, h2o_http1client_write_body_chunk_done *write_body_chunk_done,
+                                          void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_http1client_header_t *headers, size_t num_headers);
 
@@ -149,8 +148,6 @@ int fill_body(h2o_iovec_t *reqbuf)
 }
 
 static void http1_write_body_chunk_done(void *sock_, size_t written, int done);
-static h2o_http1client_write_body_chunk http1_write_body_chunk;
-
 static h2o_timeout_t post_body_timeout;
 
 struct st_timeout_ctx {
@@ -164,7 +161,7 @@ static void timeout_cb(h2o_timeout_entry_t *entry)
 
     fill_body(&reqbuf);
     h2o_timeout_unlink(&tctx->_timeout);
-    http1_write_body_chunk(tctx->sock, reqbuf, cur_body_size <= 0);
+    h2o_http1client_write_req_chunk(tctx->sock, reqbuf, cur_body_size <= 0);
     free(tctx);
 
     return;
@@ -185,9 +182,8 @@ static void http1_write_body_chunk_done(void *sock_, size_t written, int done)
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_body_chunk backend_write_body_chunk,
-                                          h2o_http1client_write_body_chunk_done *write_body_chunk_done, void **write_body_chunk_done_ctx,
-                                          h2o_iovec_t *cur_body)
+                                          int *method_is_head, h2o_http1client_write_body_chunk_done *write_body_chunk_done,
+                                          void **write_body_chunk_done_ctx, h2o_iovec_t *cur_body)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -199,7 +195,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *reqbufcnt = 1;
     *method_is_head = 0;
     if (cur_body_size > 0) {
-        http1_write_body_chunk = backend_write_body_chunk;
         *write_body_chunk_done = http1_write_body_chunk_done;
         *write_body_chunk_done_ctx = client->sock;
 
