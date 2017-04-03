@@ -540,14 +540,14 @@ static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
             stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
             execute_or_enqueue_request(conn, stream);
         } else {
-            if (!stream->req._found_handler) {
-                h2o_handler_t *h = h2o_find_handler(&stream->req);
-                if (h != NULL && h->has_body_stream) {
+            if (stream->req._first_handler_found == NULL) {
+                h2o_handler_t **h = h2o_get_first_handler(&stream->req);
+                if (h != NULL && *h != NULL && (*h)->has_body_stream) {
                     stream->req._write_req_chunk_done = write_req_chunk_done;
                     stream->_req_body.streamed_body_size = stream->_req_body.body->size;
                     execute_or_enqueue_request(conn, stream);
                 }
-                stream->req._found_handler = 1;
+                stream->req._first_handler_found = h;
             }
         }
     } else {
