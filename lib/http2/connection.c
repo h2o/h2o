@@ -591,7 +591,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;
-    } else if (h2o_http2_stream_body_size(stream) + payload.length > conn->super.ctx->globalconf->max_request_entity_size) {
+    } else if (h2o_http2_stream_req_body_size(stream) + payload.length > conn->super.ctx->globalconf->max_request_entity_size) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;

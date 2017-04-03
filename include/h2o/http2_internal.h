@@ -294,7 +294,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
-static size_t h2o_http2_stream_body_size(h2o_http2_stream_t *stream);
+static size_t h2o_http2_stream_req_body_size(h2o_http2_stream_t *stream);
 
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_settings_t *peer_settings);
@@ -504,7 +504,7 @@ inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2
     stream->push.promise_sent = 1;
 }
 
-inline size_t h2o_http2_stream_body_size(h2o_http2_stream_t *stream)
+inline size_t h2o_http2_stream_req_body_size(h2o_http2_stream_t *stream)
 {
     if (stream->req._write_req_chunk_done != NULL)
         return stream->_req_body.streamed_body_size;
