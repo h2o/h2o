@@ -1043,7 +1043,7 @@ struct st_h2o_req_t {
     h2o_write_req_chunk _write_req_chunk;
     void *_write_req_chunk_priv;
     h2o_write_req_chunk_done _write_req_chunk_done;
-    h2o_handler_t **_first_handler_found;
+    char _found_handler;
 
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
@@ -1199,7 +1199,7 @@ void h2o_process_request(h2o_req_t *req);
 /**
  * returns the first handler that will be used for the request
  */
-h2o_handler_t **h2o_get_first_handler(h2o_req_t *req);
+h2o_handler_t *h2o_get_first_handler(h2o_req_t *req);
 /**
  * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
  */

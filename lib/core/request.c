@@ -210,6 +210,7 @@ static void reset_response(h2o_req_t *req)
     req->res.reason = "OK";
     req->_next_filter_index = 0;
     req->bytes_sent = 0;
+    req->pathconf = NULL;
 }
 
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
@@ -288,20 +289,20 @@ void h2o_dispose_request(h2o_req_t *req)
     h2o_mem_clear_pool(&req->pool);
 }
 
-h2o_handler_t **h2o_get_first_handler(h2o_req_t *req)
+h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = setup_before_processing(req);
     setup_pathconf(req, hostconf);
-    return req->pathconf->handlers.entries;
+    return req->pathconf->handlers.entries[0];
 }
 
 void h2o_process_request(h2o_req_t *req)
 {
-    if (req->_first_handler_found == NULL) {
+    if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = setup_before_processing(req);
         process_hosted_request(req, hostconf);
     } else {
-        call_handlers(req, req->_first_handler_found);
+        call_handlers(req, req->pathconf->handlers.entries);
     }
 }
 
