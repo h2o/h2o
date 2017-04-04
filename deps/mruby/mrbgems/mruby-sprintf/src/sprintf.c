@@ -750,7 +750,8 @@ retry:
           mrb_int tmp_n = len;
           RSTRING(result)->flags &= ~MRB_STR_EMBED_LEN_MASK;
           RSTRING(result)->flags |= tmp_n << MRB_STR_EMBED_LEN_SHIFT;
-        } else {
+        }
+        else {
           RSTRING(result)->as.heap.len = blen;
         }
         if (flags&(FPREC|FWIDTH)) {

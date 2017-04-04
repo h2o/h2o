@@ -6,6 +6,7 @@ end
 assert('Kernel.caller, Kernel#caller') do
   skip "backtrace isn't available" if caller(0).empty?
 
+  caller_lineno = __LINE__ + 3
   c = Class.new do
     def foo(*args)
       caller(*args)
@@ -19,6 +20,7 @@ assert('Kernel.caller, Kernel#caller') do
       bar(*args)
     end
   end
+  assert_equal "kernel.rb:#{caller_lineno}:in Object#foo", c.new.baz(0)[0][-26..-1]
   assert_equal "#bar", c.new.baz[0][-4..-1]
   assert_equal "#foo", c.new.baz(0)[0][-4..-1]
   assert_equal "#bar", c.new.baz(1)[0][-4..-1]

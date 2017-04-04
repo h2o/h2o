@@ -4124,12 +4124,14 @@ parse_string(parser_state *p)
     }
     if (flag > flags) {
       dup = strndup(flags, (size_t)(flag - flags));
-    } else {
+    }
+    else {
       dup = NULL;
     }
     if (enc) {
       encp = strndup(&enc, 1);
-    } else {
+    }
+    else {
       encp = NULL;
     }
     pylval.nd = new_regx(p, s, dup, encp);

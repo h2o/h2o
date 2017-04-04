@@ -292,7 +292,8 @@ mrb_state_atexit(mrb_state *mrb, mrb_atexit_func f)
   stack_size = sizeof(mrb_atexit_func) * (mrb->atexit_stack_len + 1);
   if (mrb->atexit_stack_len == 0) {
     mrb->atexit_stack = (mrb_atexit_func*)mrb_malloc(mrb, stack_size);
-  } else {
+  }
+  else {
     mrb->atexit_stack = (mrb_atexit_func*)mrb_realloc(mrb, mrb->atexit_stack, stack_size);
   }
 #endif

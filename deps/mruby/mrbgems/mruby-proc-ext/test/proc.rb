@@ -53,6 +53,7 @@ assert('Proc#parameters') do
   assert_equal([[:req, :a]], lambda {|a|}.parameters)
   assert_equal([[:opt, :a]], lambda {|a=nil|}.parameters)
   assert_equal([[:req, :a]], ->(a){}.parameters)
+  assert_equal([[:rest]], lambda { |*| }.parameters)
   assert_equal([[:rest, :a]], Proc.new {|*a|}.parameters)
   assert_equal([[:opt, :a], [:opt, :b], [:opt, :c], [:opt, :d], [:rest, :e], [:opt, :f], [:opt, :g], [:block, :h]], Proc.new {|a,b,c=:c,d=:d,*e,f,g,&h|}.parameters)
   assert_equal([[:req, :a], [:req, :b], [:opt, :c], [:opt, :d], [:rest, :e], [:req, :f], [:req, :g], [:block, :h]], lambda {|a,b,c=:c,d=:d,*e,f,g,&h|}.parameters)

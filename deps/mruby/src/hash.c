@@ -246,7 +246,8 @@ mrb_hash_dup(mrb_state *mrb, mrb_value hash)
         int ai = mrb_gc_arena_save(mrb);
         ret_k = kh_put(ht, mrb, ret_h, KEY(kh_key(h, k)));
         mrb_gc_arena_restore(mrb, ai);
-        kh_val(ret_h, ret_k) = kh_val(h, k);
+        kh_val(ret_h, ret_k).v = kh_val(h, k).v;
+        kh_val(ret_h, ret_k).n = kh_size(ret_h)-1;
       }
     }
   }
@@ -750,19 +751,26 @@ mrb_hash_keys(mrb_state *mrb, mrb_value hash)
 {
   khash_t(ht) *h = RHASH_TBL(hash);
   khiter_t k;
+  mrb_int end;
   mrb_value ary;
   mrb_value *p;
 
   if (!h || kh_size(h) == 0) return mrb_ary_new(mrb);
   ary = mrb_ary_new_capa(mrb, kh_size(h));
-  mrb_ary_set(mrb, ary, kh_size(h)-1, mrb_nil_value());
+  end = kh_size(h)-1;
+  mrb_ary_set(mrb, ary, end, mrb_nil_value());
   p = mrb_ary_ptr(ary)->ptr;
   for (k = kh_begin(h); k != kh_end(h); k++) {
     if (kh_exist(h, k)) {
       mrb_value kv = kh_key(h, k);
       mrb_hash_value hv = kh_value(h, k);
 
-      p[hv.n] = kv;
+      if (hv.n <= end) {
+        p[hv.n] = kv;
+      }
+      else {
+        p[end] = kv;
+      }
     }
   }
   return ary;

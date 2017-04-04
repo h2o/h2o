@@ -61,6 +61,7 @@ closure_setup(mrb_state *mrb, struct RProc *p, int nlocals)
     e = mrb->c->ci->env;
   }
   p->env = e;
+  mrb_field_write_barrier(mrb, (struct RBasic *)p, (struct RBasic *)p->env);
 }
 
 struct RProc *

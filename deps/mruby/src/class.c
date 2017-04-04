@@ -554,7 +554,8 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
 
     argc = a->len;
     array_argv = TRUE;
-  } else {
+  }
+  else {
     array_argv = FALSE;
   }
 
@@ -951,7 +952,8 @@ include_class_new(mrb_state *mrb, struct RClass *m, struct RClass *super)
   ic->super = super;
   if (m->tt == MRB_TT_ICLASS) {
     ic->c = m->c;
-  } else {
+  }
+  else {
     ic->c = m;
   }
   return ic;
@@ -2225,7 +2227,7 @@ mrb_mod_module_function(mrb_state *mrb, mrb_value mod)
   mrb_check_type(mrb, mod, MRB_TT_MODULE);
 
   mrb_get_args(mrb, "*", &argv, &argc);
-  if(argc == 0) {
+  if (argc == 0) {
     /* set MODFUNC SCOPE if implemented */
     return mod;
   }

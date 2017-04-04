@@ -44,7 +44,8 @@ struct RString {
 #define RSTR_SET_LEN(s, n) do {\
   if (RSTR_EMBED_P(s)) {\
     RSTR_SET_EMBED_LEN((s),(n));\
-  } else {\
+  }\
+  else {\
     s->as.heap.len = (mrb_int)(n);\
   }\
 } while (0)

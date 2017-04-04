@@ -25,14 +25,16 @@ end
 
 assert("Enumerable#each_cons") do
   a = []
-  (1..5).each_cons(3){|e| a << e}
+  b = (1..5).each_cons(3){|e| a << e}
   assert_equal [[1, 2, 3], [2, 3, 4], [3, 4, 5]], a
+  assert_equal nil, b
 end
 
 assert("Enumerable#each_slice") do
   a = []
-  (1..10).each_slice(3){|e| a << e}
+  b = (1..10).each_slice(3){|e| a << e}
   assert_equal [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10]], a
+  assert_equal nil, b
 end
 
 assert("Enumerable#group_by") do
