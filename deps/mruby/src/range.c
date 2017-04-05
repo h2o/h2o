@@ -248,13 +248,13 @@ mrb_range_include(mrb_state *mrb, mrb_value range)
   return mrb_bool_value(include_p);
 }
 
-static mrb_bool
-range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp, mrb_int len, mrb_bool trunc)
+MRB_API mrb_int
+mrb_range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp, mrb_int len, mrb_bool trunc)
 {
   mrb_int beg, end;
   struct RRange *r;
 
-  if (mrb_type(range) != MRB_TT_RANGE) return FALSE;
+  if (mrb_type(range) != MRB_TT_RANGE) return 0;
   r = mrb_range_ptr(mrb, range);
 
   beg = mrb_int(mrb, r->edges->beg);
@@ -262,11 +262,11 @@ range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp, mrb
 
   if (beg < 0) {
     beg += len;
-    if (beg < 0) return FALSE;
+    if (beg < 0) return 2;
   }
 
   if (trunc) {
-    if (beg > len) return FALSE;
+    if (beg > len) return 2;
     if (end > len) end = len;
   }
 
@@ -278,13 +278,7 @@ range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp, mrb
 
   *begp = beg;
   *lenp = len;
-  return TRUE;
-}
-
-MRB_API mrb_bool
-mrb_range_beg_len(mrb_state *mrb, mrb_value range, mrb_int *begp, mrb_int *lenp, mrb_int len)
-{
-  return range_beg_len(mrb, range, begp, lenp, len, TRUE);
+  return 1;
 }
 
 /* 15.2.14.4.12(x) */
@@ -405,7 +399,7 @@ mrb_get_values_at(mrb_state *mrb, mrb_value obj, mrb_int olen, mrb_int argc, con
     if (mrb_fixnum_p(argv[i])) {
       mrb_ary_push(mrb, result, func(mrb, obj, mrb_fixnum(argv[i])));
     }
-    else if (range_beg_len(mrb, argv[i], &beg, &len, olen, FALSE)) {
+    else if (mrb_range_beg_len(mrb, argv[i], &beg, &len, olen, FALSE) == 1) {
       mrb_int const end = olen < beg + len ? olen : beg + len;
       for (j = beg; j < end; ++j) {
         mrb_ary_push(mrb, result, func(mrb, obj, j));

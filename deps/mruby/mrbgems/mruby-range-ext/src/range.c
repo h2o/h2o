@@ -156,7 +156,7 @@ mrb_range_size(mrb_state *mrb, mrb_value range)
     }
     if (isinf(n+1))
       return mrb_float_value(mrb, INFINITY);
-    return mrb_fixnum_value(n+1);
+    return mrb_fixnum_value((mrb_int)n+1);
   }
   return mrb_nil_value();
 }

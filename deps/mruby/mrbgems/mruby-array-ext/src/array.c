@@ -149,6 +149,81 @@ mrb_ary_to_h(mrb_state *mrb, mrb_value ary)
   return hash;
 }
 
+/*
+ *  call-seq:
+ *     ary.slice!(index)         -> obj or nil
+ *     ary.slice!(start, length) -> new_ary or nil
+ *     ary.slice!(range)         -> new_ary or nil
+ *
+ *  Deletes the element(s) given by an +index+ (optionally up to +length+
+ *  elements) or by a +range+.
+ *
+ *  Returns the deleted object (or objects), or +nil+ if the +index+ is out of
+ *  range.
+ *
+ *     a = [ "a", "b", "c" ]
+ *     a.slice!(1)     #=> "b"
+ *     a               #=> ["a", "c"]
+ *     a.slice!(-1)    #=> "c"
+ *     a               #=> ["a"]
+ *     a.slice!(100)   #=> nil
+ *     a               #=> ["a"]
+ */
+
+static mrb_value
+mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
+{
+  struct RArray *a = mrb_ary_ptr(self);
+  mrb_int i, j, k, len;
+  mrb_value index;
+  mrb_value val;
+  mrb_value *ptr;
+  mrb_value ary;
+
+  mrb_ary_modify(mrb, a);
+
+  if (mrb_get_args(mrb, "o|i", &index, &len) == 1) {
+    switch (mrb_type(index)) {
+    case MRB_TT_RANGE:
+      if (mrb_range_beg_len(mrb, index, &i, &len, a->len, TRUE) == 1) {
+        goto delete_pos_len;
+      }
+      else {
+        return mrb_nil_value();
+      }
+    case MRB_TT_FIXNUM:
+      val = mrb_funcall(mrb, self, "delete_at", 1, index);
+      return val;
+    default:
+      val = mrb_funcall(mrb, self, "delete_at", 1, index);
+      return val;
+    }
+  }
+
+  i = mrb_fixnum(index);
+ delete_pos_len:
+  if (i < 0) i += a->len;
+  if (i < 0 || a->len < i) return mrb_nil_value();
+  if (len < 0) return mrb_nil_value();
+  if (a->len == i) return mrb_ary_new(mrb);
+  if (len > a->len - i) len = a->len - i;
+
+  ary = mrb_ary_new_capa(mrb, len);
+
+  for (j = i, k = 0; k < len; ++j, ++k) {
+    mrb_ary_push(mrb, ary, a->ptr[j]);
+  }
+
+  ptr = a->ptr + i;
+  for (j = i; j < a->len - len; ++j) {
+    *ptr = *(ptr+len);
+    ++ptr;
+  }
+
+  mrb_ary_resize(mrb, self, a->len - len);
+  return ary;
+}
+
 void
 mrb_mruby_array_ext_gem_init(mrb_state* mrb)
 {
@@ -159,6 +234,7 @@ mrb_mruby_array_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, a, "rassoc", mrb_ary_rassoc, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, a, "values_at", mrb_ary_values_at, MRB_ARGS_ANY());
   mrb_define_method(mrb, a, "to_h",   mrb_ary_to_h, MRB_ARGS_REQ(0));
+  mrb_define_method(mrb, a, "slice!", mrb_ary_slice_bang,   MRB_ARGS_ANY());
 }
 
 void

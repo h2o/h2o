@@ -95,13 +95,13 @@ mrb_type(mrb_value o)
 #define mrb_undef_p(o) ((o).w == MRB_Qundef)
 #define mrb_nil_p(o)  ((o).w == MRB_Qnil)
 
-#define BOXWORD_SET_VALUE(o, ttt, attr, v) do {\
+#define BOXWORD_SET_VALUE(o, ttt, attr, v) do { \
   switch (ttt) {\
   case MRB_TT_FALSE:  (o).w = (v) ? MRB_Qfalse : MRB_Qnil; break;\
   case MRB_TT_TRUE:   (o).w = MRB_Qtrue; break;\
   case MRB_TT_UNDEF:  (o).w = MRB_Qundef; break;\
-  case MRB_TT_FIXNUM: (o).value.i_flag = MRB_FIXNUM_FLAG; (o).attr = (v); break;\
-  case MRB_TT_SYMBOL: (o).value.sym_flag = MRB_SYMBOL_FLAG; (o).attr = (v); break;\
+  case MRB_TT_FIXNUM: (o).w = 0;(o).value.i_flag = MRB_FIXNUM_FLAG; (o).attr = (v); break;\
+  case MRB_TT_SYMBOL: (o).w = 0;(o).value.sym_flag = MRB_SYMBOL_FLAG; (o).attr = (v); break;\
   default:            (o).w = 0; (o).attr = (v); if ((o).value.bp) (o).value.bp->tt = ttt; break;\
   }\
 } while (0)

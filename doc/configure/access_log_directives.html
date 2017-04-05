@@ -129,7 +129,8 @@ The list of format strings recognized by H2O is as follows.
 <tr><td><code>%{remote}p</code><td>remote port (since version 2.2)
 <tr><td><code>%q</code><td>query string (<code>?</code> is prepended if exists, otherwise an empty string)
 <tr><td><code>%r</code><td>request line (e.g. <code>GET / HTTP/1.1</code>)
-<tr><td><code>%s</code><td>status code (e.g. <code>200</code>)
+<tr><td><code>%s</code><td>status code sent to client (e.g. <code>200</code>)
+<tr><td><code>%&lt;s</code><td>status code received from upstream (or initially generated)
 <tr><td><code>%t</code><td>time when the request was received in format: <code>[02/Jan/2006:15:04:05 -0700]</code>
 <tr><td><code>%{<i>FORMAT</i>}t</code><td>time when the request was received using the specified format.  <code>FORMAT</code> should be an argument to <code>strftime</code>, or one of:
 <table>
@@ -145,7 +146,8 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>%V</code><td>requested server name (or the default server name if not specified by the client)
 <tr><td><code>%v</code><td>canonical server name
 <tr><td><code>%{<i>HEADERNAME</i>}i</code><td>value of the given request header (e.g. <code>%{user-agent}i</code>)
-<tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header (e.g. <code>%{set-cookie}o</code>)
+<tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header sent to client (e.g. <code>%{set-cookie}o</code>)
+<tr><td><code>%&lt;{<i>HEADERNAME</i>}o</code><td>value of the response header received from upstream (or initially generated)
 <tr><td><code>%{<i>NAME</i>}x</code><td>various extensions.  <code>NAME</code> must be one listed in the following tables.  A dash (<code>-</code>) is emitted if the directive is not applicable to the request being logged.
 <table>
 <caption>Access Timings</caption>

@@ -7,6 +7,7 @@ MRuby::Toolchain.new(:gcc) do |conf, _params|
     cc.option_define = '-D%s'
     cc.compile_options = '%{flags} -MMD -o %{outfile} -c %{infile}'
     cc.cxx_compile_flag = '-x c++ -std=c++03'
+    cc.cxx_exception_flag = '-fexceptions'
   end
 
   [conf.cxx].each do |cxx|
@@ -17,6 +18,7 @@ MRuby::Toolchain.new(:gcc) do |conf, _params|
     cxx.option_define = '-D%s'
     cxx.compile_options = '%{flags} -MMD -o %{outfile} -c %{infile}'
     cxx.cxx_compile_flag = '-x c++ -std=c++03'
+    cxx.cxx_exception_flag = '-fexceptions'
   end
 
   conf.linker do |linker|

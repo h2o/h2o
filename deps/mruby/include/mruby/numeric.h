@@ -42,6 +42,16 @@ mrb_value mrb_num_div(mrb_state *mrb, mrb_value x, mrb_value y);
 # define MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS
 #endif
 
+// Clang 3.8 and 3.9 have problem compiling mruby in 32-bit mode, when MRB_INT64 is set
+// because of missing __mulodi4 and similar functions in its runtime. We need to use custom
+// implementation for them.
+#ifdef MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS
+#if defined(__clang__) && (__clang_major__ == 3) && (__clang_minor__ >= 8) && \
+    defined(MRB_32BIT) && defined(MRB_INT64)
+#undef MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS
+#endif
+#endif
+
 #ifdef MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS
 
 #ifndef MRB_WORD_BOXING

@@ -328,3 +328,27 @@ assert("Array#dig") do
   assert_nil(h.dig(2, 0))
   assert_raise(TypeError) {h.dig(:a)}
 end
+
+assert("Array#slice!") do
+  a = [1, 2, 3]
+  b = a.slice!(0)
+  c = [1, 2, 3, 4, 5]
+  d = c.slice!(0, 2)
+  e = [1, 2, 3, 4, 5]
+  f = e.slice!(1..3)
+  g = [1, 2, 3]
+  h = g.slice!(-1)
+  i = [1, 2, 3]
+  j = i.slice!(0, -1)
+
+  assert_equal(a, [2, 3])
+  assert_equal(b, 1)
+  assert_equal(c, [3, 4, 5])
+  assert_equal(d, [1, 2])
+  assert_equal(e, [1, 5])
+  assert_equal(f, [2, 3, 4])
+  assert_equal(g, [1, 2])
+  assert_equal(h, 3)
+  assert_equal(i, [1, 2, 3])
+  assert_equal(j, nil)
+end

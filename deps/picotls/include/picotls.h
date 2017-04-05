@@ -388,6 +388,10 @@ typedef union st_ptls_handshake_properties_t {
          *
          */
         unsigned early_data_accepted_by_peer : 1;
+        /**
+         * negotiate the key exchange method before sending key_share
+         */
+        unsigned negotiate_before_key_exchange : 1;
     } client;
     struct {
     } server;

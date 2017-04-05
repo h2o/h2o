@@ -26,6 +26,14 @@ class Range
       return self
     end
 
+    if val.kind_of?(String) && last.kind_of?(String) # fixnums are special
+      if val.respond_to? :upto
+        return val.upto(last, exclude_end?, &block)
+      else
+        str_each = true
+      end
+    end
+
     raise TypeError, "can't iterate" unless val.respond_to? :succ
 
     return self if (val <=> last) > 0
@@ -33,6 +41,9 @@ class Range
     while (val <=> last) < 0
       block.call(val)
       val = val.succ
+      if str_each
+        break if val.size > last.size
+      end
     end
 
     block.call(val) if !exclude_end? && (val <=> last) == 0

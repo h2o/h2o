@@ -19,7 +19,8 @@ get_file(mrb_irep_debug_info *info, uint32_t pc)
     if (!(pc < (*it)->start_pos)) {
       ret = it + 1;
       count -= step + 1;
-    } else { count = step; }
+    }
+    else { count = step; }
   }
 
   --ret;
@@ -86,7 +87,8 @@ mrb_debug_get_line(mrb_irep *irep, uint32_t pc)
             if (!(pc < it->start_pos)) {
               ret = it + 1;
               count -= step + 1;
-            } else { count = step; }
+            }
+            else { count = step; }
           }
 
           --ret;

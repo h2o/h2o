@@ -353,7 +353,7 @@ assert('Exception 19') do
 end
 
 assert('Exception#inspect without message') do
-  assert_equal "Exception: Exception", Exception.new.inspect
+  assert_equal "Exception", Exception.new.inspect
 end
 
 assert('Exception#backtrace') do

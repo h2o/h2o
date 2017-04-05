@@ -217,8 +217,8 @@ subtest 'set-cookie' => sub {
             my $server = shift;
             system("curl --silent http://127.0.0.1:$server->{port}/set-cookie/ > /dev/null");
         },
-        '%{set-cookie}o %{cache-control}o',
-        qr{^a=b, c=d must-revalidate$}s,
+        '\\"%<{set-cookie}o\\" \\"%>{set-cookie}o\\" \\"%{set-cookie}o\\" \\"%{cache-control}o\\"',
+        qr{^"-" "a=b, c=d" "a=b, c=d" "must-revalidate"$}s,
     );
 };
 

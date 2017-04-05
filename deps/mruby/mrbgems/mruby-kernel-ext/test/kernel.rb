@@ -3,6 +3,37 @@ assert('Kernel.fail, Kernel#fail') do
   assert_raise(RuntimeError) { Kernel.fail }
 end
 
+assert('Kernel.caller, Kernel#caller') do
+  skip "backtrace isn't available" if caller(0).empty?
+
+  caller_lineno = __LINE__ + 3
+  c = Class.new do
+    def foo(*args)
+      caller(*args)
+    end
+
+    def bar(*args)
+      foo(*args)
+    end
+
+    def baz(*args)
+      bar(*args)
+    end
+  end
+  assert_equal "kernel.rb:#{caller_lineno}:in Object#foo", c.new.baz(0)[0][-26..-1]
+  assert_equal "#bar", c.new.baz[0][-4..-1]
+  assert_equal "#foo", c.new.baz(0)[0][-4..-1]
+  assert_equal "#bar", c.new.baz(1)[0][-4..-1]
+  assert_equal "#baz", c.new.baz(2)[0][-4..-1]
+  assert_equal ["#foo", "#bar"], c.new.baz(0, 2).map { |i| i[-4..-1] }
+  assert_equal ["#bar", "#baz"], c.new.baz(1..2).map { |i| i[-4..-1] }
+  assert_nil c.new.baz(10..20)
+  assert_raise(ArgumentError) { c.new.baz(-1) }
+  assert_raise(ArgumentError) { c.new.baz(-1, 1) }
+  assert_raise(ArgumentError) { c.new.baz(1, -1) }
+  assert_raise(TypeError) { c.new.baz(nil) }
+end
+
 assert('Kernel#__method__') do
   assert_equal(:m, Class.new {def m; __method__; end}.new.m)
   assert_equal(:m, Class.new {define_method(:m) {__method__}}.new.m)
