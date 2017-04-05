@@ -215,8 +215,8 @@ static void retain_original_response(h2o_req_t *req)
 
     req->res.original.status = req->res.status;
     h2o_vector_reserve(&req->pool, &req->res.original.headers, req->res.headers.size);
-    memcpy(req->res.original.headers.entries, req->res.headers.entries,
-           sizeof(req->res.headers.entries[0]) * req->res.headers.size);
+    h2o_memcpy(req->res.original.headers.entries, req->res.headers.entries,
+               sizeof(req->res.headers.entries[0]) * req->res.headers.size);
     req->res.original.headers.size = req->res.headers.size;
 }
 
