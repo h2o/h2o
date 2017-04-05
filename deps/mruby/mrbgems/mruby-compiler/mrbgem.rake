@@ -8,11 +8,11 @@ MRuby::Gem::Specification.new 'mruby-compiler' do |spec|
 
   lex_def = "#{current_dir}/core/lex.def"
   core_objs = Dir.glob("#{current_dir}/core/*.c").map { |f|
-    next nil if build.cxx_abi_enabled? and f =~ /(codegen).c$/
+    next nil if build.cxx_exception_enabled? and f =~ /(codegen).c$/
     objfile(f.pathmap("#{current_build_dir}/core/%n"))
   }.compact
 
-  if build.cxx_abi_enabled?
+  if build.cxx_exception_enabled?
     core_objs <<
       build.compile_as_cxx("#{current_build_dir}/core/y.tab.c", "#{current_build_dir}/core/y.tab.cxx",
                            objfile("#{current_build_dir}/y.tab"), ["#{current_dir}/core"]) <<

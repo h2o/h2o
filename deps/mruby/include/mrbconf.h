@@ -15,7 +15,6 @@
 #if !defined(MRB_32BIT) && !defined(MRB_64BIT)
 #if UINT64_MAX == SIZE_MAX
 #define MRB_64BIT
-#define MRB_INT64
 #else
 #define MRB_32BIT
 #endif

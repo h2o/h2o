@@ -17,6 +17,7 @@
 .svn
 /.git
 cscope.out
+tags
 /src/y.tab.c
 /bin
 /build

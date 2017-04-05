@@ -113,8 +113,7 @@ module MiniRake
     # Timestamp for this task.  Basic tasks return the current time for
     # their time stamp.  Other tasks can be more sophisticated.
     def timestamp
-      prerequisites = @prerequisites.collect{ |n| n.is_a?(Proc) ? n.call(name) : n }.flatten
-      prerequisites.collect { |n| Task[n].timestamp }.max || Time.now
+      Time.now
     end
 
     # Class Methods ----------------------------------------------------
@@ -237,6 +236,7 @@ module MiniRake
 
     # Time stamp for file task.
     def timestamp
+      return Time.at(0) unless File.exist?(name)
       stat = File::stat(name.to_s)
       stat.directory? ? Time.at(0) : stat.mtime
     end

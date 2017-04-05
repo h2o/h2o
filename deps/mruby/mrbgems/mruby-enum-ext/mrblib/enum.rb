@@ -124,6 +124,7 @@ module Enumerable
       ary << val.__svalue
       block.call(ary.dup) if ary.size == n
     end
+    nil
   end
 
   ##
@@ -154,6 +155,7 @@ module Enumerable
       end
     end
     block.call(ary) unless ary.empty?
+    nil
   end
 
   ##

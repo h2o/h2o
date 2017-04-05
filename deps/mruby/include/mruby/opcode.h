@@ -82,7 +82,8 @@ enum {
   OP_JMPIF,/*     A sBx   if R(A) pc+=sBx                                 */
   OP_JMPNOT,/*    A sBx   if !R(A) pc+=sBx                                */
   OP_ONERR,/*     sBx     rescue_push(pc+sBx)                             */
-  OP_RESCUE,/*    A       clear(exc); R(A) := exception (ignore when A=0) */
+  OP_RESCUE,/*    A B C   if A (if C exc=R(A) else R(A) := exc);
+                          if B R(B) := exc.isa?(R(B)); clear(exc)         */
   OP_POPERR,/*    A       A.times{rescue_pop()}                           */
   OP_RAISE,/*     A       raise(R(A))                                     */
   OP_EPUSH,/*     Bx      ensure_push(SEQ[Bx])                            */

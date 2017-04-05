@@ -177,8 +177,8 @@ class Enumerator
   #
   # If no block is given, a new Enumerator is returned that includes the index.
   #
-  def each_with_index
-    with_index
+  def each_with_index(&block)
+    with_index(0, &block)
   end
 
   ##
