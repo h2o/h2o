@@ -180,7 +180,8 @@ static int lookup(h2o_cache_digests_frame_vector_t *vector, const char *url, siz
         do {
             h2o_cache_digests_frame_t *frame = vector->entries + i;
             uint64_t key = hash >> (64 - frame->capacity_bits);
-            if (bsearch(&key, frame->keys.entries, frame->keys.size, sizeof(frame->keys.entries[0]), cmp_key) != NULL)
+            if (frame->keys.entries != NULL &&
+                bsearch(&key, frame->keys.entries, frame->keys.size, sizeof(frame->keys.entries[0]), cmp_key) != NULL)
                 return is_fresh ? H2O_CACHE_DIGESTS_STATE_FRESH : H2O_CACHE_DIGESTS_STATE_STALE;
         } while (++i != vector->size);
     }
