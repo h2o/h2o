@@ -127,7 +127,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     /* copy vars */
     memset(&self->vars[1], 0, sizeof(self->vars[1]));
     h2o_vector_reserve(&self->pool, &self->vars[1], self->vars[0].size);
-    memcpy(self->vars[1].entries, self->vars[0].entries, sizeof(self->vars[0].entries[0]) * self->vars[0].size);
+    h2o_memcpy(self->vars[1].entries, self->vars[0].entries, sizeof(self->vars[0].entries[0]) * self->vars[0].size);
     self->vars[1].size = self->vars[0].size;
 
     ++self->vars;

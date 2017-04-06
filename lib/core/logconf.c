@@ -235,9 +235,10 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     }
 #define MAP_EXT_TO_PROTO(name, cb)                                                                                                 \
     if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
+        h2o_conn_callbacks_t dummy_;                                                                                               \
         NEW_ELEMENT(ELEMENT_TYPE_PROTOCOL_SPECIFIC);                                                                               \
         LAST_ELEMENT()->data.protocol_specific_callback_index =                                                                    \
-            &((h2o_conn_callbacks_t *)NULL)->log_.cb - ((h2o_conn_callbacks_t *)NULL)->log_.callbacks;                             \
+            &dummy_.log_.cb - dummy_.log_.callbacks;                                                                               \
         goto MAP_EXT_Found;                                                                                                        \
     }
                     MAP_EXT_TO_TYPE("connection-id", ELEMENT_TYPE_CONNECTION_ID);

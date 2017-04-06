@@ -340,7 +340,7 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t eleme
         vector->capacity *= 2;
     if (pool != NULL) {
         new_entries = h2o_mem_alloc_pool(pool, element_size * vector->capacity);
-        memcpy(new_entries, vector->entries, element_size * vector->size);
+        h2o_memcpy(new_entries, vector->entries, element_size * vector->size);
     } else {
         new_entries = h2o_mem_realloc(vector->entries, element_size * vector->capacity);
     }

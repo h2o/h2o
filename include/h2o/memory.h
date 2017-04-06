@@ -161,6 +161,10 @@ extern void *(*h2o_mem__set_secure)(void *, int, size_t);
 H2O_NORETURN void h2o__fatal(const char *msg);
 
 /**
+ * A version of memcpy that can take a NULL @src to avoid UB
+ */
+static void *h2o_memcpy(void *dst, const void *src, size_t n);
+/**
  * constructor for h2o_iovec_t
  */
 static h2o_iovec_t h2o_iovec_init(const void *base, size_t len);
@@ -300,6 +304,15 @@ void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
 void h2o_append_to_null_terminated_list(void ***list, void *element);
 
 /* inline defs */
+
+inline void *h2o_memcpy(void *dst, const void *src, size_t n)
+{
+    if (src != NULL)
+        return memcpy(dst, src, n);
+    else if (n != 0)
+        h2o_fatal("null pointer passed to memcpy");
+    return dst;
+}
 
 inline h2o_iovec_t h2o_iovec_init(const void *base, size_t len)
 {
