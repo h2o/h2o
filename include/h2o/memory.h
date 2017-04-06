@@ -307,8 +307,10 @@ void h2o_append_to_null_terminated_list(void ***list, void *element);
 
 inline void *h2o_memcpy(void *dst, const void *src, size_t n)
 {
-    if (src)
+    if (src != NULL)
         return memcpy(dst, src, n);
+    else if (n != 0)
+        h2o_fatal("null pointer passed to memcpy");
     return dst;
 }
 
