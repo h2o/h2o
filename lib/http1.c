@@ -844,7 +844,7 @@ void h2o_http1_upgrade(h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o
         h2o_mem_alloc_pool(&conn->req.pool, flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len +
                                                                                           sizeof("upgrade") - 1));
     bufs[0].len = flatten_headers(bufs[0].base, &conn->req, "upgrade");
-    memcpy(bufs + 1, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+    h2o_memcpy(bufs + 1, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
 
     h2o_socket_write(conn->sock, bufs, inbufcnt + 1, on_upgrade_complete);
 }
