@@ -1244,6 +1244,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
 /**
+ * prepares the request for processing by looking at the method, URI, headers
+ */
+h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
+/**
  * binds configurations to the request
  */
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
