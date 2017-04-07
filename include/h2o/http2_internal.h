@@ -159,7 +159,6 @@ struct st_h2o_http2_stream_t {
     h2o_http2_window_t output_window;
     h2o_http2_window_t input_window;
     h2o_http2_priority_t received_priority;
-    size_t _expected_content_length; /* SIZE_MAX if unknown */
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
     h2o_http2_conn_num_streams_t *_num_streams_slot; /* points http2_conn_t::num_streams::* in which the stream is counted */
