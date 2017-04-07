@@ -165,7 +165,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
                 continue;
             }
             conn->_request_body_in_progress++;
-            stream->_conn_stream_in_progress = &conn->_request_body_in_progress;
+            stream->_conn_stream_in_progress = 1;
         } else {
             if (stream->state != H2O_HTTP2_STREAM_STATE_SEND_HEADERS)
                 h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
@@ -227,8 +227,9 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     h2o_http2_scheduler_close(&stream->_refs.scheduler);
 
     if (stream->_conn_stream_in_progress) {
-        *stream->_conn_stream_in_progress = *stream->_conn_stream_in_progress - 1;
-        stream->_conn_stream_in_progress = NULL;
+        h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
+        stream->_conn_stream_in_progress = 0;
+        conn->_request_body_in_progress--;
     }
 
     switch (stream->state) {

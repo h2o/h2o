@@ -172,8 +172,11 @@ struct st_h2o_http2_stream_t {
             unsigned casper_is_ready : 1;
         } pull;
     };
+
     unsigned response_blocked_by_server : 1;
     unsigned request_blocked_by_server : 1;
+    unsigned _conn_stream_in_progress : 1; /* true if the body is streaming */
+
     /* references governed by connection.c for handling various things */
     struct {
         h2o_linklist_t link;
@@ -185,7 +188,6 @@ struct st_h2o_http2_stream_t {
         h2o_buffer_t *body; /* NULL unless request body IS expected */
         size_t streamed_body_size;
     } _req_body;
-    unsigned *_conn_stream_in_progress; /* a reference to h2o_conn_t::_request_body_in_progress, NULL if not streaming */
 
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
