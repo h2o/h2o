@@ -160,11 +160,11 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
         h2o_linklist_unlink(&stream->_refs.link);
 
         if (stream->req._write_req_chunk_done != NULL) {
-            if (conn->_request_body_in_progress) {
+            if (conn->num_streams._request_body_in_progress) {
                 h2o_linklist_insert(&tmp, &stream->_refs.link);
                 continue;
             }
-            conn->_request_body_in_progress++;
+            conn->num_streams._request_body_in_progress++;
             stream->_conn_stream_in_progress = 1;
         } else {
             if (stream->state != H2O_HTTP2_STREAM_STATE_SEND_HEADERS)
@@ -229,7 +229,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (stream->_conn_stream_in_progress) {
         h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
         stream->_conn_stream_in_progress = 0;
-        conn->_request_body_in_progress--;
+        conn->num_streams._request_body_in_progress--;
     }
 
     switch (stream->state) {

@@ -221,6 +221,7 @@ struct st_h2o_http2_conn_t {
         h2o_http2_conn_num_streams_t push;
         uint32_t response_blocked_by_server;
         uint32_t request_blocked_by_server;
+        uint32_t _request_body_in_progress;
     } num_streams;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
@@ -241,7 +242,6 @@ struct st_h2o_http2_conn_t {
         h2o_timeout_entry_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
-    unsigned _request_body_in_progress;
     h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
 };
