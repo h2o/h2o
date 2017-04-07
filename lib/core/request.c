@@ -210,7 +210,6 @@ static void reset_response(h2o_req_t *req)
     req->res.reason = "OK";
     req->_next_filter_index = 0;
     req->bytes_sent = 0;
-    req->pathconf = NULL;
 }
 
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
@@ -371,6 +370,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     /* handle the response using the handlers, if hostconf exists */
     if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority, req->scheme->default_port)) != NULL) {
         req->_found_handler = 0;
+        req->pathconf = NULL;
         process_hosted_request(req, hostconf);
         return;
     }
