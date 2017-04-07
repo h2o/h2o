@@ -22,13 +22,18 @@
 
 struct st_h2o_uv_socket_t {
     h2o_socket_t super;
-    struct {
-        uv_stream_t *stream;
-        uv_close_cb close_cb;
-    } uv;
+    uv_handle_t *handle;
+    uv_close_cb close_cb;
     union {
-        uv_connect_t _creq;
-        uv_write_t _wreq;
+        struct {
+            union {
+                uv_connect_t _creq;
+                uv_write_t _wreq;
+            };
+        } stream;
+        struct {
+            int events;
+        } poll;
     };
 };
 
@@ -82,9 +87,35 @@ static void on_read_ssl(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unu
     sock->super._cb.read(&sock->super, err);
 }
 
+static void on_poll(uv_poll_t *poll, int status, int events);
+static void update_poll(struct st_h2o_uv_socket_t *sock)
+{
+    assert(sock->handle->type == UV_POLL);
+    if (sock->poll.events == 0) {
+        uv_poll_stop((uv_poll_t *)sock->handle);
+    } else {
+        uv_poll_start((uv_poll_t *)sock->handle, sock->poll.events, on_poll);
+    }
+}
+
+static void on_poll(uv_poll_t *poll, int status, int events)
+{
+    struct st_h2o_uv_socket_t *sock = poll->data;
+    const char *err = status == 0 ? NULL : h2o_socket_error_io;
+
+    if ((events & UV_READABLE) != 0) {
+        sock->super._cb.read(&sock->super, err);
+    }
+    if ((events & UV_WRITABLE) != 0) {
+        sock->super._cb.write(&sock->super, err);
+        sock->poll.events &= ~UV_WRITABLE;
+        update_poll(sock);
+    }
+}
+
 static void on_do_write_complete(uv_write_t *wreq, int status)
 {
-    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _wreq, wreq);
+    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, stream._wreq, wreq);
     if (sock->super._cb.write != NULL)
         on_write_complete(&sock->super, status == 0 ? NULL : h2o_socket_error_io);
 }
@@ -92,7 +123,7 @@ static void on_do_write_complete(uv_write_t *wreq, int status)
 static void free_sock(uv_handle_t *handle)
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
-    uv_close_cb cb = sock->uv.close_cb;
+    uv_close_cb cb = sock->close_cb;
     free(sock);
     cb(handle);
 }
@@ -100,7 +131,7 @@ static void free_sock(uv_handle_t *handle)
 void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
-    uv_close((uv_handle_t *)sock->uv.stream, free_sock);
+    uv_close(sock->handle, free_sock);
 }
 
 int h2o_socket_get_fd(h2o_socket_t *_sock)
@@ -108,7 +139,7 @@ int h2o_socket_get_fd(h2o_socket_t *_sock)
     int fd, ret;
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
 
-    ret = uv_fileno((uv_handle_t *)sock->uv.stream, (uv_os_fd_t *)&fd);
+    ret = uv_fileno(sock->handle, (uv_os_fd_t *)&fd);
     if (ret)
         return -1;
 
@@ -119,26 +150,60 @@ void do_read_start(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
 
-    if (sock->super.ssl == NULL)
-        uv_read_start(sock->uv.stream, alloc_inbuf_tcp, on_read_tcp);
-    else
-        uv_read_start(sock->uv.stream, alloc_inbuf_ssl, on_read_ssl);
+    switch (sock->handle->type) {
+    case UV_TCP:
+        if (sock->super.ssl == NULL) {
+            uv_read_start((uv_stream_t *)sock->handle, alloc_inbuf_tcp, on_read_tcp);
+        } else {
+            uv_read_start((uv_stream_t *)sock->handle, alloc_inbuf_ssl, on_read_ssl);
+        }
+        break;
+    case UV_POLL:
+        sock->poll.events |= UV_READABLE;
+        uv_poll_start((uv_poll_t *)sock->handle, sock->poll.events, on_poll);
+        break;
+    default:
+        h2o_fatal("unexpected handle type");
+    }
 }
 
 void do_read_stop(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
-    uv_read_stop(sock->uv.stream);
+
+    switch (sock->handle->type) {
+    case UV_TCP:
+        uv_read_stop((uv_stream_t *)sock->handle);
+        break;
+    case UV_POLL:
+        sock->poll.events &= ~UV_READABLE;
+        update_poll(sock);
+        break;
+    default:
+        h2o_fatal("unexpected handle type");
+    }
 }
 
 void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
+    assert(sock->handle->type == UV_TCP);
 
     assert(sock->super._cb.write == NULL);
     sock->super._cb.write = cb;
 
-    uv_write(&sock->_wreq, sock->uv.stream, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
+    uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
+}
+
+void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
+{
+    struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
+    assert(sock->handle->type == UV_POLL);
+    assert(sock->super._cb.write == NULL);
+
+    sock->super._cb.write = cb;
+    sock->poll.events |= UV_WRITABLE;
+    uv_poll_start((uv_poll_t *)sock->handle, sock->poll.events, on_poll);
 }
 
 static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop)
@@ -155,9 +220,10 @@ static struct st_h2o_uv_socket_t *create_socket(h2o_loop_t *loop)
 int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
+    assert(sock->handle->type == UV_TCP);
     uv_os_fd_t fd;
 
-    if (uv_fileno((uv_handle_t *)sock->uv.stream, &fd) != 0)
+    if (uv_fileno(sock->handle, &fd) != 0)
         return -1;
     /* FIXME: consider how to overcome the epoll(2) problem; man says,
      * "even after a file descriptor that is part of an epoll set has been closed,
@@ -175,7 +241,7 @@ h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 
     if (sock == NULL)
         return NULL;
-    if (uv_tcp_open((uv_tcp_t *)sock->uv.stream, info->fd) != 0) {
+    if (uv_tcp_open((uv_tcp_t *)sock->handle, info->fd) != 0) {
         h2o_socket_close(&sock->super);
         return NULL;
     }
@@ -183,15 +249,26 @@ h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     return &sock->super;
 }
 
-h2o_socket_t *h2o_uv_socket_create(uv_stream_t *stream, uv_close_cb close_cb)
+h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb)
+{
+    uv_poll_t *poll = h2o_mem_alloc(sizeof(*poll));
+    if (uv_poll_init(loop, poll, fd) != 0) {
+        free(poll);
+        return NULL;
+    }
+    return h2o_uv_socket_create((uv_handle_t *)poll, close_cb);
+}
+
+h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_mem_alloc(sizeof(*sock));
-
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
-    sock->uv.stream = stream;
-    sock->uv.close_cb = close_cb;
-    stream->data = sock;
+
+    sock->handle = handle;
+    sock->close_cb = close_cb;
+    sock->handle->data = sock;
+
     return &sock->super;
 }
 
@@ -199,7 +276,7 @@ static void on_connect(uv_connect_t *conn, int status)
 {
     if (status == UV_ECANCELED)
         return;
-    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, _creq, conn);
+    struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, stream._creq, conn);
     h2o_socket_cb cb = sock->super._cb.write;
     sock->super._cb.write = NULL;
     cb(&sock->super, status == 0 ? NULL : h2o_socket_error_conn_fail);
@@ -208,7 +285,7 @@ static void on_connect(uv_connect_t *conn, int status)
 h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *_sock)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
-    return sock->uv.stream->loop;
+    return sock->handle->loop;
 }
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
@@ -217,7 +294,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 
     if (sock == NULL)
         return NULL;
-    if (uv_tcp_connect(&sock->_creq, (void *)sock->uv.stream, addr, on_connect) != 0) {
+    if (uv_tcp_connect(&sock->stream._creq, (void *)sock->handle, addr, on_connect) != 0) {
         h2o_socket_close(&sock->super);
         return NULL;
     }
@@ -228,8 +305,10 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
+    assert(sock->handle->type == UV_TCP);
+
     int len = sizeof(struct sockaddr_storage);
-    if (uv_tcp_getsockname((void *)sock->uv.stream, sa, &len) != 0)
+    if (uv_tcp_getsockname((void *)sock->handle, sa, &len) != 0)
         return 0;
     return (socklen_t)len;
 }
@@ -237,8 +316,10 @@ socklen_t h2o_socket_getsockname(h2o_socket_t *_sock, struct sockaddr *sa)
 socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
+    assert(sock->handle->type == UV_TCP);
+
     int len = sizeof(struct sockaddr_storage);
-    if (uv_tcp_getpeername((void *)sock->uv.stream, sa, &len) != 0)
+    if (uv_tcp_getpeername((void *)sock->handle, sa, &len) != 0)
         return 0;
     return (socklen_t)len;
 }

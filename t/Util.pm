@@ -111,6 +111,7 @@ sub exec_mruby_unittest {
 # spawns a child process and returns a guard object that kills the process when destroyed
 sub spawn_server {
     my %args = @_;
+    my $ppid = $$;
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;
@@ -129,6 +130,7 @@ sub spawn_server {
             }
         }
         my $guard = scope_guard(sub {
+            return if $$ != $ppid;
             print STDERR "killing $args{argv}->[0]... ";
             my $sig = 'TERM';
           Retry:
