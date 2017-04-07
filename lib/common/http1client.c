@@ -51,8 +51,10 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
-    h2o_http1client_write_req_chunk_done _write_req_chunk_done;
-    void *_write_req_chunk_done_ctx;
+    struct {
+        h2o_http1client_write_req_chunk_done cb;
+        void *ctx;
+    } _write_req_chunk_done;
     char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
@@ -375,7 +377,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1client_private_t *client = sock->data;
 
     if (client->_body_buf_in_flight != NULL) {
-        client->_write_req_chunk_done(client->_write_req_chunk_done_ctx, client->_body_buf_in_flight->size,
+        client->_write_req_chunk_done.cb(client->_write_req_chunk_done.ctx, client->_body_buf_in_flight->size,
                                        client->_body_buf_is_done);
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
     }
@@ -473,11 +475,11 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
 
     if ((client->_cb.on_head =
              client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head,
-                                    &client->_write_req_chunk_done, &client->_write_req_chunk_done_ctx, &cur_body)) == NULL) {
+                                    &client->_write_req_chunk_done.cb, &client->_write_req_chunk_done.ctx, &cur_body)) == NULL) {
         close_client(client);
         return;
     }
-    if (client->_write_req_chunk_done != NULL) {
+    if (client->_write_req_chunk_done.cb != NULL) {
         if (cur_body.len != 0) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
             if (h2o_buffer_append(&client->_body_buf, cur_body.base, cur_body.len) == 0) {
