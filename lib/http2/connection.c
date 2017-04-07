@@ -502,6 +502,7 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
+static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream);
 static void write_req_chunk_done(h2o_req_t *req, size_t written, int done)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
@@ -513,7 +514,6 @@ static void write_req_chunk_done(h2o_req_t *req, size_t written, int done)
     }
 
     update_input_window(conn, stream->stream_id, &stream->input_window, written);
-    update_input_window(conn, 0, &conn->_input_window, written);
 
     if (done) {
         if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY) {
@@ -548,6 +548,8 @@ static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
                     execute_or_enqueue_request(conn, stream);
                 }
                 stream->req._found_handler = 1;
+            } else {
+                write_req_chunk_done(req, payload.len, is_end_stream);
             }
         }
     } else {
@@ -559,7 +561,6 @@ static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
         }
     }
-    write_req_chunk_done(req, payload.len, is_end_stream);
 
     return 0;
 }
@@ -575,6 +576,8 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
 
     if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
         return 0;
+
+    update_input_window(conn, 0, &conn->_input_window, payload.length);
 
     stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
 
