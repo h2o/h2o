@@ -541,13 +541,13 @@ static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
             execute_or_enqueue_request(conn, stream);
         } else {
             if (!stream->req._found_handler) {
+                stream->req._found_handler = 1;
                 h2o_handler_t *h = h2o_get_first_handler(&stream->req);
                 if (h != NULL && h->has_body_stream) {
                     stream->req._write_req_chunk_done = write_req_chunk_done;
                     stream->_req_body.streamed_body_size = stream->_req_body.body->size;
                     execute_or_enqueue_request(conn, stream);
                 }
-                stream->req._found_handler = 1;
             } else {
                 write_req_chunk_done(req, payload.len, is_end_stream);
             }
@@ -599,17 +599,20 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;
     } else {
-        int ret = stream->req._write_req_chunk.cb(stream->req._write_req_chunk.priv, h2o_iovec_init(payload.data, payload.length),
-                                                  frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM);
+        int ret;
+
+        if (!stream->request_blocked_by_server) {
+            h2o_http2_stream_set_request_blocked_by_server(conn, stream, 1);
+            update_idle_timeout(conn);
+        }
+
+        ret = stream->req._write_req_chunk.cb(stream->req._write_req_chunk.priv, h2o_iovec_init(payload.data, payload.length),
+                                              frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM);
         if (ret < 0) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);
             stream = NULL;
             goto UpdateWindow;
-        }
-        if (!stream->request_blocked_by_server) {
-            h2o_http2_stream_set_request_blocked_by_server(conn, stream, 1);
-            update_idle_timeout(conn);
         }
         return 0;
     }
