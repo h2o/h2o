@@ -1040,8 +1040,10 @@ struct st_h2o_req_t {
     h2o_timeout_entry_t _timeout_entry;
 
     /* streaming request body */
-    h2o_write_req_chunk _write_req_chunk;
-    void *_write_req_chunk_priv;
+    struct {
+        h2o_write_req_chunk cb;
+        void *priv;
+    } _write_req_chunk;
     h2o_write_req_chunk_done _write_req_chunk_done;
     char _found_handler;
 

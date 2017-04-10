@@ -554,9 +554,9 @@ static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
         }
     } else {
         if (is_end_stream) {
-            if (stream->req._write_req_chunk == write_req_chunk) {
+            if (stream->req._write_req_chunk.cb == write_req_chunk) {
                 stream->req._write_req_chunk_done = NULL;
-                stream->req._write_req_chunk = NULL;
+                stream->req._write_req_chunk.cb = NULL;
             }
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
         }
@@ -599,8 +599,8 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         h2o_http2_stream_reset(conn, stream);
         stream = NULL;
     } else {
-        int ret = stream->req._write_req_chunk(stream->req._write_req_chunk_priv, h2o_iovec_init(payload.data, payload.length),
-                                                frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM);
+        int ret = stream->req._write_req_chunk.cb(stream->req._write_req_chunk.priv, h2o_iovec_init(payload.data, payload.length),
+                                                  frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM);
         if (ret < 0) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_stream_reset(conn, stream);
@@ -673,8 +673,8 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         set_priority(conn, stream, &payload.priority, 0);
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
-    stream->req._write_req_chunk = write_req_chunk;
-    stream->req._write_req_chunk_priv = &stream->req;
+    stream->req._write_req_chunk.cb = write_req_chunk;
+    stream->req._write_req_chunk.priv = &stream->req;
 
     /* setup container for request body if it is expected to arrive */
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0)

@@ -554,8 +554,8 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
             *write_req_chunk_done = proxy_write_req_chunk_done;
             *write_req_chunk_done_ctx = self;
             self->frontend_write_req_chunk_done = self->src_req->_write_req_chunk_done;
-            self->src_req->_write_req_chunk = frontend_write_req_chunk;
-            self->src_req->_write_req_chunk_priv = self;
+            self->src_req->_write_req_chunk.cb = frontend_write_req_chunk;
+            self->src_req->_write_req_chunk.priv = self;
         } else {
             self->up_req.bufs[1] = self->src_req->entity;
             *reqbufcnt = 2;
