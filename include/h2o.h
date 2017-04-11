@@ -81,6 +81,8 @@ extern "C" {
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS 0 /* no timeout */
+#define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT (H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
@@ -354,6 +356,10 @@ struct st_h2o_globalconf_t {
          */
         uint64_t idle_timeout;
         /**
+         * graceful shutdown timeout (in milliseconds)
+         */
+        uint64_t graceful_shutdown_timeout;
+        /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
          * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value
          * specified by this property in order to limit the resources allocated to a single connection.
@@ -385,11 +391,19 @@ struct st_h2o_globalconf_t {
         /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
-        int preserve_x_forwarded_proto;
+        unsigned preserve_x_forwarded_proto : 1;
+        /**
+         * a boolean flag if set to true, instructs the proxy to preserve the server header passed by the origin
+         */
+        unsigned preserve_server_header : 1;
         /**
          * a boolean flag if set to true, instructs the proxy to emit x-forwarded-proto and x-forwarded-for headers
          */
-        int emit_x_forwarded_headers;
+        unsigned emit_x_forwarded_headers : 1;
+        /**
+         * a boolean flag if set to true, instructs the proxy to emit a via header
+         */
+        unsigned emit_via_header : 1;
     } proxy;
 
     /**
@@ -568,6 +582,10 @@ struct st_h2o_context_t {
          */
         h2o_linklist_t _conns;
         /**
+         * graceful shutdown timeout
+         */
+        h2o_timeout_t graceful_shutdown_timeout;
+        /**
          * timeout entry used for graceful shutdown
          */
         h2o_timeout_entry_t _graceful_shutdown_timeout;
@@ -625,6 +643,10 @@ typedef struct st_h2o_header_t {
      * name of the header (may point to h2o_token_t which is an optimized subclass of h2o_iovec_t)
      */
     h2o_iovec_t *name;
+    /**
+     * The name of the header as originally received from the client, same length as `name`
+     */
+    const char *orig_name;
     /**
      * value of the header
      */
@@ -714,6 +736,13 @@ typedef struct st_h2o_res_t {
      * mime-related attributes (may be NULL)
      */
     h2o_mime_attributes_t *mime_attr;
+    /**
+     * retains the original response header before rewritten by ostream filters
+     */
+    struct {
+        int status;
+        h2o_headers_t headers;
+    } original;
 } h2o_res_t;
 
 /**
@@ -1105,12 +1134,13 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 /**
  * adds a header to list
  */
-void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len);
+void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
+                    const char *value, size_t value_len);
 /**
  * adds a header to list
  */
 void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *value, size_t value_len);
+                           const char *orig_name, const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */
@@ -1563,7 +1593,7 @@ void h2o_mimemap_get_default_attributes(const char *mime, h2o_mime_attributes_t 
 typedef struct st_h2o_access_log_filehandle_t h2o_access_log_filehandle_t;
 
 int h2o_access_log_open_log(const char *path);
-h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt);
+h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt, int escape);
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 

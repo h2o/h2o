@@ -199,7 +199,161 @@ By default, when forwarding an HTTP request H2O sends its own <code>x-forwarded-
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.emit-x-forwarded-headers: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.emit-via-header"><code>proxy.emit-via-header</code></a>
+</dd>
 </dl>
+
+<div id="proxy.emit-via-header" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.emit-via-header"><code>"proxy.emit-via-header"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the server adds or appends an entry to the <code>via</code> request header.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.emit-via-header: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers"><code>proxy.emit-x-forwarded-headers</code></a>
+</dd>
+</dl>
+
+
+<div id="proxy.header.add" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.header.add"><code>"proxy.header.add"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Modifies the request headers sent to the application server.
+</p>
+
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.add"><code>header.add</code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extensions</dd>
+</dl>
+<div id="proxy.header.append" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.header.append"><code>"proxy.header.append"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Modifies the request headers sent to the application server.
+</p>
+
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.append"><code>header.append</code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extensions</dd>
+</dl>
+<div id="proxy.header.merge" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.header.merge"><code>"proxy.header.merge"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Modifies the request headers sent to the application server.
+</p>
+
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.merge"><code>header.merge</code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extensions</dd>
+</dl>
+<div id="proxy.header.set" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.header.set"><code>"proxy.header.set"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Modifies the request headers sent to the application server.
+</p>
+
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.set"><code>header.set</code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extensions</dd>
+</dl>
+<div id="proxy.header.setifempty" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.header.setifempty"><code>"proxy.header.setifempty"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Modifies the request headers sent to the application server.
+</p>
+
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.setifempty"><code>header.setifempty</code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extensions</dd>
+</dl>
+<div id="proxy.header.unset" class="directive-head">
+<div class="directive-since">since v2.2</div>
+<h3><a href="configure/proxy_directives.html#proxy.header.unset"><code>"proxy.header.unset"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Modifies the request headers sent to the application server.
+</p>
+
+<p>
+The behavior is identical to <a href="configure/headers_directives.html#header.unset"><code>header.unset</code></a> except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extensions</dd>
+</dl>
+
 
 <div id="proxy.ssl.cafile" class="directive-head">
 <div class="directive-since">since v2.0</div>

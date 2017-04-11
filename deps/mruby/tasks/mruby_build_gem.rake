@@ -38,7 +38,7 @@ module MRuby
       cxx_srcs = ['src', 'test', 'tools'].map do |subdir|
         Dir.glob("#{Gem.current.dir}/#{subdir}/*.{cpp,cxx,cc}")
       end.flatten
-      enable_cxx_abi unless cxx_srcs.empty?
+      enable_cxx_exception unless cxx_srcs.empty?
 
       Gem.current
     end

@@ -148,6 +148,9 @@ end
 
 assert('Float#to_i', '15.2.9.3.14') do
   assert_equal(3, 3.123456789.to_i)
+  assert_raise(FloatDomainError) { Float::INFINITY.to_i }
+  assert_raise(FloatDomainError) { (-Float::INFINITY).to_i }
+  assert_raise(FloatDomainError) { Float::NAN.to_i }
 end
 
 assert('Float#truncate', '15.2.9.3.15') do

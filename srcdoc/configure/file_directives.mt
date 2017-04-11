@@ -39,7 +39,7 @@ $ctx->{directive}->(
     see_also => render_mt(<<EOT),
 <a href="configure/file_directives.html#file.dirlisting"><code>file.dirlisting</code></a>,
 <a href="configure/file_directives.html#file.file"><code>file.file</code></a>,
-<a href="configure/file_directives.html#file.dirlisting"><code>file.index</code></a>
+<a href="configure/file_directives.html#file.index"><code>file.index</code></a>
 EOT
 )->(sub {
 ?>
@@ -211,13 +211,22 @@ $ctx->{directive}->(
 EOT
     since   => '2.0',
     desc    => <<'EOT',
-A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not so send <code>.br</code> or <code>.gz</code> variants if possible.
+A flag indicating how a pre-compressed file should be served.
 EOT
 )->(sub {
 ?>
 <p>
 If set to <code>ON</code>, the handler looks for a file with <code>.br</code> or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://datatracker.ietf.org/doc/draft-alakuijala-brotli/">brotli</a> or <a href="https://tools.ietf.org/html/rfc1952">gzip</a>-encoded response.
 For example, if a client requests a file named <code>index.html</code> with <code>Accept-Encoding: gzip</code> header and if <code>index.html.gz</code> exists, the <code>.gz</code> file is sent as a response together with a <code>Content-Encoding: gzip</code> response header.
+</p>
+<p>
+If set to <code>OFF</code>, the handler always serves the file specified by the client.
+</p>
+<p>
+Starting from version 2.2, <code>gunzip</code> is also supported.
+If set, the handler acts identical to when the value was set to <code>ON</code>.
+In addition, the handler will send an uncompressed response by dynamically decompressing the <code>.gz</code> file if the client and the server failed to agree on using a pre-compressed file as the response and if a non-compressed file was not found.
+The option is useful when conserving disk space is important; it is possible to remove the uncompressed files in place for gzipped ones.
 </p>
 ? })
 

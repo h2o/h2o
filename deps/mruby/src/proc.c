@@ -61,6 +61,7 @@ closure_setup(mrb_state *mrb, struct RProc *p, int nlocals)
     e = mrb->c->ci->env;
   }
   p->env = e;
+  mrb_field_write_barrier(mrb, (struct RBasic *)p, (struct RBasic *)p->env);
 }
 
 struct RProc *
@@ -148,19 +149,22 @@ mrb_proc_copy(struct RProc *a, struct RProc *b)
 }
 
 static mrb_value
-mrb_proc_initialize(mrb_state *mrb, mrb_value self)
+mrb_proc_s_new(mrb_state *mrb, mrb_value proc_class)
 {
   mrb_value blk;
+  mrb_value proc;
+  struct RProc *p;
 
   mrb_get_args(mrb, "&", &blk);
   if (mrb_nil_p(blk)) {
     /* Calling Proc.new without a block is not implemented yet */
     mrb_raise(mrb, E_ARGUMENT_ERROR, "tried to create Proc object without a block");
   }
-  else {
-    mrb_proc_copy(mrb_proc_ptr(self), mrb_proc_ptr(blk));
-  }
-  return self;
+  p = (struct RProc *)mrb_obj_alloc(mrb, MRB_TT_PROC, mrb_class_ptr(proc_class));
+  mrb_proc_copy(p, mrb_proc_ptr(blk));
+  proc = mrb_obj_value(p);
+  mrb_funcall_with_block(mrb, proc, mrb_intern_lit(mrb, "initialize"), 0, NULL, blk);
+  return proc;
 }
 
 static mrb_value
@@ -268,7 +272,7 @@ mrb_init_proc(mrb_state *mrb)
   call_irep->iseq = call_iseq;
   call_irep->ilen = 1;
 
-  mrb_define_method(mrb, mrb->proc_class, "initialize", mrb_proc_initialize, MRB_ARGS_NONE());
+  mrb_define_class_method(mrb, mrb->proc_class, "new", mrb_proc_s_new, MRB_ARGS_ANY());
   mrb_define_method(mrb, mrb->proc_class, "initialize_copy", mrb_proc_init_copy, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, mrb->proc_class, "arity", mrb_proc_arity, MRB_ARGS_NONE());
 

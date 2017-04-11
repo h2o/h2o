@@ -159,7 +159,9 @@ mrb_irep_free(mrb_state *mrb, mrb_irep *irep)
   }
   mrb_free(mrb, irep->reps);
   mrb_free(mrb, irep->lv);
-  mrb_free(mrb, (void *)irep->filename);
+  if (irep->own_filename) {
+    mrb_free(mrb, (void *)irep->filename);
+  }
   mrb_free(mrb, irep->lines);
   mrb_debug_info_free(mrb, irep->debug_info);
   mrb_free(mrb, irep);
@@ -261,6 +263,7 @@ mrb_add_irep(mrb_state *mrb)
   irep = (mrb_irep *)mrb_malloc(mrb, sizeof(mrb_irep));
   *irep = mrb_irep_zero;
   irep->refcnt = 1;
+  irep->own_filename = FALSE;
 
   return irep;
 }
@@ -289,7 +292,8 @@ mrb_state_atexit(mrb_state *mrb, mrb_atexit_func f)
   stack_size = sizeof(mrb_atexit_func) * (mrb->atexit_stack_len + 1);
   if (mrb->atexit_stack_len == 0) {
     mrb->atexit_stack = (mrb_atexit_func*)mrb_malloc(mrb, stack_size);
-  } else {
+  }
+  else {
     mrb->atexit_stack = (mrb_atexit_func*)mrb_realloc(mrb, mrb->atexit_stack, stack_size);
   }
 #endif

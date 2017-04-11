@@ -342,4 +342,15 @@ Technically speaking, it does the following:
 </p>
 ? });
 
+<?
+$ctx->{directive}->(
+    name    => "http2-graceful-shutdown-timeout",
+    levels  => [ qw(global) ],
+    default => 'http2-graceful-shutdown-timeout: 0',
+    desc    => <<'EOT',
+A timeout in seconds. How long to wait before closing the connection on graceful shutdown. Setting the timeout to <code>0</code> deactivates the feature: H2O will wait for the peer to close the connections.
+EOT
+)->(sub {});
+?>
+
 ? })

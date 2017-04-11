@@ -149,6 +149,15 @@ sub normalize_name {
     "H2O_TOKEN_$n";
 }
 
+# The table below is used to generate h2o__tokens in lib/core/token_table.h
+#
+# Meaning of the fields:
+# - HTTP/2 static table index (non-zero if present)
+# - Proxy should drop
+# - Is init header special
+# - HTTP/2 should reject
+# - Copy for push request
+
 __DATA__
 1 0 0 0 0 :authority
 2 0 0 0 0 :method GET
@@ -203,7 +212,7 @@ __DATA__
 51 0 0 0 0 referer
 52 0 0 0 0 refresh
 53 0 0 0 0 retry-after
-54 1 0 0 0 server
+54 0 0 0 0 server
 55 0 0 0 0 set-cookie
 56 0 0 0 0 strict-transport-security
 57 1 1 1 0 transfer-encoding

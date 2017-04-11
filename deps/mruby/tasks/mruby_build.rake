@@ -83,8 +83,9 @@ module MRuby
         @bins = []
         @gems, @libmruby = MRuby::Gem::List.new, []
         @build_mrbtest_lib_only = false
-        @cxx_abi_enabled = false
+        @cxx_exception_enabled = false
         @cxx_exception_disabled = false
+        @cxx_abi_enabled = false
         @enable_bintest = false
         @enable_test = false
         @toolchains = []
@@ -110,7 +111,28 @@ module MRuby
     end
 
     def disable_cxx_exception
+      if @cxx_exception_enabled or @cxx_abi_enabled
+        raise "cxx_exception already enabled"
+      end
       @cxx_exception_disabled = true
+    end
+
+    def enable_cxx_exception
+      return if @cxx_exception_enabled
+      return if @cxx_abi_enabled
+      if @cxx_exception_disabled
+        raise "cxx_exception disabled"
+      end
+      @cxx_exception_enabled = true
+      compilers.each { |c|
+        c.defines += %w(MRB_ENABLE_CXX_EXCEPTION)
+        c.flags << c.cxx_exception_flag
+      }
+      linker.command = cxx.command if toolchains.find { |v| v == 'gcc' }
+    end
+
+    def cxx_exception_enabled?
+      @cxx_exception_enabled
     end
 
     def cxx_abi_enabled?
@@ -118,8 +140,14 @@ module MRuby
     end
 
     def enable_cxx_abi
-      return if @cxx_exception_disabled or @cxx_abi_enabled
-      compilers.each { |c| c.defines += %w(MRB_ENABLE_CXX_EXCEPTION) }
+      return if @cxx_abi_enabled
+      if @cxx_exception_enabled
+        raise "cxx_exception already enabled"
+      end
+      compilers.each { |c|
+        c.defines += %w(MRB_ENABLE_CXX_EXCEPTION MRB_ENABLE_CXX_ABI)
+        c.flags << c.cxx_compile_flag
+      }
       compilers.each { |c| c.flags << c.cxx_compile_flag }
       linker.command = cxx.command if toolchains.find { |v| v == 'gcc' }
       @cxx_abi_enabled = true
@@ -136,15 +164,13 @@ module MRuby
 #define __STDC_CONSTANT_MACROS
 #define __STDC_LIMIT_MACROS
 
-#ifndef MRB_ENABLE_CXX_EXCEPTION
+#ifndef MRB_ENABLE_CXX_ABI
 extern "C" {
 #endif
 #include "#{src}"
-#ifndef MRB_ENABLE_CXX_EXCEPTION
+#ifndef MRB_ENABLE_CXX_ABI
 }
 #endif
-
-#{src == "#{MRUBY_ROOT}/src/error.c"? 'mrb_int mrb_jmpbuf::jmpbuf_id = 0;' : ''}
 EOS
       end
 

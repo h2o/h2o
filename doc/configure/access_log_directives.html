@@ -92,6 +92,14 @@ If the supplied argument is a scalar, it is treated as the path of the log file,
 
 <p>
 If the supplied argument is a mapping, its <code>path</code> property is considered as the path of the log file or the pipe command, and the <code>format</code> property is treated as the format of the log file.
+Starting from version 2.2, <code>escape</code> property can be used to specify the escape sequence that should be used to emit unsafe octets.
+</p>
+
+<p>
+Two forms of escape sequences are supported.
+If <code>apache</code> is specified as the value of the <code>escape</code> property, unsafe octets are emitted in the form of <code>\xNN</code>, where N is a hexadecimal number in lower case.
+If <code>json</code> is specified, unsafe octets are emitted in the form of <code>\u00NN</code>.
+<code>apache</code> is the default escape method.
 </p>
 
 <div class="example">
@@ -99,6 +107,7 @@ If the supplied argument is a mapping, its <code>path</code> property is conside
 <pre><code>access-log:
     path: /path/to/access-log-file
     format: &quot;%h %l %u %t \&quot;%r\&quot; %s %b&quot;
+    escape: apache
 </code></pre>
 </div>
 
@@ -116,10 +125,12 @@ The list of format strings recognized by H2O is as follows.
 <tr><td><code>%h</code><td>remote address (e.g. <code>1.2.3.4</code>)
 <tr><td><code>%l</code><td>remote logname (always <code>-</code>)
 <tr><td><code>%m</code><td>request method (e.g. <code>GET</code>, <code>POST</code>)
-<tr><td><code>%p</code><td>local port
+<tr><td><code>%p</code><td>local port (<code>%{local}p</code> is a synonym that is supported since version 2.2)
+<tr><td><code>%{remote}p</code><td>remote port (since version 2.2)
 <tr><td><code>%q</code><td>query string (<code>?</code> is prepended if exists, otherwise an empty string)
 <tr><td><code>%r</code><td>request line (e.g. <code>GET / HTTP/1.1</code>)
-<tr><td><code>%s</code><td>status code (e.g. <code>200</code>)
+<tr><td><code>%s</code><td>status code sent to client (e.g. <code>200</code>)
+<tr><td><code>%&lt;s</code><td>status code received from upstream (or initially generated)
 <tr><td><code>%t</code><td>time when the request was received in format: <code>[02/Jan/2006:15:04:05 -0700]</code>
 <tr><td><code>%{<i>FORMAT</i>}t</code><td>time when the request was received using the specified format.  <code>FORMAT</code> should be an argument to <code>strftime</code>, or one of:
 <table>
@@ -135,7 +146,8 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>%V</code><td>requested server name (or the default server name if not specified by the client)
 <tr><td><code>%v</code><td>canonical server name
 <tr><td><code>%{<i>HEADERNAME</i>}i</code><td>value of the given request header (e.g. <code>%{user-agent}i</code>)
-<tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header (e.g. <code>%{set-cookie}o</code>)
+<tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header sent to client (e.g. <code>%{set-cookie}o</code>)
+<tr><td><code>%&lt;{<i>HEADERNAME</i>}o</code><td>value of the response header received from upstream (or initially generated)
 <tr><td><code>%{<i>NAME</i>}x</code><td>various extensions.  <code>NAME</code> must be one listed in the following tables.  A dash (<code>-</code>) is emitted if the directive is not applicable to the request being logged.
 <table>
 <caption>Access Timings</caption>
@@ -154,6 +166,7 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>connection-id</code><td>64-bit internal ID assigned to every client connection
 <tr><td><code>ssl.protocol-version</code><td>SSL protocol version obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_get_version.html"><code>SSL_get_version</code></a>
 <tr><td><code>ssl.session-reused</code><td><code>1</code> if the <a href="configure/base_directives.html#ssl-session-resumption">SSL session was reused</a>, or <code>0</code> if not<sup><a href="#note_1" id="#cite_1" title="A single SSL connection may transfer more than one HTTP request.">1</sup></a></sup>
+<tr><td><code>ssl.session-ticket</code><td>base64-encoded value of the session ticket used for resuming the session (since v2.2)
 <tr><td><code>ssl.cipher</code><td>name of the <a href="https://tools.ietf.org/html/rfc5246#appendix-A.5">cipher suite</a> being used, obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_CIPHER_get_name.html">SSL_CIPHER_get_name</a>
 <tr><td><code>ssl.cipher-bits</code><td>strength of the cipher suite in bits
 </table>

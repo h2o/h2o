@@ -53,7 +53,7 @@ static int chunked_test(h2o_handler_t *self, h2o_req_t *req)
     h2o_iovec_t body = h2o_strdup(&req->pool, "hello world\n", SIZE_MAX);
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain"));
     h2o_start_response(req, &generator);
     h2o_send(req, &body, 1, 1);
 
@@ -67,7 +67,7 @@ static int reproxy_test(h2o_handler_t *self, h2o_req_t *req)
 
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, H2O_STRLIT("http://www.ietf.org/"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_X_REPROXY_URL, NULL, H2O_STRLIT("http://www.ietf.org/"));
     h2o_send_inline(req, H2O_STRLIT("you should never see this!\n"));
 
     return 0;
@@ -80,7 +80,7 @@ static int post_test(h2o_handler_t *self, h2o_req_t *req)
         static h2o_generator_t generator = {NULL, NULL};
         req->res.status = 200;
         req->res.reason = "OK";
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain; charset=utf-8"));
         h2o_start_response(req, &generator);
         h2o_send(req, &req->entity, 1, 1);
         return 0;

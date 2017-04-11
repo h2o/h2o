@@ -113,8 +113,8 @@ static void send_response(struct st_h2o_status_collector_t *collector)
     resp[cur_resp++] = (h2o_iovec_t){H2O_STRLIT("\n}\n")};
 
     req->res.status = 200;
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/plain; charset=utf-8"));
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache, no-store"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain; charset=utf-8"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("no-cache, no-store"));
     h2o_start_response(req, &generator);
     h2o_send(req, resp, h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : nr_resp,
              H2O_SEND_STATE_FINAL);
@@ -208,7 +208,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         if (root == NULL)
             root = H2O_TO_STR(H2O_ROOT);
         fn = h2o_concat(&req->pool, h2o_iovec_init(root, strlen(root)), h2o_iovec_init(H2O_STRLIT("/share/h2o/status/index.html")));
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("no-cache"));
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("no-cache"));
         return h2o_file_send(req, 200, "OK", fn.base, h2o_iovec_init(H2O_STRLIT("text/html; charset=utf-8")), 0);
     } else if (h2o_memis(local_path.base, local_path.len, H2O_STRLIT("/json"))) {
         int ret;

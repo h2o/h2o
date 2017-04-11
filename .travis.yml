@@ -28,7 +28,7 @@ before_script:
   - misc/install-perl-module.pl Scope::Guard
   - misc/install-perl-module.pl Plack
   - misc/install-perl-module.pl FCGI
-  - misc/install-perl-module.pl FCGI::ProcManager
+  - misc/install-perl-module.pl http://search.cpan.org/CPAN/authors/id/A/AR/ARODLAND/FCGI-ProcManager-0.25.tar.gz
   - misc/install-perl-module.pl Starlet
   - misc/install-perl-module.pl JSON
   - misc/install-perl-module.pl Path::Tiny

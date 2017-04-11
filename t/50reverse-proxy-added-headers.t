@@ -20,12 +20,15 @@ my $guard = spawn_server(
     },
 );
 
-sub test_xff {
+sub do_test {
     my $emit_xff = shift;
+    my $emit_via = shift;
     my $emit_xff_str = $emit_xff ? "ON" : "OFF";
-    print $emit_xff;
+    my $emit_via_str = $emit_via ? "ON" : "OFF";
+
     my $server = spawn_h2o(<< "EOT");
 proxy.emit-x-forwarded-headers: $emit_xff_str
+proxy.emit-via-header: $emit_via_str
 hosts:
   default:
     paths:
@@ -43,18 +46,28 @@ EOT
                 unlike $resp, qr/^x-forwarded-for: ?127\.0\.0\.1$/mi, "x-forwarded-for not present";
                 unlike $resp, qr/^x-forwarded-proto: ?$proto$/mi, "x-forwarded-proto not present";
             }
-            like $resp, qr/^via: ?[^ ]+ 127\.0\.0\.1:$port$/mi, "via";
+            if ($emit_via) {
+                like $resp, qr/^via: ?[^ ]+ 127\.0\.0\.1:$port$/mi, "via";
+            } else {
+                unlike $resp, qr/^via: ?[^ ]+ 127\.0\.0\.1:$port$/mi, "via";
+            }
             $resp = `$curl --silent --header 'X-Forwarded-For: 127.0.0.2' --header 'Via: 2 example.com' $proto://127.0.0.1:$port/echo-headers`;
             if ($emit_xff) {
                 like $resp, qr/^x-forwarded-for: ?127\.0\.0\.2, 127\.0\.0\.1$/mi, "x-forwarded-for (append)";
             } else {
                 like $resp, qr/^x-forwarded-for: ?127\.0\.0\.2$/mi, "x-forwarded-for only contains the original header";
             }
-            like $resp, qr/^via: ?2 example.com, [^ ]+ 127\.0\.0\.1:$port$/mi, "via (append)";
+            if ($emit_via) {
+                like $resp, qr/^via: ?2 example.com, [^ ]+ 127\.0\.0\.1:$port$/mi, "via (append)";
+            } else {
+                like $resp, qr/^via: 2 example.com$/mi, "via left as-is";
+            }
         });
 }
 
-test_xff(1);
-test_xff(0);
+do_test(0, 0);
+do_test(0, 1);
+do_test(1, 0);
+do_test(1, 1);
 
 done_testing();

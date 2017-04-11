@@ -159,9 +159,11 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
         /* in child process, map the file descriptors and execute; return the errnum through pipe if exec failed */
         if (mapped_fds != NULL) {
             for (; *mapped_fds != -1; mapped_fds += 2) {
-                if (mapped_fds[1] != -1)
-                    dup2(mapped_fds[0], mapped_fds[1]);
-                close(mapped_fds[0]);
+                if (mapped_fds[0] != mapped_fds[1]) {
+                    if (mapped_fds[1] != -1)
+                        dup2(mapped_fds[0], mapped_fds[1]);
+                    close(mapped_fds[0]);
+                }
             }
         }
         char **env = build_spawn_env();

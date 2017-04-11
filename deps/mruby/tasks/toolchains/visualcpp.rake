@@ -8,6 +8,7 @@ MRuby::Toolchain.new(:visualcpp) do |conf, _params|
     cc.option_define = '/D%s'
     cc.compile_options = "%{flags} /Fo%{outfile} %{infile}"
     cc.cxx_compile_flag = '/TP'
+    cc.cxx_exception_flag = '/EHs'
   end
 
   conf.cxx do |cxx|
@@ -18,6 +19,7 @@ MRuby::Toolchain.new(:visualcpp) do |conf, _params|
     cxx.option_define = '/D%s'
     cxx.compile_options = "%{flags} /Fo%{outfile} %{infile}"
     cxx.cxx_compile_flag = '/TP'
+    cxx.cxx_exception_flag = '/EHs'
   end
 
   conf.linker do |linker|

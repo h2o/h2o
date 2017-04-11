@@ -306,9 +306,9 @@ static void test_hpack(void)
         memset(&res, 0, sizeof(res));
         res.status = 302;
         res.reason = "Found";
-        h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
-        h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
-        h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("private"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, NULL, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, NULL, H2O_STRLIT("https://www.example.com"));
         check_flatten(&header_table, &res, H2O_STRLIT("\x08\x03\x33\x30\x32\x58\x85\xae\xc3\x77\x1a\x4b\x61\x96\xd0\x7a\xbe\x94\x10"
                                                       "\x54\xd4\x44\xa8\x20\x05\x95\x04\x0b\x81\x66\xe0\x82\xa6\x2d\x1b\xff\x6e\x91"
                                                       "\x9d\x29\xad\x17\x18\x63\xc7\x8f\x0b\x97\xc8\xe9\xae\x82\xae\x43\xd3"));
@@ -316,9 +316,9 @@ static void test_hpack(void)
         memset(&res, 0, sizeof(res));
         res.status = 307;
         res.reason = "Temporary Redirect";
-        h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, H2O_STRLIT("private"));
-        h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
-        h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, H2O_STRLIT("https://www.example.com"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("private"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, NULL, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
+        h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, NULL, H2O_STRLIT("https://www.example.com"));
         check_flatten(&header_table, &res, H2O_STRLIT("\x08\x03\x33\x30\x37\xc0\xbf\xbe"));
 #if 0
         h2o_iovec_init(H2O_STRLIT("\x48\x03\x33\x30\x37\xc1\xc0\xbf")),
@@ -386,10 +386,10 @@ static void test_hpack_push(void)
     req.input.scheme = &H2O_URL_SCHEME_HTTPS;
     req.input.authority = authority;
     req.input.path = h2o_iovec_init(H2O_STRLIT("/"));
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_USER_AGENT, user_agent.base, user_agent.len);
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT, accept_root.base, accept_root.len);
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_LANGUAGE, accept_language.base, accept_language.len);
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, accept_encoding.base, accept_encoding.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_USER_AGENT, NULL, user_agent.base, user_agent.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT, NULL, accept_root.base, accept_root.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_LANGUAGE, NULL, accept_language.base, accept_language.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, NULL, accept_encoding.base, accept_encoding.len);
 
     /* serialize, deserialize, and compare */
     h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
@@ -402,11 +402,11 @@ static void test_hpack_push(void)
     /* setup second request */
     req.input.path = h2o_iovec_init(H2O_STRLIT("/banner.jpg"));
     req.headers = (h2o_headers_t){NULL};
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_USER_AGENT, user_agent.base, user_agent.len);
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT, accept_images.base, accept_images.len);
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_LANGUAGE, accept_language.base, accept_language.len);
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, accept_encoding.base, accept_encoding.len);
-    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_REFERER, referer.base, referer.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_USER_AGENT, NULL, user_agent.base, user_agent.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT, NULL, accept_images.base, accept_images.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_LANGUAGE, NULL, accept_language.base, accept_language.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, NULL, accept_encoding.base, accept_encoding.len);
+    h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_REFERER, NULL, referer.base, referer.len);
 
     /* serialize, deserialize, and compare */
     h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
@@ -484,7 +484,7 @@ void test_token_wo_hpack_id(void)
 
     res.status = 200;
     res.reason = "OK";
-    h2o_add_header(&pool, &res.headers, H2O_TOKEN_TE, H2O_STRLIT("test"));
+    h2o_add_header(&pool, &res.headers, H2O_TOKEN_TE, NULL, H2O_STRLIT("test"));
 
     h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, &res, NULL, NULL, SIZE_MAX);
     ok(h2o_memis(buf->bytes + 9, buf->size - 9, H2O_STRLIT("\x88"     /* :status:200 */

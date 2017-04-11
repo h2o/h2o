@@ -477,6 +477,26 @@ Technically speaking, it does the following:
 </dd>
 </dl>
 
+<div id="http2-graceful-shutdown-timeout" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-graceful-shutdown-timeout"><code>"http2-graceful-shutdown-timeout"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A timeout in seconds. How long to wait before closing the connection on graceful shutdown. Setting the timeout to <code>0</code> deactivates the feature: H2O will wait for the peer to close the connections.
+
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-graceful-shutdown-timeout: 0</pre></code>
+</dl>
+
+
 
 
 

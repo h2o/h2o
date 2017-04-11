@@ -280,6 +280,10 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
         h2o_vector_reserve(pool, headers, len);
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token;
+            char orig_case[src[i].name_len];
+
+            /* preserve the original case */
+            memcpy(orig_case, src[i].name, src[i].name_len);
             /* convert to lower-case in-place */
             h2o_strtolower((char *)src[i].name, src[i].name_len);
             if ((name_token = h2o_lookup_token(src[i].name, src[i].name_len)) != NULL) {
@@ -302,12 +306,12 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
                         assert(!"logic flaw");
                     }
                 } else {
-                    h2o_add_header(pool, headers, name_token, src[i].value, src[i].value_len);
+                    h2o_add_header(pool, headers, name_token, orig_case, src[i].value, src[i].value_len);
                     if (name_token == H2O_TOKEN_CONNECTION)
                         *connection = headers->entries[headers->size - 1].value;
                 }
             } else {
-                h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, src[i].value, src[i].value_len);
+                h2o_add_header_by_str(pool, headers, src[i].name, src[i].name_len, 0, orig_case, src[i].value, src[i].value_len);
             }
         }
     }
@@ -410,7 +414,9 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn)
                                                 "Bad Request")};
 
     assert(conn->req.version == 0 && "request has not been parsed successfully");
+    assert(conn->req.http1_is_persistent == 0);
     h2o_socket_write(conn->sock, (h2o_iovec_t *)&resp, 1, send_bad_request_on_complete);
+    h2o_socket_read_stop(conn->sock);
 }
 
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
@@ -632,11 +638,11 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
                  * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
                  */
                 if (is_msie(req)) {
-                    static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, {H2O_STRLIT("private")}};
+                    static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, NULL, {H2O_STRLIT("private")}};
                     header = &cache_control_private;
                 }
             }
-            memcpy(dst, header->name->base, header->name->len);
+            memcpy(dst, header->orig_name ? header->orig_name : header->name->base, header->name->len);
             dst += header->name->len;
             *dst++ = ':';
             *dst++ = ' ';

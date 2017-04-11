@@ -91,9 +91,9 @@ void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_heade
 
 AddHeader:
     if (h2o_iovec_is_token(cmd->name)) {
-        h2o_add_header(pool, headers, (void *)cmd->name, cmd->value.base, cmd->value.len);
+        h2o_add_header(pool, headers, (void *)cmd->name, NULL, cmd->value.base, cmd->value.len);
     } else {
-        h2o_add_header_by_str(pool, headers, cmd->name->base, cmd->name->len, 0, cmd->value.base, cmd->value.len);
+        h2o_add_header_by_str(pool, headers, cmd->name->base, cmd->name->len, 0, NULL, cmd->value.base, cmd->value.len);
     }
     return;
 

@@ -61,7 +61,7 @@ static int on_config_mruby_handler(h2o_configurator_command_t *cmd, h2o_configur
     /* set source */
     self->vars->source = h2o_strdup(NULL, node->data.scalar, SIZE_MAX);
     self->vars->path = node->filename;
-    self->vars->lineno = (int)node->line;
+    self->vars->lineno = (int)node->line + 1;
 
     /* check if there is any error in source */
     char errbuf[1024];

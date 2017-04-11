@@ -93,6 +93,16 @@ builder {
             ]
         ];
     };
+    mount "/echo-server-header" => sub {
+        my $env = shift;
+        my @resph = [ 'content-type' => 'text/plain' ];
+        if ($env->{HTTP_SERVER}) {
+            @resph = [ 'content-type' => 'text/plain', 'server' => $env->{HTTP_SERVER} ];
+        }
+        return [
+            200, @resph, [ "Ok" ]
+        ];
+    };
     mount "/streaming-body" => sub {
         my $env = shift;
         return sub {
@@ -118,6 +128,17 @@ builder {
                 'hello world',
             ],
         ];
+    };
+    mount "/infinite-stream" => sub {
+        my $env = shift;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
+            while ($writer->write("lorem ipsum dolor sit amet")) {
+                sleep 0.1;
+            }
+            $writer->close;
+        };
     };
     mount "/infinite-redirect" => sub {
         my $env = shift;

@@ -341,6 +341,12 @@ assert('String#each_line', '15.2.10.5.15') do
   end
 
   assert_equal list, n_list
+
+  n_list.clear
+  a.each_line("li") do |line|
+    n_list << line
+  end
+  assert_equal ["first li", "ne\nsecond li", "ne\nthird li", "ne"], n_list
 end
 
 assert('String#empty?', '15.2.10.5.16') do
@@ -365,6 +371,13 @@ assert('String#gsub', '15.2.10.5.18') do
   assert_equal('$$a$$',  '##a##'.gsub('##'){|w| '$$' }, 'mruby/mruby#847 another case with block')
   assert_equal('A',      'a'.gsub('a', 'A'))
   assert_equal('A',      'a'.gsub('a'){|w| w.capitalize })
+  assert_equal("<a><><>", 'a'.gsub('a', '<\0><\1><\2>'))
+  assert_equal(".h.e.l.l.o.", "hello".gsub("", "."))
+  a = []
+  assert_equal(".h.e.l.l.o.", "hello".gsub("") { |i| a << i; "." })
+  assert_equal(["", "", "", "", "", ""], a)
+  assert_raise(ArgumentError) { "".gsub }
+  assert_raise(ArgumentError) { "".gsub("", "", "") }
 end
 
 assert('String#gsub with backslash') do
@@ -402,6 +415,8 @@ assert('String#index', '15.2.10.5.22') do
   assert_equal 0, 'abc'.index('a')
   assert_nil 'abc'.index('d')
   assert_equal 3, 'abcabc'.index('a', 1)
+  assert_equal 5, "hello".index("", 5)
+  assert_equal nil, "hello".index("", 6)
 end
 
 assert('String#initialize', '15.2.10.5.23') do
@@ -570,6 +585,16 @@ assert('String#sub', '15.2.10.5.36') do
   assert_equal 'aBcabc', 'abcabc'.sub('b', 'B')
   assert_equal 'aBcabc', 'abcabc'.sub('b') { |w| w.capitalize }
   assert_equal 'aa$', 'aa#'.sub('#', '$')
+  assert_equal '.abc', "abc".sub("", ".")
+
+  str = "abc"
+  miss = str.sub("X", "Z")
+  assert_equal str, miss
+  assert_not_equal str.object_id, miss.object_id
+
+  a = []
+  assert_equal '.abc', "abc".sub("") { |i| a << i; "." }
+  assert_equal [""], a
 end
 
 assert('String#sub with backslash') do

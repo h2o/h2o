@@ -27,10 +27,10 @@ PROJECT(h2o)
 SET(VERSION_MAJOR "2")
 SET(VERSION_MINOR "2")
 SET(VERSION_PATCH "0")
-SET(VERSION_PRERELEASE "-DEV")
+SET(VERSION_PRERELEASE "")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
-SET(LIBRARY_VERSION_MINOR "12")
+SET(LIBRARY_VERSION_MINOR "13")
 SET(LIBRARY_VERSION_PATCH "0")
 SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
@@ -69,6 +69,8 @@ ELSE ()
     SET(WITH_MRUBY_DEFAULT "OFF")
 ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
+
+OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
 
 IF (WITH_BUNDLED_SSL)
     SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/include")
@@ -186,6 +188,29 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/enc/streams.cc
     deps/brotli/enc/utf8_util.cc
     lib/handler/compress/brotli.cc)
+
+SET(PICOTLS_INCLUDE_DIRECTORIES
+    deps/picotls/deps/cifra/src/ext
+    deps/picotls/deps/cifra/src
+    deps/picotls/deps/micro-ecc
+    deps/picotls/include)
+
+SET(PICOTLS_SOURCE_FILES
+    deps/picotls/deps/micro-ecc/uECC.c
+    deps/picotls/deps/cifra/src/aes.c
+    deps/picotls/deps/cifra/src/blockwise.c
+    deps/picotls/deps/cifra/src/chash.c
+    deps/picotls/deps/cifra/src/curve25519.c
+    deps/picotls/deps/cifra/src/drbg.c
+    deps/picotls/deps/cifra/src/hmac.c
+    deps/picotls/deps/cifra/src/gcm.c
+    deps/picotls/deps/cifra/src/gf128.c
+    deps/picotls/deps/cifra/src/modes.c
+    deps/picotls/deps/cifra/src/sha256.c
+    deps/picotls/lib/picotls.c
+    deps/picotls/lib/cifra.c
+    deps/picotls/lib/uecc.c
+    deps/picotls/lib/openssl.c)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -429,6 +454,11 @@ IF (WITH_MRUBY)
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
+IF (WITH_PICOTLS)
+    LIST(APPEND STANDALONE_SOURCE_FILES ${PICOTLS_SOURCE_FILES})
+    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_PICOTLS=1")
+    INCLUDE_DIRECTORIES(${PICOTLS_INCLUDE_DIRECTORIES})
+ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
 IF (WITH_BUNDLED_SSL)
@@ -446,7 +476,7 @@ IF (WITH_MRUBY)
     # note: the paths need to be determined before libmruby.flags.mak is generated
     TARGET_LINK_LIBRARIES(h2o
         "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
-        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onig-5.15.0/.libs/libonig.a"
+        "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.1.1/.libs/libonigmo.a"
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
@@ -532,8 +562,11 @@ ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} pr
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t h2get)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
-ENDIF (LIBUV_FOUND)
+    ADD_DEPENDENCIES(check t-00unit-libuv.t)
+    IF (OPENSSL_FOUND)
+        ADD_DEPENDENCIES(check lib-examples)
+    ENDIF ()
+ENDIF ()
 
 ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/90root-*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})

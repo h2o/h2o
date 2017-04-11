@@ -28,11 +28,11 @@ class Hash
     if length == 1
       o = object[0]
       if o.respond_to?(:to_hash)
-        h = Hash.new
+        h = self.new
         object[0].to_hash.each { |k, v| h[k] = v }
         return h
       elsif o.respond_to?(:to_a)
-        h = Hash.new
+        h = self.new
         o.to_a.each do |i|
           raise ArgumentError, "wrong element type #{i.class} (expected array)" unless i.respond_to?(:to_a)
           k, v = nil
@@ -53,7 +53,7 @@ class Hash
     unless length % 2 == 0
       raise ArgumentError, 'odd number of arguments for Hash'
     end
-    h = Hash.new
+    h = self.new
     0.step(length - 2, 2) do |i|
       h[object[i]] = object[i + 1]
     end
@@ -211,7 +211,7 @@ class Hash
   #
 
   def invert
-    h = Hash.new
+    h = self.class.new
     self.each {|k, v| h[v] = k }
     h
   end

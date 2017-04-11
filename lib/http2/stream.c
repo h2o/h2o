@@ -233,7 +233,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
     /* reset casper cookie in case cache-digests exist */
     if (stream->cache_digests != NULL && stream->req.hostconf->http2.casper.capacity_bits != 0) {
-        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE,
+        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, NULL,
                        H2O_STRLIT("h2o_casper=; Path=/; Expires=Sat, 01 Jan 2000 00:00:00 GMT"));
     }
 
@@ -261,7 +261,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
                 goto SkipCookie;
         }
         h2o_iovec_t cookie = h2o_http2_casper_get_cookie(conn->casper);
-        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, NULL, cookie.base, cookie.len);
     SkipCookie:;
     }
 
@@ -283,7 +283,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
     /* send HEADERS, as well as start sending body */
     if (h2o_http2_stream_is_push(stream->stream_id))
-        h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, H2O_STRLIT("pushed"));
+        h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
+                              H2O_STRLIT("pushed"));
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                conn->peer_settings.max_frame_size, &stream->req.res, &ts, &conn->super.ctx->globalconf->server_name,
                                stream->req.res.content_length);
@@ -293,7 +294,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     return 0;
 
 CancelPush:
-    h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, H2O_STRLIT("cancelled"));
+    h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
+                          H2O_STRLIT("cancelled"));
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
     h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
     if (stream->push.promise_sent) {

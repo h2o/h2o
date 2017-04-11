@@ -30,3 +30,14 @@ assert("String#% with invalid chr") do
     end
   end
 end
+
+assert("String#% invalid format") do
+  assert_raise ArgumentError do
+    "%?" % ""
+  end
+end
+
+assert("String#% invalid format shared substring") do
+  fmt = ("x"*30+"%!")[0...-1]
+  assert_equal fmt, sprintf(fmt, "")
+end

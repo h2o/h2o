@@ -170,6 +170,20 @@ The <code style="font-weight: bold;">ssl</code> attribute must be defined as a m
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
 Default is <code>TLSv1</code>
 </dd>
+<dt id="min-version">min-verison:</dt>
+<dd>
+synonym of <code>minimum-version</code> (introduced in version 2.2)
+</dd>
+<dt id="maximum-version">maximum-version:</dt>
+<dd>
+maximum protocol version.
+Introduced in version 2.2.
+Default is the maximum protocol version supported by the server.
+</dd>
+<dt id="maximum-version">max-version:</dt>
+<dd>
+synonym of <code>maximum-version</code>.
+</dd>
 <dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
 <dt id="cipher-preferences">cipher-preference:</dt>
@@ -281,6 +295,17 @@ EOT
 )->(sub {
 ?>
 By setting the value to <code>OFF</code> and by using the <code>%{error}x</code> specifier of the <a href="configure/access_log_directives.html">access-log</a> directive, it is possible to log request-level errors only to the access log.
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "handshake-timeout",
+    levels  => [ qw(global) ],
+    default => "handshake-timeout: 10",
+    desc    => q{Maximum time (in seconds) that can be spent by a connection before it becomes ready to accept an HTTP request.},
+)->(sub {
+?>
+Times spent for receiving <a href="configure/base_directives.html#listen-proxy-protocol">the PROXY protocol</a> and TLS handshake are counted.
 ? })
 
 <?
