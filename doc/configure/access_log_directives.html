@@ -146,6 +146,7 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>%u</code><td>remote user if the request was authenticated (always <code>-</code>)
 <tr><td><code>%V</code><td>requested server name (or the default server name if not specified by the client)
 <tr><td><code>%v</code><td>canonical server name
+<tr><td><code>%{<i>VARNAME</i>}e</code><td>request environment variable (since version 2.3; see <a href="configure/mruby.html#logging-arbitrary-variable">Logging Arbitrary Variable</a>)
 <tr><td><code>%{<i>HEADERNAME</i>}i</code><td>value of the given request header (e.g. <code>%{user-agent}i</code>)
 <tr><td><code>%{<i>HEADERNAME</i>}o</code><td>value of the given response header sent to client (e.g. <code>%{set-cookie}o</code>)
 <tr><td><code>%&lt;{<i>HEADERNAME</i>}o</code><td>value of the response header received from upstream (or initially generated)

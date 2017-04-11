@@ -39,6 +39,7 @@ extern "C" {
 #include "h2o/filecache.h"
 #include "h2o/hostinfo.h"
 #include "h2o/memcached.h"
+#include "h2o/redis.h"
 #include "h2o/linklist.h"
 #include "h2o/http1client.h"
 #include "h2o/memory.h"
@@ -1161,9 +1162,14 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
- * setups accept context for async SSL resumption
+ * setups accept context for memcached SSL resumption
  */
-void h2o_accept_setup_async_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
+void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
+/**
+ * setups accept context for redis SSL resumption
+ */
+void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsigned expiration, const char *prefix);
+
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
@@ -1243,6 +1249,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  * @return pointer to the ostream filter
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+/**
+ * prepares the request for processing by looking at the method, URI, headers
+ */
+h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
 /**
  * binds configurations to the request
  */

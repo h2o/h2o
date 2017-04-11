@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.2.0 TBD
+2.2.0 2017-04-05 02:18:00+0000
 	- [core] add `crash-handler.wait-pipe-close` parameter #1092 (Frederik Deweerdt)
 	- [core] introduce an option to bypass the `server` header sent from upstream #1226 (Frederik Deweerdt)
 	- [core] apply global- and host-level configuration to requests not applicable to any of the path-level configurations #1231 (Kazuho Oku)

@@ -150,7 +150,7 @@ typedef struct st_h2o_socket_latency_optimization_conditions_t {
 } h2o_socket_latency_optimization_conditions_t;
 
 typedef void (*h2o_socket_ssl_resumption_get_async_cb)(h2o_socket_t *sock, h2o_iovec_t session_id);
-typedef void (*h2o_socket_ssl_resumption_new_cb)(h2o_iovec_t session_id, h2o_iovec_t session_data);
+typedef void (*h2o_socket_ssl_resumption_new_cb)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
 typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;

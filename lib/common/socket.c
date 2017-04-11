@@ -138,7 +138,7 @@ const char *h2o_socket_error_ssl_cert_name_mismatch = "certificate name mismatch
 const char *h2o_socket_error_ssl_decode = "SSL decode error";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
-static void (*resumption_new)(h2o_iovec_t session_id, h2o_iovec_t session_data);
+static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -931,6 +931,8 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
 
 static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 {
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
+
     h2o_iovec_t data;
     const unsigned char *id;
     unsigned id_len;
@@ -943,7 +945,7 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     i2d_SSL_SESSION(session, &p);
 
     id = SSL_SESSION_get_id(session, &id_len);
-    resumption_new(h2o_iovec_init(id, id_len), data);
+    resumption_new(sock, h2o_iovec_init(id, id_len), data);
     return 0;
 }
 

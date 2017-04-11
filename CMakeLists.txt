@@ -25,12 +25,12 @@ CMAKE_POLICY(SET CMP0003 NEW)
 PROJECT(h2o)
 
 SET(VERSION_MAJOR "2")
-SET(VERSION_MINOR "2")
+SET(VERSION_MINOR "3")
 SET(VERSION_PATCH "0")
 SET(VERSION_PRERELEASE "-DEV")
 SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_VERSION_MAJOR "0")
-SET(LIBRARY_VERSION_MINOR "13")
+SET(LIBRARY_VERSION_MINOR "14")
 SET(LIBRARY_VERSION_PATCH "0")
 SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}${VERSION_PRERELEASE}")
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
@@ -94,6 +94,7 @@ INCLUDE_DIRECTORIES(
     deps/cloexec
     deps/brotli/enc
     deps/golombset
+    deps/hiredis
     deps/libgkc
     deps/libyrmcds
     deps/klib
@@ -214,6 +215,11 @@ SET(PICOTLS_SOURCE_FILES
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
+    deps/hiredis/async.c
+    deps/hiredis/hiredis.c
+    deps/hiredis/net.c
+    deps/hiredis/read.c
+    deps/hiredis/sds.c
     deps/libgkc/gkc.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
@@ -233,6 +239,7 @@ SET(LIB_SOURCE_FILES
     lib/common/memcached.c
     lib/common/memory.c
     lib/common/multithread.c
+    lib/common/redis.c
     lib/common/serverutil.c
     lib/common/socket.c
     lib/common/socketpool.c

@@ -235,9 +235,10 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     }
 #define MAP_EXT_TO_PROTO(name, cb)                                                                                                 \
     if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
+        h2o_conn_callbacks_t dummy_;                                                                                               \
         NEW_ELEMENT(ELEMENT_TYPE_PROTOCOL_SPECIFIC);                                                                               \
         LAST_ELEMENT()->data.protocol_specific_callback_index =                                                                    \
-            &((h2o_conn_callbacks_t *)NULL)->log_.cb - ((h2o_conn_callbacks_t *)NULL)->log_.callbacks;                             \
+            &dummy_.log_.cb - dummy_.log_.callbacks;                                                                               \
         goto MAP_EXT_Found;                                                                                                        \
     }
                     MAP_EXT_TO_TYPE("connection-id", ELEMENT_TYPE_CONNECTION_ID);
@@ -535,6 +536,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += sprintf(pos, "%" PRIu64, (uint64_t)req->bytes_sent);
             break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
+            if (req->version == 0)
+                goto EmitNull;
             RESERVE(sizeof("HTTP/1.1"));
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
@@ -543,6 +546,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos = append_addr(pos, req->conn->callbacks->get_peername, req->conn, nullexpr);
             break;
         case ELEMENT_TYPE_METHOD: /* %m */
+            if (req->input.method.len == 0)
+                goto EmitNull;
             RESERVE(req->input.method.len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             break;
@@ -569,6 +574,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
+            if (req->version == 0)
+                goto EmitNull;
             RESERVE((req->input.method.len + req->input.path.len) * unsafe_factor + sizeof("  HTTP/1.1"));
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             *pos++ = ' ';
@@ -577,6 +584,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
+            if (req->res.status == 0)
+                goto EmitNull;
             RESERVE(sizeof(H2O_INT32_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRId32, (int32_t)(element->original_response ? req->res.original.status : req->res.status));
             break;
@@ -636,6 +645,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += sprintf(pos, "%06u", (unsigned)req->processed_at.at.tv_usec);
             break;
         case ELEMENT_TYPE_URL_PATH: /* %U */ {
+            if (req->input.path.len == 0)
+                goto EmitNull;
             size_t path_len = req->input.query_at == SIZE_MAX ? req->input.path.len : req->input.query_at;
             RESERVE(path_len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.path.base, path_len);

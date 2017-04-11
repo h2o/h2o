@@ -239,6 +239,36 @@ Since the API provides an asynchronous HTTP client, it is possible to effectivel
 When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
 </p>
 
+<h3 id="logging-arbitrary-variable">Logging Arbitrary Variable</h3>
+
+<p>
+In version 2.3, it is possible from mruby to set and log an arbitrary-named variable that is associated to a HTTP request.
+A HTTP response header that starts with <code>x-fallthru-set-</code> is handled specially by the H2O server. Instead of sending the header downstream, the server accepts the value as a request environment variable, taking the suffix of the header name as the name of the variable.
+</p>
+<p>
+This example shows how to read request data, parse json and then log data from mruby.
+</p>
+
+<div class="example">
+<div class="caption">Example. Logging the content of a POST request via request environment variable</div>
+<pre><code>paths:
+  &quot;/&quot;:
+    mruby.handler: |
+      Proc.new do |env|
+        input = env[&quot;rack.input&quot;] ? env[&quot;rack.input&quot;].read : &#39;{&quot;default&quot;: &quot;true&quot;}&#39;
+        parsed_json = JSON.parse(input)
+        parsed_json[&quot;time&quot;] = Time.now.to_i
+        logdata = parsed_json.to_s
+        [204, {&quot;x-fallthru-set-POSTDATA&quot; =&gt; logdata}, []]
+      end
+    access-log:
+      path: /path/to/access-log.json
+      escape: json
+      format: &#39;{&quot;POST&quot;: %{POSTDATA}e}&#39;
+</code></pre>
+</div>
+
+
 
 
 
