@@ -190,8 +190,10 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
             conn->num_streams._request_body_in_progress++;
             stream->_conn_stream_in_progress = 1;
         } else {
-            if (stream->state != H2O_HTTP2_STREAM_STATE_SEND_HEADERS)
+            if (stream->state <= H2O_HTTP2_STREAM_STATE_SEND_HEADERS) {
+                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
                 h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+            }
         }
 
         /* handle it */
@@ -581,7 +583,6 @@ static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
                 stream->req._write_req_chunk_done = NULL;
                 stream->req._write_req_chunk.cb = NULL;
             }
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
         }
     }
 
