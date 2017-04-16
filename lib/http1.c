@@ -351,6 +351,8 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
             host = h2o_strdup(&conn->req.pool, host.base, host.len);
         if (upgrade.base != NULL)
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
+        if (expect->base != NULL)
+            conn->req.expect = h2o_strdup(&conn->req.pool, expect->base, expect->len);
     }
 
     /* move host header to req->authority */

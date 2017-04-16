@@ -1049,6 +1049,10 @@ struct st_h2o_req_t {
      * the Upgrade request header (or { NULL, 0 } if not available)
      */
     h2o_iovec_t upgrade;
+    /**
+     * the Expect request header (or { NULL, 0 } if not available)
+     */
+    h2o_iovec_t expect;
 
     /**
      * preferred chunk size by the ostream
