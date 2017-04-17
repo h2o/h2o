@@ -241,18 +241,25 @@ const char *decode_ssl_input(h2o_socket_t *sock)
             const char *src = sock->ssl->input.encrypted->bytes, *src_end = src + sock->ssl->input.encrypted->size;
             ptls_buffer_t rbuf;
             int ret;
-            h2o_buffer_reserve(&sock->input, sock->ssl->input.encrypted->size);
+            if (h2o_buffer_reserve(&sock->input, sock->ssl->input.encrypted->size).base == NULL)
+                return h2o_socket_error_out_of_memory;
             ptls_buffer_init(&rbuf, sock->input->bytes + sock->input->size, sock->ssl->input.encrypted->size);
             do {
                 size_t consumed = src_end - src;
-                if ((ret = ptls_receive(sock->ssl->ptls, &rbuf, src, &consumed)) != 0)
-                    break;
+                if ((ret = ptls_receive(sock->ssl->ptls, &rbuf, src, &consumed)) != 0) {
+                    ptls_buffer_dispose(&rbuf);
+                    return h2o_socket_error_ssl_decode;
+                }
                 src += consumed;
             } while (src != src_end);
             h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size - (src_end - src));
-            assert(!rbuf.is_allocated);
+            if (rbuf.is_allocated) {
+                if (h2o_buffer_reserve(&sock->input, rbuf.off).base == NULL)
+                    return h2o_socket_error_out_of_memory;
+                memcpy(sock->input->bytes + sock->input->size, rbuf.base, rbuf.off);
+            }
             sock->input->size += rbuf.off;
-            /* FIXME handle error by checking ret */
+            ptls_buffer_dispose(&rbuf);
         }
         return NULL;
     }
