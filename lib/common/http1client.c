@@ -436,10 +436,10 @@ int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t req_chunk, int is_en
 
     client->_body_buf_is_done = is_end;
 
-    if (req_chunk.len != 0) {
-        if (client->_body_buf == NULL)
-            h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
+    if (client->_body_buf == NULL)
+        h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
 
+    if (req_chunk.len != 0) {
         if (h2o_buffer_append(&client->_body_buf, req_chunk.base, req_chunk.len) == 0)
             return -1;
     }
