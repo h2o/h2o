@@ -258,9 +258,11 @@ const char *decode_ssl_input(h2o_socket_t *sock)
                 if ((reserved = h2o_buffer_reserve(&sock->input, rbuf.off)).base == NULL)
                     return h2o_socket_error_out_of_memory;
                 memcpy(reserved.base, rbuf.base, rbuf.off);
+                sock->input->size += rbuf.off;
+                ptls_buffer_dispose(&rbuf);
+            } else {
+                sock->input->size += rbuf.off;
             }
-            sock->input->size += rbuf.off;
-            ptls_buffer_dispose(&rbuf);
         }
         return NULL;
     }
