@@ -247,10 +247,8 @@ const char *decode_ssl_input(h2o_socket_t *sock)
             ptls_buffer_init(&rbuf, reserved.base, reserved.len);
             do {
                 size_t consumed = src_end - src;
-                if ((ret = ptls_receive(sock->ssl->ptls, &rbuf, src, &consumed)) != 0) {
-                    ptls_buffer_dispose(&rbuf);
-                    return h2o_socket_error_ssl_decode;
-                }
+                if ((ret = ptls_receive(sock->ssl->ptls, &rbuf, src, &consumed)) != 0)
+                    break;
                 src += consumed;
             } while (src != src_end);
             h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size - (src_end - src));
@@ -263,6 +261,8 @@ const char *decode_ssl_input(h2o_socket_t *sock)
             } else {
                 sock->input->size += rbuf.off;
             }
+            if (!(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS))
+                return h2o_socket_error_ssl_decode;
         }
         return NULL;
     }
