@@ -51,7 +51,7 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 {
     for (++cursor; cursor < headers->size; ++cursor) {
         h2o_header_t *t = headers->entries + cursor;
-        if (h2o_memis(t->name->base, t->name->len, name, name_len)) {
+        if (h2o_lcstris(name, name_len, t->name->base, t->name->len)) {
             return cursor;
         }
     }
