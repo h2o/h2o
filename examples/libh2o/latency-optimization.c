@@ -42,6 +42,13 @@ size_t write_block_size = 65536;
 /* globals */
 static h2o_loop_t *loop;
 static h2o_socket_t *sock;
+h2o_hostinfo_getaddr_req_t *_getaddr_req;//for host port
+h2o_multithread_queue_t *resolve_secket_queue;
+h2o_multithread_receiver_cb *resolve_socket_cb =&resolve_socket_cb, resolve_socket_cb2=&resolve_socket_cb2;
+h2o_multithread_receiver_t *resolve_socket_receiver; 
+h2o_iovec_t *h2o_iovec_host;
+h2o_iovec_t *h2o_iovec_port;
+void *cbdata;//pointer for callback data,do we need it?
 static struct {
     uint64_t resp_start_at;
     uint64_t sig_received_at;
@@ -247,6 +254,32 @@ static void usage(const char *cmd)
     exit(1);
 }
 
+resolve_socket_cb(h2o_hostinfo_getaddr_req_t *req,char *errstr,struct addrinfo *ai,void *cbdata){
+    if (errstr){
+        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, errstr);
+        exit(1);
+    };
+    int fd, reuseaddr_flag = 1;
+    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
+        bind(fd, ai->ai_addr, ai->ai_addrlen) != 0 || listen(fd, SOMAXCONN) != 0) {
+        fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
+        exit(1);
+    }
+    h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+    h2o_socket_read_start(listen_sock, on_accept);   
+};
+resolve_socket_cb2(h2o_hostinfo_getaddr_req_t *req,char *errstr,struct addrinfo *ai,void *cbdata){
+    if (errstr){
+        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, errstr);
+        exit(1);
+    };
+    if ((sock = h2o_socket_connect(loop, ai->ai_addr, ai->ai_addrlen, on_connect)) == NULL) {
+        fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
+        exit(1);
+    }    
+};
+
 int main(int argc, char **argv)
 {
     static const struct option longopts[] = {{"listen", no_argument, NULL, 'l'},
@@ -310,8 +343,6 @@ int main(int argc, char **argv)
         } else {
             host = "0.0.0.0";
             port = argv[optind];
-            hostport = malloc(strlen(host) + strlen(port) + 2);
-            sprintf(hostport, "%s:%s", host, port);
         }
     }
 
@@ -343,32 +374,19 @@ int main(int argc, char **argv)
 #else
     loop = h2o_evloop_create();
 #endif
+    
+    h2o_iovec_host = h2o_iovec_init(host,sizeof(host));
+    h2o_iovec_port = h2o_iovec_init(port,sizeof(port));
+    //maybe we need to create new loop?
+resolve_secket_queue = h2o_multithread_create_queue(loop);//FIXME do we need to  call after all buisness h2o_multithread_destroy_queue?
 
-    /* resolve host:port (FIXME use the function supplied by the loop) */
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_ADDRCONFIG;
-    if ((err = getaddrinfo(host, port, &hints, &res)) != 0) {
-        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, gai_strerror(err));
-        exit(1);
-    }
-
-    if (mode_listen) {
-        int fd, reuseaddr_flag = 1;
-        if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
-            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
-            bind(fd, res->ai_addr, res->ai_addrlen) != 0 || listen(fd, SOMAXCONN) != 0) {
-            fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
-            exit(1);
-        }
-        h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_socket_read_start(listen_sock, on_accept);
+    if (mode_listen){
+//create receiver
+        h2o_multithread_register_receiver(resolve_secket_queue,resolve_socket_cb,resolve_socket_receiver);
+        _getaddr_req = h2o_hostinfo_getaddr(resolve_socket_receiver, h2o_iovec_host, h2o_iovec_port,AF_INET,SOCK_STREAM,IPPROTO_TCP,AI_ADDRCONFIG,resolve_socket_cb,void *cbdata);
     } else {
-        if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
-            fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
-            exit(1);
-        }
+        h2o_multithread_register_receiver(resolve_secket_queue,resolve_socket_cb2,resolve_socket_receiver);
+        _getaddr_req = h2o_hostinfo_getaddr(resolve_socket_receiver, h2o_iovec_host, h2o_iovec_port,AF_INET,SOCK_STREAM,IPPROTO_TCP,AI_ADDRCONFIG,resolve_socket_cb2,void *cbdata);        
     }
 
     while (1) {
