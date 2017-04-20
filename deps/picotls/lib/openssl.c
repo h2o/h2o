@@ -607,6 +607,7 @@ static int verify_sign(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t signatu
 Exit:
     if (ctx != NULL)
         EVP_MD_CTX_destroy(ctx);
+    EVP_PKEY_free(key);
     return ret;
 }
 

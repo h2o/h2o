@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
 
@@ -400,6 +401,46 @@ EOT
     ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 }is;
     is $body, "hello";
+};
+
+subtest "log lineno" => sub {
+    my $tester = sub {
+        my ($name, $conf, $expected) = @_;
+
+        subtest $name => sub {
+            my $tempdir = tempdir(CLEANUP => 1);
+            unlink "$tempdir/error_log";
+            my $server = spawn_h2o(<< "EOT");
+$conf
+error-log: $tempdir/error_log
+EOT
+            run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+            my @log = do {
+                open my $fh, "<", "$tempdir/error_log"
+                    or die "failed to open error_log:$!";
+                map { my $l = $_; chomp $l; $l } <$fh>;
+            };
+            @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
+            is $log[$#log], "[h2o_mruby] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected: hoge (RuntimeError)";
+        };
+    };
+    $tester->("flow style", <<"EOT", 5);
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: Proc.new do |env| raise "hoge" end
+EOT
+    $tester->("block style", <<"EOT", 7);
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            raise "hoge"
+          end
+EOT
 };
 
 done_testing();

@@ -65,6 +65,13 @@ assert 'Enumerator#with_index string offset' do
   assert_raise(TypeError){ @obj.to_enum(:foo, 1, 2, 3).with_index('1').to_a }
 end
 
+assert 'Enumerator#each_with_index' do
+  assert_equal([[1,0],[2,1],[3,2]], @obj.to_enum(:foo, 1, 2, 3).each_with_index.to_a)
+  a = []
+  @obj.to_enum(:foo, 1, 2, 3).each_with_index {|*i| a << i}
+  assert_equal([[1, 0], [2, 1], [3, 2]], a)
+end
+
 assert 'Enumerator#with_object' do
   obj = [0, 1]
   ret = (1..10).each.with_object(obj) {|i, memo|

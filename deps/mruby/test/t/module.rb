@@ -849,3 +849,14 @@ assert('module with non-class/module outer raises TypeError') do
   assert_raise(TypeError) { module 0::M1 end }
   assert_raise(TypeError) { module []::M2 end }
 end
+
+assert('get constant of parent module in singleton class; issue #3568') do
+  actual = module GetConstantInSingletonTest
+    EXPECTED = "value"
+    class << self
+      EXPECTED
+    end
+  end
+
+  assert_equal("value", actual)
+end

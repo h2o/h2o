@@ -165,6 +165,9 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_multithread_unregister_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr);
     h2o_multithread_destroy_queue(ctx->queue);
 
+    if (ctx->_timestamp_cache.value != NULL)
+        h2o_mem_release_shared(ctx->_timestamp_cache.value);
+
 #if H2O_USE_LIBUV
     /* make sure the handles released by h2o_timeout_dispose get freed */
     uv_run(ctx->loop, UV_RUN_NOWAIT);

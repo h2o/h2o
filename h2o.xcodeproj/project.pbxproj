@@ -8,9 +8,29 @@
 
 /* Begin PBXBuildFile section */
 		080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
+		0812AB201D7FCFEB00004F23 /* async.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1C1D7FCFEB00004F23 /* async.c */; };
+		0812AB211D7FCFEB00004F23 /* async.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB1D1D7FCFEB00004F23 /* async.h */; };
+		0812AB221D7FCFEB00004F23 /* hiredis.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1E1D7FCFEB00004F23 /* hiredis.c */; };
+		0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB1F1D7FCFEB00004F23 /* hiredis.h */; };
+		0812AB2B1D7FD54700004F23 /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; };
+		0812AB2C1D7FD54700004F23 /* read.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB2A1D7FD54700004F23 /* read.h */; };
 		084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* http2_debug_state.c */; };
 		084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C31D54BB9200E89F66 /* http2_debug_state.c */; };
+		08790DDA1D80153600A04BC1 /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; };
+		08790DDC1D80154C00A04BC1 /* sds.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DDB1D80154C00A04BC1 /* sds.c */; };
+		08790DDF1D8015A400A04BC1 /* net.h in Headers */ = {isa = PBXBuildFile; fileRef = 08790DDD1D8015A400A04BC1 /* net.h */; };
+		08790DE01D8015A400A04BC1 /* sds.h in Headers */ = {isa = PBXBuildFile; fileRef = 08790DDE1D8015A400A04BC1 /* sds.h */; };
+		08790DE21D8275DE00A04BC1 /* redis.h in Headers */ = {isa = PBXBuildFile; fileRef = 08790DE11D8275C100A04BC1 /* redis.h */; };
+		08790DE51D82782900A04BC1 /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
+		08790E091D8BD7F100A04BC1 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
+		08790E111D8BD85700A04BC1 /* redis-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DF41D8BD72500A04BC1 /* redis-client.c */; };
 		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
+		08F320DD1E7A9CA60038FA5A /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
+		08F320DE1E7A9CB80038FA5A /* async.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1C1D7FCFEB00004F23 /* async.c */; };
+		08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB1E1D7FCFEB00004F23 /* hiredis.c */; };
+		08F320E01E7A9CBD0038FA5A /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; };
+		08F320E11E7A9CBF0038FA5A /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; };
+		08F320E21E7A9CC20038FA5A /* sds.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DDB1D80154C00A04BC1 /* sds.c */; };
 		100A55101C2BB15600C4E3E0 /* http_request.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A550E1C2BB15100C4E3E0 /* http_request.c */; };
 		100A55151C30C5BC00C4E3E0 /* chunked.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A55141C30C5BC00C4E3E0 /* chunked.c */; };
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
@@ -334,6 +354,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		08790E051D8BD7F100A04BC1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1079231419A320A700C52AD6;
+			remoteInfo = h2o;
+		};
 		107923FF19A3241000C52AD6 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
@@ -365,6 +392,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		08790E0A1D8BD7F100A04BC1 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
 		107923D719A321F400C52AD6 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -432,8 +468,22 @@
 
 /* Begin PBXFileReference section */
 		080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		0812AB1C1D7FCFEB00004F23 /* async.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = async.c; sourceTree = "<group>"; };
+		0812AB1D1D7FCFEB00004F23 /* async.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = async.h; sourceTree = "<group>"; };
+		0812AB1E1D7FCFEB00004F23 /* hiredis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hiredis.c; sourceTree = "<group>"; };
+		0812AB1F1D7FCFEB00004F23 /* hiredis.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hiredis.h; sourceTree = "<group>"; };
+		0812AB291D7FD54700004F23 /* read.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = read.c; sourceTree = "<group>"; };
+		0812AB2A1D7FD54700004F23 /* read.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = read.h; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
+		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
+		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
+		08790DDE1D8015A400A04BC1 /* sds.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sds.h; sourceTree = "<group>"; };
+		08790DE11D8275C100A04BC1 /* redis.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = redis.h; sourceTree = "<group>"; };
+		08790DE31D8276EA00A04BC1 /* redis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redis.c; sourceTree = "<group>"; };
+		08790DF41D8BD72500A04BC1 /* redis-client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "redis-client.c"; sourceTree = "<group>"; };
+		08790E101D8BD7F100A04BC1 /* examples-redis-client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-redis-client"; sourceTree = BUILT_PRODUCTS_DIR; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
@@ -798,6 +848,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		08790E081D8BD7F100A04BC1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				08790E091D8BD7F100A04BC1 /* libh2o.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1079231219A320A700C52AD6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -863,6 +921,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		08B4D4391D75A2950079DFB5 /* hiredis */ = {
+			isa = PBXGroup;
+			children = (
+				0812AB1C1D7FCFEB00004F23 /* async.c */,
+				0812AB1D1D7FCFEB00004F23 /* async.h */,
+				0812AB1E1D7FCFEB00004F23 /* hiredis.c */,
+				0812AB1F1D7FCFEB00004F23 /* hiredis.h */,
+				08790DD91D80153600A04BC1 /* net.c */,
+				08790DDD1D8015A400A04BC1 /* net.h */,
+				0812AB291D7FD54700004F23 /* read.c */,
+				0812AB2A1D7FD54700004F23 /* read.h */,
+				08790DDB1D80154C00A04BC1 /* sds.c */,
+				08790DDE1D8015A400A04BC1 /* sds.h */,
+			);
+			path = hiredis;
+			sourceTree = "<group>";
+		};
 		100A550D1C2BB12A00C4E3E0 /* mruby */ = {
 			isa = PBXGroup;
 			children = (
@@ -902,6 +977,7 @@
 				1058C8891AA6E5E3008D6180 /* hostinfo.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
 				10A3D3D11B4CDBDC00327CF9 /* memcached.c */,
+				08790DE31D8276EA00A04BC1 /* redis.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
 				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
 				104B9A241A4A4FEE009EEE64 /* serverutil.c */,
@@ -1230,6 +1306,7 @@
 				10D0905119F0CA9C0043D458 /* examples-socket-server */,
 				10D0906919F38B2E0043D458 /* examples-http1client */,
 				10EA45DF1D0949BF00769A2B /* examples-latency-optimization */,
+				08790E101D8BD7F100A04BC1 /* examples-redis-client */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1240,6 +1317,7 @@
 				107E33ED1C7EAECD00AEF5F8 /* brotli */,
 				10FCC13B1B2E4A2C00F13674 /* cloexec */,
 				10F4197E1B64E6C300BEAEAC /* golombset */,
+				08B4D4391D75A2950079DFB5 /* hiredis */,
 				10FEF24B1D6FC8C800E11B1D /* libgkc */,
 				1079231F19A3210D00C52AD6 /* klib */,
 				10A3D3DC1B4FAA5900327CF9 /* libyrmcds */,
@@ -1314,6 +1392,7 @@
 				10AA2E9E1A8807CF004322AC /* url.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
 				104B9A2C1A4BE029009EEE64 /* version.h */,
+				08790DE11D8275C100A04BC1 /* redis.h */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
@@ -1503,6 +1582,7 @@
 			children = (
 				10D0906A19F38B850043D458 /* http1client.c */,
 				10D0905219F0CB130043D458 /* socket-client.c */,
+				08790DF41D8BD72500A04BC1 /* redis-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
 				1079241319A324B400C52AD6 /* websocket.c */,
 				10EA45E01D094A1200769A2B /* latency-optimization.c */,
@@ -1809,15 +1889,20 @@
 				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
 				1047A9FF1D0E6D5900CC4BCE /* rand.h in Headers */,
 				10AA2E941A80A592004322AC /* time_.h in Headers */,
+				0812AB2C1D7FD54700004F23 /* read.h in Headers */,
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */,
 				10D0905719F102DA0043D458 /* http1client.h in Headers */,
+				08790DE01D8015A400A04BC1 /* sds.h in Headers */,
 				106C22FA1C040F7800405689 /* tunnel.h in Headers */,
+				08790DE21D8275DE00A04BC1 /* redis.h in Headers */,
+				0812AB211D7FCFEB00004F23 /* async.h in Headers */,
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				1058F6ED1D7CC99B00FFFFA3 /* openssl_backport.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
 				10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */,
+				08790DDF1D8015A400A04BC1 /* net.h in Headers */,
 				10D0904119F0B9CD0043D458 /* timeout.h in Headers */,
 				10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */,
 				10F419801B64E70D00BEAEAC /* golombset.h in Headers */,
@@ -1832,6 +1917,7 @@
 				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
+				0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
 				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
 				1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */,
@@ -1841,6 +1927,24 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
+		08790E031D8BD7F100A04BC1 /* examples-redis-client */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 08790E0B1D8BD7F100A04BC1 /* Build configuration list for PBXNativeTarget "examples-redis-client" */;
+			buildPhases = (
+				08790E061D8BD7F100A04BC1 /* Sources */,
+				08790E081D8BD7F100A04BC1 /* Frameworks */,
+				08790E0A1D8BD7F100A04BC1 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				08790E041D8BD7F100A04BC1 /* PBXTargetDependency */,
+			);
+			name = "examples-redis-client";
+			productName = simple;
+			productReference = 08790E101D8BD7F100A04BC1 /* examples-redis-client */;
+			productType = "com.apple.product-type.tool";
+		};
 		1079231419A320A700C52AD6 /* h2o */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 1079231919A320A700C52AD6 /* Build configuration list for PBXNativeTarget "h2o" */;
@@ -2008,6 +2112,7 @@
 				107923D819A321F400C52AD6 /* examples-simple */,
 				1079240219A3247A00C52AD6 /* examples-websocket */,
 				10D0904419F0CA9C0043D458 /* examples-socket-client */,
+				08790E031D8BD7F100A04BC1 /* examples-redis-client */,
 				10D0905C19F38B2E0043D458 /* examples-http1client */,
 				10EA45D21D0949BF00769A2B /* examples-latency-optimization */,
 			);
@@ -2015,10 +2120,19 @@
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
+		08790E061D8BD7F100A04BC1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				08790E111D8BD85700A04BC1 /* redis-client.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1079231119A320A700C52AD6 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				08790DDC1D80154C00A04BC1 /* sds.c in Sources */,
 				107E34101C7EB13F00AEF5F8 /* gzip.c in Sources */,
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
 				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
@@ -2043,6 +2157,7 @@
 				10835E031C9A860000197E59 /* status.c in Sources */,
 				084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
+				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				106C22F81C040F6400405689 /* tunnel.c in Sources */,
 				10583BF11AE5A37B004A3AD6 /* Makefile in Sources */,
@@ -2056,12 +2171,14 @@
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
 				10FEF24A1D6FC6F600E11B1D /* durations.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
+				0812AB201D7FCFEB00004F23 /* async.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
 				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
+				08790DDA1D80153600A04BC1 /* net.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
@@ -2073,6 +2190,7 @@
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
+				0812AB221D7FCFEB00004F23 /* hiredis.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
 				1070866C1B787D06002B8F18 /* compress.c in Sources */,
 				107086721B798488002B8F18 /* compress.c in Sources */,
@@ -2095,6 +2213,7 @@
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
 				084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */,
 				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
+				08790DE51D82782900A04BC1 /* redis.c in Sources */,
 				106C23011C0544CE00405689 /* errordoc.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
@@ -2230,6 +2349,7 @@
 				E9708B1D1E49BABC0029E0A5 /* aes.c in Sources */,
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				E9708B531E52C7EE0029E0A5 /* config.c in Sources */,
+				08F320E11E7A9CBF0038FA5A /* read.c in Sources */,
 				E9708B801E52C84A0029E0A5 /* throttle_resp.c in Sources */,
 				107D4D4F1B58970D004A9B21 /* ssl.c in Sources */,
 				E9708B501E52C7E50029E0A5 /* time.c in Sources */,
@@ -2246,12 +2366,16 @@
 				E9708B461E52C7DF0029E0A5 /* filecache.c in Sources */,
 				E9708B5F1E52C80F0029E0A5 /* errordoc.c in Sources */,
 				E9708B3C1E52C7860029E0A5 /* connect.c in Sources */,
+				08F320E01E7A9CBD0038FA5A /* net.c in Sources */,
 				E9708B611E52C80F0029E0A5 /* file.c in Sources */,
 				E9708B7B1E52C83D0029E0A5 /* reproxy.c in Sources */,
+				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
 				E9708B5C1E52C80F0029E0A5 /* access_log.c in Sources */,
 				100A55101C2BB15600C4E3E0 /* http_request.c in Sources */,
 				E9708B1E1E49BAC10029E0A5 /* blockwise.c in Sources */,
+				08F320DE1E7A9CB80038FA5A /* async.c in Sources */,
 				E9708B651E52C80F0029E0A5 /* redirect.c in Sources */,
+				08F320DD1E7A9CA60038FA5A /* redis.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				E9708B6B1E52C81D0029E0A5 /* chunked.c in Sources */,
 				107E33F81C7EAF5A00AEF5F8 /* compress_fragment.cc in Sources */,
@@ -2304,6 +2428,7 @@
 				E9708B511E52C7E50029E0A5 /* timeout.c in Sources */,
 				E9708B431E52C7AA0029E0A5 /* picohttpparser.c in Sources */,
 				E9708B671E52C80F0029E0A5 /* status.c in Sources */,
+				08F320E21E7A9CC20038FA5A /* sds.c in Sources */,
 				E9708B411E52C7860029E0A5 /* strerror.c in Sources */,
 				E9708B3A1E52C7640029E0A5 /* gkc.c in Sources */,
 				E9708B5E1E52C80F0029E0A5 /* expires.c in Sources */,
@@ -2341,6 +2466,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		08790E041D8BD7F100A04BC1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1079231419A320A700C52AD6 /* h2o */;
+			targetProxy = 08790E051D8BD7F100A04BC1 /* PBXContainerItemProxy */;
+		};
 		1079240019A3241000C52AD6 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 1079231419A320A700C52AD6 /* h2o */;
@@ -2364,6 +2494,112 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		08790E0C1D8BD7F100A04BC1 /* evloop-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-debug";
+		};
+		08790E0D1D8BD7F100A04BC1 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-debug";
+		};
+		08790E0E1D8BD7F100A04BC1 /* evloop-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-release";
+		};
+		08790E0F1D8BD7F100A04BC1 /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-release";
+		};
 		1065E70F19BF752300686E72 /* libuv-debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -3246,6 +3482,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
@@ -3280,6 +3517,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
@@ -3310,6 +3548,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
@@ -3340,6 +3579,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
 					"deps/mruby-input-stream/src",
@@ -3367,6 +3607,17 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		08790E0B1D8BD7F100A04BC1 /* Build configuration list for PBXNativeTarget "examples-redis-client" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				08790E0C1D8BD7F100A04BC1 /* evloop-debug */,
+				08790E0D1D8BD7F100A04BC1 /* libuv-debug */,
+				08790E0E1D8BD7F100A04BC1 /* evloop-release */,
+				08790E0F1D8BD7F100A04BC1 /* libuv-release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "evloop-release";
+		};
 		1079231019A320A700C52AD6 /* Build configuration list for PBXProject "h2o" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -38,7 +38,7 @@ h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
     } else {
         ret.base = h2o_mem_alloc(slen + 1);
     }
-    memcpy(ret.base, s, slen);
+    h2o_memcpy(ret.base, s, slen);
     ret.base[slen] = '\0';
     ret.len = slen;
     return ret;
@@ -546,7 +546,7 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
     /* concatenate */
     ret.len = 0;
     for (i = 0; i != count; ++i) {
-        memcpy(ret.base + ret.len, list[i].base, list[i].len);
+        h2o_memcpy(ret.base + ret.len, list[i].base, list[i].len);
         ret.len += list[i].len;
     }
     ret.base[ret.len] = '\0';

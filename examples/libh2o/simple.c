@@ -112,7 +112,7 @@ static void on_accept(uv_stream_t *listener, int status)
         return;
     }
 
-    sock = h2o_uv_socket_create((uv_stream_t *)conn, (uv_close_cb)free);
+    sock = h2o_uv_socket_create((uv_handle_t *)conn, (uv_close_cb)free);
     h2o_accept(&accept_ctx, sock);
 }
 
@@ -190,7 +190,8 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 
     if (USE_MEMCACHED) {
         accept_ctx.libmemcached_receiver = &libmemcached_receiver;
-        h2o_accept_setup_async_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 0, 1, "h2o:ssl-resumption:"), 86400);
+        h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_create_context("127.0.0.1", 11211, 0, 1, "h2o:ssl-resumption:"),
+                                                  86400);
         h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
     }
 

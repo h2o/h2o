@@ -138,7 +138,7 @@ const char *h2o_socket_error_ssl_cert_name_mismatch = "certificate name mismatch
 const char *h2o_socket_error_ssl_decode = "SSL decode error";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
-static void (*resumption_new)(h2o_iovec_t session_id, h2o_iovec_t session_data);
+static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -239,10 +239,12 @@ const char *decode_ssl_input(h2o_socket_t *sock)
     if (sock->ssl->ptls != NULL) {
         if (sock->ssl->input.encrypted->size != 0) {
             const char *src = sock->ssl->input.encrypted->bytes, *src_end = src + sock->ssl->input.encrypted->size;
+            h2o_iovec_t reserved;
             ptls_buffer_t rbuf;
             int ret;
-            h2o_buffer_reserve(&sock->input, sock->ssl->input.encrypted->size);
-            ptls_buffer_init(&rbuf, sock->input->bytes + sock->input->size, sock->ssl->input.encrypted->size);
+            if ((reserved = h2o_buffer_reserve(&sock->input, sock->ssl->input.encrypted->size)).base == NULL)
+                return h2o_socket_error_out_of_memory;
+            ptls_buffer_init(&rbuf, reserved.base, reserved.len);
             do {
                 size_t consumed = src_end - src;
                 if ((ret = ptls_receive(sock->ssl->ptls, &rbuf, src, &consumed)) != 0)
@@ -250,9 +252,17 @@ const char *decode_ssl_input(h2o_socket_t *sock)
                 src += consumed;
             } while (src != src_end);
             h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size - (src_end - src));
-            assert(!rbuf.is_allocated);
-            sock->input->size += rbuf.off;
-            /* FIXME handle error by checking ret */
+            if (rbuf.is_allocated) {
+                if ((reserved = h2o_buffer_reserve(&sock->input, rbuf.off)).base == NULL)
+                    return h2o_socket_error_out_of_memory;
+                memcpy(reserved.base, rbuf.base, rbuf.off);
+                sock->input->size += rbuf.off;
+                ptls_buffer_dispose(&rbuf);
+            } else {
+                sock->input->size += rbuf.off;
+            }
+            if (!(ret == 0 || ret == PTLS_ERROR_IN_PROGRESS))
+                return h2o_socket_error_ssl_decode;
         }
         return NULL;
     }
@@ -931,6 +941,8 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
 
 static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 {
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
+
     h2o_iovec_t data;
     const unsigned char *id;
     unsigned id_len;
@@ -943,7 +955,7 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     i2d_SSL_SESSION(session, &p);
 
     id = SSL_SESSION_get_id(session, &id_len);
-    resumption_new(h2o_iovec_init(id, id_len), data);
+    resumption_new(sock, h2o_iovec_init(id, id_len), data);
     return 0;
 }
 

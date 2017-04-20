@@ -109,6 +109,7 @@ typedef struct {
     struct RRange range;
     struct RData data;
     struct RProc proc;
+    struct REnv env;
     struct RException exc;
 #ifdef MRB_WORD_BOXING
     struct RFloat floatv;
@@ -564,7 +565,7 @@ mark_context_stack(mrb_state *mrb, struct mrb_context *c)
 static void
 mark_context(mrb_state *mrb, struct mrb_context *c)
 {
-  int i, e = 0;
+  int i;
   mrb_callinfo *ci;
 
   /* mark stack */
@@ -573,16 +574,14 @@ mark_context(mrb_state *mrb, struct mrb_context *c)
   /* mark VM stack */
   if (c->cibase) {
     for (ci = c->cibase; ci <= c->ci; ci++) {
-      if (ci->eidx > e) {
-        e = ci->eidx;
-      }
       mrb_gc_mark(mrb, (struct RBasic*)ci->env);
       mrb_gc_mark(mrb, (struct RBasic*)ci->proc);
       mrb_gc_mark(mrb, (struct RBasic*)ci->target_class);
     }
   }
   /* mark ensure stack */
-  for (i=0; i<e; i++) {
+  for (i=0; i<c->esize; i++) {
+    if (c->ensure[i] == NULL) break;
     mrb_gc_mark(mrb, (struct RBasic*)c->ensure[i]);
   }
   /* mark fibers */

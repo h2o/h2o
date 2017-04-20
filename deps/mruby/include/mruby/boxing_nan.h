@@ -80,7 +80,8 @@ typedef struct mrb_value {
   if (v != v) { \
     (r).value.ttt = 0x7ff80000; \
     (r).value.i = 0; \
-  } else { \
+  } \
+  else { \
     (r).f = v; \
   }} while(0)
 

@@ -63,7 +63,8 @@ str_new(mrb_state *mrb, const char *p, size_t len)
     if (p) {
       memcpy(s->as.ary, p, len);
     }
-  } else {
+  }
+  else {
     if (len >= MRB_INT_MAX) {
       mrb_raise(mrb, E_ARGUMENT_ERROR, "string size too big");
     }
@@ -1665,9 +1666,11 @@ mrb_str_init(mrb_state *mrb, mrb_value self)
 {
   mrb_value str2;
 
-  if (mrb_get_args(mrb, "|S", &str2) == 1) {
-    str_replace(mrb, mrb_str_ptr(self), mrb_str_ptr(str2));
+  if (mrb_get_args(mrb, "|S", &str2) == 0) {
+    struct RString *s = str_new(mrb, 0, 0);
+    str2 = mrb_obj_value(s);
   }
+  str_replace(mrb, mrb_str_ptr(self), mrb_str_ptr(str2));
   return self;
 }
 
@@ -2027,7 +2030,8 @@ mrb_str_split_m(mrb_state *mrb, mrb_value str)
       if (pat_len > 0) {
         end = mrb_memsearch(RSTRING_PTR(spat), pat_len, RSTRING_PTR(str)+idx, str_len - idx);
         if (end < 0) break;
-      } else {
+      }
+      else {
         end = chars2bytes(str, idx, 1);
       }
       mrb_ary_push(mrb, result, byte_subseq(mrb, str, idx, end));
@@ -2850,7 +2854,8 @@ mrb_float_read(const char *string, char **endPtr)
     if (*p == '-') {
 	sign = TRUE;
 	p += 1;
-    } else {
+    }
+    else {
 	if (*p == '+') {
 	    p += 1;
 	}
@@ -2886,24 +2891,28 @@ mrb_float_read(const char *string, char **endPtr)
     p -= mantSize;
     if (decPt < 0) {
 	decPt = mantSize;
-    } else {
+    }
+    else {
 	mantSize -= 1;			/* One of the digits was the point. */
     }
     if (mantSize > 18) {
 	if (decPt - 18 > 29999) {
 	    fracExp = 29999;
-	} else {
+	}
+        else {
 	    fracExp = decPt - 18;
 	}
 	mantSize = 18;
-    } else {
+    }
+    else {
 	fracExp = decPt - mantSize;
     }
     if (mantSize == 0) {
 	fraction = 0.0;
 	p = string;
 	goto done;
-    } else {
+    }
+    else {
 	int frac1, frac2;
 	frac1 = 0;
 	for ( ; mantSize > 9; mantSize -= 1)
@@ -2940,7 +2949,8 @@ mrb_float_read(const char *string, char **endPtr)
 	if (*p == '-') {
 	    expSign = TRUE;
 	    p += 1;
-	} else {
+	}
+        else {
 	    if (*p == '+') {
 		p += 1;
 	    }
@@ -2956,7 +2966,8 @@ mrb_float_read(const char *string, char **endPtr)
     }
     if (expSign) {
 	exp = fracExp - exp;
-    } else {
+    }
+    else {
 	exp = fracExp + exp;
     }
 
@@ -2970,7 +2981,8 @@ mrb_float_read(const char *string, char **endPtr)
     if (exp < 0) {
 	expSign = TRUE;
 	exp = -exp;
-    } else {
+    }
+    else {
 	expSign = FALSE;
     }
     if (exp > maxExponent) {
@@ -2985,7 +2997,8 @@ mrb_float_read(const char *string, char **endPtr)
     }
     if (expSign) {
 	fraction /= dblExp;
-    } else {
+    }
+    else {
 	fraction *= dblExp;
     }
 

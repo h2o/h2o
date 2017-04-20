@@ -922,7 +922,7 @@ mrb_method_missing(mrb_state *mrb, mrb_sym name, mrb_value self, mrb_value args)
     /* method missing in inspect; avoid recursion */
     repr = mrb_any_to_s(mrb, self);
   }
-  else if (mrb_respond_to(mrb, self, inspect) && mrb->c->ci - mrb->c->cibase < 64) {
+  else if (mrb_respond_to(mrb, self, inspect) && mrb->c->ci - mrb->c->cibase < 16) {
     repr = mrb_funcall_argv(mrb, self, inspect, 0, 0);
     if (mrb_string_p(repr) && RSTRING_LEN(repr) > 64) {
       repr = mrb_any_to_s(mrb, self);
