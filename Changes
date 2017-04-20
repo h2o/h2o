@@ -5,9 +5,11 @@ Revision history for H2O.
 	- [mruby] correct the line number reported on an exception #1239 #1251 (Ichito Nagata)
 	- [ssl] support redis as a data store for session cache / ticket #1087 (Ichito Nagata)
 	- [ssl] fix assertion failure in `decode_ssl_input` #1264 (Kazuho Oku)
+	- [ssl] fix OCSP stapling error when OpenSSL 1.1.0 is used #1270 (Kazuho Oku)
 	- [libh2o] fix crash when abruptly closing an HTTP/2 connection on libuv #1250 (Kazuho Oku)
 	- [libh2o] fix memory leak of `_timestamp_cache` #1255 (Kazuho Oku)
 	- [doc] restore doc of `%{...}e` #1252 (Kazuho Oku)
+	- [doc] fix typo suggesting using `brotli` instead of `br` #1263 (Bogdan Khomutsky)
 	- [misc] fix undefined behaviors detected by ubsan #1246 (Frederik Deweerdt)
 	- [misc] include process id in crash backtrace #1254 (Kazuho Oku)
 
