@@ -325,6 +325,7 @@ mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
     /* run code and generate handler */
     mrb_value result =
         mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, conf);
+    h2o_mruby_assert(mrb);
     assert(mrb_array_p(result));
 
     return result;
