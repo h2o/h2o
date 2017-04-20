@@ -732,7 +732,6 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     mrb_value output;
     mrb_int status;
     h2o_mruby_generator_t *generator = NULL;
-    mrb_int i;
 
     while (1) {
         /* send input to fiber */
@@ -764,6 +763,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             mrb_ary_push(mrb, ctx->pendings, pending);
             goto Exit;
         } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
+            mrb_int i;
             mrb_int len = mrb_ary_len(mrb, ctx->pendings);
             for (i = 0; i != len; ++i) {
                 mrb_value pending = mrb_ary_entry(ctx->pendings, i);
