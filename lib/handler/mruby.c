@@ -410,14 +410,19 @@ static void on_rack_input_free(mrb_state *mrb, const char *base, mrb_int len, vo
 
 static int build_env_sort_header_cb(const void *_x, const void *_y)
 {
-    const h2o_header_t *x = (const h2o_header_t *)_x, *y = (const h2o_header_t *)_y;
+    const h2o_header_t *x = *(const h2o_header_t **)_x, *y = *(const h2o_header_t **)_y;
     if (x->name->len < y->name->len)
         return -1;
     if (x->name->len > y->name->len)
         return 1;
     if (x->name->base == y->name->base)
         return 0;
-    return memcmp(x->name->base, y->name->base, x->name->len);
+    int r = memcmp(x->name->base, y->name->base, x->name->len);
+    if (r != 0)
+        return r;
+    assert(x != y);
+    /* the order of the headers having the same name needs to be retained */
+    return x < y ? -1 : 1;
 }
 
 static mrb_value build_env(h2o_mruby_generator_t *generator)
@@ -479,12 +484,13 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
 
     { /* headers */
-        h2o_header_t *headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
-        h2o_memcpy(headers_sorted, generator->req->headers.entries, sizeof(*headers_sorted) * generator->req->headers.size);
+        h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
+        size_t i;
+        for (i = 0; i != generator->req->headers.size; ++i)
+            headers_sorted[i] = generator->req->headers.entries;
         qsort(headers_sorted, generator->req->headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
-        size_t i = 0;
         for (i = 0; i != generator->req->headers.size; ++i) {
-            const h2o_header_t *header = headers_sorted + i;
+            const h2o_header_t *header = headers_sorted[i];
             mrb_value n, v;
             if (h2o_iovec_is_token(header->name)) {
                 const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
@@ -497,13 +503,13 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
             }
             v = mrb_str_new(mrb, header->value.base, header->value.len);
             while (i < generator->req->headers.size - 1) {
-                if (!h2o_memis(headers_sorted[i + 1].name->base, headers_sorted[i + 1].name->len, header->name->base,
+                if (!h2o_memis(headers_sorted[i + 1]->name->base, headers_sorted[i + 1]->name->len, header->name->base,
                                header->name->len))
                     break;
-                header = headers_sorted + ++i;
-                v = mrb_str_append(mrb, v, mrb_ary_entry(shared->constants, header->name == &H2O_TOKEN_COOKIE->buf
-                                                                                ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON
-                                                                                : H2O_MRUBY_LIT_SEPARATOR_COMMA));
+                header = headers_sorted[++i];
+                v = mrb_str_append(mrb, v, mrb_ary_entry(shared->constants,
+                                                         header->name == &H2O_TOKEN_COOKIE->buf ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON
+                                                                                                : H2O_MRUBY_LIT_SEPARATOR_COMMA));
                 v = mrb_str_append(mrb, v, mrb_str_new(mrb, header->value.base, header->value.len));
             }
             mrb_hash_set(mrb, env, n, v);
