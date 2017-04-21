@@ -5,6 +5,8 @@ exec ${H2O_PERL:-perl} -x $0 "$@"
 use strict;
 use warnings;
 
+my $ppid = getppid;
+
 while (my $line = <STDIN>) {
     chomp $line;
     if ($line =~ m{^([^\(\[]+)(.*?)\[(0x[0-9A-Fa-f]+)\]}) {
@@ -13,7 +15,7 @@ while (my $line = <STDIN>) {
         $line = "$exe${info}[$addr] $resolved"
             if $resolved;
     }
-    print "$line\n";
+    print "[$ppid] $line\n";
 }
 
 sub addr2line {

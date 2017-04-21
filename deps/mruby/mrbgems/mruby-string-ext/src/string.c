@@ -387,7 +387,8 @@ mrb_str_succ_bang(mrb_state *mrb, mrb_value self)
   if (e < b) {
     e = p + l - 1;
     result = mrb_str_new_lit(mrb, "");
-  } else {
+  }
+  else {
     // find leading letter of the ascii/number
     b = e;
     while (b > p) {
@@ -405,7 +406,8 @@ mrb_str_succ_bang(mrb_state *mrb, mrb_value self)
       if (*e == 0xff) {
         mrb_str_cat_lit(mrb, result, "\x01");
         (*e) = 0;
-      } else
+      }
+      else
         (*e)++;
       break;
     }
@@ -413,13 +415,16 @@ mrb_str_succ_bang(mrb_state *mrb, mrb_value self)
     if (*e == '9') {
       if (e == b) prepend = "1";
       *e = '0';
-    } else if (*e == 'z') {
+    }
+    else if (*e == 'z') {
       if (e == b) prepend = "a";
       *e = 'a';
-    } else if (*e == 'Z') {
+    }
+    else if (*e == 'Z') {
       if (e == b) prepend = "A";
       *e = 'A';
-    } else {
+    }
+    else {
       (*e)++;
       break;
     }

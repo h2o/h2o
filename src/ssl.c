@@ -107,7 +107,7 @@ static void spawn_cache_cleanup_thread(SSL_CTX **_contexts, size_t num_contexts)
 {
     /* copy the list of contexts */
     SSL_CTX **contexts = malloc(sizeof(*contexts) * (num_contexts + 1));
-    memcpy(contexts, _contexts, sizeof(*contexts) * num_contexts);
+    h2o_memcpy(contexts, _contexts, sizeof(*contexts) * num_contexts);
     contexts[num_contexts] = NULL;
 
     /* launch the thread */

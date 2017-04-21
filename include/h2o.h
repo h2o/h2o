@@ -736,6 +736,13 @@ typedef struct st_h2o_res_t {
      * mime-related attributes (may be NULL)
      */
     h2o_mime_attributes_t *mime_attr;
+    /**
+     * retains the original response header before rewritten by ostream filters
+     */
+    struct {
+        int status;
+        h2o_headers_t headers;
+    } original;
 } h2o_res_t;
 
 /**
@@ -1242,6 +1249,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  * @return pointer to the ostream filter
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+/**
+ * prepares the request for processing by looking at the method, URI, headers
+ */
+h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
 /**
  * binds configurations to the request
  */

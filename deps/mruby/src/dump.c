@@ -407,7 +407,8 @@ write_lineno_record_1(mrb_state *mrb, mrb_irep *irep, uint8_t* bin)
 
   if (irep->filename) {
     filename_len = strlen(irep->filename);
-  } else {
+  }
+  else {
     filename_len = 0;
   }
   mrb_assert_int_fit(size_t, filename_len, uint16_t, UINT16_MAX);

@@ -61,6 +61,80 @@ static void test_secp256r1_sign(void)
     ptls_buffer_dispose(&sigbuf);
 }
 
+static void test_hrr(void)
+{
+    ptls_key_exchange_algorithm_t *client_keyex[] = {&ptls_minicrypto_x25519, &ptls_minicrypto_secp256r1, NULL};
+    ptls_context_t client_ctx = {ptls_minicrypto_random_bytes, client_keyex, ptls_minicrypto_cipher_suites};
+    ptls_t *client, *server;
+    ptls_buffer_t cbuf, sbuf, decbuf;
+    uint8_t cbuf_small[16384], sbuf_small[16384], decbuf_small[16384];
+    size_t consumed;
+    int ret;
+
+    assert(ctx_peer->key_exchanges[0] != NULL && ctx_peer->key_exchanges[0]->id == PTLS_GROUP_SECP256R1);
+    assert(ctx_peer->key_exchanges[1] == NULL);
+
+    client = ptls_new(&client_ctx, 0);
+    server = ptls_new(ctx_peer, 1);
+    ptls_buffer_init(&cbuf, cbuf_small, sizeof(cbuf_small));
+    ptls_buffer_init(&sbuf, sbuf_small, sizeof(sbuf_small));
+    ptls_buffer_init(&decbuf, decbuf_small, sizeof(decbuf_small));
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(consumed == cbuf.off);
+    cbuf.off = 0;
+
+    ok(sbuf.off > 5 + 4);
+    ok(sbuf.base[5] == 6 /* PTLS_HANDSHAKE_TYPE_HELLO_RETRY_REQUEST */);
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(consumed == sbuf.off);
+    sbuf.off = 0;
+
+    ok(cbuf.off >= 5 + 4);
+    ok(cbuf.base[5] == 1 /* PTLS_HANDSHAKE_TYPE_CLIENT_HELLO */);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(consumed == cbuf.off);
+    cbuf.off = 0;
+
+    ok(sbuf.off >= 5 + 4);
+    ok(sbuf.base[5] == 2 /* PTLS_HANDSHAKE_TYPE_SERVER_HELLO */);
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(consumed == sbuf.off);
+    sbuf.off = 0;
+
+    ret = ptls_send(client, &cbuf, "hello world", 11);
+    ok(ret == 0);
+
+    consumed = cbuf.off;
+    ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+    ok(ret == 0);
+    ok(consumed == cbuf.off);
+    cbuf.off = 0;
+
+    ok(decbuf.off == 11);
+    ok(memcmp(decbuf.base, "hello world", 11) == 0);
+
+    ptls_buffer_dispose(&decbuf);
+    ptls_buffer_dispose(&sbuf);
+    ptls_buffer_dispose(&cbuf);
+    ptls_free(client);
+    ptls_free(server);
+}
+
 int main(int argc, char **argv)
 {
     subtest("secp256r1", test_secp256r1_key_exchange);
@@ -79,6 +153,7 @@ int main(int argc, char **argv)
     ctx = ctx_peer = &ctxbuf;
 
     subtest("picotls", test_picotls);
+    subtest("hrr", test_hrr);
 
     return done_testing();
     return done_testing();

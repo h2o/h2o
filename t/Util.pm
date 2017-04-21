@@ -205,6 +205,7 @@ EOT
         tls_port => $tls_port,
         guard    => $guard,
         pid      => $pid,
+        conf_file => $conffn,
     };
     return $ret;
 }

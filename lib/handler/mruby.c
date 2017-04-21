@@ -326,6 +326,7 @@ mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
     /* run code and generate handler */
     mrb_value result =
         mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, conf);
+    h2o_mruby_assert(mrb);
     assert(mrb_array_p(result));
 
     return result;
@@ -495,7 +496,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
 
     { /* headers */
         h2o_header_t *headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
-        memcpy(headers_sorted, generator->req->headers.entries, sizeof(*headers_sorted) * generator->req->headers.size);
+        h2o_memcpy(headers_sorted, generator->req->headers.entries, sizeof(*headers_sorted) * generator->req->headers.size);
         qsort(headers_sorted, generator->req->headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
         size_t i = 0;
         for (i = 0; i != generator->req->headers.size; ++i) {
@@ -732,7 +733,6 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     mrb_value output;
     mrb_int status;
     h2o_mruby_generator_t *generator = NULL;
-    mrb_int i;
 
     while (1) {
         /* send input to fiber */
@@ -764,6 +764,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             mrb_ary_push(mrb, ctx->pendings, pending);
             goto Exit;
         } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
+            mrb_int i;
             mrb_int len = mrb_ary_len(mrb, ctx->pendings);
             for (i = 0; i != len; ++i) {
                 mrb_value pending = mrb_ary_entry(ctx->pendings, i);

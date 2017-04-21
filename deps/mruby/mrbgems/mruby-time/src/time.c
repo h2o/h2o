@@ -11,11 +11,14 @@
 #include <mruby/class.h>
 #include <mruby/data.h>
 
+#define NDIV(x,y) (-(-((x)+1)/(y))-1)
+
 #if _MSC_VER < 1800
 double round(double x) {
   if (x >= 0.0) {
     return (double)((int)(x + 0.5));
-  } else {
+  }
+  else {
     return (double)((int)(x - 0.5));
   }
 }
@@ -211,6 +214,7 @@ mrb_time_wrap(mrb_state *mrb, struct RClass *tc, struct mrb_time *tm)
   return mrb_obj_value(Data_Wrap_Struct(mrb, tc, &mrb_time_type, tm));
 }
 
+void mrb_check_num_exact(mrb_state *mrb, mrb_float num);
 
 /* Allocates a mrb_time object and initializes it. */
 static struct mrb_time*
@@ -218,6 +222,9 @@ time_alloc(mrb_state *mrb, double sec, double usec, enum mrb_timezone timezone)
 {
   struct mrb_time *tm;
   time_t tsec = 0;
+
+  mrb_check_num_exact(mrb, (mrb_float)sec);
+  mrb_check_num_exact(mrb, (mrb_float)usec);
 
   if (sizeof(time_t) == 4 && (sec > (double)INT32_MAX || (double)INT32_MIN > sec)) {
     goto out_of_range;
@@ -233,13 +240,15 @@ time_alloc(mrb_state *mrb, double sec, double usec, enum mrb_timezone timezone)
   tm = (struct mrb_time *)mrb_malloc(mrb, sizeof(struct mrb_time));
   tm->sec  = tsec;
   tm->usec = (time_t)llround((sec - tm->sec) * 1.0e6 + usec);
-  while (tm->usec < 0) {
-    tm->sec--;
-    tm->usec += 1000000;
+  if (tm->usec < 0) {
+    long sec2 = NDIV(usec,1000000); /* negative div */
+    tm->usec -= sec2 * 1000000;
+    tm->sec += sec2;
   }
-  while (tm->usec >= 1000000) {
-    tm->sec++;
-    tm->usec -= 1000000;
+  else if (tm->usec >= 1000000) {
+    long sec2 = usec / 1000000;
+    tm->usec -= sec2 * 1000000;
+    tm->sec += sec2;
   }
   tm->timezone = timezone;
   time_update_datetime(mrb, tm);

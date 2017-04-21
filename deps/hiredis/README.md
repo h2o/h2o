@@ -1,5 +1,7 @@
 [![Build Status](https://travis-ci.org/redis/hiredis.png)](https://travis-ci.org/redis/hiredis)
 
+**This Readme reflects the latest changed in the master branch. See [v0.13.3](https://github.com/redis/hiredis/tree/v0.13.3) for the Readme and documentation for the latest release.**
+
 # HIREDIS
 
 Hiredis is a minimalistic C client library for the [Redis](http://redis.io/) database.
@@ -20,7 +22,15 @@ Redis version >= 1.2.0.
 The library comes with multiple APIs. There is the
 *synchronous API*, the *asynchronous API* and the *reply parsing API*.
 
-## UPGRADING
+## Upgrading to `1.0.0`
+
+Version 1.0.0 marks a stable release of hiredis.
+It includes some minor breaking changes, mostly to make the exposed API more uniform and self-explanatory.
+It also bundles the updated `sds` library, to sync up with upstream and Redis.
+For most applications a recompile against the new hiredis should be enough.
+For code changes see the [Changelog](CHANGELOG.md).
+
+## Upgrading from `<0.9.0`
 
 Version 0.9.0 is a major overhaul of hiredis in every aspect. However, upgrading existing
 code using hiredis should not be a big pain. The key thing to keep in mind when
@@ -48,11 +58,17 @@ After trying to connect to Redis using `redisConnect` you should
 check the `err` field to see if establishing the connection was successful:
 ```c
 redisContext *c = redisConnect("127.0.0.1", 6379);
-if (c != NULL && c->err) {
-    printf("Error: %s\n", c->errstr);
-    // handle error
+if (c == NULL || c->err) {
+    if (c) {
+        printf("Error: %s\n", c->errstr);
+        // handle error
+    } else {
+        printf("Can't allocate redis context\n");
+    }
 }
 ```
+
+*Note: A `redisContext` is not thread-safe.*
 
 ### Sending commands
 
@@ -241,6 +257,9 @@ Redis. It returns a pointer to the newly created `redisAsyncContext` struct. The
 should be checked after creation to see if there were errors creating the connection.
 Because the connection that will be created is non-blocking, the kernel is not able to
 instantly return if the specified host and port is able to accept a connection.
+
+*Note: A `redisAsyncContext` is not thread-safe.*
+
 ```c
 redisAsyncContext *c = redisAsyncConnect("127.0.0.1", 6379);
 if (c->err) {

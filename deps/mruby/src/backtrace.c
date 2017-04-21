@@ -81,6 +81,7 @@ get_backtrace_i(mrb_state *mrb, struct backtrace_location *loc, void *data)
 
   str = mrb_str_new_cstr(mrb, loc->filename);
   snprintf(buf, sizeof(buf), ":%d", loc->lineno);
+  mrb_str_cat_cstr(mrb, str, buf);
 
   if (loc->method) {
     mrb_str_cat_lit(mrb, str, ":in ");
@@ -190,7 +191,8 @@ exc_output_backtrace(mrb_state *mrb, struct RObject *exc, output_stream_func fun
   lastpc = mrb_obj_iv_get(mrb, exc, mrb_intern_lit(mrb, "lastpc"));
   if (mrb_nil_p(lastpc)) {
     code = NULL;
-  } else {
+  }
+  else {
     code = (mrb_code*)mrb_cptr(lastpc);
   }
 

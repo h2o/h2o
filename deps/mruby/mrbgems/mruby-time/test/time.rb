@@ -10,7 +10,14 @@ assert('Time', '15.2.19') do
 end
 
 assert('Time.at', '15.2.19.6.1') do
-  Time.at(1300000000.0)
+  assert_kind_of(Time, Time.at(1300000000.0))
+
+  assert_raise(FloatDomainError) { Time.at(Float::NAN) }
+  assert_raise(FloatDomainError) { Time.at(Float::INFINITY) }
+  assert_raise(FloatDomainError) { Time.at(-Float::INFINITY) }
+  assert_raise(FloatDomainError) { Time.at(0, Float::NAN) }
+  assert_raise(FloatDomainError) { Time.at(0, Float::INFINITY) }
+  assert_raise(FloatDomainError) { Time.at(0, -Float::INFINITY) }
 end
 
 assert('Time.gm', '15.2.19.6.2') do
@@ -37,14 +44,22 @@ assert('Time#+', '15.2.19.7.1') do
   t1 = Time.at(1300000000.0)
   t2 = t1.+(60)
 
-  t2.utc.asctime == "Sun Mar 13 07:07:40 UTC 2011"
+  assert_equal(t2.utc.asctime, "Sun Mar 13 07:07:40 UTC 2011")
+
+  assert_raise(FloatDomainError) { Time.at(0) + Float::NAN }
+  assert_raise(FloatDomainError) { Time.at(0) + Float::INFINITY }
+  assert_raise(FloatDomainError) { Time.at(0) + -Float::INFINITY }
 end
 
 assert('Time#-', '15.2.19.7.2') do
   t1 = Time.at(1300000000.0)
   t2 = t1.-(60)
 
-  t2.utc.asctime == "Sun Mar 13 07:05:40 UTC 2011"
+  assert_equal(t2.utc.asctime, "Sun Mar 13 07:05:40 UTC 2011")
+
+  assert_raise(FloatDomainError) { Time.at(0) - Float::NAN }
+  assert_raise(FloatDomainError) { Time.at(0) - Float::INFINITY }
+  assert_raise(FloatDomainError) { Time.at(0) - -Float::INFINITY }
 end
 
 assert('Time#<=>', '15.2.19.7.3') do

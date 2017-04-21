@@ -610,6 +610,17 @@ flo_round(mrb_state *mrb, mrb_value num)
   return mrb_fixnum_value((mrb_int)number);
 }
 
+void
+mrb_check_num_exact(mrb_state *mrb, mrb_float num)
+{
+  if (isinf(num)) {
+    mrb_raise(mrb, E_FLOATDOMAIN_ERROR, num < 0 ? "-Infinity" : "Infinity");
+  }
+  if (isnan(num)) {
+    mrb_raise(mrb, E_FLOATDOMAIN_ERROR, "NaN");
+  }
+}
+
 /* 15.2.9.3.14 */
 /* 15.2.9.3.15 */
 /*
@@ -630,6 +641,7 @@ flo_truncate(mrb_state *mrb, mrb_value num)
   if (f < 0.0) f = ceil(f);
 
   if (!FIXABLE(f)) {
+    mrb_check_num_exact(mrb, f);
     return mrb_float_value(mrb, f);
   }
   return mrb_fixnum_value((mrb_int)f);
@@ -932,7 +944,8 @@ lshift(mrb_state *mrb, mrb_int val, mrb_int width)
         (val   > (MRB_INT_MAX >> width))) {
       goto bit_overflow;
     }
-  } else {
+  }
+  else {
     if ((width > NUMERIC_SHIFT_WIDTH_MAX) ||
         (val   < (MRB_INT_MIN >> width))) {
       goto bit_overflow;

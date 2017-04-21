@@ -333,7 +333,7 @@ check_cmd_pattern(const char *pattern, const char *cmd)
   if (pattern == NULL || cmd == NULL) {
     return FALSE;
   }
-  if((lbracket = strchr(pattern, '[')) == NULL) {
+  if ((lbracket = strchr(pattern, '[')) == NULL) {
     return !strcmp(pattern, cmd);
   }
   if ((rbracket = strchr(pattern, ']')) == NULL) {
