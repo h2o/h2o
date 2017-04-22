@@ -487,7 +487,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
         size_t i;
         for (i = 0; i != generator->req->headers.size; ++i)
-            headers_sorted[i] = generator->req->headers.entries;
+            headers_sorted[i] = generator->req->headers.entries + i;
         qsort(headers_sorted, generator->req->headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
         for (i = 0; i != generator->req->headers.size; ++i) {
             const h2o_header_t *header = headers_sorted[i];
