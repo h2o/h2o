@@ -415,11 +415,11 @@ static int build_env_sort_header_cb(const void *_x, const void *_y)
         return -1;
     if (x->name->len > y->name->len)
         return 1;
-    if (x->name->base == y->name->base)
-        return 0;
-    int r = memcmp(x->name->base, y->name->base, x->name->len);
-    if (r != 0)
-        return r;
+    if (x->name->base != y->name->base) {
+        int r = memcmp(x->name->base, y->name->base, x->name->len);
+        if (r != 0)
+            return r;
+    }
     assert(x != y);
     /* the order of the headers having the same name needs to be retained */
     return x < y ? -1 : 1;
