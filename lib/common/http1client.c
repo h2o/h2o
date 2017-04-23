@@ -445,11 +445,15 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     on_connection_ready(client);
 }
 
-static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data)
+static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_iovec_t host)
 {
     struct st_h2o_http1client_private_t *client = data;
 
     client->super.sockpool.connect_req = NULL;
+    
+    if (client->super.sockpool.pool->is_ssl) {
+        client->super.ssl.server_name = h2o_strdup(NULL, host.base, host.len).base;
+    }
 
     if (sock == NULL) {
         assert(errstr != NULL);
@@ -556,7 +560,7 @@ void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, 
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client =
-        create_client(_client, data, ctx, sockpool->is_ssl ? sockpool->peer.host : h2o_iovec_init(NULL, 0), cb);
+        create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb);
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
