@@ -1,5 +1,19 @@
 Revision history for H2O.
 
+2.3.0-beta1 TBD
+	- [access-log] log connections that closed prior to sending a response #1235 (Kazuho Oku)
+	- [mruby] correct the line number reported on an exception #1239 #1251 (Ichito Nagata)
+	- [mruby] retain the order of request headers sharing a single name #1271 (Kazuho Oku)
+	- [ssl] support redis as a data store for session cache / ticket #1087 (Ichito Nagata)
+	- [ssl] fix assertion failure in `decode_ssl_input` #1264 (Kazuho Oku)
+	- [ssl] fix OCSP stapling error when OpenSSL 1.1.0 is used #1270 (Kazuho Oku)
+	- [libh2o] fix crash when abruptly closing an HTTP/2 connection on libuv #1250 (Kazuho Oku)
+	- [libh2o] fix memory leak of `_timestamp_cache` #1255 (Kazuho Oku)
+	- [doc] restore doc of `%{...}e` #1252 (Kazuho Oku)
+	- [doc] fix typo suggesting using `brotli` instead of `br` #1263 (Bogdan Khomutsky)
+	- [misc] fix undefined behaviors detected by ubsan #1246 (Frederik Deweerdt)
+	- [misc] include process id in crash backtrace #1254 (Kazuho Oku)
+
 2.2.0 2017-04-05 02:18:00+0000
 	- [core] add `crash-handler.wait-pipe-close` parameter #1092 (Frederik Deweerdt)
 	- [core] introduce an option to bypass the `server` header sent from upstream #1226 (Frederik Deweerdt)
