@@ -5,6 +5,10 @@ Revision history for H2O.
 	- [ssl] support redis as a data store for session cache / ticket #1087 (Ichito Nagata)
 	- [misc] include process id in crash backtrace #1254 (Kazuho Oku)
 
+2.2.2 2017-04-23 03:24:00+0000
+	- [ssl] fix OCSP stapling error when LibreSSL is used #1275 (Ian Moone)
+
+
 2.2.1 2017-04-22 22:43:00+0000
 	- [mruby] correct the line number reported on an exception #1239 #1251 (Ichito Nagata)
 	- [mruby] retain the order of request headers sharing a single name #1271 (Kazuho Oku)
