@@ -274,6 +274,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
                             h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data)
 {
     struct pool_entry_t *entry = NULL;
+    struct on_close_data_t *close_data;
 
     if (_req != NULL)
         *_req = NULL;
@@ -296,8 +297,11 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             h2o_socketpool_target_t *target = entry->target;
             h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
             free(entry);
+            close_data = h2o_mem_alloc(sizeof(*close_data));
+            close_data->pool = pool;
+            close_data->target = target;
             sock->on_close.cb = on_close;
-            sock->on_close.data = pool;
+            sock->on_close.data = close_data;
             cb(sock, NULL, data, target->peer.host);
             return;
         }
@@ -358,10 +362,13 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {
     struct pool_entry_t *entry;
     struct on_close_data_t *close_data;
+    h2o_socketpool_target_t *target;
 
     close_data = sock->on_close.data;
+    target = close_data->target;
     /* reset the on_close callback */
     assert(close_data->pool == pool);
+    free(close_data);
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;
 
@@ -373,7 +380,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     }
     memset(&entry->link, 0, sizeof(entry->link));
     entry->added_at = h2o_now(h2o_socket_get_loop(sock));
-    entry->target = close_data->target;
+    entry->target = target;
 
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
