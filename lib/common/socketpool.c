@@ -35,6 +35,7 @@
 
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
+    h2o_socketpool_target_t *target;
     h2o_linklist_t link;
     uint64_t added_at;
 };
@@ -46,6 +47,11 @@ struct st_h2o_socketpool_connect_request_t {
     h2o_loop_t *loop;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
     h2o_socket_t *sock;
+    h2o_socketpool_target_t *target;
+};
+
+struct on_close_data_t {
+    h2o_socketpool_t *pool;
     h2o_socketpool_target_t *target;
 };
 
@@ -223,21 +229,28 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
 static void on_close(void *data)
 {
-    h2o_socketpool_t *pool = data;
+    struct on_close_data_t *close_data = data;
+    h2o_socketpool_t *pool = close_data->pool;
+    free(close_data);
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
 
 static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen)
 {
+    struct on_close_data_t *close_data;
+
     req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
     if (req->sock == NULL) {
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         call_connect_cb(req, "failed to connect to host");
         return;
     }
+    close_data = h2o_mem_alloc(sizeof(*close_data));
+    close_data->pool = req->pool;
+    close_data->target = req->target;
     req->sock->data = req;
     req->sock->on_close.cb = on_close;
-    req->sock->on_close.data = req->pool;
+    req->sock->on_close.data = close_data;
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
@@ -280,12 +293,12 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         ssize_t rret = recv(entry->sockinfo.fd, buf, 1, MSG_PEEK);
         if (rret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             /* yes! return it */
+            h2o_socketpool_target_t *target = entry->target;
             h2o_socket_t *sock = h2o_socket_import(loop, &entry->sockinfo);
-            h2o_socketpool_connect_request_t *req = sock->data;
             free(entry);
             sock->on_close.cb = on_close;
             sock->on_close.data = pool;
-            cb(sock, NULL, data, req->target->peer.host);
+            cb(sock, NULL, data, target->peer.host);
             return;
         }
 
@@ -344,9 +357,11 @@ void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req)
 int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {
     struct pool_entry_t *entry;
+    struct on_close_data_t *close_data;
 
+    close_data = sock->on_close.data;
     /* reset the on_close callback */
-    assert(sock->on_close.data == pool);
+    assert(close_data->pool == pool);
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;
 
@@ -358,6 +373,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     }
     memset(&entry->link, 0, sizeof(entry->link));
     entry->added_at = h2o_now(h2o_socket_get_loop(sock));
+    entry->target = close_data->target;
 
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
