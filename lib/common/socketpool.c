@@ -127,6 +127,7 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
     }
 
     target = h2o_mem_alloc(sizeof(*target));
+    memset(&target->link, 0, sizeof(target->link));
     target->type = H2O_SOCKETPOOL_TYPE_SOCKADDR;
     target->peer.host = h2o_strdup(NULL, host, host_len);
     memcpy(&target->peer.sockaddr.bytes, sa, salen);
@@ -151,6 +152,7 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
     }
 
     target = h2o_mem_alloc(sizeof(*target));
+    memset(&target->link, 0, sizeof(target->link));
     target->type = H2O_SOCKETPOOL_TYPE_NAMED;
     target->peer.host = h2o_strdup(NULL, host.base, host.len);
     target->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
