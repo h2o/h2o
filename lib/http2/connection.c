@@ -173,19 +173,16 @@ static int can_run_requests(h2o_http2_conn_t *conn)
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
-    h2o_linklist_t tmp;
+    h2o_linklist_t *link, *lnext;
 
-    h2o_linklist_init_anchor(&tmp);
-
-    while (!h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)) {
+    for (link = conn->_pending_reqs.next; link != &conn->_pending_reqs && can_run_requests(conn); link = lnext) {
         /* fetch and detach a pending stream */
-        h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_pending_reqs.next);
+        h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, link);
 
-        h2o_linklist_unlink(&stream->_refs.link);
+        lnext = link->next;
 
         if (stream->req._write_req_chunk_done != NULL) {
             if (conn->num_streams._request_body_in_progress) {
-                h2o_linklist_insert(&tmp, &stream->_refs.link);
                 continue;
             }
             conn->num_streams._request_body_in_progress++;
@@ -197,16 +194,12 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
             }
         }
 
+        h2o_linklist_unlink(&stream->_refs.link);
+
         /* handle it */
         if (!h2o_http2_stream_is_push(stream->stream_id) && conn->pull_stream_ids.max_processed < stream->stream_id)
             conn->pull_stream_ids.max_processed = stream->stream_id;
         h2o_process_request(&stream->req);
-    }
-
-    while (!h2o_linklist_is_empty(&tmp)) {
-        h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, tmp.next);
-        h2o_linklist_unlink(&stream->_refs.link);
-        h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);
     }
 }
 
