@@ -174,33 +174,40 @@ static int can_run_requests(h2o_http2_conn_t *conn)
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
     h2o_linklist_t *link, *lnext;
+    int ran_one_request;
 
-    for (link = conn->_pending_reqs.next; link != &conn->_pending_reqs && can_run_requests(conn); link = lnext) {
-        /* fetch and detach a pending stream */
-        h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, link);
+    do {
+        ran_one_request = 0;
 
-        lnext = link->next;
+        for (link = conn->_pending_reqs.next; link != &conn->_pending_reqs && can_run_requests(conn); link = lnext) {
+            /* fetch and detach a pending stream */
+            h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, link);
 
-        if (stream->req._write_req_chunk_done != NULL) {
-            if (conn->num_streams._request_body_in_progress) {
-                continue;
+            lnext = link->next;
+
+            if (stream->req._write_req_chunk_done != NULL) {
+                if (conn->num_streams._request_body_in_progress) {
+                    continue;
+                }
+                conn->num_streams._request_body_in_progress++;
+                stream->_conn_stream_in_progress = 1;
+            } else {
+                if (stream->state < H2O_HTTP2_STREAM_STATE_SEND_HEADERS) {
+                    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+                    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+                }
             }
-            conn->num_streams._request_body_in_progress++;
-            stream->_conn_stream_in_progress = 1;
-        } else {
-            if (stream->state < H2O_HTTP2_STREAM_STATE_SEND_HEADERS) {
-                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-                h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
-            }
+
+            h2o_linklist_unlink(&stream->_refs.link);
+            ran_one_request = 1;
+
+            /* handle it */
+            if (!h2o_http2_stream_is_push(stream->stream_id) && conn->pull_stream_ids.max_processed < stream->stream_id)
+                conn->pull_stream_ids.max_processed = stream->stream_id;
+            h2o_process_request(&stream->req);
         }
 
-        h2o_linklist_unlink(&stream->_refs.link);
-
-        /* handle it */
-        if (!h2o_http2_stream_is_push(stream->stream_id) && conn->pull_stream_ids.max_processed < stream->stream_id)
-            conn->pull_stream_ids.max_processed = stream->stream_id;
-        h2o_process_request(&stream->req);
-    }
+    } while (ran_one_request && !h2o_linklist_is_empty(&conn->_pending_reqs));
 }
 
 static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
