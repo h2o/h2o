@@ -347,11 +347,6 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     int arena = mrb_gc_arena_save(mrb);
 
     mrb_value fibers = prepare_fibers(handler_ctx);
-    if (mrb->exc != NULL) {
-        fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
-        mrb->exc = NULL;
-        return;
-    }
     assert(mrb_array_p(fibers));
 
     handler_ctx->proc = mrb_ary_entry(fibers, 0);
