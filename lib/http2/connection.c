@@ -66,6 +66,7 @@ static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
+static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream);
 
 const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
 
@@ -423,13 +424,16 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     size_t dummy_content_length;
     int ret;
 
-    assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY);
-
     if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, NULL, &dummy_content_length, NULL,
                                        err_desc)) != 0)
         return ret;
 
-    execute_or_enqueue_request(conn, stream);
+    /* trailing headers for are ignored for streaming body, but
+       we still need to parse them to keep the HPACK state in sync */
+    if (stream->req._write_req_chunk.cb == write_req_chunk) {
+        assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY);
+        execute_or_enqueue_request(conn, stream);
+    }
     return 0;
 }
 
@@ -527,7 +531,6 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream);
 static void write_req_chunk_done(h2o_req_t *req, size_t written, int done)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
