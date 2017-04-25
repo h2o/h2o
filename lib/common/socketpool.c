@@ -145,7 +145,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
         destroy_attached(entry);
-        __sync_sub_and_fetch(&pool->_shared.count, 1);
+        --pool->_shared.count;
     }
     pthread_mutex_unlock(&pool->_shared.mutex);
     pthread_mutex_destroy(&pool->_shared.mutex);
