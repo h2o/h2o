@@ -381,7 +381,6 @@ int main(int argc, char **argv)
 resolve_secket_queue = h2o_multithread_create_queue(loop);//FIXME do we need to  call after all buisness h2o_multithread_destroy_queue?
 
     if (mode_listen){
-//create receiver
         h2o_multithread_register_receiver(resolve_secket_queue,resolve_socket_cb,resolve_socket_receiver);
         _getaddr_req = h2o_hostinfo_getaddr(resolve_socket_receiver, h2o_iovec_host, h2o_iovec_port,AF_INET,SOCK_STREAM,IPPROTO_TCP,AI_ADDRCONFIG,resolve_socket_cb,void *cbdata);
     } else {
