@@ -430,9 +430,11 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     /* trailing headers for are ignored for streaming body, but
        we still need to parse them to keep the HPACK state in sync */
-    if (stream->req._write_req_chunk.cb == write_req_chunk) {
+    if (!stream->req._write_req_chunk_done) {
         assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY);
         execute_or_enqueue_request(conn, stream);
+    } else {
+        stream->req._write_req_chunk.cb(stream->req._write_req_chunk.priv, h2o_iovec_init(NULL, 0), 1);
     }
     return 0;
 }
@@ -582,10 +584,8 @@ static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream)
         }
     } else {
         if (is_end_stream) {
-            if (stream->req._write_req_chunk.cb == write_req_chunk) {
-                stream->req._write_req_chunk_done = NULL;
-                stream->req._write_req_chunk.cb = NULL;
-            }
+            stream->req._write_req_chunk_done = NULL;
+            stream->req._write_req_chunk.cb = NULL;
         }
     }
 
