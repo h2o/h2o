@@ -211,7 +211,7 @@ no_scheme:
                     return ret;
                 }
             }
-            ret.raw.port.len = i;
+            ret.raw.port.len = &url.buf[i] - ret.raw.port.buf;
             break;
         } else if (url.buf[i] == '/') {
             ret.raw.host.len = i;

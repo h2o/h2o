@@ -740,6 +740,19 @@ static mrb_value h2get_mruby_frame_ack(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
+static mrb_value h2get_mruby_frame_increment(mrb_state *mrb, mrb_value self)
+{
+    struct h2get_mruby_frame *h2g_frame;
+
+    h2g_frame = mrb_data_get_ptr(mrb, self, &h2get_mruby_frame_type);
+    if (h2g_frame->header.type == H2GET_HEADERS_WINDOW_UPDATE) {
+        return mrb_fixnum_value(ntohl(*(uint32_t *)RSTRING_PTR(h2g_frame->payload)));
+    } else {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "Frame type must be WINDOW_UPDATE");
+        return mrb_nil_value();
+    }
+}
+
 static mrb_value h2get_mruby_priority_init(mrb_state *mrb, mrb_value self)
 {
     struct h2get_mruby_priority *h2p;
@@ -835,6 +848,7 @@ void run_mruby(const char *rbfile, int argc, char **argv)
     mrb_define_method(mrb, h2get_mruby_frame, "stream_id", h2get_mruby_frame_stream_id, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "is_end_stream", h2get_mruby_frame_is_end_stream, MRB_ARGS_ARG(0, 0));
     mrb_define_method(mrb, h2get_mruby_frame, "ack", h2get_mruby_frame_ack, MRB_ARGS_ARG(0, 0));
+    mrb_define_method(mrb, h2get_mruby_frame, "increment", h2get_mruby_frame_increment, MRB_ARGS_ARG(0, 0));
 
     /* Priority */
     mrb_define_method(mrb, h2get_mruby_priority, "initialize", h2get_mruby_priority_init, MRB_ARGS_ARG(3, 0));
