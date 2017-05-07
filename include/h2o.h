@@ -1107,7 +1107,7 @@ int h2o_iovec_is_token(const h2o_iovec_t *buf);
  */
 ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor);
 /**
- * searches for a header of given name (slow, by comparing strings)
+ * searches for a header of given name (slow, by comparing strings case insensitive)
  * @param headers header list
  * @param name name of the header to search for
  * @param name_len length of the name
@@ -1121,7 +1121,7 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
                     const char *value, size_t value_len);
 /**
- * adds a header to list
+ * adds a header to list (name should be lowercase to be a valid http2 header)
  */
 void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
                            const char *orig_name, const char *value, size_t value_len);
@@ -1131,7 +1131,7 @@ void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const c
 void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
                     int overwrite_if_exists);
 /**
- * adds or replaces a header into the list
+ * adds or replaces a header into the list (name should be lowercase to be a valid http2 header)
  */
 void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
                            const char *value, size_t value_len, int overwrite_if_exists);
