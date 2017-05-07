@@ -95,7 +95,7 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-static void common_init(h2o_socketpool_t *pool, h2o_linklist_t *target_list, int is_ssl, size_t capacity)
+static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, int is_ssl, size_t capacity)
 {
     memset(pool, 0, sizeof(*pool));
 
@@ -105,18 +105,16 @@ static void common_init(h2o_socketpool_t *pool, h2o_linklist_t *target_list, int
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
-    h2o_linklist_init_anchor(&pool->targets);
-    h2o_linklist_insert_list(&pool->targets, target_list);
+    memcpy(&pool->targets, &targets, sizeof(targets));
 }
 
 void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity)
 {
     char host[NI_MAXHOST];
     size_t host_len;
-    h2o_socketpool_target_t *target;
-    h2o_linklist_t target_list;
+    h2o_socketpool_target_vector_t targets = {};
 
-    assert(salen <= sizeof(target->peer.sockaddr.bytes));
+    assert(salen <= sizeof(targets.entries[0].peer.sockaddr.bytes));
 
     if ((host_len = h2o_socket_getnumerichost(sa, salen, host)) == SIZE_MAX) {
         if (sa->sa_family != AF_UNIX)
@@ -126,21 +124,18 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
         host_len = strlen(host);
     }
 
-    target = h2o_mem_alloc(sizeof(*target));
-    memset(&target->link, 0, sizeof(target->link));
-    target->type = H2O_SOCKETPOOL_TYPE_SOCKADDR;
-    target->peer.host = h2o_strdup(NULL, host, host_len);
-    memcpy(&target->peer.sockaddr.bytes, sa, salen);
-    target->peer.sockaddr.len = salen;
-    h2o_linklist_init_anchor(&target_list);
-    h2o_linklist_insert(&target_list, &target->link);
-    common_init(pool, &target_list, is_ssl, capacity);
+    h2o_vector_reserve(NULL, &targets, 1);
+    targets.entries[0].type = H2O_SOCKETPOOL_TYPE_SOCKADDR;
+    targets.entries[0].peer.host = h2o_strdup(NULL, host, host_len);
+    memcpy(&targets.entries[0].peer.sockaddr.bytes, sa, salen);
+    targets.entries[0].peer.sockaddr.len = salen;
+    targets.size = 1;
+    common_init(pool, targets, is_ssl, capacity);
 }
 
 void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity)
 {
-    h2o_socketpool_target_t *target;
-    h2o_linklist_t target_list;
+    h2o_socketpool_target_vector_t targets = {};
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
 
@@ -151,19 +146,19 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
         return;
     }
 
-    target = h2o_mem_alloc(sizeof(*target));
-    memset(&target->link, 0, sizeof(target->link));
-    target->type = H2O_SOCKETPOOL_TYPE_NAMED;
-    target->peer.host = h2o_strdup(NULL, host.base, host.len);
-    target->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
-    target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)port);
-    h2o_linklist_init_anchor(&target_list);
-    h2o_linklist_insert(&target_list, &target->link);
-    common_init(pool, &target_list, is_ssl, capacity);
+    h2o_vector_reserve(NULL, &targets, 1);
+    targets.entries[0].type = H2O_SOCKETPOOL_TYPE_NAMED;
+    targets.entries[0].peer.host = h2o_strdup(NULL, host.base, host.len);
+    targets.entries[0].peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
+    targets.entries[0].peer.named_serv.len = sprintf(targets.entries[0].peer.named_serv.base, "%u", (unsigned)port);
+    targets.size = 1;
+    common_init(pool, targets, is_ssl, capacity);
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
+    size_t i;
+    
     pthread_mutex_lock(&pool->_shared.mutex);
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
@@ -178,9 +173,8 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
     }
     
-    while (!h2o_linklist_is_empty(&pool->targets)) {
-        h2o_socketpool_target_t *target = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_target_t, link, pool->targets.next);
-        h2o_linklist_unlink(pool->targets.next);
+    for (i = 0; i < pool->targets.size; i++) {
+        h2o_socketpool_target_t *target = &pool->targets.entries[i];
         free(target->peer.host.base);
         switch (target->type) {
         case H2O_SOCKETPOOL_TYPE_NAMED:
@@ -189,8 +183,8 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         case H2O_SOCKETPOOL_TYPE_SOCKADDR:
             break;
         }
-        free(target);
     }
+    free(pool->targets.entries);
 }
 
 void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
@@ -332,9 +326,9 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (_req != NULL)
         *_req = req;
 
-    assert(!h2o_linklist_is_empty(&pool->targets));
+    assert(pool->targets.size != 0);
     /* FIXME: for now, we only use the first target in the list. */
-    h2o_socketpool_target_t *target = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_target_t, link, pool->targets.next);
+    h2o_socketpool_target_t *target = &pool->targets.entries[0];
     req->target = target;
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:

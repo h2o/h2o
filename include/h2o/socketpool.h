@@ -50,13 +50,14 @@ typedef struct st_h2o_socketpool_target_t {
             } sockaddr;
         };
     } peer;
-    h2o_linklist_t link;
 } h2o_socketpool_target_t;
+
+typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
 
 typedef struct st_h2o_socketpool_t {
 
     /* read-only vars */
-    h2o_linklist_t targets;
+    h2o_socketpool_target_vector_t targets;
     int is_ssl;
     size_t capacity;
     uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
