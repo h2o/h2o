@@ -445,14 +445,14 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     on_connection_ready(client);
 }
 
-static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_iovec_t host)
+static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_socketpool_target_t *target)
 {
     struct st_h2o_http1client_private_t *client = data;
 
     client->super.sockpool.connect_req = NULL;
     
-    if (client->super.sockpool.pool->is_ssl) {
-        client->super.ssl.server_name = h2o_strdup(NULL, host.base, host.len).base;
+    if (target->is_ssl) {
+        client->super.ssl.server_name = h2o_strdup(NULL, target->peer.host.base, target->peer.host.len).base;
     }
 
     if (sock == NULL) {

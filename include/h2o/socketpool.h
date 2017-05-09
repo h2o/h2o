@@ -38,6 +38,7 @@ typedef enum en_h2o_socketpool_target_type_t { H2O_SOCKETPOOL_TYPE_NAMED, H2O_SO
 
 typedef struct st_h2o_socketpool_target_t {
     h2o_socketpool_target_type_t type;
+    int is_ssl;
     struct {
         h2o_iovec_t host;
         union {
@@ -54,11 +55,16 @@ typedef struct st_h2o_socketpool_target_t {
 
 typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
 
+typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried);
+
+typedef void (*h2o_socketpool_lb_initializer)(h2o_socketpool_target_vector_t *targets, void **data);
+
+typedef void (*h2o_socketpool_lb_dispose_cb)(void *data);
+
 typedef struct st_h2o_socketpool_t {
 
     /* read-only vars */
     h2o_socketpool_target_vector_t targets;
-    int is_ssl;
     size_t capacity;
     uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
     struct {
@@ -73,11 +79,20 @@ typedef struct st_h2o_socketpool_t {
         pthread_mutex_t mutex;
         h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
     } _shared;
+
+    /* vars used by load balancing, modified by multiple threads */
+    struct {
+        h2o_socketpool_lb_selector selector;
+        h2o_socketpool_lb_dispose_cb dispose;
+        pthread_mutex_t mutex;
+        void *data;
+    } _lb;
 } h2o_socketpool_t;
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
 
-typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_iovec_t host);
+typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data,
+    h2o_socketpool_target_t *target);
 /**
  * initializes a socket loop
  */
