@@ -22,15 +22,13 @@
 #include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdio.h>
-#include <sys/socket.h>
-#include <sys/types.h>
+#include "h2o/hostinfo.h"
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include "h2o/socket.h"
 #include "h2o/string_.h"
+#include "h2o/timeout.h"
 
 /* configuration */
 static char *host, *port;
@@ -42,13 +40,6 @@ size_t write_block_size = 65536;
 /* globals */
 static h2o_loop_t *loop;
 static h2o_socket_t *sock;
-h2o_hostinfo_getaddr_req_t *_getaddr_req;//for host port
-h2o_multithread_queue_t *resolve_secket_queue;
-h2o_multithread_receiver_cb *resolve_socket_cb =&resolve_socket_cb, resolve_socket_cb2=&resolve_socket_cb2;
-h2o_multithread_receiver_t *resolve_socket_receiver; 
-h2o_iovec_t *h2o_iovec_host;
-h2o_iovec_t *h2o_iovec_port;
-void *cbdata;//pointer for callback data,do we need it?
 static struct {
     uint64_t resp_start_at;
     uint64_t sig_received_at;
@@ -56,10 +47,17 @@ static struct {
     uint64_t bytes_before_sig;
 } client_stats;
 
+/*variables for assync socket resolving*/
+h2o_hostinfo_getaddr_req_t *_getaddr_req; //for host port
+h2o_multithread_queue_t *resolve_secket_queue;
+h2o_multithread_receiver_t resolve_socket_receiver;
+h2o_iovec_t h2o_iovec_host;
+h2o_iovec_t h2o_iovec_port;
+h2o_timeout_t io_timeout;
+
 static void server_write(h2o_socket_t *sock);
 
-static h2o_iovec_t prepare_write_buf(void)
-{
+static h2o_iovec_t prepare_write_buf(void) {
     static h2o_iovec_t buf;
     if (buf.base == NULL) {
         buf.base = h2o_mem_alloc(write_block_size);
@@ -69,8 +67,7 @@ static h2o_iovec_t prepare_write_buf(void)
     return buf;
 }
 
-static void server_on_write_ready(h2o_socket_t *sock, const char *err)
-{
+static void server_on_write_ready(h2o_socket_t *sock, const char *err) {
     if (err != NULL) {
         fprintf(stderr, "socket unexpected closed by peer:%s\n", err);
         exit(1);
@@ -79,8 +76,7 @@ static void server_on_write_ready(h2o_socket_t *sock, const char *err)
     server_write(sock);
 }
 
-static void server_on_write_complete(h2o_socket_t *sock, const char *err)
-{
+static void server_on_write_complete(h2o_socket_t *sock, const char *err) {
     if (err != NULL) {
         fprintf(stderr, "write failed:%s\n", err);
         exit(1);
@@ -89,8 +85,7 @@ static void server_on_write_complete(h2o_socket_t *sock, const char *err)
     h2o_socket_notify_write(sock, server_on_write_ready);
 }
 
-void server_write(h2o_socket_t *sock)
-{
+void server_write(h2o_socket_t *sock) {
     size_t sz = h2o_socket_prepare_for_latency_optimized_write(sock, &latopt_cond);
     h2o_iovec_t buf = prepare_write_buf();
 
@@ -103,8 +98,7 @@ void server_write(h2o_socket_t *sock)
     h2o_socket_write(sock, &buf, 1, server_on_write_complete);
 }
 
-static void server_on_read_second(h2o_socket_t *sock, const char *err)
-{
+static void server_on_read_second(h2o_socket_t *sock, const char *err) {
     if (err != NULL) {
         fprintf(stderr, "connection closed unexpectedly:%s\n", err);
         exit(1);
@@ -115,8 +109,7 @@ static void server_on_read_second(h2o_socket_t *sock, const char *err)
     server_flag_received = 1;
 }
 
-static void server_on_read_first(h2o_socket_t *sock, const char *err)
-{
+static void server_on_read_first(h2o_socket_t *sock, const char *err) {
     if (err != NULL) {
         fprintf(stderr, "connection closed unexpectedly:%s\n", err);
         exit(1);
@@ -127,8 +120,7 @@ static void server_on_read_first(h2o_socket_t *sock, const char *err)
     h2o_socket_read_start(sock, server_on_read_second);
 }
 
-static void client_on_write_complete(h2o_socket_t *sock, const char *err)
-{
+static void client_on_write_complete(h2o_socket_t *sock, const char *err) {
     if (err == NULL)
         return;
     /* handle error */
@@ -137,8 +129,7 @@ static void client_on_write_complete(h2o_socket_t *sock, const char *err)
     exit(1);
 }
 
-static void client_on_read_second(h2o_socket_t *sock, const char *err)
-{
+static void client_on_read_second(h2o_socket_t *sock, const char *err) {
     size_t i;
 
     if (err != NULL) {
@@ -162,14 +153,13 @@ static void client_on_read_second(h2o_socket_t *sock, const char *err)
     if (client_stats.bytes_received >= 1024 * 1024) {
         uint64_t now = h2o_now(h2o_socket_get_loop(sock));
         printf("Delay: %" PRIu64 " octets, %" PRIu64 " ms\n", client_stats.bytes_before_sig,
-               client_stats.sig_received_at - client_stats.resp_start_at);
+                client_stats.sig_received_at - client_stats.resp_start_at);
         printf("Total: %" PRIu64 " octets, %" PRIu64 " ms\n", client_stats.bytes_received, now - client_stats.resp_start_at);
         exit(0);
     }
 }
 
-static void client_on_read_first(h2o_socket_t *sock, const char *err)
-{
+static void client_on_read_first(h2o_socket_t *sock, const char *err) {
     if (err != NULL) {
         fprintf(stderr, "connection closed unexpectedly:%s\n", err);
         exit(1);
@@ -186,8 +176,7 @@ static void client_on_read_first(h2o_socket_t *sock, const char *err)
     h2o_socket_read_start(sock, client_on_read_second);
 }
 
-static void on_handshake_complete(h2o_socket_t *sock, const char *err)
-{
+static void on_handshake_complete(h2o_socket_t *sock, const char *err) {
     if (err != NULL && err != h2o_socket_error_ssl_cert_name_mismatch) {
         /* TLS handshake failed */
         fprintf(stderr, "TLS handshake failure:%s\n", err);
@@ -206,8 +195,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     }
 }
 
-static void on_connect(h2o_socket_t *sock, const char *err)
-{
+static void on_connect(h2o_socket_t *sock, const char *err) {
     if (err != NULL) {
         /* connection failed */
         fprintf(stderr, "failed to connect to host:%s\n", err);
@@ -223,8 +211,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 }
 
-static void on_accept(h2o_socket_t *listener, const char *err)
-{
+static void on_accept(h2o_socket_t *listener, const char *err) {
     if (err != NULL)
         return;
 
@@ -238,93 +225,91 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     }
 }
 
-static void usage(const char *cmd)
-{
+static void usage(const char *cmd) {
     fprintf(stderr, "Usage: %s [opts] [<host>:]<port>\n"
-                    "Options: --listen             if set, waits for incoming connection. Otherwise,\n"
-                    "                              connects to the server running at given address\n"
-                    "         --reverse-role       if set, reverses the role bet. server and the\n"
-                    "                              client once the connection is established\n"
-                    "         --tls                use TLS\n"
-                    "         --block-size=octets  default write block size\n"
-                    "         --min-rtt=ms         minimum RTT to enable latency optimization\n"
-                    "         --max-cwnd=octets    maximum size of CWND to enable latency\n"
-                    "                              optimization\n",
+            "Options: --listen             if set, waits for incoming connection. Otherwise,\n"
+            "                              connects to the server running at given address\n"
+            "         --reverse-role       if set, reverses the role bet. server and the\n"
+            "                              client once the connection is established\n"
+            "         --tls                use TLS\n"
+            "         --block-size=octets  default write block size\n"
+            "         --min-rtt=ms         minimum RTT to enable latency optimization\n"
+            "         --max-cwnd=octets    maximum size of CWND to enable latency\n"
+            "                              optimization\n",
             cmd);
     exit(1);
 }
 
-resolve_socket_cb(h2o_hostinfo_getaddr_req_t *req,char *errstr,struct addrinfo *ai,void *cbdata){
-    if (errstr){
+void  resolve_socket_cb(h2o_hostinfo_getaddr_req_t *req, const char *errstr, struct addrinfo *ai, void *cbdata) {
+
+    if (errstr) {
         fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, errstr);
         exit(1);
     };
-    int fd, reuseaddr_flag = 1;
-    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
-        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
-        bind(fd, ai->ai_addr, ai->ai_addrlen) != 0 || listen(fd, SOMAXCONN) != 0) {
-        fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
-        exit(1);
-    }
-    h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-    h2o_socket_read_start(listen_sock, on_accept);   
-};
-resolve_socket_cb2(h2o_hostinfo_getaddr_req_t *req,char *errstr,struct addrinfo *ai,void *cbdata){
-    if (errstr){
-        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, errstr);
-        exit(1);
-    };
-    if ((sock = h2o_socket_connect(loop, ai->ai_addr, ai->ai_addrlen, on_connect)) == NULL) {
+    /*getting data from pointer and converting into source data type*/
+    int data=(*(int*)cbdata); 
+    
+    if(data){    
+        int fd, reuseaddr_flag = 1;
+        if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+                setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof (reuseaddr_flag)) != 0 ||
+                bind(fd, ai->ai_addr, ai->ai_addrlen) != 0 || listen(fd, SOMAXCONN) != 0) {
+            fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
+            exit(1);
+        }
+        h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        h2o_socket_read_start(listen_sock, on_accept);
+    } else {
+        if ((sock = h2o_socket_connect(loop, ai->ai_addr, ai->ai_addrlen, on_connect)) == NULL) {
         fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
         exit(1);
-    }    
+        }
+    }
+    return;
 };
 
-int main(int argc, char **argv)
-{
-    static const struct option longopts[] = {{"listen", no_argument, NULL, 'l'},
-                                             {"reverse-role", no_argument, NULL, 'r'},
-                                             {"tls", no_argument, NULL, 't'},
-                                             {"block-size", no_argument, NULL, 'b'},
-                                             {"min-rtt", required_argument, NULL, 'R'},
-                                             {"max-cwnd", required_argument, NULL, 'c'},
-                                             {}};
+int main(int argc, char **argv) {
+    static const struct option longopts[] = {
+        {"listen", no_argument, NULL, 'l'},
+        {"reverse-role", no_argument, NULL, 'r'},
+        {"tls", no_argument, NULL, 't'},
+        {"block-size", no_argument, NULL, 'b'},
+        {"min-rtt", required_argument, NULL, 'R'},
+        {"max-cwnd", required_argument, NULL, 'c'},
+        {}};
     int opt_ch, mode_listen = 0, mode_reverse_role = 0, mode_tls = 0;
-    struct addrinfo hints, *res = NULL;
-    int err;
-
     while ((opt_ch = getopt_long(argc, argv, "lrtb:R:c:", longopts, NULL)) != -1) {
         switch (opt_ch) {
-        case 'l':
-            mode_listen = 1;
-            break;
-        case 'r':
-            mode_reverse_role = 1;
-            break;
-        case 't':
-            mode_tls = 1;
-            break;
-        case 'b':
-            if (sscanf(optarg, "%zu", &write_block_size) != 1) {
-                fprintf(stderr, "write block size (-b) must be a non-negative number of octets\n");
-                exit(1);
-            }
-            break;
-        case 'R':
-            if (sscanf(optarg, "%u", &latopt_cond.min_rtt) != 1) {
-                fprintf(stderr, "min RTT (-m) must be a non-negative number in milliseconds\n");
-                exit(1);
-            }
-            break;
-        case 'c':
-            if (sscanf(optarg, "%u", &latopt_cond.max_cwnd) != 1) {
-                fprintf(stderr, "max CWND size must be a non-negative number of octets\n");
-                exit(1);
-            }
-            break;
-        default:
-            usage(argv[0]);
-            break;
+            case 'l':
+                mode_listen = 1;
+                break;
+            case 'r':
+                mode_reverse_role = 1;
+                break;
+            case 't':
+                mode_tls = 1;
+                break;
+            case 'b':
+                if (sscanf(optarg, "%zu", &write_block_size) != 1) {
+                    fprintf(stderr, "write block size (-b) must be a non-negative number of octets\n");
+                    exit(1);
+                }
+                break;
+            case 'R':
+                if (sscanf(optarg, "%u", &latopt_cond.min_rtt) != 1) {
+                    fprintf(stderr, "min RTT (-m) must be a non-negative number in milliseconds\n");
+                    exit(1);
+                }
+                break;
+            case 'c':
+                if (sscanf(optarg, "%u", &latopt_cond.max_cwnd) != 1) {
+                    fprintf(stderr, "max CWND size must be a non-negative number of octets\n");
+                    exit(1);
+                }
+                break;
+            default:
+                usage(argv[0]);
+                break;
         }
     }
     mode_server = mode_listen;
@@ -372,29 +357,30 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
     loop = uv_loop_new();
 #else
-    loop = h2o_evloop_create();
+    loop = h2o_evloop_create();  
+
 #endif
+
+    h2o_iovec_host = h2o_iovec_init(host, sizeof (host));
+    h2o_iovec_port = h2o_iovec_init(port, sizeof (port));
+    resolve_secket_queue = h2o_multithread_create_queue(loop);
+    h2o_multithread_register_receiver(resolve_secket_queue,&resolve_socket_receiver,h2o_hostinfo_getaddr_receiver);
+ // h2o_timeout_init(loop, &io_timeout, 5000); /* 5 seconds */
+    /*We can send any data to h2o_hostinfo_getaddr via last argument, but it must be a pointer*/
+    h2o_hostinfo_getaddr(&resolve_socket_receiver, h2o_iovec_host, h2o_iovec_port, AF_INET, SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG, resolve_socket_cb, &mode_listen);
     
-    h2o_iovec_host = h2o_iovec_init(host,sizeof(host));
-    h2o_iovec_port = h2o_iovec_init(port,sizeof(port));
-    //maybe we need to create new loop?
-resolve_secket_queue = h2o_multithread_create_queue(loop);//FIXME do we need to  call after all buisness h2o_multithread_destroy_queue?
 
-    if (mode_listen){
-        h2o_multithread_register_receiver(resolve_secket_queue,resolve_socket_cb,resolve_socket_receiver);
-        _getaddr_req = h2o_hostinfo_getaddr(resolve_socket_receiver, h2o_iovec_host, h2o_iovec_port,AF_INET,SOCK_STREAM,IPPROTO_TCP,AI_ADDRCONFIG,resolve_socket_cb,void *cbdata);
-    } else {
-        h2o_multithread_register_receiver(resolve_secket_queue,resolve_socket_cb2,resolve_socket_receiver);
-        _getaddr_req = h2o_hostinfo_getaddr(resolve_socket_receiver, h2o_iovec_host, h2o_iovec_port,AF_INET,SOCK_STREAM,IPPROTO_TCP,AI_ADDRCONFIG,resolve_socket_cb2,void *cbdata);        
-    }
 
-    while (1) {
 #if H2O_USE_LIBUV
         uv_run(loop, UV_RUN_DEFAULT);
 #else
-        h2o_evloop_run(loop, INT32_MAX);
+        while(!h2o_evloop_run(loop, INT32_MAX));
 #endif
-    }
+        /* TODO:it is better write on_exit function handler that do this work*/
+        //Error:
+            h2o_multithread_destroy_queue(resolve_secket_queue);
+            h2o_evloop_destroy(loop);
+            exit(1);
 
     return 0;
 }
