@@ -238,15 +238,50 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    h2o_url_t parsed;
 
-    if (h2o_url_parse(node->data.scalar, SIZE_MAX, &parsed) != 0) {
-        h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
+    h2o_url_t parsed;
+    h2o_url_t *upstreams;
+    size_t count;
+    size_t i;
+
+    switch (node->type) {
+    case YOML_TYPE_SCALAR:
+        if (h2o_url_parse(node->data.scalar, SIZE_MAX, &parsed) != 0) {
+            h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
+            return -1;
+        }
+        upstreams = &parsed;
+        count = 1;
+
+        break;
+    case YOML_TYPE_SEQUENCE:
+        count = node->data.sequence.size;
+        if (self->vars->keepalive_timeout == 0 && count > 1) {
+            h2o_configurator_errprintf(cmd, node, "for now we don't support multiple backends with keep-alive disabled");
+            return -1;
+        }
+        upstreams = alloca(count * sizeof(h2o_url_t));
+        for (i = 0; i != node->data.sequence.size; ++i) {
+            yoml_t *element = node->data.sequence.elements[i];
+            if (element->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, element, "element of a sequence passed to proxy.reverse.url must be a scalar");
+                return -1;
+            }
+            if (h2o_url_parse(element->data.scalar, SIZE_MAX, &upstreams[i]) != 0) {
+                h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", element->data.scalar);
+                return -1;
+            }
+        }
+
+        break;
+    default:
+        h2o_configurator_errprintf(cmd, node, "argument to proxy.reverse.url must be either a scalar or a sequence");
         return -1;
     }
+
     if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
         h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
     }
 
@@ -254,7 +289,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_mem_addref_shared(self->vars->headers_cmds);
 
     /* register */
-    h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, self->vars);
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, upstreams, count, self->vars);
 
     return 0;
 }
@@ -355,7 +390,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
     h2o_configurator_define_command(
         &c->super, "proxy.reverse.url",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_url);
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE
+                                    | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_url);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_host);

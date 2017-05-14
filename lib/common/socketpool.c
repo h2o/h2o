@@ -161,13 +161,12 @@ static void lb_rr_dispose(void *data)
     free(data);
 }
 
-void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity)
+void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl)
 {
     char host[NI_MAXHOST];
     size_t host_len;
-    h2o_socketpool_target_vector_t targets = {};
 
-    assert(salen <= sizeof(targets.entries[0].peer.sockaddr.bytes));
+    assert(salen <= sizeof(target->peer.sockaddr.bytes));
 
     if ((host_len = h2o_socket_getnumerichost(sa, salen, host)) == SIZE_MAX) {
         if (sa->sa_family != AF_UNIX)
@@ -177,36 +176,54 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
         host_len = strlen(host);
     }
 
+    target->is_ssl = is_ssl;
+    target->type = H2O_SOCKETPOOL_TYPE_SOCKADDR;
+    target->peer.host = h2o_strdup(NULL, host, host_len);
+    memcpy(&target->peer.sockaddr.bytes, sa, salen);
+    target->peer.sockaddr.len = salen;
+}
+
+void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity)
+{
+    h2o_socketpool_target_vector_t targets = {};
+
     h2o_vector_reserve(NULL, &targets, 1);
-    targets.entries[0].is_ssl = is_ssl;
-    targets.entries[0].type = H2O_SOCKETPOOL_TYPE_SOCKADDR;
-    targets.entries[0].peer.host = h2o_strdup(NULL, host, host_len);
-    memcpy(&targets.entries[0].peer.sockaddr.bytes, sa, salen);
-    targets.entries[0].peer.sockaddr.len = salen;
+    h2o_socketpool_init_target_by_address(&targets.entries[0], sa, salen, is_ssl);
     targets.size = 1;
     common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
 
-void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity)
+void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl)
 {
-    h2o_socketpool_target_vector_t targets = {};
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
 
     if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
         sin.sin_family = AF_INET;
         sin.sin_port = htons(port);
-        h2o_socketpool_init_by_address(pool, (void *)&sin, sizeof(sin), is_ssl, capacity);
+        h2o_socketpool_init_target_by_address(target, (void *)&sin, sizeof(sin), is_ssl);
         return;
     }
 
+    target->is_ssl = is_ssl;
+    target->type = H2O_SOCKETPOOL_TYPE_NAMED;
+    target->peer.host = h2o_strdup(NULL, host.base, host.len);
+    target->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
+    target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)port);
+}
+
+void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity)
+{
+    h2o_socketpool_target_vector_t targets = {};
+
     h2o_vector_reserve(NULL, &targets, 1);
-    targets.entries[0].is_ssl = is_ssl;
-    targets.entries[0].type = H2O_SOCKETPOOL_TYPE_NAMED;
-    targets.entries[0].peer.host = h2o_strdup(NULL, host.base, host.len);
-    targets.entries[0].peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
-    targets.entries[0].peer.named_serv.len = sprintf(targets.entries[0].peer.named_serv.base, "%u", (unsigned)port);
+    h2o_socketpool_init_target_by_hostport(&targets.entries[0], host, port, is_ssl);
     targets.size = 1;
+    common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
+}
+
+void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity) {
+    assert(targets.size > 0);
     common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
 

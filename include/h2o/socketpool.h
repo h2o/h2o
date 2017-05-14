@@ -102,6 +102,18 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
  */
 void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity);
 /**
+ * initializes a socket pool with specified target vector
+ */
+void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity);
+/**
+ * initializes a target by specified address
+ */
+void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl);
+/**
+ * initializes a target by specified hostport
+ */
+void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl);
+/**
  * disposes of a socket loop
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
