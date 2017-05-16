@@ -1,0 +1,4 @@
+#!/bin/bash
+
+BINARY_DIR=${BINARY_DIR:-.}
+exec valgrind -q --error-exitcode=1 ${BINARY_DIR}/h2o $*

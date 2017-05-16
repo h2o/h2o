@@ -45,6 +45,8 @@ EOT
 
     $cmd->($server);
 
+    sleep(2) if $ENV{"H2O_VALGRIND"}; # make sure the logs can make it to the disk
+
     my @log = do {
         open my $fh, "<", "$tempdir/access_log"
             or die "failed to open access_log:$!";

@@ -18,7 +18,7 @@ use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
 
 sub bindir {
-    $ENV{BINARY_DIR} || '.';
+    $ENV{H2O_VALGRIND} || $ENV{BINARY_DIR} || '.';
 }
 
 sub server_features {
