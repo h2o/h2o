@@ -32,9 +32,12 @@ struct st_h2o_http1client_private_t {
     h2o_http1client_t super;
     union {
         h2o_http1client_connect_cb on_connect;
+        h2o_http1client_sockpool_connect_cb sockpool_on_connect;
         h2o_http1client_head_cb on_head;
         h2o_http1client_body_cb on_body;
     } _cb;
+    h2o_socketpool_target_t *_target;
+    int _connect_by_sockpool;
     h2o_timeout_entry_t _timeout;
     int _method_is_head;
     h2o_hostinfo_getaddr_req_t *_getaddr_req;
@@ -386,7 +389,10 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 static void on_connect_error(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL);
+    if (client->_connect_by_sockpool)
+        client->_cb.sockpool_on_connect(&client->super, errstr, NULL, NULL, NULL, client->_target);
+    else
+        client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL);
     close_client(client);
 }
 
@@ -395,8 +401,12 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_iovec_t *reqbufs;
     size_t reqbufcnt;
 
-    if ((client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head)) ==
-        NULL) {
+    if (client->_connect_by_sockpool) {
+        assert(client->_target != NULL);
+        client->_cb.on_head = client->_cb.sockpool_on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, client->_target);
+    } else
+        client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head);
+    if (client->_cb.on_head == NULL) {
         close_client(client);
         return;
     }
@@ -450,6 +460,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     struct st_h2o_http1client_private_t *client = data;
 
     client->super.sockpool.connect_req = NULL;
+    client->_target = target;
     
     if (target->is_ssl) {
         client->super.ssl.server_name = h2o_strdup(NULL, target->peer.host.base, target->peer.host.len).base;
@@ -512,6 +523,9 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 
     if (_client != NULL)
         *_client = &client->super;
+    
+    client->_connect_by_sockpool = 0;
+    client->_target = NULL;
     return client;
 }
 
@@ -557,10 +571,12 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
 }
 
 void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb)
+                                       h2o_socketpool_t *sockpool, h2o_http1client_sockpool_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client =
-        create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb);
+        create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), NULL);
+    client->_cb.sockpool_on_connect = cb;
+    client->_connect_by_sockpool = 1;
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);

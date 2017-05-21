@@ -33,6 +33,7 @@ extern "C" {
 #include "h2o/multithread.h"
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
+#include "h2o/url.h"
 
 typedef enum en_h2o_socketpool_target_type_t { H2O_SOCKETPOOL_TYPE_NAMED, H2O_SOCKETPOOL_TYPE_SOCKADDR } h2o_socketpool_target_type_t;
 
@@ -51,6 +52,7 @@ typedef struct st_h2o_socketpool_target_t {
             } sockaddr;
         };
     } peer;
+    h2o_url_t *url;
 } h2o_socketpool_target_t;
 
 typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
@@ -108,11 +110,11 @@ void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_targe
 /**
  * initializes a target by specified address
  */
-void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl);
+void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl, h2o_url_t *url);
 /**
  * initializes a target by specified hostport
  */
-void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl);
+void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl, h2o_url_t *url);
 /**
  * disposes of a socket loop
  */

@@ -161,7 +161,7 @@ static void lb_rr_dispose(void *data)
     free(data);
 }
 
-void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl)
+void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl, h2o_url_t *url)
 {
     char host[NI_MAXHOST];
     size_t host_len;
@@ -181,6 +181,12 @@ void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, stru
     target->peer.host = h2o_strdup(NULL, host, host_len);
     memcpy(&target->peer.sockaddr.bytes, sa, salen);
     target->peer.sockaddr.len = salen;
+    if (url != NULL) {
+        target->url = h2o_mem_alloc(sizeof(*target->url));
+        h2o_url_copy(NULL, target->url, url);
+    } else {
+        target->url = NULL;
+    }
 }
 
 void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity)
@@ -188,12 +194,12 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
     h2o_socketpool_target_vector_t targets = {};
 
     h2o_vector_reserve(NULL, &targets, 1);
-    h2o_socketpool_init_target_by_address(&targets.entries[0], sa, salen, is_ssl);
+    h2o_socketpool_init_target_by_address(&targets.entries[0], sa, salen, is_ssl, NULL);
     targets.size = 1;
     common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
 
-void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl)
+void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl, h2o_url_t *url)
 {
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
@@ -201,7 +207,7 @@ void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o
     if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
         sin.sin_family = AF_INET;
         sin.sin_port = htons(port);
-        h2o_socketpool_init_target_by_address(target, (void *)&sin, sizeof(sin), is_ssl);
+        h2o_socketpool_init_target_by_address(target, (void *)&sin, sizeof(sin), is_ssl, url);
         return;
     }
 
@@ -210,6 +216,12 @@ void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o
     target->peer.host = h2o_strdup(NULL, host.base, host.len);
     target->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
     target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)port);
+    if (url != NULL) {
+        target->url = h2o_mem_alloc(sizeof(*target->url));
+        h2o_url_copy(NULL, target->url, url);
+    } else {
+        target->url = NULL;
+    }
 }
 
 void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity)
@@ -217,7 +229,7 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
     h2o_socketpool_target_vector_t targets = {};
 
     h2o_vector_reserve(NULL, &targets, 1);
-    h2o_socketpool_init_target_by_hostport(&targets.entries[0], host, port, is_ssl);
+    h2o_socketpool_init_target_by_hostport(&targets.entries[0], host, port, is_ssl, NULL);
     targets.size = 1;
     common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
@@ -259,6 +271,12 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
             break;
         case H2O_SOCKETPOOL_TYPE_SOCKADDR:
             break;
+        }
+        if (target->url != NULL) {
+            free(target->url->authority.base);
+            free(target->url->host.base);
+            free(target->url->path.base);
+            free(target->url);
         }
     }
     free(pool->targets.entries);

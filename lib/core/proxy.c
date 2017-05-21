@@ -34,7 +34,7 @@ struct rp_generator_t {
     h2o_req_t *src_req;
     h2o_http1client_t *client;
     struct {
-        h2o_iovec_t bufs[2]; /* first buf is the request line and headers, the second is the POST content */
+        h2o_iovec_t bufs[3]; /* first buf is the request line and host header, the second is the rest headers, the third is the POST content */
         int is_head;
     } up_req;
     h2o_buffer_t *last_content_before_send;
@@ -129,7 +129,46 @@ static int req_requires_content_length(h2o_req_t *req)
     return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
 }
 
-static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake, int use_proxy_protocol)
+static h2o_iovec_t build_request_line_host(h2o_req_t *req, int use_proxy_protocol)
+{
+    h2o_iovec_t buf;
+    size_t offset = 0;
+    
+    buf.len = req->method.len + req->path.len + req->authority.len + sizeof("  HTTP/1.1\r\nhost: \r\n");
+    if (use_proxy_protocol)
+        buf.len += H2O_PROXY_HEADER_MAX_LENGTH;
+    buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
+    
+#define APPEND(s, l)                                                                                                               \
+    do {                                                                                                                           \
+        memcpy(buf.base + offset, (s), (l));                                                                                       \
+        offset += (l);                                                                                                             \
+    } while (0)
+#define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
+
+    if (use_proxy_protocol)
+        offset += h2o_stringify_proxy_header(req->conn, buf.base + offset);
+    
+    APPEND(req->method.base, req->method.len);
+    buf.base[offset++] = ' ';
+    APPEND(req->path.base, req->path.len);
+    APPEND_STRLIT(" HTTP/1.1\r\nhost: ");
+    APPEND(req->authority.base, req->authority.len);
+    buf.base[offset++] = '\r';
+    buf.base[offset++] = '\n';
+    buf.base[offset++] = '\0'; /* for debugging */
+
+#undef APPEND
+#undef APPEND_STRLIT
+    
+    /* set the length */
+    assert(offset <= buf.len);
+    buf.len = offset - 1;
+    
+    return buf;
+}
+
+static h2o_iovec_t build_request_rest_headers(h2o_req_t *req, int keepalive, int is_websocket_handshake)
 {
     h2o_iovec_t buf;
     size_t offset = 0, remote_addr_len = SIZE_MAX;
@@ -146,9 +185,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
 
     /* build response */
-    buf.len = req->method.len + req->path.len + req->authority.len + 512;
-    if (use_proxy_protocol)
-        buf.len += H2O_PROXY_HEADER_MAX_LENGTH;
+    buf.len = 512;
     buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
@@ -182,23 +219,14 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         }                                                                                                                          \
     } while (0)
 
-    if (use_proxy_protocol)
-        offset += h2o_stringify_proxy_header(req->conn, buf.base + offset);
-
-    APPEND(req->method.base, req->method.len);
-    buf.base[offset++] = ' ';
-    APPEND(req->path.base, req->path.len);
-    APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
+    APPEND_STRLIT("connection: ");
     if (is_websocket_handshake) {
-        APPEND_STRLIT("upgrade\r\nupgrade: websocket\r\nhost: ");
+        APPEND_STRLIT("upgrade\r\nupgrade: websocket\r\n");
     } else if (keepalive) {
-        APPEND_STRLIT("keep-alive\r\nhost: ");
+        APPEND_STRLIT("keep-alive\r\n");
     } else {
-        APPEND_STRLIT("close\r\nhost: ");
+        APPEND_STRLIT("close\r\n");
     }
-    APPEND(req->authority.base, req->authority.len);
-    buf.base[offset++] = '\r';
-    buf.base[offset++] = '\n';
     assert(offset <= buf.len);
     if (req->entity.base != NULL || req_requires_content_length(req)) {
         RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
@@ -528,10 +556,28 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     }
 
     *reqbufs = self->up_req.bufs;
-    *reqbufcnt = self->up_req.bufs[1].base != NULL ? 2 : 1;
+    *reqbufcnt = self->up_req.bufs[1].base != NULL ? 3 : 2;
     *method_is_head = self->up_req.is_head;
     self->client->informational_cb = on_1xx;
     return on_head;
+}
+
+static h2o_http1client_head_cb on_sockpool_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
+                                                   int *method_is_head, h2o_socketpool_target_t *target) {
+    struct rp_generator_t *self = client->data;
+    h2o_req_t *req = self->src_req;
+    
+    if (errstr == NULL) {
+        assert(target != NULL);
+        assert(target->url);
+        req->overrides->location_rewrite.match = target->url;
+        if (!req->overrides->proxy_preserve_host) {
+            req->scheme = target->url->scheme;
+            req->authority = target->url->authority;
+        }
+        self->up_req.bufs[0] = build_request_line_host(req, 0);
+    }
+    return on_connect(client, errstr, reqbufs, reqbufcnt, method_is_head);
 }
 
 static void on_generator_dispose(void *_self)
@@ -560,8 +606,9 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, 
         self->is_websocket_handshake = 0;
     }
     self->had_body_error = 0;
-    self->up_req.bufs[0] = build_request(req, keepalive, self->is_websocket_handshake, use_proxy_protocol);
-    self->up_req.bufs[1] = req->entity;
+    self->up_req.bufs[0] = build_request_line_host(req, use_proxy_protocol);
+    self->up_req.bufs[1] = build_request_rest_headers(req, keepalive, self->is_websocket_handshake);
+    self->up_req.bufs[2] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
@@ -580,7 +627,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
             if (overrides->use_proxy_protocol)
                 assert(!"proxy protocol cannot be used for a persistent upstream connection");
             self = proxy_send_prepare(req, 1, 0);
-            h2o_http1client_connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_connect);
+            h2o_http1client_connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_sockpool_connect);
             return;
         } else if (overrides->hostport.host.base != NULL) {
             self = proxy_send_prepare(req, 0, overrides->use_proxy_protocol);
