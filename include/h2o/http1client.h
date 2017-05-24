@@ -38,7 +38,7 @@ struct st_h2o_header_t;
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
                                                            int status, h2o_iovec_t msg, struct st_h2o_header_t *headers,
-                                                           size_t num_headers);
+                                                           size_t num_headers, int rlen);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
                                                               size_t *reqbufcnt, int *method_is_head);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
