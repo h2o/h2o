@@ -6,6 +6,7 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'racy under valgrind' if $ENV{"H2O_VALGRIND"};
 
 my $tempdir = tempdir(CLEANUP => 1);
 
@@ -44,8 +45,6 @@ hosts:
 EOT
 
     $cmd->($server);
-
-    sleep(2) if $ENV{"H2O_VALGRIND"}; # make sure the logs can make it to the disk
 
     my @log = do {
         open my $fh, "<", "$tempdir/access_log"
