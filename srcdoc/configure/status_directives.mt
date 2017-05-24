@@ -34,7 +34,7 @@ The information returned by the <code>/json</code> handler can be filtered out u
 There are currently three modules defined:
 <ul>
 <li><code>requests</code>: displays the requests currently in-flight.</li>
-<li><code>durations</code>: displays durations statistics for requests since server start time.  (returns all zeros unless <code>duration-stats</code> is <code>ON</code>)</li>
+<li><code>durations</code>: displays durations statistics for requests since server start time in seconds (returns all zeros unless <code>duration-stats</code> is <code>ON</code>).</li>
 <li><code>errors</code>: displays counters for internally generated errors.</li>
 <li><code>main</code>: displays general daemon-wide stats.</li>
 </ul>
@@ -53,8 +53,8 @@ $ctx->{directive}->(
 </p>
 <p>
 If the argument is <code>ON</code>, this directive populates duration
-statistics to be consumed by status handlers. Note: enabling this feature
-has a noticeable CPU and memory impact.
+statistics in seconds, to be consumed by status handlers. Note: enabling
+this feature has a noticeable CPU and memory impact.
 </p>
 ? })
 
