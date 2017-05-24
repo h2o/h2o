@@ -551,10 +551,14 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             req->res.content_length = h2o_strtosize(value.base, value.len);
         } else {
-            if (token == H2O_TOKEN_LINK)
-                h2o_push_path_in_link_header(req, value.base, value.len);
             value = h2o_strdup(&req->pool, value.base, value.len);
-            h2o_add_header(&req->pool, &req->res.headers, token, NULL, value.base, value.len);
+            if (token == H2O_TOKEN_LINK) {
+                h2o_iovec_t new_value = h2o_push_path_in_link_header(req, value.base, value.len);
+                if (new_value.len)
+                    h2o_add_header(&req->pool, &req->res.headers, token, NULL, new_value.base, new_value.len);
+            } else {
+                h2o_add_header(&req->pool, &req->res.headers, token, NULL, value.base, value.len);
+            }
         }
     } else if (name.len > fallthru_set_prefix.len &&
                h2o_memis(name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
