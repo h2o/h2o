@@ -356,6 +356,7 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     struct rp_ws_upgrade_info_t *info = _info;
 
     if (sock != NULL) {
+        h2o_buffer_consume(&sock->input, reqsize);//It is detached from conn. Let's trash unused data.
         h2o_tunnel_establish(info->ctx, sock, info->upstream_sock, info->timeout);
     } else {
         h2o_socket_close(info->upstream_sock);
@@ -363,10 +364,11 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     free(info);
 }
 
-static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout_t *timeout)
+static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout_t *timeout, int rlen)
 {
     h2o_req_t *req = self->src_req;
     h2o_socket_t *sock = h2o_http1client_steal_socket(self->client);
+    h2o_buffer_consume(&sock->input, rlen);//trash data after stealing sock.
     struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
     info->upstream_sock = sock;
     info->timeout = timeout;
@@ -406,7 +408,7 @@ static char compress_hint_to_enum(const char *val, size_t len)
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
+                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -485,7 +487,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->websocket_timeout != NULL);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        on_websocket_upgrade(self, client_ctx->websocket_timeout);
+        on_websocket_upgrade(self, client_ctx->websocket_timeout, rlen);
         self->client = NULL;
         return NULL;
     }
