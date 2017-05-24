@@ -567,7 +567,7 @@ IF (BUILD_FUZZER)
     ADD_EXECUTABLE(h2o-fuzzer-url fuzz/driver_url.cc)
     SET_TARGET_PROPERTIES(h2o-fuzzer-http1 PROPERTIES COMPILE_FLAGS "-DHTTP1")
     SET_TARGET_PROPERTIES(h2o-fuzzer-http2 PROPERTIES COMPILE_FLAGS "-DHTTP2")
-    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
     IF (OSS_FUZZ)
         # Use https://github.com/google/oss-fuzz compatible options
         SET(LIB_FUZZER FuzzingEngine)
