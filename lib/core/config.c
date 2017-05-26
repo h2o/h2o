@@ -157,6 +157,7 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
     DESTROY_LIST(h2o_handler_t, pathconf->handlers);
     DESTROY_LIST(h2o_filter_t, pathconf->filters);
     DESTROY_LIST(h2o_logger_t, pathconf->loggers);
+    free(pathconf->path.base);
 #undef DESTROY_LIST
 
     free(pathconf->path.base);
