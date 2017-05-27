@@ -310,11 +310,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
                 goto Exit;
             }
         } else if (headers[i].name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
-            if (client->_method_is_head) {
-                headers[i].value.base[0] = 0x30;
-                headers[i].value.len = 1;
-            }
-            else if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value.base, headers[i].value.len)) ==
+            if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value.base, headers[i].value.len)) ==
                 SIZE_MAX) {
                 on_error_before_head(client, "invalid content-length");
                 goto Exit;
