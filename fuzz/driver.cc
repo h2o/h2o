@@ -175,7 +175,7 @@ void *upstream_thread(void *arg)
 
     while (1) {
         struct sockaddr_un caddr;
-        socklen_t slen;
+        socklen_t slen = 0;
         int cfs = accept(sd, (struct sockaddr *)&caddr, &slen);
         if (cfs < 0) {
             continue;

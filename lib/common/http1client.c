@@ -214,7 +214,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
 static void on_error_before_head(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
     assert(!client->_can_keepalive);
-    client->_cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0);
+    client->_cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
     close_client(client);
 }
 
@@ -334,9 +334,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
             client->_can_keepalive = 0;
     }
 
-    /* call the callback */
+    /* call the callback. sock may be stealed and stealed sock need rlen.*/
     client->_cb.on_body = client->_cb.on_head(&client->super, is_eos ? h2o_http1client_error_is_eos : NULL, minor_version,
-                                              http_status, h2o_iovec_init(msg, msg_len), headers, num_headers);
+                                              http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, rlen);
 
     if (is_eos) {
         close_client(client);
