@@ -544,9 +544,28 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head)
+                                          int *method_is_head, h2o_url_t *location_rewrite_url)
 {
     struct rp_generator_t *self = client->data;
+    
+    h2o_req_t *req = self->src_req;
+    
+    if (errstr == NULL) {
+        int use_proxy_protocol = 0;
+        if (req->overrides != NULL) {
+            use_proxy_protocol = req->overrides->use_proxy_protocol;
+            if (location_rewrite_url != NULL) {
+                if (req->overrides != NULL)
+                    req->overrides->location_rewrite.match = location_rewrite_url;
+                
+                if (!req->overrides->proxy_preserve_host) {
+                    req->scheme = location_rewrite_url->scheme;
+                    req->authority = location_rewrite_url->authority;
+                }
+            }
+        }
+        self->up_req.bufs[0] = build_request_line_host(req, use_proxy_protocol);
+    }
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -560,24 +579,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *method_is_head = self->up_req.is_head;
     self->client->informational_cb = on_1xx;
     return on_head;
-}
-
-static h2o_http1client_head_cb on_sockpool_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                                   int *method_is_head, h2o_socketpool_target_t *target) {
-    struct rp_generator_t *self = client->data;
-    h2o_req_t *req = self->src_req;
-    
-    if (errstr == NULL) {
-        assert(target != NULL);
-        assert(target->url);
-        req->overrides->location_rewrite.match = target->url;
-        if (!req->overrides->proxy_preserve_host) {
-            req->scheme = target->url->scheme;
-            req->authority = target->url->authority;
-        }
-        self->up_req.bufs[0] = build_request_line_host(req, 0);
-    }
-    return on_connect(client, errstr, reqbufs, reqbufcnt, method_is_head);
 }
 
 static void on_generator_dispose(void *_self)
@@ -606,7 +607,6 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, 
         self->is_websocket_handshake = 0;
     }
     self->had_body_error = 0;
-    self->up_req.bufs[0] = build_request_line_host(req, use_proxy_protocol);
     self->up_req.bufs[1] = build_request_rest_headers(req, keepalive, self->is_websocket_handshake);
     self->up_req.bufs[2] = req->entity;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
@@ -627,12 +627,12 @@ void h2o__proxy_process_request(h2o_req_t *req)
             if (overrides->use_proxy_protocol)
                 assert(!"proxy protocol cannot be used for a persistent upstream connection");
             self = proxy_send_prepare(req, 1, 0);
-            h2o_http1client_connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_sockpool_connect);
+            h2o_http1client_connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_connect);
             return;
         } else if (overrides->hostport.host.base != NULL) {
             self = proxy_send_prepare(req, 0, overrides->use_proxy_protocol);
             h2o_http1client_connect(&self->client, self, client_ctx, req->overrides->hostport.host, req->overrides->hostport.port,
-                                    0, on_connect);
+                                    0, on_connect, overrides->location_rewrite.match);
             return;
         }
     }
@@ -649,7 +649,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (port == 65535)
             port = req->scheme->default_port;
         self = proxy_send_prepare(req, 0, overrides != NULL && overrides->use_proxy_protocol);
-        h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect);
+        h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect, NULL);
         return;
     }
 }

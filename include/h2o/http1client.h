@@ -40,9 +40,7 @@ typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *cl
                                                            int status, h2o_iovec_t msg, struct st_h2o_header_t *headers,
                                                            size_t num_headers);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
-                                                              size_t *reqbufcnt, int *method_is_head);
-typedef h2o_http1client_head_cb (*h2o_http1client_sockpool_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
-                                                              size_t *reqbufcnt, int *method_is_head, h2o_socketpool_target_t *target);
+                                                              size_t *reqbufcnt, int *method_is_head, h2o_url_t *location_rewrite_url);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 struct st_h2o_header_t *headers, size_t num_headers);
 
@@ -71,9 +69,9 @@ struct st_h2o_http1client_t {
 extern const char *const h2o_http1client_error_is_eos;
 
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
-                             int is_ssl, h2o_http1client_connect_cb cb);
+                             int is_ssl, h2o_http1client_connect_cb cb, h2o_url_t *location_rewrite_url);
 void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx,
-                                       h2o_socketpool_t *sockpool, h2o_http1client_sockpool_connect_cb cb);
+                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *client);
 
