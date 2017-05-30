@@ -28,7 +28,7 @@ difference that it uses 4 spaces rather than one tab for indentation.
 
 Here's a `.vimrc` snippet that would use this style:
 
-```
+```vim
 set tabstop=4
 set shiftwidth=4
 set softtabstop=4
@@ -44,7 +44,7 @@ Structs are prefixed with `st_` and suffixed with `_t`. Structs that are
 not private to a single translation unit are typedef'ed and prefixed with
 `h2o_`, and suffixed with `_t`:
 
-```
+```c
 /* public struct */
 typedef struct st_h2o_conn_t h2o_conn_t;
 
@@ -68,7 +68,7 @@ such as `h2o_process_request`, whereas private functions don't use one
 
 Goto labels use upper case, and are indented with the matching code:
 
-```
+```c
 void fn(const char *err)
 {
     if (global) {
