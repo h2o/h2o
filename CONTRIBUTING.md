@@ -1,25 +1,26 @@
 # How to contribute
 
-We welcome third party contributions H2O. The most straightforward to
+We welcome third party contributions H2O. The most straightforward way to
 do so, is to fork the project and submit a PR. If the change you're
 proposing is substantial, it might be a good idea to open an issue in
-the issue tracker first.
+the [issue tracker](https://github.com/h2o/h2o/issues) in order to
+discuss it first.
 
 # Coding style
 
-## C
+## The C flavor
 
 H2O is built on a multitude of platforms: \*BSD, Mac OS, Solaris and
 Linux. It uses a dialect of C close to c89 and c99 intended to compile
 on most gcc functions, and we avoid GNU extensions.
 
-PRs are automatically built in Travis, and a test suite is run over
-the code. When possible, please add test coverage to the code that
-you're submitting.
+PRs are automatically built in [Travis](https://travis-ci.com/fastly/h2o),
+and a test suite is run over the code. When possible, please add test
+coverage to the code that you're submitting.
 
 ## Formatting
 
-H2O uses `clang-format` (https://clang.llvm.org/docs/ClangFormat.html)
+H2O uses [`clang-format`](https://clang.llvm.org/docs/ClangFormat.html)
 in order to maintain a uniform coding style on the code base, running
 the tool before submitting might make the review process smoother.
 
@@ -61,7 +62,7 @@ struct st_on_client_hello_ptls_t {
 ### Functions
 
 As with structs, publicly visible functions are prefixed with `h2o_`,
-such as `h2o_process_request`, whereas private functions don't use one
+such as `h2o_process_request`, whereas private functions don't use one:
 `get_ocsp_response`.
 
 ### Goto labels
@@ -95,21 +96,21 @@ Both kind of tests can be found under the `t/` directory.
 ## Unit tests
 
 They are written an C and are found under the `t/00unit/` directory. They
-use `picotest` as a testing framework (https://github.com/h2o/picotest)
+use `picotest` [as a testing framework](https://github.com/h2o/picotest).
 
 ## Integration tests
 
-Integration tests are found under the `t/` directory, and are any file
-ending with `.t` extension. The test suite uses `Test::More`
-`https://perldoc.perl.org/Test/More.html` as a testing
+Integration tests are found under the `t/` directory, and
+are any file ending with `.t` extension. The test suite uses
+[`Test::More`](https://perldoc.perl.org/Test/More.html) as a testing
 framework. `t/Util.pm` offers facilities like running curl for all
-supported protocols, spawning H2O or instantiating a backend server
-using Plackup (https://search.cpan.org/perldoc?plackup).
+supported protocols, spawning H2O or instantiating a backend server using
+[Plackup](https://search.cpan.org/perldoc?plackup).
 
 ## Fuzzers
 
 H2O is part of Google's OSS-Fuzz project, and as such H2O is continuously
 fuzzed. Fuzzers are build when `cmake` is passed the `-DBUILD_FUZZER=ON`
-flag, they use libFuzzer http://llvm.org/docs/LibFuzzer.html. Anything
+flag, they use [libFuzzer](http://llvm.org/docs/LibFuzzer.html). Anything
 that parses input from the network is a good candidate for fuzzing.
 
