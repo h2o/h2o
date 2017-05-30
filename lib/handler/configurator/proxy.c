@@ -302,14 +302,14 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
         sequence = 1;
         count = node->data.sequence.size;
         if (self->vars->keepalive_timeout == 0 && count > 1) {
-            h2o_configurator_errprintf(cmd, node, "for now we don't support multiple backends with keep-alive disabled");
+            h2o_configurator_errprintf(cmd, node, "currently we do not support multiple backends with keep-alive disabled");
             return -1;
         }
         upstreams = alloca(count * sizeof(h2o_url_t));
         for (i = 0; i != node->data.sequence.size; ++i) {
             yoml_t *element = node->data.sequence.elements[i];
             if (element->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, element, "element of a sequence passed to proxy.reverse.url must be a scalar");
+                h2o_configurator_errprintf(cmd, element, "element of a sequence passed to proxy.reverse.backends must be a scalar");
                 return -1;
             }
             if (h2o_url_parse(element->data.scalar, SIZE_MAX, &upstreams[i]) != 0) {
@@ -328,15 +328,14 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
         return -1;
     }
 
-    if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+    if (self->vars->use_proxy_protocol) {
+        h2o_configurator_errprintf(cmd, node, "currently we do not support multiple backends with `proxy.use-proxy-protocol` enabled");
         return -1;
     }
     
     if (self->vars->registered_as_url) {
         h2o_configurator_errprintf(cmd, node, "please either set `proxy.reverse.backends` with `proxy.reverse.path` to support "
-                                   "multiple backends or only set `proxy.reverse.url`");
+                                   "multiple backends or only set `proxy.reverse.url`; the features are mutually exclusive");
         return -1;
     }
 
@@ -346,11 +345,6 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
     /* register */
     self->vars->registered_as_backends = 1;
     h2o_proxy_register_reverse_proxy(ctx->pathconf, upstreams, count, self->vars);
-    
-    if (sequence) {
-        /* free all url */
-        
-    }
 
     return 0;
 }
