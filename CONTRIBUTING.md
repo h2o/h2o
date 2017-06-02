@@ -157,19 +157,20 @@ are typical users of the technique.
 Here's an example demonstrating how to pass context alongside a timer pointer:
 ```c
 struct st_mycontext_t {
-  void *ctx;
+  int nr_timer_hits;
   h2o_timeout_entry_t timer;
 };
 
 void timer(h2o_timeout_entry_t *t)
 {
     struct st_mycontext_t *mc = H2O_STRUCT_FROM_MEMBER(struct st_mycontext_t, timer, t);
-    ...
+    mc->nr_timer_hits++;
 }
+
 void f(struct st_mycontext_t *mc)
 {
     mc->timer.cb = timer;
-    mc->ctx = alloc_context();
+    mc->nr_timer_hits = 0;
     h2o_timeout_link(loop, io_timeout, &mc->timer);
 }
 ```
