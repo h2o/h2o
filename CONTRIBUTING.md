@@ -7,6 +7,8 @@
          * [Functions](#functions)
          * [Goto labels](#goto-labels)
       * [Context passing and subclassing](#context-passing-and-subclassing)
+         * [Subclassing](#subclassing)
+         * [Context passing using struct member offsets](#context-passing-using-struct-member-offsets)
    * [Tests](#tests)
       * [Unit tests](#unit-tests)
       * [Integration tests](#integration-tests)
@@ -108,6 +110,7 @@ void fn(const char *err)
 
 ## Context passing and subclassing
 
+### Subclassing
 
 The H2O code base tends to use subclassing in order to pass contextual
 information. For example, both `h2o_http2_conn_t` and `struct
@@ -116,27 +119,61 @@ defining a `super` member of the struct of type `h2o_conn_t`, and
 returning that outside their respective modules. The struct is then cast
 back to the specilized subclasses when returning to their modules.
 
-Another example are timers, where the subclassing is used to pass
-context around:
+This is in turn used so that both the HTTP/1 and HTTP/2 connections are
+able to expose a common interface for `get_sockname`, for example:
 
 ```c
-struct st_mytimer_t {
-  h2o_timeout_entry_t super;
+/* http2 */
+static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
+{
+    h2o_http2_conn_t *conn = (void *)_conn;
+    ...
+}
+
+/* http1 */
+static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    ...
+}
+```
+
+This way upper layers can act on an `h2o_conn_t` without exposing the
+details of `h2o_http2_conn_t` or `struct st_h2o_http1_conn_t`.
+
+### Context passing using struct member offsets
+
+Another technique commonly used in the H2O code base is offset
+calculations. This allows to reduced public interfaces, while
+still being able to pass objects of different types. H2O
+uses the `H2O_STRUCT_FROM_MEMBER` macro (which in turn uses
+[`offsetof`](https://en.wikipedia.org/wiki/Offsetof)) in order to
+compute the offset of a member in a struct. This way, given a pointer to
+a member, we can obtain a pointer to the enclosing struct.
+
+Linked lists (`h2o_linklist_t`) and timers (`h2o_timeout_entry_t`)
+are typical users of the technique.
+
+Here's an example demonstrating how to pass context alongside a timer pointer:
+```c
+struct st_mycontext_t {
   void *ctx;
+  h2o_timeout_entry_t timer;
 };
 
 void timer(h2o_timeout_entry_t *t)
 {
-    struct st_mytimer_t *mc = (struct st_mytimer_t *)t;
+    struct st_mycontext_t *mc = H2O_STRUCT_FROM_MEMBER(struct mycontext, timer, t);
     ...
 }
-void f(struct st_mytimer_t *mc)
+void f(struct st_mycontext_t *mc)
 {
-    mc->super.cb = timer;
-    mc->ctx = alloc_some_context();
-    h2o_timeout_link(loop, io_timeout, &mc->super);
+    mc->timer.cb = timer;
+    mc->ctx = alloc_context();
+    h2o_timeout_link(loop, io_timeout, &mc->timer);
 }
 ```
+
 
 # Tests
 
