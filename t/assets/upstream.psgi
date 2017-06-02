@@ -103,6 +103,16 @@ builder {
             200, @resph, [ "Ok" ]
         ];
     };
+    mount "/echo-server-port" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+                'x-server' => $env->{"SERVER_PORT"},
+            ],
+            [$env->{"SERVER_PORT"}],
+        ];
+    };
     mount "/streaming-body" => sub {
         my $env = shift;
         return sub {
