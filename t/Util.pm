@@ -183,10 +183,10 @@ sub spawn_h2o {
     print $conffh <<"EOT";
 $conf
 listen:
-  host: 0.0.0.0
+  host: 127.0.0.1
   port: $port
 listen:
-  host: 0.0.0.0
+  host: 127.0.0.1
   port: $tls_port
   ssl:
     key-file: examples/h2o/server.key
