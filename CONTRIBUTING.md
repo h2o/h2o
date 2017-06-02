@@ -144,7 +144,7 @@ details of `h2o_http2_conn_t` or `struct st_h2o_http1_conn_t`.
 ### Context passing using struct member offsets
 
 Another technique commonly used in the H2O code base is offset
-calculations. This allows to reduced public interfaces, while
+calculations. This allows to better performance and reduced public interfaces, while
 still being able to pass objects of different types. H2O
 uses the `H2O_STRUCT_FROM_MEMBER` macro (which in turn uses
 [`offsetof`](https://en.wikipedia.org/wiki/Offsetof)) in order to
@@ -163,7 +163,7 @@ struct st_mycontext_t {
 
 void timer(h2o_timeout_entry_t *t)
 {
-    struct st_mycontext_t *mc = H2O_STRUCT_FROM_MEMBER(struct mycontext, timer, t);
+    struct st_mycontext_t *mc = H2O_STRUCT_FROM_MEMBER(struct st_mycontext_t, timer, t);
     ...
 }
 void f(struct st_mycontext_t *mc)
