@@ -14,7 +14,7 @@ H2O is built on a multitude of platforms: \*BSD, Mac OS, Solaris and
 Linux. It uses a dialect of C close to c89 and c99 intended to compile
 on most gcc functions, and we avoid GNU extensions.
 
-PRs are automatically built in [Travis](https://travis-ci.com/fastly/h2o),
+PRs are automatically built in [Travis](https://travis-ci.com/h2o/h2o),
 and a test suite is run over the code. When possible, please add test
 coverage to the code that you're submitting.
 
