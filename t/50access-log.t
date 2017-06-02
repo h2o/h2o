@@ -6,6 +6,7 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'racy under valgrind' if $ENV{"H2O_VALGRIND"};
 
 my $tempdir = tempdir(CLEANUP => 1);
 
