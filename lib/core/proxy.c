@@ -575,7 +575,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     }
 
     *reqbufs = self->up_req.bufs;
-    *reqbufcnt = self->up_req.bufs[1].base != NULL ? 3 : 2;
+    *reqbufcnt = self->up_req.bufs[2].base != NULL ? 3 : 2;
     *method_is_head = self->up_req.is_head;
     self->client->informational_cb = on_1xx;
     return on_head;
