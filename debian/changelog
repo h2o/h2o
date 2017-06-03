@@ -1,0 +1,36 @@
+h2o-server (1.1.1-1ubuntu5) trusty; urgency=medium
+
+  * [b1479f083e] cleanup dependency list
+  * [fe1407aab0] added watch file to track new version
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Mon, 06 Apr 2015 21:14:16 +0200
+
+h2o-server (1.1.1-1ubuntu4) trusty; urgency=medium
+
+  * [95fa4947dc] added another build-deps
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Sun, 05 Apr 2015 21:20:00 +0200
+
+h2o-server (1.1.1-1ubuntu3) trusty; urgency=medium
+
+  * [4da931bed4] added another build-deps
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Sun, 05 Apr 2015 21:15:01 +0200
+
+h2o-server (1.1.1-1ubuntu2) trusty; urgency=medium
+
+  * [62e76a8f31] added another build-deps
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Sun, 05 Apr 2015 21:10:02 +0200
+
+h2o-server (1.1.1-1ubuntu1) trusty; urgency=medium
+
+  * [59d91dcde0] added build-deps
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Sun, 05 Apr 2015 21:05:46 +0200
+
+h2o-server (1.1.1-1) trusty; urgency=low
+
+  * Initial release 
+
+ -- Lars K.W. Gohlke <lkwg82@gmx.de>  Sat, 04 Apr 2015 21:40:48 +0200

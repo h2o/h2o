@@ -1,0 +1,3 @@
+version=3
+opts=filenamemangle=s/.+\/v?(\d\S*)\.tar\.gz/h2o-$1\.tar\.gz/ \
+  https://github.com/h2o/h2o/tags .*/v?(\d\S*)\.tar\.gz

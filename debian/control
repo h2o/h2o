@@ -1,0 +1,20 @@
+Source: h2o-server
+Section: misc
+Priority: optional
+Maintainer: Lars K.W. Gohlke <lkwg82@gmx.de>
+Build-Depends: debhelper (>= 8.0.0),
+    ,cmake
+    ,curl
+    ,libscope-guard-perl
+    ,libssl-dev
+    ,libtest-tcp-perl
+    ,libyaml-dev
+Standards-Version: 3.9.4
+Homepage: https://github.com/h2o/h2o
+Vcs-Git: git@github.com:h2o/h2o.git
+Vcs-Browser: https://github.com/h2o/h2o
+
+Package: h2o-server
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: optimized HTTP server with support for HTTP/1.x and HTTP/2
