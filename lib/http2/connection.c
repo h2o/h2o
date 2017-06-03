@@ -330,7 +330,7 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
 }
 
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
-                                   const char **err_desc)
+                                   int is_end_stream, const char **err_desc)
 {
     int ret, header_exists_map;
 
@@ -363,7 +363,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 
-    if (stream->_req_body == NULL) {
+    if (is_end_stream) {
         execute_or_enqueue_request(conn, stream);
     } else {
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
@@ -424,7 +424,8 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
             conn->_read_expect = expect_default;
             if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS) {
                 hret = handle_incoming_request(conn, stream, (const uint8_t *)conn->_headers_unparsed->bytes,
-                                               conn->_headers_unparsed->size, err_desc);
+                                               conn->_headers_unparsed->size, (frame.flags & H2O_HTTP2_FRAME_FLAG_END_STREAM),
+                                               err_desc);
             } else {
                 hret = handle_trailing_headers(conn, stream, (const uint8_t *)conn->_headers_unparsed->bytes,
                                                conn->_headers_unparsed->size, err_desc);
@@ -600,7 +601,8 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
         /* request is complete, handle it */
-        return handle_incoming_request(conn, stream, payload.headers, payload.headers_len, err_desc);
+        return handle_incoming_request(conn, stream, payload.headers, payload.headers_len,
+                                       (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM), err_desc);
     }
 
 PREPARE_FOR_CONTINUATION:
