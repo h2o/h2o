@@ -13,3 +13,10 @@ xcuserdata
 !include/h2o
 misc/test-ca/demoCA/newcerts/*.pem
 tmp/
+libressl-*
+mruby
+*.o
+
+*.a
+
+*.pc

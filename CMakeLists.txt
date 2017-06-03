@@ -259,6 +259,7 @@ SET(LIB_SOURCE_FILES
     lib/core/util.c
 
     lib/handler/access_log.c
+    lib/handler/kafka_log.c
     lib/handler/chunked.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
@@ -279,6 +280,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/http2_debug_state.c
     lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/kafka_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
@@ -374,6 +376,15 @@ ELSE ()
     ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})
 ENDIF (WSLAY_FOUND)
 
+IF (WITH_RDKAFKA)
+    ADD_CUSTOM_TARGET(build-rdkafka ./configure
+        COMMAND make
+        WORKING_DIRECTORY deps/librdkafka)
+    INCLUDE_DIRECTORIES(deps/librdkafka/src)
+    LINK_DIRECTORIES(deps/librdkafka/src)
+    LIST(INSERT EXTRA_LIBS 0 librdkafka.a)
+ENDIF (WITH_RDKAFKA)
+
 SET_TARGET_PROPERTIES(libh2o PROPERTIES
     OUTPUT_NAME h2o
     VERSION ${LIBRARY_VERSION}
@@ -385,6 +396,11 @@ SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     VERSION ${LIBRARY_VERSION}
     SOVERSION ${LIBRARY_SOVERSION})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${EXTRA_LIBS})
+
+IF (WITH_RDKAFKA)
+    ADD_DEPENDENCIES(libh2o build-rdkafka)
+    ADD_DEPENDENCIES(libh2o-evloop build-rdkafka)
+ENDIF (WITH_RDKAFKA)
 
 IF (OPENSSL_FOUND)
     TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})

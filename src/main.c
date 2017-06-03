@@ -1930,6 +1930,7 @@ static void setup_configurators(void)
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
+    h2o_kafka_log_register_configurator(&conf.globalconf);
     h2o_compress_register_configurator(&conf.globalconf);
     h2o_expires_register_configurator(&conf.globalconf);
     h2o_errordoc_register_configurator(&conf.globalconf);
