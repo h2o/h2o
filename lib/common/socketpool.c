@@ -63,6 +63,7 @@ struct on_close_data_t {
 
 struct round_robin_t {
     size_t next_pos;
+    pthread_mutex_t mutex;
 };
 
 static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen);
@@ -121,7 +122,6 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     h2o_linklist_init_anchor(&pool->_shared.sockets);
     memcpy(&pool->targets, &targets, sizeof(targets));
 
-    pthread_mutex_init(&pool->_lb.mutex, NULL);
     lb_init(&pool->targets, &pool->_lb.data);
     pool->_lb.selector = lb_selector;
     pool->_lb.dispose = lb_dispose;
@@ -131,6 +131,7 @@ static void lb_rr_init(h2o_socketpool_target_vector_t *targets, void **data)
 {
     struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
     self->next_pos = 0;
+    pthread_mutex_init(&self->mutex, NULL);
     *data = self;
 }
 
@@ -139,6 +140,8 @@ static size_t lb_rr_selector(h2o_socketpool_target_vector_t *targets, void *_dat
     size_t i;
     size_t result;
     struct round_robin_t *self = _data;
+    
+    pthread_mutex_lock(&self->mutex);
 
     for (i = 0; i < targets->size; i++) {
         if (!tried[self->next_pos]) {
@@ -152,12 +155,14 @@ static size_t lb_rr_selector(h2o_socketpool_target_vector_t *targets, void *_dat
     assert(i < targets->size);
     self->next_pos++;
     self->next_pos %= targets->size;
-    tried[result] = 1;
+    pthread_mutex_unlock(&self->mutex);
     return result;
 }
 
 static void lb_rr_dispose(void *data)
 {
+    struct round_robin_t *self = data;
+    pthread_mutex_destroy(&self->mutex);
     free(data);
 }
 
@@ -252,10 +257,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_unlock(&pool->_shared.mutex);
     pthread_mutex_destroy(&pool->_shared.mutex);
 
-    pthread_mutex_lock(&pool->_lb.mutex);
     pool->_lb.dispose(pool->_lb.data);
-    pthread_mutex_unlock(&pool->_lb.mutex);
-    pthread_mutex_destroy(&pool->_lb.mutex);
 
     if (pool->_interval_cb.loop != NULL) {
         h2o_timeout_unlink(&pool->_interval_cb.entry);
@@ -309,10 +311,10 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
 static void try_connect(h2o_socketpool_connect_request_t *req) {
     h2o_socketpool_target_t *target;
 
-    pthread_mutex_lock(&req->pool->_lb.mutex);
     req->lb.selected = req->pool->_lb.selector(&req->pool->targets, req->pool->_lb.data, req->lb.tried);
+    assert(!req->lb.tried[req->lb.selected]);
     req->lb.try_count++;
-    pthread_mutex_unlock(&req->pool->_lb.mutex);
+    req->lb.tried[req->lb.selected] = 1;
     target = &req->pool->targets.entries[req->lb.selected];
 
     switch (target->type) {

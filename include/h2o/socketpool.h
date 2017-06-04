@@ -86,7 +86,6 @@ typedef struct st_h2o_socketpool_t {
     struct {
         h2o_socketpool_lb_selector selector;
         h2o_socketpool_lb_dispose_cb dispose;
-        pthread_mutex_t mutex;
         void *data;
     } _lb;
 } h2o_socketpool_t;
