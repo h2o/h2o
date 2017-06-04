@@ -18,7 +18,7 @@ plan skip_all => "could not find openssl"
 
 sub spawn_redis {
     # start redis
-    my $redis_port = empty_port();
+    my $redis_port = empty_port({ host => '0.0.0.0' });
     my ($redis_guard, $pid) = spawn_server(
         argv     => [ qw(redis-server --port), $redis_port ],
         is_ready => sub {
