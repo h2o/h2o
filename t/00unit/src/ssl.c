@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <limits.h>
 #include "../test.h"
 #include "../../../src/ssl.c"
 
@@ -26,7 +27,11 @@ const uint64_t UTC2000 = (365 * 30 + 7) * 86400;
 
 static void test_load_tickets_file(void)
 {
-    int ret = load_tickets_file("t/assets/session_tickets.yaml");
+    int ret;
+    char tfile_path[PATH_MAX];
+
+    sprintf(tfile_path, "%s/t/assets/session_tickets.yaml", getenv("H2O_ROOT")?getenv("H2O_ROOT"):".");
+    ret = load_tickets_file(tfile_path);
     ok(ret == 0);
     if (ret != 0)
         return;
