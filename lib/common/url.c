@@ -262,6 +262,9 @@ int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
 {
     const char *url_end, *p;
 
+    if (url == NULL)
+        return -1;
+
     if (url_len == SIZE_MAX)
         url_len = strlen(url);
     url_end = url + url_len;
