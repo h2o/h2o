@@ -394,6 +394,13 @@ typedef union st_ptls_handshake_properties_t {
         unsigned negotiate_before_key_exchange : 1;
     } client;
     struct {
+        /**
+         * psk binder being selected (len is set to zero if none)
+         */
+        struct {
+            uint8_t base[PTLS_MAX_DIGEST_SIZE];
+            size_t len;
+        } selected_psk_binder;
     } server;
 } ptls_handshake_properties_t;
 
