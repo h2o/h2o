@@ -295,8 +295,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         h2o_socket_t *sock = req->conn->callbacks->get_socket(req->conn);
         h2o_iovec_t identifier;
         if (sock != NULL && (identifier = h2o_socket_ssl_get_replay_identifier(sock)).len != 0) {
-            RESERVE(sizeof("tls13-replay-id: ") - 1 + identifier.len * 2);
-            APPEND_STRLIT("tls13-replay-id: ");
+            RESERVE(sizeof("tls-replay-id: ") - 1 + identifier.len * 2);
+            APPEND_STRLIT("tls-replay-id: ");
             h2o_hex_encode(buf.base + offset, identifier.base, identifier.len);
             offset += identifier.len * 2;
             buf.base[offset++] = '\r';
