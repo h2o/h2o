@@ -63,6 +63,9 @@ enum {
     H2O_MRUBY_HTTP_REQUEST_CLASS,
     H2O_MRUBY_HTTP_INPUT_STREAM_CLASS,
 
+    /* used by time.c */
+    H2O_MRUBY_TIME_CLASS,
+
     H2O_MRUBY_NUM_CONSTANTS
 };
 
@@ -169,6 +172,9 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_generator_t *generator, 
                                               int *next_action);
 h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *));
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final);
+
+/* handler/mruby/time.c */
+void h2o_mruby_time_init_context(h2o_mruby_shared_context_t *ctx);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);

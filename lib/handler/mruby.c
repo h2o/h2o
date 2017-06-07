@@ -306,6 +306,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
+    h2o_mruby_time_init_context(shared_ctx);
 
     return shared_ctx;
 }

@@ -255,6 +255,7 @@
 		10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FEF24C1D6FC8E200E11B1D /* gkc.c */; };
 		10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */ = {isa = PBXBuildFile; fileRef = 10FEF24D1D6FC8E200E11B1D /* gkc.h */; };
 		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
+		7D7FBC021EE8AF1C00B8D282 /* time.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D7FBBFE1EE8AF1000B8D282 /* time.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
@@ -813,6 +814,7 @@
 		10FEF24D1D6FC8E200E11B1D /* gkc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = gkc.h; sourceTree = "<group>"; };
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
+		7D7FBBFE1EE8AF1000B8D282 /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
@@ -950,6 +952,7 @@
 				08E9CC4D1E41F6660049DD26 /* embedded.c.h */,
 				100A55141C30C5BC00C4E3E0 /* chunked.c */,
 				100A550E1C2BB15100C4E3E0 /* http_request.c */,
+				7D7FBBFE1EE8AF1000B8D282 /* time.c */,
 			);
 			path = mruby;
 			sourceTree = "<group>";
@@ -2445,6 +2448,7 @@
 				E9708B3A1E52C7640029E0A5 /* gkc.c in Sources */,
 				E9708B5E1E52C80F0029E0A5 /* expires.c in Sources */,
 				E9708B491E52C7DF0029E0A5 /* memcached.c in Sources */,
+				7D7FBC021EE8AF1C00B8D282 /* time.c in Sources */,
 				10756E331AC1264D0009BF57 /* parser.c in Sources */,
 				E9708B761E52C8330029E0A5 /* headers.c in Sources */,
 				E9708B871E52C8560029E0A5 /* hpack.c in Sources */,
