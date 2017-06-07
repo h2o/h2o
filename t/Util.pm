@@ -18,7 +18,7 @@ use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
 
 sub bindir {
-    $ENV{BINARY_DIR} || '.';
+    $ENV{H2O_VALGRIND} || $ENV{BINARY_DIR} || '.';
 }
 
 sub server_features {
@@ -169,7 +169,7 @@ sub spawn_h2o {
     my @opts;
 
     # decide the port numbers
-    my ($port, $tls_port) = empty_ports(2);
+    my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
 
     # setup the configuration file
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
@@ -211,10 +211,10 @@ EOT
 }
 
 sub empty_ports {
-    my $n = shift;
+    my ($n, @ep_args) = @_;
     my @ports;
     while (@ports < $n) {
-        my $t = empty_port();
+        my $t = empty_port(@ep_args);
         push @ports, $t
             unless grep { $_ == $t } @ports;
     }

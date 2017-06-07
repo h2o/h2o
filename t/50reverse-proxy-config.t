@@ -18,7 +18,7 @@ plan skip_all => 'curl not found'
 my $upstream_port = empty_port();
 my $upstream = spawn_server(
     argv     => [
-        qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null -p), $upstream_port,
+        qw(plackup -MPlack::App::File -s Starlet --access-log /dev/null --listen), "127.0.0.1:$upstream_port",
         ASSETS_DIR . "/upstream.psgi",
     ],
     is_ready =>  sub {
