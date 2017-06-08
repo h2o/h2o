@@ -54,7 +54,7 @@ $ctx->{directive}->(
 <p>
 If the argument is <code>ON</code>, this directive populates duration
 statistics in seconds, to be consumed by status handlers. Note: enabling
-this feature has a noticeable CPU and memory impact.
+this feature has a noticeable CPU and memory impact. Also mruby handlers may not show correct timings.
 </p>
 ? })
 
