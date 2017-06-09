@@ -13,6 +13,7 @@
       * [Unit tests](#unit-tests)
       * [Integration tests](#integration-tests)
       * [Fuzzers](#fuzzers)
+   * [Mruby modules](#mruby-modules)
    * [Writing docs](#writing-docs)
 
 # How to contribute
@@ -211,6 +212,11 @@ H2O is part of Google's OSS-Fuzz project, and as such H2O is continuously
 fuzzed. Fuzzers are build when `cmake` is passed the `-DBUILD_FUZZER=ON`
 flag, they use [libFuzzer](http://llvm.org/docs/LibFuzzer.html). Anything
 that parses input from the network is a good candidate for fuzzing.
+
+# Mruby modules
+
+It is possible to add additional mruby modules.
+All modules that match `Dir.glob("../mruby-*/mrbgem.rake")` get linked. Copy (or git-submodule) the library under `deps/` and rerun make.
 
 # Writing docs
 
