@@ -30,7 +30,7 @@ sub doit {
         my $upstream = spawn_server(
             argv => [
                 qw(plackup -s FCGI --access-log /dev/null --listen),
-                ($tcp ? ":$fcgi_port" : "$tempdir/fcgi.sock"),
+                ($tcp ? "127.0.0.1:$fcgi_port" : "$tempdir/fcgi.sock"),
                 ASSETS_DIR . "/upstream.psgi",
             ],
             is_ready => sub {

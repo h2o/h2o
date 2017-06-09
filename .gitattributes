@@ -1,0 +1,2 @@
+/fuzz/http1-corpus/* binary
+/fuzz/http2-corpus/* binary

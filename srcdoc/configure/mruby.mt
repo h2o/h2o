@@ -115,10 +115,10 @@ paths:
         push_paths = []
         # push css and js when request is to dir root or HTML
         if /(\/|\.html)\z/.match(env["PATH_INFO"])
-          push_paths << "/css/style.css"
-          push_paths << "/js/app.js"
+          push_paths << ["/css/style.css", "style"]
+          push_paths << ["/js/app.js", "script"]
         end
-        [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\n")}, []]
+        [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p[0]}>; rel=preload; as=#{p[1]}"}.join("\n")}, []]
       end
     fastcgi.connect: ...
 EOT

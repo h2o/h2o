@@ -250,7 +250,7 @@ static int headers_sort_cb(const void *_x, const void *_y)
 }
 
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
+                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 

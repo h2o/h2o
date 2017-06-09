@@ -182,10 +182,10 @@ Or in the example below, the handler triggers <a href="configure/http2_directive
         push_paths = []
         # push css and js when request is to dir root or HTML
         if /(\/|\.html)\z/.match(env[&quot;PATH_INFO&quot;])
-          push_paths &lt;&lt; &quot;/css/style.css&quot;
-          push_paths &lt;&lt; &quot;/js/app.js&quot;
+          push_paths &lt;&lt; [&quot;/css/style.css&quot;, &quot;style&quot;]
+          push_paths &lt;&lt; [&quot;/js/app.js&quot;, &quot;script&quot;]
         end
-        [399, push_paths.empty? ? {} : {&quot;link&quot; =&gt; push_paths.map{|p| &quot;&lt;#{p}&gt;; rel=preload&quot;}.join(&quot;\n&quot;)}, []]
+        [399, push_paths.empty? ? {} : {&quot;link&quot; =&gt; push_paths.map{|p| &quot;&lt;#{p[0]}&gt;; rel=preload; as=#{p[1]}&quot;}.join(&quot;\n&quot;)}, []]
       end
     fastcgi.connect: ...
 </code></pre>

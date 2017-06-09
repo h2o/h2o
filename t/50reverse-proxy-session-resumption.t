@@ -156,9 +156,9 @@ subtest 'reproxy' => sub {
     my $app_server = spawn_server(
         argv => [
             qw(
-                plackup -s Starlet --max-workers=1 --port
+                plackup -s Starlet --max-workers=1 --listen
             ),
-            $app_port, "-e sub { [200, ['X-Reproxy-URL' => 'https://127.0.0.1:$upstream_port/'], []] }"
+            "127.0.0.1:$app_port", "-e sub { [200, ['X-Reproxy-URL' => 'https://127.0.0.1:$upstream_port/'], []] }"
         ],
         is_ready => sub {
             check_port($app_port);

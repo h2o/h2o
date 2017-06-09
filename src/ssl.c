@@ -682,6 +682,8 @@ H2O_NORETURN static void *ticket_redis_updater(void *unused)
             if (failcnt == 0)
                 fprintf(stderr, "[src/ssl.c] failed to connect to redis at %s:%" PRIu16 ", %s\n", conf.store.redis.host,
                         conf.store.redis.port, ctx == NULL ? "redis context allocation failed" : ctx->errstr);
+            if (ctx != NULL)
+                redisFree(ctx);
             sleep(10);
         }
         /* connected */

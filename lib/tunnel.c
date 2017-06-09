@@ -121,13 +121,13 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_
     sock2->data = tunnel;
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 
-    /* Trash all data read before tunnel establishment */
-    h2o_buffer_consume(&sock1->input, sock1->input->size);
-    h2o_buffer_consume(&sock2->input, sock2->input->size);
-
-    /* Bring up the tunnel */
-    h2o_socket_read_start(sock1, on_read);
+    /* Bring up the tunnel. Note. Upstream always ready first. */
+    if (sock2->input->size)
+        on_read(sock2, NULL);
+    if (sock1->input->size)
+        on_read(sock1, NULL);
     h2o_socket_read_start(sock2, on_read);
+    h2o_socket_read_start(sock1, on_read);
 
     return tunnel;
 }

@@ -21,7 +21,7 @@ paths:
     mruby.handler: |
       require "dos_detector.rb"
       DoSDetector.new({
-        :strategy => DoSDetector.CountingStrategy.new({
+        :strategy => DoSDetector::CountingStrategy.new({
           :period     => 10,  # default
           :threshold  => 100, # default
           :ban_period => 300, # default
@@ -75,7 +75,7 @@ paths:
     mruby.handler: |
       require "dos_detector.rb"
       DoSDetector.new({
-        :strategy => DoSDetector.CountingStrategy.new,
+        :strategy => DoSDetector::CountingStrategy.new,
         :forwarded => false,
         :cache_size => 2048,
         :callback => proc {|env, detected, ip|
