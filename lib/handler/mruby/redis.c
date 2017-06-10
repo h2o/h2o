@@ -131,7 +131,7 @@ static mrb_value connect_method(mrb_state *mrb, mrb_value self)
     mrb_value config = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@config"));
     mrb_value _host = mrb_hash_get(mrb, config, mrb_symbol_value(mrb_intern_lit(mrb, "host")));
     mrb_value _port = mrb_hash_get(mrb, config, mrb_symbol_value(mrb_intern_lit(mrb, "port")));
-    char *host = mrb_str_to_cstr(mrb, _host);
+    const char *host = mrb_string_value_cstr(mrb, &_host);
     uint16_t port = mrb_fixnum(_port);
 
     h2o_redis_connect(&conn->super, host, port);
@@ -175,7 +175,7 @@ static void on_redis_command(void *_reply, void *_ctx)
 static mrb_value call_method(mrb_state *mrb, mrb_value self)
 {
     struct st_h2o_mruby_redis_conn_t *conn = DATA_PTR(self);
-    mrb_int i;
+    size_t i = 0;
 
     /* allocate context and initialize */
     struct st_h2o_mruby_redis_command_context_t *command_ctx = h2o_mem_alloc(sizeof(*command_ctx));
@@ -195,6 +195,9 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
     int gc_arena = mrb_gc_arena_save(mrb);
 
     for (i = 0; i != command_len; ++i) {
+        if (mrb_nil_p(command_args[i]))
+            continue;
+
         if (mrb_symbol_p(command_args[i])) {
             mrb_int len;
             argv[i] = mrb_sym2name_len(mrb, mrb_symbol(command_args[i]), &len);
