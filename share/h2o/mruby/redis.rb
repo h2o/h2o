@@ -19,9 +19,10 @@ module H2O
       yield
     end
 
-    def call(*command)
+    def call(*command_args)
       ensure_connected do
-        __call(command)
+        command = __call(command_args)
+        command.args = command_args
       end
     end
 
@@ -51,13 +52,29 @@ module H2O
       call(:del, *keys)
     end
 
+    class CommandError < RuntimeError
+      attr_reader :command
+      def initialize(message, command)
+        super("%s (command: %s)" % [message, command.args.join(' ')])
+        @command = command
+      end
+    end
+
     class Command
+      attr_accessor :args
       def _set_reply(reply)
         @reply = reply
       end
       def join
         if !@reply
-          @reply = _h2o__redis_join_reply(self)
+          begin
+            @reply = _h2o__redis_join_reply(self)
+          rescue RuntimeError => e
+            @reply = e
+          end
+        end
+        if @reply.kind_of?(RuntimeError)
+          raise CommandError.new(@reply.message, self)
         end
         @reply
       end

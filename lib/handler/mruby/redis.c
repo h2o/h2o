@@ -156,15 +156,11 @@ static void on_redis_command(void *_reply, void *_ctx)
         /* TODO: throw specific io error? */
         reply = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "redis command failed due to some connection problems");
     } else {
-        reply = mrb_obj_value(_reply);
+        reply = *(mrb_value *)_reply;
     }
 
     if (mrb_nil_p(ctx->receiver)) {
-        mrb_funcall(mrb, ctx->refs.command, "_set_reply", 1, reply);
-        if (mrb->exc != NULL) {
-            fprintf(stderr, "_set_reply failed\n");
-            abort();
-        }
+        mrb_obj_iv_set(mrb, mrb_obj_ptr(ctx->refs.command), mrb_intern_lit(mrb, "@reply"), reply);
     } else {
         int gc_arena = mrb_gc_arena_save(mrb);
         h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
@@ -251,15 +247,30 @@ mrb_value h2o_mruby_redis_join_reply_callback(h2o_mruby_context_t *mctx, mrb_val
     return mrb_nil_value();
 }
 
-
 /* reader object functions */
 
-static void insert_into_parent(mrb_state *mrb, const redisReadTask *task, mrb_value v)
+static void *insert_into_parent(const redisReadTask *task, mrb_value v)
 {
-    if (task->parent != NULL) {
-        mrb_value parent = mrb_obj_value(task->parent->obj);
+    struct st_h2o_mruby_redis_conn_t *ctx = task->privdata;
+    mrb_state *mrb = ctx->ctx->shared->mrb;
+
+    if (task->parent == NULL) {
+        /* this is root reply */
+        mrb_value *root = h2o_mem_alloc(sizeof(root));
+        *root = v;
+        return root;
+    } else {
+        mrb_value parent;
+        if (task->parent->parent == NULL) {
+            /* parent is root, so parent's obj is the pointer for mrb_value itself */
+            parent = *(mrb_value *)task->parent->obj;
+        } else {
+            /* parent is not root, so parent's obj is object pointer of mrb_value */
+            parent = mrb_obj_value(task->parent->obj);
+        }
         assert(mrb_array_p(parent));
         mrb_ary_set(mrb, parent, task->idx, v);
+        return mrb_array_p(v) ? mrb_obj_ptr(v) : (void *)1; /* if v is not an array, return dummy pointer */
     }
 }
 
@@ -271,35 +282,26 @@ static void *reader_create_string_object(const redisReadTask *task, char *str, s
     if (task->type == REDIS_REPLY_ERROR) {
         v = mrb_exc_new_str(mrb, E_RUNTIME_ERROR, v);
     }
-
-    insert_into_parent(mrb, task, v);
-    return mrb_obj_ptr(v);
+    return insert_into_parent(task, v);
 }
 
 static void *reader_create_array_object(const redisReadTask *task, int elements) {
     struct st_h2o_mruby_redis_conn_t *conn = task->privdata;
     mrb_state *mrb = conn->ctx->shared->mrb;
     mrb_value v = mrb_ary_new_capa(mrb, elements);
-    insert_into_parent(mrb, task, v);
-    return mrb_obj_ptr(v);
+    return insert_into_parent(task, v);
 }
 
 static void *reader_create_integer_object(const redisReadTask *task, long long value) {
-    struct st_h2o_mruby_redis_conn_t *conn = task->privdata;
-    mrb_state *mrb = conn->ctx->shared->mrb;
     mrb_value v = mrb_fixnum_value((mrb_int)value);
-    insert_into_parent(mrb, task, v);
-    return mrb_obj_ptr(v);
+    return insert_into_parent(task, v);
 }
 
 static void *reader_create_nil_object(const redisReadTask *task) {
-    struct st_h2o_mruby_redis_conn_t *conn = task->privdata;
-    mrb_state *mrb = conn->ctx->shared->mrb;
     mrb_value v = mrb_nil_value();
-    insert_into_parent(mrb, task, v);
-    return mrb_obj_ptr(v);
+    return insert_into_parent(task, v);
 }
 
 static void reader_free_object(void *v) {
-    /* mruby's GC will all the things */
+    free(v);
 }
