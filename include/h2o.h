@@ -1830,6 +1830,11 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/proxy.c */
 
+/**
+ * A callback to be able to override the destination url on a per-request basis
+ */
+typedef int (*h2o_proxy_get_upstream)(h2o_handler_t *, h2o_req_t *, h2o_url_t **, h2o_socketpool_t **, void *ctx);
+
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
     unsigned preserve_host : 1;
@@ -1845,8 +1850,13 @@ typedef struct st_h2o_proxy_config_vars_t {
     unsigned registered_as_url : 1;
     unsigned registered_as_backends : 1;
     SSL_CTX *ssl_ctx; /* optional */
+    struct {
+        h2o_proxy_get_upstream cb;
+        void *ctx;
+    } get_upstream;
 } h2o_proxy_config_vars_t;
 
+int h2o_proxy_url_get_upstream(h2o_handler_t *self, h2o_req_t *req, h2o_url_t **upstream, h2o_socketpool_t **sockpool, void *ctx);
 /**
  * registers the reverse proxy handler to the context
  */
