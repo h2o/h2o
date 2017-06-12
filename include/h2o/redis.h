@@ -42,7 +42,7 @@ typedef struct st_h2o_redis_conn_t {
     h2o_timeout_entry_t _timeout_entry;
 } h2o_redis_conn_t;
 
-typedef void (*h2o_redis_command_cb)(void *reply, void *cb_data);
+typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data, int err, const char *errstr);
 
 #define H2O_REDIS_ERROR_NONE 0
 #define H2O_REDIS_ERROR_CONNECTION 1

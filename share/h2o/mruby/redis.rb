@@ -1,7 +1,6 @@
 module H2O
 
   class Redis
-
     def initialize(config)
       @config = config
       __setup
@@ -27,13 +26,19 @@ module H2O
       end
     end
 
-    class CommandError < RuntimeError
+    # errors
+    class BaseError < RuntimeError; end
+    class CommandError < BaseError
       attr_reader :command
       def initialize(message, command)
         super("%s (command: %s)" % [message, command.args.join(' ')])
         @command = command
       end
     end
+    class ConnectionError < BaseError; end
+    class ProtocolError < BaseError; end
+    class UnknownError < BaseError; end
+    class UnavailableCommandError < BaseError; end
 
     class Command
       attr_accessor :args
@@ -63,15 +68,14 @@ module H2O
 
       begin
         yield self
-      # FIXME
-      # rescue ConnectionError => e
-      #   raise
+      rescue ConnectionError => e
+        raise
       rescue StandardError => e
         discard
         raise e
       end
 
-      call(:exec)
+      exec
     end
 
     def watch(*keys)
@@ -82,9 +86,8 @@ module H2O
 
       begin
         yield self
-      # FIXME
-      # rescue ConnectionError => e
-      #   raise
+      rescue ConnectionError => e
+        raise
       rescue StandardError => e
         unwatch
         raise e

@@ -179,7 +179,25 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
         if (_reply == NULL) return;
         reply = decode_redis_reply(mrb, _reply, ctx->refs.command);
     } else {
-        reply = *(mrb_value *)_reply;
+        struct RClass *error_klass;
+        switch(err) {
+        case H2O_REDIS_ERROR_CONNECTION:
+            error_klass = get_error_class(mrb, "ConnectionError");
+            break;
+        case H2O_REDIS_ERROR_PROTOCOL:
+            error_klass = get_error_class(mrb, "ProtocolError");
+            break;
+        case H2O_REDIS_ERROR_UNKNOWN:
+            error_klass = get_error_class(mrb, "UnknownError");
+            break;
+        default:
+            assert(!"FIXME");
+        }
+        reply = mrb_exc_new(mrb, error_klass, errstr, strlen(errstr));
+    }
+
+    if (mrb_nil_p(reply)) {
+        return;
     }
 
     if (mrb_nil_p(ctx->receiver)) {

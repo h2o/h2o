@@ -113,11 +113,34 @@ void h2o_redis_disconnect(h2o_redis_conn_t *conn)
     }
 }
 
-static void on_command(redisAsyncContext *redis, void *reply, void *privdata)
+static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
 {
+    redisReply *reply = (redisReply *)_reply;
     struct st_h2o_redis_command_t *command = (struct st_h2o_redis_command_t *)privdata;
+
+    int err = H2O_REDIS_ERROR_NONE;
+    char *errstr = NULL;
+    if (redis->err != REDIS_OK) {
+        switch (redis->err) {
+        case REDIS_ERR_IO:
+        case REDIS_ERR_EOF:
+            err = H2O_REDIS_ERROR_CONNECTION;
+            break;
+        case REDIS_ERR_PROTOCOL:
+            err = H2O_REDIS_ERROR_PROTOCOL;
+            break;
+        case REDIS_ERR_OOM:
+        case REDIS_ERR_OTHER:
+            err = H2O_REDIS_ERROR_UNKNOWN;
+            break;
+        default:
+            assert(!"FIXME");
+        }
+        errstr = redis->errstr;
+    }
+
     if (command->cb != NULL) {
-        command->cb(reply, command->data);
+        command->cb(reply, command->data, err, errstr);
     }
     free(command);
 }
