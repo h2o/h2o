@@ -201,7 +201,10 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
     }
 
     if (mrb_nil_p(ctx->receiver)) {
-        mrb_obj_iv_set(mrb, mrb_obj_ptr(ctx->refs.command), mrb_intern_lit(mrb, "@reply"), reply);
+        mrb_value runner = mrb_funcall(mrb, ctx->refs.command, "_on_reply", 1, reply);
+        h2o_mruby_assert(mrb);
+        if (! mrb_nil_p(runner))
+            h2o_mruby_run_fiber(ctx->conn->ctx, runner, mrb_nil_value(), NULL);
     } else {
         int gc_arena = mrb_gc_arena_save(mrb);
         h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
@@ -212,35 +215,39 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
 static mrb_value call_method(mrb_state *mrb, mrb_value self)
 {
     struct st_h2o_mruby_redis_conn_t *conn = DATA_PTR(self);
-    size_t i = 0;
+    mrb_int i = 0;
+
+    mrb_value command_args;
+    mrb_value command_klass;
+    mrb_value command_block = mrb_nil_value();
+    mrb_get_args(mrb, "AC&", &command_args, &command_klass, &command_block);
+    mrb_int command_len = mrb_ary_len(mrb, command_args);
 
     /* allocate context and initialize */
     struct st_h2o_mruby_redis_command_context_t *command_ctx = h2o_mem_alloc(sizeof(*command_ctx));
     memset(command_ctx, 0, sizeof(*command_ctx));
     command_ctx->conn = conn;
     command_ctx->receiver = mrb_nil_value();
-    command_ctx->refs.command = h2o_mruby_create_data_instance(mrb, mrb_ary_entry(conn->ctx->shared->constants, H2O_MRUBY_REDIS_COMMAND_CLASS), command_ctx, &command_type);
-
-    /* retrieve argument array */
-    mrb_value *command_args;
-    mrb_int command_len;
-    mrb_get_args(mrb, "a", &command_args, &command_len);
+    command_ctx->refs.command = h2o_mruby_create_data_instance(mrb, command_klass, command_ctx, &command_type);
+    mrb_funcall_with_block(mrb, command_ctx->refs.command, mrb_intern_lit(mrb, "initialize"), 1, &command_args, command_block);
 
     const char **argv = h2o_mem_alloc(command_len * sizeof(char *));
     size_t *argvlen = h2o_mem_alloc(command_len * sizeof(size_t));
 
     int gc_arena = mrb_gc_arena_save(mrb);
 
+    /* retrieve argument array */
     for (i = 0; i != command_len; ++i) {
-        if (mrb_nil_p(command_args[i]))
+        mrb_value command_arg = mrb_ary_entry(command_args, i);
+        if (mrb_nil_p(command_arg))
             continue;
 
-        if (mrb_symbol_p(command_args[i])) {
+        if (mrb_symbol_p(command_arg)) {
             mrb_int len;
-            argv[i] = mrb_sym2name_len(mrb, mrb_symbol(command_args[i]), &len);
+            argv[i] = mrb_sym2name_len(mrb, mrb_symbol(command_arg), &len);
             argvlen[i] = len;
         } else {
-            mrb_value s = mrb_obj_as_string(mrb, command_args[i]);
+            mrb_value s = mrb_obj_as_string(mrb, command_arg);
             argv[i] = mrb_string_value_cstr(mrb, &s);
             argvlen[i] = mrb_string_value_len(mrb, s);
         }
@@ -270,9 +277,6 @@ void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx)
     mrb_define_method(mrb, redis_klass, "connect", connect_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, redis_klass, "disconnect", disconnect_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, redis_klass, "__call", call_method, MRB_ARGS_ARG(1, 0));
-
-    struct RClass *redis_command_klass = mrb_class_get_under(mrb, redis_klass, "Command");
-    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_REDIS_COMMAND_CLASS, mrb_obj_value(redis_command_klass));
 }
 
 mrb_value h2o_mruby_redis_join_reply_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args,

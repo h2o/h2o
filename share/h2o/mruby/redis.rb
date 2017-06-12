@@ -18,11 +18,26 @@ module H2O
       yield
     end
 
-    def call(*command_args)
+    STREAMING_COMMANDS = %w(subscribe psubscribe monitor).map {|c| [c, true] }.to_h
+    NO_REPLY_COMMANDS = %w(unsubscribe).map {|c| [c, true] }.to_h
+    def _command_class(c, block)
+      dc = c.to_s.downcase
+      if STREAMING_COMMANDS.include?(dc)
+        if block
+          Command::Streaming::WithBlock
+        else
+          Command::Streaming::WithoutBlock
+        end
+      elsif NO_REPLY_COMMANDS.include?(dc)
+        Command::NoReply
+      else
+        Command::OneShot
+      end
+    end
+
+    def call(*command_args, &block)
       ensure_connected do
-        command = __call(command_args)
-        command.args = command_args
-        command
+        __call(command_args, _command_class(command_args[0], block), &block)
       end
     end
 
@@ -41,22 +56,120 @@ module H2O
     class UnavailableCommandError < BaseError; end
 
     class Command
-      attr_accessor :args
-      def _set_reply(reply)
-        @reply = reply
+      attr_reader :args
+
+      def initialize(args, &block)
+        @args = args
+        @block = block
       end
-      def join
-        if !@reply
-          begin
+
+      class OneShot < Command
+        def _on_reply(reply)
+          @reply = reply
+          nil
+        end
+        def join
+          if !@reply
             @reply = _h2o__redis_join_reply(self)
-          rescue RuntimeError => e
-            @reply = e
+          end
+          if @reply.kind_of?(RuntimeError)
+            raise @reply
+          end
+          @reply
+        end
+      end
+
+      class NoReply < Command
+        def _on_reply(reply)
+          raise RuntimeError.new('something went wrong')
+        end
+        def join
+          'OK'
+        end
+      end
+
+      module Streaming
+        class WithBlock < Command
+          @@passthru = Object.new
+          def initialize(*args, &block)
+            super(*args, &block)
+            @checker = proc {|reply|
+              raise reply if reply.kind_of?(RuntimeError)
+            }
+          end
+
+          # wrap error handling blocks
+          def rescue(klass = StandardError, &block)
+            [:@block, :@checker].each {|var|
+              orig = instance_variable_get(var)
+              wrapped = proc {|reply|
+                begin
+                  orig.call(reply)
+                rescue klass => e
+                  block.call(e) if block
+                else
+                  @@passthru
+                end
+              }
+              instance_variable_set(var, wrapped)
+            }
+            self
+          end
+
+          # called when streaming reply arrives
+          def _on_reply(reply)
+            if @reply
+              @fiber ||= Fiber.new {|stream_reply|
+                loop {
+                  stream_reply = begin
+                    if @checker.call(stream_reply) == @@passthru
+                      @block.call(stream_reply)
+                    end
+                    Fiber.yield([H2O_CALLBACK_ID_NOOP])
+                  rescue => e
+                    Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e])
+                  end
+                }
+              }
+              @stream_reply = reply # to make runner cachable
+              @callback_runner ||= proc {
+                ret = @fiber.resume(@stream_reply)
+                @stream_reply = nil
+                ret
+              }
+            else
+              @reply = reply
+              @checker.call(@reply)
+              nil
+            end
+          end
+
+          # wait first reply (i.e. reply for streaming command itself, generally 'OK' without any connection problem)
+          def join
+            @reply ||= _h2o__redis_join_reply(self)
+            @checker.call(@reply)
+            @reply
+          end
+
+        end
+
+        class WithoutBlock < Command
+          def _replies
+            @_replies ||= []
+          end
+          def _on_reply(reply)
+            _replies.push(reply)
+            nil
+          end
+          def join
+            reply = _replies.shift || _h2o__redis_join_reply(self)
+            if reply.kind_of?(RuntimeError)
+              raise reply
+            end
+            reply
           end
         end
-        if @reply.kind_of?(RuntimeError)
-          raise CommandError.new(@reply.message, self)
-        end
-        @reply
+
       end
     end
 
@@ -94,6 +207,25 @@ module H2O
       end
     end
 
+    def quit
+      begin
+        res = call(:QUIT)
+      rescue ConnectionError
+        res = 'OK'
+      end
+
+      if block_given?
+        yield res
+      else
+        res
+      end
+    end
+
+    def monitor
+      # monitor command implementation in hiredis asynchronous API is absolutely dangerous, so don't use it!
+      raise UnavailableCommandError.new('monitor command is unavailable')
+    end
+
     [
       # Cluster
       %w(
@@ -105,7 +237,7 @@ module H2O
 
       # Connection
       %w(
-        auth echo ping quit select swapdb
+        auth echo ping select swapdb
       ),
 
       # Generic
@@ -155,7 +287,7 @@ module H2O
         bgrewriteaof bgsave client_kill client_list client_getname client_pause
         client_reply client_setname command command_count command_getkeys command_info
         config_get config_rewrite config_set config_resetstat dbsize debug_object
-        debug_segfault flushall flushdb info lastsave monitor
+        debug_segfault flushall flushdb info lastsave
         role save shutdown slaveof slowlog sync time
       ),
 
@@ -189,8 +321,8 @@ module H2O
     ].flatten.each {|method|
       method_args = method_args = method.upcase.split(/_/, 2)
       method_args[1].gsub!('_', '-') if method_args[1]
-      self.define_method(method) {|*args|
-        call(*method_args, *args)
+      self.define_method(method) {|*args, &block|
+        call(*method_args, *args, &block)
       }
     }
 

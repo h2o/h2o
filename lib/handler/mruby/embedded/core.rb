@@ -20,6 +20,10 @@
 # IN THE SOFTWARE.
 
 module Kernel
+  H2O_CALLBACK_ID_NOOP             =  0
+  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
+  H2O_CALLBACK_ID_CONFIGURING_APP  = -2
+  H2O_CALLBACK_ID_CONFIGURED_APP   = -3
 
   def _h2o_define_callback(name, id)
     Kernel.define_method(name) do |*args|
@@ -52,9 +56,6 @@ module Kernel
     eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])
   end
 
-  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
-  H2O_CALLBACK_ID_CONFIGURING_APP = -2
-  H2O_CALLBACK_ID_CONFIGURED_APP = -3
   def _h2o_prepare_app(conf)
     app = Proc.new do |req|
       [H2O_CALLBACK_ID_CONFIGURING_APP]

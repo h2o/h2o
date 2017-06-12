@@ -142,7 +142,22 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
     if (command->cb != NULL) {
         command->cb(reply, command->data, err, errstr);
     }
-    free(command);
+    switch (command->type) {
+    case H2O_REDIS_COMMAND_TYPE_SUBSCRIBE:
+    case H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE:
+        if (reply == NULL) {
+            free(command);
+        } else {
+            assert(reply->element != NULL);
+            char *unsub = command->type == H2O_REDIS_COMMAND_TYPE_SUBSCRIBE ? "unsubscribe" : "punsubscribe";
+            if (strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
+                free(command);
+            }
+        }
+        break;
+    default:
+        free(command);
+    }
 }
 
 static void on_command_error_deferred(h2o_timeout_entry_t *entry)
@@ -152,44 +167,105 @@ static void on_command_error_deferred(h2o_timeout_entry_t *entry)
     on_command(command->conn->_redis, NULL, command);
 }
 
-static h2o_redis_command_t *create_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data)
+static h2o_redis_command_t *create_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, h2o_redis_command_type_t type)
 {
     h2o_redis_command_t *command = h2o_mem_alloc(sizeof(h2o_redis_command_t));
     *command = (struct st_h2o_redis_command_t){NULL};
     command->conn = conn;
     command->cb = cb;
     command->data = cb_data;
+    command->type = type;
     command->_timeout_entry.cb = on_command_error_deferred;
     return command;
 }
 
-h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
+static void send_command(h2o_redis_conn_t *conn, h2o_redis_command_t *command, const char *cmd, size_t len)
 {
-    h2o_redis_command_t *command = create_command(conn, cb, cb_data);
+    if (cmd == NULL) {
+        invoke_deferred(conn, &command->_timeout_entry);
+        return;
+    }
 
     if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
         invoke_deferred(conn, &command->_timeout_entry);
-    } else {
-        va_list ap;
-        va_start(ap, format);
-        int ret = redisvAsyncCommand(conn->_redis, on_command, command, format, ap);
-        va_end(ap);
-
-        if (ret != REDIS_OK)
-            invoke_deferred(conn, &command->_timeout_entry);
+        return;
     }
+
+    if (command->type == H2O_REDIS_COMMAND_TYPE_MONITOR) {
+        /* monitor command implementation in hiredis asynchronous API is absolutely dangerous, so don't use it! */
+        invoke_deferred(conn, &command->_timeout_entry);
+        return;
+    }
+
+    int ret = redisAsyncFormattedCommand(conn->_redis, on_command, command, cmd, len);
+    if (ret != REDIS_OK) {
+        invoke_deferred(conn, &command->_timeout_entry);
+    }
+}
+
+/*
+  hiredis doesn't expose any information about the command, so parse here.
+  this function assumes that formatted is NULL-terminated
+ */
+static h2o_redis_command_type_t detect_command_type(const char *formatted)
+{
+#define CHECK(c) if (c == NULL) return H2O_REDIS_COMMAND_TYPE_ERROR
+
+    char *p = (char *)formatted;
+    CHECK(p);
+
+    assert(p[0] == '*');
+
+    p = strchr(p, '$');
+    CHECK(p);
+    p = strchr(p, '\n');
+    CHECK(p);
+    ++p;
+    CHECK(p);
+
+#define MATCH(c, target) strncasecmp(c, target, sizeof(target) - 1) == 0
+    if (MATCH(p, "subscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_SUBSCRIBE;
+    if (MATCH(p, "unsubscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE;
+    if (MATCH(p, "psubscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE;
+    if (MATCH(p, "punsubscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE;
+    if (MATCH(p, "monitor\r\n")) return H2O_REDIS_COMMAND_TYPE_MONITOR;
+#undef MATCH
+    return H2O_REDIS_COMMAND_TYPE_NORMAL;
+#undef CHECK
+}
+
+h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...)
+{
+    char *cmd;
+    int len;
+    va_list ap;
+    va_start(ap, format);
+    len = redisvFormatCommand(&cmd, format, ap);
+    va_end(ap);
+    if (len <= 0) {
+        cmd = NULL;
+        len = 0;
+    }
+
+    h2o_redis_command_t *command = create_command(conn, cb, cb_data, detect_command_type(cmd));
+    send_command(conn, command, cmd, len);
+    free(cmd);
     return command;
 }
 
 h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc, const char **argv, const size_t *argvlen)
 {
-    h2o_redis_command_t *command = create_command(conn, cb, cb_data);
-
-    if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
-        invoke_deferred(conn, &command->_timeout_entry);
-    } else if (redisAsyncCommandArgv(conn->_redis, on_command, command, argc, argv, argvlen) != REDIS_OK) {
-        invoke_deferred(conn, &command->_timeout_entry);
+    sds sdscmd;
+    int len;
+    len = redisFormatSdsCommandArgv(&sdscmd, argc, argv, argvlen);
+    if (len < 0) {
+        sdscmd = NULL;
+        len = 0;
     }
+
+    h2o_redis_command_t *command = create_command(conn, cb, cb_data, detect_command_type(sdscmd));
+    send_command(conn, command, sdscmd, len);
+    sdsfree(sdscmd);
     return command;
 }
 

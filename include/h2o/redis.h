@@ -44,6 +44,16 @@ typedef struct st_h2o_redis_conn_t {
 
 typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data, int err, const char *errstr);
 
+typedef enum enum_h2o_redis_command_type_t {
+    H2O_REDIS_COMMAND_TYPE_NORMAL = 1,
+    H2O_REDIS_COMMAND_TYPE_SUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_MONITOR,
+    H2O_REDIS_COMMAND_TYPE_ERROR
+} h2o_redis_command_type_t;
+
 #define H2O_REDIS_ERROR_NONE 0
 #define H2O_REDIS_ERROR_CONNECTION 1
 #define H2O_REDIS_ERROR_PROTOCOL 2
@@ -53,6 +63,7 @@ typedef struct st_h2o_redis_command_t {
     h2o_redis_conn_t *conn;
     h2o_redis_command_cb cb;
     void *data;
+    h2o_redis_command_type_t type;
     h2o_timeout_entry_t _timeout_entry;
 } h2o_redis_command_t;
 

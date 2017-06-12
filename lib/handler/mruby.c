@@ -282,14 +282,14 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     shared_ctx->symbols.sym_body = mrb_intern_lit(shared_ctx->mrb, "body");
     shared_ctx->symbols.sym_async = mrb_intern_lit(shared_ctx->mrb, "async");
 
-    h2o_mruby_send_chunked_init_context(shared_ctx);
-    h2o_mruby_http_request_init_context(shared_ctx);
-    h2o_mruby_redis_init_context(shared_ctx);
-
     struct RClass *module = mrb_define_module(shared_ctx->mrb, "H2O");
+    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_H2O_MODULE, mrb_obj_value(module));
     struct RClass *generator_klass = mrb_define_class_under(shared_ctx->mrb, module, "Generator", shared_ctx->mrb->object_class);
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_GENERATOR_CLASS, mrb_obj_value(generator_klass));
 
+    h2o_mruby_send_chunked_init_context(shared_ctx);
+    h2o_mruby_http_request_init_context(shared_ctx);
+    h2o_mruby_redis_init_context(shared_ctx);
 
     return shared_ctx;
 }
@@ -755,10 +755,12 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         status = mrb_fixnum(v);
 
         /* if no special actions were necessary, then the output is a rack response */
-        if (status >= 0) break;
+        if (status > 0) break;
 
         /* take special action depending on the status code */
-        if (status == H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED) {
+        if (status == H2O_MRUBY_CALLBACK_ID_NOOP) {
+            goto Exit;
+        } else if (status == H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED) {
             mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
             generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 2));
             goto GotException;

@@ -66,9 +66,6 @@ enum {
     H2O_MRUBY_HTTP_REQUEST_CLASS,
     H2O_MRUBY_HTTP_INPUT_STREAM_CLASS,
 
-    /* used by redis.c */
-    H2O_MRUBY_REDIS_COMMAND_CLASS,
-
     H2O_MRUBY_NUM_CONSTANTS
 };
 
@@ -121,6 +118,7 @@ typedef struct st_h2o_mruby_generator_t {
     } refs;
 } h2o_mruby_generator_t;
 
+#define H2O_MRUBY_CALLBACK_ID_NOOP 0
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP -2
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP -3

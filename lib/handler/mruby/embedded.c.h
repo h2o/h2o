@@ -6,6 +6,10 @@
 /* lib/handler/mruby/embedded/core.rb */
 #define H2O_MRUBY_CODE_CORE                                                                                                        \
     "module Kernel\n"                                                                                                              \
+    "  H2O_CALLBACK_ID_NOOP             =  0\n"                                                                                    \
+    "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
+    "  H2O_CALLBACK_ID_CONFIGURING_APP  = -2\n"                                                                                    \
+    "  H2O_CALLBACK_ID_CONFIGURED_APP   = -3\n"                                                                                    \
     "  def _h2o_define_callback(name, id)\n"                                                                                       \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
     "      ret = Fiber.yield([ id, _h2o_create_resumer(), args ])\n"                                                               \
@@ -33,9 +37,6 @@
     "  def _h2o_eval_conf(__h2o_conf)\n"                                                                                           \
     "    eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                                     \
     "  end\n"                                                                                                                      \
-    "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
-    "  H2O_CALLBACK_ID_CONFIGURING_APP = -2\n"                                                                                     \
-    "  H2O_CALLBACK_ID_CONFIGURED_APP = -3\n"                                                                                      \
     "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
     "      [H2O_CALLBACK_ID_CONFIGURING_APP]\n"                                                                                    \
