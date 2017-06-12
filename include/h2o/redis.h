@@ -40,11 +40,14 @@ typedef struct st_h2o_redis_conn_t {
     struct redisAsyncContext *_redis;
     h2o_timeout_t _defer_timeout;
     h2o_timeout_entry_t _timeout_entry;
-
-    redisReader *(*create_reader)(struct st_h2o_redis_conn_t *conn);
 } h2o_redis_conn_t;
 
 typedef void (*h2o_redis_command_cb)(void *reply, void *cb_data);
+
+#define H2O_REDIS_ERROR_NONE 0
+#define H2O_REDIS_ERROR_CONNECTION 1
+#define H2O_REDIS_ERROR_PROTOCOL 2
+#define H2O_REDIS_ERROR_UNKNOWN 3
 
 typedef struct st_h2o_redis_command_t {
     h2o_redis_conn_t *conn;

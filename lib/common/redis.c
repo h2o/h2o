@@ -102,9 +102,6 @@ void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port)
     attach_loop(redis, conn->loop);
     redisAsyncSetConnectCallback(redis, on_redis_connect);
     redisAsyncSetDisconnectCallback(redis, on_redis_disconnect);
-
-    if (conn->create_reader != NULL)
-        conn->_redis->c.reader = conn->create_reader(conn);
 }
 
 void h2o_redis_disconnect(h2o_redis_conn_t *conn)

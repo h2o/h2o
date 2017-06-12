@@ -68,13 +68,15 @@ static void dump_reply(redisReply *reply, unsigned indent)
     }
 }
 
-static void on_redis_command(void *_reply, void *cb_data)
+static void on_redis_command(redisReply *reply, void *cb_data, int err, const char *errstr)
 {
-    if (_reply == NULL) {
-        fprintf(stderr, "redis command failed due to some connection problems\n");
+    if (err != H2O_REDIS_ERROR_NONE) {
+        fprintf(stderr, "redis error(%d): %s\n", err, errstr);
         return;
     }
-    dump_reply((redisReply *)_reply, 0);
+    if (reply != NULL) {
+        dump_reply(reply, 0);
+    }
 }
 
 static void on_redis_connect(void)

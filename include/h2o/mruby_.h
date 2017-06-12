@@ -56,6 +56,7 @@ enum {
     H2O_MRUBY_PROC_EACH_TO_ARRAY,
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
+    H2O_MRUBY_H2O_MODULE,
     H2O_MRUBY_GENERATOR_CLASS,
 
     /* used by chunked.c */
