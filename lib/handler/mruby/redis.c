@@ -196,10 +196,6 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
         reply = mrb_exc_new(mrb, error_klass, errstr, strlen(errstr));
     }
 
-    if (mrb_nil_p(reply)) {
-        return;
-    }
-
     if (mrb_nil_p(ctx->receiver)) {
         mrb_value runner = mrb_funcall(mrb, ctx->refs.command, "_on_reply", 1, reply);
         h2o_mruby_assert(mrb);

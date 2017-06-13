@@ -18,8 +18,8 @@ module H2O
       yield
     end
 
-    STREAMING_COMMANDS = %w(subscribe psubscribe monitor).map {|c| [c, true] }.to_h
-    NO_REPLY_COMMANDS = %w(unsubscribe).map {|c| [c, true] }.to_h
+    STREAMING_COMMANDS = %w(subscribe psubscribe).map {|c| [c, true] }.to_h
+    NO_REPLY_COMMANDS  = %w(unsubscribe punsubscribe).map {|c| [c, true] }.to_h
     def _command_class(c, block)
       dc = c.to_s.downcase
       if STREAMING_COMMANDS.include?(dc)
@@ -30,14 +30,17 @@ module H2O
         end
       elsif NO_REPLY_COMMANDS.include?(dc)
         Command::NoReply
+      elsif dc.to_sym == :exec
+        Command::OneShot::Exec
       else
         Command::OneShot
       end
     end
 
     def call(*command_args, &block)
+      command_class = _command_class(command_args[0], block)
       ensure_connected do
-        __call(command_args, _command_class(command_args[0], block), &block)
+        __call(command_args, command_class, &block)
       end
     end
 
@@ -64,6 +67,9 @@ module H2O
       end
 
       class OneShot < Command
+        def _check_reply(reply)
+          raise reply if reply.kind_of?(RuntimeError)
+        end
         def _on_reply(reply)
           @reply = reply
           nil
@@ -72,10 +78,21 @@ module H2O
           if !@reply
             @reply = _h2o__redis_join_reply(self)
           end
-          if @reply.kind_of?(RuntimeError)
-            raise @reply
-          end
+          _check_reply(@reply)
           @reply
+        end
+
+        # exec may contain error reply in array reply, or nil reply when watch failed, so have to check it
+        class Exec < OneShot
+          def _check_reply(reply)
+            if reply.nil?
+              raise CommandError.new('transaction was aborted', self)
+            end
+            super(reply)
+            if reply.kind_of?(Array)
+              reply.each {|child| super(child) }
+            end
+          end
         end
       end
 
@@ -95,6 +112,7 @@ module H2O
             super(*args, &block)
             @checker = proc {|reply|
               raise reply if reply.kind_of?(RuntimeError)
+              @@passthru
             }
           end
 
@@ -163,9 +181,7 @@ module H2O
           end
           def join
             reply = _replies.shift || _h2o__redis_join_reply(self)
-            if reply.kind_of?(RuntimeError)
-              raise reply
-            end
+            raise reply if reply.kind_of?(RuntimeError)
             reply
           end
         end
@@ -173,51 +189,50 @@ module H2O
       end
     end
 
-    def multi
-      res = call(:MULTI)
-      if ! block_given?
-        return res
-      end
-
+    def _do_block_ensuring(block, &ensuring)
+      success = false
       begin
-        yield self
+        block.call(self)
+        success = true
       rescue ConnectionError => e
-        raise
-      rescue StandardError => e
-        discard
+        # if connection error happens, discard / unwatch are not needed anymore
         raise e
+      ensure
+        # to provide original exception information, pass through using ensure, not re-raise.
+        # are there more smart ways?
+        unless success
+          begin
+            ensuring.call
+          end
+        end
       end
+    end
 
+    def multi(&block)
+      command = call(:MULTI)
+      return command unless block
+      _do_block_ensuring(block) { discard }
       exec
     end
 
-    def watch(*keys)
-      res = call(:WATCH, *keys)
-      if !block_given?
-        return res
-      end
-
-      begin
-        yield self
-      rescue ConnectionError => e
-        raise
-      rescue StandardError => e
-        unwatch
-        raise e
-      end
+    def watch(*keys, &block)
+      command = call(:WATCH, *keys)
+      return command unless block
+      _do_block_ensuring(block) { unwatch }
+      command
     end
 
     def quit
       begin
-        res = call(:QUIT)
+        command = call(:QUIT)
       rescue ConnectionError
-        res = 'OK'
+        command = Command::NoReply.new
       end
 
       if block_given?
-        yield res
+        yield command
       else
-        res
+        command
       end
     end
 
