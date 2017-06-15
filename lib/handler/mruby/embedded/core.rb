@@ -19,6 +19,11 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
+$__TOP_SELF__ = self
+def _h2o_eval_conf(__h2o_conf)
+  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])
+end
+
 module Kernel
 
   def _h2o_define_callback(name, id)
@@ -46,10 +51,6 @@ module Kernel
       end
       a
     end
-  end
-
-  def _h2o_eval_conf(__h2o_conf)
-    eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])
   end
 
   H2O_CALLBACK_ID_EXCEPTION_RAISED = -1

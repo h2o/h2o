@@ -5,6 +5,10 @@
 
 /* lib/handler/mruby/embedded/core.rb */
 #define H2O_MRUBY_CODE_CORE                                                                                                        \
+    "$__TOP_SELF__ = self\n"                                                                                                       \
+    "def _h2o_eval_conf(__h2o_conf)\n"                                                                                             \
+    "  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                         \
+    "end\n"                                                                                                                        \
     "module Kernel\n"                                                                                                              \
     "  def _h2o_define_callback(name, id)\n"                                                                                       \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
@@ -29,9 +33,6 @@
     "      end\n"                                                                                                                  \
     "      a\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
-    "  end\n"                                                                                                                      \
-    "  def _h2o_eval_conf(__h2o_conf)\n"                                                                                           \
-    "    eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                                     \
     "  end\n"                                                                                                                      \
     "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
     "  H2O_CALLBACK_ID_CONFIGURING_APP = -2\n"                                                                                     \
