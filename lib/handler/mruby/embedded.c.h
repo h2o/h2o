@@ -79,6 +79,9 @@
     "    end\n"                                                                                                                    \
     "    [runner, configurator]\n"                                                                                                 \
     "  end\n"                                                                                                                      \
+    "  def sleep(*sec)\n"                                                                                                          \
+    "    _h2o__sleep(*sec)\n"                                                                                                      \
+    "  end\n"                                                                                                                      \
     "end\n"
 
 /* lib/handler/mruby/embedded/http_request.rb */
