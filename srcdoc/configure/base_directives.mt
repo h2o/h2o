@@ -168,7 +168,7 @@ The <code style="font-weight: bold;">ssl</code> attribute must be defined as a m
 <dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
-Default is <code>TLSv1</code>
+Default is <code>TLSv1.2</code> if possible, <code>TLSv1</code> otherwise.
 </dd>
 <dt id="min-version">min-verison:</dt>
 <dd>
@@ -186,10 +186,11 @@ synonym of <code>maximum-version</code>.
 </dd>
 <dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
+Default is <code>ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256</code>.
 <dt id="cipher-preferences">cipher-preference:</dt>
 <dd>
 side of the list that should be used for selecting the cipher-suite; should be either of: <code>client</code>, <code>server</code>.
-Default is <code>client</code>.
+Default is <code>server</code>.
 </dd>
 <dt id="dh-file">dh-file:</dt>
 <dd>
