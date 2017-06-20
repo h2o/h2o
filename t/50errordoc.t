@@ -111,4 +111,38 @@ EOT
     });
 };
 
+subtest 'multi-status-error' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+error-doc:
+  - status: [404, 405]
+    url: /404.html
+EOT
+
+    my $expected = do {
+        open my $fh, '<', "@{[DOC_ROOT]}/404.html"
+            or die "failed to read file:@{[DOC_ROOT]}/404.html:$!";
+        local $/;
+        <$fh>;
+    };
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/nonexist`;
+        is $resp, $expected, "content";
+        $resp = `$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/nonexist 2>&1 > /dev/null`;
+        like $resp, qr{^HTTP/[^ ]+ 404\s}s, "status";
+    });
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent -X POST $proto://127.0.0.1:$port/index.txt`;
+        is $resp, $expected, "content";
+        $resp = `$curl --silent --dump-header /dev/stderr -X POST $proto://127.0.0.1:$port/index.txt 2>&1 > /dev/null`;
+        like $resp, qr{^HTTP/[^ ]+ 405\s}s, "status";
+    });
+};
+
 done_testing;
