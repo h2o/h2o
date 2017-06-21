@@ -64,15 +64,18 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
         return mrb_nil_value(); /* sleep forever */
     }
     mrb_value arg_sec = mrb_ary_entry(args, 0);
-    uint64_t msec;
-    if (mrb_fixnum_p(arg_sec)) {
-        msec = mrb_int(mrb, arg_sec) * 1000;
-    } else if (mrb_float_p(arg_sec)) {
-        msec = mrb_float(arg_sec) * 1000;
-    } else {
+
+    /* convert the argument using to_f */
+    if (! mrb_respond_to(mrb, arg_sec, mrb_intern_lit(mrb, "to_f"))) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "argument must be either Fixnum or Float");
+        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "the argument of the sleep function must respond to 'to_f' method");
     }
+    arg_sec = mrb_funcall(mrb, arg_sec, "to_f", 0);
+    if (mrb->exc) {
+        *run_again = 1;
+        return mrb_obj_value(mrb->exc);
+    }
+    uint64_t msec = mrb_float(arg_sec) * 1000;
 
     struct st_h2o_mruby_sleep_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
     memset(ctx, 0, sizeof(*ctx));
