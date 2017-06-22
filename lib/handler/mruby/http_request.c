@@ -32,7 +32,11 @@ struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_context_t *ctx;
     h2o_http1client_t *client;
     mrb_value receiver;
+<<<<<<< HEAD
     unsigned consumed : 1; /* flag to check that the response body is consumed only once */
+=======
+    mrb_value http_callback;
+>>>>>>> Add http request callback function and channel class for parallel http response processing
     struct {
         h2o_buffer_t *buf;
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
@@ -167,7 +171,16 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
     ctx->refs.input_stream = h2o_mruby_create_data_instance(mrb, input_stream_class, ctx, &input_stream_type);
     mrb_ary_set(mrb, resp, 2, ctx->refs.input_stream);
 
-    if (mrb_nil_p(ctx->receiver)) {
+    if (!mrb_nil_p(ctx->http_callback)) {
+        mrb_funcall(mrb, ctx->refs.request, "_set_response", 1, resp);
+        if (mrb->exc != NULL) {
+            fprintf(stderr, "_set_response failed\n");
+            abort();
+        }
+        /* send response to the callback block */
+        mrb_yield(mrb, ctx->http_callback, resp);
+        ctx->http_callback = mrb_nil_value();
+    } else if (mrb_nil_p(ctx->receiver)) {
         /* is async */
         mrb_funcall(mrb, ctx->refs.request, "_set_response", 1, resp);
         if (mrb->exc != NULL) {
@@ -542,6 +555,7 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 
     klass = mrb_class_get_under(mrb, module, "HttpRequest");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS, mrb_obj_value(klass));
+    mrb_define_method(mrb, klass, "callback", http_request_callback, MRB_ARGS_BLOCK());
 
     klass = mrb_class_get_under(mrb, module, "HttpInputStream");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));

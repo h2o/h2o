@@ -67,6 +67,9 @@ enum {
     H2O_MRUBY_HTTP_INPUT_STREAM_CLASS,
     H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS,
 
+    /* used by channel.c */
+    H2O_MRUBY_CHANNEL_CLASS,
+
     H2O_MRUBY_NUM_CONSTANTS
 };
 
@@ -105,6 +108,7 @@ typedef struct st_h2o_mruby_context_t {
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
 typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;
+typedef struct st_h2o_mruby_channel_context_t h2o_mruby_channel_context_t;
 
 typedef struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
@@ -123,6 +127,7 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS -4
 #define H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE -5
 #define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -6
+#define H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT -7
 #define H2O_MRUBY_CALLBACK_ID_SLEEP -999
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
@@ -177,6 +182,7 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx);
 
 mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value args, int *next_action);
 mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *next_action);
+mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *next_action);
 
 h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *),
                                                               h2o_mruby_generator_t *generator);
@@ -186,6 +192,9 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
 /* handler/mruby/sleep.c */
 void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
 mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again);
+/* handler/mruby/channel.c */
+void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *ctx);
+mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *next_action);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);

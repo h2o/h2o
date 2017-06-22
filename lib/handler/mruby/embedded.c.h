@@ -139,3 +139,13 @@
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"
+
+/* lib/handler/mruby/embedded/chunked.rb */
+#define H2O_MRUBY_CODE_CHAHNNEL                                                                                                     \
+    "module H2O\n"                                                                                                              \
+    "  class Channel\n"                                                                                                        \
+        "    def shift\n"                                                                                                \
+        "      _h2o__channel_shift(self)\n"                                                                                                         \
+        "    end\n"                                                                                                                    \
+        "  end\n"                                                                                                                      \
+    "end\n"
