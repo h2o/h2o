@@ -18,8 +18,11 @@ MRB_BEGIN_DECL
 struct REnv {
   MRB_OBJECT_HEADER;
   mrb_value *stack;
-  mrb_sym mid;
   ptrdiff_t cioff;
+  union {
+    mrb_sym mid;
+    struct mrb_context *c;
+  } cxt;
 };
 
 #define MRB_SET_ENV_STACK_LEN(e,len) (e)->flags = (unsigned int)(len)
@@ -52,6 +55,8 @@ struct RProc {
 #define MRB_PROC_CFUNC_P(p) (((p)->flags & MRB_PROC_CFUNC) != 0)
 #define MRB_PROC_STRICT 256
 #define MRB_PROC_STRICT_P(p) (((p)->flags & MRB_PROC_STRICT) != 0)
+#define MRB_PROC_ORPHAN 512
+#define MRB_PROC_ORPHAN_P(p) (((p)->flags & MRB_PROC_ORPHAN) != 0)
 
 #define mrb_proc_ptr(v)    ((struct RProc*)(mrb_ptr(v)))
 

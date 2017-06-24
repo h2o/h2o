@@ -51,7 +51,7 @@ mrb_class(mrb_state *mrb, mrb_value v)
   }
 }
 
-// TODO: figure out where to put user flags
+/* TODO: figure out where to put user flags */
 #define MRB_FLAG_IS_FROZEN (1 << 18)
 #define MRB_FLAG_IS_PREPENDED (1 << 19)
 #define MRB_FLAG_IS_ORIGIN (1 << 20)

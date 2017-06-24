@@ -356,6 +356,7 @@ new_alias(parser_state *p, mrb_sym a, mrb_sym b)
 static node*
 new_if(parser_state *p, node *a, node *b, node *c)
 {
+  void_expr_error(p, a);
   return list4((node*)NODE_IF, a, b, c);
 }
 
@@ -363,6 +364,7 @@ new_if(parser_state *p, node *a, node *b, node *c)
 static node*
 new_unless(parser_state *p, node *a, node *b, node *c)
 {
+  void_expr_error(p, a);
   return list4((node*)NODE_IF, a, c, b);
 }
 
@@ -370,6 +372,7 @@ new_unless(parser_state *p, node *a, node *b, node *c)
 static node*
 new_while(parser_state *p, node *a, node *b)
 {
+  void_expr_error(p, a);
   return cons((node*)NODE_WHILE, cons(a, b));
 }
 
@@ -377,6 +380,7 @@ new_while(parser_state *p, node *a, node *b)
 static node*
 new_until(parser_state *p, node *a, node *b)
 {
+  void_expr_error(p, a);
   return cons((node*)NODE_UNTIL, cons(a, b));
 }
 
@@ -384,6 +388,7 @@ new_until(parser_state *p, node *a, node *b)
 static node*
 new_for(parser_state *p, node *v, node *o, node *b)
 {
+  void_expr_error(p, o);
   return list4((node*)NODE_FOR, v, o, b);
 }
 
@@ -394,6 +399,7 @@ new_case(parser_state *p, node *a, node *b)
   node *n = list2((node*)NODE_CASE, a);
   node *n2 = n;
 
+  void_expr_error(p, a);
   while (n2->cdr) {
     n2 = n2->cdr;
   }
@@ -420,6 +426,7 @@ static node*
 new_call(parser_state *p, node *a, mrb_sym b, node *c, int pass)
 {
   node *n = list4(nint(pass?NODE_CALL:NODE_SCALL), a, nsym(b), c);
+  void_expr_error(p, a);
   NODE_LINENO(n, a);
   return n;
 }
@@ -515,6 +522,7 @@ new_dot3(parser_state *p, node *a, node *b)
 static node*
 new_colon2(parser_state *p, node *b, mrb_sym c)
 {
+  void_expr_error(p, b);
   return cons((node*)NODE_COLON2, cons(b, nsym(c)));
 }
 
@@ -622,6 +630,7 @@ new_undef(parser_state *p, mrb_sym sym)
 static node*
 new_class(parser_state *p, node *c, node *s, node *b)
 {
+  void_expr_error(p, s);
   return list4((node*)NODE_CLASS, c, s, cons(locals_node(p), b));
 }
 
@@ -629,6 +638,7 @@ new_class(parser_state *p, node *c, node *s, node *b)
 static node*
 new_sclass(parser_state *p, node *o, node *b)
 {
+  void_expr_error(p, o);
   return list3((node*)NODE_SCLASS, o, cons(locals_node(p), b));
 }
 
@@ -650,6 +660,7 @@ new_def(parser_state *p, mrb_sym m, node *a, node *b)
 static node*
 new_sdef(parser_state *p, node *o, mrb_sym m, node *a, node *b)
 {
+  void_expr_error(p, o);
   return list6((node*)NODE_SDEF, o, nsym(m), locals_node(p), a, b);
 }
 
@@ -702,6 +713,7 @@ new_lambda(parser_state *p, node *a, node *b)
 static node*
 new_asgn(parser_state *p, node *a, node *b)
 {
+  void_expr_error(p, b);
   return cons((node*)NODE_ASGN, cons(a, b));
 }
 
@@ -709,6 +721,7 @@ new_asgn(parser_state *p, node *a, node *b)
 static node*
 new_masgn(parser_state *p, node *a, node *b)
 {
+  void_expr_error(p, b);
   return cons((node*)NODE_MASGN, cons(a, b));
 }
 
@@ -716,6 +729,7 @@ new_masgn(parser_state *p, node *a, node *b)
 static node*
 new_op_asgn(parser_state *p, node *a, mrb_sym op, node *b)
 {
+  void_expr_error(p, b);
   return list4((node*)NODE_OP_ASGN, a, nsym(op), b);
 }
 
@@ -835,6 +849,7 @@ new_symbols(parser_state *p, node *a)
 static node*
 call_uni_op(parser_state *p, node *recv, const char *m)
 {
+  void_expr_error(p, recv);
   return new_call(p, recv, intern_cstr(m), 0, 1);
 }
 
@@ -1404,7 +1419,6 @@ expr_value      : expr
                     {
                       if (!$1) $$ = new_nil(p);
                       else {
-                        void_expr_error(p, $1);
                         $$ = $1;
                       }
                     }
@@ -1416,6 +1430,9 @@ command_call    : command
 
 block_command   : block_call
                 | block_call call_op2 operation2 command_args
+                    {
+                      $$ = new_call(p, $1, $3, $4, $2);
+                    }
                 ;
 
 cmd_brace_block : tLBRACE_ARG
@@ -1661,6 +1678,7 @@ cpath           : tCOLON3 cname
                     }
                 | primary_value tCOLON2 cname
                     {
+                      void_expr_error(p, $1);
                       $$ = cons($1, nsym($3));
                     }
                 ;
@@ -1931,12 +1949,12 @@ aref_args       : none
 
 arg_rhs         : arg %prec tOP_ASGN
                     {
-                      void_expr_error(p, $1);
                       $$ = $1;
                     }
                 | arg modifier_rescue arg
                     {
                       void_expr_error(p, $1);
+                      void_expr_error(p, $3);
                       $$ = new_mod_rescue(p, $1, $3);
                     }
                 ;
@@ -1972,6 +1990,7 @@ opt_call_args   : none
 
 call_args       : command
                     {
+                      void_expr_error(p, $1);
                       $$ = cons(list1($1), 0);
                       NODE_LINENO($$, $1);
                     }
@@ -3112,12 +3131,14 @@ f_opt_asgn      : tIDENTIFIER '='
 
 f_opt           : f_opt_asgn arg
                     {
+                      void_expr_error(p, $2);
                       $$ = cons(nsym($1), $2);
                     }
                 ;
 
 f_block_opt     : f_opt_asgn primary_value
                     {
+                      void_expr_error(p, $2);
                       $$ = cons(nsym($1), $2);
                     }
                 ;
@@ -3230,22 +3251,28 @@ assocs          : assoc
 
 assoc           : arg tASSOC arg
                     {
+                      void_expr_error(p, $1);
+                      void_expr_error(p, $3);
                       $$ = cons($1, $3);
                     }
                 | tLABEL arg
                     {
+                      void_expr_error(p, $2);
                       $$ = cons(new_sym(p, $1), $2);
                     }
                 | tLABEL_END arg
                     {
+                      void_expr_error(p, $2);
                       $$ = cons(new_sym(p, new_strsym(p, $1)), $2);
                     }
                 | tSTRING_BEG tLABEL_END arg
                     {
+                      void_expr_error(p, $3);
                       $$ = cons(new_sym(p, new_strsym(p, $2)), $3);
                     }
                 | tSTRING_BEG string_rep tLABEL_END arg
                     {
+                      void_expr_error(p, $4);
                       $$ = cons(new_dsym(p, push($2, $3)), $4);
                     }
                 ;
@@ -3441,6 +3468,19 @@ void_expr_error(parser_state *p, node *n)
   case NODE_RETRY:
     yyerror(p, "void value expression");
     break;
+  case NODE_AND:
+  case NODE_OR:
+    void_expr_error(p, n->cdr->car);
+    void_expr_error(p, n->cdr->cdr);
+    break;
+  case NODE_BEGIN:
+    if (n->cdr) {
+      while (n->cdr) {
+        n = n->cdr;
+      }
+      void_expr_error(p, n->car);
+    }
+    break;
   default:
     break;
   }
@@ -3580,7 +3620,7 @@ skips(parser_state *p, const char *s)
     /* skip until first char */
     for (;;) {
       c = nextc(p);
-      if (c < 0) return c;
+      if (c < 0) return FALSE;
       if (c == '\n') {
         p->lineno++;
         p->column = 0;
@@ -5514,10 +5554,11 @@ void mrb_parser_dump(mrb_state *mrb, node *tree, int offset);
 MRB_API void
 mrb_parser_parse(parser_state *p, mrbc_context *c)
 {
-  struct mrb_jmpbuf buf;
-  p->jmp = &buf;
+  struct mrb_jmpbuf buf1;
+  p->jmp = &buf1;
 
   MRB_TRY(p->jmp) {
+    int n;
 
     p->cmd_start = TRUE;
     p->in_def = p->in_single = 0;
@@ -5525,7 +5566,24 @@ mrb_parser_parse(parser_state *p, mrbc_context *c)
     p->lex_strterm = NULL;
 
     parser_init_cxt(p, c);
-    if (yyparse(p) != 0 || p->nerr > 0) {
+
+    if (p->mrb->jmp) {
+      n = yyparse(p);
+    }
+    else {
+      struct mrb_jmpbuf buf2;
+
+      p->mrb->jmp = &buf2;
+      MRB_TRY(p->mrb->jmp) {
+        n = yyparse(p);
+      }
+      MRB_CATCH(p->mrb->jmp) {
+        p->nerr++;
+      }
+      MRB_END_EXC(p->mrb->jmp);
+      p->mrb->jmp = 0;
+    }
+    if (n != 0 || p->nerr > 0) {
       p->tree = 0;
       return;
     }
@@ -5536,7 +5594,6 @@ mrb_parser_parse(parser_state *p, mrbc_context *c)
     if (c && c->dump_result) {
       mrb_parser_dump(p->mrb, p->tree, 0);
     }
-
   }
   MRB_CATCH(p->jmp) {
     yyerror(p, "memory allocation error");
@@ -5708,7 +5765,7 @@ mrb_parse_string(mrb_state *mrb, const char *s, mrbc_context *c)
   return mrb_parse_nstring(mrb, s, strlen(s), c);
 }
 
-MRB_API mrb_value
+static mrb_value
 mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c)
 {
   struct RClass *target = mrb->object_class;
@@ -5731,7 +5788,9 @@ mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c)
       return mrb_undef_value();
     }
     else {
-      mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_SYNTAX_ERROR, "syntax error"));
+      if (mrb->exc == NULL) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_SYNTAX_ERROR, "syntax error"));
+      }
       mrb_parser_free(p);
       return mrb_undef_value();
     }
@@ -5739,7 +5798,9 @@ mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c)
   proc = mrb_generate_code(mrb, p);
   mrb_parser_free(p);
   if (proc == NULL) {
-    mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_SCRIPT_ERROR, "codegen error"));
+    if (mrb->exc == NULL) {
+      mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_SCRIPT_ERROR, "codegen error"));
+    }
     return mrb_undef_value();
   }
   if (c) {

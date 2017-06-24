@@ -23,8 +23,8 @@ def assertion_string(err, str, iso=nil, e=nil, bt=nil)
   msg += " => #{e.message}" if e
   msg += " (mrbgems: #{GEMNAME})" if Object.const_defined?(:GEMNAME)
   if $mrbtest_assert && $mrbtest_assert.size > 0
-    $mrbtest_assert.each do |idx, str, diff|
-      msg += "\n - Assertion[#{idx}] Failed: #{str}\n#{diff}"
+    $mrbtest_assert.each do |idx, msg, diff|
+      msg += "\n - Assertion[#{idx}] Failed: #{msg}\n#{diff}"
     end
   end
   msg += "\nbacktrace:\n\t#{bt.join("\n\t")}" if bt
@@ -62,7 +62,7 @@ def assert(str = 'Assertion failed', iso = '')
       $asserts.push(assertion_string("#{e.class}: ", str, iso, e, bt))
       $kill_test += 1
       t_print('X')
-  end
+    end
   ensure
     $mrbtest_assert = nil
   end
@@ -157,7 +157,7 @@ def assert_raise(*exp)
       msg = "#{msg}#{exp.inspect} exception expected, not"
       diff = "      Class: <#{e.class}>\n" +
              "    Message: #{e.message}"
-      if not exp.any?{|ex| ex.instance_of?(Module) ? e.kind_of?(ex) : ex == e.class }
+      unless exp.any?{|ex| ex.instance_of?(Module) ? e.kind_of?(ex) : ex == e.class }
         $mrbtest_assert.push([$mrbtest_assert_idx, msg, diff])
         ret = false
       end

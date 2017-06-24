@@ -520,9 +520,9 @@ str_replace(mrb_state *mrb, struct RString *s1, struct RString *s2)
   long len;
 
   check_frozen(mrb, s1);
+  if (s1 == s2) return mrb_obj_value(s1);
   s1->flags &= ~MRB_STR_NO_UTF;
   s1->flags |= s2->flags&MRB_STR_NO_UTF;
-  if (s1 == s2) return mrb_obj_value(s1);
   len = RSTR_LEN(s2);
   if (RSTR_SHARED_P(s1)) {
     str_decref(mrb, s1->as.heap.aux.shared);
@@ -685,13 +685,20 @@ mrb_str_modify(mrb_state *mrb, struct RString *s)
 
       p = RSTR_PTR(s);
       len = s->as.heap.len;
-      ptr = (char *)mrb_malloc(mrb, (size_t)len + 1);
+      if (len < RSTRING_EMBED_LEN_MAX) {
+        RSTR_SET_EMBED_FLAG(s);
+        RSTR_SET_EMBED_LEN(s, len);
+        ptr = RSTR_PTR(s);
+      }
+      else {
+        ptr = (char *)mrb_malloc(mrb, (size_t)len + 1);
+        s->as.heap.ptr = ptr;
+        s->as.heap.aux.capa = len;
+      }
       if (p) {
         memcpy(ptr, p, len);
       }
       ptr[len] = '\0';
-      s->as.heap.ptr = ptr;
-      s->as.heap.aux.capa = len;
       str_decref(mrb, shared);
     }
     RSTR_UNSET_SHARED_FLAG(s);
@@ -1954,10 +1961,11 @@ mrb_str_split_m(mrb_state *mrb, mrb_value str)
   int argc;
   mrb_value spat = mrb_nil_value();
   enum {awk, string, regexp} split_type = string;
-  long i = 0, lim_p;
+  mrb_int i = 0;
   mrb_int beg;
   mrb_int end;
   mrb_int lim = 0;
+  mrb_bool lim_p;
   mrb_value result, tmp;
 
   argc = mrb_get_args(mrb, "|oi", &spat, &lim);

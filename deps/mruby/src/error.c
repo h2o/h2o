@@ -62,7 +62,7 @@ exc_initialize(mrb_state *mrb, mrb_value exc)
  *  With no argument, or if the argument is the same as the receiver,
  *  return the receiver. Otherwise, create a new
  *  exception object of the same class as the receiver, but with a
- *  message equal to <code>string.to_str</code>.
+ *  message equal to <code>string</code>.
  *
  */
 
@@ -111,9 +111,7 @@ exc_to_s(mrb_state *mrb, mrb_value exc)
  *   exception.message   ->  string
  *
  * Returns the result of invoking <code>exception.to_s</code>.
- * Normally this returns the exception's message or name. By
- * supplying a to_str method, exceptions are agreeing to
- * be used where Strings are expected.
+ * Normally this returns the exception's message or name.
  */
 
 static mrb_value
@@ -137,6 +135,7 @@ exc_inspect(mrb_state *mrb, mrb_value exc)
 {
   mrb_value str, mesg, file, line;
   mrb_bool append_mesg;
+  const char *cname;
 
   mesg = mrb_attr_get(mrb, exc, mrb_intern_lit(mrb, "mesg"));
   file = mrb_attr_get(mrb, exc, mrb_intern_lit(mrb, "file"));
@@ -148,57 +147,23 @@ exc_inspect(mrb_state *mrb, mrb_value exc)
     append_mesg = RSTRING_LEN(mesg) > 0;
   }
 
+  cname = mrb_obj_classname(mrb, exc);
+  str = mrb_str_new_cstr(mrb, cname);
   if (mrb_string_p(file) && mrb_fixnum_p(line)) {
-    char buf[32];
-
-    str = mrb_str_dup(mrb, file);
-    snprintf(buf, sizeof(buf), ":%" MRB_PRId ": ", mrb_fixnum(line));
-    mrb_str_cat_cstr(mrb, str, buf);
     if (append_mesg) {
-      mrb_str_cat_str(mrb, str, mesg);
-      mrb_str_cat_lit(mrb, str, " (");
+      str = mrb_format(mrb, "%S:%S:%S (%S)", file, line, mesg, str);
     }
-    mrb_str_cat_cstr(mrb, str, mrb_obj_classname(mrb, exc));
-    if (append_mesg) {
-      mrb_str_cat_lit(mrb, str, ")");
+    else {
+      str = mrb_format(mrb, "%S:%S:%S", file, line, str);
     }
   }
-  else {
-    const char *cname = mrb_obj_classname(mrb, exc);
-    str = mrb_str_new_cstr(mrb, cname);
-    if (append_mesg) {
-      mrb_str_cat_lit(mrb, str, ": ");
-      mrb_str_cat_str(mrb, str, mesg);
-    }
+  else if (append_mesg) {
+    str = mrb_format(mrb, "%S:%S", str, mesg);
   }
   return str;
 }
 
-void mrb_save_backtrace(mrb_state *mrb);
-mrb_value mrb_restore_backtrace(mrb_state *mrb);
-
-static mrb_value
-exc_get_backtrace(mrb_state *mrb, mrb_value exc)
-{
-  mrb_sym attr_name;
-  mrb_value backtrace;
-
-  attr_name = mrb_intern_lit(mrb, "backtrace");
-  backtrace = mrb_iv_get(mrb, exc, attr_name);
-  if (mrb_nil_p(backtrace)) {
-    if (mrb_obj_ptr(exc) == mrb->backtrace.exc && mrb->backtrace.n > 0) {
-      backtrace = mrb_restore_backtrace(mrb);
-      mrb->backtrace.n = 0;
-      mrb->backtrace.exc = 0;
-    }
-    else {
-      backtrace = mrb_exc_backtrace(mrb, exc);
-    }
-    mrb_iv_set(mrb, exc, attr_name, backtrace);
-  }
-
-  return backtrace;
-}
+void mrb_keep_backtrace(mrb_state *mrb, mrb_value exc);
 
 static void
 set_backtrace(mrb_state *mrb, mrb_value exc, mrb_value backtrace)
@@ -235,7 +200,6 @@ exc_debug_info(mrb_state *mrb, struct RObject *exc)
   mrb_callinfo *ci = mrb->c->ci;
   mrb_code *pc = ci->pc;
 
-  mrb_obj_iv_set(mrb, exc, mrb_intern_lit(mrb, "ciidx"), mrb_fixnum_value((mrb_int)(ci - mrb->c->cibase)));
   while (ci >= mrb->c->cibase) {
     mrb_code *err = ci->err;
 
@@ -256,41 +220,18 @@ exc_debug_info(mrb_state *mrb, struct RObject *exc)
   }
 }
 
-static mrb_bool
-have_backtrace(mrb_state *mrb, struct RObject *exc)
-{
-  return !mrb_nil_p(mrb_obj_iv_get(mrb, exc, mrb_intern_lit(mrb, "backtrace")));
-}
-
 void
 mrb_exc_set(mrb_state *mrb, mrb_value exc)
 {
-  if (!mrb->gc.out_of_memory && mrb->backtrace.n > 0) {
-    mrb_value target_exc = mrb_nil_value();
-    int ai;
-
-    ai = mrb_gc_arena_save(mrb);
-    if ((mrb->exc && !have_backtrace(mrb, mrb->exc))) {
-      target_exc = mrb_obj_value(mrb->exc);
-    }
-    else if (!mrb_nil_p(exc) && mrb->backtrace.exc) {
-      target_exc = mrb_obj_value(mrb->backtrace.exc);
-      mrb_gc_protect(mrb, target_exc);
-    }
-    if (!mrb_nil_p(target_exc)) {
-      mrb_value backtrace;
-      backtrace = mrb_restore_backtrace(mrb);
-      set_backtrace(mrb, target_exc, backtrace);
-    }
-    mrb_gc_arena_restore(mrb, ai);
-  }
-
-  mrb->backtrace.n = 0;
   if (mrb_nil_p(exc)) {
     mrb->exc = 0;
   }
   else {
     mrb->exc = mrb_obj_ptr(exc);
+    if (!mrb->gc.out_of_memory) {
+      exc_debug_info(mrb, mrb->exc);
+      mrb_keep_backtrace(mrb, exc);
+    }
   }
 }
 
@@ -301,10 +242,6 @@ mrb_exc_raise(mrb_state *mrb, mrb_value exc)
     mrb_raise(mrb, E_TYPE_ERROR, "exception object expected");
   }
   mrb_exc_set(mrb, exc);
-  if (!mrb->gc.out_of_memory) {
-    exc_debug_info(mrb, mrb->exc);
-    mrb_save_backtrace(mrb);
-  }
   if (!mrb->jmp) {
     mrb_p(mrb, exc);
     abort();
@@ -535,7 +472,7 @@ mrb_no_method_error(mrb_state *mrb, mrb_sym id, mrb_value args, char const* fmt,
 void
 mrb_init_exception(mrb_state *mrb)
 {
-  struct RClass *exception, *runtime_error, *script_error, *stack_error;
+  struct RClass *exception, *script_error, *stack_error, *nomem_error;
 
   mrb->eException_class = exception = mrb_define_class(mrb, "Exception", mrb->object_class); /* 15.2.22 */
   MRB_SET_INSTANCE_TT(exception, MRB_TT_EXCEPTION);
@@ -545,17 +482,19 @@ mrb_init_exception(mrb_state *mrb)
   mrb_define_method(mrb, exception, "to_s",            exc_to_s,          MRB_ARGS_NONE());
   mrb_define_method(mrb, exception, "message",         exc_message,       MRB_ARGS_NONE());
   mrb_define_method(mrb, exception, "inspect",         exc_inspect,       MRB_ARGS_NONE());
-  mrb_define_method(mrb, exception, "backtrace",       exc_get_backtrace, MRB_ARGS_NONE());
+  mrb_define_method(mrb, exception, "backtrace",       mrb_exc_backtrace, MRB_ARGS_NONE());
   mrb_define_method(mrb, exception, "set_backtrace",   exc_set_backtrace, MRB_ARGS_REQ(1));
 
   mrb->eStandardError_class = mrb_define_class(mrb, "StandardError", mrb->eException_class); /* 15.2.23 */
-  runtime_error = mrb_define_class(mrb, "RuntimeError", mrb->eStandardError_class);          /* 15.2.28 */
-  mrb->nomem_err = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, runtime_error, "Out of memory"));
-#ifdef MRB_GC_FIXED_ARENA
-  mrb->arena_err = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, runtime_error, "arena overflow error"));
-#endif
+  mrb_define_class(mrb, "RuntimeError", mrb->eStandardError_class);          /* 15.2.28 */
   script_error = mrb_define_class(mrb, "ScriptError", mrb->eException_class);                /* 15.2.37 */
   mrb_define_class(mrb, "SyntaxError", script_error);                                        /* 15.2.38 */
   stack_error = mrb_define_class(mrb, "SystemStackError", exception);
   mrb->stack_err = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, stack_error, "stack level too deep"));
+
+  nomem_error = mrb_define_class(mrb, "NoMemoryError", exception);
+  mrb->nomem_err = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, nomem_error, "Out of memory"));
+#ifdef MRB_GC_FIXED_ARENA
+  mrb->arena_err = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, nomem_error, "arena overflow error"));
+#endif
 }

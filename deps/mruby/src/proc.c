@@ -41,7 +41,7 @@ env_new(mrb_state *mrb, int nlocals)
 
   e = (struct REnv*)mrb_obj_alloc(mrb, MRB_TT_ENV, (struct RClass*)mrb->c->ci->proc->env);
   MRB_SET_ENV_STACK_LEN(e, nlocals);
-  e->mid = mrb->c->ci->mid;
+  e->cxt.c = mrb->c;
   e->cioff = mrb->c->ci - mrb->c->cibase;
   e->stack = mrb->c->stack;
 
@@ -271,6 +271,7 @@ mrb_init_proc(mrb_state *mrb)
   call_irep->flags = MRB_ISEQ_NO_FREE;
   call_irep->iseq = call_iseq;
   call_irep->ilen = 1;
+  call_irep->nregs = 2;         /* receiver and block */
 
   mrb_define_class_method(mrb, mrb->proc_class, "new", mrb_proc_s_new, MRB_ARGS_ANY());
   mrb_define_method(mrb, mrb->proc_class, "initialize_copy", mrb_proc_init_copy, MRB_ARGS_REQ(1));

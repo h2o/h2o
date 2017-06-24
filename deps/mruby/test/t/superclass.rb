@@ -23,7 +23,8 @@
   [:Exception, :Object, '15.2.22.2'],
   [:StandardError, :Exception, '15.2.23.2'],
   [:ArgumentError, :StandardError, '15.2.24.2'],
-  [:LocalJumpError, :StandardError, '15.2.25.2'],
+  # [:LocalJumpError, :StandardError, '15.2.25.2'],
+  [:LocalJumpError, :ScriptError, '15.2.25.2'], # mruby specific
   [:RangeError, :StandardError, '12.2.26.2'],
   [:RegexpError, :StandardError, '12.2.27.2'],
   [:RuntimeError, :StandardError, '12.2.28.2'],

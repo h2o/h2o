@@ -19,3 +19,12 @@ assert('parsing function with void argument') do
   assert_equal "#{cmd('mrbc')}:#{a.path}:Syntax OK", result.chomp
   assert_equal 0, $?.exitstatus
 end
+
+assert('embedded document with invalid terminator') do
+  a, out = Tempfile.new('a.rb'), Tempfile.new('out.mrb')
+  a.write("=begin\n=endx\n")
+  a.flush
+  result = `#{cmd('mrbc')} -c -o #{out.path} #{a.path} 2>&1`
+  assert_equal "#{a.path}:3:0: embedded document meets end of file", result.chomp
+  assert_equal 1, $?.exitstatus
+end

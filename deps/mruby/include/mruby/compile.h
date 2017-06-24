@@ -175,7 +175,6 @@ MRB_API struct mrb_parser_state* mrb_parse_file(mrb_state*,FILE*,mrbc_context*);
 MRB_API struct mrb_parser_state* mrb_parse_string(mrb_state*,const char*,mrbc_context*);
 MRB_API struct mrb_parser_state* mrb_parse_nstring(mrb_state*,const char*,int,mrbc_context*);
 MRB_API struct RProc* mrb_generate_code(mrb_state*, struct mrb_parser_state*);
-MRB_API mrb_value mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c);
 
 /* program load functions */
 #ifndef MRB_DISABLE_STDIO
