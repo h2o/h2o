@@ -96,7 +96,14 @@
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  class HttpInputStream\n"                                                                                                    \
+    "    def consume!\n"                                                                                                           \
+    "      if @consumed\n"                                                                                                         \
+    "        raise RuntimeError.new('http response body is already consumed')\n"                                                   \
+    "      end\n"                                                                                                                  \
+    "      @consumed = true\n"                                                                                                     \
+    "    end\n"                                                                                                                    \
     "    def each\n"                                                                                                               \
+    "      consume!\n"                                                                                                             \
     "      while c = _h2o__http_fetch_chunk(self)\n"                                                                               \
     "        yield c\n"                                                                                                            \
     "      end\n"                                                                                                                  \

@@ -461,6 +461,7 @@ h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mr
 
     if ((ctx = mrb_data_check_get_ptr(mrb, obj, &input_stream_type)) == NULL)
         return NULL;
+    assert(ctx->shortcut.generator == NULL);
     ctx->shortcut.notify_cb = cb;
     ctx->shortcut.generator = generator;
     return ctx;
@@ -468,10 +469,9 @@ h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mr
 
 void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator)
 {
-    if (ctx->shortcut.generator == generator) {
-        ctx->shortcut.notify_cb = NULL;
-        ctx->shortcut.generator = NULL;
-    }
+    assert(ctx->shortcut.generator = generator);
+    ctx->shortcut.notify_cb = NULL;
+    ctx->shortcut.generator = NULL;
 }
 
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)
