@@ -33,16 +33,11 @@ module H2O
   end
 
   class HttpInputStream
-    def consume!
-      if @consumed
-        raise RuntimeError.new('http response body is already consumed')
-      end
-      @consumed = true
-    end
     def each
-      consume!
-      while c = _h2o__http_fetch_chunk(self)
+      first = true
+      while c = _h2o__http_fetch_chunk(self, first)
         yield c
+        first = false
       end
     end
     def join

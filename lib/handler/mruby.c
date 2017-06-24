@@ -698,17 +698,10 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
-        /* check the body hasn't already consumed */
-        mrb_sym consume = mrb_intern_lit(mrb, "consume!");
-        if (mrb_respond_to(mrb, body, consume)) {
-            mrb_funcall_argv(mrb, body, consume, 0, NULL);
-            if (mrb->exc != NULL) {
-                goto GotException;
-            }
-        }
-
-        h2o_start_response(generator->req, &generator->super);
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
+        if (mrb->exc) {
+            goto GotException;
+        }
         if (!mrb_nil_p(receiver)) {
             mrb_value input = mrb_ary_new_capa(mrb, 2);
             mrb_ary_set(mrb, input, 0, body);
