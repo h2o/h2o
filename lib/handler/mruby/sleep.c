@@ -66,14 +66,16 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
     mrb_value arg_sec = mrb_ary_entry(args, 0);
 
     /* convert the argument using to_f */
-    if (! mrb_respond_to(mrb, arg_sec, mrb_intern_lit(mrb, "to_f"))) {
-        *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "the argument of the sleep function must respond to 'to_f' method");
-    }
     arg_sec = mrb_funcall(mrb, arg_sec, "to_f", 0);
+
     if (mrb->exc) {
         *run_again = 1;
-        return mrb_obj_value(mrb->exc);
+        mrb_value exc = mrb_obj_value(mrb->exc);
+        if (mrb_obj_is_kind_of(mrb, exc, E_NOMETHOD_ERROR)) {
+            exc = mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "the argument of the sleep function must respond to 'to_f' method");
+        }
+        mrb->exc = NULL;
+        return exc;
     }
     uint64_t msec = mrb_float(arg_sec) * 1000;
 

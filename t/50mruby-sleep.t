@@ -132,12 +132,17 @@ hosts:
       /:
         mruby.handler: |
           proc {|env|
-            ret = sleep(Object.new)
-            [200, {}, [ret]]
+            begin
+              ret = sleep(Object.new)
+              [200, {}, [ret]]
+            rescue => e
+              [500, {}, [e.message]]
+            end
           }
 EOT
-    my ($headers) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{HTTP/[^ ]+ 500\s}is;
+    like $body, qr{the argument of the sleep function must respond to 'to_f' method}is;
 };
 
 done_testing;
