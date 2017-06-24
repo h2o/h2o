@@ -75,6 +75,9 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
     assert(mrb_nil_p(ctx->refs.request) && mrb_nil_p(ctx->refs.input_stream));
 
+    /* ctx must be alive until generator gets disposed when shortcut used */
+    assert(ctx->shortcut.generator == NULL);
+
     /* clear the refs */
     if (ctx->client != NULL) {
         h2o_http1client_cancel(ctx->client);
@@ -461,6 +464,14 @@ h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mr
     ctx->shortcut.notify_cb = cb;
     ctx->shortcut.generator = generator;
     return ctx;
+}
+
+void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator)
+{
+    if (ctx->shortcut.generator == generator) {
+        ctx->shortcut.notify_cb = NULL;
+        ctx->shortcut.generator = NULL;
+    }
 }
 
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)
