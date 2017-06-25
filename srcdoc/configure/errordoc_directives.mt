@@ -17,7 +17,7 @@ EOT
 <p>
 The argument must be a mapping containing following attributes, or if it is a sequence, every element must be a mapping with the following attributes.
 <ul>
-<li><code>status</code> - three-digit number indicating the status code
+<li><code>status</code> - three-digit number indicating the status code (or sequence of that from version 2.3)
 <li><code>url</code> - URL of the document to be served
 </ul>
 </p>
@@ -38,6 +38,12 @@ error-doc:
     url: /internal-error.html
   - status: 503
     url: /service-unavailable.html
+EOT
+?>
+<?= $ctx->{example}->('Set error document for 50x statuses (From version 2.3)', <<'EOT')
+error-doc:
+  status: [500, 502, 503, 504]
+  url: /50x.html
 EOT
 ?>
 </p>
