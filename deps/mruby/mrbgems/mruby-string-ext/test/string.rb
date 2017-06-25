@@ -122,12 +122,16 @@ assert('String#swapcase!') do
 end
 
 assert('String#concat') do
-  s = "Hello "
-  s.concat "World!"
-  t = "Hello "
-  t << "World!"
-  assert_equal "Hello World!", t
-  assert_equal "Hello World!", s
+  assert_equal "Hello World!", "Hello " << "World" << 33
+  assert_equal "Hello World!", "Hello ".concat("World").concat(33)
+
+  o = Object.new
+  def o.to_str
+    "to_str"
+  end
+  assert_equal "hi to_str", "hi " << o
+
+  assert_raise(TypeError) { "".concat(Object.new) }
 end
 
 assert('String#casecmp') do
@@ -491,6 +495,17 @@ assert('String#rjust should raise on zero width padding') do
 end
 
 assert('String#upto') do
+  assert_equal %w(a8 a9 b0 b1 b2 b3 b4 b5 b6), "a8".upto("b6").to_a
+  assert_equal ["9", "10", "11"], "9".upto("11").to_a
+  assert_equal [], "25".upto("5").to_a
+  assert_equal ["07", "08", "09", "10", "11"], "07".upto("11").to_a
+
+if UTF8STRING
+  assert_equal ["あ", "ぃ", "い", "ぅ", "う", "ぇ", "え", "ぉ", "お"], "あ".upto("お").to_a
+end
+
+  assert_equal ["9", ":", ";", "<", "=", ">", "?", "@", "A"], "9".upto("A").to_a
+
   a     = "aa"
   start = "aa"
   count = 0
@@ -550,6 +565,8 @@ assert('String#upto') do
     count += 1
   })
   assert_equal(2, count)
+
+  assert_raise(TypeError) { "a".upto(:c) {} }
 end
 
 assert('String#ord') do

@@ -116,7 +116,8 @@ enum mrb_vtype {
   MRB_TT_DATA,        /*  21 */
   MRB_TT_FIBER,       /*  22 */
   MRB_TT_ISTRUCT,     /*  23 */
-  MRB_TT_MAXDEFINE    /*  24 */
+  MRB_TT_BREAK,       /*  24 */
+  MRB_TT_MAXDEFINE    /*  25 */
 };
 
 #include <mruby/object.h>
@@ -266,6 +267,14 @@ mrb_undef_value(void)
 }
 
 #ifdef MRB_USE_ETEXT_EDATA
+#if (defined(__APPLE__) && defined(__MACH__))
+#include <mach-o/getsect.h>
+static inline mrb_bool
+mrb_ro_data_p(const char *p)
+{
+  return (const char*)get_etext() < p && p < (const char*)get_edata();
+}
+#else
 extern char _etext[];
 #ifdef MRB_NO_INIT_ARRAY_START
 extern char _edata[];
@@ -283,6 +292,7 @@ mrb_ro_data_p(const char *p)
 {
   return _etext < p && p < (char*)&__init_array_start;
 }
+#endif
 #endif
 #else
 # define mrb_ro_data_p(p) FALSE

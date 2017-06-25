@@ -1,6 +1,7 @@
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/class.h>
+#include <mruby/proc.h>
 
 /*
  *  call-seq:
@@ -86,7 +87,8 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
   }
   args = mrb_ary_new_from_values(mrb, argc, argv);
   argv = RARRAY_PTR(args);
-  return mrb_yield_with_class(mrb, blk, argc, argv, self, c);
+  mrb->c->ci->target_class = c;
+  return mrb_yield_cont(mrb, blk, self, argc, argv);
 }
 
 void

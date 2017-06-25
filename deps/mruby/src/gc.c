@@ -17,6 +17,7 @@
 #include <mruby/variable.h>
 #include <mruby/gc.h>
 #include <mruby/error.h>
+#include <mruby/throw.h>
 
 /*
   = Tri-color Incremental Garbage Collection
@@ -111,6 +112,7 @@ typedef struct {
     struct RProc proc;
     struct REnv env;
     struct RException exc;
+    struct RBreak brk;
 #ifdef MRB_WORD_BOXING
     struct RFloat floatv;
     struct RCptr cptr;
@@ -214,7 +216,8 @@ mrb_realloc(mrb_state *mrb, void *p, size_t len)
   void *p2;
 
   p2 = mrb_realloc_simple(mrb, p, len);
-  if (!p2 && len) {
+  if (len == 0) return p2;
+  if (p2 == NULL) {
     if (mrb->gc.out_of_memory) {
       mrb_exc_raise(mrb, mrb_obj_value(mrb->nomem_err));
       /* mrb_panic(mrb); */
@@ -430,7 +433,7 @@ mrb_gc_protect(mrb_state *mrb, mrb_value obj)
 
    Register your object when it's exported to C world,
    without reference from Ruby world, e.g. callback
-   arguments.  Don't forget to remove the obejct using
+   arguments.  Don't forget to remove the object using
    mrb_gc_unregister, otherwise your object will leak.
 */
 
@@ -544,21 +547,29 @@ mark_context_stack(mrb_state *mrb, struct mrb_context *c)
 {
   size_t i;
   size_t e;
+  mrb_value nil;
+  int nregs;
 
+  if (c->stack == NULL) return;
   e = c->stack - c->stbase;
-  if (c->ci) e += c->ci->nregs;
+  if (c->ci) {
+    nregs = c->ci->argc + 2;
+    if (c->ci->nregs > nregs)
+      nregs = c->ci->nregs;
+    e += nregs;
+  }
   if (c->stbase + e > c->stend) e = c->stend - c->stbase;
   for (i=0; i<e; i++) {
     mrb_value v = c->stbase[i];
 
     if (!mrb_immediate_p(v)) {
-      if (mrb_basic_ptr(v)->tt == MRB_TT_FREE) {
-        c->stbase[i] = mrb_nil_value();
-      }
-      else {
-        mrb_gc_mark(mrb, mrb_basic_ptr(v));
-      }
+      mrb_gc_mark(mrb, mrb_basic_ptr(v));
     }
+  }
+  e = c->stend - c->stbase;
+  nil = mrb_nil_value();
+  for (; i<e; i++) {
+    c->stbase[i] = nil;
   }
 }
 
@@ -568,10 +579,12 @@ mark_context(mrb_state *mrb, struct mrb_context *c)
   int i;
   mrb_callinfo *ci;
 
-  /* mark stack */
-  mark_context_stack(mrb, c);
+  if (c->status == MRB_FIBER_TERMINATED) return;
 
   /* mark VM stack */
+  mark_context_stack(mrb, c);
+
+  /* mark call stack */
   if (c->cibase) {
     for (ci = c->cibase; ci <= c->ci; ci++) {
       mrb_gc_mark(mrb, (struct RBasic*)ci->env);
@@ -585,8 +598,9 @@ mark_context(mrb_state *mrb, struct mrb_context *c)
     mrb_gc_mark(mrb, (struct RBasic*)c->ensure[i]);
   }
   /* mark fibers */
-  if (c->prev && c->prev->fib) {
-    mrb_gc_mark(mrb, (struct RBasic*)c->prev->fib);
+  mrb_gc_mark(mrb, (struct RBasic*)c->fib);
+  if (c->prev) {
+    mark_context(mrb, c->prev);
   }
 }
 
@@ -638,7 +652,12 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
       struct REnv *e = (struct REnv*)obj;
       mrb_int i, len;
 
-      if MRB_ENV_STACK_SHARED_P(e) break;
+      if (MRB_ENV_STACK_SHARED_P(e)) {
+        if (e->cxt.c->fib) {
+          mrb_gc_mark(mrb, (struct RBasic*)e->cxt.c->fib);
+        }
+        break;
+      }
       len = MRB_ENV_STACK_LEN(e);
       for (i=0; i<len; i++) {
         mrb_gc_mark_value(mrb, e->stack[i]);
@@ -701,7 +720,7 @@ mrb_gc_mark(mrb_state *mrb, struct RBasic *obj)
 static void
 obj_free(mrb_state *mrb, struct RBasic *obj, int end)
 {
-  DEBUG(printf("obj_free(%p,tt=%d)\n",obj,obj->tt));
+  DEBUG(fprintf(stderr, "obj_free(%p,tt=%d)\n",obj,obj->tt));
   switch (obj->tt) {
     /* immediate - no mark */
   case MRB_TT_TRUE:
@@ -723,8 +742,6 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
 
   case MRB_TT_EXCEPTION:
     mrb_gc_free_iv(mrb, (struct RObject*)obj);
-    if ((struct RObject*)obj == mrb->backtrace.exc)
-      mrb->backtrace.exc = 0;
     break;
 
   case MRB_TT_CLASS:
@@ -753,6 +770,7 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
   case MRB_TT_FIBER:
     {
       struct mrb_context *c = ((struct RFiber*)obj)->cxt;
+
       if (!end && c && c != mrb->root_c) {
         mrb_callinfo *ci = c->ci;
         mrb_callinfo *ce = c->cibase;
@@ -819,7 +837,7 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
 static void
 root_scan_phase(mrb_state *mrb, mrb_gc *gc)
 {
-  size_t i, e;
+  int i, e;
 
   if (!is_minor_gc(gc)) {
     gc->gray_list = NULL;
@@ -857,12 +875,6 @@ root_scan_phase(mrb_state *mrb, mrb_gc *gc)
   mrb_gc_mark(mrb, (struct RBasic*)mrb->top_self);
   /* mark exception */
   mrb_gc_mark(mrb, (struct RBasic*)mrb->exc);
-  /* mark backtrace */
-  mrb_gc_mark(mrb, (struct RBasic*)mrb->backtrace.exc);
-  e = (size_t)mrb->backtrace.n;
-  for (i=0; i<e; i++) {
-    mrb_gc_mark(mrb, (struct RBasic*)mrb->backtrace.entries[i].klass);
-  }
   /* mark pre-allocated exception */
   mrb_gc_mark(mrb, (struct RBasic*)mrb->nomem_err);
   mrb_gc_mark(mrb, (struct RBasic*)mrb->stack_err);
@@ -870,12 +882,9 @@ root_scan_phase(mrb_state *mrb, mrb_gc *gc)
   mrb_gc_mark(mrb, (struct RBasic*)mrb->arena_err);
 #endif
 
-  mark_context(mrb, mrb->root_c);
-  if (mrb->root_c->fib) {
-    mrb_gc_mark(mrb, (struct RBasic*)mrb->root_c->fib);
-  }
+  mark_context(mrb, mrb->c);
   if (mrb->root_c != mrb->c) {
-    mark_context(mrb, mrb->c);
+    mark_context(mrb, mrb->root_c);
   }
 }
 
@@ -927,7 +936,7 @@ gc_gray_mark(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
       children += i;
 
       /* mark ensure stack */
-      children += (c->ci) ? c->ci->eidx : 0;
+      children += c->eidx;
 
       /* mark closure */
       if (c->cibase) {
@@ -988,7 +997,16 @@ incremental_marking_phase(mrb_state *mrb, mrb_gc *gc, size_t limit)
 static void
 final_marking_phase(mrb_state *mrb, mrb_gc *gc)
 {
-  mark_context_stack(mrb, mrb->root_c);
+  int i, e;
+
+  /* mark arena */
+  for (i=0,e=gc->arena_idx; i<e; i++) {
+    mrb_gc_mark(mrb, gc->arena[i]);
+  }
+  mrb_gc_mark_gv(mrb);
+  mark_context(mrb, mrb->c);
+  mark_context(mrb, mrb->root_c);
+  mrb_gc_mark(mrb, (struct RBasic*)mrb->exc);
   gc_mark_gray_list(mrb, gc);
   mrb_assert(gc->gray_list == NULL);
   gc->gray_list = gc->atomic_gray_list;
@@ -1153,7 +1171,7 @@ mrb_incremental_gc(mrb_state *mrb)
 {
   mrb_gc *gc = &mrb->gc;
 
-  if (gc->disabled) return;
+  if (gc->disabled || gc->iterating) return;
 
   GC_INVOKE_TIME_REPORT("mrb_incremental_gc()");
   GC_TIME_START;
@@ -1193,7 +1211,7 @@ mrb_full_gc(mrb_state *mrb)
 {
   mrb_gc *gc = &mrb->gc;
 
-  if (gc->disabled) return;
+  if (gc->disabled || gc->iterating) return;
 
   GC_INVOKE_TIME_REPORT("mrb_full_gc()");
   GC_TIME_START;
@@ -1430,6 +1448,10 @@ gc_step_ratio_set(mrb_state *mrb, mrb_value obj)
 static void
 change_gen_gc_mode(mrb_state *mrb, mrb_gc *gc, mrb_bool enable)
 {
+  if (gc->disabled || gc->iterating) {
+    mrb_raise(mrb, E_RUNTIME_ERROR, "generational mode changed when GC disabled");
+    return;
+  }
   if (is_generational(gc) && !enable) {
     clear_all_old(mrb, gc);
     mrb_assert(gc->state == MRB_GC_STATE_ROOT);
@@ -1481,17 +1503,18 @@ gc_generational_mode_set(mrb_state *mrb, mrb_value self)
 static void
 gc_each_objects(mrb_state *mrb, mrb_gc *gc, mrb_each_object_callback *callback, void *data)
 {
-  mrb_heap_page* page = gc->heaps;
+  mrb_heap_page* page;
 
+  page = gc->heaps;
   while (page != NULL) {
-    RVALUE *p, *pend;
+    RVALUE *p;
+    int i;
 
     p = objects(page);
-    pend = p + MRB_HEAP_PAGE_SIZE;
-    for (;p < pend; p++) {
-      (*callback)(mrb, &p->as.basic, data);
+    for (i=0; i < MRB_HEAP_PAGE_SIZE; i++) {
+      if ((*callback)(mrb, &p[i].as.basic, data) == MRB_EACH_OBJ_BREAK)
+        return;
     }
-
     page = page->next;
   }
 }
@@ -1499,7 +1522,27 @@ gc_each_objects(mrb_state *mrb, mrb_gc *gc, mrb_each_object_callback *callback, 
 void
 mrb_objspace_each_objects(mrb_state *mrb, mrb_each_object_callback *callback, void *data)
 {
-  gc_each_objects(mrb, &mrb->gc, callback, data);
+  mrb_bool iterating = mrb->gc.iterating;
+
+  mrb->gc.iterating = TRUE;
+  if (iterating) {
+    gc_each_objects(mrb, &mrb->gc, callback, data);
+  }
+  else {
+    struct mrb_jmpbuf *prev_jmp = mrb->jmp;
+    struct mrb_jmpbuf c_jmp;
+
+    MRB_TRY(&c_jmp) {
+      mrb->jmp = &c_jmp;
+      gc_each_objects(mrb, &mrb->gc, callback, data);
+      mrb->jmp = prev_jmp;
+      mrb->gc.iterating = iterating; 
+   } MRB_CATCH(&c_jmp) {
+      mrb->gc.iterating = iterating;
+      mrb->jmp = prev_jmp;
+      MRB_THROW(prev_jmp);
+    } MRB_END_EXC(&c_jmp);
+  }
 }
 
 #ifdef GC_TEST

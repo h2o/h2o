@@ -16,6 +16,8 @@ MRuby.each_target do
 
       gem_libraries = gems.map { |g| g.linker.libraries }
       f.puts "MRUBY_LIBS = #{linker.option_library % 'mruby'} #{linker.library_flags(gem_libraries)}"
+
+      f.puts "MRUBY_LIBMRUBY_PATH = #{libfile("#{build_dir}/lib/libmruby")}"
     end
   end
   task :all => "#{build_dir}/lib/libmruby.flags.mak"

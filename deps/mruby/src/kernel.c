@@ -136,38 +136,38 @@ mrb_f_block_given_p_m(mrb_state *mrb, mrb_value self)
 {
   mrb_callinfo *ci = mrb->c->ci;
   mrb_value *bp;
-  mrb_bool given_p;
 
   bp = ci->stackent + 1;
   ci--;
   if (ci <= mrb->c->cibase) {
-    given_p = FALSE;
+    return mrb_false_value();
   }
-  else {
-    /* block_given? called within block; check upper scope */
-    if (ci->proc->env) {
-      struct REnv *e = ci->proc->env;
-      mrb_value *sp;
+  /* block_given? called within block; check upper scope */
+  if (ci->proc->env) {
+    struct REnv *e = ci->proc->env;
 
-      while (e->c) {
-        e = (struct REnv*)e->c;
-      }
-      sp = e->stack;
-      if (sp) {
-        /* top-level does not have block slot (alway false) */
-        if (sp == mrb->c->stbase)
-          return mrb_false_value();
-        ci = mrb->c->cibase + e->cioff;
-        bp = ci[1].stackent + 1;
-      }
+    while (e->c) {
+      e = (struct REnv*)e->c;
     }
-    if (ci->argc > 0) {
-      bp += ci->argc;
+    /* top-level does not have block slot (always false) */
+    if (e->stack == mrb->c->stbase)
+      return mrb_false_value();
+    if (e->stack && e->cioff < 0) {
+      /* use saved block arg position */
+      bp = &e->stack[-e->cioff];
+      ci = 0;                 /* no callinfo available */
     }
-    given_p = !mrb_nil_p(*bp);
+    else {
+      ci = e->cxt.c->cibase + e->cioff;
+      bp = ci[1].stackent + 1;
+    }
   }
-
-  return mrb_bool_value(given_p);
+  if (ci && ci->argc > 0) {
+    bp += ci->argc;
+  }
+  if (mrb_nil_p(*bp))
+    return mrb_false_value();
+  return mrb_true_value();
 }
 
 /* 15.3.1.3.7  */
@@ -199,11 +199,13 @@ mrb_singleton_class_clone(mrb_state *mrb, mrb_value obj)
     /* copy singleton(unnamed) class */
     struct RClass *clone = (struct RClass*)mrb_obj_alloc(mrb, klass->tt, mrb->class_class);
 
-    if ((mrb_type(obj) == MRB_TT_CLASS) || (mrb_type(obj) == MRB_TT_SCLASS)) {
-      clone->c = clone;
-    }
-    else {
+    switch (mrb_type(obj)) {
+    case MRB_TT_CLASS:
+    case MRB_TT_SCLASS:
+      break;
+    default:
       clone->c = mrb_singleton_class_clone(mrb, mrb_obj_value(klass));
+      break;
     }
     clone->super = klass->super;
     if (klass->iv) {
@@ -241,7 +243,12 @@ copy_class(mrb_state *mrb, mrb_value dst, mrb_value src)
     c1->super = mrb_class_ptr(mrb_obj_dup(mrb, mrb_obj_value(c0)));
     c1->super->flags |= MRB_FLAG_IS_ORIGIN;
   }
-  dc->mt = kh_copy(mt, mrb, sc->mt);
+  if (sc->mt) {
+    dc->mt = kh_copy(mt, mrb, sc->mt);
+  }
+  else {
+    dc->mt = kh_init(mt, mrb);
+  }
   dc->super = sc->super;
   MRB_SET_INSTANCE_TT(dc, MRB_INSTANCE_TT(sc));
 }
@@ -311,6 +318,7 @@ mrb_obj_clone(mrb_state *mrb, mrb_value self)
   }
   p = (struct RObject*)mrb_obj_alloc(mrb, mrb_type(self), mrb_obj_class(mrb, self));
   p->c = mrb_singleton_class_clone(mrb, self);
+  mrb_field_write_barrier(mrb, (struct RBasic*)p, (struct RBasic*)p->c);
   clone = mrb_obj_value(p);
   init_copy(mrb, clone, self);
 
@@ -867,7 +875,6 @@ mrb_f_raise(mrb_state *mrb, mrb_value self)
     /* fall through */
   default:
     exc = mrb_make_exception(mrb, argc, a);
-    mrb_obj_iv_set(mrb, mrb_obj_ptr(exc), mrb_intern_lit(mrb, "lastpc"), mrb_cptr_value(mrb, mrb->c->ci->pc));
     mrb_exc_raise(mrb, exc);
     break;
   }
@@ -1160,8 +1167,8 @@ mrb_local_variables(mrb_state *mrb, mrb_value self)
 
     while (e) {
       if (MRB_ENV_STACK_SHARED_P(e) &&
-          !MRB_PROC_CFUNC_P(mrb->c->cibase[e->cioff].proc)) {
-        irep = mrb->c->cibase[e->cioff].proc->body.irep;
+          !MRB_PROC_CFUNC_P(e->cxt.c->cibase[e->cioff].proc)) {
+        irep = e->cxt.c->cibase[e->cioff].proc->body.irep;
         if (irep->lv) {
           for (i = 0; i + 1 < irep->nlocals; ++i) {
             if (irep->lv[i].name) {
