@@ -66,7 +66,7 @@ MRB_API mrb_value mrb_word_boxing_float_pool(struct mrb_state*, mrb_float);
 #define mrb_ptr(o)     (o).value.p
 #define mrb_cptr(o)    (o).value.vp->p
 #define mrb_float(o)   (o).value.fp->f
-#define mrb_fixnum(o)  (o).value.i
+#define mrb_fixnum(o)  ((mrb_int)(o).value.i)
 #define mrb_symbol(o)  (o).value.sym
 
 static inline enum mrb_vtype

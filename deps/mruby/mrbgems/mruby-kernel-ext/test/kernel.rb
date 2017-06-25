@@ -20,13 +20,13 @@ assert('Kernel.caller, Kernel#caller') do
       bar(*args)
     end
   end
-  assert_equal "kernel.rb:#{caller_lineno}:in Object#foo", c.new.baz(0)[0][-26..-1]
-  assert_equal "#bar", c.new.baz[0][-4..-1]
-  assert_equal "#foo", c.new.baz(0)[0][-4..-1]
-  assert_equal "#bar", c.new.baz(1)[0][-4..-1]
-  assert_equal "#baz", c.new.baz(2)[0][-4..-1]
-  assert_equal ["#foo", "#bar"], c.new.baz(0, 2).map { |i| i[-4..-1] }
-  assert_equal ["#bar", "#baz"], c.new.baz(1..2).map { |i| i[-4..-1] }
+  assert_equal "kernel.rb:#{caller_lineno}:in foo", c.new.baz(0)[0][-19..-1]
+  assert_equal "bar", c.new.baz[0][-3..-1]
+  assert_equal "foo", c.new.baz(0)[0][-3..-1]
+  assert_equal "bar", c.new.baz(1)[0][-3..-1]
+  assert_equal "baz", c.new.baz(2)[0][-3..-1]
+  assert_equal ["foo", "bar"], c.new.baz(0, 2).map { |i| i[-3..-1] }
+  assert_equal ["bar", "baz"], c.new.baz(1..2).map { |i| i[-3..-1] }
   assert_nil c.new.baz(10..20)
   assert_raise(ArgumentError) { c.new.baz(-1) }
   assert_raise(ArgumentError) { c.new.baz(-1, 1) }

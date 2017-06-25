@@ -239,6 +239,7 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       printf("OP_RETURN\tR%d", GETARG_A(c));
       switch (GETARG_B(c)) {
       case OP_R_NORMAL:
+        printf("\tnormal\t"); break;
       case OP_R_RETURN:
         printf("\treturn\t"); break;
       case OP_R_BREAK:
@@ -258,7 +259,15 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       break;
 
     case OP_LAMBDA:
-      printf("OP_LAMBDA\tR%d\tI(%+d)\t%d", GETARG_A(c), GETARG_b(c)+1, GETARG_c(c));
+      printf("OP_LAMBDA\tR%d\tI(%+d)\t", GETARG_A(c), GETARG_b(c)+1);
+      switch (GETARG_c(c)) {
+      case OP_L_METHOD:
+        printf("method"); break;
+      case OP_L_BLOCK:
+        printf("block"); break;
+      case OP_L_LAMBDA:
+        printf("lambda"); break;
+      }
       print_lv(mrb, irep, c, RA);
       break;
     case OP_RANGE:

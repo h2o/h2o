@@ -122,7 +122,7 @@ ary_modify(mrb_state *mrb, struct RArray *a)
     }
     else {
       mrb_value *ptr, *p;
-      size_t len;
+      mrb_int len;
 
       p = a->ptr;
       len = a->len * sizeof(mrb_value);
@@ -165,11 +165,11 @@ ary_make_shared(mrb_state *mrb, struct RArray *a)
 }
 
 static void
-ary_expand_capa(mrb_state *mrb, struct RArray *a, size_t len)
+ary_expand_capa(mrb_state *mrb, struct RArray *a, mrb_int len)
 {
-  size_t capa = a->aux.capa;
+  mrb_int capa = a->aux.capa;
 
-  if (len > ARY_MAX_SIZE) {
+  if (len > ARY_MAX_SIZE || len < 0) {
   size_error:
     mrb_raise(mrb, E_ARGUMENT_ERROR, "array size too big");
   }
@@ -189,7 +189,7 @@ ary_expand_capa(mrb_state *mrb, struct RArray *a, size_t len)
     goto size_error;
   }
 
-  if (capa > (size_t)a->aux.capa) {
+  if (capa > a->aux.capa) {
     mrb_value *expanded_ptr = (mrb_value *)mrb_realloc(mrb, a->ptr, sizeof(mrb_value)*capa);
 
     a->aux.capa = capa;
@@ -596,7 +596,7 @@ mrb_ary_splice(mrb_state *mrb, mrb_value ary, mrb_int head, mrb_int len, mrb_val
   struct RArray *a = mrb_ary_ptr(ary);
   const mrb_value *argv;
   mrb_int argc;
-  size_t tail;
+  mrb_int tail;
 
   ary_modify(mrb, a);
 
@@ -611,7 +611,7 @@ mrb_ary_splice(mrb_state *mrb, mrb_value ary, mrb_int head, mrb_int len, mrb_val
     }
   }
   tail = head + len;
-  if (a->len < len || (size_t)a->len < tail) {
+  if (a->len < len || a->len < tail) {
     len = a->len - head;
   }
 
@@ -620,7 +620,12 @@ mrb_ary_splice(mrb_state *mrb, mrb_value ary, mrb_int head, mrb_int len, mrb_val
     argc = RARRAY_LEN(rpl);
     argv = RARRAY_PTR(rpl);
     if (argv == a->ptr) {
-      struct RArray *r = ary_dup(mrb, a);
+      struct RArray *r;
+
+      if (argc > 32767) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "too big recursive splice");
+      }
+      r = ary_dup(mrb, a);
       argv = r->ptr;
     }
   }

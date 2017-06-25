@@ -421,7 +421,7 @@ EOT
                 map { my $l = $_; chomp $l; $l } <$fh>;
             };
             @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
-            is $log[$#log], "[h2o_mruby] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected: hoge (RuntimeError)";
+            is $log[$#log], "[h2o_mruby] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected:hoge (RuntimeError)";
         };
     };
     $tester->("flow style", <<"EOT", 5);
