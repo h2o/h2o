@@ -97,8 +97,10 @@
     "  end\n"                                                                                                                      \
     "  class HttpInputStream\n"                                                                                                    \
     "    def each\n"                                                                                                               \
-    "      while c = _h2o__http_fetch_chunk(self)\n"                                                                               \
+    "      first = true\n"                                                                                                         \
+    "      while c = _h2o__http_fetch_chunk(self, first)\n"                                                                        \
     "        yield c\n"                                                                                                            \
+    "        first = false\n"                                                                                                      \
     "      end\n"                                                                                                                  \
     "    end\n"                                                                                                                    \
     "    def join\n"                                                                                                               \
