@@ -145,12 +145,14 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
  */
 typedef struct st_ptls_aead_context_t {
     const struct st_ptls_aead_algorithm_t *algo;
-    uint64_t seq;
     uint8_t static_iv[PTLS_MAX_IV_SIZE];
     /* field above this line must not be altered by the crypto binding */
     void (*dispose_crypto)(struct st_ptls_aead_context_t *ctx);
-    int (*do_transform)(struct st_ptls_aead_context_t *ctx, void *output, size_t *outlen, const void *input, size_t inlen,
-                        const void *iv, uint8_t enc_content_type);
+    void (*do_encrypt_init)(struct st_ptls_aead_context_t *ctx, const void *iv, const void *aad, size_t aadlen);
+    size_t (*do_encrypt_update)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen);
+    size_t (*do_encrypt_final)(struct st_ptls_aead_context_t *ctx, void *output);
+    size_t (*do_decrypt)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, const void *iv,
+                         const void *aad, size_t aadlen);
 } ptls_aead_context_t;
 
 /**
@@ -341,7 +343,11 @@ typedef struct st_ptls_context_t {
     /**
      * if set, psk handshakes use (ec)dhe
      */
-    int require_dhe_on_psk;
+    unsigned require_dhe_on_psk : 1;
+    /**
+     * if exporter master secrets should be recorded
+     */
+    unsigned use_exporter : 1;
     /**
      *
      */
@@ -364,37 +370,63 @@ typedef struct st_ptls_context_t {
     ptls_update_open_count_t *update_open_count;
 } ptls_context_t;
 
+typedef struct st_ptls_raw_extension_t {
+    uint16_t type;
+    ptls_iovec_t data;
+} ptls_raw_extension_t;
+
 /**
  * optional arguments to client-driven handshake
  */
-typedef union st_ptls_handshake_properties_t {
-    struct {
-        /**
-         * list of protocols offered through ALPN
-         */
+typedef struct st_ptls_handshake_properties_t {
+    union {
         struct {
-            const ptls_iovec_t *list;
-            size_t count;
-        } negotiated_protocols;
-        /**
-         * session ticket sent to the application via save_ticket callback
-         */
-        ptls_iovec_t session_ticket;
-        /**
-         * pointer to store the maximum size of early-data that can be sent immediately (if NULL, early data is not used)
-         */
-        size_t *max_early_data_size;
-        /**
-         *
-         */
-        unsigned early_data_accepted_by_peer : 1;
-        /**
-         * negotiate the key exchange method before sending key_share
-         */
-        unsigned negotiate_before_key_exchange : 1;
-    } client;
-    struct {
-    } server;
+            /**
+             * list of protocols offered through ALPN
+             */
+            struct {
+                const ptls_iovec_t *list;
+                size_t count;
+            } negotiated_protocols;
+            /**
+             * session ticket sent to the application via save_ticket callback
+             */
+            ptls_iovec_t session_ticket;
+            /**
+             * pointer to store the maximum size of early-data that can be sent immediately (if NULL, early data is not used)
+             */
+            size_t *max_early_data_size;
+            /**
+             *
+             */
+            unsigned early_data_accepted_by_peer : 1;
+            /**
+             * negotiate the key exchange method before sending key_share
+             */
+            unsigned negotiate_before_key_exchange : 1;
+        } client;
+        struct {
+            /**
+             * psk binder being selected (len is set to zero if none)
+             */
+            struct {
+                uint8_t base[PTLS_MAX_DIGEST_SIZE];
+                size_t len;
+            } selected_psk_binder;
+        } server;
+    };
+    /**
+     * an optional list of additional extensions to send either in CH or EE, terminated by type == UINT16_MAX
+     */
+    ptls_raw_extension_t *additional_extensions;
+    /**
+     * an optional callback that returns a boolean value indicating if a particular extension should be collected
+     */
+    int (*collect_extension)(ptls_t *tls, struct st_ptls_handshake_properties_t *properties, uint16_t type);
+    /**
+     * an optional callback that reports the extensions being collected
+     */
+    int (*collected_extensions)(ptls_t *tls, struct st_ptls_handshake_properties_t *properties, ptls_raw_extension_t *extensions);
 } ptls_handshake_properties_t;
 
 /**
@@ -496,6 +528,51 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
         ptls_buffer_push_asn1_block((buf), block);                                                                                 \
     } while (0)
 
+int ptls_decode16(uint16_t *value, const uint8_t **src, const uint8_t *end);
+int ptls_decode32(uint32_t *value, const uint8_t **src, const uint8_t *end);
+int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
+
+#define ptls_decode_open_block(src, end, capacity, block)                                                                          \
+    do {                                                                                                                           \
+        size_t _capacity = (capacity);                                                                                             \
+        if (_capacity > (size_t)(end - (src))) {                                                                                   \
+            ret = PTLS_ALERT_DECODE_ERROR;                                                                                         \
+            goto Exit;                                                                                                             \
+        }                                                                                                                          \
+        size_t _block_size = 0;                                                                                                    \
+        do {                                                                                                                       \
+            _block_size = _block_size << 8 | *(src)++;                                                                             \
+        } while (--_capacity != 0);                                                                                                \
+        if (_block_size > (size_t)(end - (src))) {                                                                                 \
+            ret = PTLS_ALERT_DECODE_ERROR;                                                                                         \
+            goto Exit;                                                                                                             \
+        }                                                                                                                          \
+        do {                                                                                                                       \
+            const uint8_t *end = (src) + _block_size;                                                                              \
+            do {                                                                                                                   \
+                block                                                                                                              \
+            } while (0);                                                                                                           \
+            if ((src) != end) {                                                                                                    \
+                ret = PTLS_ALERT_DECODE_ERROR;                                                                                     \
+                goto Exit;                                                                                                         \
+            }                                                                                                                      \
+        } while (0);                                                                                                               \
+    } while (0)
+
+#define ptls_decode_assert_block_close(src, end)                                                                                   \
+    do {                                                                                                                           \
+        if ((src) != end) {                                                                                                        \
+            ret = PTLS_ALERT_DECODE_ERROR;                                                                                         \
+            goto Exit;                                                                                                             \
+        }                                                                                                                          \
+    } while (0);
+
+#define ptls_decode_block(src, end, capacity, block)                                                                               \
+    do {                                                                                                                           \
+        ptls_decode_open_block((src), end, capacity, block);                                                                       \
+        ptls_decode_assert_block_close((src), end);                                                                                \
+    } while (0)
+
 /**
  * create a object to handle new TLS connection. Client-side of a TLS connection is created if server_name is non-NULL. Otherwise,
  * a server-side connection is created.
@@ -540,9 +617,9 @@ const char *ptls_get_negotiated_protocol(ptls_t *tls);
  */
 int ptls_set_negotiated_protocol(ptls_t *tls, const char *protocol, size_t protocol_len);
 /**
- * returns if the received data is early data
+ * returns if the handshake has been completed
  */
-int ptls_is_early_data(ptls_t *tls);
+int ptls_handshake_is_complete(ptls_t *tls);
 /**
  * returns if a PSK (or PSK-DHE) handshake was performed
  */
@@ -575,6 +652,10 @@ int ptls_send_alert(ptls_t *tls, ptls_buffer_t *sendbuf, uint8_t level, uint8_t 
 /**
  *
  */
+int ptls_export_secret(ptls_t *tls, void *output, size_t outlen, const char *label, ptls_iovec_t context_value);
+/**
+ *
+ */
 ptls_hash_context_t *ptls_hmac_create(ptls_hash_algorithm_t *algo, const void *key, size_t key_size);
 /**
  *
@@ -585,18 +666,47 @@ int ptls_hkdf_extract(ptls_hash_algorithm_t *hash, void *output, ptls_iovec_t sa
  */
 int ptls_hkdf_expand(ptls_hash_algorithm_t *hash, void *output, size_t outlen, ptls_iovec_t prk, ptls_iovec_t info);
 /**
- *
+ * instantiates an AEAD cipher given a secret, which is expanded using hkdf to a set of key and iv
+ * @param aead
+ * @param hash
+ * @param is_enc 1 if creating a context for encryption, 0 if creating a context for decryption
+ * @param secret the secret. The size must be the digest length of the hash algorithm
+ * @return pointer to an AEAD context if successful, otherwise NULL
  */
 ptls_aead_context_t *ptls_aead_new(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, int is_enc, const void *secret);
 /**
- *
+ * destroys an AEAD cipher context
  */
 void ptls_aead_free(ptls_aead_context_t *ctx);
 /**
  *
  */
-int ptls_aead_transform(ptls_aead_context_t *ctx, void *output, size_t *outlen, const void *input, size_t inlen,
-                        uint8_t enc_content_type);
+size_t ptls_aead_encrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq, const void *aad,
+                         size_t aadlen);
+/**
+ * initializes the internal state of the encryptor
+ */
+static void ptls_aead_encrypt_init(ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen);
+/**
+ * encrypts the input and updates the GCM state
+ * @return number of bytes emitted to output
+ */
+static size_t ptls_aead_encrypt_update(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen);
+/**
+ * emits buffered data (if any) and the GCM tag
+ * @return number of bytes emitted to output
+ */
+static size_t ptls_aead_encrypt_final(ptls_aead_context_t *ctx, void *output);
+/**
+ * decrypts an AEAD record
+ * @return number of bytes emitted to output if successful, or SIZE_MAX if the input is invalid (e.g. broken MAC)
+ */
+static size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
+                                const void *aad, size_t aadlen);
+/**
+ * internal
+ */
+void ptls_aead__build_iv(ptls_aead_context_t *ctx, uint8_t *iv, uint64_t seq);
 /**
  * clears memory
  */
@@ -626,6 +736,33 @@ inline void ptls_buffer_dispose(ptls_buffer_t *buf)
 {
     ptls_buffer__release_memory(buf);
     *buf = (ptls_buffer_t){NULL};
+}
+
+inline void ptls_aead_encrypt_init(ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen)
+{
+    uint8_t iv[PTLS_MAX_IV_SIZE];
+
+    ptls_aead__build_iv(ctx, iv, seq);
+    ctx->do_encrypt_init(ctx, iv, aad, aadlen);
+}
+
+inline size_t ptls_aead_encrypt_update(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen)
+{
+    return ctx->do_encrypt_update(ctx, output, input, inlen);
+}
+
+inline size_t ptls_aead_encrypt_final(ptls_aead_context_t *ctx, void *output)
+{
+    return ctx->do_encrypt_final(ctx, output);
+}
+
+inline size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
+                                const void *aad, size_t aadlen)
+{
+    uint8_t iv[PTLS_MAX_IV_SIZE];
+
+    ptls_aead__build_iv(ctx, iv, seq);
+    return ctx->do_decrypt(ctx, output, input, inlen, iv, aad, aadlen);
 }
 
 #endif

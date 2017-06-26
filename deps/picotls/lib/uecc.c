@@ -23,7 +23,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef WIN32
+#include "wincompat.h"
+#else
 #include <unistd.h>
+#endif
 #include "sha2.h"
 #include "uECC.h"
 #include "uECC_vli.h"

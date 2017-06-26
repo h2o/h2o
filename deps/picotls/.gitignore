@@ -1,0 +1,19 @@
+*/Debug
+Debug
+*/.vs
+.vs
+*/Generated Files
+*.sdf
+*/*.sdf
+*/*.user
+*.ipch
+*/*.ipch
+*.db
+*/*.db
+*/*.lib
+*/*.pdb
+*/AppX
+*/*.exe
+*/*.dll
+*/*.xbf
+*/*.ilk
