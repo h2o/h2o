@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
+use Test::Exception;
 use t::Util;
 
 subtest 'basic' => sub {
@@ -143,6 +144,36 @@ EOT
         $resp = `$curl --silent --dump-header /dev/stderr -X POST $proto://127.0.0.1:$port/index.txt 2>&1 > /dev/null`;
         like $resp, qr{^HTTP/[^ ]+ 405\s}s, "status";
     });
+};
+
+subtest "empty status" => sub {
+    throws_ok sub {
+        spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+error-doc:
+  - status: []
+    url: /404.html
+EOT
+    }, qr/server failed to start/, 'status must not be empty';
+};
+
+subtest "duplicated statuses" => sub {
+    throws_ok sub {
+        spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+error-doc:
+  - status: [@{[ join(', ', (400 .. 599), 599) ]}]
+    url: /error.html
+EOT
+    }, qr/server failed to start/, 'duplicated statuses';
 };
 
 done_testing;
