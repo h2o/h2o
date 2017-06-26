@@ -179,6 +179,7 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *ctx, mrb_valu
                                               int *next_action);
 
 h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *), h2o_mruby_generator_t *generator);
+void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator);
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final);
 
 /* handler/configurator/mruby.c */
