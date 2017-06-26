@@ -48,6 +48,7 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     struct errordoc_configurator_t *self = (void *)cmd->configurator;
     int status[200];
     size_t status_len = 0;
+    int parsed;
     const char *url = NULL;
     size_t i, j, k;
     yoml_t *key, *value;
@@ -67,19 +68,21 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
                     return -1;
                 }
                 for (j = 0; j != value->data.sequence.size; ++j) {
-                    if (scan_and_check_status(cmd, value->data.sequence.elements[j], &status[status_len++]) != 0)
+                    if (scan_and_check_status(cmd, value->data.sequence.elements[j], &parsed) != 0)
                         return -1;
                     /* check the scanned status hasn't already appeared */
-                    for (k = 0; k != status_len - 1; ++k) {
-                        if (status[k] == status[status_len - 1]) {
+                    for (k = 0; k != status_len; ++k) {
+                        if (status[k] == parsed) {
                             h2o_configurator_errprintf(cmd, value, "status %d appears multiple times", status[k]);
                             return -1;
                         }
                     }
+                    status[status_len++] = parsed;
                 }
             } else {
-                if (scan_and_check_status(cmd, value, &status[status_len++]) != 0)
+                if (scan_and_check_status(cmd, value, &parsed) != 0)
                     return -1;
+                status[status_len++] = parsed;
             }
 
         } else if (strcmp(key->data.scalar, "url") == 0) {
