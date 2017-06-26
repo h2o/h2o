@@ -532,7 +532,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t *certificate_file = NULL, *key_file = NULL, *dh_file = NULL, *min_version = NULL, *max_version = NULL,
            *cipher_suite = NULL, *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
-    long ssl_options = SSL_OP_ALL;
+    long ssl_options = SSL_OP_ALL | SSL_OP_CIPHER_SERVER_PREFERENCE;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
     int use_neverbleed = 1, use_picotls = 1;     /* enabled by default */
@@ -588,7 +588,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "client") == 0) {
                     ssl_options &= ~SSL_OP_CIPHER_SERVER_PREFERENCE;
                 } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "server") == 0) {
-                    ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
+                    ; /* this is the default */
                 } else {
                     h2o_configurator_errprintf(cmd, value, "property of `cipher-preference` must be either of: `client`, `server`");
                     return -1;
@@ -639,8 +639,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             h2o_configurator_errprintf(cmd, min_version, "unknown protocol version: %s", min_version->data.scalar);
         VersionFound:;
         } else {
-            /* default is >= TLSv1 */
+            /* default is >= TLSv1.2 if possible, >= TLSv1 otherwise */
+#ifdef SSL_OP_NO_TLSv1_1
             ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+#else
+            ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1;
+#endif
         }
         if (max_version != NULL) {
             if (strcasecmp(max_version->data.scalar, "tlsv1.3") < 0)
@@ -714,7 +718,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             goto Error;
         }
     }
-    if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
+
+#define DEFAULT_SSL_CIPHER_SUITE "ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256"
+    if (SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite != NULL ? cipher_suite->data.scalar : DEFAULT_SSL_CIPHER_SUITE) != 1) {
         h2o_configurator_errprintf(cmd, cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
