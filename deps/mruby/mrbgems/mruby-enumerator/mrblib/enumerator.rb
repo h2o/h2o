@@ -612,7 +612,7 @@ module Kernel
   def to_enum(meth=:each, *args)
     Enumerator.new self, meth, *args
   end
-  alias :enum_for :to_enum
+  alias enum_for to_enum
 end
 
 module Enumerable

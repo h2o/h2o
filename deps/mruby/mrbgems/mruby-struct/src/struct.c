@@ -84,6 +84,16 @@ mrb_struct_s_members_m(mrb_state *mrb, mrb_value klass)
   return ary;
 }
 
+static void
+mrb_struct_modify(mrb_state *mrb, mrb_value strct)
+{
+  if (MRB_FROZEN_P(mrb_basic_ptr(strct))) {
+    mrb_raise(mrb, E_RUNTIME_ERROR, "can't modify frozen struct");
+  }
+
+  mrb_write_barrier(mrb, mrb_basic_ptr(strct));
+}
+
 /* 15.2.18.4.6  */
 /*
  *  call-seq:
@@ -448,6 +458,7 @@ mrb_struct_aset_sym(mrb_state *mrb, mrb_value s, mrb_sym id, mrb_value val)
   ptr_members = RARRAY_PTR(members);
   for (i=0; i<len; i++) {
     if (mrb_symbol(ptr_members[i]) == id) {
+      mrb_struct_modify(mrb, s);
       ptr[i] = val;
       return val;
     }
@@ -511,6 +522,7 @@ mrb_struct_aset(mrb_state *mrb, mrb_value s)
                "offset %S too large for struct(size:%S)",
                mrb_fixnum_value(i), mrb_fixnum_value(RSTRUCT_LEN(s)));
   }
+  mrb_struct_modify(mrb, s);
   return RSTRUCT_PTR(s)[i] = val;
 }
 
@@ -636,7 +648,7 @@ mrb_struct_to_h(mrb_state *mrb, mrb_value self)
   mrb_value members, ret;
   mrb_int i;
 
-  members = struct_s_members(mrb, mrb_class(mrb, self));
+  members = struct_members(mrb, self);
   ret = mrb_hash_new_capa(mrb, RARRAY_LEN(members));
 
   for (i = 0; i < RARRAY_LEN(members); ++i) {
@@ -677,6 +689,7 @@ mrb_mruby_struct_gem_init(mrb_state* mrb)
 {
   struct RClass *st;
   st = mrb_define_class(mrb, "Struct",  mrb->object_class);
+  MRB_SET_INSTANCE_TT(st, MRB_TT_ARRAY);
 
   mrb_define_class_method(mrb, st, "new",             mrb_struct_s_def,       MRB_ARGS_ANY());  /* 15.2.18.3.1  */
 

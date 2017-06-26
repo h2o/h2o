@@ -381,7 +381,7 @@ assert('splat in case statement') do
 end
 
 assert('External command execution.') do
-  class << Kernel
+  module Kernel
     sym = '`'.to_sym
     alias_method :old_cmd, sym
 

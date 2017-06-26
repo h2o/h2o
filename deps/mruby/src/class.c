@@ -123,25 +123,44 @@ module_from_sym(mrb_state *mrb, struct RClass *klass, mrb_sym id)
   return mrb_class_ptr(c);
 }
 
-MRB_API struct RClass*
-mrb_class_outer_module(mrb_state *mrb, struct RClass *c)
-{
-  mrb_value outer;
-
-  outer = mrb_obj_iv_get(mrb, (struct RObject*)c, mrb_intern_lit(mrb, "__outer__"));
-  if (mrb_nil_p(outer)) return NULL;
-  return mrb_class_ptr(outer);
-}
-
-static void
-check_if_class_or_module(mrb_state *mrb, mrb_value obj)
+static mrb_bool
+class_ptr_p(mrb_value obj)
 {
   switch (mrb_type(obj)) {
   case MRB_TT_CLASS:
   case MRB_TT_SCLASS:
   case MRB_TT_MODULE:
-    return;
+    return TRUE;
   default:
+    return FALSE;
+  }
+}
+
+MRB_API struct RClass*
+mrb_class_outer_module(mrb_state *mrb, struct RClass *c)
+{
+  mrb_value outer;
+  struct RClass *cls;
+
+  outer = mrb_obj_iv_get(mrb, (struct RObject*)c, mrb_intern_lit(mrb, "__outer__"));
+  if (mrb_nil_p(outer)) return NULL;
+  cls = mrb_class_ptr(outer);
+  if (cls->tt == MRB_TT_SCLASS)
+  {
+    mrb_value klass;
+    klass = mrb_obj_iv_get(mrb, (struct RObject *)cls,
+                           mrb_intern_lit(mrb, "__attached__"));
+    if (class_ptr_p(klass)) {
+      cls = mrb_class_ptr(klass);
+    }
+  }
+  return cls;
+}
+
+static void
+check_if_class_or_module(mrb_state *mrb, mrb_value obj)
+{
+  if (!class_ptr_p(obj)) {
     mrb_raisef(mrb, E_TYPE_ERROR, "%S is not a class/module", mrb_inspect(mrb, obj));
   }
 }
@@ -412,6 +431,7 @@ mrb_define_method_raw(mrb_state *mrb, struct RClass *c, mrb_sym mid, struct RPro
   k = kh_put(mt, mrb, h, mid);
   kh_value(h, k) = p;
   if (p) {
+    p->c = NULL;
     mrb_field_write_barrier(mrb, (struct RBasic *)c, (struct RBasic *)p);
   }
 }
@@ -599,14 +619,8 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
           mrb_value ss;
 
           ss = ARGV[arg_i++];
-          switch (mrb_type(ss)) {
-          case MRB_TT_CLASS:
-          case MRB_TT_MODULE:
-          case MRB_TT_SCLASS:
-            break;
-          default:
+          if (!class_ptr_p(ss)) {
             mrb_raisef(mrb, E_TYPE_ERROR, "%S is not class/module", ss);
-            break;
           }
           *p = ss;
           i++;
@@ -683,7 +697,7 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
           if (i < argc && mrb_nil_p(ARGV[arg_i])) {
             *ps = NULL;
             *pl = 0;
-            i++;
+            i++; arg_i++;
             break;
           }
         }
@@ -787,7 +801,7 @@ mrb_get_args(mrb_state *mrb, const char *format, ...)
               {
                 mrb_float f = mrb_float(ARGV[arg_i]);
 
-                if (!FIXABLE(f)) {
+                if (!FIXABLE_FLOAT(f)) {
                   mrb_raise(mrb, E_RANGE_ERROR, "float too big for int");
                 }
                 *p = (mrb_int)f;
@@ -979,7 +993,7 @@ include_module_at(mrb_state *mrb, struct RClass *c, struct RClass *ins_pos, stru
       if (p->tt == MRB_TT_ICLASS) {
         if (p->mt == m->mt) {
           if (!superclass_seen) {
-            ins_pos = p; // move insert point
+            ins_pos = p; /* move insert point */
           }
           goto skip;
         }
@@ -1146,7 +1160,7 @@ mrb_mod_initialize(mrb_state *mrb, mrb_value mod)
 {
   mrb_value b;
   struct RClass *m = mrb_class_ptr(mod);
-  boot_initmod(mrb, m); // bootstrap a newly initialized module
+  boot_initmod(mrb, m); /* bootstrap a newly initialized module */
   mrb_get_args(mrb, "|&", &b);
   if (!mrb_nil_p(b)) {
     mrb_yield_with_class(mrb, b, 1, &mod, mod, m);
@@ -1755,15 +1769,11 @@ mrb_mod_to_s(mrb_state *mrb, mrb_value klass)
 
     str = mrb_str_new_lit(mrb, "#<Class:");
 
-    switch (mrb_type(v)) {
-      case MRB_TT_CLASS:
-      case MRB_TT_MODULE:
-      case MRB_TT_SCLASS:
-        mrb_str_cat_str(mrb, str, mrb_inspect(mrb, v));
-        break;
-      default:
-        mrb_str_cat_str(mrb, str, mrb_any_to_s(mrb, v));
-        break;
+    if (class_ptr_p(v)) {
+      mrb_str_cat_str(mrb, str, mrb_inspect(mrb, v));
+    }
+    else {
+      mrb_str_cat_str(mrb, str, mrb_any_to_s(mrb, v));
     }
     return mrb_str_cat_lit(mrb, str, ">");
   }

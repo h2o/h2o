@@ -246,7 +246,6 @@ mrb_close(mrb_state *mrb)
 
   /* free */
   mrb_gc_free_gv(mrb);
-  mrb_free_backtrace(mrb);
   mrb_free_context(mrb, mrb->root_c);
   mrb_free_symtbl(mrb);
   mrb_alloca_free(mrb);
