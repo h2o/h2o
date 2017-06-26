@@ -32,6 +32,7 @@ struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_context_t *ctx;
     h2o_http1client_t *client;
     mrb_value receiver;
+    unsigned consumed : 1; /* flag to check that the response body is consumed only once */
     struct {
         h2o_buffer_t *buf;
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
@@ -51,7 +52,6 @@ struct st_h2o_mruby_http_request_context_t {
         h2o_mruby_generator_t *generator;
         void (*notify_cb)(h2o_mruby_generator_t *generator);
     } shortcut;
-
 };
 
 static void attach_receiver(struct st_h2o_mruby_http_request_context_t *ctx, mrb_value receiver)
@@ -74,6 +74,9 @@ static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx
 static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
     assert(mrb_nil_p(ctx->refs.request) && mrb_nil_p(ctx->refs.input_stream));
+
+    /* ctx must be alive until generator gets disposed when shortcut used */
+    assert(ctx->shortcut.generator == NULL);
 
     /* clear the refs */
     if (ctx->client != NULL) {
@@ -429,6 +432,11 @@ mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_context_t *mctx, mrb_v
     return mrb_nil_value();
 }
 
+static mrb_value create_already_consumed_error(mrb_state *mrb)
+{
+    return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
+}
+
 mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args,
                                               int *run_again)
 {
@@ -439,6 +447,16 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_val
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &input_stream_type)) == NULL) {
         *run_again = 1;
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "_HttpInputStream#each wrong self");
+    }
+
+    mrb_value first = mrb_ary_entry(args, 1);
+    if (mrb_bool(first)) {
+        /* check the body hasn't already consumed */
+        if (ctx->consumed) {
+            *run_again = 1;
+            return create_already_consumed_error(mrb);
+        }
+        ctx->consumed = 1;
     }
 
     if (ctx->resp.has_content) {
@@ -454,13 +472,29 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_val
 
 h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *), h2o_mruby_generator_t *generator)
 {
+    assert(mrb->exc == NULL);
     struct st_h2o_mruby_http_request_context_t *ctx;
 
     if ((ctx = mrb_data_check_get_ptr(mrb, obj, &input_stream_type)) == NULL)
         return NULL;
+
+    if (ctx->consumed) {
+        mrb->exc = mrb_ptr(create_already_consumed_error(mrb));
+        return NULL;
+    }
+    ctx->consumed = 1;
+
+    assert(ctx->shortcut.generator == NULL);
     ctx->shortcut.notify_cb = cb;
     ctx->shortcut.generator = generator;
     return ctx;
+}
+
+void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator)
+{
+    assert(ctx->shortcut.generator = generator);
+    ctx->shortcut.notify_cb = NULL;
+    ctx->shortcut.generator = NULL;
 }
 
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)

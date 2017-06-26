@@ -34,8 +34,10 @@ module H2O
 
   class HttpInputStream
     def each
-      while c = _h2o__http_fetch_chunk(self)
+      first = true
+      while c = _h2o__http_fetch_chunk(self, first)
         yield c
+        first = false
       end
     end
     def join

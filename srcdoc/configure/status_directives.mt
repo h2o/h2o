@@ -44,7 +44,7 @@ There are currently three modules defined:
 <?
 $ctx->{directive}->(
     name    => "duration-stats",
-    levels  => [ qw(globa) ],
+    levels  => [ qw(global) ],
     since   => '2.1',
     default => 'duration-stats: OFF',
     desc    => q{Gather timing stats for requests.},
@@ -52,9 +52,11 @@ $ctx->{directive}->(
 ?>
 </p>
 <p>
-If the argument is <code>ON</code>, this directive populates duration
-statistics in seconds, to be consumed by status handlers. Note: enabling
-this feature has a noticeable CPU and memory impact.
+If the argument is <code>ON</code>, this directive populates duration statistics in seconds, to be consumed by status handlers.
+Enabling this feature has a noticeable CPU and memory impact.
+</p>
+<p>
+Note that the time spent while processing a request in a blocking manner (such as opening a file or a mruby handler that does invoke a network operation) will not be reflected to the <code>process_time</code> element of the duration stats due to the fact that the timer being used for measuring the time spent is updated only once per loop.
 </p>
 ? })
 
