@@ -59,6 +59,21 @@ static void on_gc_dispose_channel(mrb_state *mrb, void *_ctx)
 
 const static struct mrb_data_type channel_type = {"channel", on_gc_dispose_channel};
 
+static mrb_value register_receiver_method(mrb_state *mrb, mrb_value self)
+{
+    struct st_h2o_mruby_channel_context_t *ctx;
+
+    mrb_value receiver;
+    mrb_value self_obj;
+    mrb_get_args(mrb, "oo", &receiver, &self_obj);
+
+    ctx = mrb_data_check_get_ptr(mrb, self_obj, &channel_type);
+
+    attach_receiver(ctx, receiver);
+
+    return mrb_nil_value();
+}
+
 static mrb_value create_channel_method(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_shared_context_t *shared_ctx = mrb->ud;
@@ -115,10 +130,11 @@ void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *shared_ctx)
     struct RClass *module, *klass;
     module = mrb_define_module(mrb, "H2O");
 
-    mrb_define_method(mrb, mrb->kernel_module, "create_channel", create_channel_method, MRB_ARGS_ARG(1, 2));
+    mrb_define_method(mrb, mrb->kernel_module, "create_channel", create_channel_method, MRB_ARGS_NONE());
 
     klass = mrb_class_get_under(mrb, module, "Channel");
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHANNEL_CLASS, mrb_obj_value(klass));
     mrb_define_method(mrb, klass, "push", channel_push, MRB_ARGS_REQ(1));
+    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(2));
     h2o_mruby_define_callback(mrb, "_h2o__channel_shift", H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT);
 }

@@ -10,6 +10,24 @@
     "  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                         \
     "end\n"                                                                                                                        \
     "module Kernel\n"                                                                                                              \
+    "def task(&block)\n"                                                                                                              \
+    "    f = Fiber.new do\n"                                                                                                              \
+    "      block.call\n"                                                                                                              \
+    "      # For when it's called in h2o_mruby_run_fiber and return output,\n"                                                                                                              \
+    "      # or block doesn't have asynchronous callback\n"                                                                                                              \
+    "      Fiber.yield([0, nil, nil])\n"                                                                                                              \
+    "    end\n"                                                                                                              \
+    "    fiber_res = f.resume()\n"                                                                                                              \
+    "    # In case having no asynchronous callback function\n"                                                                                                              \
+    "    if fiber_res[0] == 0\n"                                                                                                              \
+    "      return\n"                                                                                                              \
+    "    end\n"                                                                                                              \
+    "    receiver = fiber_res[1]\n"                                                                                                              \
+    "    klass = fiber_res[2][0]\n"                                                                                                              \
+    "    # This should be called only one time.\n"                                                                                                              \
+    "    # After that, the fiber is called in mruby_run_fiber and it register receiver in it.\n"                                                                                                              \
+    "    klass.register_receiver(receiver, klass)\n"                                                                                                              \
+    "  end\n"                                                                                                              \
     "  def _h2o_define_callback(name, id)\n"                                                                                       \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
     "      ret = Fiber.yield([ id, _h2o_create_resumer(), args ])\n"                                                               \
