@@ -44,7 +44,7 @@ There are currently three modules defined:
 <?
 $ctx->{directive}->(
     name    => "duration-stats",
-    levels  => [ qw(globa) ],
+    levels  => [ qw(global) ],
     since   => '2.1',
     default => 'duration-stats: OFF',
     desc    => q{Gather timing stats for requests.},
