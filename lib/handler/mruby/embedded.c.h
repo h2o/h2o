@@ -162,8 +162,20 @@
 #define H2O_MRUBY_CODE_CHAHNNEL                                                                                                     \
     "module H2O\n"                                                                                                              \
     "  class Channel\n"                                                                                                        \
-        "    def shift\n"                                                                                                \
-        "      _h2o__channel_shift(self)\n"                                                                                                         \
-        "    end\n"                                                                                                                    \
-        "  end\n"                                                                                                                      \
+    "    def _init()\n"                                                                                                \
+    "      @queue = []\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "    def push(o)\n"                                                                                                \
+    "      @queue << o\n"                                                                                                         \
+    "      self._notify\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "    def shift\n"                                                                                                \
+    "      while true\n"                                                                                                         \
+    "      if !@queue.empty?\n"                                                                                                         \
+    "        return @queue.shift\n"                                                                                                         \
+    "      end\n"                                                                                                         \
+    "      _h2o__channel_wait(self)\n"                                                                                                         \
+    "      end\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
     "end\n"

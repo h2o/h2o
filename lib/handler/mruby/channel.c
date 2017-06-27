@@ -88,19 +88,18 @@ static mrb_value create_channel_method(mrb_state *mrb, mrb_value self)
     ctx->channel = h2o_mruby_create_data_instance(
                     mrb, mrb_ary_entry(shared_ctx->constants, H2O_MRUBY_CHANNEL_CLASS), ctx, &channel_type);
 
+    mrb_funcall(mrb, ctx->channel, "_init", 0, mrb_nil_value());
+
     return ctx->channel;
 }
 
-static mrb_value channel_push(mrb_state *mrb, mrb_value self)
+static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
 {
     struct st_h2o_mruby_channel_context_t *ctx;
     ctx = mrb_data_check_get_ptr(mrb, self, &channel_type);
 
-    mrb_value args;
-    mrb_get_args(mrb, "o", &args);
-
     if (!mrb_nil_p(ctx->receiver))
-        h2o_mruby_run_fiber(ctx->ctx, detach_receiver(ctx), args, NULL);
+        h2o_mruby_run_fiber(ctx->ctx, detach_receiver(ctx), mrb_nil_value(), NULL);
 
     return mrb_nil_value();
 }
@@ -134,7 +133,7 @@ void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *shared_ctx)
 
     klass = mrb_class_get_under(mrb, module, "Channel");
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHANNEL_CLASS, mrb_obj_value(klass));
-    mrb_define_method(mrb, klass, "push", channel_push, MRB_ARGS_REQ(1));
+    mrb_define_method(mrb, klass, "_notify", channel_notify_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(2));
-    h2o_mruby_define_callback(mrb, "_h2o__channel_shift", H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT);
+    h2o_mruby_define_callback(mrb, "_h2o__channel_wait", H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT);
 }
