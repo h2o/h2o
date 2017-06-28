@@ -123,7 +123,7 @@ void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *shared_ctx)
 {
     mrb_state *mrb = shared_ctx->mrb;
 
-    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CHAHNNEL);
+    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CHANNEL);
     h2o_mruby_assert(mrb);
 
     struct RClass *module, *klass;
