@@ -13,7 +13,7 @@
       * [Unit tests](#unit-tests)
       * [Integration tests](#integration-tests)
       * [Fuzzers](#fuzzers)
-   * [Mruby modules](#mruby-modules)
+   * [Adding dependencies or mruby modules](#adding-dependencies-or-mruby-modules)
    * [Writing docs](#writing-docs)
 
 # How to contribute
@@ -213,7 +213,7 @@ fuzzed. Fuzzers are build when `cmake` is passed the `-DBUILD_FUZZER=ON`
 flag, they use [libFuzzer](http://llvm.org/docs/LibFuzzer.html). Anything
 that parses input from the network is a good candidate for fuzzing.
 
-# Adding Dependencies or Mruby modules
+# Adding dependencies or mruby modules
 
 The preferred way of importing third-party code is to store them in dedicated directories under `deps/`.
 In case you plan to merge them into master you should use the helper script `misc/dump-github-repository.pl` to check out a repository. Else you can simply copy the files or check them out as git submodule.  
