@@ -308,6 +308,10 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
 /**
  *
  */
+h2o_iovec_t h2o_socket_ssl_get_replay_identifier(h2o_socket_t *sock);
+/**
+ *
+ */
 struct st_ptls_context_t *h2o_socket_ssl_get_picotls_context(SSL_CTX *ossl);
 /**
  * associates a picotls context to SSL_CTX
