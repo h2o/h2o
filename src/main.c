@@ -2147,6 +2147,8 @@ int main(int argc, char **argv)
         if ((error_log_fd = h2o_access_log_open_log(conf.error_log)) == -1)
             return EX_CONFIG;
     }
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
 
     /* setuid */
     if (conf.globalconf.user != NULL) {
