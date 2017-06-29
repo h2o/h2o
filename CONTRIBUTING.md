@@ -213,10 +213,15 @@ fuzzed. Fuzzers are build when `cmake` is passed the `-DBUILD_FUZZER=ON`
 flag, they use [libFuzzer](http://llvm.org/docs/LibFuzzer.html). Anything
 that parses input from the network is a good candidate for fuzzing.
 
-# Mruby modules
+# Adding Dependencies or Mruby modules
 
-It is possible to add additional mruby modules.
-All modules that match `Dir.glob("../mruby-*/mrbgem.rake")` get linked. Copy (or git-submodule) the library under `deps/` and rerun make.
+The preferred way of importing third-party code is to store them in dedicated directories under `deps/`.
+In case you plan to merge them into master you should use the helper script `misc/dump-github-repository.pl` to check out a repository. Else you can simply copy the files or check them out as git submodule.  
+See also https://github.com/h2o/h2o/wiki/Importing-third-party-code
+
+For adding mruby modules their directory name should start with `mruby-`.
+All modules that match `Dir.glob("../mruby-*/mrbgem.rake")` then get automatically linked. 
+
 
 # Writing docs
 
