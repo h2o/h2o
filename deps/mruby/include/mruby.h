@@ -113,7 +113,7 @@ typedef struct {
   mrb_value *stackent;
   int nregs;
   int ridx;
-  int eidx;
+  int epos;
   struct REnv *env;
   mrb_code *pc;                 /* return address */
   mrb_code *err;                /* error position */
@@ -143,7 +143,7 @@ struct mrb_context {
   mrb_code **rescue;                      /* exception handler stack */
   int rsize;
   struct RProc **ensure;                  /* ensure handler stack */
-  int esize;
+  int esize, eidx;
 
   enum mrb_fiber_state status;
   mrb_bool vmexec;
@@ -151,14 +151,6 @@ struct mrb_context {
 };
 
 struct mrb_jmpbuf;
-
-typedef struct {
-  const char *filename;
-  int lineno;
-  struct RClass *klass;
-  char sep;
-  mrb_sym method_id;
-} mrb_backtrace_entry;
 
 typedef void (*mrb_atexit_func)(struct mrb_state*);
 
@@ -174,15 +166,9 @@ typedef struct mrb_state {
 
   struct mrb_context *c;
   struct mrb_context *root_c;
+  struct iv_tbl *globals;                 /* global variable table */
 
   struct RObject *exc;                    /* exception */
-  struct {
-    struct RObject *exc;
-    int n;
-    int n_allocated;
-    mrb_backtrace_entry *entries;
-  } backtrace;
-  struct iv_tbl *globals;                 /* global variable table */
 
   struct RObject *top_self;
   struct RClass *object_class;            /* Object class */
@@ -1121,6 +1107,11 @@ MRB_API mrb_value mrb_yield(mrb_state *mrb, mrb_value b, mrb_value arg);
 MRB_API mrb_value mrb_yield_argv(mrb_state *mrb, mrb_value b, mrb_int argc, const mrb_value *argv);
 MRB_API mrb_value mrb_yield_with_class(mrb_state *mrb, mrb_value b, mrb_int argc, const mrb_value *argv, mrb_value self, struct RClass *c);
 
+/* continue execution to the proc */
+/* this function should always be called as the last function of a method */
+/* e.g. return mrb_yield_cont(mrb, proc, self, argc, argv); */
+mrb_value mrb_yield_cont(mrb_state *mrb, mrb_value b, mrb_value self, mrb_int argc, const mrb_value *argv);
+
 /* mrb_gc_protect() leaves the object in the arena */
 MRB_API void mrb_gc_protect(mrb_state *mrb, mrb_value obj);
 /* mrb_gc_register() keeps the object from GC. */
@@ -1186,6 +1177,33 @@ MRB_API void mrb_show_version(mrb_state *mrb);
 MRB_API void mrb_show_copyright(mrb_state *mrb);
 
 MRB_API mrb_value mrb_format(mrb_state *mrb, const char *format, ...);
+
+#if 0
+/* memcpy and memset does not work with gdb reverse-next on my box */
+/* use naive memcpy and memset instead */
+#undef memcpy
+#undef memset
+static inline void*
+mrbmemcpy(void *dst, const void *src, size_t n)
+{
+  char *d = (char*)dst;
+  const char *s = (const char*)src;
+  while (n--)
+    *d++ = *s++;
+  return d;
+}
+#define memcpy(a,b,c) mrbmemcpy(a,b,c)
+
+static inline void*
+mrbmemset(void *s, int c, size_t n)
+{
+  char *t = (char*)s;
+  while (n--)
+    *t++ = c;
+  return s;
+}
+#define memset(a,b,c) mrbmemset(a,b,c)
+#endif
 
 MRB_END_DECL
 

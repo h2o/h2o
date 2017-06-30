@@ -42,7 +42,7 @@ MRB_BEGIN_DECL
 /*
  * Minor release version number.
  */
-#define MRUBY_RELEASE_MINOR 2
+#define MRUBY_RELEASE_MINOR 3
 
 /*
  * Tiny release version number.

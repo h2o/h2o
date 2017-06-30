@@ -184,7 +184,7 @@ static struct {
     0,                                      /* initialized in main() */
     NULL,                                   /* thread_ids */
     0,                                      /* shutdown_requested */
-    H2O_BARRIER_INIT(SIZE_MAX),             /* startup_sync_barrier */
+    H2O_BARRIER_INITIALIZER(SIZE_MAX),      /* startup_sync_barrier */
     {{0}},                                  /* state */
     "share/h2o/annotate-backtrace-symbols", /* crash_handler */
     0,                                      /* crash_handler_wait_pipe_close */
@@ -2147,6 +2147,8 @@ int main(int argc, char **argv)
         if ((error_log_fd = h2o_access_log_open_log(conf.error_log)) == -1)
             return EX_CONFIG;
     }
+    setvbuf(stdout, NULL, _IOLBF, 0);
+    setvbuf(stderr, NULL, _IOLBF, 0);
 
     /* setuid */
     if (conf.globalconf.user != NULL) {
@@ -2221,7 +2223,7 @@ int main(int argc, char **argv)
 
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.num_threads);
-    conf.startup_sync_barrier = H2O_BARRIER_INIT(conf.num_threads);
+    h2o_barrier_init(&conf.startup_sync_barrier, conf.num_threads);
     size_t i;
     for (i = 1; i != conf.num_threads; ++i) {
         pthread_t tid;

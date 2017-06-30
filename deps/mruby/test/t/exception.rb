@@ -398,7 +398,7 @@ assert('GC in rescue') do
     end
   rescue => exception
     GC.start
-    assert_equal("#{__FILE__}:#{line}:in Object.call",
+    assert_equal("#{__FILE__}:#{line}:in call",
                  exception.backtrace.first)
   end
 end
@@ -416,7 +416,7 @@ assert('Method call in rescue') do
   rescue => exception
     [3].each do
     end
-    assert_equal("#{__FILE__}:#{line}:in Object.call",
+    assert_equal("#{__FILE__}:#{line}:in call",
                  exception.backtrace.first)
   end
 end

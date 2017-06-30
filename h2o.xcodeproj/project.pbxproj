@@ -255,6 +255,7 @@
 		10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FEF24C1D6FC8E200E11B1D /* gkc.c */; };
 		10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */ = {isa = PBXBuildFile; fileRef = 10FEF24D1D6FC8E200E11B1D /* gkc.h */; };
 		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
+		7D0285C91EF422D40094292B /* sleep.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0285C81EF422D40094292B /* sleep.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
@@ -702,7 +703,6 @@
 		109EEFDD1D77B350001F11D1 /* 50mruby-acl.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50mruby-acl.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		109EEFDE1D77B350001F11D1 /* 40server-push-multiple.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40server-push-multiple.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		109EEFDF1D77B350001F11D1 /* 50mruby-dos-detector.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50mruby-dos-detector.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		109EEFE01D77B350001F11D1 /* 50reverse-dont-add-x-forwarded-headers.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-dont-add-x-forwarded-headers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80dup-host-headers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		109EEFE21D77B350001F11D1 /* 80invalid-h2-chars-in-headers.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80invalid-h2-chars-in-headers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		109EEFE31D77B350001F11D1 /* 90live-sni.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "90live-sni.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -814,6 +814,7 @@
 		10FEF24D1D6FC8E200E11B1D /* gkc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = gkc.h; sourceTree = "<group>"; };
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
+		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
@@ -845,6 +846,13 @@
 		E9708B061E49A3130029E0A5 /* sha256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha256.c; sourceTree = "<group>"; };
 		E9708B071E49A3130029E0A5 /* tassert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tassert.h; sourceTree = "<group>"; };
 		E9708B1B1E49A3480029E0A5 /* handy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = handy.h; sourceTree = "<group>"; };
+		E9BC76BF1EE3D71000EB7A09 /* 40redis-session-resumption.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40redis-session-resumption.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9BC76C01EE3D8A100EB7A09 /* 40server-push-attrs.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40server-push-attrs.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9BC76C11EE3D9A900EB7A09 /* 50compress-hint.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50compress-hint.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9BC76C21EE3DAA900EB7A09 /* 50reverse-proxy-added-headers.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-added-headers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9BC76C31EE4AA4600EB7A09 /* 50reverse-proxy-preserve-case.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-preserve-case.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9BC76C41EE4AA9700EB7A09 /* 50reverse-proxy-session-resumption.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-session-resumption.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80graceful-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -944,6 +952,7 @@
 				08E9CC4D1E41F6660049DD26 /* embedded.c.h */,
 				100A55141C30C5BC00C4E3E0 /* chunked.c */,
 				100A550E1C2BB15100C4E3E0 /* http_request.c */,
+				7D0285C81EF422D40094292B /* sleep.c */,
 			);
 			path = mruby;
 			sourceTree = "<group>";
@@ -1624,8 +1633,10 @@
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
 				1070E1641B451D43001CCAFA /* 40proxy-protocol.t */,
+				E9BC76BF1EE3D71000EB7A09 /* 40redis-session-resumption.t */,
 				104B9A311A59D7A2009EEE64 /* 40running-user.t */,
 				108215081AB14B1100D27E66 /* 40server-push.t */,
+				E9BC76C01EE3D8A100EB7A09 /* 40server-push-attrs.t */,
 				109EEFDE1D77B350001F11D1 /* 40server-push-multiple.t */,
 				107D4D501B58B342004A9B21 /* 40session-ticket.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
@@ -1635,6 +1646,7 @@
 				10AA2EB11A931409004322AC /* 50access-log.t */,
 				109EEFD91D77B336001F11D1 /* 50chunked-encoding-proxying.t */,
 				107086741B79A08D002B8F18 /* 50compress.t */,
+				E9BC76C11EE3D9A900EB7A09 /* 50compress-hint.t */,
 				109EEFDA1D77B336001F11D1 /* 50config-tag.t */,
 				106C23021C06AB2F00405689 /* 50errordoc.t */,
 				104B9A541A60773E009EEE64 /* 50expires.t */,
@@ -1657,17 +1669,20 @@
 				10AA2EA81A8DAFD4004322AC /* 50redirect.t */,
 				108215061AAD41A000D27E66 /* 50reverse-proxy */,
 				108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */,
-				108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */,
+				E9BC76C21EE3DAA900EB7A09 /* 50reverse-proxy-added-headers.t */,
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
-				109EEFE01D77B350001F11D1 /* 50reverse-dont-add-x-forwarded-headers.t */,
-				10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */,
-				10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */,
+				108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */,
 				10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */,
+				E9BC76C31EE4AA4600EB7A09 /* 50reverse-proxy-preserve-case.t */,
+				10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */,
+				E9BC76C41EE4AA9700EB7A09 /* 50reverse-proxy-session-resumption.t */,
+				10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
 				109EEFE51D77B36C001F11D1 /* 50servername.t */,
 				10C45D571CFE9BB60096DB06 /* 50status.t */,
 				10C45D4D1CFD15890096DB06 /* 50throttle-response.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
+				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
 				109EEFE21D77B350001F11D1 /* 80invalid-h2-chars-in-headers.t */,
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				1092E0011BEB1DDC001074BF /* 80issues579.t */,
@@ -2332,6 +2347,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7D0285C91EF422D40094292B /* sleep.c in Sources */,
 				E9708B7C1E52C83D0029E0A5 /* status.c in Sources */,
 				E9708B7D1E52C8430029E0A5 /* durations.c in Sources */,
 				E9708B3F1E52C7860029E0A5 /* send_text.c in Sources */,

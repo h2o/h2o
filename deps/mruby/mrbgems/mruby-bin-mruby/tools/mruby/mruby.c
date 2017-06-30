@@ -236,7 +236,10 @@ main(int argc, char **argv)
     mrb_gc_arena_restore(mrb, ai);
     mrbc_context_free(mrb, c);
     if (mrb->exc) {
-      if (!mrb_undef_p(v)) {
+      if (mrb_undef_p(v)) {
+        mrb_p(mrb, mrb_obj_value(mrb->exc));
+      }
+      else {
         mrb_print_error(mrb);
       }
       n = -1;

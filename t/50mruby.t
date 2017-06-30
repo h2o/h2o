@@ -421,7 +421,7 @@ EOT
                 map { my $l = $_; chomp $l; $l } <$fh>;
             };
             @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
-            is $log[$#log], "[h2o_mruby] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected: hoge (RuntimeError)";
+            is $log[$#log], "[h2o_mruby] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected:hoge (RuntimeError)";
         };
     };
     $tester->("flow style", <<"EOT", 5);
@@ -441,6 +441,60 @@ hosts:
             raise "hoge"
           end
 EOT
+};
+
+subtest 'namespace' => sub {
+    subtest 'modules and classes are defined under top_self (not under Kernel)' => sub {
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          module Foo
+          end
+          class Bar
+          end
+          proc {|env|
+            [200, {}, ["#{Foo.name},#{Bar.name}"]]
+          }
+EOT
+        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $body, "Foo,Bar";
+    };
+    subtest 'require works as the same' => sub {
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          \$LOAD_PATH << '@{[ ASSETS_DIR . '/mruby' ]}'
+          require 'namespace'
+          proc {|env|
+            [200, {}, ["#{Foo.name},#{Bar.name}"]]
+          }
+EOT
+        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $body, "Foo,Bar";
+    };
+    subtest 'self must be top_self' => sub {
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            [200, {}, [self.to_s]]
+          }
+EOT
+        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $body, "main";
+    };
 };
 
 done_testing();

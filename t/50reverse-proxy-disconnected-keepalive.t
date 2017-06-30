@@ -12,8 +12,9 @@ plan skip_all => 'Starlet not found'
 
 subtest "tcp" => sub {
     my $port = empty_port();
-    my $upstream = spawn_upstream($port);
-    doit("127.0.0.1:$port");
+    my $addr = "127.0.0.1:$port";
+    my $upstream = spawn_upstream($addr);
+    doit($addr);
 };
 
 subtest "unix-socket" => sub {
@@ -67,8 +68,8 @@ sub spawn_upstream {
             ASSETS_DIR . "/upstream.psgi"
         ],
         is_ready => sub {
-            if ($addr =~ /^\d+$/) {
-                check_port($addr);
+            if ($addr =~ /:(\d+)$/) {
+                check_port($1);
             } else {
                 !! -e $addr;
             }
