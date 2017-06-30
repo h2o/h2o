@@ -873,6 +873,10 @@ typedef struct st_h2o_req_overrides_t {
      */
     unsigned use_proxy_protocol : 1;
     /**
+     * whether the proxied request should preserve host
+     */
+    unsigned proxy_preserve_host : 1;
+    /**
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
     h2o_headers_command_t *headers_cmds;
@@ -1814,13 +1818,17 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint64_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
+    h2o_iovec_t reverse_path; /* optional */
+    /* I don't know how to detect if handler registered on same path twice, so temporarily use these switches to do so. */
+    unsigned registered_as_url : 1;
+    unsigned registered_as_backends : 1;
     SSL_CTX *ssl_ctx; /* optional */
 } h2o_proxy_config_vars_t;
 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */

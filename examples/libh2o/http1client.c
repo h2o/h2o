@@ -29,7 +29,7 @@ static const char *url;
 static int cnt_left = 3;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head);
+                                          int *method_is_head, h2o_url_t *location_rewrite_url);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers);
 
@@ -65,7 +65,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         }
         h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect);
     } else {
-        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, on_connect);
+        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, on_connect, NULL);
     }
 }
 
@@ -117,7 +117,7 @@ h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, i
 }
 
 h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                   int *method_is_head)
+                                   int *method_is_head, h2o_url_t *dummy)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
