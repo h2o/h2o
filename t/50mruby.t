@@ -100,7 +100,7 @@ EOT
                 my ($proto, $port, $curl) = @_;
                 my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/echo`;
                 if ($curl =~ /http2/) {
-                    like $content, qr{"SERVER_PROTOCOL":"HTTP/2\.0"}, "SERVER_PROTOCOL";
+                    like $content, qr{"SERVER_PROTOCOL":"HTTP/2"}, "SERVER_PROTOCOL";
                 } else {
                     like $content, qr{"SERVER_PROTOCOL":"HTTP/1\.1"}, "SERVER_PROTOCOL";
                 }

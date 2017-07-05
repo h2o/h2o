@@ -441,7 +441,8 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     h2o_mruby_shared_context_t *shared = generator->ctx->shared;
     mrb_state *mrb = shared->mrb;
     mrb_value env = mrb_hash_new_capa(mrb, 16);
-    char http_version[] = "HTTP/1.0";
+    char http_version[sizeof("HTTP/1.0")];
+    size_t http_version_sz;
 
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_REQUEST_METHOD),
@@ -460,10 +461,9 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                                                       : mrb_str_new_lit(mrb, ""));
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_NAME),
                  mrb_str_new(mrb, generator->req->hostconf->authority.host.base, generator->req->hostconf->authority.host.len));
-    http_version[5] = '0' + (0xff & (generator->req->version >> 8));
-    http_version[7] = '0' + (0xff & generator->req->version);
+    http_version_sz = h2o_stringify_protocol_version(http_version, generator->req->version);
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_PROTOCOL),
-		 mrb_str_new(mrb, http_version, sizeof(http_version) - 1));
+                 mrb_str_new(mrb, http_version, http_version_sz));
     {
         mrb_value h, p;
         stringify_address(generator->req->conn, generator->req->conn->callbacks->get_sockname, mrb, &h, &p);
