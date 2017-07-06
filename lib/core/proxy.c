@@ -618,8 +618,8 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
             self->src_req->_write_req_chunk.cb = frontend_write_req_chunk;
             self->src_req->_write_req_chunk.priv = self;
         } else {
-            self->up_req.bufs[1] = self->src_req->entity;
-            *reqbufcnt = 2;
+            self->up_req.bufs[2] = self->src_req->entity;
+            *reqbufcnt = 3;
         }
     }
     self->client->informational_cb = on_1xx;

@@ -429,13 +429,16 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-void write_chunk_to_socket(struct st_h2o_http1client_private_t *client, h2o_iovec_t headers, h2o_iovec_t chunk, h2o_socket_cb cb)
+void write_chunk_to_socket(struct st_h2o_http1client_private_t *client, h2o_iovec_t headers_top, h2o_iovec_t headers_bottom, h2o_iovec_t chunk, h2o_socket_cb cb)
 {
     int i = 0;
-    h2o_iovec_t chunk_and_reqbufs[4];
+    h2o_iovec_t chunk_and_reqbufs[5];
 
-    if (headers.base)
-        chunk_and_reqbufs[i++] = headers;
+    if (headers_top.base)
+        chunk_and_reqbufs[i++] = headers_top;
+    if (headers_bottom.base)
+        chunk_and_reqbufs[i++] = headers_bottom;
+
 
     chunk_and_reqbufs[i].len = snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zX\r\n", chunk.len);
     chunk_and_reqbufs[i++].base = client->_chunk_len_str;
@@ -480,7 +483,7 @@ int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t req_chunk, int is_en
             on_send_request(sock, NULL);
             return 0;
         }
-        write_chunk_to_socket(client, h2o_iovec_init(NULL, 0),
+        write_chunk_to_socket(client, h2o_iovec_init(NULL, 0), h2o_iovec_init(NULL, 0),
                               h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size),
                               on_req_body_done);
     } else {
@@ -528,8 +531,8 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
         h2o_socket_write(client->super.sock, reqbufs, reqbufcnt, on_req_body_done);
     } else {
         if (client->_is_chunked) {
-            assert(reqbufcnt == 2);
-            write_chunk_to_socket(client, reqbufs[0], reqbufs[1], on_send_request);
+            assert(reqbufcnt == 3);
+            write_chunk_to_socket(client, reqbufs[0], reqbufs[1], reqbufs[2], on_send_request);
         } else {
             h2o_socket_write(client->super.sock, reqbufs, reqbufcnt, on_send_request);
         }
