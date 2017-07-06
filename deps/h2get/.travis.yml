@@ -1,0 +1,29 @@
+dist: trusty
+sudo: required
+
+language: c
+
+before_install:
+  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+  - sudo apt-get update --yes
+  - sudo apt-get install --yes -f gcc-6 g++-6
+  - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 60 --slave /usr/bin/g++ g++ /usr/bin/g++-6
+
+before_script:
+
+script:
+  # OpenSSL 1.0.2
+  - mkdir -p openssl
+  - export OPENSSL_PREFIX="$PWD/openssl"
+  - curl -O https://www.openssl.org/source/openssl-1.0.2k.tar.gz
+  - tar -xf openssl-1.0.2k.tar.gz
+  - cd openssl-1.0.2k
+  - ./config --prefix="$OPENSSL_PREFIX" --openssldir="${OPENSSL_PREFIX}/etc/ssl" --libdir=lib shared zlib-dynamic
+  - make depend
+  - make
+  - make install
+  - cd ..
+  # H2GET
+  - cmake -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" .
+  - make
+  - ./h2get firefox.rb www.fastly.com

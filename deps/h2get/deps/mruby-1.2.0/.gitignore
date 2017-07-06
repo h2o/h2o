@@ -1,0 +1,25 @@
+# /
+*.bak
+*.d
+*.o
+/benchmark/**/*.dat
+/benchmark/*.pdf
+/benchmark/*.png
+*.orig
+*.pdb
+*.rej
+*.sav
+*.swp
+*.tmp
+*~
+.DS_Store
+.ccmalloc
+.svn
+/.git
+cscope.out
+/src/y.tab.c
+/bin
+/build
+/mruby-source-*.gem
+doc/api
+.yardoc

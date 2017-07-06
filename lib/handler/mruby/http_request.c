@@ -273,7 +273,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_url_t *dummy)
+                                          int *method_is_head, h2o_http1client_write_req_chunk_done *req_body_done,
+                                          void **req_body_done_ctx, h2o_iovec_t *cur_body, h2o_url_t *dummy)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -412,7 +413,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     ctx->refs.request = h2o_mruby_create_data_instance(
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
     h2o_http1client_connect(&ctx->client, ctx, &ctx->ctx->shared->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
-                            url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect, NULL);
+                            url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect, 0, NULL);
 
     return ctx->refs.request;
 }

@@ -1,0 +1,26 @@
+language: c
+
+sudo: false
+
+matrix:
+  include:
+    - os: linux
+      sudo: 9000
+    - os: osx
+      osx_image: xcod6.4
+
+addons:
+  apt:
+    packages:
+      - gperf
+
+env: MRUBY_CONFIG=travis_config.rb
+script: "./minirake all test"
+
+notifications:
+  # Update mruby-head installed on Travis CI so other projects can test against it.
+  webhooks:
+    urls:
+      - "https://rubies.travis-ci.org/rebuild/mruby-head"
+    on_success: always
+    on_failure: never
