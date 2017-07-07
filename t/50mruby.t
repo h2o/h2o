@@ -95,6 +95,17 @@ EOT
         like $body, qr{"rack.url_scheme":"http"}, "url_scheme";
         like $body, qr{"SERVER_SOFTWARE":"h2o/[0-9]+\.[0-9]+\.[0-9]+}, "SERVER_SOFTWARE";
     };
+    subtest "protocol" => sub {
+        run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/echo`;
+                if ($curl =~ /http2/) {
+                    like $content, qr{"SERVER_PROTOCOL":"HTTP/2"}, "SERVER_PROTOCOL";
+                } else {
+                    like $content, qr{"SERVER_PROTOCOL":"HTTP/1\.1"}, "SERVER_PROTOCOL";
+                }
+            });
+    };
     subtest "headers" => sub {
         ($headers, $body) = $fetch->("/headers/");
         like $headers, qr{^foo: 123\r$}mi;

@@ -252,6 +252,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_NAME, "SERVER_NAME");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_ADDR, "SERVER_ADDR");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_PORT, "SERVER_PORT");
+    SET_LITERAL(H2O_MRUBY_LIT_SERVER_PROTOCOL, "SERVER_PROTOCOL");
     SET_LITERAL(H2O_MRUBY_LIT_CONTENT_LENGTH, "CONTENT_LENGTH");
     SET_LITERAL(H2O_MRUBY_LIT_REMOTE_ADDR, "REMOTE_ADDR");
     SET_LITERAL(H2O_MRUBY_LIT_REMOTE_PORT, "REMOTE_PORT");
@@ -430,6 +431,8 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     h2o_mruby_shared_context_t *shared = generator->ctx->shared;
     mrb_state *mrb = shared->mrb;
     mrb_value env = mrb_hash_new_capa(mrb, 16);
+    char http_version[sizeof("HTTP/1.0")];
+    size_t http_version_sz;
 
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_REQUEST_METHOD),
@@ -448,6 +451,9 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                                                       : mrb_str_new_lit(mrb, ""));
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_NAME),
                  mrb_str_new(mrb, generator->req->hostconf->authority.host.base, generator->req->hostconf->authority.host.len));
+    http_version_sz = h2o_stringify_protocol_version(http_version, generator->req->version);
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_PROTOCOL),
+                 mrb_str_new(mrb, http_version, http_version_sz));
     {
         mrb_value h, p;
         stringify_address(generator->req->conn, generator->req->conn->callbacks->get_sockname, mrb, &h, &p);
