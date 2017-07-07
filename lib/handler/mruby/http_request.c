@@ -492,7 +492,7 @@ h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mr
 
 void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator)
 {
-    assert(ctx->shortcut.generator = generator);
+    assert(ctx->shortcut.generator == generator);
     ctx->shortcut.notify_cb = NULL;
     ctx->shortcut.generator = NULL;
 }
