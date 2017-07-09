@@ -165,7 +165,8 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
             }
             targets.size++;
         }
-        h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */);
+        h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */,
+                                       h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose);
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);

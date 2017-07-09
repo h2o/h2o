@@ -114,7 +114,9 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
 /**
  * initializes a socket pool with specified target vector
  */
-void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity);
+void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
+                                    h2o_socketpool_lb_initializer lb_init, h2o_socketpool_lb_selector lb_selector,
+                                    h2o_socketpool_lb_dispose_cb lb_dispose);
 /**
  * initializes a target by specified address
  */
