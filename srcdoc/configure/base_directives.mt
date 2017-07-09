@@ -170,7 +170,7 @@ The <code style="font-weight: bold;">ssl</code> attribute must be defined as a m
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
 Default is <code>TLSv1</code>
 </dd>
-<dt id="min-version">min-verison:</dt>
+<dt id="min-version">min-version:</dt>
 <dd>
 synonym of <code>minimum-version</code> (introduced in version 2.2)
 </dd>
