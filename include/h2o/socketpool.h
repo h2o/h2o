@@ -57,6 +57,13 @@ typedef struct st_h2o_socketpool_target_t {
 
 typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
 
+typedef struct st_h2o_socketpool_target_status_t {
+    size_t request_count; /* synchoronus operations should be used, counting requests on the fly */
+    h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+} h2o_socketpool_target_status_t;
+
+typedef H2O_VECTOR(h2o_socketpool_target_status_t) h2o_socketpool_target_status_vector_t;
+
 typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried);
 
 typedef void (*h2o_socketpool_lb_initializer)(h2o_socketpool_target_vector_t *targets, void **data);
@@ -79,7 +86,7 @@ typedef struct st_h2o_socketpool_t {
     struct {
         size_t count; /* synchronous operations should be used to access the variable */
         pthread_mutex_t mutex;
-        h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+        h2o_socketpool_target_status_vector_t status;
     } _shared;
 
     /* vars used by load balancing, modified by multiple threads */

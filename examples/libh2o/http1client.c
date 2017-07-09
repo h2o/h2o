@@ -31,7 +31,7 @@ static int cnt_left = 3;
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_url_t *location_rewrite_url);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers);
+                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
 
 static void start_request(h2o_http1client_ctx_t *ctx)
 {
@@ -92,7 +92,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 }
 
 h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                h2o_header_t *headers, size_t num_headers)
+                                h2o_header_t *headers, size_t num_headers, int rlen)
 {
     size_t i;
 
