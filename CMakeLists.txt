@@ -254,6 +254,7 @@ SET(LIB_SOURCE_FILES
     lib/common/time.c
     lib/common/timeout.c
     lib/common/url.c
+    lib/common/balancer/roundrobin.c
 
     lib/core/config.c
     lib/core/configurator.c
