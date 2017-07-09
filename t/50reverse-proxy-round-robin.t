@@ -15,14 +15,14 @@ my $upstream_port1 = empty_port();
 my $upstream_port2 = empty_port();
 
 my $guard1 = spawn_server(
-    argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port1, ASSETS_DIR . "/upstream.psgi" ],
+    argv     => [ qw(plackup -s Starlet --max-keepalive-reqs=5 --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port1, ASSETS_DIR . "/upstream.psgi" ],
     is_ready =>  sub {
         check_port($upstream_port1);
     },
 );
 
 my $guard2 = spawn_server(
-    argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port2, ASSETS_DIR . "/upstream.psgi" ],
+    argv     => [ qw(plackup -s Starlet --max-keepalive-reqs=5 --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port2, ASSETS_DIR . "/upstream.psgi" ],
     is_ready =>  sub {
         check_port($upstream_port2);
     },
