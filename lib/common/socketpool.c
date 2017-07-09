@@ -206,9 +206,11 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
     common_init(pool, targets, capacity, h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose);
 }
 
-void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity) {
+void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
+                                    h2o_socketpool_lb_initializer lb_init, h2o_socketpool_lb_selector lb_selector,
+                                    h2o_socketpool_lb_dispose_cb lb_dispose) {
     assert(targets.size > 0);
-    common_init(pool, targets, capacity, h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose);
+    common_init(pool, targets, capacity, lb_init, lb_selector, lb_dispose);
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
