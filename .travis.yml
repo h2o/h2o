@@ -2,7 +2,7 @@ language: cpp
 
 cache: ccache
 
-php: '7.0'
+php: '5.4.x'
 
 compiler: gcc
 
