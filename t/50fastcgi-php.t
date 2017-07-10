@@ -11,9 +11,14 @@ plan skip_all => 'curl not found'
 plan skip_all => 'php-cgi not found'
     unless prog_exists('php-cgi');
 
+my $php_cgi = `which php-cgi`;
 diag("php-cgi: $php_cgi");
+$php_cgi = `php-cgi --version`;
+diag("php-cgi: $php_cgi");
+
 # spawn h2o
 my $server = spawn_h2o(<< "EOT");
+error-log: /tmp/thelog
 file.custom-handler:
   extension: .php
   fastcgi.spawn: "exec php-cgi"
@@ -25,9 +30,11 @@ hosts:
 EOT
 
 my $resp = `curl --silent http://127.0.0.1:$server->{port}/index.txt`;
+diag("the log: " . `cat /tmp/thelog`);
 is $resp, "hello\n", 'ordinary file';
 
 $resp = `curl --silent http://127.0.0.1:$server->{port}/hello.php`;
+diag("the log: " . `cat /tmp/thelog`);
 is $resp, 'hello world', 'php';
 
 subtest 'server-push' => sub {
@@ -36,6 +43,7 @@ subtest 'server-push' => sub {
     my $doit = sub {
         my ($proto, $port) = @_;
         my $resp = `nghttp -n --stat '$proto://127.0.0.1:$port/hello.php?link=<index.js>\%3b\%20rel=preload'`;
+	diag("the log: " . `cat /tmp/thelog`);
         like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/hello\.php\?}is, $proto;
     };
     $doit->('http', $server->{port});
