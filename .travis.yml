@@ -2,8 +2,6 @@ language: cpp
 
 cache: ccache
 
-php: '5.4.x'
-
 compiler: gcc
 
 addons:
@@ -21,7 +19,7 @@ matrix:
         - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
         - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
         - sudo apt-get --yes update
-        - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev wget
+        - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev wget php5-cgi
         - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
         - $CXX --version
           # for speed, pre-install deps installed in `before_script` section as ubuntu packages
