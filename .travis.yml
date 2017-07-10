@@ -2,8 +2,9 @@ language: cpp
 
 cache: ccache
 
-compiler:
-  - gcc
+php: system
+
+compiler: gcc
 
 addons:
   hosts:
