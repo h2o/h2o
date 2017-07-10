@@ -8,14 +8,16 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+my $php_cgi = `phpenv which php-cgi || echo 'php-cgi'`;
 plan skip_all => 'php-cgi not found'
-    unless prog_exists('php-cgi');
+    unless prog_exists($php_cgi);
 
+diag("php-cgi: $php_cgi");
 # spawn h2o
 my $server = spawn_h2o(<< "EOT");
 file.custom-handler:
   extension: .php
-  fastcgi.spawn: "exec php-cgi"
+  fastcgi.spawn: "exec $php_cgi"
 hosts:
   default:
     paths:
