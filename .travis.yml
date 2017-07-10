@@ -24,7 +24,6 @@ matrix:
         - $CXX --version
           # for speed, pre-install deps installed in `before_script` section as ubuntu packages
         - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
-        - sudo ln -s /home/travis/.phpenv/shims/php-cgi /usr/bin/php-cgi
       before_script: &bs
         # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
         - curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
