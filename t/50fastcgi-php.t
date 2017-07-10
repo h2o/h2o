@@ -10,6 +10,8 @@ plan skip_all => 'curl not found'
     unless prog_exists('curl');
 plan skip_all => 'php-cgi not found'
     unless prog_exists('php-cgi');
+plan skip_all => 'Not running on trusty'
+    if defined($ENV{UBUNTU_TRUSTY});
 
 my $php_cgi = `which php-cgi`;
 diag("php-cgi: $php_cgi");

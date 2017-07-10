@@ -54,6 +54,8 @@ matrix:
     - os: linux
       sudo: required
       dist: trusty
+      env:
+        - UBUNTU_TRUSTY=1
       php: '7.x'
       before_install: *bi
       before_script: *bs
