@@ -57,7 +57,8 @@ matrix:
       env:
         - UBUNTU_TRUSTY=1
       php: '7.x'
-      before_install: *bi
+      before_install:
+        <<: *bi
         - sudo add-apt-repository --yes ppa:llvm-toolchain-trusty
         - sudo apt-get install -y clang-5.0
       before_script: *bs
