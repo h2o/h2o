@@ -52,6 +52,9 @@ matrix:
         - make check
         - sudo make check-as-root
     - os: linux
+      apt:
+        sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-trusty-4.0']
+        packages: ['clang-4.0' , 'g++-6']
       sudo: required
       dist: trusty
       env:
@@ -59,4 +62,9 @@ matrix:
       php: '7.x'
       before_install: *bi
       before_script: *bs
-      script: *s
+      script:
+        - CC=clang CXX=clang++ cmake -DBUILD_FUZZERS=ON -DWITH_MRUBY=ON .
+        - make all
+        - make check
+        - sudo make check-as-root
+
