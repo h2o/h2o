@@ -58,9 +58,16 @@ matrix:
         - UBUNTU_TRUSTY=1
       php: '7.x'
       before_install:
-        <<: *bi
         - sudo add-apt-repository --yes ppa:llvm-toolchain-trusty
         - sudo apt-get install -y clang-5.0
+        - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+        - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
+        - sudo apt-get --yes update
+        - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev wget php5-cgi
+        - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
+        - $CXX --version
+          # for speed, pre-install deps installed in `before_script` section as ubuntu packages
+        - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
       before_script: *bs
       script:
         - CC=clang-5.0 CXX=clang++-5.0 cmake -DBUILD_FUZZER=ON -DWITH_MRUBY=ON .
