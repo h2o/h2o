@@ -61,6 +61,7 @@ matrix:
         - curl -L http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
         - sudo apt-add-repository -y 'deb http://llvm.org/apt/trusty llvm-toolchain-trusty-4.0 main'
         - sudo apt-add-repository -y 'deb http://llvm.org/apt/trusty llvm-toolchain-trusty main'
+        - sudo apt-get --yes update
         - sudo apt-get install -y clang-4.0
         - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
         - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
