@@ -77,4 +77,6 @@ matrix:
         - make all
         - make check
         - sudo make check-as-root
-
+        - ASAN_OPTIONS=detect_leaks=0 ./h2o-fuzzer-http1 -runs=1 -max_len=$((16 * 1024 )) fuzz/http1-corpus
+        - ASAN_OPTIONS=detect_leaks=0 ./h2o-fuzzer-http2 -runs=1 -max_len=$((16 * 1024 )) fuzz/http2-corpus
+        - ASAN_OPTIONS=detect_leaks=0 ./h2o-fuzzer-url -runs=1 -max_len=$((16 * 1024 )) fuzz/url-corpus
