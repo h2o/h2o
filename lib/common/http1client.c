@@ -440,7 +440,7 @@ void write_chunk_to_socket(struct st_h2o_http1client_private_t *client, h2o_iove
         chunk_and_reqbufs[i++] = headers_bottom;
 
 
-    chunk_and_reqbufs[i].len = snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zX\r\n", chunk.len);
+    chunk_and_reqbufs[i].len = snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zx\r\n", chunk.len);
     chunk_and_reqbufs[i++].base = client->_chunk_len_str;
 
     if (chunk.base != NULL)
