@@ -52,18 +52,17 @@ matrix:
         - make check
         - sudo make check-as-root
     - os: linux
-      apt:
-        sources: ['ubuntu-toolchain-r-test', 'llvm-toolchain-trusty-4.0']
-        packages: ['clang-4.0' , 'g++-6']
       sudo: required
       dist: trusty
       env:
         - UBUNTU_TRUSTY=1
       php: '7.x'
       before_install: *bi
+        - sudo add-apt-repository --yes ppa:llvm-toolchain-trusty
+        - sudo apt-get install -y clang-5.0
       before_script: *bs
       script:
-        - CC=clang CXX=clang++ cmake -DBUILD_FUZZERS=ON -DWITH_MRUBY=ON .
+        - CC=clang-5.0 CXX=clang++-5.0 cmake -DBUILD_FUZZER=ON -DWITH_MRUBY=ON .
         - make all
         - make check
         - sudo make check-as-root
