@@ -58,8 +58,10 @@ matrix:
         - UBUNTU_TRUSTY=1
       php: '7.x'
       before_install:
-        - sudo add-apt-repository --yes ppa:llvm-toolchain-trusty
-        - sudo apt-get install -y clang-5.0
+        - curl -L http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
+        - sudo apt-add-repository -y 'deb http://llvm.org/apt/trusty llvm-toolchain-trusty-4.0 main'
+        - sudo apt-add-repository -y 'deb http://llvm.org/apt/trusty llvm-toolchain-trusty main'
+        - sudo apt-get install -y clang-4.0
         - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
         - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
         - sudo apt-get --yes update
@@ -70,7 +72,7 @@ matrix:
         - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
       before_script: *bs
       script:
-        - CC=clang-5.0 CXX=clang++-5.0 cmake -DBUILD_FUZZER=ON -DWITH_MRUBY=ON .
+        - CC=clang-4.0 CXX=clang++-4.0 cmake -DBUILD_FUZZER=ON -DWITH_MRUBY=ON .
         - make all
         - make check
         - sudo make check-as-root
