@@ -78,6 +78,6 @@ matrix:
         - make all
         - make check
         - sudo make check-as-root
-        - ./h2o-fuzzer-http1 -runs=1 -max_len=$((16 * 1024 )) fuzz/http1-corpus
-        - ./h2o-fuzzer-http2 -runs=1 -max_len=$((16 * 1024 )) fuzz/http2-corpus
-        - ./h2o-fuzzer-url -runs=1 -max_len=$((16 * 1024 )) fuzz/url-corpus
+        - ./h2o-fuzzer-http1 -close_fd_mask=3 -runs=1 -max_len=$((16 * 1024 )) fuzz/http1-corpus < /dev/null
+        - ./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=$((16 * 1024 )) fuzz/http2-corpus < /dev/null
+        - ./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=$((16 * 1024 )) fuzz/url-corpus < /dev/null
