@@ -10,8 +10,6 @@ plan skip_all => 'curl not found'
     unless prog_exists('curl');
 plan skip_all => 'php-cgi not found'
     unless prog_exists('php-cgi');
-plan skip_all => 'Not running on trusty'
-    if defined($ENV{UBUNTU_TRUSTY});
 
 # spawn h2o
 my $server = spawn_h2o(<< "EOT");

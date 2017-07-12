@@ -12,8 +12,6 @@ plan skip_all => 'user: nobody does not exist'
     unless getpwnam 'nobody';
 plan skip_all => 'user: daemon does not exist'
     unless getpwnam 'daemon';
-plan skip_all => 'Not running on trusty'
-    if defined($ENV{UBUNTU_TRUSTY});
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
