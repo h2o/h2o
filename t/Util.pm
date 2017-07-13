@@ -78,6 +78,7 @@ sub exec_mruby_unittest {
 	my $k = 0;
     $test_dir->visit(sub {
         my ($path) = @_;
+        return unless $path->parent eq $test_dir;
         return unless $path =~ /\.rb$/;
 
         my $fn = "$bin $path";
