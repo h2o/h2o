@@ -55,8 +55,7 @@ matrix:
       sudo: required
       dist: trusty
       env:
-        - UBUNTU_TRUSTY=1
-        - ASAN_OPTIONS=detect_leaks=0 
+        - ASAN_OPTIONS=detect_leaks=0
       php: '7.x'
       before_install:
         - curl -L http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
