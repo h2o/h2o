@@ -56,7 +56,6 @@ matrix:
       dist: trusty
       env:
         - ASAN_OPTIONS=detect_leaks=0
-      php: '7.x'
       before_install:
         - curl -L http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
         - sudo apt-add-repository -y 'deb http://llvm.org/apt/trusty llvm-toolchain-trusty-4.0 main'
@@ -65,12 +64,17 @@ matrix:
         - sudo apt-get install -y clang-4.0
         - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
         - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
+        - sudo add-apt-repository --yes ppa:ondrej/php
         - sudo apt-get --yes update
-        - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev wget php5-cgi
+        - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev wget php7.0-cgi
         - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
         - $CXX --version
           # for speed, pre-install deps installed in `before_script` section as ubuntu packages
         - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
+          # default system php is buggy, make sure we're using the php7 package
+        - sudo rm /usr/bin/php-cgi
+        - sudo ln -s /usr/bin/php-cgi7.0 /usr/bin/php-cgi
+        - sudo rm /home/travis/.phpenv/shims/php-cgi
       before_script: *bs
       script:
         - CC=clang-4.0 CXX=clang++-4.0 cmake -DBUILD_FUZZER=ON -DWITH_MRUBY=ON .
