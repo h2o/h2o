@@ -30,15 +30,46 @@ OUTPUT=\
     configure/access_control.html \
     faq.html \
 
+MAN = configure/quick_start.man \
+      configure/command_options.man \
+      configure/syntax_and_structure.man \
+      configure/base_directives.man \
+      configure/compress_directives.man \
+      configure/http1_directives.man \
+      configure/http2_directives.man \
+      configure/access_log_directives.man \
+      configure/errordoc_directives.man \
+      configure/expires_directives.man \
+      configure/fastcgi_directives.man \
+      configure/file_directives.man \
+      configure/headers_directives.man \
+      configure/mruby_directives.man \
+      configure/proxy_directives.man \
+      configure/redirect_directives.man \
+      configure/reproxy_directives.man \
+      configure/status_directives.man \
+      configure/throttle_response_directives.man \
+      configure/basic_auth.man \
+      configure/cgi.man \
+      configure/mruby.man \
+      configure/dos_detection.man \
+      configure/access_control.man
+
 %.html: %.mt snippets/directive.mt snippets/wrapper.mt
 	../misc/makedoc.pl $< $@
 
-all: mkdir html search/searchindex.js
+%.man: %.mt
+	../misc/makeman.pl $< $@
+
+all: mkdir html search/searchindex.js manpage
 
 mkdir:
 	mkdir -p doc/configure
 
 html: $(OUTPUT)
+
+manpage: $(MAN)
+	cat $(VPATH)/man-snippets/header $(MAN) > h2o.8
 
 search/searchindex.js: html
 	../misc/oktavia/bin/oktavia-mkindex $(patsubst %,-i %,$(OUTPUT)) -m html -u h2 -c 10 -t js -s english
@@ -53,4 +84,6 @@ publish: all
 clean:
 	rm -f $(OUTPUT) search/searchindex.js
 
-.PHONY: mkdir html publish publish-check do-publish
+manpage:
+
+.PHONY: mkdir html publish publish-check do-publish manpage

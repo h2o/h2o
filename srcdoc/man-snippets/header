@@ -1,0 +1,16 @@
+.TH H2O 8
+.SH NAME
+h2o \- the optimized HTTP/1.x, HTTP/2 server
+.SH SYNOPSIS
+.B h2o
+[\fB\-c,\-\-conf\fR \fIFILE\fR]
+[\fB\-m,\-\-mode\fR \fIworker|daemon|master|tests\fR]
+[\fB\-v,\-\-version]
+[\fB\-h,\-\-help]
+.SH DESCRIPTION
+.B h2o
+The optimized HTTP/1.x, HTTP/2 server
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-conf =\fIFILE\fR
+configuration file (default: h2o.conf)
