@@ -29,7 +29,7 @@ sub manformat {
 };
 ?>
 ? if (@title) {
-.SS <?= $title[-1] ?>
+.SH <?= uc $title[-1] ?>
 ? }
 
 ?= manformat($content)

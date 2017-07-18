@@ -31,7 +31,6 @@ OUTPUT=\
     faq.html \
 
 MAN = configure/quick_start.man \
-      configure/command_options.man \
       configure/syntax_and_structure.man \
       configure/base_directives.man \
       configure/compress_directives.man \

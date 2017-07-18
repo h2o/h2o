@@ -32,11 +32,13 @@ $main::context = {
 .PP',
     ),
     example => build_mt(<<'EOT',
-.SH Example. <?= encoded_string($_[0]) ?>
+.PP
+.BR Example:\ 
+.R <?= Text::MicroTemplate::encoded_string($_[0]) ?>
 .PP
 .nf
 .RS
-<?= $_[1] ?>
+<?= Text::MicroTemplate::encoded_string($_[1]) ?>
 .RE
 .fi
 .PP
