@@ -1,0 +1,3928 @@
+.TH H2O 8
+.SH NAME
+h2o \- the optimized HTTP/1.x, HTTP/2 server
+.SH SYNOPSIS
+.B h2o
+[\fB\-c,\-\-conf\fR \fIFILE\fR]
+[\fB\-m,\-\-mode\fR \fIworker|daemon|master|tests\fR]
+[\fB\-v,\-\-version]
+[\fB\-h,\-\-help]
+.SH DESCRIPTION
+.B h2o
+The optimized HTTP/1.x, HTTP/2 server
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-conf =\fIFILE\fR
+configuration file (default: h2o.conf)
+.TP
+.BR \-m ", " \-\-mode =\fI<worker>\fR
+.R Where <worker> specifies one of the following mode:
+.RS
+.RS
+.PP
+-
+.B worker
+.R : invoked process handles incoming connections (default)
+.PP
+-
+.B daemon
+.R : spawns a master process and exits. `error-log` must be configured when using this mode, as all the errors are logged to the file instead of being emitted to STDERR
+.PP
+-
+.B master
+.R : invoked process becomes a master process (using the `share/h2o/start_server` command) and spawns a worker process for handling incoming connections. Users may send SIGHUP to the master process to reconfigure or upgrade the server.
+.PP
+-
+.B test
+.R :   tests the configuration
+.RE
+.RE
+.TP
+.BR \-t ", " \-\-test
+synonym of `--mode=test`
+.TP
+.BR \-v ", " \-\-version
+prints the version number
+.TP
+.BR \-h ", " \-\-help
+print this help
+
+.SH QUICK START
+
+
+
+In order to run the H2O standalone HTTP server, you need to write a configuration file.
+The minimal configuration file looks like as follows.
+
+
+.PP
+.nf
+.RS
+listen:
+  port: 8080
+user: nobody
+hosts:
+  "myhost.example.com":
+    paths:
+      /:
+        file.dir: /path/to/the/public-files
+access-log: /path/to/the/access-log
+error-log: /path/to/the/error-log
+pid-file: /path/to/the/pid-file
+
+.RE
+.fi
+.PP
+
+
+The configuration instructs the server to:
+
+listen to port 8080
+under the privileges of nobody
+serve files under /path/to/the/public-files
+emit access logs to file: /path/to/the/access-log
+emit error logs to /path/to/the/error-log
+store the process id of the server in /path/to/the/pid-file
+
+
+
+
+Enter the command below to start the server.
+
+
+.PP
+.nf
+.RS
+% sudo h2o -m daemon -c /path/to/the/configuration-file
+
+.RE
+.fi
+.PP
+
+
+The command instructs the server to read the configuration file, and start in daemon mode, which dispatches a pair of master and worker processes that serves the HTTP requests.
+
+
+
+To stop the server, send SIGTERM to the server.
+
+
+.PP
+.nf
+.RS
+% sudo kill -TERM `cat /path/to/the/pid-file`
+
+.RE
+.fi
+.PP
+
+Next Step
+
+
+Now that you know how to start and stop the server, the next step is to learn the configuration directives and their structure, or see the configuration examples.
+
+
+
+
+
+
+
+.SH SYNTAX AND STRUCTURE
+
+
+Syntax
+
+
+H2O uses YAML 1.1 as the syntax of its configuration file.
+
+
+Levels of Configuration
+
+
+When using the configuration directives of H2O, it is important to understand that there are four configuration levels: global, host, path, extension.
+
+
+
+Global-level configurations affect the entire server.
+Host-level configurations affect the configuration for the specific hostname (i.e. corresponds to the <VirtualHost> directive of the Apache HTTP Server).
+Path-level configurations only affect the behavior of resources specific to the path.
+
+
+
+Extension-level configuration affect how files with certain extensions are being served.
+For example, it is possible to map files with .php extension to the FastCGI handler running the php-cgi command.
+
+
+
+Consider the following example.
+
+
+.PP
+.nf
+.RS
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: etc/site1.crt
+        key-file: etc/site1.key
+    paths:
+      "/":
+        file.dir: htdocs/site1
+      "/icons":
+        file.dir: icons
+        expires: 1 day
+  "example.com:80":
+    listen:
+      port: 80
+    paths:
+      "/":
+        redirect: "https://example.com/"
+
+.RE
+.fi
+.PP
+
+
+In the example, two host-level configurations exist (under the hosts mapping), each of them listening to different ports.
+The first host listens to port 443 using TLS (i.e. HTTPS) using the specified server certificate and key.
+It has two path-level configurations, one for / and the other for /icons, each of them pointing to different local directories containing the files to be served.
+The latter also has the expires directive set, so that Cache-Control: max-age=864001 header would be sent.
+The second host accepts connections on port 80 (via the plain-text HTTP protocol), and redirects all the requests to the first host using HTTPS.
+
+
+
+Certain configuration directives can be used in more than one levels.  For example, the listen can be used either at the global level or at the host level.
+Expires can be used at all levels.
+On the other hand file.dir can only be used at the path level.
+
+
+Path-level configuration
+
+
+Values of the path-level configuration define the action(s) to be taken when the server processes a request that prefix-matches to the configured paths.
+Each entry of the mapping associated to the paths is evaluated in the order they appear.
+
+
+
+Consider the following example.
+When receiving a request for https://example.com/foo, the file handler is first executed trying to serve a file named /path/to/doc-root/foo as the response.
+In case the file does not exist, then the FastCGI handler is invoked.
+
+
+.PP
+.nf
+.RS
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: etc/site1.crt
+        key-file: etc/site1.key
+    paths:
+      "/":
+        file.dir: /path/to/doc-root
+        fastcgi.connect:
+          port: /path/to/fcgi.sock
+          type: unix
+
+.RE
+.fi
+.PP
+
+
+Starting from version 2.1, it is also possible to define the path-level configuration as a sequence of mappings instead of a single mapping.
+The following example is identical to the previous one.
+Notice the dashes placed before the handler directives.
+
+
+.PP
+.nf
+.RS
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: etc/site1.crt
+        key-file: etc/site1.key
+    paths:
+      "/":
+        - file.dir: /path/to/doc-root
+        - fastcgi.connect:
+            port: /path/to/fcgi.sock
+            type: unix
+
+.RE
+.fi
+.PP
+
+Using YAML Alias
+
+
+H2O resolves YAML aliases before processing the configuration file.
+Therefore, it is possible to use an alias to reduce the redundancy of the configuration file.
+For example, the following configuration reuses the first paths element (that is given an anchor named default_paths) in the following definitions.
+
+.PP
+.nf
+.RS
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: /path/to/example.com.crt
+        key-file:         /path/to/example.com.crt
+    paths: &default_paths
+      "/":
+        file.dir: /path/to/doc-root
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths: *default_paths
+
+.RE
+.fi
+.PP
+
+Using YAML Merge
+
+
+Since version 2.0, H2O recognizes Merge Key Language-Independent Type for YAML™ Version 1.1.
+Users can use the feature to merge an existing mapping against another.
+The following example reuses the TLS configuration of example.com in example.org.
+
+
+.PP
+.nf
+.RS
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl: &default_ssl
+        minimum-version: TLSv1.2
+        cipher-suite: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+        certificate-file: /path/to/example.com.crt
+        key-file:         /path/to/example.com.crt
+    paths:
+      ...
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        <<: *default_ssl
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.crt
+    paths:
+      ...
+
+.RE
+.fi
+.PP
+
+Including Files
+
+
+Starting from version 2.1, it is possible to include a YAML file from the configuration file using !file custom YAML tag.
+The following example extracts the TLS configuration into default_ssl.conf and include it multiple times in h2o.conf.
+
+
+.PP
+.BR Example:\ 
+.R default_ssl.conf
+.PP
+.nf
+.RS
+minimum-version: TLSv1.2
+cipher-suite: ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256
+certificate-file: /path/to/example.com.crt
+key-file:         /path/to/example.com.crt
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR Example:\ 
+.R h2o.conf
+.PP
+.nf
+.RS
+hosts:
+  "example.com":
+    listen:
+      port: 443
+      ssl: !file default_ssl.conf
+    paths:
+      ...
+  "example.org":
+    listen:
+      port: 443
+      ssl:
+        <
+
+.SS Notes:
+.PP
+[1]1 day is equivalent to 86400 seconds
+
+.SH BASE DIRECTIVES
+
+
+
+This document describes the configuration directives common to all the protocols and handlers.
+
+
+.SS hosts
+Maps host:port to the mappings of per-host configs.
+
+.PP
+
+
+The directive specifies the mapping between the authorities (the host or host:port section of an URL) and their configurations.
+The directive is mandatory, and must at least contain one entry.
+
+
+When port is omitted, the entry will match the requests targetting the default ports (i.e. port 80 for HTTP, port 443 for HTTPS) with given hostname.
+Otherwise, the entry will match the requests targetting the specified port.
+
+
+Since version 1.7, a wildcard character * can be used as the first component of the hostname.
+If used, they are matched using the rule defined in RFC 2818 Section 3.1.
+For example, *.example.com will match HTTP requests for both foo.example.com and bar.example.com.
+Note that an exact match is preferred over host definitions using wildcard characters.
+
+
+
+.PP
+.BR Example:\ 
+.R A host redirecting all HTTP requests to HTTPS
+.PP
+.nf
+.RS
+hosts:
+  "www.example.com:80":
+    listen:
+      port: 80
+    paths:
+      "/":
+        redirect: https://www.example.com/
+  "www.example.com:443":
+    listen:
+      port: 443
+      ssl:
+        key-file: /path/to/ssl-key-file
+        certificate-file: /path/to/ssl-certificate-file
+    paths:
+      "/":
+        file.dir: /path/to/doc-root
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS paths
+Mapping of paths and their configurations.
+
+.PP
+
+
+
+The mapping is searched using prefix-match.
+The entry with the longest path is chosen when more than one matching paths were found.
+An 404 Not Found error is returned if no matching paths were found.
+
+.PP
+.BR Example:\ 
+.R Configuration with two paths
+.PP
+.nf
+.RS
+hosts:
+  "www.example.com":
+    listen:
+      port: 80
+    paths:
+      "/":
+        file.dir: /path/to/doc-root
+      "/assets":
+        file.dir: /path/to/assets
+
+.RE
+.fi
+.PP
+
+
+In releases prior to version 2.0, all the path entries are considered as directories.
+When H2O receives a request that exactly matches to an entry in paths that does not end with a slash, the server always returns a 301 redirect that appends a slash.
+
+
+Since 2.0, it depends on the handler of the path whether if a 301 redirect that appends a slash is returned.
+Server administrators can take advantage of this change to define per-path configurations (see the examples in file.file and the FastCGI handler).
+file.dir is an exception that continues to perform the redirection; in case of the example above, access to /assets is redirected to /assets/.
+
+
+.RE
+.RE
+
+.SS listen
+Specifies the port at which the server should listen to.
+
+.PP
+
+
+
+In addition to specifying the port number, it is also possible to designate the bind address or the SSL configuration.
+
+.PP
+.BR Example:\ 
+.R Various ways of using the Listen Directive
+.PP
+.nf
+.RS
+# accept HTTP on port 80 on default address (both IPv4 and IPv6)
+listen: 80
+
+# accept HTTP on 127.0.0.1:8080
+listen:
+  host: 127.0.0.1
+  port: 8080
+
+# accept HTTPS on port 443
+listen:
+  port: 443
+  ssl:
+    key-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+
+# accept HTTPS on port 443 (using PROXY protocol)
+listen:
+  port: 443
+  ssl:
+    key-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+  proxy-protocol: ON
+
+.RE
+.fi
+.PP
+
+Configuration Levels
+
+The directive can be used either at global-level or at host-level.
+At least one listen directive must exist at the global level, or every host-level configuration must have at least one listen directive.
+
+
+Incoming connections accepted by global-level listeners will be dispatched to one of the host-level contexts with the corresponding host:port, or to the first host-level context if none of the contexts were given host:port corresponding to the request.
+
+
+Host-level listeners specify bind addresses specific to the host-level context.
+However it is permitted to specify the same bind address for more than one host-level contexts, in which case hostname-based lookup will be performed between the host contexts that share the address.
+The feature is useful for setting up a HTTPS virtual host using Server-Name Indication (RFC 6066).
+
+.PP
+.BR Example:\ 
+.R Using host-level listeners for HTTPS virtual-hosting
+.PP
+.nf
+.RS
+hosts:
+  "www.example.com:443":
+    listen:
+      port: 443
+      ssl:
+        key-file: /path/to/www_example_com.key
+        certificate-file: /path/to/www_example_com.crt
+    paths:
+      "/":
+        file.dir: /path/to/doc-root_of_www_example_com
+  "www.example.jp:443":
+    listen:
+      port: 443
+      ssl:
+        key-file: /path/to/www_example_jp.key
+        certificate-file: /path/to/www_example_jp.crt
+    paths:
+      "/":
+        file.dir: /path/to/doc-root_of_www_example_jp
+
+.RE
+.fi
+.PP
+
+SSL Attribute
+
+The ssl attribute must be defined as a mapping, and recognizes the following attributes.
+
+
+certificate-file:
+path of the SSL certificate file (mandatory)
+key-file:
+path of the SSL private key file (mandatory)
+minimum-version:
+
+minimum protocol version, should be one of: SSLv2, SSLv3, TLSv1, TLSv1.1, TLSv1.2.
+Default is TLSv1
+
+min-verison:
+
+synonym of minimum-version (introduced in version 2.2)
+
+maximum-version:
+
+maximum protocol version.
+Introduced in version 2.2.
+Default is the maximum protocol version supported by the server.
+
+max-version:
+
+synonym of maximum-version.
+
+cipher-suite:
+list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)
+cipher-preference:
+
+side of the list that should be used for selecting the cipher-suite; should be either of: client, server.
+Default is client.
+
+dh-file:
+
+path of a PEM file containing the Diffie-Hellman parameters to be used.
+Use of the file is recommended for servers using Diffie-Hellman key agreement.
+(optional)
+
+ocsp-update-interval:
+
+interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
+Default is 14400 (4 hours).
+
+ocsp-max-failures:
+
+number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
+Default is 3.
+
+neverbleed:
+
+unless set to OFF, H2O isolates RSA private key operations to an isolated process by using Neverbleed.
+Default is ON.
+
+
+ssl-session-resumption directive is provided for tuning parameters related to session resumption and session tickets.
+
+The Proxy-Protocol Attribute
+
+The proxy-protocol attribute (i.e. the value of the attribute must be either ON or OFF) specifies if the server should recognize the information passed via "the PROXY protocol in the incoming connections.
+The protocol is used by L4 gateways such as AWS Elastic Load Balancing to send peer address to the servers behind the gateways.
+
+
+When set to ON, H2O standalone server tries to parse the first octets of the incoming connections as defined in version 1 of the specification, and if successful, passes the addresses obtained from the protocol to the web applications and the logging handlers.
+If the first octets do not accord with the specification, it is considered as the start of the SSL handshake or as the beginning of an HTTP request depending on whether if the ssl attribute has been used.
+
+
+Default is OFF.
+
+Listening to a Unix Socket
+
+If the type attribute is set to unix, then the port attribute is assumed to specify the path of the unix socket to which the standalone server should bound.
+Also following attributes are recognized.
+
+
+owner
+
+username of the owner of the socket file.
+If omitted, the socket file will be owned by the launching user.
+
+permission
+
+an octal number specifying the permission of the socket file.
+Many operating systems require write permission for connecting to the socket file.
+If omitted, the permission of the socket file will reflect the umask of the calling process.
+
+
+.PP
+.BR Example:\ 
+.R Listening to a Unix Socket accessible only by www-data
+.PP
+.nf
+.RS
+listen:
+  type:       unix
+  port:       /tmp/h2o.sock
+  owner:      www-data
+  permission: 600
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS error-log
+Path of the file to which error logs should be appended.
+
+.PP
+
+
+Default is stderr.
+
+
+If the path starts with |, the rest of the path is considered as a command to which the logs should be piped.
+
+.PP
+.BR Example:\ 
+.R Log errors to file
+.PP
+.nf
+.RS
+error-log: /path/to/error-log-file
+
+.RE
+.fi
+.PP
+
+.PP
+.BR Example:\ 
+.R Log errors through pipe
+.PP
+.nf
+.RS
+error-log: "| rotatelogs /path/to/error-log-file.%Y%m%d 86400"
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+error-log.emit-request-errors
+
+.RE
+.RE
+
+.SS error-log.emit-request-errors
+(since v2.1)
+Sets whether if request-level errors should be emitted to the error log.
+
+.PP
+
+By setting the value to OFF and by using the %{error}x specifier of the access-log directive, it is possible to log request-level errors only to the access log.
+
+.PP
+.BR See\ also:
+access-log
+error-log
+
+.RE
+.RE
+
+.SS handshake-timeout
+Maximum time (in seconds) that can be spent by a connection before it becomes ready to accept an HTTP request.
+
+.PP
+
+Times spent for receiving the PROXY protocol and TLS handshake are counted.
+
+.RE
+.RE
+
+.SS limit-request-body
+Maximum size of request body in bytes (e.g. content of POST).
+
+.PP
+
+
+Default is 1073741824 (1GB).
+
+
+.RE
+.RE
+
+.SS max-connections
+Number of connections to handle at once at maximum.
+
+.PP
+
+.RE
+.RE
+.SS max-delegations
+Limits the number of delegations (i.e. internal redirects using the X-Reproxy-URL header).
+
+.PP
+
+.RE
+.RE
+.SS num-name-resolution-threads
+Maximum number of threads to run for name resolution.
+
+.PP
+
+.RE
+.RE
+
+
+.SS num-ocsp-updaters
+(since v2.0)
+Maximum number of OCSP updaters.
+
+.PP
+
+
+OSCP Stapling is an optimization that speeds up the time spent for establishing a TLS connection.
+In order to staple OCSP information, a HTTP server is required to periodically contact the certificate authority.
+This directive caps the number of the processes spawn for collecting the information.
+
+
+The use and the update interval of OCSP can be configured using the SSL attributes of the listen configuration directive.
+
+
+.RE
+.RE
+
+.SS num-threads
+Number of worker threads.
+
+.PP
+
+
+Default is the number of the processors connected to the system as obtained by getconf NPROCESSORS_ONLN.
+
+
+.RE
+.RE
+
+.SS pid-file
+Name of the file to which the process id of the server should be written.
+
+.PP
+
+
+Default is none.
+
+
+.RE
+.RE
+
+.SS tcp-fastopen
+Size of the queue used for TCP Fast Open.
+
+.PP
+
+
+TCP Fast Open is an extension to the TCP/IP protocol that reduces the time spent for establishing a connection.
+On Linux that support the feature, the default value is 4,096.
+On other platforms the default value is 0 (disabled).
+
+
+.RE
+.RE
+
+.SS send-server-name
+(since v2.0)
+A boolean flag (ON or OFF) indicating whether if the server response header should be sent.
+
+.PP
+
+
+.PP
+.BR See\ also:
+server-name
+
+.RE
+.RE
+
+.SS server-name
+(since v2.0)
+Lets the user override the value of the server response header.
+
+.PP
+
+The default value is h2o/VERSION-NUMBER.
+
+.PP
+.BR See\ also:
+send-server-name
+
+.RE
+.RE
+
+.SS setenv
+(since v2.0)
+Sets one or more environment variables.
+
+.PP
+
+
+Environment variables are a set of key-value pairs containing arbitrary strings, that can be read from applications invoked by the standalone server (e.g. fastcgi handler, mruby handler) and the access logger.
+
+
+The directive is applied from outer-level to inner-level.
+At each level, the directive is applied after the unsetenv directive at the corresponding level is applied.
+
+
+Environment variables are retained through internal redirections.
+
+.PP
+.BR Example:\ 
+.R Setting an environment variable named FOO
+.PP
+.nf
+.RS
+setenv:
+  FOO: "value_of_FOO"
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+unsetenv
+
+.RE
+.RE
+
+.SS unsetenv
+(since v2.0)
+Unsets one or more environment variables.
+
+.PP
+
+
+The directive can be used to have an exception for the paths that have an environment variable set, or can be used to reset variables after an internal redirection.
+
+.PP
+.BR Example:\ 
+.R Setting environment variable for example.com excluding /specific-path
+.PP
+.nf
+.RS
+hosts:
+  example.com:
+    setenv:
+      FOO: "value_of_FOO"
+    paths:
+      /specific-path:
+        unsetenv:
+          - FOO
+      ...
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+setenv
+
+.RE
+.RE
+
+.SS ssl-session-resumption
+Configures cache-based and ticket-based session resumption.
+
+.PP
+
+
+To reduce the latency introduced by the TLS (SSL) handshake, two methods to resume a previous encrypted session are defined by the Internet Engineering Task Force.
+H2O supports both of the methods: cache-based session resumption (defined in RFC 5246) and ticket-based session resumption (defined in RFC 5077).
+
+.PP
+.BR Example:\ 
+.R Various session-resumption configurations
+.PP
+.nf
+.RS
+# use both methods (storing data on internal memory)
+ssl-session-resumption:
+    mode: all
+
+# use both methods (storing data on memcached running at 192.168.0.4:11211)
+ssl-session-resumption:
+    mode: all
+    cache-store: memcached
+    ticket-store: memcached
+    cache-memcached-num-threads: 8
+    memcached:
+        host: 192.168.0.4
+        port: 11211
+
+# use ticket-based resumption only (with secrets used for encrypting the tickets stored in a file)
+ssl-session-resumption:
+    mode: ticket
+    ticket-store: file
+    ticket-file: /path/to/ticket-secrets.yaml
+
+.RE
+.fi
+.PP
+
+Defining the Methods Used
+
+The mode attribute defines which methods should be used for resuming the TLS sessions.
+The value can be either of: off, cache, ticket, all.
+Default is all.
+
+
+If set to off, session resumption will be disabled, and all TLS connections will be established via full handshakes.
+If set to all, both session-based and ticket-based resumptions will be used, with the preference given to the ticket-based resumption for clients supporting both the methods.
+
+
+For each method, additional attributes can be used to customize their behaviors.
+Attributes that modify the behavior of the disabled method are ignored.
+
+Attributes for Cache-based Resumption
+
+Following attributes are recognized if the cache-based session resumption is enabled.
+Note that memcached attribute must be defined as well in case the memcached cache-store is used.
+
+
+cache-store:
+
+defines where the cache should be stored, must be one of: internal, memcached.
+Default is internal.
+
+cache-memcached-num-threads:
+defines the maximum number of threads used for communicating with the memcached server.
+Default is 1.
+
+cache-memcached-prefix:
+
+for the memcached store specifies the key prefix used to store the secrets on memcached.
+Default is h2o:ssl-session-cache:.
+
+
+Attributes for Ticket-based Resumption
+
+Ticket-based session resumption uses master secret(s) to encrypt the keys used for encrypting the data transmitted over TLS connections.
+To achieve forward-secrecy (i.e. protect past communications from being decrypted in case a master secret gets obtained by a third party), it is essential to periodically change the secret and remove the old ones.
+
+
+Among the three types of stores supported for ticket-based session resumption, the internal store and memcached store implement automatic roll-over of the secrets.
+A new master secret is created every 1/4 of the session lifetime (defined by the lifetime attribute), and they expire (and gets removed) after 5/4 of the session lifetime elapse.
+
+
+For the file store, it is the responsibility of the web-site administrator to periodically update the secrets.  H2O monitors the file and reloads the secrets when the file is altered.
+
+
+Following attributes are recognized if the ticket-based resumption is enabled.
+
+
+ticket-store:
+defines where the secrets for ticket-based resumption should be / is stored, must be one of: internal, file, memcached.
+Default is internal.
+ticket-cipher:
+
+for stores that implement automatic roll-over, specifies the cipher used for encrypting the tickets.
+The value must be one recognizable by EVP_get_cipherbyname.
+Default is aes-256-cbc.
+ticket-hash:
+
+for stores that implement automatic roll-over, specifies the cipher used for digitally-signing the tickets.
+The value must be one recognizable by EVP_get_digestbyname.
+Default is sha-256.
+
+ticket-file:
+for the file store specifies the file in which the secrets are stored
+ticket-memcached-key:
+
+for the memcached store specifies the key used to store the secrets on memcached.
+Default is h2o:ssl-session-ticket.
+
+
+Other Attributes
+
+Following attributes are common to cache-based and ticket-based session resumption.
+
+
+lifetime:
+
+defines the lifetime of a TLS session; when it expires the session cache entry is purged, and establishing a new connection will require a full TLS handshake.
+Default value is 3600 (in seconds).
+
+memcached:
+
+specifies the location of memcached used by the memcached stores.
+The value must be a mapping with host attribute specifying the address of the memcached server, and optionally a port attribute specifying the port number (default is 11211).
+By default, the memcached client uses the BINARY protocol.
+Users can opt-in to using the legacy ASCII protocol by adding a protocol attribute set to ASCII.
+
+
+.RE
+.RE
+
+.SS temp-buffer-path
+(since v2.0)
+Directory in which temporary buffer files are created.
+
+.PP
+
+
+H2O uses an internal structure called h2o_buffer_t for buffering various kinds of data (e.g. POST content, response from upstream HTTP or FastCGI server).
+When amount of the data allocated in the buffer exceeds 32MB, it starts allocating storage from the directory pointed to by the directive.
+
+
+By using the directive, users can set the directory to one within a memory-backed file system (e.g. tmpfs) for speed, or specify a disk-based file system to avoid memory pressure.
+
+
+Note that the directory must be writable by the running user of the server.
+
+
+.PP
+.BR See\ also:
+user
+
+.RE
+.RE
+
+.SS user
+Username under which the server should handle incoming requests.
+
+.PP
+
+
+If the directive is omitted and if the server is started under root privileges, the server will attempt to setuid to nobody.
+
+
+.RE
+.RE
+
+.SS crash-handler
+(since v2.1)
+Script to invoke if h2o receives a fatal signal.
+
+.PP
+
+Note: this feature is only available when linking to the GNU libc.
+
+The script is invoked if one of the SIGABRT,
+SIGBUS, SIGFPE, SIGILL or
+SIGSEGV signals is received by h2o.
+
+h2o writes the backtrace as provided by
+backtrace() and backtrace_symbols_fd to the
+standard input of the program.
+
+If the path is not absolute, it is prefixed with ${H2O_ROOT}/.
+
+.RE
+.RE
+
+.SS crash-handler.wait-pipe-close
+(since v2.1)
+Whether h2o should wait for the crash handler pipe to close before exiting.
+
+.PP
+
+When this setting is ON, h2o will wait
+for the pipe to the crash handler to be closed before exiting.
+This can be useful if you use a custom handler that inspects the dying
+process.
+
+.RE
+.RE
+
+
+
+
+.SH COMPRESS DIRECTIVES
+
+
+
+The compress handler performs on-the-fly compression - it compresses the contents of an HTTP response as it is being sent, if the client indicates itself to be capable of decompressing the response transparently with the use of Accept-Encoding header, and if the response is deemed compressible according to the following rules.
+
+
+If x-compress-hint response header does not exist or the value is auto, then whether if the response is considered compressible depends on the is_compressible attribute assigned to the content type (see file.mime.addtypes).
+If x-compress-hint response header exists and the value is on, the response is always considered to be compressible.
+If the value of the response header is set to off, then the response never gets compressed.
+
+
+
+The following are the  configuration directives recognized by the handler.
+
+
+.SS compress
+(since v2.0)
+Enables on-the-fly compression of HTTP response.
+
+
+.PP
+
+
+If the argument is ON, both brotli and gzip compression are enabled.
+If the argument is OFF, on-the-fly compression is disabled.
+If the argument is a sequence, the elements are the list of compression algorithms to be enabled.
+If the argument is a mapping, each key specifies the compression algorithm to be enabled, and the values specify the quality of the algorithms.
+
+
+When both brotli and gzip are enabled and if the client supports both, H2O is hard-coded to prefer brotli.
+
+.PP
+.BR Example:\ 
+.R Enabling on-the-fly compression
+.PP
+.nf
+.RS
+# enable all algorithms
+compress: ON
+
+# enable by name
+compress: [ gzip, br ]
+
+# enable gzip only
+compress: [ gzip ]
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+file.send-compressed, file.mime.addtypes
+
+.RE
+.RE
+
+.SS compress-minimum-size
+(since v2.0)
+Defines the minimum size a files needs to have in order for H2O to compress the request.
+
+
+.PP
+
+.RE
+.RE
+
+
+.SS gzip
+(since v1.5)
+Enables on-the-fly compression of HTTP response using gzip.
+
+
+.PP
+
+Equivalent to compress: [ gzip ].
+
+.PP
+.BR See\ also:
+compress
+
+.RE
+.RE
+
+
+
+
+.SH HTTP/1 DIRECTIVES
+
+
+
+This document describes the configuration directives for controlling the HTTP/1 protocol handler.
+
+
+.SS http1-request-timeout
+Timeout for incoming requests in seconds.
+
+.PP
+
+.RE
+.RE
+.SS http1-upgrade-to-http2
+Boolean flag (ON or OFF) indicating whether or not to allow upgrade to HTTP/2.
+
+.PP
+
+.RE
+.RE
+
+
+
+
+
+.SH HTTP/2 DIRECTIVES
+
+
+
+H2O provides one of the world's most sophisticated HTTP/2 protocol implementation, including following features.
+
+
+Prioritization
+
+
+H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the HTTP/2 specification.
+The server implements a O(1) scheduler that determines which HTTP response should be sent to the client, per every 16KB chunk.
+
+
+Unfortunately, some web browsers fail to specify response priorities that lead to best end-user experience.
+H2O is capable of detecting such web browsers, and if it does, uses server-driven prioritization; i.e. send responses with certain MIME-types before others.
+
+
+It is possible to tune or turn off server-driven prioritization using directives: file.mime.addtypes, http2-reprioritize-blocking-assets.
+
+
+See also:
+
+Download Timings Benchmark
+HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY
+
+
+
+Server push
+
+
+H2O recognizes link headers with preload keyword sent by a backend application server (reverse proxy or FastCGI) or an mruby handler, and pushes the designated resource to a client.
+
+.PP
+.BR Example:\ 
+.R A link response header triggering HTTP/2 push
+.PP
+.nf
+.RS
+link: ; rel=preload; as=script
+
+.RE
+.fi
+.PP
+
+
+When the HTTP/2 driver of H2O recognizes a link response header with rel=preload attribute set, and if all of the following conditions are met, the specified resource is pushed to the client.
+
+
+configuration directive http2-push-preload is not set to OFF
+the link header does not have the nopush attribute set
+the link header is not part of a pushed response
+the client does not disable HTTP/2 push
+number of the pushed responses in-flight is below the negotiated threshold
+authority of the resource specified is equivalent to the request that tried to trigger the push
+(for handlers that return the status code synchronously) the status code of the response to be pushed does not indicate an error (i.e. 4xx or 5xx)
+
+
+The server also provides a mechanism to track the clients' cache state via cookies, and to push the resources specified with the link header only when it does not exist within the clients' cache.  For details, please refer to the documentation of http2-casper configuration directive.
+
+
+When a resource is pushed, the priority is determined using the priority attribute of the MIME-type configuration.  If the priority is set to highest then the resource will be sent to the client before anything else; otherwise the resource will be sent to client after the main content, as per defined by the HTTP/2 specification.
+
+
+HTTP/1.1 allows a server to send an informational response (see RFC 7230 section 6.2) before sending the final response.
+Starting from version 2.1, web applications can take advantage of the informational response to initiate HTTP/2 pushes before starting to process the request.
+The following example shows how such responses would look like.
+
+.PP
+.BR Example:\ 
+.R 100 response with link headers
+.PP
+.nf
+.RS
+HTTP/1.1 100 Continue
+Link: ; rel=preload; as=style
+Link: ; rel=preload; as=script
+
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+
+
+
+
+
+
+...
+
+.RE
+.fi
+.PP
+
+
+Pushed responses will have x-http2-push: pushed header set; by looking for the header, it is possible to determine if a resource has been pushed.
+It is also possible to log the value in the access log by specifying %{x-http2-push}o, push responses but cancelled by CASPER will have the value of the header logged as cancelled.
+
+
+See also:
+
+Optimizing performance of multi-tier web applications using HTTP/2 push
+
+
+
+Latency Optimization
+
+
+When using HTTP/2, a client often issues high-priority requests (e.g. requests for CSS and JavaScript files that block the rendering) while a lower-priority response (e.g. HTML) is in flight.
+In such case, it is desirable for a server to switch to sending the response of the high-priority requests as soon as it observes the requests.
+
+
+In order to do so, send buffer of the TCP/IP stack should be kept empty except for the packets in-flight, and size of the TLS records must be small enough to avoid head-of-line blocking.
+The downside is that obeying the requirement increases the interaction between the server process and kernel, which result in consumption of more CPU cycles and slightly increased latency.
+
+
+Starting from version 2.1, H2O provides directives that lets the users tune how the TCP/IP stack is used depending on the observed RTT, CWND, and the additional latency imposed by the interaction between the server and the OS.
+
+
+For TCP/IP connections with greater RTT and smaller CWND than the configured threshold, the server will try to keep the size of HTTP/2 frames unsent as small as possible so that it can switch to sending a higher-priority response.
+Benchmarks suggest that users can expect in average 1 RTT reduction when this optimization is enabled.
+For connections that do not meet the criteria, the server will utilize the TCP/IP stack in ordinary ways.
+
+
+The default values of the thresholds have been chosen that the optimization will come into action for mobile and long-distance networks but not when a proxy exists on the network.
+
+
+The optimization is supported only on Linux and OS X. The two are the operating systems that provide access to TCP_INFO and an interface to adjust the size of the unsent buffer (TCP_NOTSENT_LOWAT).
+
+
+Please refer to the documentation of the directives below to configure the optimization:
+
+http2-latency-optimization-min-rtt
+http2-latency-optimization-max-additional-delay
+http2-latency-optimization-max-cwnd
+
+
+
+See also:
+
+Reorganizing Website Architecture for HTTP/2 and Beyond pp.14-21
+
+
+
+
+The following describes the configuration directives for controlling the HTTP/2 protocol handler.
+
+
+.SS http2-casper
+Configures CASPer (cache-aware server-push).
+
+
+.PP
+
+
+When enabled, H2O maintains a fingerprint of the web browser cache, and cancels server-push suggested by the handlers if the client is known to be in possession of the content.
+The fingerprint is stored in a cookie named h2o_casper using Golomb-compressed sets (a compressed encoding of Bloom filter).
+
+
+If the value is OFF, the feature is disabled.
+Push requests (made by the handlers through the use of Link: rel=preload header) are processed regardless of whether if client already has the responses in its cache.
+If the value is ON, the feature is enabled with the defaults value specified below.
+If the value is mapping, the feature is enabled, recognizing the following attributes.
+
+capacity-bits:
+number of bits used for the fingerprinting.
+Roughly speaking, the number of bits should be log2(1/P * number-of-assets-to-track) where P being the probability of false positives.
+Default is 13, enough for tracking about 100 asset files with 1/100 chance of false positives (i.e. log2(100 * 100) =~ 213).
+tracking-types:
+specifies the types of the content tracked by casper.
+If omitted or set to blocking-assets, maintains fingerprint (and cancels server push) for resources with mime-type of highest priority.
+If set to all, tracks all responses.
+
+
+It should be noted that the size of the cookie will be log2(P) * number-of-assets-being-tracked bits multiplied by the overhead of Base 64 encoding (4/3).
+Therefore with current cookie-based implementation, it is necessary in many cases to restrict the resources being tracked to those have significant effect to user-perceived response time.
+
+
+.PP
+.BR Example:\ 
+.R Enabling CASPer
+.PP
+.nf
+.RS
+http2-casper: ON
+
+# `ON` is equivalent to:
+# http2-casper:
+#   capacity-bits:  13
+#   tracking-types: blocking-assets
+
+.RE
+.fi
+.PP
+
+
+
+.PP
+.BR See\ also:
+file.mime.addtypes,
+issue #421
+
+.RE
+.RE
+
+.SS http2-debug-state
+A directive to turn on the HTTP/2 Implementation Debug State.
+
+
+.PP
+
+
+
+This experimental feature serves a JSON document at the fixed path /.well-known/h2/state, which describes an internal HTTP/2 state of the H2O server.
+To know the details about the response fields, please see the spec.
+This feature is only for developing and debugging use, so it's highly recommended that you disable this setting in the production environment.
+
+
+
+The value of this directive specifies the property set contained in the response. Available values are minimum or hpack.
+If hpack is specified, the response will contain the internal hpack state of the same connection.
+If minimum is specified, the response doesn't contain the internal hpack state.
+
+
+
+In some circumstances, there may be a risk of information leakage on providing an internal hpack state. For example, the case that some proxies exist between the client and the server, and they share the connections among the clients.
+Therefore, you should specify hpack only when the server runs in the environments you can completely control.
+
+
+
+This feature is considered experimental yet.
+For now, the implementation conforms to the version draft-01 of the specification.
+
+
+
+.PP
+.BR See\ also:
+HTTP/2 Implementation Debug State (draft-01)
+
+.RE
+.RE
+
+.SS http2-idle-timeout
+Timeout for idle connections in seconds.
+
+
+.PP
+
+.RE
+.RE
+.SS http2-max-concurrent-requests-per-connection
+Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
+
+
+.PP
+
+
+The value cannot exceed 256.
+
+
+.RE
+.RE
+
+.SS http2-latency-optimization-min-rtt
+(since v2.1)
+Minimum RTT (in milliseconds) to enable latency optimization.
+
+
+.PP
+
+
+Latency optimization is disabled for TCP connections with smaller RTT (round-trip time) than the specified value.
+Otherwise, whether if the optimization is used depends on other parameters.
+
+
+Setting this value to 4294967295 (i.e. UINT_MAX) effectively disables the optimization.
+
+
+.RE
+.RE
+
+.SS http2-latency-optimization-max-additional-delay
+(since v2.1)
+Maximum additional delay (as the ratio to RTT) permitted to get latency optimization activated.
+
+
+.PP
+
+
+Latency optimization is disabled if the additional delay imposed by the interaction between the OS and the TCP/IP stack is estimated to be greater than the given threshold.
+Otherwise, whether if the optimization is used depends on other parameters.
+
+
+.RE
+.RE
+
+.SS http2-latency-optimization-max-cwnd
+(since v2.1)
+Maximum size (in octets) of CWND to get latency optimization activated.
+
+
+.PP
+
+
+CWND is a per-TCP-connection variable that represents the number of bytes that can be sent within 1 RTT.
+
+
+The server will not use or stop using latency optimization mode if CWND becomes greater than the configured value.
+In such case, average size of HTTP/2 frames buffered unsent will be slightly above the tcp_notsent_lowat sysctl value.
+
+
+
+.RE
+.RE
+
+.SS http2-push-preload
+(since v2.1)
+A boolean flag (ON or OFF) indicating whether if the server should push resources when observing a link: rel=preload header.
+
+
+.PP
+
+
+.RE
+.RE
+
+.SS http2-reprioritize-blocking-assets
+A boolean flag (ON or OFF) indicating if the server should send contents with highest priority before anything else.
+
+
+.PP
+
+
+To maximize the user-perceived responsiveness of a web page, it is essential for the web server to send blocking assets (i.e. CSS and JavaScript files in ) before any other files such as images.
+HTTP/2 provides a way for web browsers to specify such priorities to the web server.
+However, as of Sep. 2015, no major web browsers except Mozilla Firefox take advantage of the feature.
+
+
+This option, when enabled, works as a workaround for such web browsers, thereby improving experience of users using the web browsers.
+
+
+Technically speaking, it does the following:
+
+if the client uses dependency-based prioritization, do not reprioritize
+if the client does not use dependency-based prioritization, send the contents of which their types are given highest priority before any other responses
+
+
+
+.PP
+.BR See\ also:
+file.mime.addtypes,
+HTTP/2 (and H2O) improves user experience over HTTP/1.1 or SPDY
+
+.RE
+.RE
+
+.SS http2-graceful-shutdown-timeout
+A timeout in seconds. How long to wait before closing the connection on graceful shutdown. Setting the timeout to 0 deactivates the feature: H2O will wait for the peer to close the connections.
+
+
+.PP
+
+.RE
+.RE
+
+
+
+
+
+.SH ACCESS LOG DIRECTIVES
+
+
+
+This document describes the configuration directives of the access_log handler.
+
+
+.SS access-log
+The directive sets the path and optionally the format of the access log.
+
+.PP
+
+
+If the supplied argument is a scalar, it is treated as the path of the log file, or if the value starts with a |, it is treated as a command to which the log should be emitted.
+
+.PP
+.BR Example:\ 
+.R Emit access log to file
+.PP
+.nf
+.RS
+access-log: /path/to/access-log-file
+
+.RE
+.fi
+.PP
+
+.PP
+.BR Example:\ 
+.R Emit access log through pipe
+.PP
+.nf
+.RS
+access-log: "| rotatelogs /path/to/access-log-file.%Y%m%d 86400"
+
+.RE
+.fi
+.PP
+
+
+
+If the supplied argument is a mapping, its path property is considered as the path of the log file or the pipe command, and the format property is treated as the format of the log file.
+Starting from version 2.2, escape property can be used to specify the escape sequence that should be used to emit unsafe octets.
+
+
+
+Two forms of escape sequences are supported.
+If apache is specified as the value of the escape property, unsafe octets are emitted in the form of \xNN, where N is a hexadecimal number in lower case.
+If json is specified, unsafe octets are emitted in the form of \u00NN.
+apache is the default escape method.
+
+
+.PP
+.BR Example:\ 
+.R Emit access log to file using Common Log Format
+.PP
+.nf
+.RS
+access-log:
+    path: /path/to/access-log-file
+    format: "%h %l %u %t \"%r\" %s %b"
+    escape: apache
+
+.RE
+.fi
+.PP
+
+
+
+The list of format strings recognized by H2O is as follows.
+
+
+
+Format StringDescription
+%%the percent sign
+%Alocal address (e.g. 4.5.6.7)
+%bsize of the response body in bytes
+%Hrequest protocol as sent by the client (e.g. HTTP/1.1)
+%hremote address (e.g. 1.2.3.4)
+%lremote logname (always -)
+%mrequest method (e.g. GET, POST)
+%plocal port (%{local}p is a synonym that is supported since version 2.2)
+%{remote}premote port (since version 2.2)
+%qquery string (? is prepended if exists, otherwise an empty string)
+%rrequest line (e.g. GET / HTTP/1.1)
+%sstatus code sent to client (e.g. 200)
+%status code received from upstream (or initially generated)
+%ttime when the request was received in format: [02/Jan/2006:15:04:05 -0700]
+%{FORMAT}ttime when the request was received using the specified format.  FORMAT should be an argument to strftime, or one of:
+
+secnumber of seconds since Epoch
+msecnumber of milliseconds since Epoch
+usecnumber of microseconds since Epoch
+msec_fracmillisecond fraction
+usec_fracmicrosecond fraction
+
+As an example, it is possible to log timestamps in millisecond resolution using %{%Y/%m/%d:%H:%M:%S}t.%{msec_frac}t, which results in a timestamp like 2006-01-02:15:04:05.000.
+%Urequested URL path, not including the query string
+%uremote user if the request was authenticated (always -)
+%Vrequested server name (or the default server name if not specified by the client)
+%vcanonical server name
+%{VARNAME}erequest environment variable (since version 2.3; see Logging Arbitrary Variable)
+%{HEADERNAME}ivalue of the given request header (e.g. %{user-agent}i)
+%{HEADERNAME}ovalue of the given response header sent to client (e.g. %{set-cookie}o)
+%<{HEADERNAME}ovalue of the response header received from upstream (or initially generated)
+%{NAME}xvarious extensions.  NAME must be one listed in the following tables.  A dash (-) is emitted if the directive is not applicable to the request being logged.
+
+Access Timings
+NameDescription
+connect-timetime spent to establish the connection (i.e. since connection gets accept(2)-ed until first octet of the request is received)
+request-header-timetime spent receiving request headers
+request-body-timetime spent receiving request body
+request-total-timesum of request-header-time and request-body-time
+process-timetime spent after receiving request, before starting to send response
+response-timetime spent sending response
+durationsum of request-total-time, process-time, response-time
+
+
+Connection (since v2.0)
+NameDescription
+connection-id64-bit internal ID assigned to every client connection
+ssl.protocol-versionSSL protocol version obtained from SSL_get_version
+ssl.session-reused1 if the SSL session was reused, or 0 if not1
+ssl.session-ticketbase64-encoded value of the session ticket used for resuming the session (since v2.2)
+ssl.ciphername of the cipher suite being used, obtained from SSL_CIPHER_get_name
+ssl.cipher-bitsstrength of the cipher suite in bits
+
+
+HTTP/2 (since v2.0)
+NameDescription
+http2.stream-idstream ID
+http2.priority.receivedcolon-concatenated values of exclusive, parent, weight
+http2.priority.received.exclusiveexclusive bit of the most recent priority specified by the client
+http2.priority.received.parentparent stream ID of the most recent priority specified by the client
+http2.priority.received.weightweight of the most recent priority specified by the client
+
+
+Miscellaneous
+NameDescription
+errorrequest-level errors. Unless specified otherwise by using the error-log.emit-request-errors directive, the same messages are emitted to the error-log. (since v2.1)
+
+
+
+
+The default format is %h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i", a.k.a. the NCSA extended/combined log format.
+
+
+Note that you may need to quote (and escape) the format string as required by YAML (see Yaml Cookbook).
+
+
+.PP
+.BR See\ also:
+error-log
+error-log.emit-request-errors
+
+.RE
+.RE
+
+
+
+.SS Notes:
+.PP
+[1]A single SSL connection may transfer more than one HTTP request.
+
+.SH ERRORDOC DIRECTIVES
+
+
+
+This document describes the configuration directives of the errordoc handler.
+
+
+.SS error-doc
+Specifies the content to be sent when returning an error response (i.e. a response with 4xx or 5xx status code).
+
+
+.PP
+
+
+The argument must be a mapping containing following attributes, or if it is a sequence, every element must be a mapping with the following attributes.
+
+status - three-digit number indicating the status code (or sequence of that from version 2.3)
+url - URL of the document to be served
+
+
+
+URL can either be absolute or relative.
+Only content-type, content-language, set-cookie headers obtained from the specified URL are served to the client.
+
+
+.PP
+.BR Example:\ 
+.R Set error document for 404 status
+.PP
+.nf
+.RS
+error-doc:
+  status: 404
+  url: /404.html
+
+.RE
+.fi
+.PP
+
+.PP
+.BR Example:\ 
+.R Set error document for 500 and 503 status
+.PP
+.nf
+.RS
+error-doc:
+  - status: 500
+    url: /internal-error.html
+  - status: 503
+    url: /service-unavailable.html
+
+.RE
+.fi
+.PP
+
+.PP
+.BR Example:\ 
+.R Set error document for 50x statuses (From version 2.3)
+.PP
+.nf
+.RS
+error-doc:
+  status: [500, 502, 503, 504]
+  url: /50x.html
+
+.RE
+.fi
+.PP
+
+
+
+.RE
+.RE
+
+
+
+
+.SH EXPIRES DIRECTIVES
+
+
+
+This document describes the configuration directives of the expires handler.
+
+
+.SS expires
+An optional directive for setting the Cache-Control: max-age= header.
+
+
+.PP
+
+
+if the argument is OFF the feature is not used
+if the value is NUMBER UNIT then the header is set
+the units recognized are: second, minute, hour, day, month, year
+ the units can also be in plural forms
+
+.PP
+.BR Example:\ 
+.R Set Cache-Control: max-age=86400
+.PP
+.nf
+.RS
+expires: 1 day
+
+.RE
+.fi
+.PP
+
+
+You can also find an example that conditionally sets the header depending on the aspects of a request in Modifying the Response section of the Mruby directives documentation.
+
+
+.RE
+.RE
+
+
+
+
+.SH FASTCGI DIRECTIVES
+
+
+
+This document describes the configuration directives of the FastCGI handler.
+
+
+The configuration directives of the FastCGI handler can be categorized into two groups.
+Fastcgi.connect and fastcgi.spawn define the address (or the process) to which the requests should be sent.
+Other directives customize how the connections to the FastCGI processes should be maintained.
+
+
+.SS fastcgi.connect
+The directive specifies the address at where the FastCGI daemon is running.
+
+.PP
+
+
+If the argument is a mapping, following properties are recognized.
+
+host
+name (or IP address) of the server running the FastCGI daemon (ignored if type is unix)
+port
+TCP port number or path to the unix socket
+type
+either tcp (default) or unix
+
+
+
+If the argument is a scalar, the value is considered as a TCP port number and the host is assumed to be 127.0.0.1.
+
+.PP
+.BR Example:\ 
+.R Map /app to FastCGI daemon listening to /tmp/fcgi.sock
+.PP
+.nf
+.RS
+hosts:
+    "example.com:80":
+        paths:
+            "/app":
+                fastcgi.connect:
+                    port: /tmp/fcgi.sock
+                    type: unix
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS fastcgi.spawn
+The directive specifies the command to start the FastCGI process manager.
+
+.PP
+
+
+In contrast to fastcgi.connect that connects to a FastCGI server running externally, this directive launches a FastCGI process manager under the control of H2O, and terminates it when H2O quits.
+The argument is a /bin/sh -c expression to be executed when H2O boots up.
+The HTTP server records the process id of the expression, and sends SIGTERM to the id when it exits.
+
+.PP
+.BR Example:\ 
+.R Map .php files to 10 worker processes of /usr/local/bin/php-cgi
+.PP
+.nf
+.RS
+file.custom-handler:
+    extension:     .php
+    fastcgi.spawn: "PHP_FCGI_CHILDREN=10 exec /usr/local/bin/php-cgi"
+
+.RE
+.fi
+.PP
+
+
+As of version 1.4.0, the spawned process is run under the privileges of user specified by the user directive (in version 1.3.x, the FastCGI process was spawned under the privileges that spawned the H2O standalone server).
+It is possible to specify a different user for running the FastCGI process, by providing a mapping that contains an attribute named user together with an attribute named command.
+
+.PP
+.BR Example:\ 
+.R Running FastCGI processes under user fastcgi
+.PP
+.nf
+.RS
+file.custom-handler:
+    extension:     .php
+    fastcgi.spawn:
+        command: "PHP_FCGI_CHILDREN=10 exec /usr/local/bin/php-cgi"
+        user:    fastcgi
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS fastcgi.timeout.io
+Sets the I/O timeout of connections to the FastCGI process in milliseconds.
+
+.PP
+
+.RE
+.RE
+
+
+.SS fastcgi.timeout.keepalive
+Sets the keepl-alive timeout for idle connections in milliseconds.
+
+.PP
+
+
+FastCGI connections will not be persistent if the value is set to zero (default).
+
+
+.RE
+.RE
+
+.SS fastcgi.send-delegated-uri
+Send the modified HTTP_HOST and REQUEST_URI being rewritten in case of internal redirect.
+
+.PP
+
+
+In H2O, it is possible to perform internal redirects (a.k.a. delegations or URL rewrites) using the redirect directive or by returning X-Reproxy-URL headers from web applications.
+The directive specifies whether to send the original values to the FastCGI process (default), or if the rewritten values should be sent.
+
+
+.RE
+.RE
+
+
+
+
+.SH FILE DIRECTIVES
+
+
+
+This document describes the configuration directives of the file handler - a handler that for serving static files.
+
+
+Two directives: file.dir and file.file are used to define the mapping.
+Other directives modify the behavior of the mappings defined by the two.
+
+
+.SS file.custom-handler
+The directive maps extensions to a custom handler (e.g. FastCGI).
+
+.PP
+
+
+The directive accepts a mapping containing configuration directives that can be used at the extension level, together with a property named extension specifying a extension (starting with .) or a sequence of extensions to which the directives should be applied.
+Only one handler must exist within the directives.
+
+.PP
+.BR Example:\ 
+.R Mapping PHP files to FastCGI
+.PP
+.nf
+.RS
+file.custom-handler:
+  extension: .php
+  fastcgi.connect:
+    port: /tmp/fcgi.sock
+    type: unix
+
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS file.dir
+The directive specifies the directory under which should be served for the corresponding path.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Serving files under different paths
+.PP
+.nf
+.RS
+paths:
+    "/":
+        file.dir: /path/to/doc-root
+    "/icons":
+        file.dir: /path/to/icons-dir
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+file.dirlisting,
+file.file,
+file.index
+
+.RE
+.RE
+
+.SS file.dirlisting
+A boolean flag (OFF, or ON) specifying whether or not to send the directory listing in case none of the index files exist.
+
+
+.PP
+
+.PP
+.BR See\ also:
+file.dir
+
+.RE
+.RE
+.SS file.etag
+A boolean flag (OFF, or ON) specifying whether or not to send etags.
+
+
+.PP
+
+.RE
+.RE
+
+
+.SS file.file
+(since v2.0)
+The directive maps a path to a specific file.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Mapping a path to a specific file
+.PP
+.nf
+.RS
+paths:
+  /robots.txt:
+    file.file: /path/to/robots.txt
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+file.dir
+
+.RE
+.RE
+
+.SS file.index
+Specifies the names of the files that should be served when the client sends a request against the directory.
+
+.PP
+
+
+The sequence of filenames are searched from left to right, and the first file that existed is sent to the client.
+
+
+.PP
+.BR See\ also:
+file.dir
+
+.RE
+.RE
+
+.SS file.mime.addtypes
+The directive modifies the MIME mappings by adding the specified MIME type mappings.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Adding MIME mappings
+.PP
+.nf
+.RS
+file.mime.addtypes:
+    "application/javascript": ".js"
+    "image/jpeg": [ ".jpg", ".jpeg" ]
+
+.RE
+.fi
+.PP
+
+
+The default mappings is hard-coded in lib/handler/mimemap/defaults.c.h.
+
+
+It is also possible to set certain attributes for a MIME type.
+The example below maps .css files to text/css type, setting is_compressible flag to ON and priority to highest.
+
+
+.PP
+.BR Example:\ 
+.R Setting MIME attributes
+.PP
+.nf
+.RS
+file.mime.settypes:
+    "text/css":
+         extensions: [".css"]
+         is_compressible: yes
+         priority: highest
+
+.RE
+.fi
+.PP
+
+
+
+Following attributes are recognized.
+
+
+
+AttributePossible ValuesDescription
+is_compressibleON, OFFif content is compressible
+priorityhighest, normalsend priority of the content
+
+
+
+The priority attribute affects how the HTTP/2 protocol implementation handles the request.
+For detail, please refer to the HTTP/2 directives listed in the see also section below.
+By default, mime-types for CSS and JavaScript files are the only ones that are given highest priority.
+
+
+
+.PP
+.BR See\ also:
+compress,
+http2-casper,
+http2-reprioritize-blocking-assets
+
+.RE
+.RE
+
+.SS file.mime.removetypes
+Removes the MIME mappings for specified extensions supplied as a sequence of extensions.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Removing MIME mappings
+.PP
+.nf
+.RS
+file.mime.removetypes: [ ".jpg", ".jpeg" ]
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS file.mime.setdefaulttype
+Sets the default MIME-type that is used when an extension does not exist in the MIME mappings
+
+.PP
+
+.RE
+.RE
+
+
+.SS file.mime.settypes
+Resets the MIME mappings to given mapping.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Resetting the MIME mappings to minimum
+.PP
+.nf
+.RS
+file.mime.settypes:
+    "text/html":  [ ".html", ".htm" ]
+    "text/plain": ".txt"
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS file.send-compressed
+(since v2.0)
+A flag indicating how a pre-compressed file should be served.
+
+
+.PP
+
+
+If set to ON, the handler looks for a file with .br or .gz appended and sends the file, if the client is capable of transparently decoding a brotli or gzip-encoded response.
+For example, if a client requests a file named index.html with Accept-Encoding: gzip header and if index.html.gz exists, the .gz file is sent as a response together with a Content-Encoding: gzip response header.
+
+
+If set to OFF, the handler always serves the file specified by the client.
+
+
+Starting from version 2.2, gunzip is also supported.
+If set, the handler acts identical to when the value was set to ON.
+In addition, the handler will send an uncompressed response by dynamically decompressing the .gz file if the client and the server failed to agree on using a pre-compressed file as the response and if a non-compressed file was not found.
+The option is useful when conserving disk space is important; it is possible to remove the uncompressed files in place for gzipped ones.
+
+
+.PP
+.BR See\ also:
+compress
+
+.RE
+.RE
+
+.SS file.send-gzip
+Obsoleted in 2.0.
+Synonym of file.send-compressed.
+
+
+.PP
+
+.RE
+.RE
+
+
+
+
+
+.SH HEADERS DIRECTIVES
+
+
+
+This document describes the configuration directives of the headers handler.
+
+
+.SS header.add
+Adds a new header line to the response headers, regardless if a header with the same name already exists.
+
+.PP
+
+
+Example. Setting the Set-Cookie header
+header.add: "Set-Cookie: test=1"
+
+
+.RE
+.RE
+
+.SS header.append
+Adds a new header line, or appends the value to the existing header with the same name, separated by ,.
+
+
+.PP
+
+.RE
+.RE
+
+
+.SS header.merge
+Adds a new header line, or merges the value to the existing header of comma-separated values.
+
+
+.PP
+
+
+The following example sets the must-revalidate attribute of the Cache-Control header when and only when the attribute is not yet being set.
+
+.PP
+.BR Example:\ 
+.R Setting the must-revalidate attribute
+.PP
+.nf
+.RS
+header.merge: "Cache-Control: must-revalidate"
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS header.set
+Sets a header line, removing headers with the same name if exists.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Setting the X-Content-Type-Options: nosniff header
+.PP
+.nf
+.RS
+header.set: "X-Content-Type-Options: nosniff"
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS header.setifempty
+Sets a header line when and only when a header with the same name does not already exist.
+
+
+.PP
+
+.RE
+.RE
+.SS header.unset
+Removes headers with given name.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Removing the X-Powered-By header
+.PP
+.nf
+.RS
+header.unset: "X-Powered-By"
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+
+
+
+.SH MRUBY DIRECTIVES
+
+
+
+The following are the configuration directives of the mruby handler.
+Please refer to Using mruby to find out how to write handlers using mruby.
+
+
+.SS mruby.handler
+Upon start-up evaluates given mruby expression, and uses the returned mruby object to handle the incoming requests.
+
+
+.PP
+
+
+.PP
+.BR Example:\ 
+.R Hello-world in mruby
+.PP
+.nf
+.RS
+mruby.handler: |
+  Proc.new do |env|
+    [200, {'content-type' => 'text/plain'}, ["Hello world\n"]]
+  end
+
+.RE
+.fi
+.PP
+
+
+
+Note that the provided expression is evaluated more than once (typically for every thread that accepts incoming connections).
+
+
+.PP
+.BR See\ also:
+mruby.handler-file
+
+.RE
+.RE
+
+.SS mruby.handler-file
+Upon start-up evaluates given mruby file, and uses the returned mruby object to handle the incoming requests.
+
+
+.PP
+
+
+.PP
+.BR Example:\ 
+.R Hello-world in mruby
+.PP
+.nf
+.RS
+mruby.handler-file: /path/to/my-mruby-handler.rb
+
+.RE
+.fi
+.PP
+
+
+
+Note that the provided expression is evaluated more than once (typically for every thread that accepts incoming connections).
+
+
+.PP
+.BR See\ also:
+mruby.handler
+
+.RE
+.RE
+
+
+
+
+.SH PROXY DIRECTIVES
+
+
+
+Proxy module is the reverse proxy implementation for H2O - it implements a HTTP client that forwards a HTTP request to an upstream server.
+
+
+When forwarding the requests, the module sets following request headers:
+
+via
+x-forwarded-for
+x-forwarded-proto
+
+
+
+The HTTP client only supports HTTP/1.
+Support for HTTPS has been introduced in version 2.0.
+
+
+Following sections describe the configuration directives defined for the module.
+
+
+.SS proxy.reverse.url
+Forwards the requests to the specified URL, and proxies the response.
+
+.PP
+
+.PP
+.BR Example:\ 
+.R Forwarding the requests to application server running on 127.0.0.1:8080
+.PP
+.nf
+.RS
+proxy.reverse.url: "http://127.0.0.1:8080/"
+
+.RE
+.fi
+.PP
+
+
+If you want load balancing multiple backends, replace 127.0.0.1 with hostname which returns IP addresses via DNS or /etc/hosts.
+
+
+In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
+Path to the unix socket should be surrounded by square brackets, and prefixed with unix: (e.g. http://[unix:/path/to/socket]/path).
+
+
+
+.RE
+.RE
+
+.SS proxy.preserve-host
+A boolean flag (ON or OFF) designating whether or not to pass Host header from incoming request to upstream.
+
+.PP
+
+.RE
+.RE
+
+
+.SS proxy.preserve-x-forwarded-proto
+(since v2.0)
+A boolean flag(ON or OFF) indicating if the server preserve the received x-forwarded-proto request header.
+
+.PP
+
+
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received x-forwarded-proto request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
+
+
+.RE
+.RE
+
+.SS proxy.proxy-protocol
+(since v2.1)
+A boolean flag (ON or OFF) indicating if PROXY protocol should be used when connecting to the application server.
+
+.PP
+
+
+When using the PROXY protocol, connections to the application server cannot be persistent (i.e. proxy.timeout.keepalive must be set to zero).
+
+
+.PP
+.BR See\ also:
+proxy.timeout.keepalive
+
+.RE
+.RE
+
+.SS proxy.emit-x-forwarded-headers
+(since v2.1)
+A boolean flag(ON or OFF) indicating if the server will append or add the x-forwarded-proto and x-forwarded-for request headers.
+
+.PP
+
+
+By default, when forwarding an HTTP request H2O sends its own x-forwarded-proto and x-forwarded-for request headers (or might append its value in the x-forwarded-proto case, see proxy.preserve-x-forwarded-proto). This might not be always desirable. Please keep in mind security implications when setting this of OFF, since it might allow an attacker to spoof the originator or the protocol of a request.
+
+
+.PP
+.BR See\ also:
+proxy.emit-via-header
+
+.RE
+.RE
+
+.SS proxy.emit-via-header
+(since v2.2)
+A boolean flag (ON or OFF) indicating if the server adds or appends an entry to the via request header.
+
+.PP
+
+.PP
+.BR See\ also:
+proxy.emit-x-forwarded-headers
+
+.RE
+.RE
+
+
+.SS proxy.header.add
+(since v2.2)
+Modifies the request headers sent to the application server.
+
+.PP
+
+
+The behavior is identical to header.add except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
+
+
+.RE
+.RE
+.SS proxy.header.append
+(since v2.2)
+Modifies the request headers sent to the application server.
+
+.PP
+
+
+The behavior is identical to header.append except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
+
+
+.RE
+.RE
+.SS proxy.header.merge
+(since v2.2)
+Modifies the request headers sent to the application server.
+
+.PP
+
+
+The behavior is identical to header.merge except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
+
+
+.RE
+.RE
+.SS proxy.header.set
+(since v2.2)
+Modifies the request headers sent to the application server.
+
+.PP
+
+
+The behavior is identical to header.set except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
+
+
+.RE
+.RE
+.SS proxy.header.setifempty
+(since v2.2)
+Modifies the request headers sent to the application server.
+
+.PP
+
+
+The behavior is identical to header.setifempty except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
+
+
+.RE
+.RE
+.SS proxy.header.unset
+(since v2.2)
+Modifies the request headers sent to the application server.
+
+.PP
+
+
+The behavior is identical to header.unset except for the fact that it affects the request sent to the application server.
+Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
+
+
+.RE
+.RE
+
+
+.SS proxy.ssl.cafile
+(since v2.0)
+Specifies the file storing the list of trusted root certificates.
+
+.PP
+
+
+By default, H2O uses share/h2o/ca-bundle.crt.  The file contains a set of trusted root certificates maintained by Mozilla, downloaded and converted using mk-ca-bundle.pl.
+
+
+.PP
+.BR See\ also:
+proxy.ssl.verify-peer
+
+.RE
+.RE
+
+.SS proxy.ssl.session-cache
+(since v2.1)
+Specifies whether if and how a session cache should be used for TLS connections to the application server.
+
+.PP
+
+
+Since version 2.1, result of the TLS handshakes to the application server is memoized and later used to resume the connection, unless set to OFF using this directive.
+If the value is a mapping, then the following two attributes must be specified:
+
+lifetime:
+validity of session cache entries in seconds
+capacity:
+maxmum number of entries to be kept in the session cache
+
+If set to ON, lifetime and capacity will be set to 86,400 (one day) and 4,096.
+
+
+.RE
+.RE
+
+.SS proxy.ssl.verify-peer
+(since v2.0)
+A boolean flag (ON or OFF) indicating if the server certificate and hostname should be verified.
+
+.PP
+
+
+If set to ON, the HTTP client implementation of H2O verifies the peer's certificate using the list of trusted certificates as well as compares the hostname presented in the certificate against the connecting hostname.
+
+
+.PP
+.BR See\ also:
+proxy.ssl.cafile
+
+.RE
+.RE
+
+.SS proxy.timeout.io
+Sets the upstream I/O timeout in milliseconds.
+
+.PP
+
+.RE
+.RE
+
+
+.SS proxy.timeout.keepalive
+Sets the upstream timeout for idle connections in milliseconds.
+
+.PP
+
+
+Upstream connection becomes non-persistent if the value is set to zero.
+The value should be set to something smaller than that being set at the upstream server.
+
+
+.RE
+.RE
+
+.SS proxy.websocket
+A boolean flag (ON or OFF) indicating whether or not to allow upgrading the proxied connection to the WebSocket protocol.
+
+.PP
+
+
+When set to ON, the proxied connection will be upgraded to a bi-directional tunnel stream if upgrading to WebSocket connection is permitted by the backend server (i.e. if the backend server responds to a WebSocket handshake with 101 status code).
+
+
+Support for WebSocket is considered experimental for the time being and therefore is not yet turned on by default.
+
+
+.RE
+.RE
+
+.SS proxy.websocket.timeout
+Sets idle timeout of a WebSocket connection being proxied.
+
+.PP
+
+.RE
+.RE
+
+
+
+
+
+.SH REDIRECT DIRECTIVES
+
+
+
+This document describes the configuration directives of the redirect handler.
+
+
+.SS redirect
+Redirects the requests to given URL.
+
+.PP
+
+
+The directive rewrites the URL by replacing the host and path part of the URL at which the directive is used with the given URL.  For example, when using the configuration below, requests to http://example.com/abc.html will be redirected to https://example.com/abc.html.
+
+
+If the argument is a scalar, the value is considered as the URL to where the requests should be redirected.
+
+
+Following properties are recognized if the argument is a mapping.
+
+url
+URL to redirect to
+status
+the three-digit status code to use (e.g. 301)
+internal
+either YES or NO (default); if set to YES, then the server performs an internal redirect and return the content at the redirected URL
+
+
+.PP
+.BR Example:\ 
+.R Redirect all HTTP to HTTPS permanently (except for the files under RSS)
+.PP
+.nf
+.RS
+hosts:
+    "example.com:80":
+        paths:
+            "/":
+                redirect:
+                    status: 301
+                    url:    "https://example.com/"
+            "/rss":
+                file.dir: /path/to/rss
+
+.RE
+.fi
+.PP
+
+
+
+.RE
+.RE
+
+
+
+
+.SH REPROXY DIRECTIVES
+
+
+
+This document describes the configuration directives of the reproxy handler.
+
+
+.SS reproxy
+A boolean flag (ON or OFF) indicating if the server should recognize the X-Reproxy-URL header sent from upstream servers.
+
+
+.PP
+
+
+If H2O recognizes the header, it fetches the contents of the resource specified by the header, and sends the contents as the response to the client.
+If the status code associated with the X-Reproxy-URL header is 307 or 308, then the method of the original request is used to obtain the specified resource.
+Otherwise, the request method is changed to GET.
+
+
+For example, an upstream server may send an URL pointing to a large image using the X-Reproxy-URL header stored on a distributed file system, and let H2O fetch and return the content to the client, instead of fetching the image by itself.
+Doing so would reduce the load on the application server.
+
+
+.RE
+.RE
+
+
+
+
+.SH STATUS DIRECTIVES
+
+
+
+The status handler exposes the current states of the HTTP server.
+This document describes the configuration directives of the handler.
+
+
+.SS status
+(since v2.0)
+If the argument is ON, the directive registers the status handler to the current path.
+
+
+.PP
+
+
+Access to the handler should be restricted, considering the fact that the status includes the details of in-flight HTTP requests.
+The example below uses Basic authentication.
+
+.PP
+.BR Example:\ 
+.R Exposing status with Basic authentication
+.PP
+.nf
+.RS
+paths:
+  /server-status:
+    mruby.handler: |
+      require "htpasswd.rb"
+      Htpasswd.new("/path/to/.htpasswd", "status")
+    status: ON
+
+.RE
+.fi
+.PP
+
+
+The information returned by the /json handler can be filtered out using the optional show=module1,module2 parameter.
+There are currently three modules defined:
+
+requests: displays the requests currently in-flight.
+durations: displays durations statistics for requests since server start time in seconds (returns all zeros unless duration-stats is ON).
+errors: displays counters for internally generated errors.
+main: displays general daemon-wide stats.
+
+
+
+.RE
+.RE
+
+.SS duration-stats
+(since v2.1)
+Gather timing stats for requests.
+
+.PP
+
+
+
+If the argument is ON, this directive populates duration statistics in seconds, to be consumed by status handlers.
+Enabling this feature has a noticeable CPU and memory impact.
+
+
+Note that the time spent while processing a request in a blocking manner (such as opening a file or a mruby handler that does invoke a network operation) will not be reflected to the process_time element of the duration stats due to the fact that the timer being used for measuring the time spent is updated only once per loop.
+
+
+.RE
+.RE
+
+
+
+
+.SH THROTTLE RESPONSE DIRECTIVES
+
+
+
+The throttle response handler performs per response traffic throttling, when an X-Traffic header exists in the response headers.
+
+
+The value of X-Traffic header should be an integer that represents the speed you want in bytes per second. This header CAN be set with header.add so that traffic for static assets can also be easily throttled.
+
+
+The following are the configuration directives recognized by the handler.
+
+
+.SS throttle-response
+(since v2.1)
+Enables traffic throttle per HTTP response.
+
+
+.PP
+
+
+If the argument is ON, the traffic per response is throttled as long as a legal X-Traffic header exists.
+If the argument is OFF, traffic throttle per response is disabled.
+
+.PP
+.BR Example:\ 
+.R Enabling traffic throttle per response with static file configuration
+.PP
+.nf
+.RS
+# enable throttle
+throttle-response: ON
+
+# an example host configuration that throttle traffic to ~100KB/s
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: /path/to/assets
+        header.add: "X-Traffic: 100000"
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+
+
+
+.SH USING BASIC AUTHENTICATION
+
+
+
+Starting from version 1.7, H2O comes with a mruby script named htpasswd.rb that implements Basic Authentication.
+The script provides a Rack handler that implements Basic Authentication using password files generated by the htpasswd command.
+
+
+
+Below example uses the mruby script to restrict access to the path.
+If authentication fails, the mruby handler returns a 401 Unauthorized response.
+If authentication succeeds, the handler returns a 399 response, and the request is delegated internally to the next handler (i.e. file.dir).
+
+
+.PP
+.BR Example:\ 
+.R Configuring HTTP authentication using htpasswd.rb
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      require "htpasswd.rb"
+      Htpasswd.new("/path/to/.htpasswd", "realm-name")
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+
+In H2O versions prior to 2.0, you should specify "#{$H2O_ROOT}/share/h2o/mruby/htpasswd.rb" as the argument to require, since the directory is not registered as part of $LOAD_PATH.
+
+
+For convenience, the mruby script also forbids access to files or directories that start with .ht.
+
+
+
+
+.SH USING CGI
+
+
+
+Starting from version 1.7, H2O comes with a FastCGI-to-CGI gateway (fastcgi-cgi), which can be found under share/h2o directory of the installation path.
+The gateway can be used for running CGI scripts through the FastCGI handler.
+
+
+
+The example below maps .cgi files to be executed by the gateway.
+It is also possible to run CGI scripts under different privileges by specifying the user attribute of the directive.
+
+
+.PP
+.BR Example:\ 
+.R Execute .cgi files using FastCGI-to-CGI gateway
+.PP
+.nf
+.RS
+file.custom-handler:
+  extension: .cgi
+  fastcgi.spawn:
+    command: "exec $H2O_ROOT/share/h2o/fastcgi-cgi"
+
+.RE
+.fi
+.PP
+
+
+The gateway also provides options to for tuning the behavior.  A full list of options can be obtained by running the gateway directly with --help option.
+
+.PP
+.BR Example:\ 
+.R Output of share/h2o/fastcgi-cgi --help
+.PP
+.nf
+.RS
+$ share/h2o/fastcgi-cgi --help
+Usage:
+    share/h2o/fastcgi-cgi [options]
+
+Options:
+  --listen=sockfn    path to the UNIX socket.  If specified, the program will
+                     create a UNIX socket at given path replacing the existing
+                     file (should it exist).  If not, file descriptor zero (0)
+                     will be used as the UNIX socket for accepting new
+                     connections.
+  --max-workers=nnn  maximum number of CGI processes (default: unlimited)
+  --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+
+.RE
+.fi
+.PP
+
+
+
+
+
+.SH USING MRUBY
+
+
+
+mruby is a lightweight implementation of the Ruby programming language.
+With H2O, users can implement their own request handling logic using mruby, either to generate responses or to fix-up the request / response.
+
+
+Rack-based Programming Interface
+
+
+The interface between the mruby program and the H2O server is based on Rack interface specification.
+Below is a simple configuration that returns hello world.
+
+
+.PP
+.BR Example:\ 
+.R Hello-world in mruby
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        [200, {'content-type' => 'text/plain'}, ["Hello world\n"]]
+      end
+
+.RE
+.fi
+.PP
+
+
+
+It should be noted that as of H2O version 1.7.0, there are limitations when compared to ordinary web application server with support for Rack such as Unicorn:
+
+no libraries provided as part of Rack is available (only the interface is compatible)
+
+
+
+
+In addition to the Rack interface specification, H2O recognizes status code 399 which can be used to delegate request to the next handler.
+The feature can be used to implement access control and response header modifiers.
+
+
+Access Control
+
+
+By using the 399 status code, it is possible to implement access control using mruby.
+The example below restricts access to requests from 192.168. private address.
+
+
+.PP
+.BR Example:\ 
+.R Restricting access to 192.168.
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      lambda do |env|
+        if /\A192\.168\./.match(env["REMOTE_ADDR"])
+          return [399, {}, []]
+        end
+        [403, {'content-type' => 'text/plain'}, ["access forbidden\n"]]
+      end
+
+.RE
+.fi
+.PP
+
+
+
+Support for Basic Authentication is also provided by an mruby script.
+
+
+Delegating the Request
+
+
+When enabled using the reproxy directive, it is possible to delegate the request from the mruby handler to any other handler.
+
+
+.PP
+.BR Example:\ 
+.R Rewriting URL with delegation
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      lambda do |env|
+        if /\/user\/([^\/]+)/.match(env["PATH_INFO"])
+          return [307, {"x-reproxy-url" => "/user.php?user=#{$1}"}, []]
+        end
+        return [399, {}, []]
+      end
+
+.RE
+.fi
+.PP
+
+
+Modifying the Response
+
+
+When the mruby handler returns status code 399, H2O delegates the request to the next handler while preserving the headers emitted by the handler.
+The feature can be used to add extra headers to the response.
+
+
+For example, the following example sets cache-control header for requests against .css and .js files.
+
+
+.PP
+.BR Example:\ 
+.R Setting cache-control header for certain types of files
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        headers = {}
+        if /\.(css|js)\z/.match(env["PATH_INFO"])
+          headers["cache-control"] = "max-age=86400"
+        end
+        [399, headers, []]
+      end
+    file.dir: /path/to/doc-root
+
+.RE
+.fi
+.PP
+
+
+
+Or in the example below, the handler triggers HTTP/2 server push with the use of Link: rel=preload headers, and then requests a FastCGI application to process the request.
+
+
+.PP
+.BR Example:\ 
+.R Pushing asset files
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        push_paths = []
+        # push css and js when request is to dir root or HTML
+        if /(\/|\.html)\z/.match(env["PATH_INFO"])
+          push_paths << ["/css/style.css", "style"]
+          push_paths << ["/js/app.js", "script"]
+        end
+        [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p[0]}>; rel=preload; as=#{p[1]}"}.join("\n")}, []]
+      end
+    fastcgi.connect: ...
+
+.RE
+.fi
+.PP
+
+
+Using the HTTP Client
+
+
+Starting from version 1.7, a HTTP client API is provided.
+HTTP requests issued through the API will be handled asynchronously; the client does not block the event loop of the HTTP server.
+
+
+.PP
+.BR Example:\ 
+.R Mruby handler returning the response of http://example.com
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        req = http_request("http://example.com")
+        status, headers, body = req.join
+        [status, headers, body]
+      end
+
+.RE
+.fi
+.PP
+
+
+
+http_request is the method that issues a HTTP request.
+
+
+The method takes two arguments.
+First argument is the target URI.
+Second argument is an optional hash; method (defaults to GET), header, body attributes are recognized.
+
+
+The method returns a promise object.
+When #join method of the promise is invoked, a three-argument array containing the status code, response headers, and the body is returned.
+The response body is also a promise.
+Applications can choose from three ways when dealing with the body: a) call #each method to receive the contents, b) call #join to retrieve the body as a string, c) return the object as the response body of the mruby handler.
+
+
+The header and the body object passed to http_request should conform to the requirements laid out by the Rack specification for request header and request body.
+The response header and the response body object returned by the #join method of the promise returned by http_request conforms to the requirements of the Rack specification.
+
+
+Since the API provides an asynchronous HTTP client, it is possible to effectively issue multiple HTTP requests concurrently and merge them into a single response.
+
+
+When HTTPS is used, servers are verified using the properties of proxy.ssl.cafile and proxy.ssl.verify-peer specified at the global level.
+
+
+Logging Arbitrary Variable
+
+
+In version 2.3, it is possible from mruby to set and log an arbitrary-named variable that is associated to a HTTP request.
+A HTTP response header that starts with x-fallthru-set- is handled specially by the H2O server. Instead of sending the header downstream, the server accepts the value as a request environment variable, taking the suffix of the header name as the name of the variable.
+
+
+This example shows how to read request data, parse json and then log data from mruby.
+
+
+.PP
+.BR Example:\ 
+.R Logging the content of a POST request via request environment variable
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        input = env["rack.input"] ? env["rack.input"].read : '{"default": "true"}'
+        parsed_json = JSON.parse(input)
+        parsed_json["time"] = Time.now.to_i
+        logdata = parsed_json.to_s
+        [204, {"x-fallthru-set-POSTDATA" => logdata}, []]
+      end
+    access-log:
+      path: /path/to/access-log.json
+      escape: json
+      format: '{"POST": %{POSTDATA}e}'
+
+.RE
+.fi
+.PP
+
+
+
+
+
+.SH USING DOS DETECTION
+
+
+
+Starting from version 2.1, H2O comes with a mruby script named dos_detector.rb that implements DoS Detection feature.
+The script provides a Rack handler that detects HTTP flooding attacks based on the client's IP address. 
+
+
+Basic Usage
+
+
+Below example uses the mruby script to detect DoS attacks.
+The default detecting strategy is simply counting requests within configured period.
+If the count exceeds configured threshold, the handler returns a 403 Forbidden response.
+Otherwise, the handler returns a 399 response, and the request is delegated internally to the next handler.
+
+
+.PP
+.BR Example:\ 
+.R Configuring DoS Detection
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      require "dos_detector.rb"
+      DoSDetector.new({
+        :strategy => DoSDetector::CountingStrategy.new({
+          :period     => 10,  # default
+          :threshold  => 100, # default
+          :ban_period => 300, # default
+        }),
+      })
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+
+In the example above, the handler countup the requests within 10 seconds for each IP address, and when the count exceeds 100,
+it returns a 403 Forbidden response for the request and marks the client as "Banned" for 300 seconds. While marked as "Banned", the handler returns a 403 Forbidden to all requests from the same IP address.
+
+
+Configuring Details
+
+
+You can pass the following parameters to DoSDetector.new .
+
+:strategy
+  The algorithm to detect DoS attacks. You can write and pass your own strategies if needed. The default strategy is DoSDetector.CountingStrategy which takes the following parameters:
+  
+    :period
+      Time window in seconds to count requests. The default value is 10.
+    
+    :threshold
+      Threshold count of request. The default value is 100.
+    
+    :ban_period
+      Duration in seconds in which "Banned" client continues to be restricted. The default value is 300.
+    
+  
+
+:callback
+  The callback which is called by the handler with detecting result. You can define your own callback to return arbitrary response, set response headers, etc. The default callback returns 403 Forbidden if DoS detected, otherwise delegate the request to the next handler.
+
+:forwarded
+  
+    If set true, the handler uses X-HTTP-Forwarded-For header to get client's IP address if the header exists. The default value is true.
+  
+
+:cache_size
+  
+    The capacity of the LRU cache which preserves client's IP address and associated request count. The default value is 128.
+  
+
+
+.PP
+.BR Example:\ 
+.R Configuring Details
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      require "dos_detector.rb"
+      DoSDetector.new({
+        :strategy => DoSDetector::CountingStrategy.new,
+        :forwarded => false,
+        :cache_size => 2048,
+        :callback => proc {|env, detected, ip|
+          if detected && ! ip.start_with?("192.168.")
+            [503, {}, ["Service Unavailable"]]
+          else
+            [399, {}, []]
+          end
+        }
+      })
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+
+Points to Notice
+
+
+  For now, counting requests is "per-thread" and not shared between multiple threads.
+
+
+
+
+
+
+.SH ACCESS CONTROL
+
+
+
+Starting from version 2.1, H2O comes with a DSL-like mruby library which makes it easy to write access control list (ACL).
+
+
+Example
+
+
+Below example uses this Access Control feature to write various access control.
+
+
+.PP
+.BR Example:\ 
+.R Access Control
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      acl {
+        allow { addr == "127.0.0.1" }
+        deny { user_agent.match(/curl/i) && ! addr.start_with?("192.168.") }
+        respond(503, {}, ["Service Unavailable"]) { addr == malicious_ip }
+        redirect("https://example.com/", 301) { path =~ /moved/ }
+        use Htpasswd.new("/path/to/.htpasswd", "realm") { path.start_with?("/admin") }
+      }
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+
+In the example, the handler you get by calling acl method will do the following:
+
+  
+    if the remote IP address is exactly equal to "127.0.0.1", the request will be delegated to the next handler (i.e. serve files under /path/to/doc_root) and all following acl settings are ignored
+  
+  
+    otherwise, if the user agent string includes "curl" and the remote IP address doesn't start with "192.168.", this handler immediately returns 403 Forbidden response
+  
+  
+    otherwise, if the remote IP address is exactly equal to the malicious_ip variable, this handler immediately returns 503 Service Unavailable response
+  
+  
+    otherwise, if the request path matches with the pattern /moved/i, this handler immediately redirects the client to "https://example.com" with 301 status code
+  
+  
+    otherwise, if the request path starts with /admin, apply Basic Authentication to the request (for details of Basic Authentication, see here).
+  
+  
+    otherwise, the request will be delegated to the next handler (i.e. serve files under /path/to/doc_root)
+  
+
+
+
+ACL Methods
+
+
+An ACL handler is built by calling ACL methods, which can be used like directives.
+ACL methods can only be used in acl block.
+
+
+
+Each ACL method adds a filter to the handler, which checks whether the request matches the provided condition or not.
+Every ACL method can be accompanied by a condition block, which should return boolean value. 
+
+
+
+The filter defined by the method that first matched the accompanying condition gets applied (e.g. response 403 Forbidden, redirect to somewhere).
+If a condition block is omitted, all requests matches.
+If none of the conditions matches the request, the handler returns 399 and the request will be delegated to the next handler.
+
+
+
+"allow"
+
+
+
+Description:
+
+
+ Adds a filter which delegates the request to the next handler if the request matches the provided condition. 
+
+
+allow { ..condition.. }
+
+
+
+
+
+"deny"
+
+
+
+Description:
+
+
+ Adds a filter which returns 403 Forbidden if the request matches the provided condition. 
+
+
+deny { ..condition.. }
+
+
+
+
+
+"redirect"
+
+
+
+Description:
+
+
+ Adds a filter which redirects the client if the request matches the provided condition. 
+
+
+redirect(location, status) { ..condition.. }
+
+
+Parameters:
+
+
+  location
+  Location to which the client will be redirected. Required.
+  status
+  Status code of the response. Default value: 302
+
+
+
+
+
+"respond"
+
+
+
+Description:
+
+
+ Adds a filter which returns arbitrary response if the request matches the provided condition. 
+
+
+respond(status, header, body) { ..condition.. }
+
+
+Parameters:
+
+
+  status
+  Status code of the response. Required.
+  header
+  Header key-value pairs of the response. Default value: {}
+  body
+  Body array of the response. Default value: []
+
+
+
+
+
+"use"
+
+
+
+Description:
+
+
+ Adds a filter which applies the provided handler (callable object) if the request matches the provided condition. 
+
+
+use(proc) { ..condition.. }
+
+
+Parameters:
+
+
+  proc
+  Callable object that should be applied
+
+
+
+
+Matching Methods
+
+
+In a condition block, you can use helpful methods which return particular properties of the request as string values.
+Matching methods can only be used in a condition block of the ACL methods.
+
+
+
+"addr"
+
+
+
+Description:
+
+
+ Returns the remote IP address of the request. 
+
+
+addr(forwarded)
+
+
+Parameters:
+
+
+  forwarded
+  If true, returns the value of X-Forwarded-For header if it exists. Default value: true
+
+
+
+
+
+"path"
+
+
+
+Description:
+
+
+ Returns the requested path string of the request. 
+
+
+path()
+
+
+
+
+
+"method"
+
+
+
+Description:
+
+
+ Returns the HTTP method of the request. 
+
+
+method()
+
+
+
+
+
+"header"
+
+
+
+Description:
+
+
+ Returns the header value of the request associated with the provided name. 
+
+
+header(name)
+
+
+Parameters:
+
+
+  name
+  Case-insensitive header name. Required.
+
+
+
+
+
+"user_agent"
+
+
+
+Description:
+
+
+ Shortcut for header("user-agent"). 
+
+
+user_agent()
+
+
+
+
+Caution
+
+
+Several restrictions are introduced to avoid misconfiguration when using acl method.
+
+acl method can be called only once in each handler configuration
+If acl method is used, the handler returned by the configuration directive must be the one returned by the acl method
+
+If a configuration violates these restrictions, the server will detect it and refuse to launch with error message.
+
+
+
+For example, both of the following examples violate the restrictions above, so the server will refuse to start up.
+
+
+.PP
+.BR Example:\ 
+.R Misconfiguration Example 1
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      acl {    # this block will be ignored!
+        allow { addr == "127.0.0.1" }
+      }
+      acl {
+        deny
+      }
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR Example:\ 
+.R Misconfiguration Example 2
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      acl {    # this block will be ignored!
+        allow { addr == "127.0.0.1" }
+        deny
+      }
+      proc {|env| [399, {}, []}
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+
+You can correct these like the following:
+
+
+.PP
+.BR Example:\ 
+.R Valid Configuration Example
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      acl {
+        allow { addr == "127.0.0.1" }
+        deny
+      }
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+How-To
+
+Matching IP Address Blocks
+
+
+You can match an IP address against predefined list of address blocks using a script named trie_addr.rb.
+
+
+Below is an example.
+
+
+.PP
+.BR Example:\ 
+.R Address Block Matching Example
+.PP
+.nf
+.RS
+paths:
+  "/":
+    mruby.handler: |
+      require "trie_addr.rb"
+      trie = TrieAddr.new.add(["192.168.0.0/16", "172.16.0.0/12"])
+      acl {
+        allow { trie.match?(addr) }
+        deny
+      }
+    file.dir: /path/to/doc_root
+
+.RE
+.fi
+.PP
+
+
+
+This library currently supports only IPv4 addresses. TrieAddr#match? returns false when it receives an invalid IPv4 address (including an IPv6 address) as an argument..
+
+
+
+
