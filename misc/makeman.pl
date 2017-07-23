@@ -10,6 +10,7 @@ use Scalar::Util qw(looks_like_number);
 use Text::MicroTemplate qw(build_mt render_mt encoded_string);
 use Text::MicroTemplate::File;
 use HTML::TokeParser::Simple;
+use HTML::Entities;
 
 my $mt = Text::MicroTemplate::File->new(
     include_path => [ qw(../srcdoc/man-snippets .) ],
@@ -34,11 +35,11 @@ $main::context = {
     example => build_mt(<<'EOT',
 .PP
 .BR Example:\ 
-.R <?= Text::MicroTemplate::encoded_string($_[0]) ?>
+.R <?= Text::MicroTemplate::encoded_string(decode_entities($_[0])) ?>
 .PP
 .nf
 .RS
-<?= Text::MicroTemplate::encoded_string($_[1]) ?>
+<?= Text::MicroTemplate::encoded_string(decode_entities($_[1])) ?>
 .RE
 .fi
 .PP
@@ -71,8 +72,18 @@ EOT
             $alt,
         );
     },
+    unhtmlize => sub {
+        my ($content) = @_;
+        my $ret = "";
+        my $parser = HTML::TokeParser::Simple->new( string => $content->as_string() );
+        while (my $tok = $parser->get_token) {
+            next unless $tok->is_text;
+            $ret = $ret . $tok->as_is;
+        }
+        HTML::Entities::decode_entities($ret);
+    },
 };
-my $output = $mt->render_file($src_file);
+my $output = decode_entities($mt->render_file($src_file));
 mkpath(dirname($dst_file));
 
 chmod 0666, $dst_file;

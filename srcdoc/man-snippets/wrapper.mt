@@ -16,23 +16,12 @@ my $create_tab = sub {
     Text::MicroTemplate::encoded_string($html);
 };
 
-sub manformat {
-    my ($content) = @_;
-    my $ret = "";
-    print(ref($content));
-    my $parser = HTML::TokeParser::Simple->new( string => $content->as_string() );
-    while (my $tok = $parser->get_token) {
-        next unless $tok->is_text;
-        $ret = $ret . $tok->as_is;
-    }
-    $ret;
-};
 ?>
 ? if (@title) {
 .SH <?= uc $title[-1] ?>
 ? }
 
-?= manformat($content)
+?= $ctx->{unhtmlize}->($content)
 
 ? if (my @notes = @{$ctx->{notes}}) {
 .SS Notes:

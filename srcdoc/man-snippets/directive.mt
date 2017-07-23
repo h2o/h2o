@@ -4,10 +4,10 @@
 ? if ($args->{since}) {
 (since v<?= $args->{since} ?>)
 ? }
-<?= Text::MicroTemplate::encoded_string($args->{desc}) ?>
+<?= Text::MicroTemplate::encoded_string(decode_entities($args->{desc})) ?>
 
 .PP
-<?= $content ?>
+<?= $ctx->{unhtmlize}->(Text::MicroTemplate::encoded_string(decode_entities($content))) ?>
 ? if ($args->{see_also}) {
 .PP
 .BR See\ also:

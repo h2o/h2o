@@ -14,3 +14,35 @@ The optimized HTTP/1.x, HTTP/2 server
 .TP
 .BR \-c ", " \-\-conf =\fIFILE\fR
 configuration file (default: h2o.conf)
+.TP
+.BR \-m ", " \-\-mode =\fI<worker>\fR
+.R Where <worker> specifies one of the following mode:
+.RS
+.RS
+.PP
+-
+.B worker
+.R : invoked process handles incoming connections (default)
+.PP
+-
+.B daemon
+.R : spawns a master process and exits. `error-log` must be configured when using this mode, as all the errors are logged to the file instead of being emitted to STDERR
+.PP
+-
+.B master
+.R : invoked process becomes a master process (using the `share/h2o/start_server` command) and spawns a worker process for handling incoming connections. Users may send SIGHUP to the master process to reconfigure or upgrade the server.
+.PP
+-
+.B test
+.R :   tests the configuration
+.RE
+.RE
+.TP
+.BR \-t ", " \-\-test
+synonym of `--mode=test`
+.TP
+.BR \-v ", " \-\-version
+prints the version number
+.TP
+.BR \-h ", " \-\-help
+print this help
