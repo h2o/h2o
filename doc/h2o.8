@@ -188,7 +188,7 @@ hosts:
 In the example, two host-level configurations exist (under the hosts mapping), each of them listening to different ports.
 The first host listens to port 443 using TLS (i.e. HTTPS) using the specified server certificate and key.
 It has two path-level configurations, one for / and the other for /icons, each of them pointing to different local directories containing the files to be served.
-The latter also has the expires directive set, so that Cache-Control: max-age=864001 header would be sent.
+The latter also has the expires directive set, so that Cache-Control: max-age=86400 [1] header would be sent.
 The second host accepts connections on port 80 (via the plain-text HTTP protocol), and redirects all the requests to the first host using HTTPS.
 
 
@@ -1744,7 +1744,7 @@ Connection (since v2.0)
 NameDescription
 connection-id64-bit internal ID assigned to every client connection
 ssl.protocol-versionSSL protocol version obtained from SSL_get_version
-ssl.session-reused1 if the SSL session was reused, or 0 if not1
+ssl.session-reused1 if the SSL session was reused, or 0 if not [1]
 ssl.session-ticketbase64-encoded value of the session ticket used for resuming the session (since v2.2)
 ssl.ciphername of the cipher suite being used, obtained from SSL_CIPHER_get_name
 ssl.cipher-bitsstrength of the cipher suite in bits

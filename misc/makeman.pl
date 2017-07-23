@@ -67,7 +67,7 @@ EOT
         my $alt = $html;
         $alt =~ s/<.*?>//g;
         return render_mt(
-            '<sup><a href="#note_<?= $_[0] ?>" id="#cite_<?= $_[0] ?>" title="<?= $_[1] ?>"><?= $_[0] ?></sup></a></sup>',
+            ' [<?= $_[0] ?>]',
             $index + 1,
             $alt,
         );
