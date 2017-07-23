@@ -83,6 +83,4 @@ publish: all
 clean:
 	rm -f $(OUTPUT) search/searchindex.js
 
-manpage:
-
 .PHONY: mkdir html publish publish-check do-publish manpage
