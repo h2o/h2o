@@ -3597,112 +3597,90 @@ If a condition block is omitted, all requests matches.
 If none of the conditions matches the request, the handler returns 399 and the request will be delegated to the next handler.
 
 
-
-"allow"
-
-
-
-Description:
-
+.SS allow
 
  Adds a filter which delegates the request to the next handler if the request matches the provided condition. 
-
+.PP
 
 allow { ..condition.. }
 
 
+.RE
+.RE
 
-
-
-"deny"
-
-
-
-Description:
-
+.SS deny
 
  Adds a filter which returns 403 Forbidden if the request matches the provided condition. 
-
+.PP
 
 deny { ..condition.. }
 
 
+.RE
+.RE
 
-
-
-"redirect"
-
-
-
-Description:
-
+.SS redirect
 
  Adds a filter which redirects the client if the request matches the provided condition. 
-
+.PP
 
 redirect(location, status) { ..condition.. }
 
+.PP
+.BR Parameters:
+.RS
+.B location:
+.R Location to which the client will be redirected. Required.
+.RE
+.RS
+.B status:
+.R Status code of the response. Default value: 302
+.RE
 
-Parameters:
+.RE
+.RE
 
-
-  location
-  Location to which the client will be redirected. Required.
-  status
-  Status code of the response. Default value: 302
-
-
-
-
-
-"respond"
-
-
-
-Description:
-
+.SS respond
 
  Adds a filter which returns arbitrary response if the request matches the provided condition. 
-
+.PP
 
 respond(status, header, body) { ..condition.. }
 
+.PP
+.BR Parameters:
+.RS
+.B status:
+.R Status code of the response. Required.
+.RE
+.RS
+.B header:
+.R Header key-value pairs of the response. Default value: {}
+.RE
+.RS
+.B body:
+.R Body array of the response. Default value: []
+.RE
 
-Parameters:
+.RE
+.RE
 
-
-  status
-  Status code of the response. Required.
-  header
-  Header key-value pairs of the response. Default value: {}
-  body
-  Body array of the response. Default value: []
-
-
-
-
-
-"use"
-
-
-
-Description:
-
+.SS use
 
  Adds a filter which applies the provided handler (callable object) if the request matches the provided condition. 
-
+.PP
 
 use(proc) { ..condition.. }
 
+.PP
+.BR Parameters:
+.RS
+.B proc:
+.R Callable object that should be applied
+.RE
 
-Parameters:
-
-
-  proc
-  Callable object that should be applied
-
-
-
+.RE
+.RE
 
 Matching Methods
 
@@ -3711,99 +3689,72 @@ In a condition block, you can use helpful methods which return particular proper
 Matching methods can only be used in a condition block of the ACL methods.
 
 
-
-"addr"
-
-
-
-Description:
-
+.SS addr
 
  Returns the remote IP address of the request. 
-
+.PP
 
 addr(forwarded)
 
+.PP
+.BR Parameters:
+.RS
+.B forwarded:
+.R If true, returns the value of X-Forwarded-For header if it exists. Default value: true
+.RE
 
-Parameters:
+.RE
+.RE
 
-
-  forwarded
-  If true, returns the value of X-Forwarded-For header if it exists. Default value: true
-
-
-
-
-
-"path"
-
-
-
-Description:
-
+.SS path
 
  Returns the requested path string of the request. 
-
+.PP
 
 path()
 
 
+.RE
+.RE
 
-
-
-"method"
-
-
-
-Description:
-
+.SS method
 
  Returns the HTTP method of the request. 
-
+.PP
 
 method()
 
 
+.RE
+.RE
 
-
-
-"header"
-
-
-
-Description:
-
+.SS header
 
  Returns the header value of the request associated with the provided name. 
-
+.PP
 
 header(name)
 
+.PP
+.BR Parameters:
+.RS
+.B name:
+.R Case-insensitive header name. Required.
+.RE
 
-Parameters:
+.RE
+.RE
 
-
-  name
-  Case-insensitive header name. Required.
-
-
-
-
-
-"user_agent"
-
-
-
-Description:
-
+.SS user_agent
 
  Shortcut for header("user-agent"). 
-
+.PP
 
 user_agent()
 
 
-
+.RE
+.RE
 
 Caution
 
