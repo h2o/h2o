@@ -881,6 +881,10 @@ typedef struct st_h2o_req_overrides_t {
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
     h2o_headers_command_t *headers_cmds;
+    /**
+     * extra data per request for load balancer
+     */
+    void *req_extra;
 } h2o_req_overrides_t;
 
 /**

@@ -66,7 +66,7 @@ typedef struct st_h2o_socketpool_target_status_t {
 typedef H2O_VECTOR(h2o_socketpool_target_status_t) h2o_socketpool_target_status_vector_t;
 
 typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets,
-                                             h2o_socketpool_target_status_vector_t *status, void *data, int *tried);
+                                             h2o_socketpool_target_status_vector_t *status, void *data, int *tried, void *req_extra);
 
 typedef void (*h2o_socketpool_lb_initializer)(h2o_socketpool_target_vector_t *targets, void **data);
 
@@ -137,7 +137,7 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
  * connects to the peer (or returns a pooled connection)
  */
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **req, h2o_socketpool_t *pool, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data, void *req_extra);
 /**
  * cancels a connect request
  */
@@ -161,7 +161,7 @@ inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *
 /* round robin */
 void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void **data);
 size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                void *_data, int *tried);
+                                void *_data, int *tried, void *dummy);
 void h2o_balancer_rr_dispose(void *data);
 
 #ifdef __cplusplus

@@ -14,7 +14,7 @@ void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void **data)
 }
 
 size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                void *_data, int *tried)
+                                void *_data, int *tried, void *dummy)
 {
     size_t i;
     size_t result;
