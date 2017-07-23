@@ -76,7 +76,7 @@ int h2o_http1client_write_req_chunk(void *priv, h2o_iovec_t req_chunk, int is_en
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
                              int is_ssl, h2o_http1client_connect_cb cb, int is_chunked, h2o_url_t *location_rewrite_url);
 void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx,
-                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked);
+                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *client);
 

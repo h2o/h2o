@@ -700,7 +700,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
 }
 
 void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked)
+                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra)
 {
     struct st_h2o_http1client_private_t *client =
         create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb, is_chunked);
@@ -711,7 +711,7 @@ void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, 
     client->_location_rewrite_url = NULL;
     h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
     h2o_socketpool_connect(&client->super.sockpool.connect_req, sockpool, ctx->loop, ctx->getaddr_receiver, on_pool_connect,
-                           client);
+                           client, req_extra);
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *_client)
