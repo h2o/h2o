@@ -35,7 +35,7 @@ $main::context = {
     example => build_mt(<<'EOT',
 .PP
 .BR Example:\ 
-.R <?= Text::MicroTemplate::encoded_string(decode_entities($_[0])) ?>
+<?= Text::MicroTemplate::encoded_string(decode_entities($_[0])) ?>
 .PP
 .nf
 .RS

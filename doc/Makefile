@@ -57,7 +57,7 @@ MAN = configure/quick_start.man \
 %.html: %.mt snippets/directive.mt snippets/wrapper.mt
 	../misc/makedoc.pl $< $@
 
-%.man: %.mt
+%.man: %.mt man-snippets/directive.mt man-snippets/header man-snippets/mruby_method.mt man-snippets/wrapper.mt
 	../misc/makeman.pl $< $@
 
 all: mkdir html search/searchindex.js manpage

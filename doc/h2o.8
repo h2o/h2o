@@ -16,25 +16,25 @@ The optimized HTTP/1.x, HTTP/2 server
 configuration file (default: h2o.conf)
 .TP
 .BR \-m ", " \-\-mode =\fI<worker>\fR
-.R Where <worker> specifies one of the following mode:
+ Where <worker> specifies one of the following mode:
 .RS
 .RS
 .PP
 -
 .B worker
-.R : invoked process handles incoming connections (default)
+: invoked process handles incoming connections (default)
 .PP
 -
 .B daemon
-.R : spawns a master process and exits. `error-log` must be configured when using this mode, as all the errors are logged to the file instead of being emitted to STDERR
+: spawns a master process and exits. `error-log` must be configured when using this mode, as all the errors are logged to the file instead of being emitted to STDERR
 .PP
 -
 .B master
-.R : invoked process becomes a master process (using the `share/h2o/start_server` command) and spawns a worker process for handling incoming connections. Users may send SIGHUP to the master process to reconfigure or upgrade the server.
+: invoked process becomes a master process (using the `share/h2o/start_server` command) and spawns a worker process for handling incoming connections. Users may send SIGHUP to the master process to reconfigure or upgrade the server.
 .PP
 -
 .B test
-.R :   tests the configuration
+: tests the configuration
 .RE
 .RE
 .TP
@@ -336,7 +336,7 @@ The following example extracts the TLS configuration into default_ssl.conf and i
 
 .PP
 .BR Example:\ 
-.R default_ssl.conf
+default_ssl.conf
 .PP
 .nf
 .RS
@@ -352,7 +352,7 @@ key-file:         /path/to/example.com.crt
 
 .PP
 .BR Example:\ 
-.R h2o.conf
+h2o.conf
 .PP
 .nf
 .RS
@@ -403,7 +403,7 @@ Note that an exact match is preferred over host definitions using wildcard chara
 
 .PP
 .BR Example:\ 
-.R A host redirecting all HTTP requests to HTTPS
+A host redirecting all HTTP requests to HTTPS
 .PP
 .nf
 .RS
@@ -445,7 +445,7 @@ An 404 Not Found error is returned if no matching paths were found.
 
 .PP
 .BR Example:\ 
-.R Configuration with two paths
+Configuration with two paths
 .PP
 .nf
 .RS
@@ -487,7 +487,7 @@ In addition to specifying the port number, it is also possible to designate the 
 
 .PP
 .BR Example:\ 
-.R Various ways of using the Listen Directive
+Various ways of using the Listen Directive
 .PP
 .nf
 .RS
@@ -533,7 +533,7 @@ The feature is useful for setting up a HTTPS virtual host using Server-Name Indi
 
 .PP
 .BR Example:\ 
-.R Using host-level listeners for HTTPS virtual-hosting
+Using host-level listeners for HTTPS virtual-hosting
 .PP
 .nf
 .RS
@@ -652,7 +652,7 @@ If omitted, the permission of the socket file will reflect the umask of the call
 
 .PP
 .BR Example:\ 
-.R Listening to a Unix Socket accessible only by www-data
+Listening to a Unix Socket accessible only by www-data
 .PP
 .nf
 .RS
@@ -683,7 +683,7 @@ If the path starts with |, the rest of the path is considered as a command to wh
 
 .PP
 .BR Example:\ 
-.R Log errors to file
+Log errors to file
 .PP
 .nf
 .RS
@@ -695,7 +695,7 @@ error-log: /path/to/error-log-file
 
 .PP
 .BR Example:\ 
-.R Log errors through pipe
+Log errors through pipe
 .PP
 .nf
 .RS
@@ -877,7 +877,7 @@ Environment variables are retained through internal redirections.
 
 .PP
 .BR Example:\ 
-.R Setting an environment variable named FOO
+Setting an environment variable named FOO
 .PP
 .nf
 .RS
@@ -907,7 +907,7 @@ The directive can be used to have an exception for the paths that have an enviro
 
 .PP
 .BR Example:\ 
-.R Setting environment variable for example.com excluding /specific-path
+Setting environment variable for example.com excluding /specific-path
 .PP
 .nf
 .RS
@@ -944,7 +944,7 @@ H2O supports both of the methods: cache-based session resumption (defined in RFC
 
 .PP
 .BR Example:\ 
-.R Various session-resumption configurations
+Various session-resumption configurations
 .PP
 .nf
 .RS
@@ -1174,7 +1174,7 @@ When both brotli and gzip are enabled and if the client supports both, H2O is ha
 
 .PP
 .BR Example:\ 
-.R Enabling on-the-fly compression
+Enabling on-the-fly compression
 .PP
 .nf
 .RS
@@ -1290,7 +1290,7 @@ H2O recognizes link headers with preload keyword sent by a backend application s
 
 .PP
 .BR Example:\ 
-.R A link response header triggering HTTP/2 push
+A link response header triggering HTTP/2 push
 .PP
 .nf
 .RS
@@ -1325,7 +1325,7 @@ The following example shows how such responses would look like.
 
 .PP
 .BR Example:\ 
-.R 100 response with link headers
+100 response with link headers
 .PP
 .nf
 .RS
@@ -1433,7 +1433,7 @@ Therefore with current cookie-based implementation, it is necessary in many case
 
 .PP
 .BR Example:\ 
-.R Enabling CASPer
+Enabling CASPer
 .PP
 .nf
 .RS
@@ -1639,7 +1639,7 @@ If the supplied argument is a scalar, it is treated as the path of the log file,
 
 .PP
 .BR Example:\ 
-.R Emit access log to file
+Emit access log to file
 .PP
 .nf
 .RS
@@ -1651,7 +1651,7 @@ access-log: /path/to/access-log-file
 
 .PP
 .BR Example:\ 
-.R Emit access log through pipe
+Emit access log through pipe
 .PP
 .nf
 .RS
@@ -1676,7 +1676,7 @@ apache is the default escape method.
 
 .PP
 .BR Example:\ 
-.R Emit access log to file using Common Log Format
+Emit access log to file using Common Log Format
 .PP
 .nf
 .RS
@@ -1813,7 +1813,7 @@ Only content-type, content-language, set-cookie headers obtained from the specif
 
 .PP
 .BR Example:\ 
-.R Set error document for 404 status
+Set error document for 404 status
 .PP
 .nf
 .RS
@@ -1827,7 +1827,7 @@ error-doc:
 
 .PP
 .BR Example:\ 
-.R Set error document for 500 and 503 status
+Set error document for 500 and 503 status
 .PP
 .nf
 .RS
@@ -1843,7 +1843,7 @@ error-doc:
 
 .PP
 .BR Example:\ 
-.R Set error document for 50x statuses (From version 2.3)
+Set error document for 50x statuses (From version 2.3)
 .PP
 .nf
 .RS
@@ -1884,7 +1884,7 @@ the units recognized are: second, minute, hour, day, month, year
 
 .PP
 .BR Example:\ 
-.R Set Cache-Control: max-age=86400
+Set Cache-Control: max-age=86400
 .PP
 .nf
 .RS
@@ -1937,7 +1937,7 @@ If the argument is a scalar, the value is considered as a TCP port number and th
 
 .PP
 .BR Example:\ 
-.R Map /app to FastCGI daemon listening to /tmp/fcgi.sock
+Map /app to FastCGI daemon listening to /tmp/fcgi.sock
 .PP
 .nf
 .RS
@@ -1969,7 +1969,7 @@ The HTTP server records the process id of the expression, and sends SIGTERM to t
 
 .PP
 .BR Example:\ 
-.R Map .php files to 10 worker processes of /usr/local/bin/php-cgi
+Map .php files to 10 worker processes of /usr/local/bin/php-cgi
 .PP
 .nf
 .RS
@@ -1987,7 +1987,7 @@ It is possible to specify a different user for running the FastCGI process, by p
 
 .PP
 .BR Example:\ 
-.R Running FastCGI processes under user fastcgi
+Running FastCGI processes under user fastcgi
 .PP
 .nf
 .RS
@@ -2064,7 +2064,7 @@ Only one handler must exist within the directives.
 
 .PP
 .BR Example:\ 
-.R Mapping PHP files to FastCGI
+Mapping PHP files to FastCGI
 .PP
 .nf
 .RS
@@ -2090,7 +2090,7 @@ The directive specifies the directory under which should be served for the corre
 
 .PP
 .BR Example:\ 
-.R Serving files under different paths
+Serving files under different paths
 .PP
 .nf
 .RS
@@ -2144,7 +2144,7 @@ The directive maps a path to a specific file.
 
 .PP
 .BR Example:\ 
-.R Mapping a path to a specific file
+Mapping a path to a specific file
 .PP
 .nf
 .RS
@@ -2187,7 +2187,7 @@ The directive modifies the MIME mappings by adding the specified MIME type mappi
 
 .PP
 .BR Example:\ 
-.R Adding MIME mappings
+Adding MIME mappings
 .PP
 .nf
 .RS
@@ -2209,7 +2209,7 @@ The example below maps .css files to text/css type, setting is_compressible flag
 
 .PP
 .BR Example:\ 
-.R Setting MIME attributes
+Setting MIME attributes
 .PP
 .nf
 .RS
@@ -2257,7 +2257,7 @@ Removes the MIME mappings for specified extensions supplied as a sequence of ext
 
 .PP
 .BR Example:\ 
-.R Removing MIME mappings
+Removing MIME mappings
 .PP
 .nf
 .RS
@@ -2287,7 +2287,7 @@ Resets the MIME mappings to given mapping.
 
 .PP
 .BR Example:\ 
-.R Resetting the MIME mappings to minimum
+Resetting the MIME mappings to minimum
 .PP
 .nf
 .RS
@@ -2386,7 +2386,7 @@ The following example sets the must-revalidate attribute of the Cache-Control he
 
 .PP
 .BR Example:\ 
-.R Setting the must-revalidate attribute
+Setting the must-revalidate attribute
 .PP
 .nf
 .RS
@@ -2407,7 +2407,7 @@ Sets a header line, removing headers with the same name if exists.
 
 .PP
 .BR Example:\ 
-.R Setting the X-Content-Type-Options: nosniff header
+Setting the X-Content-Type-Options: nosniff header
 .PP
 .nf
 .RS
@@ -2436,7 +2436,7 @@ Removes headers with given name.
 
 .PP
 .BR Example:\ 
-.R Removing the X-Powered-By header
+Removing the X-Powered-By header
 .PP
 .nf
 .RS
@@ -2470,7 +2470,7 @@ Upon start-up evaluates given mruby expression, and uses the returned mruby obje
 
 .PP
 .BR Example:\ 
-.R Hello-world in mruby
+Hello-world in mruby
 .PP
 .nf
 .RS
@@ -2504,7 +2504,7 @@ Upon start-up evaluates given mruby file, and uses the returned mruby object to 
 
 .PP
 .BR Example:\ 
-.R Hello-world in mruby
+Hello-world in mruby
 .PP
 .nf
 .RS
@@ -2558,7 +2558,7 @@ Forwards the requests to the specified URL, and proxies the response.
 
 .PP
 .BR Example:\ 
-.R Forwarding the requests to application server running on 127.0.0.1:8080
+Forwarding the requests to application server running on 127.0.0.1:8080
 .PP
 .nf
 .RS
@@ -2866,7 +2866,7 @@ either YES or NO (default); if set to YES, then the server performs an internal 
 
 .PP
 .BR Example:\ 
-.R Redirect all HTTP to HTTPS permanently (except for the files under RSS)
+Redirect all HTTP to HTTPS permanently (except for the files under RSS)
 .PP
 .nf
 .RS
@@ -2942,7 +2942,7 @@ The example below uses Basic authentication.
 
 .PP
 .BR Example:\ 
-.R Exposing status with Basic authentication
+Exposing status with Basic authentication
 .PP
 .nf
 .RS
@@ -3018,7 +3018,7 @@ If the argument is OFF, traffic throttle per response is disabled.
 
 .PP
 .BR Example:\ 
-.R Enabling traffic throttle per response with static file configuration
+Enabling traffic throttle per response with static file configuration
 .PP
 .nf
 .RS
@@ -3060,7 +3060,7 @@ If authentication succeeds, the handler returns a 399 response, and the request 
 
 .PP
 .BR Example:\ 
-.R Configuring HTTP authentication using htpasswd.rb
+Configuring HTTP authentication using htpasswd.rb
 .PP
 .nf
 .RS
@@ -3100,7 +3100,7 @@ It is also possible to run CGI scripts under different privileges by specifying 
 
 .PP
 .BR Example:\ 
-.R Execute .cgi files using FastCGI-to-CGI gateway
+Execute .cgi files using FastCGI-to-CGI gateway
 .PP
 .nf
 .RS
@@ -3118,7 +3118,7 @@ The gateway also provides options to for tuning the behavior.  A full list of op
 
 .PP
 .BR Example:\ 
-.R Output of share/h2o/fastcgi-cgi --help
+Output of share/h2o/fastcgi-cgi --help
 .PP
 .nf
 .RS
@@ -3160,7 +3160,7 @@ Below is a simple configuration that returns hello world.
 
 .PP
 .BR Example:\ 
-.R Hello-world in mruby
+Hello-world in mruby
 .PP
 .nf
 .RS
@@ -3197,7 +3197,7 @@ The example below restricts access to requests from 192.168. private address.
 
 .PP
 .BR Example:\ 
-.R Restricting access to 192.168.
+Restricting access to 192.168.
 .PP
 .nf
 .RS
@@ -3228,7 +3228,7 @@ When enabled using the reproxy directive, it is possible to delegate the request
 
 .PP
 .BR Example:\ 
-.R Rewriting URL with delegation
+Rewriting URL with delegation
 .PP
 .nf
 .RS
@@ -3259,7 +3259,7 @@ For example, the following example sets cache-control header for requests agains
 
 .PP
 .BR Example:\ 
-.R Setting cache-control header for certain types of files
+Setting cache-control header for certain types of files
 .PP
 .nf
 .RS
@@ -3286,7 +3286,7 @@ Or in the example below, the handler triggers HTTP/2 server push with the use of
 
 .PP
 .BR Example:\ 
-.R Pushing asset files
+Pushing asset files
 .PP
 .nf
 .RS
@@ -3318,7 +3318,7 @@ HTTP requests issued through the API will be handled asynchronously; the client 
 
 .PP
 .BR Example:\ 
-.R Mruby handler returning the response of http://example.com
+Mruby handler returning the response of http://example.com
 .PP
 .nf
 .RS
@@ -3373,7 +3373,7 @@ This example shows how to read request data, parse json and then log data from m
 
 .PP
 .BR Example:\ 
-.R Logging the content of a POST request via request environment variable
+Logging the content of a POST request via request environment variable
 .PP
 .nf
 .RS
@@ -3419,7 +3419,7 @@ Otherwise, the handler returns a 399 response, and the request is delegated inte
 
 .PP
 .BR Example:\ 
-.R Configuring DoS Detection
+Configuring DoS Detection
 .PP
 .nf
 .RS
@@ -3481,7 +3481,7 @@ You can pass the following parameters to DoSDetector.new .
 
 .PP
 .BR Example:\ 
-.R Configuring Details
+Configuring Details
 .PP
 .nf
 .RS
@@ -3534,7 +3534,7 @@ Below example uses this Access Control feature to write various access control.
 
 .PP
 .BR Example:\ 
-.R Access Control
+Access Control
 .PP
 .nf
 .RS
@@ -3773,7 +3773,7 @@ For example, both of the following examples violate the restrictions above, so t
 
 .PP
 .BR Example:\ 
-.R Misconfiguration Example 1
+Misconfiguration Example 1
 .PP
 .nf
 .RS
@@ -3795,7 +3795,7 @@ paths:
 
 .PP
 .BR Example:\ 
-.R Misconfiguration Example 2
+Misconfiguration Example 2
 .PP
 .nf
 .RS
@@ -3820,7 +3820,7 @@ You can correct these like the following:
 
 .PP
 .BR Example:\ 
-.R Valid Configuration Example
+Valid Configuration Example
 .PP
 .nf
 .RS
@@ -3851,7 +3851,7 @@ Below is an example.
 
 .PP
 .BR Example:\ 
-.R Address Block Matching Example
+Address Block Matching Example
 .PP
 .nf
 .RS
