@@ -14,7 +14,7 @@
 ? for my $param (@{ $args->{params} }) {
 .RS
 .B <?= $param->{label} ?>:
-.R <?= $param->{desc} ?>
+<?= $param->{desc} ?>
 .RE
 ? }
 ? }

@@ -3630,11 +3630,11 @@ redirect(location, status) { ..condition.. }
 .BR Parameters:
 .RS
 .B location:
-.R Location to which the client will be redirected. Required.
+Location to which the client will be redirected. Required.
 .RE
 .RS
 .B status:
-.R Status code of the response. Default value: 302
+Status code of the response. Default value: 302
 .RE
 
 .RE
@@ -3651,15 +3651,15 @@ respond(status, header, body) { ..condition.. }
 .BR Parameters:
 .RS
 .B status:
-.R Status code of the response. Required.
+Status code of the response. Required.
 .RE
 .RS
 .B header:
-.R Header key-value pairs of the response. Default value: {}
+Header key-value pairs of the response. Default value: {}
 .RE
 .RS
 .B body:
-.R Body array of the response. Default value: []
+Body array of the response. Default value: []
 .RE
 
 .RE
@@ -3676,7 +3676,7 @@ use(proc) { ..condition.. }
 .BR Parameters:
 .RS
 .B proc:
-.R Callable object that should be applied
+Callable object that should be applied
 .RE
 
 .RE
@@ -3700,7 +3700,7 @@ addr(forwarded)
 .BR Parameters:
 .RS
 .B forwarded:
-.R If true, returns the value of X-Forwarded-For header if it exists. Default value: true
+If true, returns the value of X-Forwarded-For header if it exists. Default value: true
 .RE
 
 .RE
@@ -3739,7 +3739,7 @@ header(name)
 .BR Parameters:
 .RS
 .B name:
-.R Case-insensitive header name. Required.
+Case-insensitive header name. Required.
 .RE
 
 .RE
