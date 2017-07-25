@@ -619,6 +619,13 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         method_type = METHOD_IS_OTHER;
     }
 
+    /* obtain mime type */
+    if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
+        do_close(&generator->super, req);
+        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
+    }
+    assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
+
     /* if-non-match and if-modified-since */
     if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
@@ -635,13 +642,6 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
                 goto NotModified;
         }
     }
-
-    /* obtain mime type */
-    if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
-        do_close(&generator->super, req);
-        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
-    }
-    assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
 
     /* only allow GET or POST for static files */
     if (method_type == METHOD_IS_OTHER) {
