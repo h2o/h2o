@@ -77,6 +77,7 @@ static void lib_hmac_update(mrb_state *, struct mrb_hmac *, unsigned char *, mrb
 
 #define HAVE_MD5
 #define HAVE_SHA1
+#define HAVE_SHA256
 
 struct mrb_md {
   picohash_ctx_t ctx;
@@ -148,6 +149,7 @@ static void (*md_type_md(int type))(picohash_ctx_t *)
   switch (type) {
   case MD_TYPE_MD5:	return picohash_init_md5;
   case MD_TYPE_SHA1:	return picohash_init_sha1;
+  case MD_TYPE_SHA256:	return picohash_init_sha256;
   default:		return NULL;
   }
 }
