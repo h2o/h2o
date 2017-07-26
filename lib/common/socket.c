@@ -932,6 +932,19 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
         return NULL;
     case ASYNC_RESUMPTION_STATE_COMPLETE:
         *copy = 1;
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+        /* work around for OpenSSL 1.1 where really strange code has been found @ L537
+         * in openssl/ssl/ssl_sess.c, commit 8ab4fed.
+         *
+         * at that point in openssl, external cached session is to be added to internal session
+         * if internal session cache store is not disabled, but requiring SSL_CTX_add_session()
+         * return 0, i.e. failed. So we have to add the cached session before return the session.
+         */
+        if (!(SSL_CTX_get_session_cache_mode(sock->ssl->ssl_ctx) & SSL_SESS_CACHE_NO_INTERNAL_STORE) &&
+            sock->ssl->handshake.server.async_resumption.session_data != NULL) {
+            SSL_CTX_add_session(sock->ssl->ssl_ctx, sock->ssl->handshake.server.async_resumption.session_data);
+        }
+#endif
         return sock->ssl->handshake.server.async_resumption.session_data;
     default:
         assert(!"FIXME");
