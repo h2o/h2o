@@ -670,7 +670,7 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
                               const h2o_iovec_t *value)
 {
-    int name_index = 0, name_is_token = h2o_iovec_is_token(name);
+    int name_index = 0, dont_compress = 0, name_is_token = h2o_iovec_is_token(name);
 
     /* try to send as indexed */
     {
@@ -703,21 +703,31 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     if (name_is_token) {
         const h2o_token_t *name_token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
         name_index = name_token->http2_static_table_name_index;
+        dont_compress = name_token->dont_compress;
     }
 
     if (name_index != 0) {
-        /* literal header field with indexing (indexed name) */
-        *dst = 0x40;
-        dst = encode_int(dst, name_index, 6);
+        /* literal header field with indexing (indexed name). */
+        if (dont_compress == 1) {
+            /* mark the field as 'never indexed' */
+            *dst = 0x10;
+            dst = encode_int(dst, name_index, 4);
+        } else {
+            *dst = 0x40;
+            dst = encode_int(dst, name_index, 6);
+        }
     } else {
         /* literal header field with indexing (new name) */
         *dst++ = 0x40;
         dst += h2o_hpack_encode_string(dst, name->base, name->len);
     }
-    dst += h2o_hpack_encode_string(dst, value->base, value->len);
-
-    { /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above) would
-         not take too long) */
+    if (dont_compress == 1) {
+        /* bypass huffman encoding */
+        dst += encode_as_is(dst, value->base, value->len);
+    } else {
+        /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above) would
+           not take too long) */
+        dst += h2o_hpack_encode_string(dst, value->base, value->len);
         struct st_h2o_hpack_header_table_entry_t *entry =
             header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (entry != NULL) {

@@ -114,6 +114,7 @@ typedef struct st_h2o_token_t {
     unsigned char is_init_header_special : 1;
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
+    unsigned char dont_compress : 1;
 } h2o_token_t;
 
 #include "h2o/token.h"
