@@ -57,7 +57,7 @@ typedef struct st_h2o_socketpool_target_t {
 } h2o_socketpool_target_t;
 
 typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
-
+    
 typedef struct st_h2o_socketpool_target_status_t {
     size_t request_count; /* synchoronus operations should be used, counting requests on the fly */
     h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
@@ -66,12 +66,12 @@ typedef struct st_h2o_socketpool_target_status_t {
 typedef H2O_VECTOR(h2o_socketpool_target_status_t) h2o_socketpool_target_status_vector_t;
 
 typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets,
-                                             h2o_socketpool_target_status_vector_t *status, void *data, int *tried, void *req_extra);
+h2o_socketpool_target_status_vector_t *status, void *data, int *tried, void *req_extra);
 
 typedef void (*h2o_socketpool_lb_initializer)(h2o_socketpool_target_vector_t *targets, void **data);
 
 typedef void (*h2o_socketpool_lb_dispose_cb)(void *data);
-
+    
 typedef struct st_h2o_socketpool_t {
 
     /* read-only vars */
@@ -157,12 +157,6 @@ inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *
 {
     return sock->on_close.data == pool;
 }
-
-/* round robin */
-void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void **data);
-size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                void *_data, int *tried, void *dummy);
-void h2o_balancer_rr_dispose(void *data);
 
 #ifdef __cplusplus
 }

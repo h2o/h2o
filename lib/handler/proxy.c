@@ -22,6 +22,7 @@
 #include <sys/un.h>
 #include "h2o.h"
 #include "h2o/socketpool.h"
+#include "h2o/balancer.h"
 
 struct rp_handler_t {
     h2o_handler_t super;
@@ -166,8 +167,17 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
             }
             targets.size++;
         }
-        h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */,
-                                       h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose);
+        switch (config->balancer) {
+        case H2O_BALANCER_LEAST_CONN:
+            h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */, h2o_balancer_lc_init,
+                                           h2o_balancer_lc_selector, h2o_balancer_lc_dispose);
+            break;
+        case H2O_BALANCER_ROUND_ROBIN:
+        default:
+            h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */,
+                                           h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose);
+                
+        }
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);

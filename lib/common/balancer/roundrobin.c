@@ -1,4 +1,4 @@
-#include "h2o/socketpool.h"
+#include "h2o/balancer.h"
 
 struct round_robin_t {
     size_t next_pos;
