@@ -32,6 +32,7 @@
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
 #include "h2o/timeout.h"
+#include "h2o/balancer.h"
 
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
@@ -129,9 +130,12 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     }
     memcpy(&pool->targets, &targets, sizeof(targets));
 
-    lb_init(&pool->targets, &pool->_lb.data);
-    pool->_lb.selector = lb_selector;
-    pool->_lb.dispose = lb_dispose;
+    /* we only need balancing if there're more than one backends */
+    if (targets.size > 1) {
+        lb_init(&pool->targets, &pool->_lb.data);
+        pool->_lb.selector = lb_selector;
+        pool->_lb.dispose = lb_dispose;
+    }
 }
 
 void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl, h2o_url_t *url)
@@ -231,7 +235,9 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_destroy(&pool->_shared.mutex);
     free(&pool->_shared.status.entries);
 
-    pool->_lb.dispose(pool->_lb.data);
+    if (pool->_lb.dispose != NULL) {
+        pool->_lb.dispose(pool->_lb.data);
+    }
 
     if (pool->_interval_cb.loop != NULL) {
         h2o_timeout_unlink(&pool->_interval_cb.entry);
@@ -336,11 +342,16 @@ static void try_connect(h2o_socketpool_connect_request_t *req) {
     struct pool_entry_t *entry = NULL;
     struct on_close_data_t *close_data;
     
-    req->lb.selected = req->pool->_lb.selector(&req->pool->targets, &req->pool->_shared.status, req->pool->_lb.data, req->lb.tried, req->lb.req_extra);
-    assert(!req->lb.tried[req->lb.selected]);
-    req->lb.try_count++;
-    req->lb.tried[req->lb.selected] = 1;
-    __sync_add_and_fetch(&pool->_shared.status.entries[req->lb.selected].request_count, 1);
+    if (req->pool->_lb.selector != NULL) {
+        req->lb.selected = req->pool->_lb.selector(&req->pool->targets, &req->pool->_shared.status, req->pool->_lb.data, req->lb.tried, req->lb.req_extra);
+        assert(!req->lb.tried[req->lb.selected]);
+        req->lb.try_count++;
+        req->lb.tried[req->lb.selected] = 1;
+        __sync_add_and_fetch(&pool->_shared.status.entries[req->lb.selected].request_count, 1);
+    } else {
+        req->lb.selected = 0;
+        req->lb.try_count = 1;
+    }
     
     /* try to fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);

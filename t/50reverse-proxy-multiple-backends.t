@@ -13,6 +13,7 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
 sub do_test_both_tcp {
+    my $balancer = shift;
     my $upstream_port1 = empty_port();
     my $upstream_port2 = empty_port();
 
@@ -41,6 +42,7 @@ hosts:
           - http://127.0.0.1.XIP.IO:$upstream_port1
           - http://127.0.0.1.XIP.IO:$upstream_port2
         proxy.reverse.path: /echo-server-port
+        proxy.reverse.balancer: $balancer
 EOT
 
     for my $i (0..20) {
@@ -70,6 +72,7 @@ sub get_unix_socket {
 }
 
 sub do_test_both_unix {
+    my $balancer = shift;
     my $upstream_file1 = get_unix_socket();
     my $upstream_file2 = get_unix_socket();
 
@@ -98,6 +101,7 @@ hosts:
           - http://[unix:$upstream_file1]
           - http://[unix:$upstream_file2]
         proxy.reverse.path: /echo-server-port
+        proxy.reverse.balancer: $balancer
 EOT
 
     for my $i (0..20) {
@@ -113,6 +117,7 @@ EOT
 }
 
 sub do_test_tcp_unix {
+    my $balancer = shift;
     my $upstream_port = empty_port();
     my $upstream_file = get_unix_socket();
 
@@ -141,6 +146,7 @@ hosts:
           - http://127.0.0.1.XIP.IO:$upstream_port
           - http://[unix:$upstream_file]
         proxy.reverse.path: /echo-server-port
+        proxy.reverse.balancer: $balancer
 EOT
 
     for my $i (0..20) {
@@ -155,7 +161,13 @@ EOT
     }
 }
 
-do_test_both_tcp();
-do_test_both_unix();
-do_test_tcp_unix();
+sub do_test {
+    my $balancer = shift;
+    do_test_both_tcp($balancer);
+    do_test_both_unix($balancer);
+    do_test_tcp_unix($balancer);
+}
+
+do_test("round-robin");
+do_test("least-conn");
 done_testing();

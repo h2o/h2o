@@ -23,7 +23,9 @@ my $guard = spawn_server(
 
 my $unexpected = 0;
 
-my $server = spawn_h2o(<< "EOT");
+sub do_test {
+    my $balancer = shift;
+    my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
@@ -32,10 +34,12 @@ hosts:
           - http://127.0.0.1.XIP.IO:$unused_port
           - http://127.0.0.1.XIP.IO:$upstream_port
         proxy.reverse.path: /echo-server-port
+        proxy.reverse.balancer: $balancer
 EOT
-
-sub do_test {
-    run_with_curl($server, sub {
+    my $doit = sub {    
+#        my ($server, $balancer) = @_;
+#
+        run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             my $resp = `$curl --silent $proto://127.0.0.1:$port/`;
             if ($resp ne $upstream_port) {
@@ -43,14 +47,17 @@ sub do_test {
             }
             isnt $unexpected, 1, "no unexpected port"
         });
-}
+    };
 
-for my $i (1..50) {
-    do_test();
-    if ($unexpected == 1) {
-        last
+    for my $i (1..50) {
+        $doit->();
+        if ($unexpected == 1) {
+            last
+        }
     }
+    isnt $unexpected, 1, "no unexpected port";
 }
 
-isnt $unexpected, 1, "no unexpected port";
+do_test("round-robin");
+do_test("least-conn");
 done_testing();

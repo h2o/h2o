@@ -27,6 +27,7 @@
 #include <openssl/ssl.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
+#include "h2o/balancer.h"
 
 struct proxy_configurator_t {
     h2o_configurator_t super;
@@ -265,6 +266,21 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    
+    if (strcmp(node->data.scalar, "round-robin") == 0) {
+        self->vars->balancer = H2O_BALANCER_ROUND_ROBIN;
+    } else if (strcmp(node->data.scalar, "least-conn") == 0) {
+        self->vars->balancer = H2O_BALANCER_LEAST_CONN;
+    } else {
+        h2o_configurator_errprintf(cmd, node, "specified balancer is currently not supported. supported balancers are: "
+                                   "round-robin least-conn");
+    }
+    return 0;
+}
+
 static int on_config_reverse_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -446,6 +462,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
     c->vars->registered_as_url = 0;
     c->vars->registered_as_backends = 0;
+    c->vars->balancer = H2O_BALANCER_ROUND_ROBIN;
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -460,6 +477,10 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_backends);
     h2o_configurator_define_command(&c->super, "proxy.reverse.path",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_reverse_path);
+    /* support selecting wanted load balancing strategy */
+    h2o_configurator_define_command(&c->super, "proxy.reverse.balancer",
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_reverse_balancer);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_host);
