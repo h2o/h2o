@@ -18,6 +18,6 @@ end
 MRuby::Build.new do |conf|
   toolchain :gcc
   conf.gembox 'default'
-
+  enable_test
   conf.gem File.expand_path(File.dirname(__FILE__))
 end
