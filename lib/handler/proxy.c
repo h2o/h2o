@@ -137,7 +137,8 @@ static void on_handler_dispose(h2o_handler_t *_self)
     }
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
+                                      h2o_proxy_config_vars_t *config, void **extra_lb_data)
 {
     struct sockaddr_un sa;
     const char *to_sa_err;
@@ -160,24 +161,19 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
             to_sa_err = h2o_url_host_to_sun(upstreams[i].host, &sa);
             is_ssl = upstreams[i].scheme == &H2O_URL_SCHEME_HTTPS;
             if (to_sa_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
-                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]), is_ssl, &upstreams[i]);
+                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host,
+                                                       h2o_url_get_port(&upstreams[i]), is_ssl, &upstreams[i]);
             } else {
                 assert(to_sa_err == NULL);
                 h2o_socketpool_init_target_by_address(&targets.entries[i], (void *)&sa, sizeof(sa), is_ssl, &upstreams[i]);
             }
+            if (extra_lb_data != NULL) {
+                targets.entries[i].data_for_balancer = extra_lb_data[i];
+            }
             targets.size++;
         }
-        switch (config->balancer) {
-        case H2O_BALANCER_LEAST_CONN:
-            h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */, h2o_balancer_lc_init,
-                                           h2o_balancer_lc_selector, h2o_balancer_lc_dispose);
-            break;
-        case H2O_BALANCER_ROUND_ROBIN:
-        default:
-            h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */,
-                                           h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose);
-                
-        }
+        h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */, config->lb.init,config->lb.selector,
+                                       config->lb.dispose);
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);

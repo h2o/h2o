@@ -260,6 +260,9 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
             free(target->url->path.base);
             free(target->url);
         }
+        if (target->data_for_balancer != NULL) {
+            free(target->data_for_balancer);
+        }
     }
     free(pool->targets.entries);
 }

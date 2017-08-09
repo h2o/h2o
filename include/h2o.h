@@ -51,6 +51,7 @@ extern "C" {
 #include "h2o/timeout.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
+#include "h2o/balancer.h"
 
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
@@ -1847,14 +1848,20 @@ typedef struct st_h2o_proxy_config_vars_t {
     } websocket;
     h2o_headers_command_t *headers_cmds;
     h2o_iovec_t reverse_path; /* optional */
-    uint8_t balancer; /* default round robin */
+    struct {
+        h2o_socketpool_lb_initializer init;
+        h2o_socketpool_lb_selector selector;
+        h2o_socketpool_lb_dispose_cb dispose;
+        h2o_balancer_per_target_conf_parser parser;
+    } lb;
     SSL_CTX *ssl_ctx; /* optional */
 } h2o_proxy_config_vars_t;
 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
+                                      h2o_proxy_config_vars_t *config, void **extra_lb_data);
 /**
  * registers the configurator
  */
