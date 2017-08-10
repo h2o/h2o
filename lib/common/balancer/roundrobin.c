@@ -2,10 +2,10 @@
 #include <stdio.h>
 
 struct round_robin_t {
-    size_t next_pos; /* counting next logic index */
+    size_t next_pos;           /* counting next logic index */
     size_t next_actual_target; /* indicate next actual target index */
     size_t *floor_next_target; /* caching logic indices indicating next target should be used */
-    size_t pos_less_than; /* return point for logic count */
+    size_t pos_less_than;      /* return point for logic count */
     pthread_mutex_t mutex;
 };
 
@@ -13,7 +13,7 @@ struct round_robin_target_conf_t {
     size_t weight;
 };
 
-void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void **data)
+void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
 {
     size_t i;
     struct round_robin_target_conf_t *target_conf;
@@ -77,15 +77,15 @@ int h2o_balancer_rr_per_target_conf_parser(yoml_t *node, void **data, yoml_t **e
     return -1;
 }
 
-size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                void *_data, int *tried, void *dummy)
+size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
+                                int *tried, void *dummy)
 {
     size_t i;
     size_t result;
     struct round_robin_t *self = _data;
-    
+
     pthread_mutex_lock(&self->mutex);
-    
+
     for (i = 0; i < targets->size; i++) {
         if (!tried[self->next_actual_target]) {
             /* get the result */
@@ -100,7 +100,7 @@ size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_soc
             self->next_actual_target = 0;
         }
     }
-    
+
     assert(i < targets->size);
     self->next_pos++;
     if (self->next_pos == self->floor_next_target[self->next_actual_target]) {
