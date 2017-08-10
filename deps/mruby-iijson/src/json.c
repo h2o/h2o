@@ -6,6 +6,7 @@
 #include "mruby/array.h"
 #include "mruby/hash.h"
 #include "mruby/string.h"
+#include "mruby/value.h"
 
 #define E_JSON_PARSER_ERROR (mrb_class_get_under(mrb, mrb_module_get(mrb, "JSON"), "ParserError"))
 
@@ -44,6 +45,15 @@ mrb_module_get(mrb_state *mrb, const char *name)
   return mrb_class_get(mrb, name);
 }
 #endif
+#if !defined(MRB_PRId)
+#if defined(MRB_INT64)
+# define MRB_PRId PRId64
+#elif defined(MRB_INT16)
+# define MRB_PRId PRId16
+#else
+# define MRB_PRId PRId32
+#endif
+#endif  /* !defined(MRB_PRId) */
 
 static void
 json_check_nesting(struct json_parser *parser)
