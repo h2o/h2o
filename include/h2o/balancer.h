@@ -32,17 +32,20 @@ extern "C" {
 /* function for configure per-target extra data when parsing configuration. node = NULL for default */
 typedef int (*h2o_balancer_per_target_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
 
+/* function for parsing overall configuration of a load balancer */
+typedef int (*h2o_balancer_overall_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
+
 /* round robin */
-void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void **data);
-size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                void *_data, int *tried, void *dummy);
+void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void *unused, void **data);
+size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
+                                int *tried, void *dummy);
 void h2o_balancer_rr_dispose(void *data);
 int h2o_balancer_rr_per_target_conf_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
 
 /* least connection */
-void h2o_balancer_lc_init(h2o_socketpool_target_vector_t *targets, void **data);
-size_t h2o_balancer_lc_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                void *_data, int *tried, void *dummy);
+void h2o_balancer_lc_init(h2o_socketpool_target_vector_t *targets, void *unused, void **data);
+size_t h2o_balancer_lc_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
+                                int *tried, void *dummy);
 void h2o_balancer_lc_dispose(void *data);
 
 #ifdef __cplusplus

@@ -37,7 +37,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
     const h2o_url_scheme_t *scheme;
     h2o_iovec_t *authority;
-   
+
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
     if (self->sockpool != NULL) {
@@ -137,8 +137,8 @@ static void on_handler_dispose(h2o_handler_t *_self)
     }
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
-                                      h2o_proxy_config_vars_t *config, void **extra_lb_data)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config,
+                                      void **lb_per_target_conf)
 {
     struct sockaddr_un sa;
     const char *to_sa_err;
@@ -161,19 +161,19 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
             to_sa_err = h2o_url_host_to_sun(upstreams[i].host, &sa);
             is_ssl = upstreams[i].scheme == &H2O_URL_SCHEME_HTTPS;
             if (to_sa_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
-                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host,
-                                                       h2o_url_get_port(&upstreams[i]), is_ssl, &upstreams[i]);
+                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]),
+                                                       is_ssl, &upstreams[i]);
             } else {
                 assert(to_sa_err == NULL);
                 h2o_socketpool_init_target_by_address(&targets.entries[i], (void *)&sa, sizeof(sa), is_ssl, &upstreams[i]);
             }
-            if (extra_lb_data != NULL) {
-                targets.entries[i].data_for_balancer = extra_lb_data[i];
+            if (lb_per_target_conf != NULL) {
+                targets.entries[i].data_for_balancer = lb_per_target_conf[i];
             }
             targets.size++;
         }
-        h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */, config->lb.init,config->lb.selector,
-                                       config->lb.dispose);
+        h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */, config->lb.init, config->lb.selector,
+                                       config->lb.dispose, config->lb.lb_conf);
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);
