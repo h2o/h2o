@@ -191,7 +191,7 @@ __DATA__
 30 0 0 0 0 content-range
 31 0 0 0 0 content-type
 32 0 0 0 0 cookie
-33 1 0 0 0 date
+33 0 0 0 0 date
 34 0 0 0 0 etag
 35 0 1 0 0 expect
 36 0 0 0 0 expires
