@@ -397,7 +397,7 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
 
     h2o_socket_read_start(client->super.sock, on_head);
     client->_timeout.cb = on_head_timeout;
-    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
+    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->_timeout);
 }
 
 static void on_req_body_done(h2o_socket_t *sock, const char *err)
@@ -668,7 +668,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     /* setup */
     client = create_client(_client, data, ctx, is_ssl ? host : h2o_iovec_init(NULL, 0), cb, is_chunked);
     client->_timeout.cb = on_connect_timeout;
-    h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
+    h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
     client->_location_rewrite_url = location_rewrite_url;
 
     { /* directly call connect(2) if `host` is an IP address */
@@ -709,7 +709,7 @@ void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, 
     client->super.sockpool.pool = sockpool;
     client->_timeout.cb = on_connect_timeout;
     client->_location_rewrite_url = NULL;
-    h2o_timeout_link(ctx->loop, ctx->io_timeout, &client->_timeout);
+    h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
     h2o_socketpool_connect(&client->super.sockpool.connect_req, sockpool, ctx->loop, ctx->getaddr_receiver, on_pool_connect,
                            client);
 }
