@@ -1,0 +1,193 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_READ 3
+.Os
+.Sh NAME
+.Nm SSL_read
+.Nd read bytes from a TLS/SSL connection
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fn SSL_read "SSL *ssl" "void *buf" "int num"
+.Sh DESCRIPTION
+.Fn SSL_read
+tries to read
+.Fa num
+bytes from the specified
+.Fa ssl
+into the buffer
+.Fa buf .
+.Sh NOTES
+If necessary,
+.Fn SSL_read
+will negotiate a TLS/SSL session, if not already explicitly performed by
+.Xr SSL_connect 3
+or
+.Xr SSL_accept 3 .
+If the peer requests a re-negotiation,
+it will be performed transparently during the
+.Fn SSL_read
+operation.
+The behaviour of
+.Fn SSL_read
+depends on the underlying
+.Vt BIO .
+.Pp
+For the transparent negotiation to succeed, the
+.Fa ssl
+must have been initialized to client or server mode.
+This is being done by calling
+.Xr SSL_set_connect_state 3
+or
+.Xr SSL_set_accept_state 3
+before the first call to
+.Fn SSL_read
+or
+.Xr SSL_write 3 .
+.Pp
+.Fn SSL_read
+works based on the SSL/TLS records.
+The data are received in records (with a maximum record size of 16kB for
+SSLv3/TLSv1).
+Only after a record has been completely received can it be processed
+(decrypted and checked for integrity).
+Therefore data not retrieved at the last call of
+.Fn SSL_read
+can still be buffered inside the SSL layer and will be retrieved on the next
+call to
+.Fn SSL_read .
+If
+.Fa num
+is higher than the number of bytes buffered,
+.Fn SSL_read
+will return with the bytes buffered.
+If no more bytes are in the buffer,
+.Fn SSL_read
+will trigger the processing of the next record.
+Only when the record has been received and processed completely will
+.Fn SSL_read
+return reporting success.
+At most the contents of the record will be returned.
+As the size of an SSL/TLS record may exceed the maximum packet size of the
+underlying transport (e.g., TCP), it may be necessary to read several packets
+from the transport layer before the record is complete and
+.Fn SSL_read
+can succeed.
+.Pp
+If the underlying
+.Vt BIO
+is
+.Em blocking ,
+.Fn SSL_read
+will only return once the read operation has been finished or an error
+has occurred, except when a renegotiation take place, in which case a
+.Dv SSL_ERROR_WANT_READ
+may occur.
+This behavior can be controlled with the
+.Dv SSL_MODE_AUTO_RETRY
+flag of the
+.Xr SSL_CTX_set_mode 3
+call.
+.Pp
+If the underlying
+.Vt BIO
+is
+.Em non-blocking ,
+.Fn SSL_read
+will also return when the underlying
+.Vt BIO
+could not satisfy the needs of
+.Fn SSL_read
+to continue the operation.
+In this case a call to
+.Xr SSL_get_error 3
+with the return value of
+.Fn SSL_read
+will yield
+.Dv SSL_ERROR_WANT_READ
+or
+.Dv SSL_ERROR_WANT_WRITE .
+As at any time a re-negotiation is possible, a call to
+.Fn SSL_read
+can also cause write operations!
+The calling process then must repeat the call after taking appropriate action
+to satisfy the needs of
+.Fn SSL_read .
+The action depends on the underlying
+.Vt BIO .
+When using a non-blocking socket, nothing is to be done, but
+.Xr select 2
+can be used to check for the required condition.
+When using a buffering
+.Vt BIO ,
+like a
+.Vt BIO
+pair, data must be written into or retrieved out of the
+.Vt BIO
+before being able to continue.
+.Pp
+.Xr SSL_pending 3
+can be used to find out whether there are buffered bytes available for
+immediate retrieval.
+In this case
+.Fn SSL_read
+can be called without blocking or actually receiving new data from the
+underlying socket.
+.Sh WARNING
+When an
+.Fn SSL_read
+operation has to be repeated because of
+.Dv SSL_ERROR_WANT_READ
+or
+.Dv SSL_ERROR_WANT_WRITE ,
+it must be repeated with the same arguments.
+.Sh RETURN VALUES
+The following return values can occur:
+.Bl -tag -width Ds
+.It >0
+The read operation was successful; the return value is the number of bytes
+actually read from the TLS/SSL connection.
+.It 0
+The read operation was not successful.
+The reason may either be a clean shutdown due to a
+.Dq close notify
+alert sent by the peer (in which case the
+.Dv SSL_RECEIVED_SHUTDOWN
+flag in the ssl shutdown state is set (see
+.Xr SSL_shutdown 3
+and
+.Xr SSL_set_shutdown 3 ) .
+It is also possible that the peer simply shut down the underlying transport and
+the shutdown is incomplete.
+Call
+.Fn SSL_get_error
+with the return value to find out whether an error occurred or the connection
+was shut down cleanly
+.Pq Dv SSL_ERROR_ZERO_RETURN .
+.Pp
+SSLv2 (deprecated) does not support a shutdown alert protocol, so it can only
+be detected whether the underlying connection was closed.
+It cannot be checked whether the closure was initiated by the peer or by
+something else.
+.It <0
+The read operation was not successful, because either an error occurred or
+action must be taken by the calling process.
+Call
+.Fn SSL_get_error
+with the return value to find out the reason.
+.El
+.Sh SEE ALSO
+.Xr bio 3 ,
+.Xr ssl 3 ,
+.Xr SSL_accept 3 ,
+.Xr SSL_connect 3 ,
+.Xr SSL_CTX_new 3 ,
+.Xr SSL_CTX_set_mode 3 ,
+.Xr SSL_get_error 3 ,
+.Xr SSL_pending 3 ,
+.Xr SSL_set_connect_state 3 ,
+.Xr SSL_set_shutdown 3 ,
+.Xr SSL_shutdown 3 ,
+.Xr SSL_write 3

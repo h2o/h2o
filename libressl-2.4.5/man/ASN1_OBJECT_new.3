@@ -1,0 +1,58 @@
+.Dd $Mdocdate: September 9 2015 $
+.Dt ASN1_OBJECT_NEW 3
+.Os
+.Sh NAME
+.Nm ASN1_OBJECT_new ,
+.Nm ASN1_OBJECT_free
+.Nd ASN1 object allocation functions
+.Sh SYNOPSIS
+.In openssl/asn1.h
+.Ft ASN1_OBJECT *
+.Fo ASN1_OBJECT_new
+.Fa void
+.Fc
+.Ft void
+.Fo ASN1_OBJECT_free
+.Fa "ASN1_OBJECT *a"
+.Fc
+.Sh DESCRIPTION
+The ASN1_OBJECT allocation routines allocate and free an
+.Vt ASN1_OBJECT
+structure, which represents an ASN1 OBJECT IDENTIFIER.
+.Pp
+.Fn ASN1_OBJECT_new
+allocates and initializes an
+.Vt ASN1_OBJECT
+structure.
+.Pp
+.Fn ASN1_OBJECT_free
+frees up the
+.Vt ASN1_OBJECT
+structure
+.Fa a .
+.Sh NOTES
+Although
+.Fn ASN1_OBJECT_new
+allocates a new
+.Vt ASN1_OBJECT
+structure, it is almost never used in applications.
+The ASN1 object utility functions such as
+.Xr OBJ_nid2obj 3
+are used instead.
+.Sh RETURN VALUES
+If the allocation fails,
+.Fn ASN1_OBJECT_new
+returns
+.Dv NULL
+and sets an error code that can be obtained by
+.Xr ERR_get_error 3 .
+Otherwise it returns a pointer to the newly allocated structure.
+.Sh SEE ALSO
+.Xr d2i_ASN1_OBJECT 3 ,
+.Xr ERR_get_error 3 ,
+.Xr OBJ_nid2obj 3
+.Sh HISTORY
+.Fn ASN1_OBJECT_new
+and
+.Fn ASN1_OBJECT_free
+are available in all versions of SSLeay and OpenSSL.

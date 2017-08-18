@@ -1,0 +1,61 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_GET_CLIENT_CA_LIST 3
+.Os
+.Sh NAME
+.Nm SSL_get_client_CA_list ,
+.Nm SSL_CTX_get_client_CA_list
+.Nd get list of client CAs
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft STACK_OF(X509_NAME) *
+.Fn SSL_get_client_CA_list "const SSL *s"
+.Ft STACK_OF(X509_NAME) *
+.Fn SSL_CTX_get_client_CA_list "const SSL_CTX *ctx"
+.Sh DESCRIPTION
+.Fn SSL_CTX_get_client_CA_list
+returns the list of client CAs explicitly set for
+.Fa ctx
+using
+.Xr SSL_CTX_set_client_CA_list 3 .
+.Pp
+.Fn SSL_get_client_CA_list
+returns the list of client CAs explicitly set for
+.Fa ssl
+using
+.Fn SSL_set_client_CA_list
+or
+.Fa ssl Ns 's
+.Vt SSL_CTX
+object with
+.Xr SSL_CTX_set_client_CA_list 3 ,
+when in server mode.
+In client mode,
+.Fn SSL_get_client_CA_list
+returns the list of client CAs sent from the server, if any.
+.Sh RETURN VALUES
+.Fn SSL_CTX_set_client_CA_list
+and
+.Fn SSL_set_client_CA_list
+do not return diagnostic information.
+.Pp
+.Fn SSL_CTX_add_client_CA
+and
+.Fn SSL_add_client_CA
+have the following return values:
+.Bl -tag -width Ds
+.It Dv STACK_OF Ns Po Vt X509_NAMES Pc
+List of CA names explicitly set (for
+.Fa ctx
+or in server mode) or sent by the server (client mode).
+.It Dv NULL
+No client CA list was explicitly set (for
+.Fa ctx
+or in server mode) or the server did not send a list of CAs (client mode).
+.El
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_set_client_CA_list 3 ,
+.Xr SSL_CTX_set_client_cert_cb 3

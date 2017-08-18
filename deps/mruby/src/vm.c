@@ -1894,13 +1894,9 @@ RETRY_TRY_BLOCK:
           }
           /* call ensure only when we skip this callinfo */
           if (ci[0].ridx == ci[-1].ridx) {
-	    mrb_value *org_stbase = mrb->c->stbase;
             while (mrb->c->eidx > ci->epos) {
               ecall(mrb, --mrb->c->eidx);
               ci = mrb->c->ci;
-	      if (org_stbase != mrb->c->stbase) {
-		stk = mrb->c->stack;
-	      }
             }
           }
         }
@@ -1989,18 +1985,21 @@ RETRY_TRY_BLOCK:
           if (!proc->env || !MRB_ENV_STACK_SHARED_P(proc->env)) {
             goto L_BREAK_ERROR;
           }
-          while (mrb->c->eidx > mrb->c->ci->epos) {
-            ecall(mrb, --mrb->c->eidx);
-          }
           /* break from fiber block */
           if (mrb->c->ci == mrb->c->cibase && mrb->c->ci->pc) {
             struct mrb_context *c = mrb->c;
 
+            while (mrb->c->eidx > 0) {
+              ecall(mrb, --mrb->c->eidx);
+            }
             mrb->c = c->prev;
             c->prev = NULL;
             ci = mrb->c->ci;
           }
           if (ci->acc < 0) {
+            while (mrb->c->eidx > mrb->c->ci->epos) {
+              ecall(mrb, --mrb->c->eidx);
+            }
             ARENA_RESTORE(mrb, ai);
             mrb->c->vmexec = FALSE;
             mrb->exc = (struct RObject*)break_new(mrb, proc, v);

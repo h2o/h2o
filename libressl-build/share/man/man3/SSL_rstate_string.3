@@ -1,0 +1,55 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_RSTATE_STRING 3
+.Os
+.Sh NAME
+.Nm SSL_rstate_string ,
+.Nm SSL_rstate_string_long
+.Nd get textual description of state of an SSL object during read operation
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft const char *
+.Fn SSL_rstate_string "SSL *ssl"
+.Ft const char *
+.Fn SSL_rstate_string_long "SSL *ssl"
+.Sh DESCRIPTION
+.Fn SSL_rstate_string
+returns a 2-letter string indicating the current read state of the
+.Vt SSL
+object
+.Fa ssl .
+.Pp
+.Fn SSL_rstate_string_long
+returns a string indicating the current read state of the
+.Vt SSL
+object
+.Fa ssl .
+.Sh NOTES
+When performing a read operation, the SSL/TLS engine must parse the record,
+consisting of header and body.
+When working in a blocking environment,
+.Fn SSL_rstate_string[_long]
+should always return
+.Qo RD Qc Ns / Ns Qo read done Qc .
+.Pp
+This function should only seldom be needed in applications.
+.Sh RETURN VALUES
+.Fn SSL_rstate_string
+and
+.Fn SSL_rstate_string_long
+can return the following values:
+.Bl -tag -width Ds
+.It Qo RH Qc Ns / Ns Qo read header Qc
+The header of the record is being evaluated.
+.It Qo RB Qc Ns / Ns Qo read body Qc
+The body of the record is being evaluated.
+.It Qo RD Qc Ns / Ns Qo read done Qc
+The record has been completely processed.
+.It Qo unknown Qc Ns / Ns Qo unknown Qc
+The read state is unknown.
+This should never happen.
+.El
+.Sh SEE ALSO
+.Xr ssl 3

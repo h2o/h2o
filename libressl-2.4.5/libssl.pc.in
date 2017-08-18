@@ -1,0 +1,16 @@
+#libssl pkg-config source file
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: LibreSSL-libssl
+Description: Secure Sockets Layer and cryptography libraries
+Version: @VERSION@
+Requires:
+Requires.private: libcrypto
+Conflicts:
+Libs: -L${libdir} -lssl
+Libs.private: @LIBS@ -lcrypto @PLATFORM_LDADD@
+Cflags: -I${includedir}

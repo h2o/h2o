@@ -1,0 +1,150 @@
+#!/bin/sh
+
+key="$1"
+cert="$2"
+CA="-CAfile $3"
+ssltest="${4-./ssltest} -key $key -cert $cert -c_key $key -c_cert $cert"
+openssl=${5-openssl}
+extra="$6"
+
+$openssl version || exit 1
+
+if $openssl x509 -in $cert -text -noout | fgrep 'DSA Public Key' >/dev/null; then
+  dsa_cert=YES
+else
+  dsa_cert=NO
+fi
+
+#############################################################################
+
+echo test sslv2/sslv3
+$ssltest $extra || exit 1
+
+echo test sslv2/sslv3 with server authentication
+$ssltest -server_auth $CA $extra || exit 1
+
+echo test sslv2/sslv3 with client authentication
+$ssltest -client_auth $CA $extra || exit 1
+
+echo test sslv2/sslv3 with both client and server authentication
+$ssltest -server_auth -client_auth $CA $extra || exit 1
+
+echo test sslv2/sslv3 via BIO pair
+$ssltest $extra || exit 1
+
+if [ $dsa_cert = NO ]; then
+  echo 'test sslv2/sslv3 w/o (EC)DHE via BIO pair'
+  $ssltest -bio_pair -no_dhe -no_ecdhe $extra || exit 1
+fi
+
+echo test sslv2/sslv3 with 1024bit DHE via BIO pair
+$ssltest -bio_pair -dhe1024dsa -v $extra || exit 1
+
+echo test sslv2/sslv3 with server authentication
+$ssltest -bio_pair -server_auth $CA $extra || exit 1
+
+echo test sslv2/sslv3 with client authentication via BIO pair
+$ssltest -bio_pair -client_auth $CA $extra || exit 1
+
+echo test sslv2/sslv3 with both client and server authentication via BIO pair
+$ssltest -bio_pair -server_auth -client_auth $CA $extra || exit 1
+
+echo test sslv2/sslv3 with both client and server authentication via BIO pair and app verify
+$ssltest -bio_pair -server_auth -client_auth -app_verify $CA $extra || exit 1
+
+echo "Testing ciphersuites"
+for protocol in TLSv1.2; do
+  echo "Testing ciphersuites for $protocol"
+  for cipher in `$openssl ciphers "$protocol+aRSA" | tr ':' ' '`; do
+    echo "Testing $cipher"
+    $ssltest -cipher $cipher
+    if [ $? -ne 0 ] ; then
+      echo "Failed $cipher"
+      exit 1
+    fi
+  done
+done
+
+#############################################################################
+
+if $openssl no-dh; then
+  echo skipping anonymous DH tests
+else
+  echo test tls1 with 1024bit anonymous DH, multiple handshakes
+  $ssltest -v -bio_pair -tls1 -cipher ADH -dhe1024dsa -num 10 -f -time $extra || exit 1
+fi
+
+#if $openssl no-rsa; then
+#  echo skipping RSA tests
+#else
+#  echo 'test tls1 with 1024bit RSA, no (EC)DHE, multiple handshakes'
+#  ./ssltest -v -bio_pair -tls1 -cert ../apps/server2.pem -no_dhe -no_ecdhe -num 10 -f -time $extra || exit 1
+#
+#  if $openssl no-dh; then
+#    echo skipping RSA+DHE tests
+#  else
+#    echo test tls1 with 1024bit RSA, 1024bit DHE, multiple handshakes
+#    ./ssltest -v -bio_pair -tls1 -cert ../apps/server2.pem -dhe1024dsa -num 10 -f -time $extra || exit 1
+#  fi
+#fi
+
+#
+# DTLS tests
+#
+
+echo test dtlsv1
+$ssltest -dtls1 $extra || exit 1
+
+echo test dtlsv1 with server authentication
+$ssltest -dtls1 -server_auth $CA $extra || exit 1
+
+echo test dtlsv1 with client authentication
+$ssltest -dtls1 -client_auth $CA $extra || exit 1
+
+echo test dtlsv1 with both client and server authentication
+$ssltest -dtls1 -server_auth -client_auth $CA $extra || exit 1
+
+echo "Testing DTLS ciphersuites"
+for protocol in SSLv3; do
+  echo "Testing ciphersuites for $protocol"
+  for cipher in `$openssl ciphers "RSA+$protocol" | tr ':' '\n' |
+    grep -v RC4`; do
+    echo "Testing $cipher"
+    $ssltest -cipher $cipher -dtls1
+    if [ $? -ne 0 ] ; then
+      echo "Failed $cipher"
+      exit 1
+    fi
+  done
+done
+
+#
+# Next Protocol Negotiation tests
+#
+echo "Testing NPN..."
+$ssltest -bio_pair -tls1 -npn_client || exit 1
+$ssltest -bio_pair -tls1 -npn_server || exit 1
+$ssltest -bio_pair -tls1 -npn_server_reject || exit 1
+$ssltest -bio_pair -tls1 -npn_client -npn_server_reject || exit 1
+$ssltest -bio_pair -tls1 -npn_client -npn_server || exit 1
+$ssltest -bio_pair -tls1 -npn_client -npn_server -num 2 || exit 1
+$ssltest -bio_pair -tls1 -npn_client -npn_server -num 2 -reuse || exit 1
+
+#
+# ALPN tests
+#
+echo "Testing ALPN..."
+$ssltest -bio_pair -tls1 -alpn_client foo -alpn_server bar || exit 1
+$ssltest -bio_pair -tls1 -alpn_client foo -alpn_server foo \
+  -alpn_expected foo || exit 1
+$ssltest -bio_pair -tls1 -alpn_client foo,bar -alpn_server foo \
+  -alpn_expected foo || exit 1
+$ssltest -bio_pair -tls1 -alpn_client bar,foo -alpn_server foo \
+  -alpn_expected foo || exit 1
+$ssltest -bio_pair -tls1 -alpn_client bar,foo -alpn_server foo,bar \
+  -alpn_expected foo || exit 1
+$ssltest -bio_pair -tls1 -alpn_client bar,foo -alpn_server bar,foo \
+  -alpn_expected bar || exit 1
+$ssltest -bio_pair -tls1 -alpn_client foo,bar -alpn_server bar,foo \
+  -alpn_expected bar || exit 1
+$ssltest -bio_pair -tls1 -alpn_client baz -alpn_server bar,foo || exit 1

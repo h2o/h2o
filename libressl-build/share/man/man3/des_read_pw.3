@@ -1,0 +1,97 @@
+.Dd $Mdocdate: November 12 2015 $
+.Dt DES_READ_PW 3
+.Os
+.Sh NAME
+.Nm des_read_password ,
+.Nm des_read_2passwords ,
+.Nm des_read_pw_string ,
+.Nm des_read_pw
+.Nd Compatibility user interface functions
+.Sh SYNOPSIS
+.In openssl/des_old.h
+.Ft int
+.Fo des_read_password
+.Fa "DES_cblock *key"
+.Fa "const char *prompt"
+.Fa "int verify"
+.Fc
+.Ft int
+.Fo des_read_2passwords
+.Fa "DES_cblock *key1"
+.Fa "DES_cblock *key2"
+.Fa "const char *prompt"
+.Fa "int verify"
+.Fc
+.Ft int
+.Fo des_read_pw_string
+.Fa "char *buf"
+.Fa "int length"
+.Fa "const char *prompt"
+.Fa "int verify"
+.Fc
+.Ft int
+.Fo des_read_pw
+.Fa "char *buf"
+.Fa "char *buff"
+.Fa "int size"
+.Fa "const char *prompt"
+.Fa "int verify"
+.Fc
+.Sh DESCRIPTION
+The DES library contained a few routines to prompt for passwords.
+These aren't necessarily dependent on DES, and have therefore become
+part of the UI compatibility library.
+.Pp
+.Fn des_read_pw
+writes the string specified by
+.Fa prompt
+to standard output turns echo off and reads an input string from the
+terminal.
+The string is returned in
+.Fa buf ,
+which must have space for at least
+.Fa size
+bytes.
+If
+.Fa verify
+is set, the user is asked for the password twice and unless the two
+copies match, an error is returned.
+The second password is stored in
+.Fa buff ,
+which must therefore also be at least
+.Fa size
+bytes.
+A return code of -1 indicates a system error, 1 failure due to use
+interaction, and 0 is success.
+All other functions described here use
+.Fn des_read_pw
+to do the work.
+.Pp
+.Fn des_read_pw_string
+is a variant of
+.Fn des_read_pw
+that provides a buffer for you if
+.Fa verify
+is set.
+.Pp
+.Fn des_read_password
+calls
+.Fn des_read_pw
+and converts the password to a DES key by calling
+.Xr DES_string_to_key 3 ;
+.Fn des_read_2passwords
+operates in the same way as
+.Fn des_read_password
+except that it generates two keys by using the
+.Xr DES_string_to_2key 3
+function.
+.Sh NOTES
+.Fn des_read_pw_string
+is available in the MIT Kerberos library as well, and is also available
+under the name
+.Xr EVP_read_pw_string 3 .
+.Sh SEE ALSO
+.Xr UI_new 3
+.Sh AUTHORS
+.An Richard Levitte Aq Mt richard@levitte.org
+for the OpenSSL project.

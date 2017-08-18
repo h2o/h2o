@@ -1,0 +1,52 @@
+#!/bin/sh
+set -e
+
+./autogen.sh
+
+if [ "x$ARCH" = "xnative" ]; then
+	# test autotools
+	./configure
+	make -j 4 distcheck
+
+	# make distribution
+	make dist
+	tar zxvf libressl-*.tar.gz
+	cd libressl-*
+	mkdir build
+	cd build
+
+	# test cmake and ninja
+	if [ `uname` = "Darwin" ]; then
+		cmake ..
+		make
+		make test
+	else
+		sudo apt-get update
+		sudo apt-get install -y python-software-properties
+		sudo apt-add-repository -y ppa:kalakris/cmake
+		sudo apt-get update
+		sudo apt-get install -y cmake ninja-build
+		cmake -GNinja ..
+		ninja
+		ninja test
+	fi
+else
+	CPU=i686
+	if [ "x$ARCH" = "xmingw64" ]; then
+		CPU=x86_64
+	fi
+	export CC=$CPU-w64-mingw32-gcc
+
+	if [ -z $(which $CC) ]; then
+		# Update Ubuntu 12.04 with current mingw toolchain
+		sudo apt-get update
+		sudo apt-get install -y python-software-properties
+		sudo apt-add-repository -y ppa:tobydox/mingw-x-precise
+		sudo apt-get update
+		sudo apt-get install -y $ARCH-x-gcc make
+		export PATH=$PATH:/opt/$ARCH/bin
+	fi
+
+	./configure --host=$CPU-w64-mingw32
+	make -j
+fi

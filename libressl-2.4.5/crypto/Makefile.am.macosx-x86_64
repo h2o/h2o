@@ -1,0 +1,41 @@
+
+ASM_X86_64_MACOSX = aes/aes-macosx-x86_64.s
+ASM_X86_64_MACOSX += aes/bsaes-macosx-x86_64.s
+ASM_X86_64_MACOSX += aes/vpaes-macosx-x86_64.s
+ASM_X86_64_MACOSX += aes/aesni-macosx-x86_64.s
+ASM_X86_64_MACOSX += aes/aesni-sha1-macosx-x86_64.s
+ASM_X86_64_MACOSX += bn/modexp512-macosx-x86_64.s
+ASM_X86_64_MACOSX += bn/mont-macosx-x86_64.s
+ASM_X86_64_MACOSX += bn/mont5-macosx-x86_64.s
+ASM_X86_64_MACOSX += bn/gf2m-macosx-x86_64.s
+ASM_X86_64_MACOSX += camellia/cmll-macosx-x86_64.s
+ASM_X86_64_MACOSX += md5/md5-macosx-x86_64.s
+ASM_X86_64_MACOSX += modes/ghash-macosx-x86_64.s
+ASM_X86_64_MACOSX += rc4/rc4-macosx-x86_64.s
+ASM_X86_64_MACOSX += rc4/rc4-md5-macosx-x86_64.s
+ASM_X86_64_MACOSX += sha/sha1-macosx-x86_64.s
+ASM_X86_64_MACOSX += sha/sha256-macosx-x86_64.S
+ASM_X86_64_MACOSX += sha/sha512-macosx-x86_64.S
+ASM_X86_64_MACOSX += whrlpool/wp-macosx-x86_64.s
+ASM_X86_64_MACOSX += cpuid-macosx-x86_64.S
+
+EXTRA_DIST += $(ASM_X86_64_MACOSX)
+
+if HOST_ASM_MACOSX_X86_64
+libcrypto_la_CPPFLAGS += -DAES_ASM
+libcrypto_la_CPPFLAGS += -DBSAES_ASM
+libcrypto_la_CPPFLAGS += -DVPAES_ASM
+libcrypto_la_CPPFLAGS += -DOPENSSL_IA32_SSE2
+libcrypto_la_CPPFLAGS += -DOPENSSL_BN_ASM_MONT
+libcrypto_la_CPPFLAGS += -DOPENSSL_BN_ASM_MONT5
+libcrypto_la_CPPFLAGS += -DOPENSSL_BN_ASM_GF2m
+libcrypto_la_CPPFLAGS += -DMD5_ASM
+libcrypto_la_CPPFLAGS += -DGHASH_ASM
+libcrypto_la_CPPFLAGS += -DRSA_ASM
+libcrypto_la_CPPFLAGS += -DSHA1_ASM
+libcrypto_la_CPPFLAGS += -DSHA256_ASM
+libcrypto_la_CPPFLAGS += -DSHA512_ASM
+libcrypto_la_CPPFLAGS += -DWHIRLPOOL_ASM
+libcrypto_la_CPPFLAGS += -DOPENSSL_CPUID_OBJ
+libcrypto_la_SOURCES += $(ASM_X86_64_MACOSX)
+endif

@@ -1,0 +1,82 @@
+.Dd $Mdocdate: October 09 2015 $
+.Dt CONF_MODULES_LOAD_FILE 3
+.Os
+.Sh NAME
+.Nm CONF_modules_load_file ,
+.Nm CONF_modules_load
+.Nd OpenSSL configuration functions
+.Sh SYNOPSIS
+.In openssl/conf.h
+.Ft int
+.Fo CONF_modules_load_file
+.Fa "const char *filename"
+.Fa "const char *appname"
+.Fa "unsigned long flags"
+.Fc
+.Ft int
+.Fo CONF_modules_load
+.Fa "const CONF *cnf"
+.Fa "const char *appname"
+.Fa "unsigned long flags"
+.Fc
+.Sh DESCRIPTION
+The function
+.Fn CONF_modules_load_file
+configures OpenSSL using file
+.Fa filename
+and application name
+.Fa appname .
+If
+.Fa filename
+is
+.Dv NULL ,
+the standard OpenSSL configuration file is used.
+If
+.Fa appname
+is
+.Dv NULL ,
+the standard OpenSSL application name
+.Qq openssl_conf
+is used.
+The behaviour can be cutomized using
+.Fa flags .
+.Pp
+.Fn CONF_modules_load
+is idential to
+.Fn CONF_modules_load_file
+except it reads configuration information from
+.Fa cnf .
+.Pp
+The following
+.Fa flags
+are currently recognized:
+.Bl -tag -width Ds
+.It Dv CONF_MFLAGS_IGNORE_ERRORS
+Ignore errors returned by individual configuration modules.
+By default, the first module error is considered fatal and no further
+modules are loaded.
+.It Dv CONF_MFLAGS_SILENT
+Do not add any error information.
+By default, all module errors add error information to the error queue.
+.It Dv CONF_MFLAGS_NO_DSO
+Disable loading of configuration modules from DSOs.
+.It Dv CONF_MFLAGS_IGNORE_MISSING_FILE
+Let
+.Fn CONF_modules_load_file
+ignore missing configuration files.
+By default, a missing configuration file returns an error.
+.El
+.Sh RETURN VALUES
+These functions return 1 for success and zero or a negative value for
+failure.
+If module errors are not ignored, the return code will reflect the return
+value of the failing module (this will always be zero or negative).
+.Sh SEE ALSO
+.Xr CONF_free 3 ,
+.Xr ERR 3 ,
+.Xr OPENSSL_config 3
+.Sh HISTORY
+.Fn CONF_modules_load_file
+and
+.Fn CONF_modules_load
+first appeared in OpenSSL 0.9.7.

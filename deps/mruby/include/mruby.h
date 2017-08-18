@@ -1186,8 +1186,8 @@ MRB_API mrb_value mrb_format(mrb_state *mrb, const char *format, ...);
 static inline void*
 mrbmemcpy(void *dst, const void *src, size_t n)
 {
-  char *d = (char*)dst;
-  const char *s = (const char*)src;
+  char *d = dst;
+  const char *s = src;
   while (n--)
     *d++ = *s++;
   return d;
@@ -1197,7 +1197,7 @@ mrbmemcpy(void *dst, const void *src, size_t n)
 static inline void*
 mrbmemset(void *s, int c, size_t n)
 {
-  char *t = (char*)s;
+  char *t = s;
   while (n--)
     *t++ = c;
   return s;

@@ -1,0 +1,11 @@
+idea/libcrypto_la-i_cfb64.lo: idea/i_cfb64.c ../include/openssl/idea.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  idea/idea_lcl.h
+
+../include/openssl/idea.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+idea/idea_lcl.h:

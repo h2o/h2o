@@ -1,0 +1,193 @@
+.\"
+.\"	$OpenBSD: SSL_alert_type_string.3,v 1.2 2014/12/02 14:11:01 jmc Exp $
+.\"
+.Dd $Mdocdate: December 2 2014 $
+.Dt SSL_ALERT_TYPE_STRING.POD 3
+.Os
+.Sh NAME
+.Nm SSL_alert_type_string ,
+.Nm SSL_alert_type_string_long ,
+.Nm SSL_alert_desc_string ,
+.Nm SSL_alert_desc_string_long
+.Nd get textual description of alert information
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft const char *
+.Fn SSL_alert_type_string "int value"
+.Ft const char *
+.Fn SSL_alert_type_string_long "int value"
+.Ft const char *
+.Fn SSL_alert_desc_string "int value"
+.Ft const char *
+.Fn SSL_alert_desc_string_long "int value"
+.Sh DESCRIPTION
+.Fn SSL_alert_type_string
+returns a one letter string indicating the type of the alert specified by
+.Fa value .
+.Pp
+.Fn SSL_alert_type_string_long
+returns a string indicating the type of the alert specified by
+.Fa value .
+.Pp
+.Fn SSL_alert_desc_string
+returns a two letter string as a short form describing the reason of the alert
+specified by
+.Fa value .
+.Pp
+.Fn SSL_alert_desc_string_long
+returns a string describing the reason of the alert specified by
+.Fa value .
+.Sh NOTES
+When one side of an SSL/TLS communication wants to inform the peer about
+a special situation, it sends an alert.
+The alert is sent as a special message and does not influence the normal data
+stream (unless its contents results in the communication being canceled).
+.Pp
+A warning alert is sent, when a non-fatal error condition occurs.
+The
+.Dq close notify
+alert is sent as a warning alert.
+Other examples for non-fatal errors are certificate errors
+.Po
+.Dq certificate expired ,
+.Dq unsupported certificate
+.Pc ,
+for which a warning alert may be sent.
+(The sending party may, however, decide to send a fatal error.)
+The receiving side may cancel the connection on reception of a warning alert at
+its discretion.
+.Pp
+Several alert messages must be sent as fatal alert messages as specified
+by the TLS RFC.
+A fatal alert always leads to a connection abort.
+.Sh RETURN VALUES
+The following strings can occur for
+.Fn SSL_alert_type_string
+or
+.Fn SSL_alert_type_string_long :
+.Bl -tag -width Ds
+.It \(dqW\(dq/\(dqwarning\(dq
+.It \(dqF\(dq/\(dqfatal\(dq
+.It \(dqU\(dq/\(dqunknown\(dq
+This indicates that no support is available for this alert type.
+Probably
+.Fa value
+does not contain a correct alert message.
+.El
+.Pp
+The following strings can occur for
+.Fn SSL_alert_desc_string
+or
+.Fn SSL_alert_desc_string_long :
+.Bl -tag -width Ds
+.It \(dqCN\(dq/\(dqclose notify\(dq
+The connection shall be closed.
+This is a warning alert.
+.It \(dqUM\(dq/\(dqunexpected message\(dq
+An inappropriate message was received.
+This alert is always fatal and should never be observed in communication
+between proper implementations.
+.It \(dqBM\(dq/\(dqbad record mac\(dq
+This alert is returned if a record is received with an incorrect MAC.
+This message is always fatal.
+.It \(dqDF\(dq/\(dqdecompression failure\(dq
+The decompression function received improper input
+(e.g., data that would expand to excessive length).
+This message is always fatal.
+.It \(dqHF\(dq/\(dqhandshake failure\(dq
+Reception of a handshake_failure alert message indicates that the sender was
+unable to negotiate an acceptable set of security parameters given the options
+available.
+This is a fatal error.
+.It \(dqNC\(dq/\(dqno certificate\(dq
+A client, that was asked to send a certificate, does not send a certificate
+(SSLv3 only).
+.It \(dqBC\(dq/\(dqbad certificate\(dq
+A certificate was corrupt, contained signatures that did not verify correctly,
+etc.
+.It \(dqUC\(dq/\(dqunsupported certificate\(dq
+A certificate was of an unsupported type.
+.It \(dqCR\(dq/\(dqcertificate revoked\(dq
+A certificate was revoked by its signer.
+.It \(dqCE\(dq/\(dqcertificate expired\(dq
+A certificate has expired or is not currently valid.
+.It \(dqCU\(dq/\(dqcertificate unknown\(dq
+Some other (unspecified) issue arose in processing the certificate,
+rendering it unacceptable.
+.It \(dqIP\(dq/\(dqillegal parameter\(dq
+A field in the handshake was out of range or inconsistent with other fields.
+This is always fatal.
+.It \(dqDC\(dq/\(dqdecryption failed\(dq
+A TLSCiphertext decrypted in an invalid way: either it wasn't an even multiple
+of the block length or its padding values, when checked, weren't correct.
+This message is always fatal.
+.It \(dqRO\(dq/\(dqrecord overflow\(dq
+A TLSCiphertext record was received which had a length more than
+2^14+2048 bytes, or a record decrypted to a TLSCompressed record with more than
+2^14+1024 bytes.
+This message is always fatal.
+.It \(dqCA\(dq/\(dqunknown CA\(dq
+A valid certificate chain or partial chain was received,
+but the certificate was not accepted because the CA certificate could not be
+located or couldn't be matched with a known, trusted CA.
+This message is always fatal.
+.It \(dqAD\(dq/\(dqaccess denied\(dq
+A valid certificate was received, but when access control was applied,
+the sender decided not to proceed with negotiation.
+This message is always fatal.
+.It \(dqDE\(dq/\(dqdecode error\(dq
+A message could not be decoded because some field was out of the specified
+range or the length of the message was incorrect.
+This message is always fatal.
+.It \(dqCY\(dq/\(dqdecrypt error\(dq
+A handshake cryptographic operation failed, including being unable to correctly
+verify a signature, decrypt a key exchange, or validate a finished message.
+.It \(dqER\(dq/\(dqexport restriction\(dq
+A negotiation not in compliance with export restrictions was detected;
+for example, attempting to transfer a 1024 bit ephemeral RSA key for the
+RSA_EXPORT handshake method.
+This message is always fatal.
+.It \(dqPV\(dq/\(dqprotocol version\(dq
+The protocol version the client has attempted to negotiate is recognized,
+but not supported.
+(For example, old protocol versions might be avoided for security reasons.)
+This message is always fatal.
+.It \(dqIS\(dq/\(dqinsufficient security\(dq
+Returned instead of handshake_failure when a negotiation has failed
+specifically because the server requires ciphers more secure than those
+supported by the client.
+This message is always fatal.
+.It \(dqIE\(dq/\(dqinternal error\(dq
+An internal error unrelated to the peer or the correctness of the protocol
+makes it impossible to continue (such as a memory allocation failure).
+This message is always fatal.
+.It \(dqUS\(dq/\(dquser canceled\(dq
+This handshake is being canceled for some reason unrelated to a protocol
+failure.
+If the user cancels an operation after the handshake is complete,
+just closing the connection by sending a close_notify is more appropriate.
+This alert should be followed by a close_notify.
+This message is generally a warning.
+.It \(dqNR\(dq/\(dqno renegotiation\(dq
+Sent by the client in response to a hello request or by the server in response
+to a client hello after initial handshaking.
+Either of these would normally lead to renegotiation; when that is not
+appropriate, the recipient should respond with this alert; at that point,
+the original requester can decide whether to proceed with the connection.
+One case where this would be appropriate would be where a server has spawned a
+process to satisfy a request; the process might receive security parameters
+(key length, authentication, etc.) at startup and it might be difficult to
+communicate changes to these parameters after that point.
+This message is always a warning.
+.It \(dqUP\(dq/\(dqunknown PSK identity\(dq
+Sent by the server to indicate that it does not recognize a PSK identity or an
+SRP identity.
+.It \(dqUK\(dq/\(dqunknown\(dq
+This indicates that no description is available for this alert type.
+Probably
+.Fa value
+does not contain a correct alert message.
+.El
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_set_info_callback 3

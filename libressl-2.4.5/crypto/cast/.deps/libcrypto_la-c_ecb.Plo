@@ -1,0 +1,13 @@
+cast/libcrypto_la-c_ecb.lo: cast/c_ecb.c ../include/openssl/cast.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  cast/cast_lcl.h ../include/openssl/opensslv.h
+
+../include/openssl/cast.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+cast/cast_lcl.h:
+
+../include/openssl/opensslv.h:

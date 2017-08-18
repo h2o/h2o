@@ -1,0 +1,101 @@
+.Dd $Mdocdate: September 10 2002 $
+.Dt BN_ZERO 3
+.Os
+.Sh NAME
+.Nm BN_zero ,
+.Nm BN_one ,
+.Nm BN_value_one ,
+.Nm BN_set_word ,
+.Nm BN_get_word
+.Nd BIGNUM assignment operations
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft int
+.Fo BN_zero
+.Fa "BIGNUM *a"
+.Fc
+.Ft int
+.Fo BN_one
+.Fa "BIGNUM *a"
+.Fc
+.Ft const BIGNUM *
+.Fo BN_value_one
+.Fa void
+.Fc
+.Ft int
+.Fo BN_set_word
+.Fa "BIGNUM *a"
+.Fa "unsigned long w"
+.Fc
+.Ft unsigned long
+.Fo BN_get_word
+.Fa "BIGNUM *a"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_zero ,
+.Fn BN_one ,
+and
+.Fn BN_set_word
+set
+.Fa a
+to the values 0, 1 and
+.Fa w
+respectively.
+.Fn BN_zero
+and
+.Fn BN_one
+are macros.
+.Pp
+.Fn BN_value_one
+returns a
+.Vt BIGNUM
+constant of value 1.
+This constant is useful for use in comparisons and assignment.
+.Pp
+.Fn BN_get_word
+returns
+.Fa a
+if it can be represented as an
+.Vt unsigned long .
+.Sh RETURN VALUES
+.Fn BN_get_word
+returns the value
+.Fa a ,
+or 0xffffffffL if
+.Fa a
+cannot be represented as an
+.Vt unsigned long .
+.Pp
+.Fn BN_zero ,
+.Fn BN_one ,
+and
+.Fn BN_set_word
+return 1 on success, 0 otherwise.
+.Fn BN_value_one
+returns the constant.
+.Sh SEE ALSO
+.Xr bn 3 ,
+.Xr BN_bn2bin 3
+.Sh HISTORY
+.Fn BN_zero ,
+.Fn BN_one ,
+and
+.Fn BN_set_word
+are available in all versions of SSLeay and OpenSSL.
+.Fn BN_value_one
+and
+.Fn BN_get_word
+were added in SSLeay 0.8.
+.Pp
+.Fn BN_value_one
+was changed to return a true
+.Vt const BIGNUM *
+in OpenSSL 0.9.7.
+.Sh BUGS
+Someone might change the constant.
+.Pp
+If a
+.Vt BIGNUM
+is equal to 0xffffffffL it can be represented as an
+.Vt unsigned long
+but this value is also returned on error.

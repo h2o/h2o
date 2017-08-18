@@ -1,0 +1,59 @@
+.Dd $Mdocdate: June 16 2014 $
+.Dt BN_MOD_INVERSE 3
+.Os
+.Sh NAME
+.Nm BN_mod_inverse
+.Nd compute inverse modulo n
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft BIGNUM *
+.Fo BN_mod_inverse
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "const BIGNUM *n"
+.Fa "BN_CTX *ctx"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_mod_inverse
+computes the inverse of
+.Fa a
+modulo
+.Fa n
+add places the result in
+.Fa r
+.Pq Li (a*r)%n==1 .
+If
+.Fa r
+is
+.Dv NULL ,
+a new
+.Vt BIGNUM
+is created.
+.Pp
+.Fa ctx
+is a previously allocated
+.Vt BN_CTX
+used for temporary variables.
+.Fa r
+may be the same
+.Vt BIGNUM
+as
+.Fa a
+or
+.Fa n .
+.Sh RETURN VALUES
+.Fn BN_mod_inverse
+returns the
+.Vt BIGNUM
+containing the inverse, or
+.Dv NULL
+on error.
+The error codes can be obtained by
+.Xr ERR_get_error 3 .
+.Sh SEE ALSO
+.Xr bn 3 ,
+.Xr BN_add 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn BN_mod_inverse
+is available in all versions of SSLeay and OpenSSL.

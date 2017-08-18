@@ -579,8 +579,6 @@ mark_context(mrb_state *mrb, struct mrb_context *c)
   int i;
   mrb_callinfo *ci;
 
-  if (c->status == MRB_FIBER_TERMINATED) return;
-
   /* mark VM stack */
   mark_context_stack(mrb, c);
 

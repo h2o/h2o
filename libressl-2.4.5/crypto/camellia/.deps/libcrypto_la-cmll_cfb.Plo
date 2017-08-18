@@ -1,0 +1,15 @@
+camellia/libcrypto_la-cmll_cfb.lo: camellia/cmll_cfb.c \
+  ../include/openssl/camellia.h ../include/openssl/opensslconf.h \
+  ../include/openssl/opensslfeatures.h \
+  /Library/Developer/CommandLineTools/usr/bin/../lib/clang/8.1.0/include/stddef.h \
+  ../include/openssl/modes.h
+
+../include/openssl/camellia.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+/Library/Developer/CommandLineTools/usr/bin/../lib/clang/8.1.0/include/stddef.h:
+
+../include/openssl/modes.h:

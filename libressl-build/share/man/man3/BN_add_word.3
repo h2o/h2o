@@ -1,0 +1,124 @@
+.Dd $Mdocdate: February 23 2015 $
+.Dt BN_ADD_WORD 3
+.Os
+.Sh NAME
+.Nm BN_add_word ,
+.Nm BN_sub_word ,
+.Nm BN_mul_word ,
+.Nm BN_div_word ,
+.Nm BN_mod_word
+.Nd arithmetic functions on BIGNUMs with integers
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft int
+.Fo BN_add_word
+.Fa "BIGNUM *a"
+.Fa "BN_ULONG w"
+.Fc
+.Ft int
+.Fo BN_sub_word
+.Fa "BIGNUM *a"
+.Fa "BN_ULONG w"
+.Fc
+.Ft int
+.Fo BN_mul_word
+.Fa "BIGNUM *a"
+.Fa "BN_ULONG w"
+.Fc
+.Ft BN_ULONG
+.Fo BN_div_word
+.Fa "BIGNUM *a"
+.Fa "BN_ULONG w"
+.Fc
+.Ft BN_ULONG
+.Fo BN_mod_word
+.Fa "const BIGNUM *a"
+.Fa "BN_ULONG w"
+.Fc
+.Sh DESCRIPTION
+These functions perform arithmetic operations on BIGNUMs with unsigned
+integers.
+They are much more efficient than the normal BIGNUM arithmetic
+operations.
+.Pp
+.Fn BN_add_word
+adds
+.Fa w
+to
+.Fa a
+.Pq Li a+=w .
+.Pp
+.Fn BN_sub_word
+subtracts
+.Fa w
+from
+.Fa a
+.Pq Li a-=w .
+.Pp
+.Fn BN_mul_word
+multiplies
+.Fa a
+and
+.Fa w
+.Pq Li a*=w .
+.Pp
+.Fn BN_div_word
+divides
+.Fa a
+by
+.Fa w
+.Pq Li a/=w
+and returns the remainder.
+.Pp
+.Fn BN_mod_word
+returns the remainder of
+.Fa a
+divided by
+.Fa w
+.Pq Li a%w
+or (BN_ULONG)-1 on error.
+.Pp
+For
+.Fn BN_div_word
+and
+.Fn BN_mod_word ,
+.Fa w
+must not be 0.
+.Sh RETURN VALUES
+.Fn BN_add_word ,
+.Fn BN_sub_word ,
+and
+.Fn BN_mul_word
+return 1 for success, 0 on error.
+The error codes can be obtained by
+.Xr ERR_get_error 3 .
+.Pp
+.Fn BN_mod_word
+and
+.Fn BN_div_word
+return
+.Fa a Ns % Ns Fa w
+on success and
+.Pq Vt BN_ULONG Ns -1
+if an error occurred.
+.Sh SEE ALSO
+.Xr bn 3 ,
+.Xr BN_add 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn BN_add_word
+and
+.Fn BN_mod_word
+are available in all versions of SSLeay and OpenSSL.
+.Fn BN_div_word
+was added in SSLeay 0.8, and
+.Fn BN_sub_word
+and
+.Fn BN_mul_word
+in SSLeay 0.9.0.
+.Pp
+Before 0.9.8a, the return value for
+.Fn BN_div_word
+and
+.Fn BN_mod_word
+in case of an error was 0.

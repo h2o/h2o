@@ -1,0 +1,16 @@
+#libtls pkg-config source file
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: LibreSSL-libtls
+Description: Secure communications using the TLS socket protocol.
+Version: @VERSION@
+Requires:
+Requires.private: libcrypto libssl
+Conflicts:
+Libs: -L${libdir} -ltls
+Libs.private: @LIBS@ -lcrypto -lssl @PLATFORM_LDADD@
+Cflags: -I${includedir}

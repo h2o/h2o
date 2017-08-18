@@ -1,0 +1,98 @@
+.\"
+.\"	$OpenBSD: SSL_SESSION_get_time.3,v 1.2 2014/12/02 14:11:01 jmc Exp $
+.\"
+.Dd $Mdocdate: December 2 2014 $
+.Dt SSL_SESSION_GET_TIME 3
+.Os
+.Sh NAME
+.Nm SSL_SESSION_get_time ,
+.Nm SSL_SESSION_set_time ,
+.Nm SSL_SESSION_get_timeout ,
+.Nm SSL_SESSION_set_timeout ,
+.Nm SSL_get_time ,
+.Nm SSL_set_time ,
+.Nm SSL_get_timeout ,
+.Nm SSL_set_timeout
+.Nd retrieve and manipulate session time and timeout settings
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft long
+.Fn SSL_SESSION_get_time "const SSL_SESSION *s"
+.Ft long
+.Fn SSL_SESSION_set_time "SSL_SESSION *s" "long tm"
+.Ft long
+.Fn SSL_SESSION_get_timeout "const SSL_SESSION *s"
+.Ft long
+.Fn SSL_SESSION_set_timeout "SSL_SESSION *s" "long tm"
+.Ft long
+.Fn SSL_get_time "const SSL_SESSION *s"
+.Ft long
+.Fn SSL_set_time "SSL_SESSION *s" "long tm"
+.Ft long
+.Fn SSL_get_timeout "const SSL_SESSION *s"
+.Ft long
+.Fn SSL_set_timeout "SSL_SESSION *s" "long tm"
+.Sh DESCRIPTION
+.Fn SSL_SESSION_get_time
+returns the time at which the session
+.Fa s
+was established.
+The time is given in seconds since the Epoch and therefore compatible to the
+time delivered by the
+.Xr time 3
+call.
+.Pp
+.Fn SSL_SESSION_set_time
+replaces the creation time of the session
+.Fa s
+with
+the chosen value
+.Fa tm .
+.Pp
+.Fn SSL_SESSION_get_timeout
+returns the timeout value set for session
+.Fa s
+in seconds.
+.Pp
+.Fn SSL_SESSION_set_timeout
+sets the timeout value for session
+.Fa s
+in seconds to
+.Fa tm .
+.Pp
+The
+.Fn SSL_get_time ,
+.Fn SSL_set_time ,
+.Fn SSL_get_timeout ,
+and
+.Fn SSL_set_timeout
+functions are synonyms for the
+.Fn SSL_SESSION_*
+counterparts.
+.Sh NOTES
+Sessions are expired by examining the creation time and the timeout value.
+Both are set at creation time of the session to the actual time and the default
+timeout value at creation, respectively, as set by
+.Xr SSL_CTX_set_timeout 3 .
+Using these functions it is possible to extend or shorten the lifetime of the
+session.
+.Sh RETURN VALUES
+.Fn SSL_SESSION_get_time
+and
+.Fn SSL_SESSION_get_timeout
+return the currently valid values.
+.Pp
+.Fn SSL_SESSION_set_time
+and
+.Fn SSL_SESSION_set_timeout
+return 1 on success.
+.Pp
+If any of the function is passed the
+.Dv NULL
+pointer for the session
+.Fa s ,
+0 is returned.
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_set_timeout 3 ,
+.Xr SSL_get_default_timeout 3

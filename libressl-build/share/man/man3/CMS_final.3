@@ -1,0 +1,48 @@
+.Dd $Mdocdate: March 21 2015 $
+.Dt CMS_FINAL 3
+.Os
+.Sh NAME
+.Nm CMS_final
+.Nd finalise a CMS_ContentInfo structure
+.Sh SYNOPSIS
+.In openssl/cms.h
+.Ft int
+.Fo CMS_final
+.Fa "CMS_ContentInfo *cms"
+.Fa "BIO *data"
+.Fa "BIO *dcont"
+.Fa "unsigned int flags"
+.Fc
+.Sh DESCRIPTION
+.Fn CMS_final
+finalises the structure
+.Fa cms .
+Its purpose is to perform any operations necessary on
+.Fa cms
+(digest computation for example) and set the appropriate fields.
+The parameter
+.Fa data
+contains the content to be processed.
+The
+.Fa dcont
+parameter contains a
+.Vt BIO
+to write content to after processing: this is
+only used with detached data and will usually be set to
+.Dv NULL .
+.Sh NOTES
+This function will normally be called when the
+.Dv CMS_PARTIAL
+flag is used.
+It should only be used when streaming is not performed because the
+streaming I/O functions perform finalisation operations internally.
+.Sh RETURN VALUES
+.Fn CMS_final
+returns 1 for success or 0 for failure.
+.Sh SEE ALSO
+.Xr CMS_encrypt 3 ,
+.Xr CMS_sign 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn CMS_final
+was added to OpenSSL 0.9.8.

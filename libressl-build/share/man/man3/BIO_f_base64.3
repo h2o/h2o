@@ -1,0 +1,80 @@
+.Dd $Mdocdate: July 17 2014 $
+.Dt BIO_F_BASE64 3
+.Os
+.Sh NAME
+.Nm BIO_f_base64
+.Nd base64 BIO filter
+.Sh SYNOPSIS
+.In openssl/bio.h
+.In openssl/evp.h
+.Ft BIO_METHOD *
+.Fo BIO_f_base64
+.Fa void
+.Fc
+.Sh DESCRIPTION
+.Fn BIO_f_base64
+returns the base64 BIO method.
+This is a filter BIO that base64 encodes any data written through it
+and decodes any data read through it.
+.Pp
+Base64 BIOs do not support
+.Xr BIO_gets 3
+or
+.Xr BIO_puts 3 .
+.Pp
+.Xr BIO_flush 3
+on a base64 BIO that is being written through
+is used to signal that no more data is to be encoded:
+this is used to flush the final block through the BIO.
+.Pp
+The flag
+.Dv BIO_FLAGS_BASE64_NO_NL
+can be set with
+.Xr BIO_set_flags 3
+to encode the data all on one line
+or expect the data to be all on one line.
+.Sh NOTES
+Because of the format of base64 encoding the end of the encoded
+block cannot always be reliably determined.
+.Sh RETURN VALUES
+.Fn BIO_f_base64
+returns the base64 BIO method.
+.Sh EXAMPLES
+Base64 encode the string "Hello World\en"
+and write the result to standard output:
+.Bd -literal -offset indent
+BIO *bio, *b64;
+char message[] = "Hello World \en";
+
+b64 = BIO_new(BIO_f_base64());
+bio = BIO_new_fp(stdout, BIO_NOCLOSE);
+BIO_push(b64, bio);
+BIO_write(b64, message, strlen(message));
+BIO_flush(b64);
+
+BIO_free_all(b64);
+.Ed
+.Pp
+Read Base64 encoded data from standard input
+and write the decoded data to standard output:
+.Bd -literal -offset indent
+BIO *bio, *b64, *bio_out;
+char inbuf[512];
+int inlen;
+
+b64 = BIO_new(BIO_f_base64());
+bio = BIO_new_fp(stdin, BIO_NOCLOSE);
+bio_out = BIO_new_fp(stdout, BIO_NOCLOSE);
+BIO_push(b64, bio);
+while((inlen = BIO_read(b64, inbuf, 512)) > 0)
+	BIO_write(bio_out, inbuf, inlen);
+
+BIO_flush(bio_out);
+BIO_free_all(b64);
+.Ed
+.Sh BUGS
+The ambiguity of EOF in base64 encoded data can cause additional
+data following the base64 encoded block to be misinterpreted.
+.Pp
+There should be some way of specifying a test that the BIO can perform
+to reliably determine EOF (for example a MIME boundary).

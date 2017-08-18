@@ -1,0 +1,53 @@
+.\"
+.\"	$OpenBSD: SSL_CTX_free.3,v 1.2 2014/12/02 14:11:01 jmc Exp $
+.\"
+.Dd $Mdocdate: December 2 2014 $
+.Dt SSL_CTX_FREE 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_free
+.Nd free an allocated SSL_CTX object
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft void
+.Fn SSL_CTX_free "SSL_CTX *ctx"
+.Sh DESCRIPTION
+.Fn SSL_CTX_free
+decrements the reference count of
+.Fa ctx ,
+and removes the
+.Vt SSL_CTX
+object pointed to by
+.Fa ctx
+and frees up the allocated memory if the reference count has reached 0.
+If
+.Fa ctx
+is a
+.Dv NULL
+pointer, no action occurs.
+.Pp
+It also calls the
+.Xr free 3 Ns ing
+procedures for indirectly affected items, if applicable:
+the session cache, the list of ciphers, the list of Client CAs,
+the certificates and keys.
+.Sh WARNINGS
+If a session-remove callback is set
+.Pq Xr SSL_CTX_sess_set_remove_cb 3 ,
+this callback will be called for each session being freed from
+.Fa ctx Ns 's
+session cache.
+This implies that all corresponding sessions from an external session cache are
+removed as well.
+If this is not desired, the user should explicitly unset the callback by
+calling
+.Fn SSL_CTX_sess_set_remove_cb ctx NULL
+prior to calling
+.Fn SSL_CTX_free .
+.Sh RETURN VALUES
+.Fn SSL_CTX_free
+does not provide diagnostic information.
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_new 3 ,
+.Xr SSL_CTX_sess_set_get_cb 3

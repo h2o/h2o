@@ -1,0 +1,103 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_WANT 3
+.Os
+.Sh NAME
+.Nm SSL_want ,
+.Nm SSL_want_nothing ,
+.Nm SSL_want_read ,
+.Nm SSL_want_write ,
+.Nm SSL_want_x509_lookup
+.Nd obtain state information TLS/SSL I/O operation
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fn SSL_want "const SSL *ssl"
+.Ft int
+.Fn SSL_want_nothing "const SSL *ssl"
+.Ft int
+.Fn SSL_want_read "const SSL *ssl"
+.Ft int
+.Fn SSL_want_write "const SSL *ssl"
+.Ft int
+.Fn SSL_want_x509_lookup "const SSL *ssl"
+.Sh DESCRIPTION
+.Fn SSL_want
+returns state information for the
+.Vt SSL
+object
+.Fa ssl .
+.Pp
+The other
+.Fn SSL_want_*
+calls are shortcuts for the possible states returned by
+.Fn SSL_want .
+.Sh NOTES
+.Fn SSL_want
+examines the internal state information of the
+.Vt SSL
+object.
+Its return values are similar to those of
+.Xr SSL_get_error 3 .
+Unlike
+.Xr SSL_get_error 3 ,
+which also evaluates the error queue,
+the results are obtained by examining an internal state flag only.
+The information must therefore only be used for normal operation under
+non-blocking I/O.
+Error conditions are not handled and must be treated using
+.Xr SSL_get_error 3 .
+.Pp
+The result returned by
+.Fn SSL_want
+should always be consistent with the result of
+.Xr SSL_get_error 3 .
+.Sh RETURN VALUES
+The following return values can currently occur for
+.Fn SSL_want :
+.Bl -tag -width Ds
+.It .Dv SSL_NOTHING
+There is no data to be written or to be read.
+.It .Dv SSL_WRITING
+There are data in the SSL buffer that must be written to the underlying
+.Vt BIO
+layer in order to complete the actual
+.Fn SSL_*
+operation.
+A call to
+.Xr SSL_get_error 3
+should return
+.Dv SSL_ERROR_WANT_WRITE .
+.It Dv SSL_READING
+More data must be read from the underlying
+.Vt BIO
+layer in order to
+complete the actual
+.Fn SSL_*
+operation.
+A call to
+.Xr SSL_get_error 3
+should return
+.Dv SSL_ERROR_WANT_READ.
+.It Dv SSL_X509_LOOKUP
+The operation did not complete because an application callback set by
+.Xr SSL_CTX_set_client_cert_cb 3
+has asked to be called again.
+A call to
+.Xr SSL_get_error 3
+should return
+.Dv SSL_ERROR_WANT_X509_LOOKUP .
+.El
+.Pp
+.Fn SSL_want_nothing ,
+.Fn SSL_want_read ,
+.Fn SSL_want_write ,
+and
+.Fn SSL_want_x509_lookup
+return 1 when the corresponding condition is true or 0 otherwise.
+.Sh SEE ALSO
+.Xr err 3 ,
+.Xr ssl 3 ,
+.Xr SSL_get_error 3

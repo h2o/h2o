@@ -1,0 +1,41 @@
+
+ASM_X86_64_ELF = aes/aes-elf-x86_64.s
+ASM_X86_64_ELF += aes/bsaes-elf-x86_64.s
+ASM_X86_64_ELF += aes/vpaes-elf-x86_64.s
+ASM_X86_64_ELF += aes/aesni-elf-x86_64.s
+ASM_X86_64_ELF += aes/aesni-sha1-elf-x86_64.s
+ASM_X86_64_ELF += bn/modexp512-elf-x86_64.s
+ASM_X86_64_ELF += bn/mont-elf-x86_64.s
+ASM_X86_64_ELF += bn/mont5-elf-x86_64.s
+ASM_X86_64_ELF += bn/gf2m-elf-x86_64.s
+ASM_X86_64_ELF += camellia/cmll-elf-x86_64.s
+ASM_X86_64_ELF += md5/md5-elf-x86_64.s
+ASM_X86_64_ELF += modes/ghash-elf-x86_64.s
+ASM_X86_64_ELF += rc4/rc4-elf-x86_64.s
+ASM_X86_64_ELF += rc4/rc4-md5-elf-x86_64.s
+ASM_X86_64_ELF += sha/sha1-elf-x86_64.s
+ASM_X86_64_ELF += sha/sha256-elf-x86_64.S
+ASM_X86_64_ELF += sha/sha512-elf-x86_64.S
+ASM_X86_64_ELF += whrlpool/wp-elf-x86_64.s
+ASM_X86_64_ELF += cpuid-elf-x86_64.S
+
+EXTRA_DIST += $(ASM_X86_64_ELF)
+
+if HOST_ASM_ELF_X86_64
+libcrypto_la_CPPFLAGS += -DAES_ASM
+libcrypto_la_CPPFLAGS += -DBSAES_ASM
+libcrypto_la_CPPFLAGS += -DVPAES_ASM
+libcrypto_la_CPPFLAGS += -DOPENSSL_IA32_SSE2
+libcrypto_la_CPPFLAGS += -DOPENSSL_BN_ASM_MONT
+libcrypto_la_CPPFLAGS += -DOPENSSL_BN_ASM_MONT5
+libcrypto_la_CPPFLAGS += -DOPENSSL_BN_ASM_GF2m
+libcrypto_la_CPPFLAGS += -DMD5_ASM
+libcrypto_la_CPPFLAGS += -DGHASH_ASM
+libcrypto_la_CPPFLAGS += -DRSA_ASM
+libcrypto_la_CPPFLAGS += -DSHA1_ASM
+libcrypto_la_CPPFLAGS += -DSHA256_ASM
+libcrypto_la_CPPFLAGS += -DSHA512_ASM
+libcrypto_la_CPPFLAGS += -DWHIRLPOOL_ASM
+libcrypto_la_CPPFLAGS += -DOPENSSL_CPUID_OBJ
+libcrypto_la_SOURCES += $(ASM_X86_64_ELF)
+endif

@@ -1,0 +1,71 @@
+.\"
+.\"	$OpenBSD: SSL_set_connect_state.3,v 1.2 2014/12/02 14:11:01 jmc Exp $
+.\"
+.Dd $Mdocdate: December 2 2014 $
+.Dt SSL_SET_CONNECT_STATE 3
+.Os
+.Sh NAME
+.Nm SSL_set_connect_state ,
+.Nm SSL_set_accept_state
+.Nd prepare SSL object to work in client or server mode
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft void
+.Fn SSL_set_connect_state "SSL *ssl"
+.Ft void
+.Fn SSL_set_accept_state "SSL *ssl"
+.Sh DESCRIPTION
+.Fn SSL_set_connect_state
+sets
+.Fa ssl
+to work in client mode.
+.Pp
+.Fn SSL_set_accept_state
+sets
+.Fa ssl
+to work in server mode.
+.Sh NOTES
+When the
+.Vt SSL_CTX
+object was created with
+.Xr SSL_CTX_new 3 ,
+it was either assigned a dedicated client method, a dedicated server method, or
+a generic method, that can be used for both client and server connections.
+(The method might have been changed with
+.Xr SSL_CTX_set_ssl_version 3
+or
+.Xr SSL_set_ssl_method 3 . )
+.Pp
+When beginning a new handshake, the SSL engine must know whether it must call
+the connect (client) or accept (server) routines.
+Even though it may be clear from the method chosen whether client or server
+mode was requested, the handshake routines must be explicitly set.
+.Pp
+When using the
+.Xr SSL_connect 3
+or
+.Xr SSL_accept 3
+routines, the correct handshake routines are automatically set.
+When performing a transparent negotiation using
+.Xr SSL_write 3
+or
+.Xr SSL_read 3 ,
+the handshake routines must be explicitly set in advance using either
+.Fn SSL_set_connect_state
+or
+.Fn SSL_set_accept_state .
+.Sh RETURN VALUES
+.Fn SSL_set_connect_state
+and
+.Fn SSL_set_accept_state
+do not return diagnostic information.
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_accept 3 ,
+.Xr SSL_connect 3 ,
+.Xr SSL_CTX_new 3 ,
+.Xr SSL_CTX_set_ssl_version 3 ,
+.Xr SSL_do_handshake 3 ,
+.Xr SSL_new 3 ,
+.Xr SSL_read 3 ,
+.Xr SSL_write 3

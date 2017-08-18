@@ -1,0 +1,104 @@
+.Dd $Mdocdate: November 11 2015 $
+.Dt CRYPTO 3
+.Os
+.Sh NAME
+.Nm crypto
+.Nd OpenSSL cryptographic library
+.Sh DESCRIPTION
+The OpenSSL crypto library implements a wide range of cryptographic
+algorithms used in various Internet standards.
+The services provided by this library are used by the OpenSSL
+implementations of SSL, TLS and S/MIME, and they have also been used to
+implement SSH, OpenPGP, and other cryptographic standards.
+.Sh OVERVIEW
+.Sy libcrypto
+consists of a number of sub-libraries that implement the individual
+algorithms.
+.Pp
+The functionality includes symmetric encryption, public key cryptography
+and key agreement, certificate handling, cryptographic hash functions
+and a cryptographic pseudo-random number generator.
+.Bl -tag -width Ds
+.It SYMMETRIC CIPHERS
+.Xr blowfish 3 ,
+cast,
+.Xr des 3 ,
+idea,
+rc2,
+.Xr rc4 3 ,
+rc5
+.It PUBLIC KEY CRYPTOGRAPHY AND KEY AGREEMENT
+.Xr dsa 3 ,
+.Xr dh 3 ,
+.Xr rsa 3
+.It CERTIFICATES
+.Xr x509 3 ,
+x509v3
+.It AUTHENTICATION CODES, HASH FUNCTIONS
+.Xr hmac 3 ,
+.Xr MD2 3 ,
+.Xr MD4 3 ,
+.Xr MD5 3 ,
+.Xr ripemd 3 ,
+.Xr sha 3
+.It AUXILIARY FUNCTIONS
+.Xr ERR 3 ,
+.Xr threads 3 ,
+.Xr rand 3 ,
+.Xr OPENSSL_VERSION_NUMBER 3
+.It INPUT/OUTPUT, DATA ENCODING
+asn1,
+.Xr bio 3 ,
+.Xr evp 3 ,
+.Xr pem 3 ,
+pkcs7,
+pkcs12
+.It INTERNAL FUNCTIONS
+.Xr bn 3 ,
+.Xr buffer 3 ,
+.Xr ec 3 ,
+.Xr lh_new 3 ,
+objects,
+stack,
+txt_db
+.El
+.Sh NOTES
+Some of the newer functions follow a naming convention using the numbers
+.Sq 0
+and
+.Sq 1 .
+For example the functions:
+.Pp
+.Ft int
+.Fo X509_CRL_add0_revoked
+.Fa "X509_CRL *crl"
+.Fa "X509_REVOKED *rev"
+.Fc
+.br
+.Ft int
+.Fo X509_add1_trust_object
+.Fa "X509 *x"
+.Fa "ASN1_OBJECT *obj"
+.Fc
+.Pp
+The
+.Sq 0
+version uses the supplied structure pointer directly in the parent and
+it will be freed up when the parent is freed.
+In the above example
+.Fa crl
+would be freed but
+.Fa rev
+would not.
+.Pp
+The
+.Sq 1
+function uses a copy of the supplied structure pointer (or in some cases
+increases its link count) in the parent and so both
+.Pf ( Fa x
+and
+.Fa obj
+above) should be freed up.
+.Sh SEE ALSO
+.Xr openssl 1 ,
+.Xr ssl 3

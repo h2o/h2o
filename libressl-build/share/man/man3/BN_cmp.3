@@ -1,0 +1,99 @@
+.Dd $Mdocdate: June 16 2014 $
+.Dt BN_CMP 3
+.Os
+.Sh NAME
+.Nm BN_cmp ,
+.Nm BN_ucmp ,
+.Nm BN_is_zero ,
+.Nm BN_is_one ,
+.Nm BN_is_word ,
+.Nm BN_is_odd
+.Nd BIGNUM comparison and test functions
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft int
+.Fo BN_cmp
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fc
+.Ft int
+.Fo BN_ucmp
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fc
+.Ft int
+.Fo BN_is_zero
+.Fa "BIGNUM *a"
+.Fc
+.Ft int
+.Fo BN_is_one
+.Fa "BIGNUM *a"
+.Fc
+.Ft int
+.Fo BN_is_word
+.Fa "BIGNUM *a"
+.Fa "BN_ULONG w"
+.Fc
+.Ft int
+.Fo BN_is_odd
+.Fa "BIGNUM *a"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_cmp
+compares the numbers
+.Fa a
+and
+.Fa b .
+.Fn BN_ucmp
+compares their absolute values.
+.Pp
+.Fn BN_is_zero ,
+.Fn BN_is_one
+and
+.Fn BN_is_word
+test if
+.Fa a
+equals 0, 1, or
+.Fa w
+respectively.
+.Fn BN_is_odd
+tests if a is odd.
+.Pp
+.Fn BN_is_zero ,
+.Fn BN_is_one ,
+.Fn BN_is_word ,
+and
+.Fn BN_is_odd
+are macros.
+.Sh RETURN VALUES
+.Fn BN_cmp
+returns -1 if
+.Fa a Ns < Ns Fa b ,
+0 if
+.Fa a Ns == Ns Fa b ,
+and 1 if
+.Fa a Ns > Ns Fa b .
+.Fn BN_ucmp
+is the same using the absolute values of
+.Fa a
+and
+.Fa b .
+.Pp
+.Fn BN_is_zero ,
+.Fn BN_is_one ,
+.Fn BN_is_word ,
+and
+.Fn BN_is_odd
+return 1 if the condition is true, 0 otherwise.
+.Sh SEE ALSO
+.Xr bn 3
+.Sh HISTORY
+.Fn BN_cmp ,
+.Fn BN_ucmp ,
+.Fn BN_is_zero ,
+.Fn BN_is_one
+and
+.Fn BN_is_word
+are available in all versions of SSLeay and OpenSSL.
+.Fn BN_is_odd
+was added in SSLeay 0.8.

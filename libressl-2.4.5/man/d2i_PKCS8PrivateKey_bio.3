@@ -1,0 +1,97 @@
+.Dd $Mdocdate: June 16 2014 $
+.Dt D2I_PKCS8PRIVATEKEY_BIO 3
+.Os
+.Sh NAME
+.Nm d2i_PKCS8PrivateKey_bio ,
+.Nm d2i_PKCS8PrivateKey_fp ,
+.Nm i2d_PKCS8PrivateKey_bio ,
+.Nm i2d_PKCS8PrivateKey_fp ,
+.Nm i2d_PKCS8PrivateKey_nid_bio ,
+.Nm i2d_PKCS8PrivateKey_nid_fp
+.Nd PKCS#8 format private key functions
+.Sh SYNOPSIS
+.In openssl/evp.h
+.Ft EVP_PKEY *
+.Fo d2i_PKCS8PrivateKey_bio
+.Fa "BIO *bp"
+.Fa "EVP_PKEY **x"
+.Fa "pem_password_cb *cb"
+.Fa "void *u"
+.Fc
+.Ft EVP_PKEY *
+.Fo d2i_PKCS8PrivateKey_fp
+.Fa "FILE *fp"
+.Fa "EVP_PKEY **x"
+.Fa "pem_password_cb *cb"
+.Fa "void *u"
+.Fc
+.Ft int
+.Fo i2d_PKCS8PrivateKey_bio
+.Fa "BIO *bp"
+.Fa "EVP_PKEY *x"
+.Fa "const EVP_CIPHER *enc"
+.Fa "char *kstr"
+.Fa "int klen"
+.Fa "pem_password_cb *cb"
+.Fa "void *u"
+.Fc
+.Ft int
+.Fo i2d_PKCS8PrivateKey_fp
+.Fa "FILE *fp"
+.Fa "EVP_PKEY *x"
+.Fa "const EVP_CIPHER *enc"
+.Fa "char *kstr"
+.Fa "int klen"
+.Fa "pem_password_cb *cb"
+.Fa "void *u"
+.Fc
+.Ft int
+.Fo i2d_PKCS8PrivateKey_nid_bio
+.Fa "BIO *bp"
+.Fa "EVP_PKEY *x"
+.Fa "int nid"
+.Fa "char *kstr"
+.Fa "int klen"
+.Fa "pem_password_cb *cb"
+.Fa "void *u"
+.Fc
+.Ft int
+.Fo i2d_PKCS8PrivateKey_nid_fp
+.Fa "FILE *fp"
+.Fa "EVP_PKEY *x"
+.Fa "int nid"
+.Fa "char *kstr"
+.Fa "int klen"
+.Fa "pem_password_cb *cb"
+.Fa "void *u"
+.Fc
+.Sh DESCRIPTION
+The PKCS#8 functions encode and decode private keys in PKCS#8 format
+using both PKCS#5 v1.5 and PKCS#5 v2.0 password based encryption
+algorithms.
+.Pp
+Other than the use of DER as opposed to PEM these functions are
+identical to the corresponding
+.Xr pem 3
+functions.
+.Sh NOTES
+Before using these functions,
+.Xr OpenSSL_add_all_algorithms 3
+should be called to initialize the internal algorithm lookup tables.
+Otherwise errors about unknown algorithms will occur if an attempt is
+made to decrypt a private key.
+.Pp
+These functions are currently the only way to store encrypted private
+keys using DER format.
+.Pp
+Currently all the functions use
+.Vt BIO
+or
+.Vt FILE
+pointers, there are no functions which work directly on memory:
+this can be readily worked around by converting the buffers to
+memory BIOs, see
+.Xr BIO_s_mem 3
+for details.
+.Sh SEE ALSO
+.Xr pem 3

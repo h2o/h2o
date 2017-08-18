@@ -1,0 +1,352 @@
+.Dd $Mdocdate: June 16 2014 $
+.Dt BN_ADD 3
+.Os
+.Sh NAME
+.Nm BN_add ,
+.Nm BN_sub ,
+.Nm BN_mul ,
+.Nm BN_sqr ,
+.Nm BN_div ,
+.Nm BN_mod ,
+.Nm BN_nnmod ,
+.Nm BN_mod_add ,
+.Nm BN_mod_sub ,
+.Nm BN_mod_mul ,
+.Nm BN_mod_sqr ,
+.Nm BN_exp ,
+.Nm BN_mod_exp ,
+.Nm BN_gcd
+.Nd arithmetic operations on BIGNUMs
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft int
+.Fo BN_add
+.Fa "BIGNUM *r"
+.Fa "const BIGNUM *a"
+.Fa "const BIGNUM *b"
+.Fc
+.Ft int
+.Fo BN_sub
+.Fa "BIGNUM *r"
+.Fa "const BIGNUM *a"
+.Fa "const BIGNUM *b"
+.Fc
+.Ft int
+.Fo BN_mul
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_sqr
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_div
+.Fa "BIGNUM *dv"
+.Fa "BIGNUM *rem"
+.Fa "const BIGNUM *a"
+.Fa "const BIGNUM *d"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_mod
+.Fa "BIGNUM *rem"
+.Fa "const BIGNUM *a"
+.Fa "const BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_nnmod
+.Fa "BIGNUM *r"
+.Fa "const BIGNUM *a"
+.Fa "const BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_mod_add
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fa "const BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_mod_sub
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fa "const BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_mod_mul
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fa "const BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_mod_sqr
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "const BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_exp
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *p"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_mod_exp
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "const BIGNUM *p"
+.Fa "const BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_gcd
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fa "BN_CTX *ctx"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_add
+adds
+.Fa a
+and
+.Fa b
+and places the result in
+.Fa r
+.Pq Li r=a+b .
+.Fa r
+may be the same
+.Vt BIGNUM
+as
+.Fa a
+or
+.Fa b .
+.Pp
+.Fn BN_sub
+subtracts
+.Fa b
+from
+.Fa a
+and places the result in
+.Fa r
+.Pq Li r=a-b .
+.Pp
+.Fn BN_mul
+multiplies
+.Fa a
+and
+.Fa b
+and places the result in
+.Fa r
+.Pq Li r=a*b .
+.Fa r
+may be the same
+.Vt BIGNUM
+as
+.Fa a
+or
+.Fa b .
+For multiplication by powers of 2, use
+.Xr BN_lshift 3 .
+.Pp
+.Fn BN_sqr
+takes the square of
+.Fa a
+and places the result in
+.Fa r
+.Pq Li r=a^2 .
+.Fa r
+and
+.Fa a
+may be the same
+.Vt BIGNUM .
+This function is faster than
+.Fn BN_mul r a a .
+.Pp
+.Fn BN_div
+divides
+.Fa a
+by
+.Fa d
+and places the result in
+.Fa dv
+and the remainder in
+.Fa rem
+.Pq Li dv=a/d , rem=a%d .
+Either of
+.Fa dv
+and
+.Fa rem
+may be
+.Dv NULL ,
+in which case the respective value is not returned.
+The result is rounded towards zero; thus if
+.Fa a
+is negative, the remainder will be zero or negative.
+For division by powers of 2, use
+.Fn BN_rshift 3 .
+.Pp
+.Fn BN_mod
+corresponds to
+.Fn BN_div
+with
+.Fa dv
+set to
+.Dv NULL .
+.Pp
+.Fn BN_nnmod
+reduces
+.Fa a
+modulo
+.Fa m
+and places the non-negative remainder in
+.Fa r .
+.Pp
+.Fn BN_mod_add
+adds
+.Fa a
+to
+.Fa b
+modulo
+.Fa m
+and places the non-negative result in
+.Fa r .
+.Pp
+.Fn BN_mod_sub
+subtracts
+.Fa b
+from
+.Fa a
+modulo
+.Fa m
+and places the non-negative result in
+.Fa r .
+.Pp
+.Fn BN_mod_mul
+multiplies
+.Fa a
+by
+.Fa b
+and finds the non-negative remainder respective to modulus
+.Fa m
+.Pq Li r=(a*b)%m .
+.Fa r
+may be the same
+.Vt BIGNUM
+as
+.Fa a
+or
+.Fa b .
+For more efficient algorithms for repeated computations using the same
+modulus, see
+.Xr BN_mod_mul_montgomery 3
+and
+.Xr BN_mod_mul_reciprocal 3 .
+.Pp
+.Fn BN_mod_sqr
+takes the square of
+.Fa a
+modulo
+.Fa m
+and places the result in
+.Fa r .
+.Pp
+.Fn BN_exp
+raises
+.Fa a
+to the
+.Fa p Ns -th
+power and places the result in
+.Fa r
+.Pq Li r=a^p .
+This function is faster than repeated applications of
+.Fn BN_mul .
+.Pp
+.Fn BN_mod_exp
+computes
+.Fa a
+to the
+.Fa p Ns -th
+power modulo
+.Fa m
+.Pq Li r=(a^p)%m .
+This function uses less time and space than
+.Fn BN_exp .
+.Pp
+.Fn BN_gcd
+computes the greatest common divisor of
+.Fa a
+and
+.Fa b
+and places the result in
+.Fa r .
+.Fa r
+may be the same
+.Vt BIGNUM
+as
+.Fa a
+or
+.Fa b .
+.Pp
+For all functions,
+.Fa ctx
+is a previously allocated
+.Vt BN_CTX
+used for temporary variables; see
+.Xr BN_CTX_new 3 .
+.Pp
+Unless noted otherwise, the result
+.Vt BIGNUM
+must be different from the arguments.
+.Sh RETURN VALUES
+For all functions, 1 is returned for success, 0 on error.
+The return value should always be checked, for example:
+.Pp
+.Dl if (!BN_add(r,a,b)) goto err;
+.Pp
+The error codes can be obtained by
+.Xr ERR_get_error 3 .
+.Sh SEE ALSO
+.Xr bn 3 ,
+.Xr BN_add_word 3 ,
+.Xr BN_CTX_new 3 ,
+.Xr BN_set_bit 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn BN_add ,
+.Fn BN_sub ,
+.Fn BN_sqr ,
+.Fn BN_div ,
+.Fn BN_mod ,
+.Fn BN_mod_mul ,
+.Fn BN_mod_exp ,
+and
+.Fn BN_gcd
+are available in all versions of SSLeay and OpenSSL.
+The
+.Fa ctx
+argument to
+.Fn BN_mul
+was added in SSLeay 0.9.1b.
+.Fn BN_exp
+appeared in SSLeay 0.9.0.
+.Fn BN_nnmod ,
+.Fn BN_mod_add ,
+.Fn BN_mod_sub ,
+and
+.Fn BN_mod_sqr
+were added in OpenSSL 0.9.7.

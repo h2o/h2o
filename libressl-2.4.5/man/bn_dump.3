@@ -1,0 +1,717 @@
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: November 12 2015 $
+.Dt BN_DUMP 3
+.Os
+.Sh NAME
+.Nm bn_mul_words ,
+.Nm bn_mul_add_words ,
+.Nm bn_sqr_words ,
+.Nm bn_div_words ,
+.Nm bn_add_words ,
+.Nm bn_sub_words ,
+.Nm bn_mul_comba4 ,
+.Nm bn_mul_comba8 ,
+.Nm bn_sqr_comba4 ,
+.Nm bn_sqr_comba8 ,
+.Nm bn_cmp_words ,
+.Nm bn_mul_normal ,
+.Nm bn_mul_low_normal ,
+.Nm bn_mul_recursive ,
+.Nm bn_mul_part_recursive ,
+.Nm bn_mul_low_recursive ,
+.Nm bn_mul_high ,
+.Nm bn_sqr_normal ,
+.Nm bn_sqr_recursive ,
+.Nm bn_expand ,
+.Nm bn_wexpand ,
+.Nm bn_expand2 ,
+.Nm bn_fix_top ,
+.Nm bn_check_top ,
+.Nm bn_print ,
+.Nm bn_dump ,
+.Nm bn_set_max ,
+.Nm bn_set_high ,
+.Nm bn_set_low ,
+.Nm mul ,
+.Nm mul_add ,
+.Nm sqr
+.Nd BIGNUM library internal functions
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft BN_ULONG
+.Fo bn_mul_words
+.Fa "BN_ULONG *rp"
+.Fa "BN_ULONG *ap"
+.Fa "int num"
+.Fa "BN_ULONG w"
+.Fc
+.Ft BN_ULONG
+.Fo bn_mul_add_words
+.Fa "BN_ULONG *rp"
+.Fa "BN_ULONG *ap"
+.Fa "int num"
+.Fa "BN_ULONG w"
+.Fc
+.Ft void
+.Fo bn_sqr_words
+.Fa "BN_ULONG *rp"
+.Fa "BN_ULONG *ap"
+.Fa "int num"
+.Fc
+.Ft BN_ULONG
+.Fo bn_div_words
+.Fa "BN_ULONG h"
+.Fa "BN_ULONG l"
+.Fa "BN_ULONG d"
+.Fc
+.Ft BN_ULONG
+.Fo bn_add_words
+.Fa "BN_ULONG *rp"
+.Fa "BN_ULONG *ap"
+.Fa "BN_ULONG *bp"
+.Fa "int num"
+.Fc
+.Ft BN_ULONG
+.Fo bn_sub_words
+.Fa "BN_ULONG *rp"
+.Fa "BN_ULONG *ap"
+.Fa "BN_ULONG *bp"
+.Fa "int num"
+.Fc
+.Ft void
+.Fo bn_mul_comba4
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fc
+.Ft void
+.Fo bn_mul_comba8
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fc
+.Ft void
+.Fo bn_sqr_comba4
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fc
+.Ft void
+.Fo bn_sqr_comba8
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fc
+.Ft int
+.Fo bn_cmp_words
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fa "int n"
+.Fc
+.Ft void
+.Fo bn_mul_normal
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "int na"
+.Fa "BN_ULONG *b"
+.Fa "int nb"
+.Fc
+.Ft void
+.Fo bn_mul_low_normal
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fa "int n"
+.Fc
+.Ft void
+.Fo bn_mul_recursive
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fa "int n2"
+.Fa "int dna"
+.Fa "int dnb"
+.Fa "BN_ULONG *tmp"
+.Fc
+.Ft void
+.Fo bn_mul_part_recursive
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fa "int n"
+.Fa "int tna"
+.Fa "int tnb"
+.Fa "BN_ULONG *tmp"
+.Fc
+.Ft void
+.Fo bn_mul_low_recursive
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fa "int n2"
+.Fa "BN_ULONG *tmp"
+.Fc
+.Ft void
+.Fo bn_mul_high
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "BN_ULONG *b"
+.Fa "BN_ULONG *l"
+.Fa "int n2"
+.Fa "BN_ULONG *tmp"
+.Fc
+.Ft void
+.Fo bn_sqr_normal
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "int n"
+.Fa "BN_ULONG *tmp"
+.Fc
+.Ft void
+.Fo bn_sqr_recursive
+.Fa "BN_ULONG *r"
+.Fa "BN_ULONG *a"
+.Fa "int n2"
+.Fa "BN_ULONG *tmp"
+.Fc
+.Ft void
+.Fo mul
+.Fa "BN_ULONG r"
+.Fa "BN_ULONG a"
+.Fa "BN_ULONG w"
+.Fa "BN_ULONG c"
+.Fc
+.Ft void
+.Fo mul_add
+.Fa "BN_ULONG r"
+.Fa "BN_ULONG a"
+.Fa "BN_ULONG w"
+.Fa "BN_ULONG c"
+.Fc
+.Ft void
+.Fo sqr
+.Fa "BN_ULONG r0"
+.Fa "BN_ULONG r1"
+.Fa "BN_ULONG a"
+.Fc
+.Ft BIGNUM *
+.Fo bn_expand
+.Fa "BIGNUM *a"
+.Fa "int bits"
+.Fc
+.Ft BIGNUM *
+.Fo bn_wexpand
+.Fa "BIGNUM *a"
+.Fa "int n"
+.Fc
+.Ft BIGNUM *
+.Fo bn_expand2
+.Fa "BIGNUM *a"
+.Fa "int n"
+.Fc
+.Ft void
+.Fo bn_fix_top
+.Fa "BIGNUM *a"
+.Fc
+.Ft void
+.Fo bn_check_top
+.Fa "BIGNUM *a"
+.Fc
+.Ft void
+.Fo bn_print
+.Fa "BIGNUM *a"
+.Fc
+.Ft void
+.Fo bn_dump
+.Fa "BN_ULONG *d"
+.Fa "int n"
+.Fc
+.Ft void
+.Fo bn_set_max
+.Fa "BIGNUM *a"
+.Fc
+.Ft void
+.Fo bn_set_high
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "int n"
+.Fc
+.Ft void
+.Fo bn_set_low
+.Fa "BIGNUM *r"
+.Fa "BIGNUM *a"
+.Fa "int n"
+.Fc
+.Sh DESCRIPTION
+This page documents the internal functions used by the OpenSSL
+.Vt BIGNUM
+implementation.
+They are described here to facilitate debugging and extending the
+library.
+They are
+.Em not
+to be used by applications.
+.Ss The BIGNUM structure
+.Bd -literal
+typedef struct bignum_st BIGNUM;
+
+struct bignum_st {
+	BN_ULONG *d;	/* Pointer to an array of 'BN_BITS2' bit chunks. */
+	int top;	/* Index of last used d +1. */
+	/* The next are internal book keeping for bn_expand. */
+	int dmax;	/* Size of the d array. */
+	int neg;	/* one if the number is negative */
+	int flags;
+};
+.Ed
+.Pp
+The integer value is stored in
+.Fa d ,
+a
+.Xr malloc 3 Ap ed
+array of words
+.Pq Vt BN_ULONG ,
+least significant word first.
+A
+.Vt BN_ULONG
+can be either 16, 32 or 64 bits in size, depending on the 'number of
+bits'
+.Pq Dv BITS2
+specified in
+.In openssl/bn.h .
+.Pp
+.Fa dmax
+is the size of the
+.Fa d
+array that has been allocated.
+.Fa top
+is the number of words being used, so for a value of 4, bn.d[0]=4 and
+bn.top=1.
+.Fa neg
+is 1 if the number is negative.
+When a
+.Vt BIGNUM
+is 0, the
+.Fa d
+field can be
+.Dv NULL
+and
+.Fa top
+== 0.
+.Pp
+.Fa flags
+is a bit field of flags which are defined in
+.In openssl/bn.h .
+The flags begin with
+.Dv BN_FLG_ .
+The macros
+.Fn BN_set_flags b n
+and
+.Fn BN_get_flags b n
+exist to enable or fetch flag(s)
+.Fa n
+from a
+.Vt BIGNUM
+structure
+.Fa b .
+.Pp
+Various routines in this library require the use of temporary
+.Vt BIGNUM
+variables during their execution.
+Since dynamic memory allocation to create
+.Vt BIGNUM Ns s
+is rather expensive when used in conjunction with repeated subroutine
+calls, the
+.Vt BN_CTX
+structure is used.
+This structure contains BN_CTX_NUM
+.Vt BIGNUM Ns s,
+see
+.Xr BN_CTX_start 3 .
+.Ss Low-level arithmetic operations
+These functions are implemented in C and for several platforms in
+assembly language:
+.Pp
+.Fn bn_mul_words rp ap num w
+operates on the
+.Fa num
+word arrays
+.Fa rp
+and
+.Fa ap .
+It computes
+.Fa ap
+*
+.Fa w ,
+places the result in
+.Fa rp ,
+and returns the high word (carry).
+.Pp
+.Fn bn_mul_add_words rp ap num w
+operates on the
+.Fa num
+word arrays
+.Fa rp
+and
+.Fa ap .
+It computes
+.Fa ap
+*
+.Fa w
++
+.Fa rp ,
+places the result in
+.Fa rp ,
+and returns the high word (carry).
+.Pp
+.Fn bn_sqr_words rp ap num
+operates on the
+.Fa num
+word array
+.Fa ap
+and the
+.Pf 2* Fa num
+word array
+.Fa ap .
+It computes
+.Fa ap
+*
+.Fa ap
+word-wise, and places the low and high bytes of the result in
+.Fa rp .
+.Pp
+.Fn bn_div_words h l d
+divides the two word number
+.Pq Fa h , Fa l
+by
+.Fa d
+and returns the result.
+.Pp
+.Fn bn_add_words rp ap bp num
+operates on the
+.Fa num
+word arrays
+.Fa ap ,
+.Fa bp
+and
+.Fa rp .
+It computes
+.Fa ap
++
+.Fa bp ,
+places the result in
+.Fa rp ,
+and returns the high word (carry).
+.Pp
+.Fn bn_sub_words rp ap bp num
+operates on the
+.Fa num
+word arrays
+.Fa ap ,
+.Fa bp
+and
+.Fa rp .
+It computes
+.Fa ap
+-
+.Fa bp ,
+places the result in
+.Fa rp ,
+and returns the carry (1 if
+.Fa bp
+\(ra
+.Fa ap ,
+0 otherwise).
+.Pp
+.Fn bn_mul_comba4 r a b
+operates on the 4 word arrays
+.Fa a
+and
+.Fa b
+and the 8 word array
+.Fa r .
+It computes
+.Fa a Ns * Ns Fa b
+and places the result in
+.Fa r .
+.Pp
+.Fn bn_mul_comba8 r a b
+operates on the 8 word arrays
+.Fa a
+and
+.Fa b
+and the 16 word array
+.Fa r .
+It computes
+.Fa a Ns * Ns Fa b
+and places the result in
+.Fa r .
+.Pp
+.Fn bn_sqr_comba4 r a b
+operates on the 4 word arrays
+.Fa a
+and
+.Fa b
+and the 8 word array
+.Fa r .
+.Pp
+.Fn bn_sqr_comba8 r a b
+operates on the 8 word arrays
+.Fa a
+and
+.Fa b
+and the 16 word array
+.Fa r .
+.Pp
+The following functions are implemented in C:
+.Pp
+.Fn bn_cmp_words a b n
+operates on the
+.Fa n
+word arrays
+.Fa a
+and
+.Fa b .
+It returns 1, 0 and -1 if
+.Fa a
+is greater than, equal and less than
+.Fa b .
+.Pp
+.Fn bn_mul_normal r a na b nb
+operates on the
+.Fa na
+word array
+.Fa a ,
+the
+.Fa nb
+word array
+.Fa b
+and the
+.Fa na Ns + Ns Fa nb
+word array
+.Fa r .
+It computes
+.Fa a Ns * Ns Fa b
+and places the result in
+.Fa r .
+.Pp
+.Fn bn_mul_low_normal r a b n
+operates on the
+.Fa n
+word arrays
+.Fa r ,
+.Fa a
+and
+.Fa b .
+It computes the
+.Fa n
+low words of
+.Fa a Ns * Ns Fa b
+and places the result in
+.Fa r .
+.Pp
+.Fn bn_mul_recursive r a b n2 dna dnb t
+operates on the word arrays
+.Fa a
+and
+.Fa b
+of length
+.Fa n2 Ns + Ns Fa dna
+and
+.Fa n2 Ns + Ns Fa dnb
+.Pf ( Fa dna
+and
+.Fa dnb
+are currently allowed to be 0 or negative) and the
+.Pf 2* Fa n2
+word arrays
+.Fa r
+and
+.Sy t .
+.Fa n2
+must be a power of 2.
+It computes
+.Fa a Ns * Ns Fa b
+and places the result in
+.Fa r .
+.Pp
+.Fn bn_mul_part_recursive r a b n tna tnb tmp
+operates on the word arrays
+.Fa a
+and
+.Fa b
+of length
+.Fa n Ns + Ns Fa tna
+and
+.Fa n Ns + Ns Fa tnb
+and the
+.Pf 4* Fa n
+word arrays
+.Fa r
+and
+.Fa tmp .
+.Pp
+.Fn bn_mul_low_recursive r a b n2 tmp
+operates on the
+.Fa n2
+word arrays
+.Fa r
+and
+.Fa tmp
+and the
+.Fa n2 Ns /2
+word arrays
+.Fa a
+and
+.Fa b .
+.Pp
+.Fn bn_mul_high r a b l n2 tmp
+operates on the
+.Fa n2
+word arrays
+.Fa r ,
+.Fa a ,
+.Fa b
+and
+.Fa l
+(?) and the
+.Pf 3* Fa n2
+word array
+.Fa tmp .
+.Pp
+.Xr BN_mul 3
+calls
+.Fn bn_mul_normal ,
+or an optimized implementation if the factors have the same size:
+.Fn bn_mul_comba8
+is used if they are 8 words long,
+.Fn bn_mul_recursive
+if they are larger than
+.Dv BN_MULL_SIZE_NORMAL
+and the size is an exact multiple of the word size, and
+.Fn bn_mul_part_recursive
+for others that are larger than
+.Dv BN_MULL_SIZE_NORMAL .
+.Pp
+.Fn bn_sqr_normal r a n tmp
+operates on the
+.Fa n
+word array
+.Fa a
+and the
+.Pf 2* Fa n
+word arrays
+.Fa tmp
+and
+.Fa r .
+.Pp
+The implementations use the following macros which, depending on the
+architecture, may use
+.Vt long long
+C operations or inline assembler.
+They are defined in
+.Pa bn_lcl.h .
+.Pp
+.Fn mul r a w c
+computes
+.Fa w Ns * Ns Fa a Ns + Ns Fa c
+and places the low word of the result in
+.Fa r
+and the high word in
+.Fa c .
+.Pp
+.Fn mul_add r a w c
+computes
+.Fa w Ns * Ns Fa a Ns + Ns Fa r Ns + Ns Fa c
+and places the low word of the result in
+.Fa r
+and the high word in
+.Fa c .
+.Pp
+.Fn sqr r0 r1 a
+computes
+.Fa a Ns * Ns Fa a
+and places the low word of the result in
+.Fa r0
+and the high word in
+.Fa r1 .
+.Ss Size changes
+.Fn bn_expand
+ensures that
+.Fa b
+has enough space for a
+.Fa bits
+bit number.
+.Fn bn_wexpand
+ensures that
+.Fa b
+has enough space for an
+.Fa n
+word number.
+If the number has to be expanded, both macros call
+.Fn bn_expand2 ,
+which allocates a new
+.Fa d
+array and copies the data.
+They return
+.Dv NULL
+on error,
+.Fa b
+otherwise.
+.Pp
+The
+.Fn bn_fix_top
+macro reduces
+.Fa a Ns -> Ns Fa top
+to point to the most significant non-zero word plus one when
+.Fa a
+has shrunk.
+.Ss Debugging
+.Fn bn_check_top
+verifies that
+.Ql ((a)-\(ratop \(ra= 0 && (a)-\(ratop \(la= (a)-\(radmax) .
+A violation will cause the program to abort.
+.Pp
+.Fn bn_print
+prints
+.Fa a
+to
+.Dv stderr .
+.Fn bn_dump
+prints
+.Fa n
+words at
+.Fa d
+(in reverse order, i.e.
+most significant word first) to
+.Dv stderr .
+.Pp
+.Fn bn_set_max
+makes
+.Fa a
+a static number with a
+.Fa dmax
+of its current size.
+This is used by
+.Fn bn_set_low
+and
+.Fn bn_set_high
+to make
+.Fa r
+a read-only
+.Vt BIGNUM
+that contains the
+.Fa n
+low or high words of
+.Fa a .
+.Pp
+If
+.Dv BN_DEBUG
+is not defined,
+.Fn bn_check_top ,
+.Fn bn_print ,
+.Fn bn_dump
+and
+.Fn bn_set_max
+are defined as empty macros.
+.Sh SEE ALSO
+.Xr bn 3

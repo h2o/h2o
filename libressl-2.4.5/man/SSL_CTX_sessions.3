@@ -1,0 +1,35 @@
+.\"
+.\"	$OpenBSD: SSL_CTX_sessions.3,v 1.2 2014/12/02 14:11:01 jmc Exp $
+.\"
+.Dd $Mdocdate: December 2 2014 $
+.Dt SSL_CTX_SESSIONS 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_sessions
+.Nd access internal session cache
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft struct lhash_st *
+.Fn SSL_CTX_sessions "SSL_CTX *ctx"
+.Sh DESCRIPTION
+.Fn SSL_CTX_sessions
+returns a pointer to the lhash databases containing the internal session cache
+for
+.Fa ctx .
+.Sh NOTES
+The sessions in the internal session cache are kept in an
+lhash-type database
+(see
+.Xr lh_new 3 ) .
+It is possible to directly access this database, e.g., for searching.
+In parallel,
+the sessions form a linked list which is maintained separately from the
+lhash operations,
+so that the database must not be modified directly but by using the
+.Xr SSL_CTX_add_session 3
+family of functions.
+.Sh SEE ALSO
+.Xr lh_new 3 ,
+.Xr ssl 3 ,
+.Xr SSL_CTX_add_session 3 ,
+.Xr SSL_CTX_set_session_cache_mode 3

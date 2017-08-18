@@ -1,0 +1,68 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CTX_SET_PSK_CLIENT_CALLBACK 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_set_psk_client_callback ,
+.Nm SSL_set_psk_client_callback
+.Nd set PSK client callback
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft void
+.Fo SSL_CTX_set_psk_client_callback
+.Fa "SSL_CTX *ctx"
+.Fa "unsigned int (*callback)(SSL *ssl, const char *hint, char *identity, \
+unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len)"
+.Fc
+.Ft void
+.Fo SSL_set_psk_client_callback
+.Fa "SSL *ssl"
+.Fa "unsigned int (*callback)(SSL *ssl, const char *hint, char *identity, \
+unsigned int max_identity_len, unsigned char *psk, unsigned int max_psk_len)"
+.Fc
+.Sh DESCRIPTION
+A client application must provide a callback function which is called
+when the client is sending the ClientKeyExchange message to the server.
+.Pp
+The purpose of the callback function is to select the PSK identity and
+the pre-shared key to use during the connection setup phase.
+.Pp
+The callback is set using functions
+.Fn SSL_CTX_set_psk_client_callback
+or
+.Fn SSL_set_psk_client_callback .
+The callback function is given the connection in parameter
+.Fa ssl ,
+a
+.Dv NULL Ns
+-terminated PSK identity hint sent by the server in parameter
+.Fa hint ,
+a buffer
+.Fa identity
+of length
+.Fa max_identity_len
+bytes where the resulting
+.Dv NULL Ns
+-terminated identity is to be stored, and a buffer
+.Fa psk
+of
+length
+.Fa max_psk_len
+bytes where the resulting pre-shared key is to be stored.
+.Sh NOTES
+Note that parameter
+.Fa hint
+given to the callback may be
+.Dv NULL .
+.Sh RETURN VALUES
+Return values from the client callback are interpreted as follows:
+.Pp
+On success (callback found a PSK identity and a pre-shared key to use)
+the length (> 0) of
+.Fa psk
+in bytes is returned.
+.Pp
+Otherwise or on errors callback should return 0.
+In this case the connection setup fails.

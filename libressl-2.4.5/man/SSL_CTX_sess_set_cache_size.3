@@ -1,0 +1,55 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CTX_SESS_SET_CACHE_SIZE 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_sess_set_cache_size ,
+.Nm SSL_CTX_sess_get_cache_size
+.Nd manipulate session cache size
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft long
+.Fn SSL_CTX_sess_set_cache_size "SSL_CTX *ctx" "long t"
+.Ft long
+.Fn SSL_CTX_sess_get_cache_size "SSL_CTX *ctx"
+.Sh DESCRIPTION
+.Fn SSL_CTX_sess_set_cache_size
+sets the size of the internal session cache of context
+.Fa ctx
+to
+.Fa t .
+.Pp
+.Fn SSL_CTX_sess_get_cache_size
+returns the currently valid session cache size.
+.Sh NOTES
+The internal session cache size is
+.Dv SSL_SESSION_CACHE_MAX_SIZE_DEFAULT ,
+currently 1024\(mu20, so that up to 20000 sessions can be held.
+This size can be modified using the
+.Fn SSL_CTX_sess_set_cache_size
+call.
+A special case is the size 0, which is used for unlimited size.
+.Pp
+When the maximum number of sessions is reached,
+no more new sessions are added to the cache.
+New space may be added by calling
+.Xr SSL_CTX_flush_sessions 3
+to remove expired sessions.
+.Pp
+If the size of the session cache is reduced and more sessions are already in
+the session cache,
+old session will be removed the next time a session shall be added.
+This removal is not synchronized with the expiration of sessions.
+.Sh RETURN VALUES
+.Fn SSL_CTX_sess_set_cache_size
+returns the previously valid size.
+.Pp
+.Fn SSL_CTX_sess_get_cache_size
+returns the currently valid size.
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_flush_sessions 3 ,
+.Xr SSL_CTX_sess_number 3 ,
+.Xr SSL_CTX_set_session_cache_mode 3

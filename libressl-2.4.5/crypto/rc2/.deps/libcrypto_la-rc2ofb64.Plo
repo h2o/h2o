@@ -1,0 +1,11 @@
+rc2/libcrypto_la-rc2ofb64.lo: rc2/rc2ofb64.c ../include/openssl/rc2.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  rc2/rc2_locl.h
+
+../include/openssl/rc2.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+rc2/rc2_locl.h:

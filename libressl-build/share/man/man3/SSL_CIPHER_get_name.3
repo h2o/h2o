@@ -1,0 +1,196 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CIPHER_GET_NAME 3
+.Os
+.Sh NAME
+.Nm SSL_CIPHER_get_name ,
+.Nm SSL_CIPHER_get_bits ,
+.Nm SSL_CIPHER_get_version ,
+.Nm SSL_CIPHER_description
+.Nd get SSL_CIPHER properties
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft const char *
+.Fn SSL_CIPHER_get_name "const SSL_CIPHER *cipher"
+.Ft int
+.Fn SSL_CIPHER_get_bits "const SSL_CIPHER *cipher" "int *alg_bits"
+.Ft char *
+.Fn SSL_CIPHER_get_version "const SSL_CIPHER *cipher"
+.Ft char *
+.Fn SSL_CIPHER_description "const SSL_CIPHER *cipher" "char *buf" "int size"
+.Sh DESCRIPTION
+.Fn SSL_CIPHER_get_name
+returns a pointer to the name of
+.Fa cipher .
+If the
+argument is the
+.Dv NULL
+pointer, a pointer to the constant value
+.Qq NONE
+is returned.
+.Pp
+.Fn SSL_CIPHER_get_bits
+returns the number of secret bits used for
+.Fa cipher .
+If
+.Fa alg_bits
+is not
+.Dv NULL ,
+it contains the number of bits processed by the
+chosen algorithm.
+If
+.Fa cipher
+is
+.Dv NULL ,
+0 is returned.
+.Pp
+.Fn SSL_CIPHER_get_version
+returns a string which indicates the SSL/TLS protocol version that first
+defined the cipher.
+This is currently
+.Qq SSLv2
+or
+.Qq TLSv1/SSLv3 .
+In some cases it should possibly return
+.Qq TLSv1.2
+but the function does not; use
+.Xr SSL_CIPHER_description 3
+instead.
+If
+.Fa cipher
+is
+.Dv NULL ,
+.Qq (NONE)
+is returned.
+.Pp
+.Fn SSL_CIPHER_description
+returns a textual description of the cipher used into the buffer
+.Fa buf
+of length
+.Fa len
+provided.
+If
+.Fa buf
+is
+.Dv NULL ,
+a buffer is allocated using
+.Xr asprintf 3 ;
+that buffer should be freed using the
+.Xr free 3
+function.
+If
+.Fa len
+is too small, or if
+.Fa buf
+is
+.Dv NULL
+and the allocation fails, a pointer to the string
+.Qq Buffer too small
+is returned.
+.Sh NOTES
+The number of bits processed can be different from the secret bits.
+For example, an export cipher like EXP-RC4-MD5 has only 40 secret bits.
+The algorithm does use the full 128 bits (which would be returned for
+.Fa alg_bits ) ,
+but 88 bits are fixed.
+The search space is hence only 40 bits.
+.Pp
+The string returned by
+.Fn SSL_CIPHER_description
+in case of success consists
+of cleartext information separated by one or more blanks in the following
+sequence:
+.Bl -tag -width Ds
+.It Aq Ar ciphername
+Textual representation of the cipher name.
+.It Aq Ar protocol version
+Protocol version:
+.Em SSLv2 ,
+.Em SSLv3 ,
+.Em TLSv1.2 .
+The TLSv1.0 ciphers are flagged with SSLv3.
+No new ciphers were added by TLSv1.1.
+.It Kx= Ns Aq Ar key exchange
+Key exchange method:
+.Em RSA
+(for export ciphers as
+.Em RSA(512)
+or
+.Em RSA(1024) ) ,
+.Em DH
+(for export ciphers as
+.Em DH(512)
+or
+.Em DH(1024) ) ,
+.Em DH/RSA ,
+.Em DH/DSS ,
+.Em Fortezza .
+.It Au= Ns Aq Ar authentication
+Authentication method:
+.Em RSA ,
+.Em DSS ,
+.Em DH ,
+.Em None .
+.Em None
+is the representation of anonymous ciphers.
+.It Enc= Ns Aq Ar symmetric encryption method
+Encryption method with number of secret bits:
+.Em DES(40) ,
+.Em DES(56) ,
+.Em 3DES(168) ,
+.Em RC4(40) ,
+.Em RC4(56) ,
+.Em RC4(64) ,
+.Em RC4(128) ,
+.Em RC2(40) ,
+.Em RC2(56) ,
+.Em RC2(128) ,
+.Em IDEA(128) ,
+.Em Fortezza ,
+.Em None .
+.It Mac= Ns Aq Ar message authentication code
+Message digest:
+.Em MD5 ,
+.Em SHA1 .
+.It Aq Ar export flag
+If the cipher is flagged exportable with respect to old US crypto
+regulations, the word
+.Dq export
+is printed.
+.El
+.Sh RETURN VALUES
+See
+.Sx DESCRIPTION
+.Sh EXAMPLES
+Some examples for the output of
+.Fn SSL_CIPHER_description :
+.D1 "EDH-RSA-DES-CBC3-SHA    SSLv3 Kx=DH       Au=RSA  Enc=3DES(168) Mac=SHA1"
+.D1 "EDH-DSS-DES-CBC3-SHA    SSLv3 Kx=DH       Au=DSS  Enc=3DES(168) Mac=SHA1"
+.D1 "RC4-MD5                 SSLv3 Kx=RSA      Au=RSA  Enc=RC4(128)  Mac=MD5"
+.D1 "EXP-RC4-MD5             SSLv3 Kx=RSA(512) Au=RSA  Enc=RC4(40)   Mac=MD5  export"
+.Pp
+A complete list can be retrieved by invoking the following command:
+.Pp
+.Dl $ openssl ciphers -v ALL
+.Sh SEE ALSO
+.Xr openssl 1 ,
+.Xr ssl 3 ,
+.Xr SSL_get_ciphers 3 ,
+.Xr SSL_get_current_cipher 3
+.Sh BUGS
+If
+.Fn SSL_CIPHER_description
+is called with
+.Fa cipher
+being
+.Dv NULL ,
+the library crashes.
+.Pp
+If
+.Fn SSL_CIPHER_description
+cannot handle a built-in cipher,
+the according description of the cipher property is
+.Qq unknown .
+This case should not occur.

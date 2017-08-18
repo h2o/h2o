@@ -1,0 +1,73 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_SET_FD 3
+.Os
+.Sh NAME
+.Nm SSL_set_fd ,
+.Nm SSL_set_rfd ,
+.Nm SSL_set_wfd
+.Nd connect the SSL object with a file descriptor
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fn SSL_set_fd "SSL *ssl" "int fd"
+.Ft int
+.Fn SSL_set_rfd "SSL *ssl" "int fd"
+.Ft int
+.Fn SSL_set_wfd "SSL *ssl" "int fd"
+.Sh DESCRIPTION
+.Fn SSL_set_fd
+sets the file descriptor
+.Fa fd
+as the input/output facility for the TLS/SSL (encrypted) side of
+.Fa ssl .
+.Fa fd
+will typically be the socket file descriptor of a network connection.
+.Pp
+When performing the operation, a socket
+.Vt BIO
+is automatically created to interface between the
+.Fa ssl
+and
+.Fa fd .
+The
+.Vt BIO
+and hence the SSL engine inherit the behaviour of
+.Fa fd .
+If
+.Fa fd
+is non-blocking, the
+.Fa ssl
+will also have non-blocking behaviour.
+.Pp
+If there was already a
+.Vt BIO
+connected to
+.Fa ssl ,
+.Xr BIO_free 3
+will be called (for both the reading and writing side, if different).
+.Pp
+.Fn SSL_set_rfd
+and
+.Fn SSL_set_wfd
+perform the respective action, but only for the read channel or the write
+channel, which can be set independently.
+.Sh RETURN VALUES
+The following return values can occur:
+.Bl -tag -width Ds
+.It 0
+The operation failed.
+Check the error stack to find out why.
+.It 1
+The operation succeeded.
+.El
+.Sh SEE ALSO
+.Xr bio 3 ,
+.Xr ssl 3 ,
+.Xr SSL_accept 3 ,
+.Xr SSL_connect 3 ,
+.Xr SSL_get_fd 3 ,
+.Xr SSL_set_bio 3 ,
+.Xr SSL_shutdown 3

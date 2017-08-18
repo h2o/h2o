@@ -1,0 +1,65 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: November 22 2014 $
+.Dt SSL_GET_EX_DATA_X509_STORE_CTX_IDX 3
+.Os
+.Sh NAME
+.Nm SSL_get_ex_data_X509_STORE_CTX_idx
+.Nd get ex_data index to access SSL structure from X509_STORE_CTX
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fn SSL_get_ex_data_X509_STORE_CTX_idx void
+.Sh DESCRIPTION
+.Fn SSL_get_ex_data_X509_STORE_CTX_idx
+returns the index number under which the pointer to the
+.Vt SSL
+object is stored into the
+.Vt X509_STORE_CTX
+object.
+.Sh NOTES
+Whenever a
+.Vt X509_STORE_CTX
+object is created for the verification of the peer's certificate during a
+handshake, a pointer to the
+.Vt SSL
+object is stored into the
+.Vt X509_STORE_CTX
+object to identify the connection affected.
+To retrieve this pointer the
+.Xr X509_STORE_CTX_get_ex_data 3
+function can be used with the correct index.
+This index is globally the same for all
+.Vt X509_STORE_CTX
+objects and can be retrieved using
+.Fn SSL_get_ex_data_X509_STORE_CTX_idx .
+The index value is set when
+.Fn SSL_get_ex_data_X509_STORE_CTX_idx
+is first called either by the application program directly or indirectly during
+other SSL setup functions or during the handshake.
+.Pp
+The value depends on other index values defined for
+.Vt X509_STORE_CTX
+objects before the SSL index is created.
+.Sh RETURN VALUES
+.Bl -tag -width Ds
+.It \(>=0
+The index value to access the pointer.
+.It <0
+An error occurred, check the error stack for a detailed error message.
+.El
+.Sh EXAMPLES
+The index returned from
+.Fn SSL_get_ex_data_X509_STORE_CTX_idx
+provides access to
+.Vt SSL
+object for the connection during the
+.Fn verify_callback
+when checking the peer's certificate.
+Please check the example in
+.Xr SSL_CTX_set_verify 3 .
+.Sh SEE ALSO
+.Xr CRYPTO_set_ex_data 3 ,
+.Xr ssl 3 ,
+.Xr SSL_CTX_set_verify 3

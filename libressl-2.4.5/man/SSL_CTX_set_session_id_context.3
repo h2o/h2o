@@ -1,0 +1,105 @@
+.\"
+.\"	$OpenBSD: SSL_CTX_set_session_id_context.3,v 1.2 2014/12/02 14:11:01 jmc Exp $
+.\"
+.Dd $Mdocdate: December 2 2014 $
+.Dt SSL_CTX_SET_SESSION_ID_CONTEXT 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_set_session_id_context ,
+.Nm SSL_set_session_id_context
+.Nd set context within which session can be reused (server side only)
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fo SSL_CTX_set_session_id_context
+.Fa "SSL_CTX *ctx"
+.Fa "const unsigned char *sid_ctx"
+.Fa "unsigned int sid_ctx_len"
+.Fc
+.Ft int
+.Fo SSL_set_session_id_context
+.Fa "SSL *ssl"
+.Fa "const unsigned char *sid_ctx"
+.Fa "unsigned int sid_ctx_len"
+.Fc
+.Sh DESCRIPTION
+.Fn SSL_CTX_set_session_id_context
+sets the context
+.Fa sid_ctx
+of length
+.Fa sid_ctx_len
+within which a session can be reused for the
+.Fa ctx
+object.
+.Pp
+.Fn SSL_set_session_id_context
+sets the context
+.Fa sid_ctx
+of length
+.Fa sid_ctx_len
+within which a session can be reused for the
+.Fa ssl
+object.
+.Sh NOTES
+Sessions are generated within a certain context.
+When exporting/importing sessions with
+.Xr i2d_SSL_SESSION 3
+and
+.Xr d2i_SSL_SESSION 3 ,
+it would be possible to re-import a session generated from another context
+(e.g., another application), which might lead to malfunctions.
+Therefore each application must set its own session id context
+.Fa sid_ctx
+which is used to distinguish the contexts and is stored in exported sessions.
+The
+.Fa sid_ctx
+can be any kind of binary data with a given length; it is therefore possible
+to use, for instance, the name of the application, the hostname, the service
+name...
+.Pp
+The session id context becomes part of the session.
+The session id context is set by the SSL/TLS server.
+The
+.Fn SSL_CTX_set_session_id_context
+and
+.Fn SSL_set_session_id_context
+functions are therefore only useful on the server side.
+.Pp
+OpenSSL clients will check the session id context returned by the server when
+reusing a session.
+.Pp
+The maximum length of the
+.Fa sid_ctx
+is limited to
+.Dv SSL_MAX_SSL_SESSION_ID_LENGTH .
+.Sh WARNINGS
+If the session id context is not set on an SSL/TLS server and client
+certificates are used, stored sessions will not be reused but a fatal error
+will be flagged and the handshake will fail.
+.Pp
+If a server returns a different session id context to an OpenSSL client
+when reusing a session, an error will be flagged and the handshake will
+fail.
+OpenSSL servers will always return the correct session id context,
+as an OpenSSL server checks the session id context itself before reusing
+a session as described above.
+.Sh RETURN VALUES
+.Fn SSL_CTX_set_session_id_context
+and
+.Fn SSL_set_session_id_context
+return the following values:
+.Bl -tag -width Ds
+.It 0
+The length
+.Fa sid_ctx_len
+of the session id context
+.Fa sid_ctx
+exceeded
+the maximum allowed length of
+.Dv SSL_MAX_SSL_SESSION_ID_LENGTH .
+The error is logged to the error stack.
+.It 1
+The operation succeeded.
+.El
+.Sh SEE ALSO
+.Xr ssl 3

@@ -1,0 +1,57 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CTX_FLUSH_SESSIONS 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_flush_sessions ,
+.Nm SSL_flush_sessions
+.Nd remove expired sessions
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft void
+.Fn SSL_CTX_flush_sessions "SSL_CTX *ctx" "long tm"
+.Ft void
+.Fn SSL_flush_sessions "SSL_CTX *ctx" "long tm"
+.Sh DESCRIPTION
+.Fn SSL_CTX_flush_sessions
+causes a run through the session cache of
+.Fa ctx
+to remove sessions expired at time
+.Fa tm .
+.Pp
+.Fn SSL_flush_sessions
+is a synonym for
+.Fn SSL_CTX_flush_sessions .
+.Sh NOTES
+If enabled, the internal session cache will collect all sessions established
+up to the specified maximum number (see
+.Fn SSL_CTX_sess_set_cache_size ) .
+As sessions will not be reused ones they are expired, they should be
+removed from the cache to save resources.
+This can either be done automatically whenever 255 new sessions were
+established (see
+.Xr SSL_CTX_set_session_cache_mode 3 )
+or manually by calling
+.Fn SSL_CTX_flush_sessions .
+.Pp
+The parameter
+.Fa tm
+specifies the time which should be used for the
+expiration test, in most cases the actual time given by
+.Fn time 0
+will be used.
+.Pp
+.Fn SSL_CTX_flush_sessions
+will only check sessions stored in the internal cache.
+When a session is found and removed, the
+.Va remove_session_cb
+is however called to synchronize with the external cache (see
+.Xr SSL_CTX_sess_set_get_cb 3 ) .
+.Sh RETURN VALUES
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_sess_set_get_cb 3 ,
+.Xr SSL_CTX_set_session_cache_mode 3 ,
+.Xr SSL_CTX_set_timeout 3

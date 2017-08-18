@@ -1,0 +1,11 @@
+cast/libcrypto_la-c_cfb64.lo: cast/c_cfb64.c ../include/openssl/cast.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  cast/cast_lcl.h
+
+../include/openssl/cast.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+cast/cast_lcl.h:

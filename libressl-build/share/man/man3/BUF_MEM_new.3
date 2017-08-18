@@ -1,0 +1,104 @@
+.Dd $Mdocdate: September 22 2015 $
+.Dt BUF_MEM_NEW 3
+.Os
+.Sh NAME
+.Nm BUF_MEM_new ,
+.Nm BUF_MEM_free ,
+.Nm BUF_MEM_grow ,
+.Nm BUF_strdup
+.Nd simple character arrays structure
+.Sh SYNOPSIS
+.In openssl/buffer.h
+.Ft BUF_MEM *
+.Fo BUF_MEM_new
+.Fa void
+.Fc
+.Ft void
+.Fo BUF_MEM_free
+.Fa "BUF_MEM *a"
+.Fc
+.Ft int
+.Fo BUF_MEM_grow
+.Fa "BUF_MEM *str"
+.Fa "size_t len"
+.Fc
+.Ft char *
+.Fo BUF_strdup
+.Fa "const char *str"
+.Fc
+.Sh DESCRIPTION
+The buffer library handles simple character arrays.
+Buffers are used for various purposes in the library, most notably
+memory BIOs.
+.Pp
+The library uses the
+.Vt BUF_MEM
+structure defined in buffer.h:
+.Bd -literal
+typedef struct buf_mem_st
+{
+	size_t length;	/* current number of bytes */
+	char *data;
+	size_t max;	/* size of buffer */
+} BUF_MEM;
+.Ed
+.Pp
+.Fa length
+is the current size of the buffer in bytes,
+.Fa max
+is the amount of memory allocated to the buffer.
+There are three functions which handle these and one
+.Dq miscellaneous
+function.
+.Pp
+.Fn BUF_MEM_new
+allocates a new buffer of zero size.
+.Pp
+.Fn BUF_MEM_free
+frees up an already existing buffer.
+The data is zeroed before freeing up in case the buffer contains
+sensitive data.
+.Pp
+.Fn BUF_MEM_grow
+changes the size of an already existing buffer to
+.Fa len .
+Any data already in the buffer is preserved if it increases in size.
+.Pp
+.Fn BUF_strdup
+copies a NUL terminated string into a block of allocated memory and
+returns a pointer to the allocated block.
+Unlike the system
+.Xr strdup 3
+function,
+.Fn BUF_strdup
+will accept a
+.Dv NULL
+argument and will return
+.Dv NULL
+in that case.
+Its use in new programs is discouraged.
+.Pp
+The memory allocated from
+.Fn BUF_strdup
+should be freed up using the
+.Xr free 3
+function.
+.Sh RETURN VALUES
+.Fn BUF_MEM_new
+returns the buffer or
+.Dv NULL
+on error.
+.Pp
+.Fn BUF_MEM_grow
+returns zero on error or the new size (i.e.
+.Fa len Ns ).
+.Sh SEE ALSO
+.Xr bio 3
+.Sh HISTORY
+.Fn BUF_MEM_new ,
+.Fn BUF_MEM_free
+and
+.Fn BUF_MEM_grow
+are available in all versions of SSLeay and OpenSSL.
+.Fn BUF_strdup
+was added in SSLeay 0.8.

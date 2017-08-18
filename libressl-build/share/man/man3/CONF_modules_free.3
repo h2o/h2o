@@ -1,0 +1,56 @@
+.Dd $Mdocdate: March 21 2015 $
+.Dt CONF_MODULES_FREE 3
+.Os
+.Sh NAME
+.Nm CONF_modules_free ,
+.Nm CONF_modules_finish ,
+.Nm CONF_modules_unload
+.Nd OpenSSL configuration cleanup functions
+.Sh SYNOPSIS
+.In openssl/conf.h
+.Ft void
+.Fo CONF_modules_free
+.Fa void
+.Fc
+.Ft void
+.Fo CONF_modules_finish
+.Fa void
+.Fc
+.Ft void
+.Fo CONF_modules_unload
+.Fa "int all"
+.Fc
+.Sh DESCRIPTION
+.Fn CONF_modules_free
+closes down and frees up all memory allocated by all configuration
+modules.
+.Pp
+.Fn CONF_modules_finish
+calls the configuration
+.Sy finish
+handler of each configuration module to free up any configuration
+that module may have performed.
+.Pp
+.Fn CONF_modules_unload
+finishes and unloads configuration modules.
+If
+.Fa all
+is set to 0, only modules loaded from DSOs will be unloaded.
+If
+.Fa all
+is 1, all modules, including builtin modules, will be unloaded.
+.Sh NOTES
+Normally applications will only call
+.Fn CONF_modules_free
+at application to tidy up any configuration performed.
+.Sh RETURN VALUE
+None of the functions return a value.
+.Sh SEE ALSO
+.Xr CONF_modules_load_file 3 ,
+.Xr OPENSSL_config 3
+.Sh HISTORY
+.Fn CONF_modules_free ,
+.Fn CONF_modules_unload ,
+and
+.Fn CONF_modules_finish
+first appeared in OpenSSL 0.9.7.

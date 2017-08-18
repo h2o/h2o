@@ -1,0 +1,269 @@
+.Dd $Mdocdate: February 23 2015 $
+.Dt BN_BLINDING_NEW 3
+.Os
+.Sh NAME
+.Nm BN_BLINDING_new ,
+.Nm BN_BLINDING_free ,
+.Nm BN_BLINDING_update ,
+.Nm BN_BLINDING_convert ,
+.Nm BN_BLINDING_invert ,
+.Nm BN_BLINDING_convert_ex ,
+.Nm BN_BLINDING_invert_ex ,
+.Nm BN_BLINDING_get_thread_id ,
+.Nm BN_BLINDING_set_thread_id ,
+.Nm BN_BLINDING_thread_id ,
+.Nm BN_BLINDING_get_flags ,
+.Nm BN_BLINDING_set_flags ,
+.Nm BN_BLINDING_create_param
+.Nd blinding related BIGNUM functions
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft BN_BLINDING *
+.Fo BN_BLINDING_new
+.Fa "const BIGNUM *A"
+.Fa "const BIGNUM *Ai"
+.Fa "BIGNUM *mod"
+.Fc
+.Ft void
+.Fo BN_BLINDING_free
+.Fa "BN_BLINDING *b"
+.Fc
+.Ft int
+.Fo BN_BLINDING_update
+.Fa "BN_BLINDING *b"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_BLINDING_convert
+.Fa "BIGNUM *n"
+.Fa "BN_BLINDING *b"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_BLINDING_invert
+.Fa "BIGNUM *n"
+.Fa "BN_BLINDING *b"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_BLINDING_convert_ex
+.Fa "BIGNUM *n"
+.Fa "BIGNUM *r"
+.Fa "BN_BLINDING *b"
+.Fa "BN_CTX *ctx"
+.Fc
+.Ft int
+.Fo BN_BLINDING_invert_ex
+.Fa "BIGNUM *n"
+.Fa "const BIGNUM *r"
+.Fa "BN_BLINDING *b"
+.Fa "BN_CTX *ctx"
+.Fc
+.Fd #ifndef OPENSSL_NO_DEPRECATED
+.Ft unsigned long
+.Fo BN_BLINDING_get_thread_id
+.Fa "const BN_BLINDING *"
+.Fc
+.Ft void
+.Fo BN_BLINDING_set_thread_id
+.Fa "BN_BLINDING *"
+.Fa "unsigned long"
+.Fc
+.Fd #endif
+.Ft CRYPTO_THREADID *
+.Fo BN_BLINDING_thread_id
+.Fa "BN_BLINDING *"
+.Fc
+.Ft unsigned long
+.Fo BN_BLINDING_get_flags
+.Fa "const BN_BLINDING *"
+.Fc
+.Ft void
+.Fo BN_BLINDING_set_flags
+.Fa "BN_BLINDING *"
+.Fa "unsigned long"
+.Fc
+.Ft BN_BLINDING *
+.Fo BN_BLINDING_create_param
+.Fa "BN_BLINDING *b"
+.Fa "const BIGNUM *e"
+.Fa "BIGNUM *m"
+.Fa "BN_CTX *ctx"
+.Fa "int (*bn_mod_exp)(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,\
+ const BIGNUM *m, BN_CTX *ctx, BN_MONT_CTX *m_ctx)"
+.Fa "BN_MONT_CTX *m_ctx"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_BLINDING_new
+allocates a new
+.Vt BN_BLINDING
+structure and copies the
+.Fa A
+and
+.Fa \&Ai
+values into the newly created
+.Vt BN_BLINDING
+object.
+.Pp
+.Fn BN_BLINDING_free
+frees the
+.Vt BN_BLINDING
+structure.
+.Pp
+.Fn BN_BLINDING_update
+updates the
+.Vt BN_BLINDING
+parameters by squaring the
+.Fa A
+and
+.Fa \&Ai
+or, after specific number of uses and if the necessary parameters are
+set, by re-creating the blinding parameters.
+.Pp
+.Fn BN_BLINDING_convert_ex
+multiplies
+.Fa n
+with the blinding factor
+.Fa A .
+If
+.Fa r
+is not
+.Dv NULL ,
+a copy of the inverse blinding factor
+.Fa \&Ai
+will be returned in
+.Fa r
+(this is useful if a
+.Vt RSA
+object is shared among several threads).
+.Fn BN_BLINDING_invert_ex
+multiplies
+.Fa n
+with the inverse blinding factor
+.Fa \&Ai .
+If
+.Fa r
+is not
+.Dv NULL ,
+it will be used as the inverse blinding.
+.Pp
+.Fn BN_BLINDING_convert
+and
+.Fn BN_BLINDING_invert
+are wrapper functions for
+.Fn BN_BLINDING_convert_ex
+and
+.Fn BN_BLINDING_invert_ex
+with
+.Fa r
+set to
+.Dv NULL .
+.Pp
+.Fn BN_BLINDING_thread_id
+provides access to the
+.Vt CRYPTO_THREADID
+object within the
+.Vt BN_BLINDING
+structure.
+This is to help users provide proper locking if needed for
+multi-threaded use.
+The "thread id" object of a newly allocated
+.Vt BN_BLINDING
+structure is initialised to the thread id in which
+.Fn BN_BLINDING_new
+was called.
+.Pp
+.Fn BN_BLINDING_get_flags
+returns the
+.Dv BN_BLINDING_*
+flags.
+Currently there are two supported flags:
+.Dv BN_BLINDING_NO_UPDATE
+and
+.Dv BN_BLINDING_NO_RECREATE .
+.Dv BN_BLINDING_NO_UPDATE
+inhibits the automatic update of the
+.Vt BN_BLINDING
+parameters after each use and
+.Dv BN_BLINDING_NO_RECREATE
+inhibits the automatic re-creation of the
+.Vt BN_BLINDING
+parameters after a fixed number of uses (currently 32).
+In newly allocated
+.Vt BN_BLINDING
+objects no flags are set.
+.Fn BN_BLINDING_set_flags
+sets the
+.Dv BN_BLINDING_*
+parameters flags.
+.Pp
+.Fn BN_BLINDING_create_param
+creates new
+.Vt BN_BLINDING
+parameters using the exponent
+.Fa e
+and the modulus
+.Fa m .
+.Fa bn_mod_exp
+and
+.Fa m_ctx
+can be used to pass special functions for exponentiation (normally
+.Xr BN_mod_exp_mont 3
+and
+.Vt BN_MONT_CTX Ns ).
+.Sh RETURN VALUES
+.Fn BN_BLINDING_new
+returns the newly allocated
+.Vt BN_BLINDING
+structure or
+.Dv NULL
+in case of an error.
+.Pp
+.Fn BN_BLINDING_update ,
+.Fn BN_BLINDING_convert ,
+.Fn BN_BLINDING_invert ,
+.Fn BN_BLINDING_convert_ex
+and
+.Fn BN_BLINDING_invert_ex
+return 1 on success and 0 if an error occurred.
+.Pp
+.Fn BN_BLINDING_thread_id
+returns a pointer to the thread id object within a
+.Vt BN_BLINDING
+object.
+.Pp
+.Fn BN_BLINDING_get_flags
+returns the currently set
+.Dv BN_BLINDING_*
+flags (an
+.Vt unsigned long
+value).
+.Pp
+.Fn BN_BLINDING_create_param
+returns the newly created
+.Vt BN_BLINDING
+parameters or
+.Dv NULL
+on error.
+.Sh SEE ALSO
+.Xr bn 3
+.Sh HISTORY
+.Fn BN_BLINDING_thread_id
+was first introduced in OpenSSL 1.0.0, and it deprecates
+.Fn BN_BLINDING_set_thread_id
+and
+.Fn BN_BLINDING_get_thread_id .
+.Pp
+.Fn BN_BLINDING_convert_ex ,
+.Fn BN_BLINDIND_invert_ex ,
+.Fn BN_BLINDING_get_thread_id ,
+.Fn BN_BLINDING_set_thread_id ,
+.Fn BN_BLINDING_set_flags ,
+.Fn BN_BLINDING_get_flags
+and
+.Fn BN_BLINDING_create_param
+were first introduced in OpenSSL 0.9.8
+.Sh AUTHORS
+.An Nils Larsch
+for
+.Lk http://www.openssl.org/ "the OpenSSL project" .

@@ -1,0 +1,13 @@
+bf/libcrypto_la-bf_ecb.lo: bf/bf_ecb.c ../include/openssl/blowfish.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  bf/bf_locl.h ../include/openssl/opensslv.h
+
+../include/openssl/blowfish.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+bf/bf_locl.h:
+
+../include/openssl/opensslv.h:

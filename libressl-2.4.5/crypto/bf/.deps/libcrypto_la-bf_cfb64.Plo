@@ -1,0 +1,11 @@
+bf/libcrypto_la-bf_cfb64.lo: bf/bf_cfb64.c ../include/openssl/blowfish.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  bf/bf_locl.h
+
+../include/openssl/blowfish.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+bf/bf_locl.h:

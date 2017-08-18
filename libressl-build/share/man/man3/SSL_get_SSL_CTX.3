@@ -1,0 +1,28 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_GET_SSL_CTX 3
+.Os
+.Sh NAME
+.Nm SSL_get_SSL_CTX
+.Nd get the SSL_CTX from which an SSL is created
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft SSL_CTX *
+.Fn SSL_get_SSL_CTX "const SSL *ssl"
+.Sh DESCRIPTION
+.Fn SSL_get_SSL_CTX
+returns a pointer to the
+.Vt SSL_CTX
+object from which
+.Fa ssl
+was created with
+.Xr SSL_new 3 .
+.Sh RETURN VALUES
+The pointer to the
+.Vt SSL_CTX
+object is returned.
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_new 3

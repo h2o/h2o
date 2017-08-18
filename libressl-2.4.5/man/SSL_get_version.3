@@ -1,0 +1,35 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_GET_VERSION 3
+.Os
+.Sh NAME
+.Nm SSL_get_version
+.Nd get the protocol version of a connection
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft const char *
+.Fn SSL_get_version "const SSL *ssl"
+.Sh DESCRIPTION
+.Fn SSL_get_version
+returns the name of the protocol used for the connection
+.Fa ssl .
+.Sh RETURN VALUES
+The following strings can be returned:
+.Bl -tag -width Ds
+.It Qq SSLv2
+The connection uses the SSLv2 protocol.
+.It Qq SSLv3
+The connection uses the SSLv3 protocol.
+.It Qq TLSv1
+The connection uses the TLSv1.0 protocol.
+.It Qq TLSv1.1
+The connection uses the TLSv1.1 protocol.
+.It Qq TLSv1.2
+The connection uses the TLSv1.2 protocol.
+.It Qq unknown
+This indicates that no version has been set (no connection established).
+.El
+.Sh SEE ALSO
+.Xr ssl 3

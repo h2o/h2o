@@ -1,0 +1,12 @@
+prefix=/usr/local
+exec_prefix=${prefix}
+includedir=${prefix}/include
+libdir=/usr/local/lib
+
+Name: libh2o
+Description: An optimized HTTP/1.x & HTTP/2 library
+URL: https://h2o.examp1e.net/
+Version: 0.14.0
+Requires.private: libuv >= 1.0.0
+Libs: -L${libdir} -lh2o
+Cflags: -I${includedir}

@@ -1,0 +1,145 @@
+.Dd $Mdocdate: July 17 2014 $
+.Dt BIO_SHOULD_RETRY 3
+.Os
+.Sh NAME
+.Nm BIO_should_retry ,
+.Nm BIO_should_read ,
+.Nm BIO_should_write ,
+.Nm BIO_should_io_special ,
+.Nm BIO_retry_type ,
+.Nm BIO_get_retry_BIO ,
+.Nm BIO_get_retry_reason
+.Nd BIO retry functions
+.Sh SYNOPSIS
+.In openssl/bio.h
+.Pp
+.Fd #define BIO_should_read(a)		((a)->flags & BIO_FLAGS_READ)
+.Fd #define BIO_should_write(a)		((a)->flags & BIO_FLAGS_WRITE)
+.Fd #define BIO_should_io_special(a)	((a)->flags & BIO_FLAGS_IO_SPECIAL)
+.Fd #define BIO_retry_type(a)		((a)->flags & BIO_FLAGS_RWS)
+.Fd #define BIO_should_retry(a)		((a)->flags & BIO_FLAGS_SHOULD_RETRY)
+.Fd #define BIO_FLAGS_READ			0x01
+.Fd #define BIO_FLAGS_WRITE			0x02
+.Fd #define BIO_FLAGS_IO_SPECIAL		0x04
+.Fd #define BIO_FLAGS_RWS \e
+.Fd \&	(BIO_FLAGS_READ|BIO_FLAGS_WRITE|BIO_FLAGS_IO_SPECIAL)
+.Fd #define BIO_FLAGS_SHOULD_RETRY	0x08
+.Ft BIO *
+.Fo BIO_get_retry_BIO
+.Fa "BIO *bio"
+.Fa "int *reason"
+.Fc
+.Ft int
+.Fo BIO_get_retry_reason
+.Fa "BIO *bio"
+.Fc
+.Sh DESCRIPTION
+These functions determine why a BIO is not able to read or write data.
+They will typically be called after a failed
+.Xr BIO_read 3
+or
+.Xr BIO_write 3
+call.
+.Pp
+.Fn BIO_should_retry
+is true if the call that produced this condition
+should be retried at a later time.
+.Pp
+If
+.Fn BIO_should_retry
+is false, the cause is an error condition.
+.Pp
+.Fn BIO_should_read
+is true if the cause of the condition is that a BIO needs to read data.
+.Pp
+.Fn BIO_should_write
+is true if the cause of the condition is that a BIO needs to write data.
+.Pp
+.Fn BIO_should_io_special
+is true if some "special" condition, that is a reason other than
+reading or writing, is the cause of the condition.
+.Pp
+.Fn BIO_retry_type
+returns a mask of the cause of a retry condition consisting of the values
+.Dv BIO_FLAGS_READ ,
+.Dv BIO_FLAGS_WRITE ,
+.Dv BIO_FLAGS_IO_SPECIAL
+though current BIO types will only set one of these.
+.Pp
+.Fn BIO_get_retry_BIO
+determines the precise reason for the special condition.
+It returns the BIO that caused this condition and if
+.Fa reason
+is not
+.Dv NULL
+it contains the reason code.
+The meaning of the reason code and the action that should be taken
+depends on the type of BIO that resulted in this condition.
+.Pp
+.Fn BIO_get_retry_reason
+returns the reason for a special condition
+if passed the relevant BIO, for example as returned by
+.Fn BIO_get_retry_BIO .
+.Sh NOTES
+If
+.Fn BIO_should_retry
+returns false, then the precise "error condition" depends on
+the BIO type that caused it and the return code of the BIO operation.
+For example if a call to
+.Xr BIO_read 3
+on a socket BIO returns 0 and
+.Fn BIO_should_retry
+is false, then the cause will be that the connection closed.
+A similar condition on a file BIO will mean that it has reached EOF.
+Some BIO types may place additional information on the error queue.
+For more details see the individual BIO type manual pages.
+.Pp
+If the underlying I/O structure is in a blocking mode,
+almost all current BIO types will not request a retry,
+because the underlying I/O calls will not.
+If the application knows that the BIO type will never
+signal a retry then it need not call
+.Fn BIO_should_retry
+after a failed BIO I/O call.
+This is typically done with file BIOs.
+.Pp
+SSL BIOs are the only current exception to this rule:
+they can request a retry even if the underlying I/O structure
+is blocking, if a handshake occurs during a call to
+.Xr BIO_read 3 .
+An application can retry the failed call immediately
+or avoid this situation by setting
+.Dv SSL_MODE_AUTO_RETRY
+on the underlying SSL structure.
+.Pp
+While an application may retry a failed non blocking call immediately,
+this is likely to be very inefficient because the call will fail
+repeatedly until data can be processed or is available.
+An application will normally wait until the necessary condition
+is satisfied.
+How this is done depends on the underlying I/O structure.
+.Pp
+For example if the cause is ultimately a socket and
+.Fn BIO_should_read
+is true then a call to
+.Xr select 2
+may be made to wait until data is available
+and then retry the BIO operation.
+By combining the retry conditions of several non blocking BIOs in a single
+.Xr select 2
+call it is possible to service several BIOs in a single thread,
+though the performance may be poor if SSL BIOs are present because
+long delays can occur during the initial handshake process.
+.Pp
+It is possible for a BIO to block indefinitely if the underlying I/O
+structure cannot process or return any data.
+This depends on the behaviour of the platforms I/O functions.
+This is often not desirable: one solution is to use non blocking I/O
+and use a timeout on the
+.Xr select 2
+(or equivalent) call.
+.Sh BUGS
+The OpenSSL ASN1 functions cannot gracefully deal with non blocking I/O:
+they cannot retry after a partial read or write.
+This is usually worked around by only passing the relevant data to ASN1
+functions when the entire structure can be read or written.

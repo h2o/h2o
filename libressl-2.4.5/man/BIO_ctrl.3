@@ -1,0 +1,264 @@
+.Dd $Mdocdate: July 17 2014 $
+.Dt BIO_CTRL 3
+.Os
+.Sh NAME
+.Nm BIO_ctrl ,
+.Nm BIO_callback_ctrl ,
+.Nm BIO_ptr_ctrl ,
+.Nm BIO_int_ctrl ,
+.Nm BIO_reset ,
+.Nm BIO_seek ,
+.Nm BIO_tell ,
+.Nm BIO_flush ,
+.Nm BIO_eof ,
+.Nm BIO_set_close ,
+.Nm BIO_get_close ,
+.Nm BIO_pending ,
+.Nm BIO_wpending ,
+.Nm BIO_ctrl_pending ,
+.Nm BIO_ctrl_wpending ,
+.Nm BIO_get_info_callback ,
+.Nm BIO_set_info_callback
+.Nd BIO control operations
+.Sh SYNOPSIS
+.In openssl/bio.h
+.Ft long
+.Fo BIO_ctrl
+.Fa "BIO *bp"
+.Fa "int cmd"
+.Fa "long larg"
+.Fa "void *parg"
+.Fc
+.Ft long
+.Fo BIO_callback_ctrl
+.Fa "BIO *b"
+.Fa "int cmd"
+.Fa "void (*fp)(struct bio_st *, int, const char *, int, long, long)"
+.Fc
+.Ft char *
+.Fo BIO_ptr_ctrl
+.Fa "BIO *bp"
+.Fa "int cmd"
+.Fa "long larg"
+.Fc
+.Ft long
+.Fo BIO_int_ctrl
+.Fa "BIO *bp"
+.Fa "int cmd"
+.Fa "long larg"
+.Fa "int iarg"
+.Fc
+.Ft int
+.Fo BIO_reset
+.Fa "BIO *b"
+.Fc
+.Ft int
+.Fo BIO_seek
+.Fa "BIO *b"
+.Fa "int ofs"
+.Fc
+.Ft int
+.Fo BIO_tell
+.Fa "BIO *b"
+.Fc
+.Ft int
+.Fo BIO_flush
+.Fa "BIO *b"
+.Fc
+.Ft int
+.Fo BIO_eof
+.Fa "BIO *b"
+.Fc
+.Ft int
+.Fo BIO_set_close
+.Fa "BIO *b"
+.Fa "long flag"
+.Fc
+.Ft int
+.Fo BIO_get_close
+.Fa "BIO *b"
+.Fc
+.Ft int
+.Fo BIO_pending
+.Fa "BIO *b"
+.Fc
+.Ft int
+.Fo BIO_wpending
+.Fa "BIO *b"
+.Fc
+.Ft size_t
+.Fo BIO_ctrl_pending
+.Fa "BIO *b"
+.Fc
+.Ft size_t
+.Fo BIO_ctrl_wpending
+.Fa "BIO *b"
+.Fc
+.Ft int
+.Fo BIO_get_info_callback
+.Fa "BIO *b"
+.Fa "bio_info_cb **cbp"
+.Fc
+.Ft int
+.Fo BIO_set_info_callback
+.Fa "BIO *b"
+.Fa "bio_info_cb *cb"
+.Fc
+.Ft typedef void
+.Fo bio_info_cb
+.Fa "BIO *b"
+.Fa "int oper"
+.Fa "const char *ptr"
+.Fa "int arg1"
+.Fa "long arg2"
+.Fa "long arg3"
+.Fc
+.Sh DESCRIPTION
+.Fn BIO_ctrl ,
+.Fn BIO_callback_ctrl ,
+.Fn BIO_ptr_ctrl ,
+and
+.Fn BIO_int_ctrl
+are BIO "control" operations taking arguments of various types.
+These functions are not normally called directly,
+various macros are used instead.
+The standard macros are described below, macros specific to a
+particular type of BIO are described in the specific BIO's manual
+page as well as any special features of the standard calls.
+.Pp
+.Fn BIO_reset
+typically resets a BIO to some initial state, in the case
+of file related BIOs for example it rewinds the file pointer
+to the start of the file.
+.Pp
+.Fn BIO_seek
+resets a file related BIO's (that is file descriptor and
+FILE BIOs) file position pointer to
+.Fa ofs
+bytes from start of file.
+.Pp
+.Fn BIO_tell
+returns the current file position of a file related BIO.
+.Pp
+.Fn BIO_flush
+normally writes out any internally buffered data, in some cases
+it is used to signal EOF and that no more data will be written.
+.Pp
+.Fn BIO_eof
+returns 1 if the BIO has read EOF, the precise meaning of
+"EOF" varies according to the BIO type.
+.Pp
+.Fn BIO_set_close
+sets the BIO
+.Fa b
+close flag to
+.Fa flag .
+.Fa flag
+can take the value
+.Dv BIO_CLOSE
+or
+.Dv BIO_NOCLOSE .
+Typically
+.Dv BIO_CLOSE
+is used in a source/sink BIO to indicate that the underlying I/O stream
+should be closed when the BIO is freed.
+.Pp
+.Fn BIO_get_close
+returns the BIO's close flag.
+.Pp
+.Fn BIO_pending ,
+.Fn BIO_ctrl_pending ,
+.Fn BIO_wpending ,
+and
+.Fn BIO_ctrl_wpending
+return the number of pending characters in the BIO's read and write buffers.
+Not all BIOs support these calls.
+.Fn BIO_ctrl_pending
+and
+.Fn BIO_ctrl_wpending
+return a
+.Vt size_t
+type and are functions,
+.Fn BIO_pending
+and
+.Fn BIO_wpending
+are macros which call
+.Fn BIO_ctrl .
+.Sh RETURN VALUES
+.Fn BIO_reset
+normally returns 1 for success and 0 or -1 for failure.
+File BIOs are an exception, they return 0 for success and -1 for failure.
+.Pp
+.Fn BIO_seek
+and
+.Fn BIO_tell
+both return the current file position on success
+and -1 for failure, except file BIOs which for
+.Fn BIO_seek
+always return 0 for success and -1 for failure.
+.Pp
+.Fn BIO_flush
+returns 1 for success and 0 or -1 for failure.
+.Pp
+.Fn BIO_eof
+returns 1 if EOF has been reached 0 otherwise.
+.Pp
+.Fn BIO_set_close
+always returns 1.
+.Pp
+.Fn BIO_get_close
+returns the close flag value
+.Dv BIO_CLOSE
+or
+.Dv BIO_NOCLOSE .
+.Pp
+.Fn BIO_pending ,
+.Fn BIO_ctrl_pending ,
+.Fn BIO_wpending ,
+and
+.Fn BIO_ctrl_wpending
+return the amount of pending data.
+.Sh NOTES
+Because it can write data,
+.Fn BIO_flush
+may return 0 or -1 indicating that the call should be retried later
+in a similar manner to
+.Fn BIO_write .
+The
+.Fn BIO_should_retry
+call should be used and appropriate action taken is the call fails.
+.Pp
+The return values of
+.Fn BIO_pending
+and
+.Fn BIO_wpending
+may not reliably determine the amount of pending data in all cases.
+For example in the case of a file BIO some data may be available in the
+.Vt FILE
+structure's internal buffers but it is not possible
+to determine this in a portably way.
+For other types of BIO they may not be supported.
+.Pp
+If they do not internally handle a particular
+.Fn BIO_ctrl
+operation, filter BIOs usually pass the operation
+to the next BIO in the chain.
+This often means there is no need to locate the required BIO for
+a particular operation, it can be called on a chain and it will
+be automatically passed to the relevant BIO.
+However this can cause unexpected results:
+for example no current filter BIOs implement
+.Fn BIO_seek ,
+but this may still succeed if the chain ends
+in a FILE or file descriptor BIO.
+.Pp
+Source/sink BIOs return an 0 if they do not recognize the
+.Fn BIO_ctrl
+operation.
+.Sh BUGS
+Some of the return values are ambiguous and care should be taken.
+In particular a return value of 0 can be returned if an operation
+is not supported, if an error occurred, if EOF has not been reached
+and in the case of
+.Fn BIO_seek
+on a file BIO for a successful operation.

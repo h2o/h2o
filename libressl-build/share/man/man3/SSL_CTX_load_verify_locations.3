@@ -1,0 +1,161 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CTX_LOAD_VERIFY_LOCATIONS 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_load_verify_locations
+.Nd set default locations for trusted CA certificates
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fo SSL_CTX_load_verify_locations
+.Fa "SSL_CTX *ctx" "const char *CAfile" "const char *CApath"
+.Fc
+.Sh DESCRIPTION
+.Fn SSL_CTX_load_verify_locations
+specifies the locations for
+.Fa ctx ,
+at which CA certificates for verification purposes are located.
+The certificates available via
+.Fa CAfile
+and
+.Fa CApath
+are trusted.
+.Sh NOTES
+If
+.Fa CAfile
+is not
+.Dv NULL ,
+it points to a file of CA certificates in PEM format.
+The file can contain several CA certificates identified by sequences of:
+.Bd -literal
+ -----BEGIN CERTIFICATE-----
+ ... (CA certificate in base64 encoding) ...
+ -----END CERTIFICATE-----
+.Ed
+Before, between, and after the certificates arbitrary text is allowed which can
+be used, e.g., for descriptions of the certificates.
+.Pp
+The
+.Fa CAfile
+is processed on execution of the
+.Fn SSL_CTX_load_verify_locations
+function.
+.Pp
+If
+.Fa CApath
+is not NULL, it points to a directory containing CA certificates in PEM format.
+The files each contain one CA certificate.
+The files are looked up by the CA subject name hash value,
+which must hence be available.
+If more than one CA certificate with the same name hash value exist,
+the extension must be different (e.g.,
+.Pa 9d66eef0.0 ,
+.Pa 9d66eef0.1 ,
+etc.).
+The search is performed in the ordering of the extension number,
+regardless of other properties of the certificates.
+.Pp
+The certificates in
+.Fa CApath
+are only looked up when required, e.g., when building the certificate chain or
+when actually performing the verification of a peer certificate.
+.Pp
+When looking up CA certificates, the OpenSSL library will first search the
+certificates in
+.Fa CAfile ,
+then those in
+.Fa CApath .
+Certificate matching is done based on the subject name, the key identifier (if
+present), and the serial number as taken from the certificate to be verified.
+If these data do not match, the next certificate will be tried.
+If a first certificate matching the parameters is found,
+the verification process will be performed;
+no other certificates for the same parameters will be searched in case of
+failure.
+.Pp
+In server mode, when requesting a client certificate, the server must send
+the list of CAs of which it will accept client certificates.
+This list is not influenced by the contents of
+.Fa CAfile
+or
+.Fa CApath
+and must explicitly be set using the
+.Xr SSL_CTX_set_client_CA_list 3
+family of functions.
+.Pp
+When building its own certificate chain, an OpenSSL client/server will try to
+fill in missing certificates from
+.Fa CAfile Ns / Fa CApath ,
+if the
+certificate chain was not explicitly specified (see
+.Xr SSL_CTX_add_extra_chain_cert 3
+and
+.Xr SSL_CTX_use_certificate 3 ) .
+.Sh WARNINGS
+If several CA certificates matching the name, key identifier, and serial
+number condition are available, only the first one will be examined.
+This may lead to unexpected results if the same CA certificate is available
+with different expiration dates.
+If a
+.Dq certificate expired
+verification error occurs, no other certificate will be searched.
+Make sure to not have expired certificates mixed with valid ones.
+.Sh RETURN VALUES
+The following return values can occur:
+.Bl -tag -width Ds
+.It 0
+The operation failed because
+.Fa CAfile
+and
+.Fa CApath
+are
+.Dv NULL
+or the processing at one of the locations specified failed.
+Check the error stack to find out the reason.
+.It 1
+The operation succeeded.
+.El
+.Sh EXAMPLES
+Generate a CA certificate file with descriptive text from the CA certificates
+.Pa ca1.pem
+.Pa ca2.pem
+.Pa ca3.pem :
+.Bd -literal
+#!/bin/sh
+rm CAfile.pem
+for i in ca1.pem ca2.pem ca3.pem; do
+	openssl x509 -in $i -text >> CAfile.pem
+done
+.Ed
+.Pp
+Prepare the directory /some/where/certs containing several CA certificates
+for use as
+.Fa CApath :
+.Bd -literal
+$ cd /some/where/certs
+$ rm -f *.[0-9]* *.r[0-9]*
+$ for c in *.pem; do
+>    [ "$c" = "*.pem" ] && continue
+>    hash=$(openssl x509 -noout -hash -in "$c")
+>    if egrep -q -- '-BEGIN( X509 | TRUSTED | )CERTIFICATE-' "$c"; then
+>      suf=0
+>      while [ -e $hash.$suf ]; do suf=$(( $suf + 1 )); done
+>      ln -s "$c" $hash.$suf
+>    fi
+>    if egrep -q -- '-BEGIN X509 CRL-' "$c"; then
+>      suf=0
+>      while [ -e $hash.r$suf ]; do suf=$(( $suf + 1 )); done
+>      ln -s "$c" $hash.r$suf
+>    fi
+> done
+.Ed
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_add_extra_chain_cert 3 ,
+.Xr SSL_CTX_set_cert_store 3 ,
+.Xr SSL_CTX_set_client_CA_list 3 ,
+.Xr SSL_CTX_use_certificate 3 ,
+.Xr SSL_get_client_CA_list 3

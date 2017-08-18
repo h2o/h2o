@@ -1,0 +1,52 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_GET_CURRENT_CIPHER 3
+.Os
+.Sh NAME
+.Nm SSL_get_current_cipher ,
+.Nm SSL_get_cipher ,
+.Nm SSL_get_cipher_name ,
+.Nm  SSL_get_cipher_bits ,
+.Nm SSL_get_cipher_version
+.Nd get SSL_CIPHER of a connection
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft SSL_CIPHER *
+.Fn SSL_get_current_cipher "const SSL *ssl"
+.Fd #define SSL_get_cipher(s) SSL_CIPHER_get_name(SSL_get_current_cipher(s))
+.Fd #define SSL_get_cipher_name(s) \
+SSL_CIPHER_get_name(SSL_get_current_cipher(s))
+.Fd #define SSL_get_cipher_bits(s,np) \
+SSL_CIPHER_get_bits(SSL_get_current_cipher(s),np)
+.Fd #define SSL_get_cipher_version(s) \
+SSL_CIPHER_get_version(SSL_get_current_cipher(s))
+.Sh DESCRIPTION
+.Fn SSL_get_current_cipher
+returns a pointer to an
+.Vt SSL_CIPHER
+object containing the description of the actually used cipher of a connection
+established with the
+.Fa ssl
+object.
+.Pp
+.Fn SSL_get_cipher
+and
+.Fn SSL_get_cipher_name
+are identical macros to obtain the name of the currently used cipher.
+.Fn SSL_get_cipher_bits
+is a macro to obtain the number of secret/algorithm bits used and
+.Fn SSL_get_cipher_version
+returns the protocol name.
+See
+.Xr SSL_CIPHER_get_name 3
+for more details.
+.Sh RETURN VALUES
+.Fn SSL_get_current_cipher
+returns the cipher actually used or
+.Dv NULL ,
+when no session has been established.
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CIPHER_get_name 3

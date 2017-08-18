@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+echo 1..2
+TEST=./rfc5280time
+if [ -e ./rfc5280time.exe ]; then
+	TEST=./rfc5280time.exe
+fi
+$TEST
+echo "ok 1"
+echo "ok 2 - rfc5280time_64-bit # SKIP this system is unable to represent times past 2038"

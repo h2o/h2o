@@ -1,0 +1,328 @@
+.Dd $Mdocdate: November 11 2015 $
+.Dt CRYPTO_SET_LOCKING_CALLBACK 3
+.Os
+.Sh NAME
+.Nm CRYPTO_THREADID_set_callback ,
+.Nm CRYPTO_THREADID_get_callback ,
+.Nm CRYPTO_THREADID_current ,
+.Nm CRYPTO_THREADID_cmp ,
+.Nm CRYPTO_THREADID_cpy ,
+.Nm CRYPTO_THREADID_hash ,
+.Nm CRYPTO_set_locking_callback ,
+.Nm CRYPTO_num_locks ,
+.Nm CRYPTO_set_dynlock_create_callback ,
+.Nm CRYPTO_set_dynlock_lock_callback ,
+.Nm CRYPTO_set_dynlock_destroy_callback ,
+.Nm CRYPTO_get_new_dynlockid ,
+.Nm CRYPTO_destroy_dynlockid ,
+.Nm CRYPTO_lock ,
+.Nm CRYPTO_w_lock ,
+.Nm CRYPTO_w_unlock ,
+.Nm CRYPTO_r_lock ,
+.Nm CRYPTO_r_unlock ,
+.Nm CRYPTO_add ,
+.Nm CRYPTO_add_lock ,
+.Nm CRYPTO_set_id_callback
+.Nd OpenSSL thread support
+.Sh SYNOPSIS
+.In openssl/crypto.h
+.Bd -literal
+/* Don't use this structure directly. */
+typedef struct crypto_threadid_st {
+	void *ptr;
+	unsigned long val;
+} CRYPTO_THREADID;
+/* Only use CRYPTO_THREADID_set_[numeric|pointer]() within callbacks */
+.Ed
+.Pp
+.Ft void
+.Fo CRYPTO_THREADID_set_numeric
+.Fa "CRYPTO_THREADID *id"
+.Fa "unsigned long val"
+.Fc
+.Ft void
+.Fo CRYPTO_THREADID_set_pointer
+.Fa "CRYPTO_THREADID *id"
+.Fa "void *ptr"
+.Fc
+.Ft int
+.Fo CRYPTO_THREADID_set_callback
+.Fa "void (*threadid_func)(CRYPTO_THREADID *)"
+.Fc
+.Ft void
+.Fo "(*CRYPTO_THREADID_get_callback(void))"
+.Fa "CRYPTO_THREADID *"
+.Fc
+.Ft void
+.Fo CRYPTO_THREADID_current
+.Fa "CRYPTO_THREADID *id"
+.Fc
+.Ft int
+.Fo CRYPTO_THREADID_cmp
+.Fa "const CRYPTO_THREADID *a"
+.Fa "const CRYPTO_THREADID *b"
+.Fc
+.Ft void
+.Fo CRYPTO_THREADID_cpy
+.Fa "CRYPTO_THREADID *dest"
+.Fa "const CRYPTO_THREADID *src"
+.Fc
+.Ft unsigned long
+.Fo CRYPTO_THREADID_hash
+.Fa "const CRYPTO_THREADID *id"
+.Fc
+.Ft int
+.Fo CRYPTO_num_locks
+.Fa void
+.Fc
+.Bd -literal
+/* struct CRYPTO_dynlock_value needs to be defined by the user */
+struct CRYPTO_dynlock_value;
+.Ed
+.Pp
+.Ft void
+.Fo CRYPTO_set_dynlock_create_callback
+.Fa "struct CRYPTO_dynlock_value *"
+.Fa "(*dyn_create_function)(char *file, int line)"
+.Fc
+.Ft void
+.Fo CRYPTO_set_dynlock_lock_callback
+.Fa "void (*dyn_lock_function)(int mode, struct CRYPTO_dynlock_value *l,\
+ const char *file, int line)"
+.Fc
+.Ft void
+.Fo CRYPTO_set_dynlock_destroy_callback
+.Fa "void (*dyn_destroy_function)(struct CRYPTO_dynlock_value *l,\
+ const char *file, int line)"
+.Fc
+.Ft int
+.Fo CRYPTO_get_new_dynlockid
+.Fa void
+.Fc
+.Ft void
+.Fo CRYPTO_destroy_dynlockid
+.Fa "int i"
+.Fc
+.Ft void
+.Fo CRYPTO_lock
+.Fa "int mode"
+.Fa "int n"
+.Fa "const char *file"
+.Fa "int line"
+.Fc
+.Bd -literal
+#define	CRYPTO_w_lock(type) \e
+	CRYPTO_lock(CRYPTO_LOCK|CRYPTO_WRITE, type, __FILE__, __LINE__)
+#define	CRYPTO_w_unlock(type) \e
+	CRYPTO_lock(CRYPTO_UNLOCK|CRYPTO_WRITE, type, __FILE__, __LINE__)
+#define	CRYPTO_r_lock(type) \e
+	CRYPTO_lock(CRYPTO_LOCK|CRYPTO_READ, type, __FILE__, __LINE__)
+#define	CRYPTO_r_unlock(type) \e
+	CRYPTO_lock(CRYPTO_UNLOCK|CRYPTO_READ, type, __FILE__, __LINE__)
+#define	CRYPTO_add(addr,amount,type) \e
+	CRYPTO_add_lock(addr, amount, type, __FILE__, __LINE__)
+.Ed
+.Sh DESCRIPTION
+OpenSSL can safely be used in multi-threaded applications provided that
+at least two callback functions are set,
+.Fn locking_function
+and
+.Fn threadid_func .
+.Pp
+.Fo locking_function
+.Fa "int mode"
+.Fa "int n"
+.Fa "const char *file"
+.Fa "int line"
+.Fc
+is needed to perform locking on shared data structures.
+Note that OpenSSL uses a number of global data structures that will be
+implicitly shared whenever multiple threads use OpenSSL.
+Multi-threaded applications will crash at random if it is not set.
+.Pp
+.Fn locking_function
+must be able to handle up to
+.Fn CRYPTO_num_locks
+different mutex locks.
+It sets the
+.Fa n Ns -th
+lock if
+.Fa mode
+includes
+.Dv CRYPTO_LOCK ,
+and releases it otherwise.
+.Pp
+.Fa file
+and
+.Fa line
+are the file number of the function setting the lock.
+They can be useful for debugging.
+.Pp
+.Fo threadid_func
+.Fa "CRYPTO_THREADID *id"
+.Fc
+is needed to record the currently-executing thread's identifier into
+.Fa id .
+The implementation of this callback should not fill in
+.Fa id
+directly, but should use
+.Fn CRYPTO_THREADID_set_numeric
+if thread IDs are numeric, or
+.Fn CRYPTO_THREADID_set_pointer
+if they are pointer-based.
+If the application does not register such a callback using
+.Fn CRYPTO_THREADID_set_callback ,
+then a default implementation is used - on Windows and BeOS this uses
+the system's default thread identifying APIs, and on all other platforms
+it uses the address of
+.Va errno .
+The latter is satisfactory for thread-safety if and only if the platform
+has a thread-local error number facility.
+.Pp
+Once
+.Fn threadid_func
+is registered, or if the built-in default implementation is to be used,
+.Bl -bullet
+.It
+.Fn CRYPTO_THREADID_current
+records the currently-executing thread ID into the given
+.Fa id
+object.
+.It
+.Fn CRYPTO_THREADID_cmp
+compares two thread IDs (returning zero for equality, i.e. the same
+semantics as
+.Xr memcmp 3 ) .
+.It
+.Fn CRYPTO_THREADID_cpy
+duplicates a thread ID value.
+.It
+.Fn CRYPTO_THREADID_hash
+returns a numeric value usable as a hash-table key.
+This is usually the exact numeric or pointer-based thread ID used
+internally, however this also handles the unusual case where pointers
+are larger than
+.Vt long
+variables and the platform's thread IDs are pointer-based \(em in
+this case, mixing is done to attempt to produce a unique numeric
+value even though it is not as wide as the platform's true thread
+IDs.
+.El
+.Pp
+Additionally, OpenSSL supports dynamic locks, and sometimes, some parts
+of OpenSSL need it for better performance.
+To enable this, the following is required:
+.Bl -bullet
+.It
+Three additional callback functions,
+.Fn dyn_create_function ,
+.Fn dyn_lock_function ,
+and
+.Fn dyn_destroy_function .
+.It
+A structure defined with the data that each lock needs to handle.
+.El
+.Pp
+.Vt struct CRYPTO_dynlock_value
+has to be defined to contain whatever structure is needed to handle locks.
+.Pp
+.Fo dyn_create_function
+.Fa "const char *file"
+.Fa "int line"
+.Fc
+is needed to create a lock.
+Multi-threaded applications might crash at random if it is not set.
+.Pp
+.Fo dyn_lock_function
+.Fa "int mode"
+.Fa "CRYPTO_dynlock *l"
+.Fa "const char *file"
+.Fa "int line"
+.Fc
+is needed to perform locking off dynamic lock numbered n.
+Multi-threaded applications might crash at random if it is not set.
+.Pp
+.Fo dyn_destroy_function
+.Fa "CRYPTO_dynlock *l"
+.Fa "const char *file"
+.Fa "int line"
+.Fc
+is needed to destroy the lock
+.Fa l .
+Multi-threaded applications might crash at random if it is not set.
+.Pp
+.Fn CRYPTO_get_new_dynlockid
+is used to create locks.
+It will call
+.Fn dyn_create_function
+for the actual creation.
+.Pp
+.Fn CRYPTO_destroy_dynlockid
+is used to destroy locks.
+It will call
+.Fn dyn_destroy_function
+for the actual destruction.
+.Pp
+.Fn CRYPTO_lock
+is used to lock and unlock the locks.
+.Fa mode
+is a bitfield describing what should be done with the lock.
+.Fa n
+is the number of the lock as returned from
+.Fn CRYPTO_get_new_dynlockid .
+.Fa mode
+can be combined from the following values.
+These values are pairwise exclusive, with undefined behaviour if misused
+(for example,
+.Dv CRYPTO_READ
+and
+.Dv CRYPTO_WRITE
+should not be used together):
+.Bd -literal -offset indent
+CRYPTO_LOCK	0x01
+CRYPTO_UNLOCK	0x02
+CRYPTO_READ	0x04
+CRYPTO_WRITE	0x08
+.Ed
+.Sh RETURN VALUES
+.Fn CRYPTO_num_locks
+returns the required number of locks.
+.Pp
+.Fn CRYPTO_get_new_dynlockid
+returns the index to the newly created lock.
+.Pp
+The other functions return no values.
+.Sh NOTES
+You can find out if OpenSSL was configured with thread support:
+.Bd -literal -offset indent
+#define OPENSSL_THREAD_DEFINES
+#include <openssl/opensslconf.h>
+#if defined(OPENSSL_THREADS)
+	/* thread support enabled */
+#else
+	/* no thread support */
+#endif
+.Ed
+.Pp
+Also, dynamic locks are currently not used internally by OpenSSL, but
+may do so in the future.
+.Sh EXAMPLES
+.Pa crypto/threads/mttest.c
+shows examples of the callback functions on Solaris, Irix and Win32.
+.Sh SEE ALSO
+.Xr crypto 3
+.Sh HISTORY
+.Fn CRYPTO_set_locking_callback
+is available in all versions of SSLeay and OpenSSL.
+.Fn CRYPTO_num_locks
+was added in OpenSSL 0.9.4.
+All functions dealing with dynamic locks were added in OpenSSL 0.9.5b-dev.
+.Vt CRYPTO_THREADID
+and associated functions were introduced in OpenSSL 1.0.0 to replace
+(actually, deprecate) the previous
+.Fn CRYPTO_set_id_callback ,
+.Fn CRYPTO_get_id_callback ,
+and
+.Fn CRYPTO_thread_id
+functions which assumed thread IDs to always be represented by
+.Vt unsigned long .

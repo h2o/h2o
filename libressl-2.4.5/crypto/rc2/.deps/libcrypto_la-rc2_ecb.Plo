@@ -1,0 +1,13 @@
+rc2/libcrypto_la-rc2_ecb.lo: rc2/rc2_ecb.c ../include/openssl/rc2.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  rc2/rc2_locl.h ../include/openssl/opensslv.h
+
+../include/openssl/rc2.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+rc2/rc2_locl.h:
+
+../include/openssl/opensslv.h:

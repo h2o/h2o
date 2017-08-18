@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# This file is in the public domain.
+# https://github.com/kmcallister/autoharden/blob/c5c7842f39c2f8d19836bb5427d6479db4436d62/LICENSE
+#
+# From kmcallister: 
+# https://github.com/kmcallister/autoharden/blob/efaf5a16612589808c276a11536ea9a47071f74b/scripts/wrap-compiler-for-flag-check
+
+# Prior to clang v5.1, there was no way to make
+# clang's "argument unused" warning fatal.  This
+# wrapper script that greps for this warning message. Newer clang's have no issues.
+#
+# Ideally the search string would also include 'clang: ' but this output might
+# depend on clang's argv[0].
+#
+set -o errexit
+set -o nounset
+
+if out=`"$@" 2>&1`; then
+  echo "$out"
+  if echo "$out" | grep 'warning: argument unused' >/dev/null; then
+    echo "$0: found clang warning"
+    exit 1
+  else
+    exit 0
+  fi
+else
+  code=$?
+  echo "$out"
+  exit $code
+fi

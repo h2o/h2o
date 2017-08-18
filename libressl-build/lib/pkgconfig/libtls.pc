@@ -1,0 +1,16 @@
+#libtls pkg-config source file
+
+prefix=/Users/travisgalloway/github/h2o/libressl-build
+exec_prefix=${prefix}
+libdir=/Users/travisgalloway/github/h2o/libressl-build/lib
+includedir=${prefix}/include
+
+Name: LibreSSL-libtls
+Description: Secure communications using the TLS socket protocol.
+Version: 2.4.5
+Requires:
+Requires.private: libcrypto libssl
+Conflicts:
+Libs: -L${libdir} -ltls
+Libs.private:  -lcrypto -lssl 
+Cflags: -I${includedir}

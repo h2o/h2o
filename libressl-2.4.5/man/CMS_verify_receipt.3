@@ -1,0 +1,55 @@
+.Dd $Mdocdate: March 21 2015 $
+.Dt CMS_VERIFY_RECEIPT 3
+.Os
+.Sh NAME
+.Nm CMS_verify_receipt
+.Nd verify a CMS signed receipt
+.Sh SYNOPSIS
+.In openssl/cms.h
+.Ft int
+.Fo CMS_verify_receipt
+.Fa "CMS_ContentInfo *rcms"
+.Fa "CMS_ContentInfo *ocms"
+.Fa "STACK_OF(X509) *certs"
+.Fa "X509_STORE *store"
+.Fa "unsigned int flags"
+.Fc
+.Sh DESCRIPTION
+.Fn CMS_verify_receipt
+verifies a CMS signed receipt.
+.Fa rcms
+is the signed receipt to verify.
+.Fa ocms
+is the original SignedData structure containing the receipt request.
+.Fa certs
+is a set of certificates in which to search for the signing certificate.
+.Fa store
+is a trusted certificate store (used for chain verification).
+.Pp
+.Fa flags
+is an optional set of flags, which can be used to modify the verify
+operation.
+.Sh NOTES
+This functions behaves in a similar way to
+.Xr CMS_verify 3
+except the flag values
+.Dv CMS_DETACHED ,
+.Dv CMS_BINARY ,
+.Dv CMS_TEXT ,
+and
+.Dv CMS_STREAM
+are not supported since they do not make sense in the context of signed
+receipts.
+.Sh RETURN VALUES
+.Fn CMS_verify_receipt
+returns 1 for a successful verification and zero if an error occurred.
+.Pp
+The error can be obtained from
+.Xr ERR_get_error 3 .
+.Sh SEE ALSO
+.Xr CMS_sign_receipt 3 ,
+.Xr CMS_verify 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn CMS_verify_receipt
+was added to OpenSSL 0.9.8.

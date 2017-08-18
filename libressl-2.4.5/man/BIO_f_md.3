@@ -1,0 +1,209 @@
+.Dd $Mdocdate: July 17 2014 $
+.Dt BIO_F_MD 3
+.Os
+.Sh NAME
+.Nm BIO_f_md ,
+.Nm BIO_set_md ,
+.Nm BIO_get_md ,
+.Nm BIO_get_md_ctx
+.Nd message digest BIO filter
+.Sh SYNOPSIS
+.In openssl/bio.h
+.In openssl/evp.h
+.Ft BIO_METHOD *
+.Fo BIO_f_md
+.Fa void
+.Fc
+.Ft int
+.Fo BIO_set_md
+.Fa "BIO *b"
+.Fa "EVP_MD *md"
+.Fc
+.Ft int
+.Fo BIO_get_md
+.Fa "BIO *b"
+.Fa "EVP_MD **mdp"
+.Fc
+.Ft int
+.Fo BIO_get_md_ctx
+.Fa "BIO *b"
+.Fa "EVP_MD_CTX **mdcp"
+.Fc
+.Sh DESCRIPTION
+.Fn BIO_f_md
+returns the message digest BIO method.
+This is a filter BIO that digests any data passed through it.
+It is a BIO wrapper for the digest routines
+.Fn EVP_DigestInit ,
+.Fn EVP_DigestUpdate ,
+and
+.Fn EVP_DigestFinal .
+.Pp
+Any data written or read through a digest BIO using
+.Xr BIO_read 3
+and
+.Xr BIO_write 3
+is digested.
+.Pp
+.Xr BIO_gets 3 ,
+if its
+.Sy size
+parameter is large enough,
+finishes the digest calculation and returns the digest value.
+.Xr BIO_puts 3
+is
+not supported.
+.Pp
+.Xr BIO_reset 3
+reinitialises a digest BIO.
+.Pp
+.Fn BIO_set_md
+sets the message digest of BIO
+.Fa b
+to
+.Fa md :
+this must be called to initialize a digest BIO
+before any data is passed through it.
+It is a
+.Xr BIO_ctrl 3
+macro.
+.Pp
+.Fn BIO_get_md
+places the a pointer to the digest BIOs digest method in
+.Fa mdp .
+It is a
+.Xr BIO_ctrl 3
+macro.
+.Pp
+.Fn BIO_get_md_ctx
+returns the digest BIOs context in
+.Fa mdcp .
+.Sh NOTES
+The context returned by
+.Fn BIO_get_md_ctx
+can be used in calls to
+.Xr EVP_DigestFinal 3
+and also in the signature routines
+.Xr EVP_SignFinal 3
+and
+.Xr EVP_VerifyFinal 3 .
+.Pp
+The context returned by
+.Fn BIO_get_md_ctx
+is an internal context structure.
+Changes made to this context will affect the digest BIO itself, and
+the context pointer will become invalid when the digest BIO is freed.
+.Pp
+After the digest has been retrieved from a digest BIO,
+it must be reinitialized by calling
+.Xr BIO_reset 3
+or
+.Fn BIO_set_md
+before any more data is passed through it.
+.Pp
+If an application needs to call
+.Xr BIO_gets 3
+or
+.Xr BIO_puts 3
+through a chain containing digest BIOs,
+then this can be done by prepending a buffering BIO.
+.Pp
+Before OpenSSL 1.0.0 the call to
+.Fn BIO_get_md_ctx
+would only work if the BIO had been initialized for example by calling
+.Fn BIO_set_md .
+In OpenSSL 1.0.0 and later the context is always returned
+and the BIO is state is set to initialized.
+This allows applications to initialize the context externally
+if the standard calls such as
+.Fn BIO_set_md
+are not sufficiently flexible.
+.Sh RETURN VALUES
+.Fn BIO_f_md
+returns the digest BIO method.
+.Pp
+.Fn BIO_set_md ,
+.Fn BIO_get_md ,
+and
+.Fn BIO_get_md_ctx
+return 1 for success and 0 for failure.
+.Sh EXAMPLES
+The following example creates a BIO chain containing an SHA1 and MD5
+digest BIO and passes the string "Hello World" through it.
+Error checking has been omitted for clarity.
+.Bd -literal -offset 2n
+BIO *bio, *mdtmp;
+const char message[] = "Hello World";
+bio = BIO_new(BIO_s_null());
+mdtmp = BIO_new(BIO_f_md());
+BIO_set_md(mdtmp, EVP_sha1());
+/*
+ * For BIO_push() we want to append the sink BIO
+ * and keep a note of the start of the chain.
+ */
+bio = BIO_push(mdtmp, bio);
+mdtmp = BIO_new(BIO_f_md());
+BIO_set_md(mdtmp, EVP_md5());
+bio = BIO_push(mdtmp, bio);
+/* Note: mdtmp can now be discarded */
+BIO_write(bio, message, strlen(message));
+.Ed
+.Pp
+The next example digests data by reading through a chain instead:
+.Bd -literal -offset 2n
+BIO *bio, *mdtmp;
+char buf[1024];
+int rdlen;
+
+bio = BIO_new_file(file, "rb");
+mdtmp = BIO_new(BIO_f_md());
+BIO_set_md(mdtmp, EVP_sha1());
+bio = BIO_push(mdtmp, bio);
+mdtmp = BIO_new(BIO_f_md());
+BIO_set_md(mdtmp, EVP_md5());
+bio = BIO_push(mdtmp, bio);
+do {
+	rdlen = BIO_read(bio, buf, sizeof(buf));
+	/* Might want to do something with the data here */
+} while (rdlen > 0);
+.Ed
+.Pp
+This next example retrieves the message digests from a BIO chain
+and outputs them.
+This could be used with the examples above.
+.Bd -literal -offset 2n
+BIO *mdtmp;
+unsigned char mdbuf[EVP_MAX_MD_SIZE];
+int mdlen;
+int i;
+
+mdtmp = bio;	/* Assume bio has previously been set up */
+do {
+	EVP_MD *md;
+	mdtmp = BIO_find_type(mdtmp, BIO_TYPE_MD);
+	if (!mdtmp)
+		break;
+	BIO_get_md(mdtmp, &md);
+	printf("%s digest", OBJ_nid2sn(EVP_MD_type(md)));
+	mdlen = BIO_gets(mdtmp, mdbuf, EVP_MAX_MD_SIZE);
+	for(i = 0; i < mdlen; i++)
+		printf(":%02X", mdbuf[i]);
+	printf("\en");
+	mdtmp = BIO_next(mdtmp);
+} while(mdtmp);
+BIO_free_all(bio);
+.Ed
+.Sh BUGS
+The lack of support for
+.Xr BIO_puts 3
+and the non standard behaviour of
+.Xr BIO_gets 3
+could be regarded as anomalous.
+It could be argued that
+.Xr BIO_gets 3
+and
+.Xr BIO_puts 3
+should be passed to the next BIO in the chain and digest the data
+passed through and that digests should be retrieved using a separate
+.Xr BIO_ctrl 3
+call.

@@ -69,7 +69,7 @@ class Enumerator
 
     def reject(&block)
       Lazy.new(self){|yielder, val|
-        unless block.call(val)
+        if not block.call(val)
           yielder << val
         end
       }

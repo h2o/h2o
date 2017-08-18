@@ -1,0 +1,152 @@
+.Dd $Mdocdate: March 21 2015 $
+.Dt CMS_ENCRYPT 3
+.Os
+.Sh NAME
+.Nm CMS_encrypt
+.Nd create a CMS envelopedData structure
+.Sh SYNOPSIS
+.In openssl/cms.h
+.Ft CMS_ContentInfo *
+.Fo CMS_encrypt
+.Fa "STACK_OF(X509) *certs"
+.Fa "BIO *in"
+.Fa "const EVP_CIPHER *cipher"
+.Fa "unsigned int flags"
+.Fc
+.Sh DESCRIPTION
+.Fn CMS_encrypt
+creates and returns a CMS EnvelopedData structure.
+.Fa certs
+is a list of recipient certificates.
+.Fa in
+is the content to be encrypted.
+.Fa cipher
+is the symmetric cipher to use.
+.Fa flags
+is an optional set of flags.
+.Sh NOTES
+Only certificates carrying RSA keys are supported so the recipient
+certificates supplied to this function must all contain RSA public keys,
+though they do not have to be signed using the RSA algorithm.
+.Pp
+The algorithm passed in the
+.Fa cipher
+parameter must support ASN1 encoding of its parameters.
+.Pp
+Many browsers implement a "sign and encrypt" option which is simply an
+S/MIME envelopedData containing an S/MIME signed message.
+This can be readily produced by storing the S/MIME signed message in a
+memory BIO and passing it to
+.Fn CMS_encrypt .
+.Pp
+The following flags can be passed in the
+.Fa flags
+parameter:
+.Pp
+If the
+.Dv CMS_TEXT
+flag is set, MIME headers for type
+.Sy text/plain
+are prepended to the data.
+.Pp
+Normally the supplied content is translated into MIME canonical format
+(as required by the S/MIME specifications); if
+.Dv CMS_BINARY
+is set, no translation occurs.
+This option should be used if the supplied data is in binary format;
+otherwise the translation will corrupt it.
+If
+.Dv CMS_BINARY
+is set then
+.Dv CMS_TEXT
+is ignored.
+.Pp
+OpenSSL will by default identify recipient certificates using issuer
+name and serial number.
+If
+.Dv CMS_USE_KEYID
+is set, it will use the subject key identifier value instead.
+An error occurs if all recipient certificates do not have a subject key
+identifier extension.
+.Pp
+If the
+.Dv CMS_STREAM
+flag is set, a partial
+.Vt CMS_ContentInfo
+structure is returned suitable for streaming I/O: no data is read from the
+.Vt BIO
+.Fa in .
+.Pp
+If the
+.Dv CMS_PARTIAL
+flag is set, a partial
+.Vt CMS_ContentInfo
+structure is returned to which additional recipients and attributes can
+be added before finalization.
+.Pp
+The data being encrypted is included in the
+.Vt CMS_ContentInfo
+structure, unless
+.Dv CMS_DETACHED
+is set, in which case it is omitted.
+This is rarely used in practice and is not supported by
+.Xr SMIME_write_CMS 3 .
+.Pp
+If the flag
+.Dv CMS_STREAM
+is set, the returned
+.Vt CMS_ContentInfo
+structure is
+.Em not
+complete and outputting its contents via a function that does not
+properly finalize the
+.Vt CMS_ContentInfo
+structure will give unpredictable results.
+.Pp
+Several functions including
+.Xr SMIME_write_CMS 3 ,
+.Xr i2d_CMS_bio_stream 3 ,
+.Xr PEM_write_bio_CMS_stream 3
+finalize the structure.
+Alternatively finalization can be performed by obtaining the streaming
+ASN1
+.Vt BIO
+directly using
+.Xr BIO_new_CMS 3 .
+.Pp
+The recipients specified in
+.Fa certs
+use a CMS KeyTransRecipientInfo info structure.
+KEKRecipientInfo is also supported using the flag
+.Dv CMS_PARTIAL
+and
+.Xr CMS_add0_recipient_key 3 .
+.Pp
+The parameter
+.Fa certs
+may be
+.Dv NULL
+if
+.Dv CMS_PARTIAL
+is set and recipients are added later using
+.Xr CMS_add1_recipient_cert 3
+or
+.Xr CMS_add0_recipient_key 3 .
+.Sh RETURN VALUES
+.Fn CMS_encrypt
+returns either a
+.Vt CMS_ContentInfo
+structure or
+.Dv NULL
+if an error occurred.
+The error can be obtained from
+.Xr ERR_get_error 3 .
+.Sh SEE ALSO
+.Xr CMS_decrypt 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn CMS_encrypt
+was added to OpenSSL 0.9.8.
+The
+.Dv CMS_STREAM
+flag was first supported in OpenSSL 1.0.0.

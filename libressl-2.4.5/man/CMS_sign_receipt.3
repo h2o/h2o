@@ -1,0 +1,61 @@
+.Dd $Mdocdate: March 21 2015 $
+.Dt CMS_SIGN_RECEIPT 3
+.Os
+.Sh NAME
+.Nm CMS_sign_receipt
+.Nd create a CMS signed receipt
+.Sh SYNOPSIS
+.In openssl/cms.h
+.Ft CMS_ContentInfo *
+.Fo CMS_sign_receipt
+.Fa "CMS_SignerInfo *si"
+.Fa "X509 *signcert"
+.Fa "EVP_PKEY *pkey"
+.Fa "STACK_OF(X509) *certs"
+.Fa "unsigned int flags"
+.Fc
+.Sh DESCRIPTION
+.Fn CMS_sign_receipt
+creates and returns a CMS signed receipt structure.
+.Fa si
+is the
+.Vt CMS_SignerInfo
+structure containing the signed receipt request.
+.Fa signcert
+is the certificate to sign with,
+.Fa pkey
+is the corresponding private key.
+.Fa certs
+is an optional additional set of certificates to include in the CMS
+structure (for example any intermediate CAs in the chain).
+.Pp
+.Fa flags
+is an optional set of flags.
+.Sh NOTES
+This functions behaves in a similar way to
+.Xr CMS_sign 3
+except the flag values
+.Dv CMS_DETACHED ,
+.Dv CMS_BINARY ,
+.Dv CMS_NOATTR ,
+.Dv CMS_TEXT ,
+and
+.Dv CMS_STREAM
+are not supported, since they do not make sense in the context of
+signed receipts.
+.Sh RETURN VALUES
+.Fn CMS_sign_receipt
+returns either a valid
+.Vt CMS_ContentInfo
+structure or
+.Dv NULL
+if an error occurred.
+The error can be obtained from
+.Xr ERR_get_error 3 .
+.Sh SEE ALSO
+.Xr CMS_sign 3 ,
+.Xr CMS_verify_receipt 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn CMS_sign_receipt
+was added to OpenSSL 0.9.8.

@@ -1,0 +1,11 @@
+cast/libcrypto_la-c_enc.lo: cast/c_enc.c ../include/openssl/cast.h \
+  ../include/openssl/opensslconf.h ../include/openssl/opensslfeatures.h \
+  cast/cast_lcl.h
+
+../include/openssl/cast.h:
+
+../include/openssl/opensslconf.h:
+
+../include/openssl/opensslfeatures.h:
+
+cast/cast_lcl.h:

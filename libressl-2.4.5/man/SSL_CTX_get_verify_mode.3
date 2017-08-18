@@ -1,0 +1,73 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CTX_GET_VERIFY_MODE 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_get_verify_mode ,
+.Nm SSL_get_verify_mode ,
+.Nm SSL_CTX_get_verify_depth ,
+.Nm SSL_get_verify_depth ,
+.Nm SSL_get_verify_callback ,
+.Nm SSL_CTX_get_verify_callback
+.Nd get currently set verification parameters
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fn SSL_CTX_get_verify_mode "const SSL_CTX *ctx"
+.Ft int
+.Fn SSL_get_verify_mode "const SSL *ssl"
+.Ft int
+.Fn SSL_CTX_get_verify_depth "const SSL_CTX *ctx"
+.Ft int
+.Fn SSL_get_verify_depth "const SSL *ssl"
+.Ft int
+.Fo "(*SSL_CTX_get_verify_callback(const SSL_CTX *ctx))"
+.Fa int "X509_STORE_CTX *"
+.Fc
+.Ft int
+.Fo "(*SSL_get_verify_callback(const SSL *ssl))"
+.Fa int "X509_STORE_CTX *"
+.Fc
+.Sh DESCRIPTION
+.Fn SSL_CTX_get_verify_mode
+returns the verification mode currently set in
+.Fa ctx .
+.Pp
+.Fn SSL_get_verify_mode
+returns the verification mode currently set in
+.Fa ssl .
+.Pp
+.Fn SSL_CTX_get_verify_depth
+returns the verification depth limit currently set
+in
+.Fa ctx .
+If no limit has been explicitly set,
+\(mi1 is returned and the default value will be used.
+.Pp
+.Fn SSL_get_verify_depth
+returns the verification depth limit currently set in
+.Fa ssl .
+If no limit has been explicitly set,
+\(mi1 is returned and the default value will be used.
+.Pp
+.Fn SSL_CTX_get_verify_callback
+returns a function pointer to the verification callback currently set in
+.Fa ctx .
+If no callback was explicitly set, the
+.Dv NULL
+pointer is returned and the default callback will be used.
+.Pp
+.Fn SSL_get_verify_callback
+returns a function pointer to the verification callback currently set in
+.Fa ssl .
+If no callback was explicitly set, the
+.Dv NULL
+pointer is returned and the default callback will be used.
+.Sh RETURN VALUES
+See
+.Sx DESCRIPTION
+.Sh SEE ALSO
+.Xr ssl 3 ,
+.Xr SSL_CTX_set_verify 3

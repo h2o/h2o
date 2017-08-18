@@ -1,0 +1,235 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CTX_SET_TMP_DH_CALLBACK 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_set_tmp_dh_callback ,
+.Nm SSL_CTX_set_tmp_dh ,
+.Nm SSL_set_tmp_dh_callback ,
+.Nm SSL_set_tmp_dh
+.Nd handle DH keys for ephemeral key exchange
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft void
+.Fo SSL_CTX_set_tmp_dh_callback
+.Fa "SSL_CTX *ctx"
+.Fa "DH *(*tmp_dh_callback)(SSL *ssl, int is_export, int keylength)"
+.Fc
+.Ft long
+.Fn SSL_CTX_set_tmp_dh "SSL_CTX *ctx" "DH *dh"
+.Ft void
+.Fo SSL_set_tmp_dh_callback
+.Fa "SSL *ssl"
+.Fa "DH *(*tmp_dh_callback)(SSL *ssl, int is_export, int keylength"
+.Fc
+.Ft long
+.Fn SSL_set_tmp_dh "SSL *ssl" "DH *dh"
+.Sh DESCRIPTION
+.Fn SSL_CTX_set_tmp_dh_callback
+sets the callback function for
+.Fa ctx
+to be used when a DH parameters are required to
+.Fa tmp_dh_callback .
+The callback is inherited by all
+.Vt ssl
+objects created from
+.Fa ctx .
+.Pp
+.Fn SSL_CTX_set_tmp_dh
+sets DH parameters to be used to be
+.Sy dh Ns  .
+The key is inherited by all
+.Fa ssl
+objects created from
+.Fa ctx .
+.Pp
+.Fn SSL_set_tmp_dh_callback
+sets the callback only for
+.Fa ssl .
+.Pp
+.Fn SSL_set_tmp_dh
+sets the parameters only for
+.Fa ssl .
+.Pp
+These functions apply to SSL/TLS servers only.
+.Sh NOTES
+When using a cipher with RSA authentication,
+an ephemeral DH key exchange can take place.
+Ciphers with DSA keys always use ephemeral DH keys as well.
+In these cases, the session data are negotiated using the ephemeral/temporary
+DH key and the key supplied and certified by the certificate chain is only used
+for signing.
+Anonymous ciphers (without a permanent server key) also use ephemeral DH keys.
+.Pp
+Using ephemeral DH key exchange yields forward secrecy,
+as the connection can only be decrypted when the DH key is known.
+By generating a temporary DH key inside the server application that is lost
+when the application is left, it becomes impossible for an attacker to decrypt
+past sessions, even if he gets hold of the normal (certified) key,
+as this key was only used for signing.
+.Pp
+In order to perform a DH key exchange the server must use a DH group
+(DH parameters) and generate a DH key.
+The server will always generate a new DH key during the negotiation,
+when the DH parameters are supplied via callback and/or when the
+.Dv SSL_OP_SINGLE_DH_USE
+option of
+.Xr SSL_CTX_set_options 3
+is set.
+It will immediately create a DH key, when DH parameters are supplied via
+.Fn SSL_CTX_set_tmp_dh
+and
+.Dv SSL_OP_SINGLE_DH_USE
+is not set.
+In this case, it may happen that a key is generated on initialization without
+later being needed, while on the other hand the computer time during the
+negotiation is being saved.
+.Pp
+If
+.Dq strong
+primes were used to generate the DH parameters, it is not strictly necessary to
+generate a new key for each handshake but it does improve forward secrecy.
+If it is not assured that
+.Dq strong
+primes were used (see especially the section about DSA parameters below),
+.Dv SSL_OP_SINGLE_DH_USE
+must be used in order to prevent small subgroup attacks.
+Always using
+.Dv SSL_OP_SINGLE_DH_USE
+has an impact on the computer time needed during negotiation,
+but it is not very large,
+so application authors/users should consider always enabling this option.
+.Pp
+As generating DH parameters is extremely time consuming, an application should
+not generate the parameters on the fly but supply the parameters.
+DH parameters can be reused,
+as the actual key is newly generated during the negotiation.
+The risk in reusing DH parameters is that an attacker may specialize on a very
+often used DH group.
+Applications should therefore generate their own DH parameters during the
+installation process using the openssl
+.Xr openssl 1
+application.
+In order to reduce the computer time needed for this generation,
+it is possible to use DSA parameters instead (see
+.Xr openssl 1 ) ,
+but in this case
+.Dv SSL_OP_SINGLE_DH_USE
+is mandatory.
+.Pp
+Application authors may compile in DH parameters.
+Files
+.Pa dh512.pem ,
+.Pa dh1024.pem ,
+.Pa dh2048.pem ,
+and
+.Pa dh4096.pem
+in the
+.Pa apps
+directory of the current version of the OpenSSL distribution contain the
+.Sq SKIP
+DH parameters,
+which use safe primes and were generated verifiably pseudo-randomly.
+These files can be converted into C code using the
+.Fl C
+option of the
+.Xr openssl 1
+application.
+Authors may also generate their own set of parameters using
+.Xr openssl 1 ,
+but a user may not be sure how the parameters were generated.
+The generation of DH parameters during installation is therefore recommended.
+.Pp
+An application may either directly specify the DH parameters or can supply the
+DH parameters via a callback function.
+The callback approach has the advantage that the callback may supply DH
+parameters for different key lengths.
+.Pp
+The
+.Fa tmp_dh_callback
+is called with the
+.Fa keylength
+needed and the
+.Fa is_export
+information.
+The
+.Fa is_export
+flag is set when the ephemeral DH key exchange is performed with an export
+cipher.
+.Sh RETURN VALUES
+.Fn SSL_CTX_set_tmp_dh_callback
+and
+.Fn SSL_set_tmp_dh_callback
+do not return diagnostic output.
+.Pp
+.Fn SSL_CTX_set_tmp_dh
+and
+.Fn SSL_set_tmp_dh
+do return 1 on success and 0 on failure.
+Check the error queue to find out the reason of failure.
+.Sh EXAMPLES
+Handle DH parameters for key lengths of 512 and 1024 bits.
+(Error handling partly left out.)
+.Bd -literal
+\&...
+/* Set up ephemeral DH stuff */
+DH *dh_512 = NULL;
+DH *dh_1024 = NULL;
+FILE *paramfile;
+
+\&...
+
+/* "openssl dhparam -out dh_param_512.pem -2 512" */
+paramfile = fopen("dh_param_512.pem", "r");
+if (paramfile) {
+	dh_512 = PEM_read_DHparams(paramfile, NULL, NULL, NULL);
+	fclose(paramfile);
+}
+/* "openssl dhparam -out dh_param_1024.pem -2 1024" */
+paramfile = fopen("dh_param_1024.pem", "r");
+if (paramfile) {
+	dh_1024 = PEM_read_DHparams(paramfile, NULL, NULL, NULL);
+	fclose(paramfile);
+}
+
+\&...
+
+/* "openssl dhparam -C -2 512" etc... */
+DH *get_dh512() { ... }
+DH *get_dh1024() { ... }
+
+DH *
+tmp_dh_callback(SSL *s, int is_export, int keylength)
+{
+	DH *dh_tmp=NULL;
+
+	switch (keylength) {
+	case 512:
+		if (!dh_512)
+			dh_512 = get_dh512();
+		dh_tmp = dh_512;
+		break;
+	case 1024:
+		if (!dh_1024)
+			dh_1024 = get_dh1024();
+		dh_tmp = dh_1024;
+		break;
+	default:
+		/*
+		 * Generating a key on the fly is very costly,
+		 * so use what is there
+		 */
+		setup_dh_parameters_like_above();
+	}
+
+	return(dh_tmp);
+}
+.Ed
+.Sh SEE ALSO
+.Xr openssl 1 ,
+.Xr ssl 3 ,
+.Xr SSL_CTX_set_cipher_list 3 ,
+.Xr SSL_CTX_set_options 3 ,
+.Xr SSL_CTX_set_tmp_rsa_callback 3

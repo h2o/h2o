@@ -1,0 +1,117 @@
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: September 9 2015 $
+.Dt BIO_F_BUFFER 3
+.Os
+.Sh NAME
+.Nm BIO_f_buffer ,
+.Nm BIO_get_buffer_num_lines ,
+.Nm BIO_set_read_buffer_size ,
+.Nm BIO_set_write_buffer_size ,
+.Nm BIO_set_buffer_size ,
+.Nm BIO_set_buffer_read_data
+.Nd buffering BIO
+.Sh SYNOPSIS
+.In openssl/bio.h
+.Ft BIO_METHOD *
+.Fo BIO_f_buffer
+.Fa void
+.Fc
+.Bd -literal
+#define	BIO_get_buffer_num_lines(b) \e
+	BIO_ctrl(b,BIO_C_GET_BUFF_NUM_LINES,0,NULL)
+#define	BIO_set_read_buffer_size(b,size) \e
+	BIO_int_ctrl(b,BIO_C_SET_BUFF_SIZE,size,0)
+#define	BIO_set_write_buffer_size(b,size) \e
+	BIO_int_ctrl(b,BIO_C_SET_BUFF_SIZE,size,1)
+#define	BIO_set_buffer_size(b,size) \e
+	BIO_ctrl(b,BIO_C_SET_BUFF_SIZE,size,NULL)
+#define	BIO_set_buffer_read_data(b,buf,num) \e
+	BIO_ctrl(b,BIO_C_SET_BUFF_READ_DATA,num,buf)
+.Ed
+.Sh DESCRIPTION
+.Fn BIO_f_buffer
+returns the buffering BIO method.
+.Pp
+Data written to a buffering BIO is buffered and periodically written
+to the next BIO in the chain.
+Data read from a buffering BIO comes from an internal buffer
+which is filled from the next BIO in the chain.
+Both
+.Xr BIO_gets 3
+and
+.Xr BIO_puts 3
+are supported.
+.Pp
+Calling
+.Xr BIO_reset 3
+on a buffering BIO clears any buffered data.
+.Pp
+.Fn BIO_get_buffer_num_lines
+returns the number of lines currently buffered.
+.Pp
+.Fn BIO_set_read_buffer_size ,
+.Fn BIO_set_write_buffer_size ,
+and
+.Fn BIO_set_buffer_size
+set the read, write or both read and write buffer sizes to
+.Fa size .
+The initial buffer size is
+.Dv DEFAULT_BUFFER_SIZE ,
+currently 4096.
+Any attempt to reduce the buffer size below
+.Dv DEFAULT_BUFFER_SIZE
+is ignored.
+Any buffered data is cleared when the buffer is resized.
+.Pp
+.Fn BIO_set_buffer_read_data
+clears the read buffer and fills it with
+.Fa num
+bytes of
+.Fa buf .
+If
+.Fa num
+is larger than the current buffer size the buffer is expanded.
+.Sh NOTES
+Buffering BIOs implement
+.Xr BIO_gets 3
+by using
+.Xr BIO_read 3
+operations on the next BIO in the chain.
+By prepending a buffering BIO to a chain
+it is therefore possible to provide
+.Xr BIO_gets 3
+functionality if the following BIOs do not support it (for example SSL BIOs).
+.Pp
+Data is only written to the next BIO in the chain
+when the write buffer fills or when
+.Xr BIO_flush 3
+is called.
+It is therefore important to call
+.Xr BIO_flush 3
+whenever any pending data should be written
+such as when removing a buffering BIO using
+.Xr BIO_pop 3 .
+.Xr BIO_flush 3
+may need to be retried if the ultimate source/sink BIO is non blocking.
+.Sh RETURN VALUES
+.Fn BIO_f_buffer
+returns the buffering BIO method.
+.Pp
+.Fn BIO_get_buffer_num_lines
+returns the number of lines buffered (may be 0).
+.Pp
+.Fn BIO_set_read_buffer_size ,
+.Fn BIO_set_write_buffer_size ,
+and
+.Fn BIO_set_buffer_size
+return 1 if the buffer was successfully resized or 0 for failure.
+.Pp
+.Fn BIO_set_buffer_read_data
+returns 1 if the data was set correctly or 0 if there was an error.
+.Sh SEE ALSO
+.Xr BIO 3 ,
+.Xr BIO_ctrl 3 ,
+.Xr BIO_flush 3 ,
+.Xr BIO_pop 3 ,
+.Xr BIO_reset 3

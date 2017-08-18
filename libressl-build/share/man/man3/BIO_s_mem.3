@@ -1,0 +1,190 @@
+.Dd $Mdocdate: July 17 2014 $
+.Dt BIO_S_MEM 3
+.Os
+.Sh NAME
+.Nm BIO_s_mem ,
+.Nm BIO_set_mem_eof_return ,
+.Nm BIO_get_mem_data ,
+.Nm BIO_set_mem_buf ,
+.Nm BIO_get_mem_ptr ,
+.Nm BIO_new_mem_buf
+.Nd memory BIO
+.Sh SYNOPSIS
+.In openssl/bio.h
+.Ft BIO_METHOD *
+.Fo BIO_s_mem
+.Fa "void"
+.Fc
+.Ft long
+.Fo BIO_set_mem_eof_return
+.Fa "BIO *b"
+.Fa "int v"
+.Fc
+.Ft long
+.Fo BIO_get_mem_data
+.Fa "BIO *b"
+.Fa "char **pp"
+.Fc
+.Ft long
+.Fo BIO_set_mem_buf
+.Fa "BIO *b"
+.Fa "BUF_MEM *bm"
+.Fa "int c"
+.Fc
+.Ft long
+.Fo BIO_get_mem_ptr
+.Fa "BIO *b"
+.Fa "BUF_MEM **pp"
+.Fc
+.Ft BIO *
+.Fo BIO_new_mem_buf
+.Fa "void *buf"
+.Fa "int len"
+.Fc
+.Sh DESCRIPTION
+.Fn BIO_s_mem
+returns the memory BIO method function.
+.Pp
+A memory BIO is a source/sink BIO which uses memory for its I/O.
+Data written to a memory BIO is stored in a
+.Vt BUF_MEM
+structure which is extended as appropriate to accommodate the stored data.
+.Pp
+Any data written to a memory BIO can be recalled by reading from it.
+Unless the memory BIO is read only,
+any data read from it is deleted from the BIO.
+.Pp
+Memory BIOs support
+.Xr BIO_gets 3
+and
+.Xr BIO_puts 3 .
+.Pp
+If the
+.Dv BIO_CLOSE
+flag is set when a memory BIO is freed, the underlying
+.Dv BUF_MEM
+structure is also freed.
+.Pp
+Calling
+.Xr BIO_reset 3
+on a read/write memory BIO clears any data in it.
+On a read only BIO it restores the BIO to its original state
+and the read only data can be read again.
+.Pp
+.Xr BIO_eof 3
+is true if no data is in the BIO.
+.Pp
+.Xr BIO_ctrl_pending 3
+returns the number of bytes currently stored.
+.Pp
+.Xr BIO_set_mem_eof_return 3
+sets the behaviour of memory BIO
+.Fa b
+when it is empty.
+If
+.Fa v
+is zero, then an empty memory BIO will return EOF:
+It will return zero and
+.Fn BIO_should_retry
+will be false.
+If
+.Fa v
+is non-zero then it will return
+.Fa v
+when it is empty and it will set the read retry flag:
+.Fn BIO_read_retry
+is true.
+To avoid ambiguity with a normal positive return value
+.Fa v
+should be set to a negative value, typically -1.
+.Pp
+.Fn BIO_get_mem_data
+sets
+.Fa pp
+to a pointer to the start of the memory BIO's data
+and returns the total amount of data available.
+It is implemented as a macro.
+.Pp
+.Fn BIO_set_mem_buf
+sets the internal BUF_MEM structure to
+.Fa bm
+and sets the close flag to
+.Fa c ,
+that is
+.Fa c
+should be either
+.Dv BIO_CLOSE
+or
+.Dv BIO_NOCLOSE .
+.Fn BIO_set_mem_buf
+is a macro.
+.Pp
+.Fn BIO_get_mem_ptr
+places the underlying
+.Vt BUF_MEM
+structure in
+.Fa pp .
+It is a macro.
+.Pp
+.Fn BIO_new_mem_buf
+creates a memory BIO using
+.Fa len
+bytes of data at
+.Fa buf .
+If
+.Fa len
+is -1, then
+.Fa buf
+is assumed to be NUL terminated and its length is determined by
+.Xr strlen 3 .
+The BIO is set to a read only state and as a result cannot be written to.
+This is useful when some data needs to be made available
+from a static area of memory in the form of a BIO.
+The supplied data is read directly from the supplied buffer:
+it is
+.Em not
+copied first, so the supplied area of memory must be unchanged
+until the BIO is freed.
+.Sh NOTES
+Writes to memory BIOs will always succeed if memory is available:
+their size can grow indefinitely.
+.Pp
+Every read from a read/write memory BIO will remove the data just read
+with an internal copy operation.
+If a BIO contains a lot of data and it is read in small chunks,
+the operation can be very slow.
+The use of a read only memory BIO avoids this problem.
+If the BIO must be read/write then adding a buffering BIO
+to the chain will speed up the process.
+.Sh EXAMPLES
+Create a memory BIO and write some data to it:
+.Bd -literal -offset indent
+BIO *mem = BIO_new(BIO_s_mem());
+BIO_puts(mem, "Hello World\en");
+.Ed
+.Pp
+Create a read only memory BIO:
+.Bd -literal -offset indent
+char data[] = "Hello World";
+BIO *mem;
+mem = BIO_new_mem_buf(data, -1);
+.Ed
+.Pp
+Extract the
+.Vt BUF_MEM
+structure from a memory BIO and then free up the BIO:
+.Bd -literal -offset indent
+BUF_MEM *bptr;
+BIO_get_mem_ptr(mem, &bptr);
+/* Make sure BIO_free() leaves BUF_MEM alone. */
+BIO_set_close(mem, BIO_NOCLOSE);
+BIO_free(mem);
+.Ed
+.Sh BUGS
+There should be an option to set the maximum size of a memory BIO.
+.Pp
+There should be a way to "rewind" a read/write BIO without destroying
+its contents.
+.Pp
+The copying operation should not occur after every small read
+of a large BIO to improve efficiency.

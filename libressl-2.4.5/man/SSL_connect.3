@@ -1,0 +1,102 @@
+.\"
+.\"	$OpenBSD: SSL_connect.3,v 1.2 2014/12/02 14:11:01 jmc Exp $
+.\"
+.Dd $Mdocdate: December 2 2014 $
+.Dt SSL_CONNECT 3
+.Os
+.Sh NAME
+.Nm SSL_connect
+.Nd initiate the TLS/SSL handshake with a TLS/SSL server
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fn SSL_connect "SSL *ssl"
+.Sh DESCRIPTION
+.Fn SSL_connect
+initiates the TLS/SSL handshake with a server.
+The communication channel must already have been set and assigned to the
+.Fa ssl
+by setting an underlying
+.Vt BIO .
+.Sh NOTES
+The behaviour of
+.Fn SSL_connect
+depends on the underlying
+.Vt BIO .
+.Pp
+If the underlying
+.Vt BIO
+is
+.Em blocking ,
+.Fn SSL_connect
+will only return once the handshake has been finished or an error occurred.
+.Pp
+If the underlying
+.Vt BIO
+is
+.Em non-blocking ,
+.Fn SSL_connect
+will also return when the underlying
+.Vt BIO
+could not satisfy the needs of
+.Fn SSL_connect
+to continue the handshake, indicating the problem with the return value \(mi1.
+In this case a call to
+.Xr SSL_get_error 3
+with the return value of
+.Fn SSL_connect
+will yield
+.Dv SSL_ERROR_WANT_READ
+or
+.Dv SSL_ERROR_WANT_WRITE .
+The calling process then must repeat the call after taking appropriate action
+to satisfy the needs of
+.Fn SSL_connect .
+The action depends on the underlying
+.Vt BIO .
+When using a non-blocking socket, nothing is to be done, but
+.Xr select 2
+can be used to check for the required condition.
+When using a buffering
+.Vt BIO ,
+like a
+.Vt BIO
+pair, data must be written into or retrieved out of the
+.Vt BIO
+before being able to continue.
+.Sh RETURN VALUES
+The following return values can occur:
+.Bl -tag -width Ds
+.It 0
+The TLS/SSL handshake was not successful but was shut down controlled and
+by the specifications of the TLS/SSL protocol.
+Call
+.Xr SSL_get_error 3
+with the return value
+.Fa ret
+to find out the reason.
+.It 1
+The TLS/SSL handshake was successfully completed,
+and a TLS/SSL connection has been established.
+.It <0
+The TLS/SSL handshake was not successful, because either a fatal error occurred
+at the protocol level or a connection failure occurred.
+The shutdown was not clean.
+It can also occur if action is needed to continue the operation for
+non-blocking
+.Vt BIO Ns s.
+Call
+.Xr SSL_get_error 3
+with the return value
+.Fa ret
+to find out the reason.
+.El
+.Sh SEE ALSO
+.Xr bio 3 ,
+.Xr ssl 3 ,
+.Xr SSL_accept 3 ,
+.Xr SSL_CTX_new 3 ,
+.Xr SSL_do_handshake 3 ,
+.Xr SSL_get_error 3 ,
+.Xr SSL_set_connect_state 3 ,
+.Xr SSL_shutdown 3

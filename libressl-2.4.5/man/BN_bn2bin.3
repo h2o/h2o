@@ -1,0 +1,237 @@
+.Dd $Mdocdate: July 17 2014 $
+.Dt BN_BN2BIN 3
+.Os
+.Sh NAME
+.Nm BN_bn2bin ,
+.Nm BN_bin2bn ,
+.Nm BN_bn2hex ,
+.Nm BN_bn2dec ,
+.Nm BN_hex2bn ,
+.Nm BN_dec2bn ,
+.Nm BN_print ,
+.Nm BN_print_fp ,
+.Nm BN_bn2mpi ,
+.Nm BN_mpi2bn
+.Nd format conversions
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft int
+.Fo BN_bn2bin
+.Fa "const BIGNUM *a"
+.Fa "unsigned char *to"
+.Fc
+.Ft BIGNUM *
+.Fo BN_bin2bn
+.Fa "const unsigned char *s"
+.Fa "int len"
+.Fa "BIGNUM *ret"
+.Fc
+.Ft char *
+.Fo BN_bn2hex
+.Fa "const BIGNUM *a"
+.Fc
+.Ft char *
+.Fo BN_bn2dec
+.Fa "const BIGNUM *a"
+.Fc
+.Ft int
+.Fo BN_hex2bn
+.Fa "BIGNUM **a"
+.Fa "const char *str"
+.Fc
+.Ft int
+.Fo BN_dec2bn
+.Fa "BIGNUM **a"
+.Fa "const char *str"
+.Fc
+.Ft int
+.Fo BN_print
+.Fa "BIO *fp"
+.Fa "const BIGNUM *a"
+.Fc
+.Ft int
+.Fo BN_print_fp
+.Fa "FILE *fp"
+.Fa "const BIGNUM *a"
+.Fc
+.Ft int
+.Fo BN_bn2mpi
+.Fa "const BIGNUM *a"
+.Fa "unsigned char *to"
+.Fc
+.Ft BIGNUM *
+.Fo BN_mpi2bn
+.Fa "unsigned char *s"
+.Fa "int len"
+.Fa "BIGNUM *ret"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_bn2bin
+converts the absolute value of
+.Fa a
+into big-endian form and stores it at
+.Fa to .
+.Fa to
+must point to
+.Fn BN_num_bytes a
+bytes of memory.
+.Pp
+.Fn BN_bin2bn
+converts the positive integer in big-endian form of length
+.Fa len
+at
+.Fa s
+into a
+.Vt BIGNUM
+and places it in
+.Fa ret .
+If
+.Fa ret
+is
+.Dv NULL ,
+a new
+.Vt BIGNUM
+is created.
+.Pp
+.Fn BN_bn2hex
+and
+.Fn BN_bn2dec
+return printable strings containing the hexadecimal and decimal encoding of
+.Fa a
+respectively.
+For negative numbers, the string is prefaced with a leading minus sign.
+The string must be freed later using
+.Xr free 3 .
+.Pp
+.Fn BN_hex2bn
+converts the string
+.Fa str
+containing a hexadecimal number to a
+.Vt BIGNUM
+and stores it in
+.Pf * Fa a .
+If
+.Pf * Fa a
+is
+.Dv NULL ,
+a new
+.Vt BIGNUM
+is created.
+If
+.Fa a
+is
+.Dv NULL ,
+it only computes the number's length in hexadecimal digits.
+If the string starts with a minus sign, the number is negative.
+.Fn BN_dec2bn
+is the same using the decimal system.
+.Pp
+.Fn BN_print
+and
+.Fn BN_print_fp
+write the hexadecimal encoding of
+.Fa a ,
+with a leading minus sign for negative numbers, to the
+.Vt BIO
+or
+.Vt FILE
+.Fa fp .
+.Pp
+.Fn BN_bn2mpi
+and
+.Fn BN_mpi2bn
+convert
+.Vt BIGNUM Ns s
+from and to a format that consists of the number's length in bytes
+represented as a 4-byte big-endian number, and the number itself in
+big-endian format, where the most significant bit signals a negative
+number (the representation of numbers with the MSB set is prefixed with
+a NUL byte).
+.Pp
+.Fn BN_bn2mpi
+stores the representation of
+.Fa a
+at
+.Fa to ,
+where
+.Fa to
+must be large enough to hold the result.
+The size can be determined by calling
+.Fn BN_bn2mpi a , NULL .
+.Pp
+.Fn BN_mpi2bn
+converts the
+.Fa len
+bytes long representation at
+.Fa s
+to a
+.Vt BIGNUM
+and stores it at
+.Fa ret ,
+or in a newly allocated
+.Vt BIGNUM
+if
+.Fa ret
+is
+.Dv NULL .
+.Sh RETURN VALUES
+.Fn BN_bn2bin
+returns the length of the big-endian number placed at
+.Fa to .
+.Fn BN_bin2bn
+returns the
+.Vt BIGNUM ,
+or
+.Dv NULL
+on error.
+.Pp
+.Fn BN_bn2hex
+and
+.Fn BN_bn2dec
+return a NUL-terminated string, or
+.Dv NULL
+on error.
+.Fn BN_hex2bn
+and
+.Fn BN_dec2bn
+return the number's length in hexadecimal or decimal digits, and 0 on
+error.
+.Pp
+.Fn BN_print_fp
+and
+.Fn BN_print
+return 1 on success, 0 on write errors.
+.Pp
+.Fn BN_bn2mpi
+returns the length of the representation.
+.Fn BN_mpi2bn
+returns the
+.Vt BIGNUM ,
+or
+.Dv NULL
+on error.
+.Pp
+The error codes can be obtained by
+.Xr ERR_get_error 3 .
+.Sh SEE ALSO
+.Xr ASN1_INTEGER_to_BN 3 ,
+.Xr bn 3 ,
+.Xr BN_num_bytes 3 ,
+.Xr BN_zero 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn BN_bn2bin ,
+.Fn BN_bin2bn ,
+.Fn BN_print_fp ,
+and
+.Fn BN_print
+are available in all versions of SSLeay and OpenSSL.
+.Pp
+.Fn BN_bn2hex ,
+.Fn BN_bn2dec ,
+.Fn BN_hex2bn ,
+.Fn BN_dec2bn ,
+.Fn BN_bn2mpi ,
+and
+.Fn BN_mpi2bn
+were added in SSLeay 0.9.0.

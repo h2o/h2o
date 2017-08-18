@@ -1,0 +1,84 @@
+.Dd $Mdocdate: September 6 2008 $
+.Dt BN_NEW 3
+.Os
+.Sh NAME
+.Nm BN_new ,
+.Nm BN_init ,
+.Nm BN_clear ,
+.Nm BN_free ,
+.Nm BN_clear_free
+.Nd allocate and free BIGNUMs
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft BIGNUM *
+.Fo BN_new
+.Fa void
+.Fc
+.Ft void
+.Fo BN_init
+.Fa "BIGNUM *"
+.Fc
+.Ft void
+.Fo BN_clear
+.Fa "BIGNUM *a"
+.Fc
+.Ft void
+.Fo BN_free
+.Fa "BIGNUM *a"
+.Fc
+.Ft void
+.Fo BN_clear_free
+.Fa "BIGNUM *a"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_new
+allocates and initializes a
+.Vt BIGNUM
+structure.
+.Fn BN_init
+initializes an existing uninitialized
+.Vt BIGNUM .
+.Pp
+.Fn BN_clear
+is used to destroy sensitive data such as keys when they are no longer
+needed.
+It erases the memory used by
+.Fa a
+and sets it to the value 0.
+.Pp
+.Fn BN_free
+frees the components of the
+.Vt BIGNUM ,
+and if it was created by
+.Fn BN_new ,
+also the structure itself.
+.Fn BN_clear_free
+additionally overwrites the data before the memory is returned to the
+system.
+.Sh RETURN VALUES
+.Fn BN_new
+returns a pointer to the
+.Vt BIGNUM .
+If the allocation fails, it returns
+.Dv NULL
+and sets an error code that can be obtained by
+.Xr ERR_get_error 3 .
+.Pp
+.Fn BN_init ,
+.Fn BN_clear ,
+.Fn BN_free ,
+and
+.Fn BN_clear_free
+return no values.
+.Sh SEE ALSO
+.Xr bn 3 ,
+.Xr ERR_get_error 3
+.Sh HISTORY
+.Fn BN_new ,
+.Fn BN_clear ,
+.Fn BN_free ,
+and
+.Fn BN_clear_free
+are available in all versions on SSLeay and OpenSSL.
+.Fn BN_init
+was added in SSLeay 0.9.1b.

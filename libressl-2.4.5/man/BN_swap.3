@@ -1,0 +1,23 @@
+.Dd $Mdocdate: June 16 2014 $
+.Dt BN_SWAP 3
+.Os
+.Sh NAME
+.Nm BN_swap
+.Nd exchange BIGNUMs
+.Sh SYNOPSIS
+.In openssl/bn.h
+.Ft void
+.Fo BN_swap
+.Fa "BIGNUM *a"
+.Fa "BIGNUM *b"
+.Fc
+.Sh DESCRIPTION
+.Fn BN_swap
+exchanges the values of
+.Fa a
+and
+.Fa b .
+.Sh SEE ALSO
+.Xr bn 3
+.Sh HISTORY
+BN_swap was added in OpenSSL 0.9.7.

@@ -1,0 +1,54 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_LIBRARY_INIT 3
+.Os
+.Sh NAME
+.Nm SSL_library_init ,
+.Nm OpenSSL_add_ssl_algorithms ,
+.Nm SSLeay_add_ssl_algorithms
+.Nd initialize SSL library by registering algorithms
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft int
+.Fn SSL_library_init void
+.Fd #define OpenSSL_add_ssl_algorithms() SSL_library_init()
+.Fd #define SSLeay_add_ssl_algorithms() SSL_library_init()
+.Sh DESCRIPTION
+.Fn SSL_library_init
+registers the available SSL/TLS ciphers and digests.
+.Pp
+.Fn OpenSSL_add_ssl_algorithms
+and
+.Fn SSLeay_add_ssl_algorithms
+are synonyms for
+.Fn SSL_library_init .
+.Sh NOTES
+.Fn SSL_library_init
+must be called before any other action takes place.
+.Fn SSL_library_init
+is not reentrant.
+.Sh WARNING
+.Fn SSL_library_init
+adds ciphers and digests used directly and indirectly by SSL/TLS.
+.Sh RETURN VALUES
+.Fn SSL_library_init
+always returns 1, so it is safe to discard the return value.
+.Sh EXAMPLES
+A typical TLS/SSL application will start with the library initialization, and
+provide readable error messages.
+.Bd -literal
+SSL_load_error_strings();                /* readable error messages */
+SSL_library_init();                      /* initialize library */
+.Ed
+.Sh NOTES
+OpenSSL 0.9.8o and 1.0.0a and later added SHA2 algorithms to
+.Fn SSL_library_init .
+Applications which need to use SHA2 in earlier versions of OpenSSL should call
+.Fn OpenSSL_add_all_algorithms
+as well.
+.Sh SEE ALSO
+.Xr RAND_add 3 ,
+.Xr ssl 3 ,
+.Xr SSL_load_error_strings 3

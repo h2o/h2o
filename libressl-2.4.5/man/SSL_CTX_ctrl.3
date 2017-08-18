@@ -1,0 +1,49 @@
+.\"
+.\"	$OpenBSD$
+.\"
+.Dd $Mdocdate: October 12 2014 $
+.Dt SSL_CTX_CTRL 3
+.Os
+.Sh NAME
+.Nm SSL_CTX_ctrl ,
+.Nm SSL_CTX_callback_ctrl ,
+.Nm SSL_ctrl ,
+.Nm SSL_callback_ctrl
+.Nd internal handling functions for SSL_CTX and SSL objects
+.Sh SYNOPSIS
+.In openssl/ssl.h
+.Ft long
+.Fn SSL_CTX_ctrl "SSL_CTX *ctx" "int cmd" "long larg" "void *parg"
+.Ft long
+.Fn SSL_CTX_callback_ctrl "SSL_CTX *" "int cmd" "void (*fp)()"
+.Ft long
+.Fn SSL_ctrl "SSL *ssl" "int cmd" "long larg" "void *parg"
+.Ft long
+.Fn SSL_callback_ctrl "SSL *" "int cmd" "void (*fp)()"
+.Sh DESCRIPTION
+The
+.Fn SSL_*_ctrl
+family of functions is used to manipulate settings of
+the
+.Vt SSL_CTX
+and
+.Vt SSL
+objects.
+Depending on the command
+.Fa cmd
+the arguments
+.Fa larg ,
+.Fa parg ,
+or
+.Fa fp
+are evaluated.
+These functions should never be called directly.
+All functionalities needed are made available via other functions or macros.
+.Sh RETURN VALUES
+The return values of the
+.Fn SSL*_ctrl
+functions depend on the command supplied via the
+.Fn cmd
+parameter.
+.Sh SEE ALSO
+.Xr ssl 3

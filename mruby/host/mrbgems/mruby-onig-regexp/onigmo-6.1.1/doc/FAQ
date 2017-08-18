@@ -1,0 +1,23 @@
+FAQ    2016/11/07
+
+1. Longest match
+
+   You can execute longest match by using ONIG_OPTION_FIND_LONGEST option
+   in onig_new().
+
+
+2. CR + LF
+
+   DOS newline (CR (0x0c) + LF (0x0a) sequence)
+
+   Enable the following line in regenc.h, and use ONIG_OPTION_NEWLINE_CRLF
+   option in onig_new().
+
+     /* #define USE_CRNL_AS_LINE_TERMINATOR */
+
+
+3. Mailing list
+
+   There is no mailing list about Onigmo/Oniguruma.
+
+// END
