@@ -93,6 +93,17 @@ builder {
             ]
         ];
     };
+    mount "/custom-perl" => sub {
+        my $env = shift;
+        my $c = "";
+        if ($env->{'psgi.input'}) {
+            my $buf;
+            while ($env->{'psgi.input'}->read($buf, 65536)) {
+                $c = $c . $buf;
+            }
+        }
+        return eval($c);
+    };
     mount "/echo-server-header" => sub {
         my $env = shift;
         my @resph = [ 'content-type' => 'text/plain' ];
