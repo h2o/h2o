@@ -50,6 +50,7 @@ struct st_h2o_http1client_private_t {
             size_t bytes_decoded_in_buf;
         } chunked;
     } _body_decoder;
+    h2o_socket_cb reader;
 };
 
 static void close_client(struct st_h2o_http1client_private_t *client)
@@ -592,4 +593,17 @@ h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *_client)
     h2o_socket_read_stop(sock);
     client->super.sock = NULL;
     return sock;
+}
+
+void h2o_http1client_body_read_stop(h2o_http1client_t *_client)
+{
+    struct st_h2o_http1client_private_t *client = (void *)_client;
+    client->reader = client->super.sock->_cb.read;
+    h2o_socket_read_stop(client->super.sock);
+}
+
+void h2o_http1client_body_read_resume(h2o_http1client_t *_client)
+{
+    struct st_h2o_http1client_private_t *client = (void *)_client;
+    h2o_socket_read_start(client->super.sock, client->reader);
 }

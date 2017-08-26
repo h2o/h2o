@@ -29,12 +29,6 @@
 #include "h2o/http1client.h"
 #include "h2o/tunnel.h"
 
-struct rp_generator_t;
-struct await_send_arg_t {
-    struct rp_generator_t *proxy_generator;
-    h2o_socket_cb cb;
-};
-
 struct rp_generator_t {
     h2o_generator_t super;
     h2o_req_t *src_req;
@@ -47,8 +41,7 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
-    void (*await_send)(struct await_send_arg_t *);
-    struct await_send_arg_t await_send_arg;
+    void (*await_send)(h2o_http1client_t *);
 };
 
 struct rp_ws_upgrade_info_t {
@@ -386,7 +379,7 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
     h2o_doublebuffer_consume(&self->sending);
     do_send(self);
     if (self->await_send) {
-        self->await_send(&self->await_send_arg);
+        self->await_send(self->client);
         self->await_send = NULL;
     }
 }
@@ -416,10 +409,10 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout
     h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
 }
 
-static void await_send(struct await_send_arg_t *asc)
+static void await_send(h2o_http1client_t *client)
 {
-    if (asc->proxy_generator->client)
-        h2o_socket_read_start(asc->proxy_generator->client->sock, asc->cb);
+        if (client)
+            h2o_http1client_body_read_resume(client);
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
@@ -442,9 +435,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
     if (self->client && self->client->sock && overrides && self->client->sock->input->size > overrides->max_buffer_size) {
         self->await_send = await_send;
-        self->await_send_arg.proxy_generator = self;
-        self->await_send_arg.cb = self->client->sock->_cb.read;
-        h2o_socket_read_stop(self->client->sock);
+        h2o_http1client_body_read_stop(self->client);
     }
 
     return 0;
