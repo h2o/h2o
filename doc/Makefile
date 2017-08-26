@@ -68,7 +68,7 @@ mkdir:
 html: $(OUTPUT)
 
 manpage: $(MAN)
-	cat $(VPATH)/man-snippets/header $(MAN) > h2o.8
+	cat $(VPATH)/man-snippets/header $(MAN) > h2o.conf.5
 
 search/searchindex.js: html
 	../misc/oktavia/bin/oktavia-mkindex $(patsubst %,-i %,$(OUTPUT)) -m html -u h2 -c 10 -t js -s english
