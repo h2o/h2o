@@ -169,7 +169,7 @@ ary_expand_capa(mrb_state *mrb, struct RArray *a, mrb_int len)
 {
   mrb_int capa = a->aux.capa;
 
-  if (len > ARY_MAX_SIZE || len < 0) {
+  if (len > ARY_MAX_SIZE) {
   size_error:
     mrb_raise(mrb, E_ARGUMENT_ERROR, "array size too big");
   }

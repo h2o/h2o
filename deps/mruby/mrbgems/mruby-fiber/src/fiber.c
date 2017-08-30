@@ -125,7 +125,6 @@ fiber_init(mrb_state *mrb, mrb_value self)
   ci = c->ci;
   ci->target_class = p->target_class;
   ci->proc = p;
-  mrb_field_write_barrier(mrb, (struct RBasic*)mrb_obj_ptr(self), (struct RBasic*)p);
   ci->pc = p->body.irep->iseq;
   ci->nregs = p->body.irep->nregs;
   ci[1] = ci[0];

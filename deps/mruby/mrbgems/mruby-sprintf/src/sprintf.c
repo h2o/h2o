@@ -528,7 +528,6 @@ mrb_str_format(mrb_state *mrb, int argc, const mrb_value *argv, mrb_value fmt)
   mrb_int n;
   mrb_int width;
   mrb_int prec;
-  int flags = FNONE;
   int nextarg = 1;
   int posarg = 0;
   mrb_value nextvalue;
@@ -564,6 +563,7 @@ mrb_str_format(mrb_state *mrb, int argc, const mrb_value *argv, mrb_value fmt)
   for (; p < end; p++) {
     const char *t;
     mrb_sym id = 0;
+    int flags = FNONE;
 
     for (t = p; t < end && *t != '%'; t++) ;
     if (t + 1 == end) ++t;
@@ -701,17 +701,27 @@ retry:
 
         tmp = mrb_check_string_type(mrb, val);
         if (!mrb_nil_p(tmp)) {
-          if (mrb_fixnum(mrb_funcall(mrb, tmp, "size", 0)) != 1 ) {
+          if (RSTRING_LEN(tmp) != 1) {
             mrb_raise(mrb, E_ARGUMENT_ERROR, "%c requires a character");
           }
         }
         else if (mrb_fixnum_p(val)) {
-          tmp = mrb_funcall(mrb, val, "chr", 0);
+          mrb_int n = mrb_fixnum(val);
+
+          if (n < 0x80) {
+            char buf[1];
+
+            buf[0] = (char)n;
+            tmp = mrb_str_new(mrb, buf, 1);
+          }
+          else {
+            tmp = mrb_funcall(mrb, val, "chr", 0);
+            mrb_check_type(mrb, tmp, MRB_TT_STRING);
+          }
         }
         else {
           mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid character");
         }
-        mrb_check_type(mrb, tmp, MRB_TT_STRING);
         c = RSTRING_PTR(tmp);
         n = RSTRING_LEN(tmp);
         if (!(flags & FWIDTH)) {
@@ -791,13 +801,6 @@ retry:
         int base;
         mrb_int len;
 
-        switch (*p) {
-          case 'd':
-          case 'i':
-            sign = 1; break;
-          default:
-            break;
-        }
         if (flags & FSHARP) {
           switch (*p) {
             case 'o': prefix = "0"; break;
@@ -838,21 +841,13 @@ retry:
           case 'u':
           case 'd':
           case 'i':
+            sign = 1;
           default:
             base = 10; break;
         }
 
-        if (base == 2) {
-          if (v < 0 && !sign) {
-            val = mrb_fix2binstr(mrb, mrb_fixnum_value(v), base);
-            dots = 1;
-          }
-          else {
-            val = mrb_fixnum_to_str(mrb, mrb_fixnum_value(v), base);
-          }
-        }
         if (sign) {
-          if (v > 0) {
+          if (v >= 0) {
             if (flags & FPLUS) {
               sc = '+';
               width--;
@@ -862,36 +857,32 @@ retry:
               width--;
             }
           }
-          switch (base) {
-          case 2:
-            strncpy(nbuf, RSTRING_PTR(val), sizeof(nbuf));
-            break;
-          case 8:
-            snprintf(nbuf, sizeof(nbuf), "%" MRB_PRIo, v);
-            break;
-          case 10:
-            snprintf(nbuf, sizeof(nbuf), "%" MRB_PRId, v);
-            break;
-          case 16:
-            snprintf(nbuf, sizeof(nbuf), "%" MRB_PRIx, v);
-            break;
+          else {
+            sc = '-';
+            width--;
           }
+          mrb_assert(base == 10);
+          snprintf(nbuf, sizeof(nbuf), "%" MRB_PRId, v);
           s = nbuf;
+          if (v < 0) s++;       /* skip minus sign */
         }
         else {
           s = nbuf;
-          if (base != 10 && v < 0) {
+          if (v < 0) {
             dots = 1;
           }
           switch (base) {
           case 2:
+            if (v < 0) {
+              val = mrb_fix2binstr(mrb, mrb_fixnum_value(v), base);
+            }
+            else {
+              val = mrb_fixnum_to_str(mrb, mrb_fixnum_value(v), base);
+            }
             strncpy(++s, RSTRING_PTR(val), sizeof(nbuf)-1);
             break;
           case 8:
             snprintf(++s, sizeof(nbuf)-1, "%" MRB_PRIo, v);
-            break;
-          case 10:
-            snprintf(++s, sizeof(nbuf)-1, "%" MRB_PRId, v);
             break;
           case 16:
             snprintf(++s, sizeof(nbuf)-1, "%" MRB_PRIx, v);
@@ -918,11 +909,6 @@ retry:
           size = strlen(s);
           /* PARANOID: assert(size <= MRB_INT_MAX) */
           len = (mrb_int)size;
-        }
-
-        if (dots) {
-          prec -= 2;
-          width -= 2;
         }
 
         if (*p == 'X') {
@@ -972,6 +958,7 @@ retry:
 
         if (!(flags&FMINUS) && width > 0) {
           FILL(' ', width);
+          width = 0;
         }
 
         if (sc) PUSH(&sc, 1);
@@ -980,16 +967,19 @@ retry:
           int plen = (int)strlen(prefix);
           PUSH(prefix, plen);
         }
-        if (dots) PUSH("..", 2);
+        if (dots) {
+          prec -= 2;
+          width -= 2;
+          PUSH("..", 2);
+        }
 
         if (prec > len) {
           CHECK(prec - len);
-          if (v < 0) {
-            char c = sign_bits(base, p);
-            FILL(c, prec - len);
-          }
-          else if ((flags & (FMINUS|FPREC)) != FMINUS) {
+          if ((flags & (FMINUS|FPREC)) != FMINUS) {
             char c = '0';
+            FILL(c, prec - len);
+          } else if (v < 0) {
+            char c = sign_bits(base, p);
             FILL(c, prec - len);
           }
         }

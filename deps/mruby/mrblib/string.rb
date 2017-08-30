@@ -133,7 +133,7 @@ class String
     if args.length == 2 && block
       block = nil
     end
-    unless block
+    if !block
       replace = replace.to_str
     end
     result = []
