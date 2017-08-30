@@ -16,3 +16,4 @@ tmp/
 /libressl*
 /mruby
 /h2o
+install_manifest.txt
