@@ -190,7 +190,8 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
                 to_sa_err = h2o_url_host_to_sun(upstreams[i].host, &sa);
                 is_ssl = upstreams[i].scheme == &H2O_URL_SCHEME_HTTPS;
                 if (to_sa_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
-                    h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]), is_ssl, &upstreams[i]);
+                    h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]),
+                                                           is_ssl, &upstreams[i]);
                 } else {
                     assert(to_sa_err == NULL);
                     h2o_socketpool_init_target_by_address(&targets.entries[i], (void *)&sa, sizeof(sa), is_ssl, &upstreams[i]);
@@ -202,7 +203,6 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
         h2o_url_copy(NULL, &self->upstream, &upstreams[0]);
         if (to_sa_err)
             h2o_strtolower(self->upstream.host.base, self->upstream.host.len);
-
     }
     self->config = *config;
     if (self->config.ssl_ctx != NULL)

@@ -281,11 +281,12 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 
     if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
         h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
     }
     if (self->vars->reverse_path.base != NULL || self->vars->registered_as_backends) {
-        h2o_configurator_errprintf(cmd, node, "please either set `proxy.reverse.backends` with `proxy.reverse.path` to support "
+        h2o_configurator_errprintf(cmd, node,
+                                   "please either set `proxy.reverse.backends` with `proxy.reverse.path` to support "
                                    "multiple backends or only set `proxy.reverse.url`; the features are mutually exclusive");
         return -1;
     }
@@ -363,12 +364,14 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
     }
 
     if (self->vars->use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node, "currently we do not support multiple backends with `proxy.use-proxy-protocol` enabled");
+        h2o_configurator_errprintf(cmd, node,
+                                   "currently we do not support multiple backends with `proxy.use-proxy-protocol` enabled");
         return -1;
     }
-    
+
     if (self->vars->registered_as_url) {
-        h2o_configurator_errprintf(cmd, node, "please either set `proxy.reverse.backends` with `proxy.reverse.path` to support "
+        h2o_configurator_errprintf(cmd, node,
+                                   "please either set `proxy.reverse.backends` with `proxy.reverse.path` to support "
                                    "multiple backends or only set `proxy.reverse.url`; the features are mutually exclusive");
         return -1;
     }
@@ -453,7 +456,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 
     if (self->vars->headers_cmds != NULL)
         h2o_mem_release_shared(self->vars->headers_cmds);
-    
+
     if (self->vars->reverse_path.base != NULL)
         free(self->vars->reverse_path.base);
 
@@ -478,17 +481,17 @@ static int on_config_backend(h2o_configurator_command_t *cmd, h2o_configurator_c
         return -1;
     }
 
-    if ((turl = yoml_get(node, "url")) == NULL) {                                                                                  \
+    if ((turl = yoml_get(node, "url")) == NULL) {
         fprintf(stderr, "%s: missing mandatory attribute `url`\n", __func__);
         return -1;
     }
-    if ((tid = yoml_get(node, "id")) == NULL) {                                                                                  \
+    if ((tid = yoml_get(node, "id")) == NULL) {
         fprintf(stderr, "%s: missing mandatory attribute `id`\n", __func__);
         return -1;
     }
 
     h2o_dyn_backend_config_t bconfig;
-    ret = h2o_url_parse(turl->data.scalar,strlen(turl->data.scalar), &bconfig.upstream);
+    ret = h2o_url_parse(turl->data.scalar, strlen(turl->data.scalar), &bconfig.upstream);
     if (ret < 0) {
         fprintf(stderr, "%s: failed to parse url\n", __func__);
         return -1;
@@ -516,14 +519,15 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     /* setup handlers */
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
-    h2o_configurator_define_command(
-        &c->super, "proxy.reverse.url",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_url);
+    h2o_configurator_define_command(&c->super, "proxy.reverse.url",
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_reverse_url);
     /* if reverse proxy with multiple backends, they should be equivalent. then use backends & path instead of url. */
-    h2o_configurator_define_command(
-        &c->super, "proxy.reverse.backends",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE
-                                    | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_backends);
+    h2o_configurator_define_command(&c->super, "proxy.reverse.backends",
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_reverse_backends);
     h2o_configurator_define_command(&c->super, "proxy.reverse.path",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_reverse_path);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
@@ -556,10 +560,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_emit_x_forwarded_headers);
     h2o_configurator_define_command(&c->super, "proxy.emit-via-header",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_emit_via_header);
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_emit_via_header);
     h2o_configurator_define_headers_commands(conf, &c->super, "proxy.header", get_headers_commands);
-    h2o_configurator_define_command(&c->super, "backend",
-                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+    h2o_configurator_define_command(&c->super, "backend", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                     on_config_backend);
 }

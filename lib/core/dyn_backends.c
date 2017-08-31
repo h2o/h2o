@@ -3,7 +3,6 @@
 
 #include "khash.h"
 
-
 KHASH_MAP_INIT_STR(backends, h2o_socketpool_t *);
 
 struct st_backend_t {
@@ -14,7 +13,7 @@ struct st_backend_t {
     h2o_url_t upstream;
     h2o_socketpool_t sockpool;
 };
-static khash_t(backends) *backends;
+static khash_t(backends) * backends;
 
 const char *h2o_dyn_backend_add(const char *id, h2o_dyn_backend_config_t *config)
 {
@@ -35,7 +34,7 @@ const char *h2o_dyn_backend_add(const char *id, h2o_dyn_backend_config_t *config
     to_sa_err = h2o_url_host_to_sun(config->upstream.host, &sa);
     if (to_sa_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
         h2o_socketpool_init_by_hostport(&backend->sockpool, config->upstream.host, h2o_url_get_port(&config->upstream), is_ssl,
-                SIZE_MAX /* FIXME */);
+                                        SIZE_MAX /* FIXME */);
     } else {
         assert(to_sa_err == NULL);
         h2o_socketpool_init_by_address(&backend->sockpool, (void *)&sa, sizeof(sa), is_ssl, SIZE_MAX /* FIXME */);
