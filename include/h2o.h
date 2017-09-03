@@ -882,10 +882,6 @@ typedef struct st_h2o_req_overrides_t {
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
     h2o_headers_command_t *headers_cmds;
-    /**
-     * extra data per request for load balancer
-     */
-    void *req_extra;
 } h2o_req_overrides_t;
 
 /**
@@ -1832,8 +1828,12 @@ int h2o_headers_is_prohibited_name(const h2o_token_t *token);
  */
 void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 
-/* lib/proxy.c */
+/**
+ * callback for generate per-request data for balancer
+ */
+typedef void *(*h2o_balancer_per_req_data_generator)(h2o_req_t *req);
 
+/* lib/proxy.c */
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
     unsigned preserve_host : 1;

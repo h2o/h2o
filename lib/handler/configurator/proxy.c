@@ -316,6 +316,12 @@ static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_confi
         self->vars->lb.dispose = h2o_balancer_lc_dispose;
         self->vars->lb.target_parser = NULL;
         self->vars->lb.overall_parser = NULL;
+    } else if (strcmp(lb_type_node->data.scalar, "hash") == 0) {
+        self->vars->lb.init = h2o_balancer_hash_init;
+        self->vars->lb.selector = h2o_balancer_hash_selector;
+        self->vars->lb.dispose = h2o_balancer_hash_dispose;
+        self->vars->lb.target_parser = NULL;
+        self->vars->lb.overall_parser = h2o_balancer_hash_overall_parser;
     } else {
         h2o_configurator_errprintf(cmd, node,
                                    "specified balancer is currently not supported. supported balancers are: "

@@ -672,7 +672,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
             if (overrides->use_proxy_protocol)
                 assert(!"proxy protocol cannot be used for a persistent upstream connection");
             self = proxy_send_prepare(req, 1, 0, &te_chunked);
-            h2o_http1client_connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_connect, te_chunked, overrides->req_extra);
+            h2o_http1client_connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_connect, te_chunked, req);
             return;
         } else if (overrides->hostport.host.base != NULL) {
             self = proxy_send_prepare(req, 0, overrides->use_proxy_protocol, &te_chunked);

@@ -124,11 +124,12 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_vector_reserve(NULL, &pool->_shared.status, targets.size);
     pool->_shared.status.size = targets.size;
+    memcpy(&pool->targets, &targets, sizeof(targets));
     for (i = 0; i < pool->_shared.status.size; i++) {
         pool->_shared.status.entries[i].request_count = 0;
         h2o_linklist_init_anchor(&pool->_shared.status.entries[i].sockets);
+        pool->targets.entries[i].status = &pool->_shared.status.entries[i];
     }
-    memcpy(&pool->targets, &targets, sizeof(targets));
 
     /* we only need balancing if there're more than one backends */
     if (targets.size > 1) {
