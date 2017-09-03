@@ -23,7 +23,7 @@
 #define h2o__balancer_h
 
 #ifdef __cplusplus
-extern "C" {
+//extern "C" {
 #endif
 
 #include "h2o/socketpool.h"
@@ -48,8 +48,20 @@ size_t h2o_balancer_lc_selector(h2o_socketpool_target_vector_t *targets, h2o_soc
                                 int *tried, void *dummy);
 void h2o_balancer_lc_dispose(void *data);
 
+/* bounded hash */
+void h2o_balancer_hash_init(h2o_socketpool_target_vector_t *targets, void *_conf, void **data);
+size_t h2o_balancer_hash_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
+                                  int *tried, void *_req);
+void h2o_balancer_hash_dispose(void *data);
+int h2o_balancer_hash_overall_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
+
+typedef enum en_h2o_balancer_hash_key_type {
+    H2O_BALANCER_HASH_KEY_TYPE_PATH,
+    H2O_BALANCER_HASH_KEY_TYPE_IP,
+    H2O_BALANCER_HASH_KEY_TYPE_IP_PORT
+} h2o_balancer_hash_key_type;
 #ifdef __cplusplus
-}
+//}
 #endif
 
 #endif

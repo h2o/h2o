@@ -102,6 +102,7 @@ INCLUDE_DIRECTORIES(
     deps/picohttpparser
     deps/picotest
     deps/yaml/include
+    deps/SipHash
     deps/yoml)
 
 IF (PKG_CONFIG_FOUND)
@@ -237,6 +238,7 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/strerror.c
     deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
+    deps/SipHash/siphash.c
 
     lib/common/cache.c
     lib/common/file.c
@@ -256,6 +258,7 @@ SET(LIB_SOURCE_FILES
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
+    lib/common/balancer/hash.c
 
     lib/core/config.c
     lib/core/configurator.c

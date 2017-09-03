@@ -259,6 +259,7 @@
 		D01865DE1F121E4300EBA12C /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D01865DD1F121E4300EBA12C /* roundrobin.c */; };
 		D05E37A51F2CC6F200AD23C6 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D05E37A41F2CC6F200AD23C6 /* least_conn.c */; };
 		D05E37A71F2CC78100AD23C6 /* balancer.h in Headers */ = {isa = PBXBuildFile; fileRef = D05E37A61F2CC78100AD23C6 /* balancer.h */; };
+		D0E3392B1F5A7D2300724FAF /* hash.c in Sources */ = {isa = PBXBuildFile; fileRef = D0E3392A1F5A7D2300724FAF /* hash.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
@@ -821,6 +822,7 @@
 		D01865DD1F121E4300EBA12C /* roundrobin.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = roundrobin.c; path = balancer/roundrobin.c; sourceTree = "<group>"; };
 		D05E37A41F2CC6F200AD23C6 /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = least_conn.c; path = balancer/least_conn.c; sourceTree = "<group>"; };
 		D05E37A61F2CC78100AD23C6 /* balancer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balancer.h; sourceTree = "<group>"; };
+		D0E3392A1F5A7D2300724FAF /* hash.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = hash.c; path = balancer/hash.c; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
@@ -1793,6 +1795,7 @@
 			children = (
 				D01865DD1F121E4300EBA12C /* roundrobin.c */,
 				D05E37A41F2CC6F200AD23C6 /* least_conn.c */,
+				D0E3392A1F5A7D2300724FAF /* hash.c */,
 			);
 			name = balancer;
 			sourceTree = "<group>";
@@ -2190,6 +2193,7 @@
 				10835E031C9A860000197E59 /* status.c in Sources */,
 				D01865DE1F121E4300EBA12C /* roundrobin.c in Sources */,
 				084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */,
+				D0E3392B1F5A7D2300724FAF /* hash.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,

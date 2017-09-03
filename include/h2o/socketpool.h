@@ -40,6 +40,13 @@ typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
+typedef struct st_h2o_socketpool_target_status_t {
+    size_t request_count;   /* synchoronus operations should be used, counting requests on the fly */
+    h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+} h2o_socketpool_target_status_t;
+
+typedef H2O_VECTOR(h2o_socketpool_target_status_t) h2o_socketpool_target_status_vector_t;
+
 typedef struct st_h2o_socketpool_target_t {
     h2o_socketpool_target_type_t type;
     int is_ssl;
@@ -57,16 +64,10 @@ typedef struct st_h2o_socketpool_target_t {
     } peer;
     h2o_url_t *url;
     void *data_for_balancer;
+    h2o_socketpool_target_status_t *status;
 } h2o_socketpool_target_t;
 
 typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
-
-typedef struct st_h2o_socketpool_target_status_t {
-    size_t request_count;   /* synchoronus operations should be used, counting requests on the fly */
-    h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
-} h2o_socketpool_target_status_t;
-
-typedef H2O_VECTOR(h2o_socketpool_target_status_t) h2o_socketpool_target_status_vector_t;
 
 typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
                                              void *data, int *tried, void *req_extra);
