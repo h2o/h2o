@@ -51,9 +51,9 @@ static int on_config_expires(h2o_configurator_command_t *cmd, h2o_configurator_c
         } else if (strncasecmp(unit, H2O_STRLIT("day")) == 0) {
             value *= 24 * 60 * 60;
         } else if (strncasecmp(unit, H2O_STRLIT("month")) == 0) {
-            value *= 30 * 60 * 60;
+            value *= 30 * 24 * 60 * 60;
         } else if (strncasecmp(unit, H2O_STRLIT("year")) == 0) {
-            value *= 365 * 30 * 60 * 60;
+            value *= 365 * 30 * 24 * 60 * 60;
         } else {
             /* TODO add support for H2O_EXPIRES_MODE_MAX_ABSOLUTE that sets the Expires header? */
             h2o_configurator_errprintf(cmd, node, "unknown unit:`%s` (see --help)", unit);
