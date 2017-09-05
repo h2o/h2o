@@ -129,6 +129,17 @@ builder {
             ],
         ];
     };
+    mount "/fixed-date-header" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+                'content-type' => 'text/plain',
+                'date' => 'Thu, 01 Jan 1970 00:00:00 GMT',
+            ],
+            []
+        ];
+    };
     mount "/infinite-stream" => sub {
         my $env = shift;
         return sub {

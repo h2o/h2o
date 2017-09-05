@@ -108,7 +108,8 @@ typedef struct st_h2o_headers_command_t h2o_headers_command_t;
 typedef struct st_h2o_token_t {
     h2o_iovec_t buf;
     char http2_static_table_name_index; /* non-zero if any */
-    unsigned char proxy_should_drop : 1;
+    unsigned char proxy_should_drop_for_req : 1;
+    unsigned char proxy_should_drop_for_res : 1;
     unsigned char is_init_header_special : 1;
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;

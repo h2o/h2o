@@ -552,7 +552,7 @@ static int handle_response_header(h2o_mruby_context_t *handler_ctx, h2o_iovec_t 
     h2o_strtolower(name.base, name.len);
 
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        if (token->proxy_should_drop) {
+        if (token->proxy_should_drop_for_res) {
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             req->res.content_length = h2o_strtosize(value.base, value.len);

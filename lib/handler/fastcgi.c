@@ -504,7 +504,7 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
         const h2o_token_t *token;
         h2o_strtolower((char *)headers[i].name, headers[i].name_len);
         if ((token = h2o_lookup_token(headers[i].name, headers[i].name_len)) != NULL) {
-            if (token->proxy_should_drop) {
+            if (token->proxy_should_drop_for_res) {
                 /* skip */
             } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX) {
