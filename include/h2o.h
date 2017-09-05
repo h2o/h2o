@@ -109,7 +109,8 @@ typedef struct st_h2o_headers_command_t h2o_headers_command_t;
 typedef struct st_h2o_token_t {
     h2o_iovec_t buf;
     char http2_static_table_name_index; /* non-zero if any */
-    unsigned char proxy_should_drop : 1;
+    unsigned char proxy_should_drop_for_req : 1;
+    unsigned char proxy_should_drop_for_res : 1;
     unsigned char is_init_header_special : 1;
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
@@ -127,6 +128,7 @@ typedef struct st_h2o_handler_t {
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
+    unsigned has_body_stream : 1;
 } h2o_handler_t;
 
 /**
@@ -898,6 +900,9 @@ typedef struct st_h2o_req_error_log_t {
     h2o_iovec_t msg;
 } h2o_req_error_log_t;
 
+typedef void (*h2o_write_req_chunk_done)(struct st_h2o_req_t *req, size_t written, int done);
+typedef int (*h2o_write_req_chunk)(void *priv, h2o_iovec_t req_chunk, int is_end);
+
 /**
  * a HTTP request
  */
@@ -988,9 +993,13 @@ struct st_h2o_req_t {
      */
     h2o_headers_t headers;
     /**
-     * the request entity (base == NULL if none)
+     * the request entity (base == NULL if none), can't be used if the handler is streaming the body
      */
     h2o_iovec_t entity;
+    /**
+     * If different of SIZE_MAX, the numeric value of the received content-length: header
+     */
+    size_t content_length;
     /**
      * timestamp when the request was processed
      */
@@ -1064,6 +1073,15 @@ struct st_h2o_req_t {
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
     h2o_timeout_entry_t _timeout_entry;
+
+    /* streaming request body */
+    struct {
+        h2o_write_req_chunk cb;
+        void *priv;
+    } _write_req_chunk;
+    h2o_write_req_chunk_done _write_req_chunk_done;
+    char _found_handler;
+
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
 };
@@ -1221,6 +1239,10 @@ void h2o_dispose_request(h2o_req_t *req);
  * called by the connection layer to start processing a request that is ready
  */
 void h2o_process_request(h2o_req_t *req);
+/**
+ * returns the first handler that will be used for the request
+ */
+h2o_handler_t *h2o_get_first_handler(h2o_req_t *req);
 /**
  * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
  */

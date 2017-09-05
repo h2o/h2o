@@ -4,6 +4,9 @@ cache: ccache
 
 compiler: gcc
 
+env:
+  - PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
+
 addons:
   hosts:
     - 127.0.0.1.xip.io

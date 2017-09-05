@@ -34,6 +34,11 @@ EOT
 like $resp, qr/^cache-control:.*\Wmax-age=86400\W/im, "expires 1 day";
 
 $resp = fetch(<< 'EOT');
+expires: 1 month
+EOT
+like $resp, qr/^cache-control:.*\Wmax-age=2592000\W/im, "expires 1 month";
+
+$resp = fetch(<< 'EOT');
         expires: OFF
 expires: 1 day
 EOT
