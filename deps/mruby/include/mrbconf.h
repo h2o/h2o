@@ -34,6 +34,17 @@
 /* add -DMRB_INT64 to use 64bit integer for mrb_int; conflict with MRB_INT16 */
 //#define MRB_INT64
 
+/* if no specific integer type is chosen */
+#if !defined(MRB_INT16) && !defined(MRB_INT32) && !defined(MRB_INT64)
+# if defined(MRB_64BIT) && !defined(MRB_NAN_BOXING)
+/* Use 64bit integers on 64bit architecture (without MRB_NAN_BOXING) */
+#  define MRB_INT64
+# else
+/* Otherwise use 32bit integers */
+#  define MRB_INT32
+# endif
+#endif
+
 /* represent mrb_value in boxed double; conflict with MRB_USE_FLOAT */
 //#define MRB_NAN_BOXING
 
