@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use Test::More;
+use Time::HiRes;
 use t::Util;
 
 plan skip_all => 'curl not found'
@@ -45,6 +46,7 @@ hosts:
 EOT
 
     $cmd->($server);
+    Time::HiRes::sleep(0.1);
 
     my @log = do {
         open my $fh, "<", "$tempdir/access_log"

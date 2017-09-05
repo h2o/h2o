@@ -1,7 +1,17 @@
+matrix:
+  include:
+    - os: linux
+      compiler: gcc
+    - os: osx
+      osx_image: xcode7.3
+      compiler: clang
+
 language: cpp
 
-compiler:
-  - gcc
+cache:
+  directories:
+    - ${HOME}/local
+    - ${HOME}/cpanm
 
 env:
   - PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
@@ -12,20 +22,47 @@ addons:
     - alternate.127.0.0.1.xip.io
 
 before_install:
-  # upgrade g++ and libstdc++ to build nghttp2
-  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-  - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
-  - sudo apt-get --yes update
-  - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev php5-cgi wget
-  - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
-  - $CXX --version
-  # for speed, pre-install deps installed in `before_script` section as ubuntu packages
-  - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
+  # setup variables
+  - export INSTALL_DIR=${HOME}/local
+  - export CPANM_DIR=${HOME}/cpanm
+  - export PATH=`echo -n "$PATH" | sed -E "s#(:/usr(/local/bin|/bin):)#:${INSTALL_DIR}/bin:${CPANM_DIR}/bin\1#"`
+  - export PKG_CONFIG_PATH=${INSTALL_DIR}/lib/pkgconfig:/usr/local/opt/openssl/lib/pkgconfig
+  - export PERL5LIB=${CPANM_DIR}/lib/perl5
+  - export PERL_CPANM_OPT="--local-lib=${CPANM_DIR}"
+  - export PERL_MB_OPT="--install_base ${CPANM_DIR}"
+  - export PERL_MM_OPT="INSTALL_BASE=${CPANM_DIR}"
+  - export CACHE_VERSION_DIR=${INSTALL_DIR}/versions
+  - if [[ ! -d "${CACHE_VERSION_DIR}" ]]; then mkdir -p "${CACHE_VERSION_DIR}"; fi
+  # get latest version of cpanminus
+  - |
+    if [[ ! -e "${INSTALL_DIR}/bin/cpanm" ]]; then
+      curl -L https://cpanmin.us/ --create-dirs -o ${INSTALL_DIR}/bin/cpanm
+      chmod +x ${INSTALL_DIR}/bin/cpanm
+    fi
+  - |
+    case "${TRAVIS_OS_NAME}" in
+      "linux" )
+        # upgrade g++ and libstdc++ to build nghttp2
+        sudo apt-add-repository --yes ppa:ubuntu-toolchain-r/test
+        sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
+        sudo apt-get -qq update
+        sudo apt-get install -qq cmake cmake-data g++-4.8 libstdc++-4.8-dev php5-cgi wget
+        if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
+        $CXX --version
+        # for speed, pre-install deps installed in `before_script` section as ubuntu packages
+        sudo apt-get install -qq libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
+        ;;
+      "osx"   )
+        brew update
+        # brew tap homebrew/dupes
+        # brew install --quiet openssl homebrew/dupes/zlib
+        # brew link --force openssl
+        # brew link --force zlib
+        ;;
+    esac
 
 before_script:
-  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
-  - curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
-  - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
+  - "set -e"
   # install perl modules (mandatory for testing)
   - misc/install-perl-module.pl Net::EmptyPort
   - misc/install-perl-module.pl Scope::Guard
@@ -36,17 +73,73 @@ before_script:
   - misc/install-perl-module.pl JSON
   - misc/install-perl-module.pl Path::Tiny
   - misc/install-perl-module.pl Test::Exception
+  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
+  - |
+    case "${TRAVIS_OS_NAME}" in
+      "linux" )
+        LIBUV_VERSION=1.0.0
+        if [ "`cat ${CACHE_VERSION_DIR}/libuv 2> /dev/null`" != "${LIBUV_VERSION}" ] ; then
+          curl -L https://github.com/libuv/libuv/archive/v${LIBUV_VERSION}.tar.gz | tar xzf -
+          (cd libuv-${LIBUV_VERSION} && ./autogen.sh && ./configure --prefix=${INSTALL_DIR} && make && make install)
+          echo "${LIBUV_VERSION}" > ${CACHE_VERSION_DIR}/libuv
+        fi
+        ;;
+      "osx"   )
+        brew install --quiet libuv
+        brew link libuv
+        ;;
+    esac
+
   # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
-  - sudo apt-get install -qq apache2-utils
+  - |
+    case "${TRAVIS_OS_NAME}" in
+      "linux" ) sudo apt-get install -qq apache2-utils ;;
+      "osx"   )
+        brew install --quiet apr
+        # workaround for a linking issue, perhaps like https://github.com/Homebrew/homebrew-apache/issues/75
+        ln -s /usr/local/Cellar/apr/1.5.2_3 /usr/local/Cellar/apr/1.5.2_2
+        brew install --quiet homebrew/apache/ab
+        ;;
+    esac
   # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
-  - sudo apt-get install -qq libev-dev
-  - curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-1.4.0.tar.gz | tar xzf -
-  - (cd nghttp2-1.4.0 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
-  - curl -L https://curl.haxx.se/download/curl-7.50.0.tar.gz | tar xzf -
-  - (cd curl-7.50.0 && ./configure --prefix=/usr --with-nghttp2 --disable-shared && make && sudo make install)
+  - |
+    case "${TRAVIS_OS_NAME}" in
+      "linux" ) sudo apt-get install -qq libev-dev ;;
+      "osx"   ) brew install --quiet libev ;;
+    esac
+  - |
+    SPDYLAY_VERSION=1.3.2
+    JANSSON_VERSION=2.7
+    NGHTTP2_VERSION=1.4.0
+    CURL_VERSION=7.50.0
+    if [ "`cat ${CACHE_VERSION_DIR}/nghttp2 2> /dev/null`" != "${NGHTTP2_VERSION}" ] ; then
+      case "${TRAVIS_OS_NAME}" in
+        "osx"   )
+          if [ "`cat ${CACHE_VERSION_DIR}/spdylay 2> /dev/null`" != "${SPDYLAY_VERSION}" ] ; then
+            curl -L https://github.com/tatsuhiro-t/spdylay/releases/download/v${SPDYLAY_VERSION}/spdylay-${SPDYLAY_VERSION}.tar.gz | tar xzf -
+            (cd spdylay-${SPDYLAY_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+            echo "${SPDYLAY_VERSION}" > ${CACHE_VERSION_DIR}/spdylay
+          fi
+          if [ "`cat ${CACHE_VERSION_DIR}/jansson 2> /dev/null`" != "${JANSSON_VERSION}" ] ; then
+            curl http://www.digip.org/jansson/releases/jansson-${JANSSON_VERSION}.tar.gz | tar xzf -
+            (cd jansson-${JANSSON_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-shared && make && make install)
+            echo "${JANSSON_VERSION}" > ${CACHE_VERSION_DIR}/jansson
+          fi
+          ;;
+      esac
+      curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-${NGHTTP2_VERSION}.tar.gz | tar xzf -
+      (cd nghttp2-${NGHTTP2_VERSION} && ./configure --prefix=${INSTALL_DIR} --disable-threads --enable-app --disable-shared && make && make install)
+      echo "${NGHTTP2_VERSION}" > ${CACHE_VERSION_DIR}/nghttp2
+    fi
+  - |
+    if [ "`cat ${CACHE_VERSION_DIR}/curl 2> /dev/null`" != "${CURL_VERSION}" ] ; then
+      curl -L https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.gz | tar xzf -
+      (cd curl-${CURL_VERSION} && ./configure --prefix=${INSTALL_DIR} --with-nghttp2=${INSTALL_DIR} --disable-shared && make && make install)
+      echo "${CURL_VERSION}" > ${CACHE_VERSION_DIR}/curl
+    fi
 
 script:
   - cmake -DWITH_MRUBY=ON .
   - make all
   - make check
-  - sudo make check-as-root
+  - sudo PATH=$PATH PERL5LIB=$PERL5LIB make check-as-root
