@@ -539,8 +539,13 @@ Note that <code>memcached</code> attribute must be defined as well in case the <
 <dl>
 <dt>cache-store:</dt>
 <dd>
+<p>
 defines where the cache should be stored, must be one of: <code>internal</code>, <code>memcached</code>.
 Default is <code>internal</code>.
+</p>
+<p>
+Please note that if you compiled h2o with OpenSSL 1.1.0 ~ 1.1.0f, session resumption with external cache store would fail due to bug of OpenSSL.
+</p>
 </dd>
 <dt>cache-memcached-num-threads:</dt>
 <dd>defines the maximum number of threads used for communicating with the memcached server.
