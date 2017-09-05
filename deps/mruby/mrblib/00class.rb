@@ -15,6 +15,7 @@ class Module
       m.append_features(self)
       m.included(self)
     end
+    self
   end
 
   def prepend(*args)
@@ -22,5 +23,6 @@ class Module
       m.prepend_features(self)
       m.prepended(self)
     end
+    self
   end
 end

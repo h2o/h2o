@@ -187,7 +187,9 @@ flodivmod(mrb_state *mrb, mrb_float x, mrb_float y, mrb_float *divp, mrb_float *
   mrb_float mod;
 
   if (y == 0.0) {
-    div = INFINITY;
+    if (x > 0.0) div = INFINITY;
+    else if (x < 0.0) div = -INFINITY;
+    else div = NAN;             /* x == 0.0 */
     mod = NAN;
   }
   else {
@@ -378,7 +380,11 @@ flo_shift(mrb_state *mrb, mrb_value x, mrb_int width)
 #if defined(_ISOC99_SOURCE)
     val = trunc(val);
 #else
-    val = val > 0 ? floor(val) : ceil(val);
+    if (val > 0){
+        val = floor(val);    
+    } else {
+        val = ceil(val);
+    }
 #endif
     if (val == 0 && mrb_float(x) < 0) {
       return mrb_fixnum_value(-1);
@@ -411,32 +417,6 @@ flo_rshift(mrb_state *mrb, mrb_value x)
 
   mrb_get_args(mrb, "i", &width);
   return flo_shift(mrb, x, width);
-}
-
-/* 15.2.8.3.18 */
-/*
- * call-seq:
- *   flt.hash  ->  integer
- *
- * Returns a hash code for this float.
- */
-static mrb_value
-flo_hash(mrb_state *mrb, mrb_value num)
-{
-  mrb_float d;
-  char *c;
-  size_t i;
-  mrb_int hash;
-
-  d = (mrb_float)mrb_fixnum(num);
-  /* normalize -0.0 to 0.0 */
-  if (d == 0) d = 0.0;
-  c = (char*)&d;
-  for (hash=0,i=0; i<sizeof(mrb_float); i++) {
-    hash = (hash * 971) ^ (unsigned char)c[i];
-  }
-  if (hash < 0) hash = -hash;
-  return mrb_fixnum_value(hash);
 }
 
 /* 15.2.9.3.13 */
@@ -811,8 +791,10 @@ fix_divmod(mrb_state *mrb, mrb_value x)
     mrb_int div, mod;
 
     if (mrb_fixnum(y) == 0) {
-      return mrb_assoc_new(mrb, mrb_float_value(mrb, INFINITY),
-        mrb_float_value(mrb, NAN));
+      return mrb_assoc_new(mrb, ((mrb_fixnum(x) == 0) ?
+                                 mrb_float_value(mrb, NAN):
+                                 mrb_float_value(mrb, INFINITY)),
+                           mrb_float_value(mrb, NAN));
     }
     fixdivmod(mrb, mrb_fixnum(x), mrb_fixnum(y), &div, &mod);
     return mrb_assoc_new(mrb, mrb_fixnum_value(div), mrb_fixnum_value(mod));
@@ -822,7 +804,7 @@ fix_divmod(mrb_state *mrb, mrb_value x)
     mrb_value a, b;
 
     flodivmod(mrb, (mrb_float)mrb_fixnum(x), mrb_to_flo(mrb, y), &div, &mod);
-    a = mrb_float_value(mrb, (mrb_int)div);
+    a = mrb_float_value(mrb, div);
     b = mrb_float_value(mrb, mod);
     return mrb_assoc_new(mrb, a, b);
   }
@@ -838,7 +820,7 @@ flo_divmod(mrb_state *mrb, mrb_value x)
   mrb_get_args(mrb, "o", &y);
 
   flodivmod(mrb, mrb_float(x), mrb_to_flo(mrb, y), &div, &mod);
-  a = mrb_float_value(mrb, (mrb_int)div);
+  a = mrb_float_value(mrb, div);
   b = mrb_float_value(mrb, mod);
   return mrb_assoc_new(mrb, a, b);
 }
@@ -962,15 +944,15 @@ lshift(mrb_state *mrb, mrb_int val, mrb_int width)
         (val   > (MRB_INT_MAX >> width))) {
       goto bit_overflow;
     }
+    return mrb_fixnum_value(val << width);
   }
   else {
     if ((width > NUMERIC_SHIFT_WIDTH_MAX) ||
         (val   < (MRB_INT_MIN >> width))) {
       goto bit_overflow;
     }
+    return mrb_fixnum_value(val * (1u << width));
   }
-
-  return mrb_fixnum_value(val << width);
 
 bit_overflow:
   {
@@ -1328,7 +1310,6 @@ mrb_init_numeric(mrb_state *mrb)
   mrb_define_method(mrb, fixnum,  "<<",       fix_lshift,      MRB_ARGS_REQ(1)); /* 15.2.8.3.12 */
   mrb_define_method(mrb, fixnum,  ">>",       fix_rshift,      MRB_ARGS_REQ(1)); /* 15.2.8.3.13 */
   mrb_define_method(mrb, fixnum,  "eql?",     fix_eql,         MRB_ARGS_REQ(1)); /* 15.2.8.3.16 */
-  mrb_define_method(mrb, fixnum,  "hash",     flo_hash,        MRB_ARGS_NONE()); /* 15.2.8.3.18 */
   mrb_define_method(mrb, fixnum,  "to_f",     fix_to_f,        MRB_ARGS_NONE()); /* 15.2.8.3.23 */
   mrb_define_method(mrb, fixnum,  "to_s",     fix_to_s,        MRB_ARGS_NONE()); /* 15.2.8.3.25 */
   mrb_define_method(mrb, fixnum,  "inspect",  fix_to_s,        MRB_ARGS_NONE());

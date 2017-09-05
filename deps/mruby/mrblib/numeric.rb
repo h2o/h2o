@@ -45,7 +45,7 @@ module Integral
   #
   # ISO 15.2.8.3.15
   def downto(num, &block)
-    return to_enum(:downto, num) unless block_given?
+    return to_enum(:downto, num) unless block
 
     i = self.to_i
     while i >= num
@@ -70,7 +70,7 @@ module Integral
   #
   # ISO 15.2.8.3.22
   def times &block
-    return to_enum :times unless block_given?
+    return to_enum :times unless block
 
     i = 0
     while i < self
@@ -86,7 +86,7 @@ module Integral
   #
   # ISO 15.2.8.3.27
   def upto(num, &block)
-    return to_enum(:upto, num) unless block_given?
+    return to_enum(:upto, num) unless block
 
     i = self.to_i
     while i <= num
@@ -102,7 +102,7 @@ module Integral
   #
   def step(num=nil, step=1, &block)
     raise ArgumentError, "step can't be 0" if step == 0
-    return to_enum(:step, num, step) unless block_given?
+    return to_enum(:step, num, step) unless block
 
     i = if num.kind_of? Float then self.to_f else self end
     if num == nil

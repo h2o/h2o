@@ -75,7 +75,7 @@ assert("String#% with invalid chr") do
     end
 
     assert_raise TypeError do
-      "%c" % 0
+      "%c" % 0x80
     end
   ensure
     class Fixnum
@@ -89,6 +89,12 @@ end
 
 assert("String#% %b") do
   assert_equal("..10115", "%0b5" % -5)
+end
+
+assert("String#% %d") do
+  assert_equal("  10",   "%4d" % 10)
+  assert_equal("1000",   "%4d" % 1000)
+  assert_equal("10000",  "%4d" % 10000)
 end
 
 assert("String#% invalid format") do
