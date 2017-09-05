@@ -1,7 +1,8 @@
 language: cpp
 
-compiler:
-  - gcc
+cache: ccache
+
+compiler: gcc
 
 env:
   - PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
@@ -11,42 +12,79 @@ addons:
     - 127.0.0.1.xip.io
     - alternate.127.0.0.1.xip.io
 
-before_install:
-  # upgrade g++ and libstdc++ to build nghttp2
-  - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
-  - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
-  - sudo apt-get --yes update
-  - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev php5-cgi wget
-  - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
-  - $CXX --version
-  # for speed, pre-install deps installed in `before_script` section as ubuntu packages
-  - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
-
-before_script:
-  # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
-  - curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
-  - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
-  # install perl modules (mandatory for testing)
-  - misc/install-perl-module.pl Net::EmptyPort
-  - misc/install-perl-module.pl Scope::Guard
-  - misc/install-perl-module.pl Plack
-  - misc/install-perl-module.pl FCGI
-  - misc/install-perl-module.pl http://search.cpan.org/CPAN/authors/id/A/AR/ARODLAND/FCGI-ProcManager-0.25.tar.gz
-  - misc/install-perl-module.pl Starlet
-  - misc/install-perl-module.pl JSON
-  - misc/install-perl-module.pl Path::Tiny
-  - misc/install-perl-module.pl Test::Exception
-  # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
-  - sudo apt-get install -qq apache2-utils
-  # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
-  - sudo apt-get install -qq libev-dev
-  - curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-1.4.0.tar.gz | tar xzf -
-  - (cd nghttp2-1.4.0 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
-  - curl -L https://curl.haxx.se/download/curl-7.50.0.tar.gz | tar xzf -
-  - (cd curl-7.50.0 && ./configure --prefix=/usr --with-nghttp2 --disable-shared && make && sudo make install)
-
-script:
-  - cmake -DWITH_MRUBY=ON .
-  - make all
-  - make check
-  - sudo make check-as-root
+matrix:
+  include:
+    - os: linux
+      sudo: required
+      dist: precise
+      before_install: &bi
+        # upgrade g++ and libstdc++ to build nghttp2
+        - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+        - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
+        - sudo apt-get --yes update
+        - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev wget php5-cgi
+        - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
+        - $CXX --version
+          # for speed, pre-install deps installed in `before_script` section as ubuntu packages
+        - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
+      before_script: &bs
+        # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
+        - curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
+        - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
+          # install perl modules (mandatory for testing)
+        - misc/install-perl-module.pl Net::EmptyPort
+        - misc/install-perl-module.pl Scope::Guard
+        - misc/install-perl-module.pl Plack
+        - misc/install-perl-module.pl FCGI
+        - misc/install-perl-module.pl http://search.cpan.org/CPAN/authors/id/A/AR/ARODLAND/FCGI-ProcManager-0.25.tar.gz
+        - misc/install-perl-module.pl Starlet
+        - misc/install-perl-module.pl JSON
+        - misc/install-perl-module.pl Path::Tiny
+        - misc/install-perl-module.pl Test::Exception
+          # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
+        - sudo apt-get install -qq apache2-utils
+          # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
+        - sudo apt-get install -qq libev-dev
+        - curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-1.4.0.tar.gz | tar xzf -
+        - (cd nghttp2-1.4.0 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
+        - curl -L https://curl.haxx.se/download/curl-7.50.0.tar.gz | tar xzf -
+        - (cd curl-7.50.0 && ./configure --prefix=/usr --with-nghttp2 --disable-shared && make && sudo make install)
+      script: &s
+        - cmake -DWITH_MRUBY=ON .
+        - make all
+        - make check
+        - sudo make check-as-root
+    - os: linux
+      sudo: required
+      dist: trusty
+      env:
+        - ASAN_OPTIONS=detect_leaks=0
+      before_install:
+        - curl -L http://llvm.org/apt/llvm-snapshot.gpg.key | sudo apt-key add -
+        - sudo apt-add-repository -y 'deb http://llvm.org/apt/trusty llvm-toolchain-trusty-4.0 main'
+        - sudo apt-add-repository -y 'deb http://llvm.org/apt/trusty llvm-toolchain-trusty main'
+        - sudo apt-get --yes update
+        - sudo apt-get install -y clang-4.0
+        - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+        - sudo apt-add-repository --yes ppa:smspillaz/cmake-2.8.12
+        - sudo add-apt-repository --yes ppa:ondrej/php
+        - sudo apt-get --yes update
+        - sudo apt-get install --yes cmake cmake-data g++-4.8 libstdc++-4.8-dev wget php7.0-cgi
+        - if [ "$CXX" = "g++" ]; then export CXX="g++-4.8"; fi
+        - $CXX --version
+          # for speed, pre-install deps installed in `before_script` section as ubuntu packages
+        - sudo apt-get install -qq cpanminus libipc-signal-perl liblist-moreutils-perl libwww-perl libio-socket-ssl-perl zlib1g-dev
+          # default system php is buggy, make sure we're using the php7 package
+        - sudo rm /usr/bin/php-cgi
+        - sudo ln -s /usr/bin/php-cgi7.0 /usr/bin/php-cgi
+        - sudo rm /home/travis/.phpenv/shims/php-cgi
+      before_script: *bs
+      script:
+        - CC=clang-4.0 CXX=clang++-4.0 cmake -DBUILD_FUZZER=ON -DWITH_MRUBY=ON .
+        - make all
+        - sudo chmod 775 /home/travis
+        - make check
+        - sudo make check-as-root
+        - ./h2o-fuzzer-http1 -close_fd_mask=3 -runs=1 -max_len=$((16 * 1024 )) fuzz/http1-corpus < /dev/null
+        - ./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=$((16 * 1024 )) fuzz/http2-corpus < /dev/null
+        - ./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=$((16 * 1024 )) fuzz/url-corpus < /dev/null
