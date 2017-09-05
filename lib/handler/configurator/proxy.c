@@ -243,7 +243,6 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        self->vars->get_upstream.cb = h2o_proxy_url_get_upstream;
         if (h2o_url_parse(node->data.scalar, SIZE_MAX, &parsed) != 0) {
             h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
             return -1;
@@ -380,7 +379,6 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
         h2o_mem_addref_shared(self->vars->headers_cmds);
 
     /* register */
-    self->vars->get_upstream.cb = h2o_proxy_url_get_upstream;
     self->vars->registered_as_backends = 1;
     h2o_proxy_register_reverse_proxy(ctx->pathconf, upstreams, count, self->vars);
 
