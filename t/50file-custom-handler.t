@@ -86,7 +86,7 @@ subtest 'treat .html as cgi by resetting mimetypes' => sub {
     my $server = spawn_h2o(<< "EOT");
 file.mime.settypes: {}
 file.custom-handler:
-  extension: ["default", ".cgi"]
+  extension: ["default"]
   fastcgi.spawn: "exec \$H2O_ROOT/share/h2o/fastcgi-cgi"
 hosts:
   default:

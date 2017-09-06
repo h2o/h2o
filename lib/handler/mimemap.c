@@ -212,6 +212,10 @@ void h2o_mimemap_on_context_init(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
     const char *ext;
     h2o_mimemap_type_t *type;
 
+    if (mimemap->default_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
+        h2o_context_init_pathconf_context(ctx, &mimemap->default_type->data.dynamic.pathconf);
+    }
+
     kh_foreach(mimemap->extmap, ext, type, {
         switch (type->type) {
         case H2O_MIMEMAP_TYPE_DYNAMIC:
@@ -227,6 +231,10 @@ void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
 {
     const char *ext;
     h2o_mimemap_type_t *type;
+
+    if (mimemap->default_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
+        h2o_context_dispose_pathconf_context(ctx, &mimemap->default_type->data.dynamic.pathconf);
+    }
 
     kh_foreach(mimemap->extmap, ext, type, {
         switch (type->type) {
