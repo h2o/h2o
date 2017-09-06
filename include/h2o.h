@@ -387,6 +387,14 @@ struct st_h2o_globalconf_t {
          */
         uint64_t io_timeout;
         /**
+         * io timeout (in milliseconds)
+         */
+        uint64_t connect_timeout;
+        /**
+         * io timeout (in milliseconds)
+         */
+        uint64_t first_byte_timeout;
+        /**
          * SSL context for connections initiated by the proxy (optional, governed by the application)
          */
         SSL_CTX *ssl_ctx;
@@ -616,6 +624,14 @@ struct st_h2o_context_t {
          * timeout handler used by the default client context
          */
         h2o_timeout_t io_timeout;
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t connect_timeout;
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t first_byte_timeout;
     } proxy;
 
     /**
@@ -1832,6 +1848,8 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
+    uint64_t connect_timeout;
+    uint64_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
