@@ -329,6 +329,22 @@ void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext)
     }
 }
 
+void h2o_mimemap_clear_types(h2o_mimemap_t *mimemap)
+{
+    khiter_t iter;
+
+    for (iter = kh_begin(mimemap->extmap); iter != kh_end(mimemap->extmap); ++iter) {
+        if (!kh_exist(mimemap->extmap, iter)) continue;
+        const char *key = kh_key(mimemap->extmap, iter);
+        h2o_mimemap_type_t *type = kh_val(mimemap->extmap, iter);
+        on_unlink(mimemap, type);
+        h2o_mem_release_shared(type);
+        kh_del(extmap, mimemap->extmap, iter);
+        h2o_mem_release_shared((char *)key);
+    }
+    rebuild_typeset(mimemap);
+}
+
 h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap)
 {
     return mimemap->default_type;

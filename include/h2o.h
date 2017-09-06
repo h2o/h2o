@@ -1605,6 +1605,10 @@ h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const cha
  */
 void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext);
 /**
+ * clears all mime-type mapping
+ */
+void h2o_mimemap_clear_types(h2o_mimemap_t *mimemap);
+/**
  * sets the default mime-type
  */
 h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
