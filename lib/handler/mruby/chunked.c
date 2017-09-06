@@ -226,7 +226,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
         h2o_mruby_chunked_t *chunked = generator->chunked;
         if (chunked->bytes_left != SIZE_MAX) {
             if (len > chunked->bytes_left)
-                len = chunked->bytes_left;
+                len = (mrb_int)chunked->bytes_left;
             chunked->bytes_left -= len;
         }
         if (len != 0) {
