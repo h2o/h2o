@@ -244,6 +244,19 @@ int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap)
     return mimemap->num_dynamic != 0;
 }
 
+void set_default_type(h2o_mimemap_t *mimemap, h2o_mimemap_type_t *type)
+{
+    /* unlink the old one */
+    on_unlink(mimemap, mimemap->default_type);
+    h2o_mem_release_shared(mimemap->default_type);
+
+    /* update */
+    h2o_mem_addref_shared(type);
+    mimemap->default_type = type;
+    on_link(mimemap, type);
+    rebuild_typeset(mimemap);
+}
+
 void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime, h2o_mime_attributes_t *attr)
 {
     h2o_mimemap_type_t *new_type;
@@ -256,14 +269,8 @@ void h2o_mimemap_set_default_type(h2o_mimemap_t *mimemap, const char *mime, h2o_
         new_type = create_extension_type(mime, attr);
     }
 
-    /* unlink the old one */
-    on_unlink(mimemap, mimemap->default_type);
-    h2o_mem_release_shared(mimemap->default_type);
-
-    /* update */
-    mimemap->default_type = new_type;
-    on_link(mimemap, new_type);
-    rebuild_typeset(mimemap);
+    set_default_type(mimemap, new_type);
+    h2o_mem_release_shared(new_type);
 }
 
 static void set_type(h2o_mimemap_t *mimemap, const char *ext, h2o_mimemap_type_t *type)
@@ -309,8 +316,13 @@ h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const cha
     h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf, mimemap);
     size_t i;
 
-    for (i = 0; exts[i] != NULL; ++i)
-        set_type(mimemap, exts[i], new_type);
+    for (i = 0; exts[i] != NULL; ++i) {
+        if (strcmp(exts[i], "default") == 0) {
+            set_default_type(mimemap, new_type);
+        } else {
+            set_type(mimemap, exts[i], new_type);
+        }
+    }
     h2o_mem_release_shared(new_type);
     return new_type;
 }
