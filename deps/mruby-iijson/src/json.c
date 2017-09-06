@@ -6,6 +6,7 @@
 #include "mruby/array.h"
 #include "mruby/hash.h"
 #include "mruby/string.h"
+#include "mruby/value.h"
 
 #define E_JSON_PARSER_ERROR (mrb_class_get_under(mrb, mrb_module_get(mrb, "JSON"), "ParserError"))
 
@@ -33,7 +34,7 @@ static int json_whitespace_p(char ch);
 
 static int json_parse_array(struct json_parser *, mrb_value *);
 static int json_parse_object(struct json_parser *, mrb_value *);
-static int json_parse_number2(struct json_parser *, int, mrb_value *, int, int);
+static int json_parse_number2(struct json_parser *, int, mrb_value *, mrb_int, int);
 static int json_parse_string(struct json_parser *, mrb_value *);
 static int json_parse_value(struct json_parser *, mrb_value *);
 
@@ -44,6 +45,15 @@ mrb_module_get(mrb_state *mrb, const char *name)
   return mrb_class_get(mrb, name);
 }
 #endif
+#if !defined(MRB_PRId)
+#if defined(MRB_INT64)
+# define MRB_PRId PRId64
+#elif defined(MRB_INT16)
+# define MRB_PRId PRId16
+#else
+# define MRB_PRId PRId32
+#endif
+#endif  /* !defined(MRB_PRId) */
 
 static void
 json_check_nesting(struct json_parser *parser)
@@ -293,8 +303,7 @@ json_parse_number(struct json_parser *parser, int ch, mrb_value *result)
           (num == MRB_INT_MIN / 10 && d < MRB_INT_MIN - num * 10) ||
           num > MRB_INT_MAX / 10 ||
           (num == MRB_INT_MAX / 10 && d > MRB_INT_MAX - num * 10)) {
-        mrb_raise(mrb, E_JSON_PARSER_ERROR, "integer overflow");
-        return -1;
+        return json_parse_number2(parser, ch, result, num, sign);
       }
       num = num * 10 + d;
     } else if (ch == '.' || ch == 'e' || ch == 'E') {
@@ -311,7 +320,7 @@ json_parse_number(struct json_parser *parser, int ch, mrb_value *result)
 }
 
 static int
-json_parse_number2(struct json_parser *parser, int ch, mrb_value *result, int num, int sign)
+json_parse_number2(struct json_parser *parser, int ch, mrb_value *result, mrb_int num, int sign)
 {
   mrb_state *mrb = parser->mrb;
   double d;
@@ -320,50 +329,67 @@ json_parse_number2(struct json_parser *parser, int ch, mrb_value *result, int nu
 
   /*
    * "-"? ("0" | [1-9] digit* ) ("." digit+ )? ([eE][-+] digit+)?
-   * state:                      000 111111     22223333 444444
+   * state:            000000    111 222222     33334444 555555
    */
-  i = snprintf(buf, sizeof(buf), "%s%d%c",
+  i = snprintf(buf, sizeof(buf), "%s%"MRB_PRId"%c",
       (num == 0 && sign < 0) ? "-" : "",
       num, ch);
-  if (ch == '.')
+
+  if (isdigit(ch))
     state = 0;
+  else if (ch == '.')
+    state = 1;
   else /* (ch == 'e' || ch == 'E') */
-    state = 2;
+    state = 3;
+
   while (1) {
     ch = json_getc(parser);
     if (ch == JSON_EOF)
       break;
     switch (state) {
       case 0:
-        if (!isdigit(ch))
-          goto formaterr;
-        state = 1;
-        break;
-      case 1:
         if (isdigit(ch))
           ; /* read more digits */
+        else if (ch == '.')
+          state = 1;
         else if (ch == 'e' || ch == 'E')
-          state = 2;
+          state = 3;
         else if (json_delimiter_p(ch)) {
           json_ungetc(parser);
           state = -1;
         } else
           goto formaterr;
         break;
+      case 1:
+        if (!isdigit(ch))
+          goto formaterr;
+        state = 2;
+        break;
       case 2:
-        if (ch == '-' || ch == '+')
+        if (isdigit(ch))
+          ; /* read more digits */
+        else if (ch == 'e' || ch == 'E')
           state = 3;
-        else if (isdigit(ch))
-          state = 4;
-        else
+        else if (json_delimiter_p(ch)) {
+          json_ungetc(parser);
+          state = -1;
+        } else
           goto formaterr;
         break;
       case 3:
-        if (!isdigit(ch))
+        if (ch == '-' || ch == '+')
+          state = 4;
+        else if (isdigit(ch))
+          state = 5;
+        else
           goto formaterr;
-        state = 4;
         break;
       case 4:
+        if (!isdigit(ch))
+          goto formaterr;
+        state = 5;
+        break;
+      case 5:
       default:
         if (isdigit(ch))
           ; /* read more digits */

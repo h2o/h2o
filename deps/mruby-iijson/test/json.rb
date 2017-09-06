@@ -114,6 +114,32 @@ assert('JSON.parse: empty string is not a valid JSON text') do
   end
 end
 
+assert('JSON.parse: parsing numbers around MRB_INT_MIN/MRB_INT_MAX') do
+  int_min = TestJSON::MRB_INT_MIN
+  int_max = TestJSON::MRB_INT_MAX
+
+  assert_kind_of Fixnum, JSON.load(int_min.to_s)
+  assert_equal int_min, JSON.load(int_min.to_s)
+
+  assert_kind_of Fixnum, JSON.load(int_max.to_s)
+  assert_equal int_max, JSON.load(int_max.to_s)
+
+  assert_kind_of Float, JSON.load((int_min-1).to_s)
+  assert_float (int_min-1)/int_min, JSON.load((int_min-1).to_s)/int_min
+
+  assert_kind_of Float, JSON.load((int_max+1).to_s)
+  assert_float (int_max+1)/int_max, JSON.load((int_max+1).to_s)/int_max
+end
+
+assert('JSON.parse: parsing a Number that is bigger than MRB_INT_MAX') do 
+  assert_equal 2147483647, JSON.load("2147483647")
+  assert_equal 2147483648, JSON.load("2147483648")
+  assert_equal 9223372036854775807, JSON.load("9223372036854775807")   #fails if #define MRB_INT64
+  assert_equal 9223372036854775808.to_s, JSON.load("9223372036854775808").to_s
+  assert_equal 9223372036854775808.123.to_s, JSON.load("9223372036854775808.123").to_s 
+end
+
+
 assert('#to_json') do
   assert_equal 'false',     false.to_json
   assert_equal 'null',      nil.to_json
@@ -123,4 +149,6 @@ assert('#to_json') do
   assert_equal '"str"',     "str".to_json
   assert_equal '["one",2]', [ "one", 2 ].to_json
   assert_equal '{"a":1}',   { "a" => 1 }.to_json
+  assert_equal TestJSON::MRB_INT_MIN.to_s, TestJSON::MRB_INT_MIN.to_json
+  assert_equal TestJSON::MRB_INT_MAX.to_s, TestJSON::MRB_INT_MAX.to_json
 end
