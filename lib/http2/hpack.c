@@ -703,7 +703,7 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     if (name_is_token) {
         const h2o_token_t *name_token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
         name_index = name_token->http2_static_table_name_index;
-        dont_compress = name_token->dont_compress;
+        dont_compress = (name_token->dont_compress == 1 && value->len < 20) ? 1 : 0;
     }
 
     if (name_index != 0) {
