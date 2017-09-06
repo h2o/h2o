@@ -143,7 +143,6 @@ static size_t lb_rr_selector(h2o_socketpool_target_vector_t *targets, void *_dat
     
     pthread_mutex_lock(&self->mutex);
 
-    assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
         if (!tried[self->next_pos]) {
             result = self->next_pos;
