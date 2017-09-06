@@ -127,19 +127,20 @@ mrb_ary_to_h(mrb_state *mrb, mrb_value ary)
   hash = mrb_hash_new_capa(mrb, 0);
 
   for (i = 0; i < RARRAY_LEN(ary); ++i) {
-    v = mrb_check_array_type(mrb, RARRAY_PTR(ary)[i]);
+    mrb_value elt = RARRAY_PTR(ary)[i];
+    v = mrb_check_array_type(mrb, elt);
 
     if (mrb_nil_p(v)) {
       mrb_raisef(mrb, E_TYPE_ERROR, "wrong element type %S at %S (expected array)",
-        mrb_str_new_cstr(mrb,  mrb_obj_classname(mrb, ary_elt(ary, i))),
-        mrb_fixnum_value(i)
+                 mrb_str_new_cstr(mrb,  mrb_obj_classname(mrb, elt)),
+                 mrb_fixnum_value(i)
       );
     }
 
     if (RARRAY_LEN(v) != 2) {
       mrb_raisef(mrb, E_ARGUMENT_ERROR, "wrong array length at %S (expected 2, was %S)",
-        mrb_fixnum_value(i),
-        mrb_fixnum_value(RARRAY_LEN(v))
+                 mrb_fixnum_value(i),
+                 mrb_fixnum_value(RARRAY_LEN(v))
       );
     }
 
@@ -174,7 +175,7 @@ static mrb_value
 mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
 {
   struct RArray *a = mrb_ary_ptr(self);
-  mrb_int i, j, k, len;
+  mrb_int i, j, k, len, alen = ARY_LEN(a);
   mrb_value index;
   mrb_value val;
   mrb_value *ptr;
@@ -185,7 +186,7 @@ mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
   if (mrb_get_args(mrb, "o|i", &index, &len) == 1) {
     switch (mrb_type(index)) {
     case MRB_TT_RANGE:
-      if (mrb_range_beg_len(mrb, index, &i, &len, a->len, TRUE) == 1) {
+      if (mrb_range_beg_len(mrb, index, &i, &len, alen, TRUE) == 1) {
         goto delete_pos_len;
       }
       else {
@@ -202,25 +203,25 @@ mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
 
   i = mrb_fixnum(index);
  delete_pos_len:
-  if (i < 0) i += a->len;
-  if (i < 0 || a->len < i) return mrb_nil_value();
+  if (i < 0) i += alen;
+  if (i < 0 || alen < i) return mrb_nil_value();
   if (len < 0) return mrb_nil_value();
-  if (a->len == i) return mrb_ary_new(mrb);
-  if (len > a->len - i) len = a->len - i;
+  if (alen == i) return mrb_ary_new(mrb);
+  if (len > alen - i) len = alen - i;
 
   ary = mrb_ary_new_capa(mrb, len);
-
+  ptr = ARY_PTR(a);
   for (j = i, k = 0; k < len; ++j, ++k) {
-    mrb_ary_push(mrb, ary, a->ptr[j]);
+    mrb_ary_push(mrb, ary, ptr[j]);
   }
 
-  ptr = a->ptr + i;
-  for (j = i; j < a->len - len; ++j) {
+  ptr += i;
+  for (j = i; j < alen - len; ++j) {
     *ptr = *(ptr+len);
     ++ptr;
   }
 
-  mrb_ary_resize(mrb, self, a->len - len);
+  mrb_ary_resize(mrb, self, alen - len);
   return ary;
 }
 

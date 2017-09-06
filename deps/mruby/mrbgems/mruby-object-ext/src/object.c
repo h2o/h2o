@@ -67,7 +67,6 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
   mrb_int argc;
   mrb_value blk;
   struct RClass *c;
-  mrb_value args;
 
   mrb_get_args(mrb, "*&", &argv, &argc, &blk);
 
@@ -85,8 +84,6 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
     c = mrb_class_ptr(mrb_singleton_class(mrb, self));
     break;
   }
-  args = mrb_ary_new_from_values(mrb, argc, argv);
-  argv = RARRAY_PTR(args);
   mrb->c->ci->target_class = c;
   return mrb_yield_cont(mrb, blk, self, argc, argv);
 }

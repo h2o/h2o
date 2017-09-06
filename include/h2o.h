@@ -899,6 +899,10 @@ typedef struct st_h2o_req_overrides_t {
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
     h2o_headers_command_t *headers_cmds;
+    /**
+     * Maximum size to buffer for the response
+     */
+    size_t max_buffer_size;
 } h2o_req_overrides_t;
 
 /**
@@ -1876,6 +1880,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         void *lb_conf;
     } lb;
     SSL_CTX *ssl_ctx; /* optional */
+    size_t max_buffer_size;
 } h2o_proxy_config_vars_t;
 
 /**

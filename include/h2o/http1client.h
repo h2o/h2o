@@ -81,6 +81,8 @@ void h2o_http1client_connect_with_pool(h2o_http1client_t **client, void *data, h
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *client);
+void h2o_http1client_body_read_stop(h2o_http1client_t *client);
+void h2o_http1client_body_read_resume(h2o_http1client_t *client);
 
 #ifdef __cplusplus
 }

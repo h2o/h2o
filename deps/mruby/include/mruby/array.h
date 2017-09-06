@@ -21,22 +21,46 @@ typedef struct mrb_shared_array {
   mrb_value *ptr;
 } mrb_shared_array;
 
+#define MRB_ARY_EMBED_LEN_MAX ((mrb_int)(sizeof(void*)*3/sizeof(mrb_value)))
 struct RArray {
   MRB_OBJECT_HEADER;
-  mrb_int len;
   union {
-    mrb_int capa;
-    mrb_shared_array *shared;
-  } aux;
-  mrb_value *ptr;
+    struct {
+      mrb_int len;
+      union {
+        mrb_int capa;
+        mrb_shared_array *shared;
+      } aux;
+      mrb_value *ptr;
+    } heap;
+    mrb_value embed[MRB_ARY_EMBED_LEN_MAX];
+  } as;
 };
 
 #define mrb_ary_ptr(v)    ((struct RArray*)(mrb_ptr(v)))
 #define mrb_ary_value(p)  mrb_obj_value((void*)(p))
 #define RARRAY(v)  ((struct RArray*)(mrb_ptr(v)))
 
-#define RARRAY_LEN(a) (RARRAY(a)->len)
-#define RARRAY_PTR(a) ((const mrb_value*)RARRAY(a)->ptr)
+#define MRB_ARY_EMBED_MASK  7
+#define ARY_EMBED_P(a) ((a)->flags & MRB_ARY_EMBED_MASK)
+#define ARY_UNSET_EMBED_FLAG(a) ((a)->flags &= ~(MRB_ARY_EMBED_MASK))
+#define ARY_EMBED_LEN(a) ((mrb_int)(((a)->flags & MRB_ARY_EMBED_MASK) - 1))
+#define ARY_SET_EMBED_LEN(a,len) ((a)->flags = ((a)->flags&~MRB_ARY_EMBED_MASK) | (len + 1))
+#define ARY_EMBED_PTR(a) (&((a)->as.embed[0]))
+
+#define ARY_LEN(a) (ARY_EMBED_P(a)?ARY_EMBED_LEN(a):(a)->as.heap.len)
+#define ARY_PTR(a) (ARY_EMBED_P(a)?ARY_EMBED_PTR(a):(a)->as.heap.ptr)
+#define RARRAY_LEN(a) ARY_LEN(RARRAY(a))
+#define RARRAY_PTR(a) ARY_PTR(RARRAY(a))
+#define ARY_SET_LEN(a,n) do {\
+  if (ARY_EMBED_P(a)) {\
+    mrb_assert((n) <= MRB_ARY_EMBED_LEN_MAX); \
+    ARY_SET_EMBED_LEN(a,n);\
+  }\
+  else\
+    (a)->as.heap.len = (n);\
+} while (0)
+#define ARY_CAPA(a) (ARY_EMBED_P(a)?MRB_ARY_EMBED_LEN_MAX:(a)->as.heap.aux.capa)
 #define MRB_ARY_SHARED      256
 #define ARY_SHARED_P(a) ((a)->flags & MRB_ARY_SHARED)
 #define ARY_SET_SHARED_FLAG(a) ((a)->flags |= MRB_ARY_SHARED)
@@ -178,7 +202,7 @@ MRB_API void mrb_ary_replace(mrb_state *mrb, mrb_value self, mrb_value other);
 MRB_API mrb_value mrb_check_array_type(mrb_state *mrb, mrb_value self);
 
 /*
- * Unshift an element into an array
+ * Unshift an element into the array
  *
  * Equivalent to:
  *
@@ -189,6 +213,17 @@ MRB_API mrb_value mrb_check_array_type(mrb_state *mrb, mrb_value self);
  * @param item The item to unshift.
  */
 MRB_API mrb_value mrb_ary_unshift(mrb_state *mrb, mrb_value self, mrb_value item);
+
+/*
+ * Get nth element in the array
+ *
+ * Equivalent to:
+ *
+ *     ary[offset]
+ *
+ * @param ary The target array.
+ * @param offset The element position (negative counts from the tail).
+ */
 MRB_API mrb_value mrb_ary_entry(mrb_value ary, mrb_int offset);
 
 /*
@@ -205,7 +240,7 @@ MRB_API mrb_value mrb_ary_entry(mrb_value ary, mrb_int offset);
 MRB_API mrb_value mrb_ary_shift(mrb_state *mrb, mrb_value self);
 
 /*
- * Removes all elements from this array
+ * Removes all elements from the array
  *
  * Equivalent to:
  *
@@ -238,23 +273,6 @@ MRB_API mrb_value mrb_ary_join(mrb_state *mrb, mrb_value ary, mrb_value sep);
  * @param new_len The new capacity of the array
  */
 MRB_API mrb_value mrb_ary_resize(mrb_state *mrb, mrb_value ary, mrb_int new_len);
-
-static inline mrb_int
-mrb_ary_len(mrb_state *mrb, mrb_value ary)
-{
-  (void)mrb;
-  mrb_assert(mrb_array_p(ary));
-  return RARRAY_LEN(ary);
-}
-
-static inline mrb_value
-ary_elt(mrb_value ary, mrb_int offset)
-{
-  if (offset < 0 || RARRAY_LEN(ary) <= offset) {
-    return mrb_nil_value();
-  }
-  return RARRAY_PTR(ary)[offset];
-}
 
 MRB_END_DECL
 

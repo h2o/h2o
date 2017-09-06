@@ -18,14 +18,9 @@
 
 #define NDIV(x,y) (-(-((x)+1)/(y))-1)
 
-#if _MSC_VER < 1800
+#if defined(_MSC_VER) && _MSC_VER < 1800
 double round(double x) {
-  if (x >= 0.0) {
-    return (double)((int)(x + 0.5));
-  }
-  else {
-    return (double)((int)(x - 0.5));
-  }
+  return floor(x + 0.5);
 }
 #endif
 

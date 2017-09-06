@@ -522,6 +522,12 @@ static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd,
     return 0;
 }
 
+static int on_config_max_buffer_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->max_buffer_size);
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)_self;
@@ -604,6 +610,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->lb.target_parser = h2o_balancer_rr_per_target_conf_parser;
     c->vars->lb.overall_parser = NULL;
     c->vars->lb.lb_conf = NULL;
+    c->vars->max_buffer_size = SIZE_MAX;
 
     /* setup handlers */
     c->super.enter = on_config_enter;
@@ -659,4 +666,6 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.emit-via-header",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_emit_via_header);
     h2o_configurator_define_headers_commands(conf, &c->super, "proxy.header", get_headers_commands);
+    h2o_configurator_define_command(&c->super, "proxy.max-buffer-size",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_max_buffer_size);
 }
