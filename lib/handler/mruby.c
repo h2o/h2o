@@ -677,7 +677,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* flatten body if possible */
     if (mrb_array_p(body)) {
-        mrb_int i, len = mrb_ary_len(mrb, body);
+        mrb_int i, len = RARRAY_LEN(body);
         /* calculate the length of the output, while at the same time converting the elements of the output array to string */
         content.len = 0;
         for (i = 0; i != len; ++i) {
@@ -777,7 +777,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto Exit;
         } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
             mrb_int i;
-            mrb_int len = mrb_ary_len(mrb, ctx->pendings);
+            mrb_int len = RARRAY_LEN(ctx->pendings);
             for (i = 0; i != len; ++i) {
                 mrb_value pending = mrb_ary_entry(ctx->pendings, i);
                 mrb_value resumer = mrb_ary_entry(pending, 0);
@@ -932,7 +932,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
 
     if (mrb_hash_p(headers)) {
         mrb_value keys = mrb_hash_keys(mrb, headers);
-        mrb_int i, len = mrb_ary_len(mrb, keys);
+        mrb_int i, len = RARRAY_LEN(keys);
         for (i = 0; i != len; ++i) {
             mrb_value k = mrb_ary_entry(keys, i);
             mrb_value v = mrb_hash_get(mrb, headers, k);
@@ -941,7 +941,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
         }
     } else {
         assert(mrb_array_p(headers));
-        mrb_int i, len = mrb_ary_len(mrb, headers);
+        mrb_int i, len = RARRAY_LEN(headers);
         for (i = 0; i != len; ++i) {
             mrb_value pair = mrb_ary_entry(headers, i);
             if (!mrb_array_p(pair)) {
