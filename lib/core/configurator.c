@@ -554,6 +554,10 @@ static int assert_is_extension(h2o_configurator_command_t *cmd, yoml_t *node)
         h2o_configurator_errprintf(cmd, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
         return -1;
     }
+    if (strlen(node->data.scalar) == 1) {
+        h2o_configurator_errprintf(cmd, node, "given extension \".\" is invalid: at least 2 characters are required");
+        return -1;
+    }
     return 0;
 }
 
@@ -691,7 +695,8 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
 static const char *get_ext(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (strcmp(node->data.scalar, "default") == 0) {
-        return node->data.scalar;
+        /* empty string means default */
+        return "";
     } else if  (assert_is_extension(cmd, node) == 0) {
         return node->data.scalar + 1;
     } else {
