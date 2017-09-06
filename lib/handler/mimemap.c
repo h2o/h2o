@@ -317,7 +317,8 @@ h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const cha
     size_t i;
 
     for (i = 0; exts[i] != NULL; ++i) {
-        if (strlen(exts[i]) == 0) {
+        if (exts[i][0] == '\0') {
+            /* empty string means default */
             set_default_type(mimemap, new_type);
         } else {
             set_type(mimemap, exts[i], new_type);

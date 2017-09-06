@@ -554,7 +554,7 @@ static int assert_is_extension(h2o_configurator_command_t *cmd, yoml_t *node)
         h2o_configurator_errprintf(cmd, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
         return -1;
     }
-    if (strlen(node->data.scalar) == 1) {
+    if (node->data.scalar[1] == '\0') {
         h2o_configurator_errprintf(cmd, node, "given extension \".\" is invalid: at least 2 characters are required");
         return -1;
     }
