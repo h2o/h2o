@@ -84,7 +84,7 @@ class Hash
   #
   # ISO 15.2.13.4.9
   def each(&block)
-    return to_enum :each unless block_given?
+    return to_enum :each unless block
 
     keys = self.keys
     vals = self.values
@@ -117,7 +117,7 @@ class Hash
   #
   # ISO 15.2.13.4.10
   def each_key(&block)
-    return to_enum :each_key unless block_given?
+    return to_enum :each_key unless block
 
     self.keys.each{|k| block.call(k)}
     self
@@ -143,7 +143,7 @@ class Hash
   #
   # ISO 15.2.13.4.11
   def each_value(&block)
-    return to_enum :each_value unless block_given?
+    return to_enum :each_value unless block
 
     self.keys.each{|k| block.call(self[k])}
     self
@@ -224,12 +224,12 @@ class Hash
   #
   #  1.8/1.9 Hash#reject! returns Hash; ISO says nothing.
   #
-  def reject!(&b)
-    return to_enum :reject! unless block_given?
+  def reject!(&block)
+    return to_enum :reject! unless block
 
     keys = []
     self.each{|k,v|
-      if b.call([k, v])
+      if block.call([k, v])
         keys.push(k)
       end
     }
@@ -255,12 +255,12 @@ class Hash
   #
   #  1.8/1.9 Hash#reject returns Hash; ISO says nothing.
   #
-  def reject(&b)
-    return to_enum :reject unless block_given?
+  def reject(&block)
+    return to_enum :reject unless block
 
     h = {}
     self.each{|k,v|
-      unless b.call([k, v])
+      unless block.call([k, v])
         h[k] = v
       end
     }
@@ -277,12 +277,12 @@ class Hash
   #
   #  1.9 Hash#select! returns Hash; ISO says nothing.
   #
-  def select!(&b)
-    return to_enum :select! unless block_given?
+  def select!(&block)
+    return to_enum :select! unless block
 
     keys = []
     self.each{|k,v|
-      unless b.call([k, v])
+      unless block.call([k, v])
         keys.push(k)
       end
     }
@@ -308,12 +308,12 @@ class Hash
   #
   #  1.9 Hash#select returns Hash; ISO says nothing
   #
-  def select(&b)
-    return to_enum :select unless block_given?
+  def select(&block)
+    return to_enum :select unless block
 
     h = {}
     self.each{|k,v|
-      if b.call([k, v])
+      if block.call([k, v])
         h[k] = v
       end
     }

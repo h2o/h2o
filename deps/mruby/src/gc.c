@@ -466,10 +466,13 @@ mrb_gc_unregister(mrb_state *mrb, mrb_value obj)
   }
   a = mrb_ary_ptr(table);
   mrb_ary_modify(mrb, a);
-  for (i = 0; i < a->len; i++) {
-    if (mrb_obj_eq(mrb, a->ptr[i], obj)) {
-      a->len--;
-      memmove(&a->ptr[i], &a->ptr[i + 1], (a->len - i) * sizeof(a->ptr[i]));
+  for (i = 0; i < ARY_LEN(a); i++) {
+    if (mrb_obj_eq(mrb, ARY_PTR(a)[i], obj)) {
+      mrb_int len = ARY_LEN(a)-1;
+      mrb_value *ptr = ARY_PTR(a);
+
+      ARY_SET_LEN(a, len);
+      memmove(&ptr[i], &ptr[i + 1], (len - i) * sizeof(mrb_value));
       break;
     }
   }
@@ -644,6 +647,9 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
 
       mrb_gc_mark(mrb, (struct RBasic*)p->env);
       mrb_gc_mark(mrb, (struct RBasic*)p->target_class);
+      if (!MRB_PROC_CFUNC_P(p) && p->body.irep) {
+        mrb_gc_mark(mrb, (struct RBasic*)p->body.irep->target_class);
+      }
     }
     break;
 
@@ -678,8 +684,8 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
       struct RArray *a = (struct RArray*)obj;
       size_t i, e;
 
-      for (i=0,e=a->len; i<e; i++) {
-        mrb_gc_mark_value(mrb, a->ptr[i]);
+      for (i=0,e=ARY_LEN(a); i<e; i++) {
+        mrb_gc_mark_value(mrb, ARY_PTR(a)[i]);
       }
     }
     break;
@@ -790,9 +796,9 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
 
   case MRB_TT_ARRAY:
     if (ARY_SHARED_P(obj))
-      mrb_ary_decref(mrb, ((struct RArray*)obj)->aux.shared);
-    else
-      mrb_free(mrb, ((struct RArray*)obj)->ptr);
+      mrb_ary_decref(mrb, ((struct RArray*)obj)->as.heap.aux.shared);
+    else if (!ARY_EMBED_P(obj))
+      mrb_free(mrb, ((struct RArray*)obj)->as.heap.ptr);
     break;
 
   case MRB_TT_HASH:
@@ -859,6 +865,7 @@ root_scan_phase(mrb_state *mrb, mrb_gc *gc)
   mrb_gc_mark(mrb, (struct RBasic*)mrb->string_class);
   mrb_gc_mark(mrb, (struct RBasic*)mrb->array_class);
   mrb_gc_mark(mrb, (struct RBasic*)mrb->hash_class);
+  mrb_gc_mark(mrb, (struct RBasic*)mrb->range_class);
 
   mrb_gc_mark(mrb, (struct RBasic*)mrb->float_class);
   mrb_gc_mark(mrb, (struct RBasic*)mrb->fixnum_class);
@@ -950,7 +957,7 @@ gc_gray_mark(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
   case MRB_TT_ARRAY:
     {
       struct RArray *a = (struct RArray*)obj;
-      children += a->len;
+      children += ARY_LEN(a);
     }
     break;
 
@@ -1243,34 +1250,6 @@ mrb_garbage_collect(mrb_state *mrb)
   mrb_full_gc(mrb);
 }
 
-MRB_API int
-mrb_gc_arena_save(mrb_state *mrb)
-{
-  return mrb->gc.arena_idx;
-}
-
-MRB_API void
-mrb_gc_arena_restore(mrb_state *mrb, int idx)
-{
-  mrb_gc *gc = &mrb->gc;
-
-#ifndef MRB_GC_FIXED_ARENA
-  int capa = gc->arena_capa;
-
-  if (idx < capa / 2) {
-    capa = (int)(capa * 0.66);
-    if (capa < MRB_GC_ARENA_SIZE) {
-      capa = MRB_GC_ARENA_SIZE;
-    }
-    if (capa != gc->arena_capa) {
-      gc->arena = (struct RBasic**)mrb_realloc(mrb, gc->arena, sizeof(struct RBasic*)*capa);
-      gc->arena_capa = capa;
-    }
-  }
-#endif
-  gc->arena_idx = idx;
-}
-
 /*
  * Field write barrier
  *   Paint obj(Black) -> value(White) to obj(Black) -> value(Gray).
@@ -1505,6 +1484,7 @@ gc_each_objects(mrb_state *mrb, mrb_gc *gc, mrb_each_object_callback *callback, 
 {
   mrb_heap_page* page;
 
+  mrb_full_gc(mrb);
   page = gc->heaps;
   while (page != NULL) {
     RVALUE *p;

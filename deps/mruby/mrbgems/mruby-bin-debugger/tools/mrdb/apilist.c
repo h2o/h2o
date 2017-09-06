@@ -174,9 +174,13 @@ mrb_debug_get_source(mrb_state *mrb, mrdb_state *mrdb, const char *srcpath, cons
   FILE *fp;
   const char *search_path[3];
   char *path = NULL;
+  const char *srcname = strrchr(filename, '/');
+
+  if (srcname) srcname++;
+  else srcname = filename;
 
   search_path[0] = srcpath;
-  search_path[1] = dirname(mrb, mrb_debug_get_filename(mrdb->dbg->root_irep, 0));
+  search_path[1] = dirname(mrb, mrb_debug_get_filename(mrdb->dbg->irep, 0));
   search_path[2] = ".";
 
   for (i = 0; i < 3; i++) {
@@ -184,7 +188,7 @@ mrb_debug_get_source(mrb_state *mrb, mrdb_state *mrdb, const char *srcpath, cons
       continue;
     }
 
-    if ((path = build_path(mrb, search_path[i], filename)) == NULL) {
+    if ((path = build_path(mrb, search_path[i], srcname)) == NULL) {
       continue;
     }
 

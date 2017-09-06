@@ -438,7 +438,7 @@ mrb_check_type(mrb_state *mrb, mrb_value x, enum mrb_vtype t)
 MRB_API mrb_value
 mrb_any_to_s(mrb_state *mrb, mrb_value obj)
 {
-  mrb_value str = mrb_str_buf_new(mrb, 20);
+  mrb_value str = mrb_str_new_capa(mrb, 20);
   const char *cname = mrb_obj_classname(mrb, obj);
 
   mrb_str_cat_lit(mrb, str, "#<");

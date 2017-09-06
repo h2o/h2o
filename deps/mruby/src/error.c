@@ -47,7 +47,7 @@ exc_initialize(mrb_state *mrb, mrb_value exc)
   mrb_int argc;
   mrb_value *argv;
 
-  if (mrb_get_args(mrb, "|o*", &mesg, &argv, &argc) >= 1) {
+  if (mrb_get_args(mrb, "|o*!", &mesg, &argv, &argc) >= 1) {
     mrb_iv_set(mrb, exc, mrb_intern_lit(mrb, "mesg"), mesg);
   }
   return exc;
@@ -151,14 +151,14 @@ exc_inspect(mrb_state *mrb, mrb_value exc)
   str = mrb_str_new_cstr(mrb, cname);
   if (mrb_string_p(file) && mrb_fixnum_p(line)) {
     if (append_mesg) {
-      str = mrb_format(mrb, "%S:%S:%S (%S)", file, line, mesg, str);
+      str = mrb_format(mrb, "%S:%S: %S (%S)", file, line, mesg, str);
     }
     else {
-      str = mrb_format(mrb, "%S:%S:%S", file, line, str);
+      str = mrb_format(mrb, "%S:%S: %S", file, line, str);
     }
   }
   else if (append_mesg) {
-    str = mrb_format(mrb, "%S:%S", str, mesg);
+    str = mrb_format(mrb, "%S: %S", str, mesg);
   }
   return str;
 }
@@ -207,8 +207,8 @@ exc_debug_info(mrb_state *mrb, struct RObject *exc)
     if (err && ci->proc && !MRB_PROC_CFUNC_P(ci->proc)) {
       mrb_irep *irep = ci->proc->body.irep;
 
-      int32_t const line = mrb_debug_get_line(irep, (uint32_t)(err - irep->iseq));
-      char const* file = mrb_debug_get_filename(irep, (uint32_t)(err - irep->iseq));
+      int32_t const line = mrb_debug_get_line(irep, err - irep->iseq);
+      char const* file = mrb_debug_get_filename(irep, err - irep->iseq);
       if (line != -1 && file) {
         mrb_obj_iv_set(mrb, exc, mrb_intern_lit(mrb, "file"), mrb_str_new_cstr(mrb, file));
         mrb_obj_iv_set(mrb, exc, mrb_intern_lit(mrb, "line"), mrb_fixnum_value(line));
@@ -269,9 +269,12 @@ mrb_vformat(mrb_state *mrb, const char *format, va_list ap)
 
     if (c == '%') {
       if (*p == 'S') {
+        mrb_value val;
+
         size = p - b - 1;
         mrb_ary_push(mrb, ary, mrb_str_new(mrb, b, size));
-        mrb_ary_push(mrb, ary, va_arg(ap, mrb_value));
+        val = va_arg(ap, mrb_value);
+        mrb_ary_push(mrb, ary, mrb_obj_as_string(mrb, val));
         b = p + 1;
       }
     }
