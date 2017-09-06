@@ -104,11 +104,12 @@ size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_soc
                                 int *tried, void *dummy)
 {
     size_t i;
-    size_t result;
+    size_t result = 0;
     struct round_robin_t *self = _data;
 
     pthread_mutex_lock(&self->mutex);
 
+    assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
         if (!tried[self->next_actual_target]) {
             /* get the result */

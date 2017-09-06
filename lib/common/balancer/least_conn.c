@@ -42,6 +42,7 @@ size_t h2o_balancer_lc_selector(h2o_socketpool_target_vector_t *targets, h2o_soc
 
     pthread_mutex_lock(&self->mutex);
 
+    assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
         if (!tried[i] && status->entries[i].request_count < least_conn) {
             least_conn = status->entries[i].request_count;
