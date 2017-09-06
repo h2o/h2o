@@ -651,7 +651,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* flatten body if possible */
     if (mrb_array_p(body)) {
-        mrb_int i, len = mrb_ary_len(mrb, body);
+        mrb_int i, len = RARRAY_LEN(body);
         /* calculate the length of the output, while at the same time converting the elements of the output array to string */
         content.len = 0;
         for (i = 0; i != len; ++i) {
@@ -879,7 +879,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value header
 
     if (mrb_hash_p(headers)) {
         mrb_value keys = mrb_hash_keys(mrb, headers);
-        mrb_int i, len = mrb_ary_len(mrb, keys);
+        mrb_int i, len = RARRAY_LEN(keys);
         for (i = 0; i != len; ++i) {
             mrb_value k = mrb_ary_entry(keys, i);
             mrb_value v = mrb_hash_get(mrb, headers, k);
@@ -888,7 +888,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_context_t *handler_ctx, mrb_value header
         }
     } else {
         assert(mrb_array_p(headers));
-        mrb_int i, len = mrb_ary_len(mrb, headers);
+        mrb_int i, len = RARRAY_LEN(headers);
         for (i = 0; i != len; ++i) {
             mrb_value pair = mrb_ary_entry(headers, i);
             if (!mrb_array_p(pair)) {

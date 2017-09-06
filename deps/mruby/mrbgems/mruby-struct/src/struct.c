@@ -13,8 +13,8 @@
 #include <mruby/hash.h>
 #include <mruby/range.h>
 
-#define RSTRUCT_LEN(st) mrb_ary_ptr(st)->len
-#define RSTRUCT_PTR(st) mrb_ary_ptr(st)->ptr
+#define RSTRUCT_LEN(st) RARRAY_LEN(st)
+#define RSTRUCT_PTR(st) RARRAY_PTR(st)
 
 static struct RClass *
 struct_class(mrb_state *mrb)
@@ -276,7 +276,6 @@ mrb_struct_s_def(mrb_state *mrb, mrb_value klass)
   mrb_int argc;
 
   name = mrb_nil_value();
-  rest = mrb_nil_value();
   mrb_get_args(mrb, "*&", &argv, &argc, &b);
   if (argc == 0) { /* special case to avoid crash */
     rest = mrb_ary_new(mrb);
@@ -346,7 +345,7 @@ mrb_struct_initialize(mrb_state *mrb, mrb_value self)
   mrb_value *argv;
   mrb_int argc;
 
-  mrb_get_args(mrb, "*", &argv, &argc);
+  mrb_get_args(mrb, "*!", &argv, &argc);
   return mrb_struct_initialize_withArg(mrb, argc, argv, self);
 }
 
