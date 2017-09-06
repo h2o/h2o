@@ -137,7 +137,7 @@ mrb_irep_decref(mrb_state *mrb, mrb_irep *irep)
 void
 mrb_irep_free(mrb_state *mrb, mrb_irep *irep)
 {
-  size_t i;
+  int i;
 
   if (!(irep->flags & MRB_ISEQ_NO_FREE))
     mrb_free(mrb, irep->iseq);
@@ -157,6 +157,8 @@ mrb_irep_free(mrb_state *mrb, mrb_irep *irep)
   for (i=0; i<irep->rlen; i++) {
     mrb_irep_decref(mrb, irep->reps[i]);
   }
+  if (irep->outer)
+    mrb_irep_decref(mrb, irep->outer);
   mrb_free(mrb, irep->reps);
   mrb_free(mrb, irep->lv);
   if (irep->own_filename) {
@@ -246,7 +248,6 @@ mrb_close(mrb_state *mrb)
 
   /* free */
   mrb_gc_free_gv(mrb);
-  mrb_free_backtrace(mrb);
   mrb_free_context(mrb, mrb->root_c);
   mrb_free_symtbl(mrb);
   mrb_alloca_free(mrb);

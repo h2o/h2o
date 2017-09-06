@@ -7,7 +7,6 @@ MRuby::Gem::Specification.new('mruby-bin-mruby') do |spec|
   spec.add_dependency('mruby-error', :core => 'mruby-error')
 
   if build.cxx_exception_enabled?
-    @objs << build.compile_as_cxx("#{spec.dir}/tools/mruby/mruby.c", "#{spec.build_dir}/tools/mruby/mruby.cxx")
-    @objs.delete_if { |v| v == objfile("#{spec.build_dir}/tools/mruby/mruby") }
+    build.compile_as_cxx("#{spec.dir}/tools/mruby/mruby.c", "#{spec.build_dir}/tools/mruby/mruby.cxx")
   end
 end

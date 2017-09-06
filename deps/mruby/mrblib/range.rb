@@ -10,7 +10,7 @@ class Range
   #
   # ISO 15.2.14.4.4
   def each(&block)
-    return to_enum :each unless block_given?
+    return to_enum :each unless block
 
     val = self.first
     last = self.last

@@ -52,8 +52,7 @@ void mrb_random_init_genrand(mt_state *t, unsigned long s)
 {
     t->mt[0]= s & 0xffffffffUL;
     for (t->mti=1; t->mti<N; t->mti++) {
-        t->mt[t->mti] =
-	    (1812433253UL * (t->mt[t->mti-1] ^ (t->mt[t->mti-1] >> 30)) + t->mti);
+        t->mt[t->mti] = (1812433253UL * (t->mt[t->mti-1] ^ (t->mt[t->mti-1] >> 30)) + t->mti);
         t->mt[t->mti] &= 0xffffffffUL;
     }
 }
@@ -111,8 +110,7 @@ void init_genrand(unsigned long s)
 {
     mt[0]= s & 0xffffffffUL;
     for (mti=1; mti<N; mti++) {
-        mt[mti] =
-	    (1812433253UL * (mt[mti-1] ^ (mt[mti-1] >> 30)) + mti);
+        mt[mti] = (1812433253UL * (mt[mti-1] ^ (mt[mti-1] >> 30)) + mti);
         /* See Knuth TAOCP Vol2. 3rd Ed. P.106 for multiplier. */
         /* In the previous versions, MSBs of the seed affect   */
         /* only MSBs of the array mt[].                        */

@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include "async.h"
+#include "hiredis.h"
 #include "h2o/redis.h"
 #include "h2o/socket.h"
 

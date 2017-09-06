@@ -84,6 +84,13 @@ MRB_API mrb_int mrb_str_strlen(mrb_state*, struct RString*);
 
 void mrb_gc_free_str(mrb_state*, struct RString*);
 MRB_API void mrb_str_modify(mrb_state*, struct RString*);
+
+/*
+ * Finds the index of a substring in a string
+ */
+MRB_API mrb_int mrb_str_index(mrb_state*, mrb_value, const char*, mrb_int, mrb_int);
+#define mrb_str_index_lit(mrb, str, lit, off) mrb_str_index(mrb, str, lit, mrb_strlen_lit(lit), off);
+
 /*
  * Appends self to other. Returns self as a concatnated string.
  *
@@ -297,6 +304,7 @@ MRB_API mrb_value mrb_str_substr(mrb_state *mrb, mrb_value str, mrb_int beg, mrb
 MRB_API mrb_value mrb_string_type(mrb_state *mrb, mrb_value str);
 
 MRB_API mrb_value mrb_check_string_type(mrb_state *mrb, mrb_value str);
+MRB_API mrb_value mrb_str_new_capa(mrb_state *mrb, size_t capa);
 MRB_API mrb_value mrb_str_buf_new(mrb_state *mrb, size_t capa);
 
 MRB_API const char *mrb_string_value_cstr(mrb_state *mrb, mrb_value *ptr);

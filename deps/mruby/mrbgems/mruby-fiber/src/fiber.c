@@ -74,6 +74,9 @@ fiber_init(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "&", &blk);
 
+  if (f->cxt) {
+    mrb_raise(mrb, E_RUNTIME_ERROR, "cannot initialize twice");
+  }
   if (mrb_nil_p(blk)) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "tried to create Fiber object without a block");
   }
@@ -82,9 +85,9 @@ fiber_init(mrb_state *mrb, mrb_value self)
     mrb_raise(mrb, E_FIBER_ERROR, "tried to create Fiber from C defined method");
   }
 
-  f->cxt = (struct mrb_context*)mrb_malloc(mrb, sizeof(struct mrb_context));
-  *f->cxt = mrb_context_zero;
-  c = f->cxt;
+  c = (struct mrb_context*)mrb_malloc(mrb, sizeof(struct mrb_context));
+  *c = mrb_context_zero;
+  f->cxt = c;
 
   /* initialize VM stack */
   slen = FIBER_STACK_INIT_SIZE;
@@ -122,6 +125,7 @@ fiber_init(mrb_state *mrb, mrb_value self)
   ci = c->ci;
   ci->target_class = p->target_class;
   ci->proc = p;
+  mrb_field_write_barrier(mrb, (struct RBasic*)mrb_obj_ptr(self), (struct RBasic*)p);
   ci->pc = p->body.irep->iseq;
   ci->nregs = p->body.irep->nregs;
   ci[1] = ci[0];
@@ -168,6 +172,16 @@ fiber_check_cfunc(mrb_state *mrb, struct mrb_context *c)
   }
 }
 
+static void
+fiber_switch_context(mrb_state *mrb, struct mrb_context *c)
+{
+  if (mrb->c->fib) {
+    mrb_write_barrier(mrb, (struct RBasic*)mrb->c->fib);
+  }
+  c->status = MRB_FIBER_RUNNING;
+  mrb->c = c;
+}
+
 static mrb_value
 fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mrb_bool resume, mrb_bool vmexec)
 {
@@ -188,9 +202,13 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
   mrb->c->status = resume ? MRB_FIBER_RESUMED : MRB_FIBER_TRANSFERRED;
   c->prev = resume ? mrb->c : (c->prev ? c->prev : mrb->root_c);
   if (c->status == MRB_FIBER_CREATED) {
-    mrb_value *b = c->stack+1;
-    mrb_value *e = b + len;
+    mrb_value *b, *e;
 
+    if (len >= c->stend - c->stack) {
+      mrb_raise(mrb, E_FIBER_ERROR, "too many arguments to fiber");
+    }
+    b = c->stack+1;
+    e = b + len;
     while (b<e) {
       *b++ = *a++;
     }
@@ -200,9 +218,7 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
   else {
     value = fiber_result(mrb, a, len);
   }
-  mrb_write_barrier(mrb, (struct RBasic*)c->fib);
-  c->status = MRB_FIBER_RUNNING;
-  mrb->c = c;
+  fiber_switch_context(mrb, c);
 
   if (vmexec) {
     c->vmexec = TRUE;
@@ -237,7 +253,7 @@ fiber_resume(mrb_state *mrb, mrb_value self)
   mrb_int len;
   mrb_bool vmexec = FALSE;
 
-  mrb_get_args(mrb, "*", &a, &len);
+  mrb_get_args(mrb, "*!", &a, &len);
   if (mrb->c->ci->acc < 0) {
     vmexec = TRUE;
   }
@@ -297,14 +313,12 @@ fiber_transfer(mrb_state *mrb, mrb_value self)
   mrb_int len;
 
   fiber_check_cfunc(mrb, mrb->c);
-  mrb_get_args(mrb, "*", &a, &len);
+  mrb_get_args(mrb, "*!", &a, &len);
 
   if (c == mrb->root_c) {
     mrb->c->status = MRB_FIBER_TRANSFERRED;
-    mrb->c = c;
-    c->status = MRB_FIBER_RUNNING;
+    fiber_switch_context(mrb, c);
     MARK_CONTEXT_MODIFY(c);
-    mrb_write_barrier(mrb, (struct RBasic*)c->fib);
     return fiber_result(mrb, a, len);
   }
 
@@ -326,15 +340,15 @@ mrb_fiber_yield(mrb_state *mrb, mrb_int len, const mrb_value *a)
     mrb_raise(mrb, E_FIBER_ERROR, "can't yield from root fiber");
   }
 
+  fiber_check_cfunc(mrb, c);
   c->prev->status = MRB_FIBER_RUNNING;
   c->status = MRB_FIBER_SUSPENDED;
-  mrb->c = c->prev;
+  fiber_switch_context(mrb, c->prev);
   c->prev = NULL;
   if (c->vmexec) {
     c->vmexec = FALSE;
     mrb->c->ci->acc = CI_ACC_RESUMED;
   }
-  mrb_write_barrier(mrb, (struct RBasic*)c->fib);
   MARK_CONTEXT_MODIFY(mrb->c);
   return fiber_result(mrb, a, len);
 }
@@ -357,7 +371,7 @@ fiber_yield(mrb_state *mrb, mrb_value self)
   mrb_value *a;
   mrb_int len;
 
-  mrb_get_args(mrb, "*", &a, &len);
+  mrb_get_args(mrb, "*!", &a, &len);
   return mrb_fiber_yield(mrb, len, a);
 }
 

@@ -45,7 +45,6 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
     stream->received_priority = *received_priority;
-    stream->_expected_content_length = SIZE_MAX;
 
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
@@ -65,8 +64,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    if (stream->_req_body != NULL)
-        h2o_buffer_dispose(&stream->_req_body);
+    if (stream->_req_body.body != NULL)
+        h2o_buffer_dispose(&stream->_req_body.body);
     if (stream->cache_digests != NULL)
         h2o_cache_digests_destroy(stream->cache_digests);
     h2o_dispose_request(&stream->req);
@@ -314,6 +313,9 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
     assert(stream->req._ostr_top == &stream->_ostr_final);
     assert(stream->state == H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
 
+    assert(stream->response_blocked_by_server);
+    h2o_http2_stream_set_response_blocked_by_server(conn, stream, 0);
+
     /* register the pull callback */
     stream->_pull_cb = cb;
 
@@ -337,10 +339,19 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
     assert(stream->_data.size == 0);
 
+    if (stream->response_blocked_by_server)
+        h2o_http2_stream_set_response_blocked_by_server(conn, stream, 0);
+
     stream->send_state = state;
 
     /* send headers */
     switch (stream->state) {
+    case H2O_HTTP2_STREAM_STATE_RECV_BODY:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+    /* fallthru */
+    case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+    /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         if (send_headers(conn, stream) != 0)
             return;
@@ -404,6 +415,8 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
         h2o_http2_stream_close(conn, stream);
     } else {
+        if (!conn->num_streams.response_blocked_by_server)
+            h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
         h2o_proceed_response(&stream->req);
     }
 }

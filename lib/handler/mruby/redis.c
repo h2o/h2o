@@ -28,6 +28,8 @@
 #include <mruby/variable.h>
 #include "h2o/mruby_.h"
 #include "h2o/redis.h"
+#include "hiredis.h"
+
 
 struct st_h2o_mruby_redis_conn_t {
     h2o_redis_conn_t super;
@@ -217,7 +219,7 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
     mrb_value command_klass;
     mrb_value command_block = mrb_nil_value();
     mrb_get_args(mrb, "AC&", &command_args, &command_klass, &command_block);
-    mrb_int command_len = mrb_ary_len(mrb, command_args);
+    mrb_int command_len = RARRAY_LEN(command_args);
 
     /* allocate context and initialize */
     struct st_h2o_mruby_redis_command_context_t *command_ctx = h2o_mem_alloc(sizeof(*command_ctx));

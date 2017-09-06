@@ -438,7 +438,7 @@ mrb_check_type(mrb_state *mrb, mrb_value x, enum mrb_vtype t)
 MRB_API mrb_value
 mrb_any_to_s(mrb_state *mrb, mrb_value obj)
 {
-  mrb_value str = mrb_str_buf_new(mrb, 20);
+  mrb_value str = mrb_str_new_capa(mrb, 20);
   const char *cname = mrb_obj_classname(mrb, obj);
 
   mrb_str_cat_lit(mrb, str, "#<");
@@ -534,8 +534,11 @@ mrb_convert_to_integer(mrb_state *mrb, mrb_value val, int base)
   switch (mrb_type(val)) {
     case MRB_TT_FLOAT:
       if (base != 0) goto arg_error;
-      if (FIXABLE(mrb_float(val))) {
-        break;
+      else {
+        mrb_float f = mrb_float(val);
+        if (FIXABLE_FLOAT(f)) {
+          break;
+        }
       }
       return mrb_flo_to_fixnum(mrb, val);
 
@@ -553,6 +556,7 @@ mrb_convert_to_integer(mrb_state *mrb, mrb_value val, int base)
   if (base != 0) {
     tmp = mrb_check_string_type(mrb, val);
     if (!mrb_nil_p(tmp)) {
+      val = tmp;
       goto string_conv;
     }
 arg_error:

@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include "hiredis.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"

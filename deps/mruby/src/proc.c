@@ -13,7 +13,7 @@ static mrb_code call_iseq[] = {
   MKOP_A(OP_CALL, 0),
 };
 
-struct RProc *
+struct RProc*
 mrb_proc_new(mrb_state *mrb, mrb_irep *irep)
 {
   struct RProc *p;
@@ -41,7 +41,7 @@ env_new(mrb_state *mrb, int nlocals)
 
   e = (struct REnv*)mrb_obj_alloc(mrb, MRB_TT_ENV, (struct RClass*)mrb->c->ci->proc->env);
   MRB_SET_ENV_STACK_LEN(e, nlocals);
-  e->mid = mrb->c->ci->mid;
+  e->cxt.c = mrb->c;
   e->cioff = mrb->c->ci - mrb->c->cibase;
   e->stack = mrb->c->stack;
 
@@ -64,7 +64,7 @@ closure_setup(mrb_state *mrb, struct RProc *p, int nlocals)
   mrb_field_write_barrier(mrb, (struct RBasic *)p, (struct RBasic *)p->env);
 }
 
-struct RProc *
+struct RProc*
 mrb_closure_new(mrb_state *mrb, mrb_irep *irep)
 {
   struct RProc *p = mrb_proc_new(mrb, irep);
@@ -73,7 +73,7 @@ mrb_closure_new(mrb_state *mrb, mrb_irep *irep)
   return p;
 }
 
-MRB_API struct RProc *
+MRB_API struct RProc*
 mrb_proc_new_cfunc(mrb_state *mrb, mrb_func_t func)
 {
   struct RProc *p;
@@ -86,7 +86,7 @@ mrb_proc_new_cfunc(mrb_state *mrb, mrb_func_t func)
   return p;
 }
 
-MRB_API struct RProc *
+MRB_API struct RProc*
 mrb_proc_new_cfunc_with_env(mrb_state *mrb, mrb_func_t func, mrb_int argc, const mrb_value *argv)
 {
   struct RProc *p = mrb_proc_new_cfunc(mrb, func);
@@ -110,7 +110,7 @@ mrb_proc_new_cfunc_with_env(mrb_state *mrb, mrb_func_t func, mrb_int argc, const
   return p;
 }
 
-MRB_API struct RProc *
+MRB_API struct RProc*
 mrb_closure_new_cfunc(mrb_state *mrb, mrb_func_t func, int nlocals)
 {
   return mrb_proc_new_cfunc_with_env(mrb, func, nlocals, NULL);
@@ -139,6 +139,10 @@ mrb_proc_cfunc_env_get(mrb_state *mrb, mrb_int idx)
 void
 mrb_proc_copy(struct RProc *a, struct RProc *b)
 {
+  if (a->body.irep) {
+    /* already initialized proc */
+    return;
+  }
   a->flags = b->flags;
   a->body = b->body;
   if (!MRB_PROC_CFUNC_P(a) && a->body.irep) {
@@ -163,7 +167,11 @@ mrb_proc_s_new(mrb_state *mrb, mrb_value proc_class)
   p = (struct RProc *)mrb_obj_alloc(mrb, MRB_TT_PROC, mrb_class_ptr(proc_class));
   mrb_proc_copy(p, mrb_proc_ptr(blk));
   proc = mrb_obj_value(p);
-  mrb_funcall_with_block(mrb, proc, mrb_intern_lit(mrb, "initialize"), 0, NULL, blk);
+  mrb_funcall_with_block(mrb, proc, mrb_intern_lit(mrb, "initialize"), 0, NULL, proc);
+  if (!MRB_PROC_STRICT_P(p) &&
+      mrb->c->ci > mrb->c->cibase && p->env == mrb->c->ci[-1].env) {
+    p->flags |= MRB_PROC_ORPHAN;
+  }
   return proc;
 }
 
@@ -271,6 +279,7 @@ mrb_init_proc(mrb_state *mrb)
   call_irep->flags = MRB_ISEQ_NO_FREE;
   call_irep->iseq = call_iseq;
   call_irep->ilen = 1;
+  call_irep->nregs = 2;         /* receiver and block */
 
   mrb_define_class_method(mrb, mrb->proc_class, "new", mrb_proc_s_new, MRB_ARGS_ANY());
   mrb_define_method(mrb, mrb->proc_class, "initialize_copy", mrb_proc_init_copy, MRB_ARGS_REQ(1));

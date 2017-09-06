@@ -93,6 +93,17 @@ builder {
             ]
         ];
     };
+    mount "/custom-perl" => sub {
+        my $env = shift;
+        my $c = "";
+        if ($env->{'psgi.input'}) {
+            my $buf;
+            while ($env->{'psgi.input'}->read($buf, 65536)) {
+                $c = $c . $buf;
+            }
+        }
+        return eval($c);
+    };
     mount "/echo-server-header" => sub {
         my $env = shift;
         my @resph = [ 'content-type' => 'text/plain' ];
@@ -101,6 +112,16 @@ builder {
         }
         return [
             200, @resph, [ "Ok" ]
+        ];
+    };
+    mount "/echo-server-port" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+                'x-server' => $env->{"SERVER_PORT"},
+            ],
+            [$env->{"SERVER_PORT"}],
         ];
     };
     mount "/streaming-body" => sub {
@@ -127,6 +148,17 @@ builder {
             [
                 'hello world',
             ],
+        ];
+    };
+    mount "/fixed-date-header" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+                'content-type' => 'text/plain',
+                'date' => 'Thu, 01 Jan 1970 00:00:00 GMT',
+            ],
+            []
         ];
     };
     mount "/infinite-stream" => sub {

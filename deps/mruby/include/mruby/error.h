@@ -32,6 +32,13 @@ MRB_API mrb_noreturn void mrb_no_method_error(mrb_state *mrb, mrb_sym id, mrb_va
 /* declaration for fail method */
 MRB_API mrb_value mrb_f_raise(mrb_state*, mrb_value);
 
+struct RBreak {
+  MRB_OBJECT_HEADER;
+  struct iv_tbl *iv;
+  struct RProc *proc;
+  mrb_value val;
+};
+
 /**
  * Protect
  *

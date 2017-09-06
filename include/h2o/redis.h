@@ -22,8 +22,10 @@
 #ifndef h2o__redis_h
 #define h2o__redis_h
 
-#include "hiredis.h"
 #include "h2o/timeout.h"
+
+struct redisAsyncContext;
+struct redisReply;
 
 typedef enum {
     H2O_REDIS_CONNECTION_STATE_CLOSED = 0,
@@ -42,7 +44,7 @@ typedef struct st_h2o_redis_conn_t {
     h2o_timeout_entry_t _timeout_entry;
 } h2o_redis_conn_t;
 
-typedef void (*h2o_redis_command_cb)(redisReply *reply, void *cb_data, int err, const char *errstr);
+typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, int err, const char *errstr);
 
 typedef enum enum_h2o_redis_command_type_t {
     H2O_REDIS_COMMAND_TYPE_NORMAL = 1,

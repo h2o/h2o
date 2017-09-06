@@ -38,7 +38,7 @@ puts [1,2,3]
 3
 ```
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 ```
 [1, 2, 3]
@@ -61,7 +61,7 @@ end
 
 ```ZeroDivisionError``` is raised.
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 No exception is raised.
 
@@ -77,7 +77,7 @@ def test; eval 'test'; end; test
 
 ```SystemStackError``` is raised.
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 Segmentation fault.
 
@@ -105,7 +105,7 @@ p Liste.new "foobar"
 
 ``` [] ```
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 ```ArgumentError``` is raised.
 
@@ -135,7 +135,7 @@ false
 true
 ```
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 ```
 true
@@ -158,7 +158,7 @@ defined?(Foo)
 nil
 ```
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 ```NameError``` is raised.
 
@@ -175,7 +175,7 @@ alias $a $__a__
 
 ``` nil ```
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 Syntax error
 
@@ -197,7 +197,7 @@ end
 ```ArgumentError``` is raised.
 The re-defined ```+``` operator does not accept any arguments.
 
-#### mruby [1.2.0 (2015-11-17)]
+#### mruby [1.3.0 (2017-7-4)]
 
 ``` 'ab' ```
 Behavior of the operator wasn't changed.

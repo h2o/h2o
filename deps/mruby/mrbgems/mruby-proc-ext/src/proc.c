@@ -52,10 +52,7 @@ mrb_proc_inspect(mrb_state *mrb, mrb_value self)
 
     line = mrb_debug_get_line(irep, 0);
     if (line != -1) {
-      char buf[32];
-
-      snprintf(buf, sizeof(buf), "%" PRId32, line);
-      mrb_str_cat_cstr(mrb, str, buf);
+      str = mrb_format(mrb, "%S:%S", str, mrb_fixnum_value(line));
     }
     else {
       mrb_str_cat_lit(mrb, str, "-");

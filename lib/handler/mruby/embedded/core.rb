@@ -19,6 +19,11 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
+$__TOP_SELF__ = self
+def _h2o_eval_conf(__h2o_conf)
+  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])
+end
+
 module Kernel
   H2O_CALLBACK_ID_NOOP             =  0
   H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
@@ -50,10 +55,6 @@ module Kernel
       end
       a
     end
-  end
-
-  def _h2o_eval_conf(__h2o_conf)
-    eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])
   end
 
   def _h2o_prepare_app(conf)
@@ -100,6 +101,10 @@ module Kernel
     end
 
     [runner, configurator]
+  end
+
+  def sleep(*sec)
+    _h2o__sleep(*sec)
   end
 
 end

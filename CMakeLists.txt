@@ -87,6 +87,9 @@ ELSE (WITH_BUNDLED_SSL)
     IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
         MESSAGE(WARNING "*********************************************************************** OpenSSL 1.0.2 is required for HTTP/2 interoperability with web browsers ***********************************************************************")
     ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
+    IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
+        MESSAGE(WARNING "*********************************************************************** OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed when using external cache ***********************************************************************")
+    ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
 ENDIF (WITH_BUNDLED_SSL)
 
 INCLUDE_DIRECTORIES(
@@ -466,6 +469,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
         lib/handler/mruby/redis.c
+        lib/handler/mruby/sleep.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
@@ -553,6 +557,16 @@ ELSE (WITH_BUNDLED_SSL)
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
 
+include(ExternalProject)
+
+IF (WITH_BUNDLED_SSL)
+    SET(H2GET_SSL_ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/")
+ELSE ()
+    IF (OPENSSL_FOUND)
+        GET_FILENAME_COMPONENT(H2GET_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} DIRECTORY)
+    ENDIF ()
+ENDIF ()
+
 ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
@@ -561,6 +575,20 @@ IF (LIBUV_FOUND)
     IF (OPENSSL_FOUND)
         ADD_DEPENDENCIES(check lib-examples)
     ENDIF ()
+ENDIF ()
+
+IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
+    ExternalProject_Add(h2get
+                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${H2GET_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/h2get_bin
+                        BUILD_COMMAND make
+                        INSTALL_COMMAND true)
+    SET_TARGET_PROPERTIES(h2get PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    IF (WITH_BUNDLED_SSL)
+        ADD_DEPENDENCIES(h2get bundled-ssl)
+    ENDIF ()
+    ADD_DEPENDENCIES(check h2get)
 ENDIF ()
 
 ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/*.t

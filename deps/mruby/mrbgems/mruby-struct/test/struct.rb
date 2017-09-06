@@ -197,3 +197,16 @@ assert("Struct.new generates subclass of Struct") do
     Struct = original_struct
   end
 end
+
+assert 'Struct#freeze' do
+  c = Struct.new :m
+
+  o = c.new
+  o.m = :test
+  assert_equal :test, o.m
+
+  o.freeze
+  assert_raise(RuntimeError) { o.m = :modify }
+  assert_raise(RuntimeError) { o[:m] = :modify }
+  assert_equal :test, o.m
+end

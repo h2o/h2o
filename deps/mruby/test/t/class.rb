@@ -410,6 +410,20 @@ assert('class variable in module and class << self style class method') do
   assert_equal("value", ClassVariableInModuleTest.class_variable)
 end
 
+assert('child class/module defined in singleton class get parent constant') do
+  actual = module GetParentConstantTest
+            EXPECT = "value"
+            class << self
+              class CHILD
+                class << self
+                    EXPECT
+                end
+              end
+            end
+          end
+  assert_equal("value", actual)
+end
+
 assert('overriding class variable with a module (#3235)') do
   module ModuleWithCVar
     @@class_variable = 1
