@@ -65,6 +65,16 @@
 
 #include "mrbconf.h"
 
+#ifndef FLT_EPSILON
+#define FLT_EPSILON (1.19209290e-07f)
+#endif
+#ifndef DBL_EPSILON
+#define DBL_EPSILON ((double)2.22044604925031308085e-16L)
+#endif
+#ifndef LDBL_EPSILON
+#define LDBL_EPSILON (1.08420217248550443401e-19L)
+#endif
+
 #ifdef MRB_USE_FLOAT
 #define MRB_FLOAT_EPSILON FLT_EPSILON
 #else
@@ -150,6 +160,22 @@ struct mrb_context {
   struct RFiber *fib;
 };
 
+#ifdef MRB_METHOD_CACHE_SIZE
+# define MRB_METHOD_CACHE
+#else
+/* default method cache size: 128 */
+/* cache size needs to be power of 2 */
+# define MRB_METHOD_CACHE_SIZE (1<<7)
+#endif
+
+#ifdef MRB_METHOD_CACHE
+struct mrb_cache_entry {
+  struct RClass *c;
+  mrb_sym mid;
+  struct RProc *m;
+};
+#endif
+
 struct mrb_jmpbuf;
 
 typedef void (*mrb_atexit_func)(struct mrb_state*);
@@ -178,6 +204,7 @@ typedef struct mrb_state {
   struct RClass *string_class;
   struct RClass *array_class;
   struct RClass *hash_class;
+  struct RClass *range_class;
 
   struct RClass *float_class;
   struct RClass *fixnum_class;
@@ -189,6 +216,10 @@ typedef struct mrb_state {
 
   struct alloca_header *mems;
   mrb_gc gc;
+
+#ifdef MRB_METHOD_CACHE
+  struct mrb_cache_entry cache[MRB_METHOD_CACHE_SIZE];
+#endif
 
   mrb_sym symidx;
   struct kh_n2s *name2sym;      /* symbol hash */
@@ -945,8 +976,8 @@ MRB_API mrb_value mrb_str_new_static(mrb_state *mrb, const char *p, size_t len);
 #define mrb_str_new_lit(mrb, lit) mrb_str_new_static(mrb, (lit), mrb_strlen_lit(lit))
 
 #ifdef _WIN32
-char* mrb_utf8_from_locale(const char *p, size_t len);
-char* mrb_locale_from_utf8(const char *p, size_t len);
+char* mrb_utf8_from_locale(const char *p, int len);
+char* mrb_locale_from_utf8(const char *p, int len);
 #define mrb_locale_free(p) free(p)
 #define mrb_utf8_free(p) free(p)
 #else
@@ -1029,11 +1060,27 @@ MRB_API mrb_value mrb_Float(mrb_state *mrb, mrb_value val);
 MRB_API mrb_value mrb_inspect(mrb_state *mrb, mrb_value obj);
 MRB_API mrb_bool mrb_eql(mrb_state *mrb, mrb_value obj1, mrb_value obj2);
 
+static inline int mrb_gc_arena_save(mrb_state*);
+static inline void mrb_gc_arena_restore(mrb_state*,int);
+
+static inline int
+mrb_gc_arena_save(mrb_state *mrb)
+{
+  return mrb->gc.arena_idx;
+}
+
+static inline void
+mrb_gc_arena_restore(mrb_state *mrb, int idx)
+{
+  mrb->gc.arena_idx = idx;
+}
+
+MRB_API int mrb_gc_arena_save(mrb_state*);
+MRB_API void mrb_gc_arena_restore(mrb_state*,int);
+
 MRB_API void mrb_garbage_collect(mrb_state*);
 MRB_API void mrb_full_gc(mrb_state*);
 MRB_API void mrb_incremental_gc(mrb_state *);
-MRB_API int mrb_gc_arena_save(mrb_state*);
-MRB_API void mrb_gc_arena_restore(mrb_state*,int);
 MRB_API void mrb_gc_mark(mrb_state*,struct RBasic*);
 #define mrb_gc_mark_value(mrb,val) do {\
   if (!mrb_immediate_p(val)) mrb_gc_mark((mrb), mrb_basic_ptr(val)); \

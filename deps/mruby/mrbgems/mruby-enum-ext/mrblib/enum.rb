@@ -201,7 +201,7 @@ module Enumerable
       ary.push([block.call(e), i])
     }
     if ary.size > 1
-      __sort_sub__(ary, ::Array.new(ary.size), 0, 0, ary.size - 1) do |a,b|
+      __sort_sub__(ary, 0, ary.size - 1) do |a,b|
         a <=> b
       end
     end

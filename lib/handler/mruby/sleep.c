@@ -60,7 +60,8 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
 {
     mrb_state *mrb = mctx->shared->mrb;
 
-    if (mrb_ary_len(mrb, args) == 0) {
+    assert(mrb_array_p(args));
+    if (RARRAY_LEN(args) == 0) {
         return mrb_nil_value(); /* sleep forever */
     }
     mrb_value arg_sec = mrb_ary_entry(args, 0);

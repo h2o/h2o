@@ -16,7 +16,7 @@ struct strip_args {
 static void
 irep_remove_lv(mrb_state *mrb, mrb_irep *irep)
 {
-  size_t i;
+  int i;
 
   if (irep->lv) {
     mrb_free(mrb, irep->lv);

@@ -459,7 +459,7 @@ codedump(mrb_state *mrb, mrb_irep *irep)
 static void
 codedump_recur(mrb_state *mrb, mrb_irep *irep)
 {
-  size_t i;
+  int i;
 
   codedump(mrb, irep);
   for (i=0; i<irep->rlen; i++) {

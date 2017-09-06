@@ -93,6 +93,8 @@ mrb_float_id(mrb_float f)
   int len = sizeof(f);
   mrb_int id = 0;
 
+  /* normalize -0.0 to 0.0 */
+  if (f == 0) f = 0.0;
   while (len--) {
     id = id*65599 + *p;
     p++;

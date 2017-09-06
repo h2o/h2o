@@ -61,7 +61,7 @@ out(struct fmt_args *f, const char *s, size_t l)
 
 #define PAD_SIZE 256
 static void
-pad(struct fmt_args *f, char c, int w, int l, int fl)
+pad(struct fmt_args *f, char c, ptrdiff_t w, ptrdiff_t l, uint8_t fl)
 {
   char pad[PAD_SIZE];
   if (fl & (LEFT_ADJ | ZERO_PAD) || l >= w) return;
@@ -91,16 +91,17 @@ typedef char compiler_defines_long_double_incorrectly[9-(int)sizeof(long double)
 #endif
 
 static int
-fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
+fmt_fp(struct fmt_args *f, long double y, ptrdiff_t p, uint8_t fl, int t)
 {
   uint32_t big[(LDBL_MANT_DIG+28)/29 + 1          // mantissa expansion
     + (LDBL_MAX_EXP+LDBL_MANT_DIG+28+8)/9]; // exponent expansion
   uint32_t *a, *d, *r, *z;
   uint32_t i;
-  int e2=0, e, j, l;
+  int e2=0, e, j;
+  ptrdiff_t l;
   char buf[9+LDBL_MANT_DIG/4], *s;
   const char *prefix="-0X+0X 0X-0x+0x 0x";
-  int pl;
+  ptrdiff_t pl;
   char ebuf0[3*sizeof(int)], *ebuf=&ebuf0[3*sizeof(int)], *estr;
 
   pl=1;
@@ -115,11 +116,11 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
   if (!isfinite(y)) {
     const char *ss = (t&32)?"inf":"INF";
     if (y!=y) ss=(t&32)?"nan":"NAN";
-    pad(f, ' ', w, 3+pl, fl&~ZERO_PAD);
+    pad(f, ' ', 0, 3+pl, fl&~ZERO_PAD);
     out(f, prefix, pl);
     out(f, ss, 3);
-    pad(f, ' ', w, 3+pl, fl^LEFT_ADJ);
-    return MAX(w, 3+pl);
+    pad(f, ' ', 0, 3+pl, fl^LEFT_ADJ);
+    return 3+(int)pl;
   }
 
   y = frexp((double)y, &e2) * 2;
@@ -127,7 +128,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
 
   if ((t|32)=='a') {
     long double round = 8.0;
-    int re;
+    ptrdiff_t re;
 
     if (t&32) prefix += 9;
     pl += 2;
@@ -167,14 +168,14 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
     else
       l = (s-buf) + (ebuf-estr);
 
-    pad(f, ' ', w, pl+l, fl);
+    pad(f, ' ', 0, pl+l, fl);
     out(f, prefix, pl);
-    pad(f, '0', w, pl+l, fl^ZERO_PAD);
+    pad(f, '0', 0, pl+l, fl^ZERO_PAD);
     out(f, buf, s-buf);
     pad(f, '0', l-(ebuf-estr)-(s-buf), 0, 0);
     out(f, estr, ebuf-estr);
-    pad(f, ' ', w, pl+l, fl^LEFT_ADJ);
-    return MAX(w, pl+l);
+    pad(f, ' ', 0, pl+l, fl^LEFT_ADJ);
+    return (int)pl+(int)l;
   }
   if (p<0) p=6;
 
@@ -202,7 +203,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
   }
   while (e2<0) {
     uint32_t carry=0, *b;
-    int sh=MIN(9,-e2), need=1+(p+LDBL_MANT_DIG/3+8)/9;
+    int sh=MIN(9,-e2), need=1+((int)p+LDBL_MANT_DIG/3+8)/9;
     for (d=a; d<z; d++) {
       uint32_t rm = *d & ((1<<sh)-1);
       *d = (*d>>sh) + carry;
@@ -216,11 +217,11 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
     e2+=sh;
   }
 
-  if (a<z) for (i=10, e=9*(r-a); *a>=i; i*=10, e++);
+  if (a<z) for (i=10, e=9*(int)(r-a); *a>=i; i*=10, e++);
   else e=0;
 
   /* Perform rounding: j is precision after the radix (possibly neg) */
-  j = p - ((t|32)!='f')*e - ((t|32)=='g' && p);
+  j = (int)p - ((t|32)!='f')*e - ((t|32)=='g' && p);
   if (j < 9*(z-r-1)) {
     uint32_t x;
     /* We avoid C's broken division of negative numbers */
@@ -247,7 +248,7 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
           if (d<a) *--a=0;
           (*d)++;
         }
-        for (i=10, e=9*(r-a); *a>=i; i*=10, e++);
+        for (i=10, e=9*(int)(r-a); *a>=i; i*=10, e++);
       }
     }
     if (z>d+1) z=d+1;
@@ -286,9 +287,9 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
     l += ebuf-estr;
   }
 
-  pad(f, ' ', w, pl+l, fl);
+  pad(f, ' ', 0, pl+l, fl);
   out(f, prefix, pl);
-  pad(f, '0', w, pl+l, fl^ZERO_PAD);
+  pad(f, '0', 0, pl+l, fl^ZERO_PAD);
 
   if ((t|32)=='f') {
     if (a>r) a=r;
@@ -317,21 +318,21 @@ fmt_fp(struct fmt_args *f, long double y, int w, int p, int fl, int t)
         if (p>0||(fl&ALT_FORM)) out(f, ".", 1);
       }
       out(f, ss, MIN(buf+9-ss, p));
-      p -= buf+9-ss;
+      p -= (int)(buf+9-ss);
     }
     pad(f, '0', p+18, 18, 0);
     out(f, estr, ebuf-estr);
   }
 
-  pad(f, ' ', w, pl+l, fl^LEFT_ADJ);
+  pad(f, ' ', 0, pl+l, fl^LEFT_ADJ);
 
-  return MAX(w, pl+l);
+  return (int)pl+(int)l;
 }
 
 static int
 fmt_core(struct fmt_args *f, const char *fmt, mrb_float flo)
 {
-  int p;
+  ptrdiff_t p;
 
   if (*fmt != '%') {
     return -1;
@@ -351,7 +352,7 @@ fmt_core(struct fmt_args *f, const char *fmt, mrb_float flo)
   switch (*fmt) {
   case 'e': case 'f': case 'g': case 'a':
   case 'E': case 'F': case 'G': case 'A':
-    return fmt_fp(f, flo, 0, p, 0, *fmt);
+    return fmt_fp(f, flo, p, 0, *fmt);
   default:
     return -1;
   }
@@ -363,7 +364,7 @@ mrb_float_to_str(mrb_state *mrb, mrb_value flo, const char *fmt)
   struct fmt_args f;
 
   f.mrb = mrb;
-  f.str = mrb_str_buf_new(mrb, 24);
+  f.str = mrb_str_new_capa(mrb, 24);
   if (fmt_core(&f, fmt, mrb_float(flo)) < 0) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid format string");
   }
