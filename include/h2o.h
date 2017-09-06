@@ -388,6 +388,14 @@ struct st_h2o_globalconf_t {
          */
         uint64_t io_timeout;
         /**
+         * io timeout (in milliseconds)
+         */
+        uint64_t connect_timeout;
+        /**
+         * io timeout (in milliseconds)
+         */
+        uint64_t first_byte_timeout;
+        /**
          * SSL context for connections initiated by the proxy (optional, governed by the application)
          */
         SSL_CTX *ssl_ctx;
@@ -617,6 +625,14 @@ struct st_h2o_context_t {
          * timeout handler used by the default client context
          */
         h2o_timeout_t io_timeout;
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t connect_timeout;
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t first_byte_timeout;
     } proxy;
 
     /**
@@ -1837,6 +1853,8 @@ typedef void *(*h2o_balancer_per_req_data_generator)(h2o_req_t *req);
 /* lib/proxy.c */
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
+    uint64_t connect_timeout;
+    uint64_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     /* I don't know how to detect if handler registered on same path twice, so temporarily use these switches to do so. */

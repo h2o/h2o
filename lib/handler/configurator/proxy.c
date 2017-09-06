@@ -31,14 +31,38 @@
 
 struct proxy_configurator_t {
     h2o_configurator_t super;
+    unsigned connect_timeout_set : 1;
+    unsigned first_byte_timeout_set : 1;
     h2o_proxy_config_vars_t *vars;
     h2o_proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    int ret;
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->io_timeout);
+    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->io_timeout);
+    if (ret < 0)
+        return ret;
+    if (!self->connect_timeout_set)
+        self->vars->connect_timeout = self->vars->io_timeout;
+    if (!self->first_byte_timeout_set)
+        self->vars->first_byte_timeout = self->vars->io_timeout;
+    return ret;
+}
+
+static int on_config_timeout_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    self->connect_timeout_set = 1;
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->connect_timeout);
+}
+
+static int on_config_timeout_first_byte(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    self->first_byte_timeout_set = 1;
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->first_byte_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -506,6 +530,8 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     if (self->vars[1].headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars[1].headers_cmds);
     ++self->vars;
+    self->connect_timeout_set = 0;
+    self->first_byte_timeout_set = 0;
 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
         /* is global conf, setup the default SSL context */
@@ -533,6 +559,8 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     if (ctx->pathconf == NULL && ctx->hostconf == NULL) {
         /* is global conf */
         ctx->globalconf->proxy.io_timeout = self->vars->io_timeout;
+        ctx->globalconf->proxy.connect_timeout = self->vars->connect_timeout;
+        ctx->globalconf->proxy.first_byte_timeout = self->vars->first_byte_timeout;
         ctx->globalconf->proxy.ssl_ctx = self->vars->ssl_ctx;
     } else {
         SSL_CTX_free(self->vars->ssl_ctx);
@@ -563,6 +591,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->reverse_path.base = NULL;
     c->vars->reverse_path.len = 0;
     c->vars->io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
+    c->vars->connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
+    c->vars->first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->keepalive_timeout = 2000;
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
@@ -601,6 +631,10 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_proxy_protocol);
     h2o_configurator_define_command(&c->super, "proxy.timeout.io",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_io);
+    h2o_configurator_define_command(&c->super, "proxy.timeout.connect",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_connect);
+    h2o_configurator_define_command(&c->super, "proxy.timeout.first_byte",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_timeout_first_byte);
     h2o_configurator_define_command(&c->super, "proxy.timeout.keepalive",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_timeout_keepalive);
