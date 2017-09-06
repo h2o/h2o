@@ -23,7 +23,7 @@
 #define h2o__balancer_h
 
 #ifdef __cplusplus
-//extern "C" {
+extern "C" {
 #endif
 
 #include "h2o/socketpool.h"
@@ -61,7 +61,7 @@ typedef enum en_h2o_balancer_hash_key_type {
     H2O_BALANCER_HASH_KEY_TYPE_IP_PORT
 } h2o_balancer_hash_key_type;
 #ifdef __cplusplus
-//}
+}
 #endif
 
 #endif

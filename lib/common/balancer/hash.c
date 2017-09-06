@@ -94,8 +94,6 @@ static size_t find_bucket_for_item(hash_bucket_vector_t *ring, void *key, size_t
     uint64_t hash = compute_hash(key, key_size);
     size_t index = range_bsearch(&hash, ring->entries, ring->size, sizeof(struct hash_bucket_t),
                                  hash_cmp, 1);
-    assert(hash < ring->entries[0].hash || hash > ring->entries[index - 1].hash);
-    assert(hash > ring->entries[ring->size - 1].hash || hash < ring->entries[index].hash);
     return index;
 }
 
