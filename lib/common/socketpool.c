@@ -138,7 +138,7 @@ static void lb_rr_init(h2o_socketpool_target_vector_t *targets, void **data)
 static size_t lb_rr_selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried)
 {
     size_t i;
-    size_t result;
+    size_t result = 0;
     struct round_robin_t *self = _data;
     
     pthread_mutex_lock(&self->mutex);
