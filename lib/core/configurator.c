@@ -692,7 +692,7 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
     return 0;
 }
 
-static const char *get_ext(h2o_configurator_command_t *cmd, yoml_t *node)
+static const char *normalize_ext(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (strcmp(node->data.scalar, "default") == 0) {
         /* empty string means default */
@@ -724,7 +724,7 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     switch (ext_node->type) {
     case YOML_TYPE_SCALAR:
         exts = alloca(2 * sizeof(*exts));
-        if ((exts[0] = get_ext(cmd, ext_node)) == NULL) return -1;
+        if ((exts[0] = normalize_ext(cmd, ext_node)) == NULL) return -1;
         exts[1] = NULL;
         break;
     case YOML_TYPE_SEQUENCE: {
@@ -732,7 +732,7 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         size_t i;
         for (i = 0; i != ext_node->data.sequence.size; ++i) {
             yoml_t *n = ext_node->data.sequence.elements[i];
-            if ((exts[i] = get_ext(cmd, n)) == NULL) return -1;
+            if ((exts[i] = normalize_ext(cmd, n)) == NULL) return -1;
         }
         exts[i] = NULL;
     } break;
