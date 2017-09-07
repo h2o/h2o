@@ -199,10 +199,10 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
     }
 
     if (mrb_nil_p(ctx->receiver)) {
-        mrb_value runner = mrb_funcall(mrb, ctx->refs.command, "_on_reply", 1, reply);
+        mrb_value fiber_runner = mrb_funcall(mrb, ctx->refs.command, "_on_reply", 1, reply);
         h2o_mruby_assert(mrb);
-        if (! mrb_nil_p(runner))
-            h2o_mruby_run_fiber(ctx->conn->ctx, runner, mrb_nil_value(), NULL);
+        if (! mrb_nil_p(fiber_runner))
+            h2o_mruby_run_fiber(ctx->conn->ctx, fiber_runner, mrb_nil_value(), NULL);
     } else {
         int gc_arena = mrb_gc_arena_save(mrb);
         h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
