@@ -11,6 +11,8 @@ plan skip_all => 'curl not found'
 plan skip_all => 'php-cgi not found'
     unless prog_exists('php-cgi');
 
+note `php-cgi --version`;
+
 # spawn h2o
 my $server = spawn_h2o(<< "EOT");
 file.custom-handler:
