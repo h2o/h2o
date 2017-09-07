@@ -220,6 +220,7 @@ $conf_code
 EOT
     my $server = spawn_h2o($conf);
     my $tester = sub {
+        local $Test::Builder::Level = $Test::Builder::Level + 1;
         my %args = @_;
         my $url = "http://127.0.0.1:$server->{port}/";
         $url .= '?' . $args{query_string} if $args{query_string};

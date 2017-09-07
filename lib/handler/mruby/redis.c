@@ -214,6 +214,8 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
         h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
         mrb_gc_arena_restore(mrb, gc_arena);
     }
+
+    mrb_gc_unregister(mrb, ctx->refs.command);
 }
 
 static mrb_value call_method(mrb_state *mrb, mrb_value self)
@@ -234,6 +236,7 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
     command_ctx->receiver = mrb_nil_value();
     command_ctx->refs.command = h2o_mruby_create_data_instance(mrb, command_klass, command_ctx, &command_type);
     mrb_funcall_with_block(mrb, command_ctx->refs.command, mrb_intern_lit(mrb, "initialize"), 1, &command_args, command_block);
+    mrb_gc_register(mrb, command_ctx->refs.command);
 
     const char **argv = h2o_mem_alloc(command_len * sizeof(char *));
     size_t *argvlen = h2o_mem_alloc(command_len * sizeof(size_t));
