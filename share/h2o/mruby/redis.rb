@@ -8,13 +8,35 @@ module H2O
 
     # will be overriden by h2o (define here for passing compile check)
     def __setup; end
-    def connect; end
-    def connected?; end
+    def __connect; end
     def disconnect; end
+    def disconnected?; end
     def __call; end
 
+    def password
+      @config[:password]
+    end
+
+    def db
+      @config[:db]
+    end
+
+    def db=(_db)
+      old = @config[:db]
+      @config[:db] = _db.to_i
+      if ! disconnected? && @config[:db] != old
+        self.select(@config[:db])
+      end
+    end
+
+    def connect
+      __connect
+      self.auth(@config[:password]) if @config[:password]
+      self.select(@config[:db]) if (@config[:db] || 0) != 0
+    end
+
     def ensure_connected
-      connect
+      connect if disconnected?
       yield
     end
 

@@ -118,10 +118,10 @@ static mrb_value connect_method(mrb_state *mrb, mrb_value self)
     return self;
 }
 
-static mrb_value connected_method(mrb_state *mrb, mrb_value self)
+static mrb_value disconnected_method(mrb_state *mrb, mrb_value self)
 {
     struct st_h2o_mruby_redis_conn_t *conn = DATA_PTR(self);
-    return mrb_bool_value(conn->super.state == H2O_REDIS_CONNECTION_STATE_CONNECTED);
+    return mrb_bool_value(conn->super.state == H2O_REDIS_CONNECTION_STATE_CLOSED);
 }
 
 static mrb_value disconnect_method(mrb_state *mrb, mrb_value self)
@@ -281,8 +281,8 @@ void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx)
 
     struct RClass *redis_klass = mrb_class_get_under(mrb, module, "Redis");
     mrb_define_method(mrb, redis_klass, "__setup", setup_method, MRB_ARGS_NONE());
-    mrb_define_method(mrb, redis_klass, "connect", connect_method, MRB_ARGS_NONE());
-    mrb_define_method(mrb, redis_klass, "connected?", connected_method, MRB_ARGS_NONE());
+    mrb_define_method(mrb, redis_klass, "__connect", connect_method, MRB_ARGS_NONE());
+    mrb_define_method(mrb, redis_klass, "disconnected?", disconnected_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, redis_klass, "disconnect", disconnect_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, redis_klass, "__call", call_method, MRB_ARGS_ARG(1, 0));
 }

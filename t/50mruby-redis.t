@@ -194,18 +194,53 @@ EOT
 
 };
 
+subtest 'db option' => sub {
+    my ($redis, $redis_port) = spawn_redis();
+    my $conf = <<"EOT";
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          redis = H2O::Redis.new(:host => '127.0.0.1', :port => $redis_port, :db => 1)
+          proc {|env|
+            db = env['QUERY_STRING']
+            unless db.empty?
+              redis.db = db.to_i
+            end
+            value = redis.incr('hoge').join
+            [200, {}, [value]]
+          }
+EOT
+    my $server = spawn_h2o($conf);
+    my $body;
+    (undef, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}");
+    is($body, '1');
+    (undef, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}?2");
+    is($body, '1');
+    (undef, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}?1");
+    is($body, '2');
+};
+
 # TODO: add streaming command tests when those are implemented
 
 done_testing;
 
-sub setup {
-    my ($conf_code, $opts) = @_;
-    $opts ||= +{};
+sub spawn_redis {
+    my ($opts) = @_;
     my $redis_port = empty_port();
     my $redis = $opts->{no_redis} ? undef : spawn_server(
         argv     => [ qw(redis-server --port), $redis_port ],
         is_ready => sub { check_port($redis_port) },
     );
+    return ($redis, $redis_port);
+}
+
+sub setup {
+    my ($conf_code, $opts) = @_;
+    $opts ||= +{};
+    my ($redis, $redis_port) = spawn_redis($opts);
     $conf_code = $conf_code->($redis_port) if ref($conf_code) eq 'CODE';
     
     my $conf = <<"EOT";
