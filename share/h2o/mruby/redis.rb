@@ -9,6 +9,7 @@ module H2O
     # will be overriden by h2o (define here for passing compile check)
     def __setup; end
     def connect; end
+    def connected?; end
     def disconnect; end
     def __call; end
 
