@@ -207,16 +207,18 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
     return dst;
 }
 
+#define FOREACH_TYPE(mimemap, block)                                                                                               \
+    do {                                                                                                                           \
+        const char *ext;                                                                                                           \
+        h2o_mimemap_type_t *type;                                                                                                  \
+        type = mimemap->default_type;                                                                                              \
+        {block};                                                                                                                   \
+        kh_foreach(mimemap->extmap, ext, type, {block});                                                                           \
+    } while (0)
+
 void h2o_mimemap_on_context_init(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
 {
-    const char *ext;
-    h2o_mimemap_type_t *type;
-
-    if (mimemap->default_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
-        h2o_context_init_pathconf_context(ctx, &mimemap->default_type->data.dynamic.pathconf);
-    }
-
-    kh_foreach(mimemap->extmap, ext, type, {
+    FOREACH_TYPE(mimemap, {
         switch (type->type) {
         case H2O_MIMEMAP_TYPE_DYNAMIC:
             h2o_context_init_pathconf_context(ctx, &type->data.dynamic.pathconf);
@@ -229,14 +231,7 @@ void h2o_mimemap_on_context_init(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
 
 void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
 {
-    const char *ext;
-    h2o_mimemap_type_t *type;
-
-    if (mimemap->default_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
-        h2o_context_dispose_pathconf_context(ctx, &mimemap->default_type->data.dynamic.pathconf);
-    }
-
-    kh_foreach(mimemap->extmap, ext, type, {
+    FOREACH_TYPE(mimemap, {
         switch (type->type) {
         case H2O_MIMEMAP_TYPE_DYNAMIC:
             h2o_context_dispose_pathconf_context(ctx, &type->data.dynamic.pathconf);
@@ -246,6 +241,8 @@ void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
         }
     });
 }
+
+#undef FOREACH_TYPES
 
 int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap)
 {
@@ -355,7 +352,8 @@ void h2o_mimemap_clear_types(h2o_mimemap_t *mimemap)
     khiter_t iter;
 
     for (iter = kh_begin(mimemap->extmap); iter != kh_end(mimemap->extmap); ++iter) {
-        if (!kh_exist(mimemap->extmap, iter)) continue;
+        if (!kh_exist(mimemap->extmap, iter))
+            continue;
         const char *key = kh_key(mimemap->extmap, iter);
         h2o_mimemap_type_t *type = kh_val(mimemap->extmap, iter);
         on_unlink(mimemap, type);
