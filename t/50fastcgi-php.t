@@ -11,13 +11,13 @@ plan skip_all => 'curl not found'
 plan skip_all => 'php-cgi not found'
     unless prog_exists('php-cgi');
 
-note `php-cgi --version`;
+note `which php-cgi; php-cgi --version`;
 
 # spawn h2o
 my $server = spawn_h2o(<< "EOT");
 file.custom-handler:
   extension: .php
-  fastcgi.spawn: "exec php-cgi"
+  fastcgi.spawn: "exec catchsegv php-cgi"
 hosts:
   default:
     paths:
