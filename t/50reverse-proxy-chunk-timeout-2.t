@@ -17,7 +17,7 @@ my $listener = IO::Socket::INET->new(
 ) or die "failed to listen to 127.0.0.1:$upstream_port:$!";
 
 my $server = spawn_h2o(<< "EOT");
-http2-idle-timeout: 2
+http2-idle-timeout: 5
 hosts:
   default:
     paths:
