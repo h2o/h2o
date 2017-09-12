@@ -554,6 +554,10 @@ static int assert_is_extension(h2o_configurator_command_t *cmd, yoml_t *node)
         h2o_configurator_errprintf(cmd, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
         return -1;
     }
+    if (node->data.scalar[1] == '\0') {
+        h2o_configurator_errprintf(cmd, node, "given extension \".\" is invalid: at least 2 characters are required");
+        return -1;
+    }
     return 0;
 }
 
@@ -688,6 +692,18 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
     return 0;
 }
 
+static const char *normalize_ext(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    if (strcmp(node->data.scalar, "default") == 0) {
+        /* empty string means default */
+        return "";
+    } else if  (assert_is_extension(cmd, node) == 0) {
+        return node->data.scalar + 1;
+    } else {
+        return NULL;
+    }
+}
+
 static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     static const char *ignore_commands[] = {"extension", NULL};
@@ -707,10 +723,8 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     /* create dynamic type */
     switch (ext_node->type) {
     case YOML_TYPE_SCALAR:
-        if (assert_is_extension(cmd, ext_node) != 0)
-            return -1;
         exts = alloca(2 * sizeof(*exts));
-        exts[0] = ext_node->data.scalar + 1;
+        if ((exts[0] = normalize_ext(cmd, ext_node)) == NULL) return -1;
         exts[1] = NULL;
         break;
     case YOML_TYPE_SEQUENCE: {
@@ -718,9 +732,7 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         size_t i;
         for (i = 0; i != ext_node->data.sequence.size; ++i) {
             yoml_t *n = ext_node->data.sequence.elements[i];
-            if (assert_is_extension(cmd, n) != 0)
-                return -1;
-            exts[i] = n->data.scalar + 1;
+            if ((exts[i] = normalize_ext(cmd, n)) == NULL) return -1;
         }
         exts[i] = NULL;
     } break;
