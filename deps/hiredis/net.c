@@ -143,7 +143,6 @@ int redisKeepAlive(redisContext *c, int interval) {
     }
 #else
 #if defined(__GLIBC__) && !defined(__FreeBSD_kernel__)
-    val = interval;
     if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &val, sizeof(val)) < 0) {
         __redisSetError(c,REDIS_ERR_OTHER,strerror(errno));
         return REDIS_ERR;
@@ -341,8 +340,6 @@ addrretry:
             continue;
 
         c->fd = s;
-        if (redisSetTcpNoDelay(c) != REDIS_OK)
-            goto error;
         if (redisSetBlocking(c,0) != REDIS_OK)
             goto error;
         if (c->tcp.source_addr) {
@@ -359,6 +356,7 @@ addrretry:
                 n = 1;
                 if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char*) &n,
                                sizeof(n)) < 0) {
+                    freeaddrinfo(bservinfo);
                     goto error;
                 }
             }
@@ -396,6 +394,8 @@ addrretry:
             }
         }
         if (blocking && redisSetBlocking(c,1) != REDIS_OK)
+            goto error;
+        if (redisSetTcpNoDelay(c) != REDIS_OK)
             goto error;
 
         c->flags |= REDIS_CONNECTED;
