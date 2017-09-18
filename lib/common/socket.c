@@ -220,7 +220,7 @@ static void setup_bio(h2o_socket_t *sock)
             __sync_synchronize();
             bio_methods = biom;
         }
-	pthread_mutex_unlock(&init_lock);
+        pthread_mutex_unlock(&init_lock);
     }
 
     BIO *bio = BIO_new(bio_methods);

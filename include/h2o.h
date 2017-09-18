@@ -1878,7 +1878,8 @@ typedef struct st_h2o_proxy_config_vars_t {
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
+                                      h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */
@@ -2143,11 +2144,12 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     }
 
 COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
-COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
-                                                                     ? &req->processed_at.at
-                                                                     : &req->timestamps.request_body_begin_at);
-COMPUTE_DURATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
-                                                                                        : &req->timestamps.request_body_begin_at,
+COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at,
+                 h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                             : &req->timestamps.request_body_begin_at);
+COMPUTE_DURATION(body_time,
+                 h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                             : &req->timestamps.request_body_begin_at,
                  &req->processed_at.at);
 COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);

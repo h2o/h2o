@@ -102,9 +102,11 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 static void on_gc_dispose_request(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
-    if (ctx == NULL) return;
+    if (ctx == NULL)
+        return;
     ctx->refs.request = mrb_nil_value();
-    if (mrb_nil_p(ctx->refs.input_stream)) dispose_context(ctx);
+    if (mrb_nil_p(ctx->refs.input_stream))
+        dispose_context(ctx);
 }
 
 const static struct mrb_data_type request_type = {"http_request", on_gc_dispose_request};
@@ -112,9 +114,11 @@ const static struct mrb_data_type request_type = {"http_request", on_gc_dispose_
 static void on_gc_dispose_input_stream(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
-    if (ctx == NULL) return;
+    if (ctx == NULL)
+        return;
     ctx->refs.input_stream = mrb_nil_value();
-    if (mrb_nil_p(ctx->refs.request)) dispose_context(ctx);
+    if (mrb_nil_p(ctx->refs.request))
+        dispose_context(ctx);
 }
 
 const static struct mrb_data_type input_stream_type = {"http_input_stream", on_gc_dispose_input_stream};
@@ -418,8 +422,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     return ctx->refs.request;
 }
 
-mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args,
-                                                int *run_again)
+mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -438,8 +441,7 @@ static mrb_value create_already_consumed_error(mrb_state *mrb)
     return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
 }
 
-mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args,
-                                              int *run_again)
+mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -471,7 +473,8 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_val
     return ret;
 }
 
-h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *), h2o_mruby_generator_t *generator)
+h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *),
+                                                              h2o_mruby_generator_t *generator)
 {
     assert(mrb->exc == NULL);
     struct st_h2o_mruby_http_request_context_t *ctx;

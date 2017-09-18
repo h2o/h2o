@@ -725,7 +725,8 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
         /* bypass huffman encoding */
         dst += encode_as_is(dst, value->base, value->len);
     } else {
-        /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above) would
+        /* add to header table (maximum number of entries in output header table is limited to 32 so that the search (see above)
+           would
            not take too long) */
         dst += h2o_hpack_encode_string(dst, value->base, value->len);
         struct st_h2o_hpack_header_table_entry_t *entry =

@@ -108,7 +108,7 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     }
 
     h2o_iovec_t _url = h2o_strdup(&self->pool, url, SIZE_MAX);
-    for (i = 0; i != status_len; ++i){
+    for (i = 0; i != status_len; ++i) {
         /* register */
         h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
         h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;

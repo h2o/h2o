@@ -36,7 +36,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
     const h2o_url_scheme_t *scheme;
     h2o_iovec_t *authority;
-   
+
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
     if (self->sockpool != NULL) {
@@ -81,20 +81,19 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
         ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
-        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout &&
-        !self->config.websocket.enabled &&
+        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled &&
         self->config.ssl_ctx == ctx->globalconf->proxy.ssl_ctx)
         return;
 
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
-#define ALLOC_TIMEOUT(to_) \
-    if (ctx->globalconf->proxy.to_ == self->config.to_) { \
-        client_ctx->to_ = &ctx->proxy.to_; \
-    } else { \
-        client_ctx->to_ = h2o_mem_alloc(sizeof(*client_ctx->to_)); \
-        h2o_timeout_init(client_ctx->loop, client_ctx->to_, self->config.to_); \
+#define ALLOC_TIMEOUT(to_)                                                                                                         \
+    if (ctx->globalconf->proxy.to_ == self->config.to_) {                                                                          \
+        client_ctx->to_ = &ctx->proxy.to_;                                                                                         \
+    } else {                                                                                                                       \
+        client_ctx->to_ = h2o_mem_alloc(sizeof(*client_ctx->to_));                                                                 \
+        h2o_timeout_init(client_ctx->loop, client_ctx->to_, self->config.to_);                                                     \
     }
     ALLOC_TIMEOUT(io_timeout);
     ALLOC_TIMEOUT(connect_timeout);
@@ -120,10 +119,10 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     if (client_ctx == NULL)
         return;
 
-#define FREE_TIMEOUT(to_) \
-    if (client_ctx->to_ != &ctx->proxy.to_) { \
-        h2o_timeout_dispose(client_ctx->loop, client_ctx->to_); \
-        free(client_ctx->to_); \
+#define FREE_TIMEOUT(to_)                                                                                                          \
+    if (client_ctx->to_ != &ctx->proxy.to_) {                                                                                      \
+        h2o_timeout_dispose(client_ctx->loop, client_ctx->to_);                                                                    \
+        free(client_ctx->to_);                                                                                                     \
     }
     FREE_TIMEOUT(io_timeout);
     FREE_TIMEOUT(connect_timeout);
@@ -174,7 +173,8 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
             to_sa_err = h2o_url_host_to_sun(upstreams[i].host, &sa);
             is_ssl = upstreams[i].scheme == &H2O_URL_SCHEME_HTTPS;
             if (to_sa_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
-                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]), is_ssl, &upstreams[i]);
+                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]),
+                                                       is_ssl, &upstreams[i]);
             } else {
                 assert(to_sa_err == NULL);
                 h2o_socketpool_init_target_by_address(&targets.entries[i], (void *)&sa, sizeof(sa), is_ssl, &upstreams[i]);

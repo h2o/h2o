@@ -140,7 +140,7 @@ static size_t lb_rr_selector(h2o_socketpool_target_vector_t *targets, void *_dat
     size_t i;
     size_t result = 0;
     struct round_robin_t *self = _data;
-    
+
     pthread_mutex_lock(&self->mutex);
 
     for (i = 0; i < targets->size; i++) {
@@ -166,7 +166,8 @@ static void lb_rr_dispose(void *data)
     free(data);
 }
 
-void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl, h2o_url_t *url)
+void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl,
+                                           h2o_url_t *url)
 {
     char host[NI_MAXHOST];
     size_t host_len;
@@ -204,7 +205,8 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
     common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
 
-void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl, h2o_url_t *url)
+void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl,
+                                            h2o_url_t *url)
 {
     struct sockaddr_in sin;
     memset(&sin, 0, sizeof(sin));
@@ -239,7 +241,8 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
     common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
 
-void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity) {
+void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity)
+{
     assert(targets.size > 0);
     common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
@@ -247,7 +250,7 @@ void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_targe
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 {
     size_t i;
-    
+
     pthread_mutex_lock(&pool->_shared.mutex);
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, link, pool->_shared.sockets.next);
@@ -308,7 +311,8 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     cb(sock, errstr, data, &targets->entries[selected]);
 }
 
-static void try_connect(h2o_socketpool_connect_request_t *req) {
+static void try_connect(h2o_socketpool_connect_request_t *req)
+{
     h2o_socketpool_target_t *target;
 
     req->lb.selected = req->pool->_lb.selector(&req->pool->targets, req->pool->_lb.data, req->lb.tried);
@@ -318,15 +322,15 @@ static void try_connect(h2o_socketpool_connect_request_t *req) {
     target = &req->pool->targets.entries[req->lb.selected];
 
     switch (target->type) {
-        case H2O_SOCKETPOOL_TYPE_NAMED:
-            /* resolve the name, and connect */
-            req->getaddr_req = h2o_hostinfo_getaddr(req->lb.getaddr_receiver, target->peer.host, target->peer.named_serv, AF_UNSPEC, SOCK_STREAM,
-                                                    IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
-            break;
-        case H2O_SOCKETPOOL_TYPE_SOCKADDR:
-            /* connect (using sockaddr_in) */
-            start_connect(req, (void *)&target->peer.sockaddr.bytes, target->peer.sockaddr.len);
-            break;
+    case H2O_SOCKETPOOL_TYPE_NAMED:
+        /* resolve the name, and connect */
+        req->getaddr_req = h2o_hostinfo_getaddr(req->lb.getaddr_receiver, target->peer.host, target->peer.named_serv, AF_UNSPEC,
+                                                SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
+        break;
+    case H2O_SOCKETPOOL_TYPE_SOCKADDR:
+        /* connect (using sockaddr_in) */
+        start_connect(req, (void *)&target->peer.sockaddr.bytes, target->peer.sockaddr.len);
+        break;
     }
 }
 
