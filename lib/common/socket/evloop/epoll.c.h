@@ -189,7 +189,11 @@ h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
 
+#ifdef EPOLL_CLOEXEC
+    loop->ep = epoll_create1(EPOLL_CLOEXEC);
+#else
     loop->ep = epoll_create(10);
+#endif
 
     return &loop->super;
 }
