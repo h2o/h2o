@@ -246,9 +246,6 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
     /* retrieve argument array */
     for (i = 0; i != command_len; ++i) {
         mrb_value command_arg = mrb_ary_entry(command_args, i);
-        if (mrb_nil_p(command_arg))
-            continue;
-
         if (mrb_symbol_p(command_arg)) {
             mrb_int len;
             argv[i] = mrb_sym2name_len(mrb, mrb_symbol(command_arg), &len);
