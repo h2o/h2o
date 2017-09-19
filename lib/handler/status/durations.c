@@ -149,11 +149,12 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
     } while (0)
 
     ADD_OBSERVATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
-    ADD_OBSERVATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
-                                                                        ? &req->processed_at.at
-                                                                        : &req->timestamps.request_body_begin_at);
-    ADD_OBSERVATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
-                                                                                           : &req->timestamps.request_body_begin_at,
+    ADD_OBSERVATION(header_time, &req->timestamps.request_begin_at,
+                    h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                                : &req->timestamps.request_body_begin_at);
+    ADD_OBSERVATION(body_time,
+                    h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                                : &req->timestamps.request_body_begin_at,
                     &req->processed_at.at);
     ADD_OBSERVATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
     ADD_OBSERVATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
