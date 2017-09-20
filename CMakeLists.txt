@@ -256,6 +256,7 @@ SET(LIB_SOURCE_FILES
     lib/common/string.c
     lib/common/time.c
     lib/common/timeout.c
+    lib/common/timerwheel.c
     lib/common/url.c
 
     lib/core/config.c
@@ -330,6 +331,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/string.c
     t/00unit/lib/common/time.c
     t/00unit/lib/common/url.c
+    t/00unit/lib/common/timerwheel.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
