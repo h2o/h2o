@@ -233,4 +233,14 @@ builder {
         my $query = Plack::Request->new($env)->query_parameters;
         [200, ["content-type" => "text/plain; charset=utf-8", "content-length" => 11, "link" => "$query->{'pushes'}"], ["hello world"]];
     };
+    mount "/no-content" => sub {
+        my $env = shift;
+        return [
+            204,
+            [
+                'content-type' => 'text/plain',
+            ],
+            [],
+        ];
+    };
 };
