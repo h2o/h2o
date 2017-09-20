@@ -365,6 +365,9 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         if (!mrb_nil_p(t)) {
             t = mrb_str_to_str(mrb, t);
             method = h2o_iovec_init(RSTRING_PTR(t), RSTRING_LEN(t));
+            if (h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"))) {
+                ctx->req.method_is_head = 1;
+            }
         }
     }
 
