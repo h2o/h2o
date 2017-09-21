@@ -49,6 +49,7 @@ extern "C" {
 #include "h2o/string_.h"
 #include "h2o/time_.h"
 #include "h2o/timeout.h"
+#include "h2o/timerwheel.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
 
@@ -533,10 +534,6 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t zero_timeout;
     /**
-     * timeout structure to be used for registering 1-second timeout callbacks
-     */
-    h2o_timeout_t one_sec_timeout;
-    /**
      * timeout structrue to be used for registering 100-milisecond timeout callbacks
      */
     h2o_timeout_t hundred_ms_timeout;
@@ -599,7 +596,7 @@ struct st_h2o_context_t {
         /**
          * timeout entry used for graceful shutdown
          */
-        h2o_timeout_entry_t _graceful_shutdown_timeout;
+        h2o_timerwheel_timer_t _graceful_shutdown_timeout;
         struct {
             /**
              * counter for http2 errors internally emitted by h2o

@@ -85,7 +85,7 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
     }
 }
 
-static void graceful_shutdown_close_stragglers(h2o_timeout_entry_t *entry)
+static void graceful_shutdown_close_stragglers(h2o_timerwheel_timer_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
     h2o_linklist_t *node, *next;
@@ -98,7 +98,7 @@ static void graceful_shutdown_close_stragglers(h2o_timeout_entry_t *entry)
     }
 }
 
-static void graceful_shutdown_resend_goaway(h2o_timeout_entry_t *entry)
+static void graceful_shutdown_resend_goaway(h2o_timerwheel_timer_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
     h2o_linklist_t *node;
@@ -115,8 +115,9 @@ static void graceful_shutdown_resend_goaway(h2o_timeout_entry_t *entry)
     /* After waiting a second, we still had active connections. If configured, wait one
      * final timeout before closing the connections */
     if (do_close_stragglers && ctx->globalconf->http2.graceful_shutdown_timeout) {
-        ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_close_stragglers;
-        h2o_timeout_link(ctx->loop, &ctx->http2.graceful_shutdown_timeout, &ctx->http2._graceful_shutdown_timeout);
+        h2o_timerwheel_init_timer(&ctx->http2._graceful_shutdown_timeout, graceful_shutdown_close_stragglers);
+        uint64_t expire = h2o_now(ctx->loop) + ctx->globalconf->http2.graceful_shutdown_timeout;
+        h2o_timerwheel_add_timer(&ctx->loop->_timerwheel, &ctx->http2._graceful_shutdown_timeout, expire);
     }
 }
 
@@ -133,7 +134,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
     /* only doit once */
     if (ctx->http2._graceful_shutdown_timeout.cb != NULL)
         return;
-    ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
+    h2o_timerwheel_init_timer(&ctx->http2._graceful_shutdown_timeout, graceful_shutdown_resend_goaway);
 
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
         h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _conns, node);
@@ -143,7 +144,8 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
             h2o_http2_conn_request_write(conn);
         }
     }
-    h2o_timeout_link(ctx->loop, &ctx->one_sec_timeout, &ctx->http2._graceful_shutdown_timeout);
+    uint64_t expire = h2o_now(ctx->loop) + 1000;
+    h2o_timerwheel_add_timer(&ctx->loop->_timerwheel, &ctx->http2._graceful_shutdown_timeout, expire);
 }
 
 static void on_idle_timeout(h2o_timeout_entry_t *entry)

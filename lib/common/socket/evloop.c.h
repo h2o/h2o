@@ -443,6 +443,8 @@ h2o_evloop_t *create_evloop(size_t sz)
     memset(loop, 0, sz);
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
     h2o_linklist_init_anchor(&loop->_timeouts);
+    h2o_timerwheel_init(&loop->_timerwheel);
+    h2o_timerwheel_run(&loop->_timerwheel, loop->_now);
 
     update_now(loop);
 
@@ -582,6 +584,9 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
         h2o_timeout_t *timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _link, node);
         h2o_timeout_run(loop, timeout, loop->_now);
     }
+
+    h2o_timerwheel_run(&loop->_timerwheel, loop->_now);
+
     /* assert h2o_timeout_run has called run_pending */
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);

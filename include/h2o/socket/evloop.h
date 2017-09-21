@@ -23,6 +23,7 @@
 #define h2o__evloop_h
 
 #include "h2o/linklist.h"
+#include "h2o/timerwheel.h"
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
@@ -43,6 +44,7 @@ typedef struct st_h2o_evloop_t {
     } _statechanged;
     uint64_t _now;
     h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
+    h2o_timerwheel_t _timerwheel;
     h2o_sliding_counter_t exec_time_counter;
 } h2o_evloop_t;
 
