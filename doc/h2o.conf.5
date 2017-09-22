@@ -1381,7 +1381,7 @@ If the value is mapping, the feature is enabled, recognizing the following attri
 capacity-bits:
 number of bits used for the fingerprinting.
 Roughly speaking, the number of bits should be log2(1/P * number-of-assets-to-track) where P being the probability of false positives.
-Default is 13, enough for tracking about 100 asset files with 1/100 chance of false positives (i.e. log2(100 * 100) =~ 213).
+Default is 13, enough for tracking about 100 asset files with 1/100 chance of false positives (i.e. log2(100 * 100) =~ 13).
 tracking-types:
 specifies the types of the content tracked by casper.
 If omitted or set to blocking-assets, maintains fingerprint (and cancels server push) for resources with mime-type of highest priority.

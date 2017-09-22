@@ -57,7 +57,7 @@ MAN = configure/quick_start.man \
 %.html: %.mt snippets/directive.mt snippets/wrapper.mt
 	../misc/makedoc.pl $< $@
 
-%.man: %.mt man-snippets/directive.mt man-snippets/header man-snippets/mruby_method.mt man-snippets/wrapper.mt
+%.man: %.mt man-snippets/h2o.conf.5/directive.mt man-snippets/h2o.conf.5/header man-snippets/h2o.conf.5/mruby_method.mt man-snippets/h2o.conf.5/wrapper.mt
 	../misc/makeman.pl $< $@
 
 all: mkdir html search/searchindex.js manpage
@@ -68,7 +68,11 @@ mkdir:
 html: $(OUTPUT)
 
 manpage: $(MAN)
-	cat $(VPATH)/man-snippets/header $(MAN) > h2o.conf.5
+	cat $(VPATH)/man-snippets/h2o.conf.5/header $(MAN) > h2o.conf.5
+	( cat $(VPATH)/man-snippets/h2o.8/header ; \
+	cat $(VPATH)/man-snippets/h2o.8/description ; \
+	../h2o --help | ../misc/cli2man.pl ; \
+	cat $(VPATH)/man-snippets/h2o.8/footer ) > h2o.8
 
 search/searchindex.js: html
 	../misc/oktavia/bin/oktavia-mkindex $(patsubst %,-i %,$(OUTPUT)) -m html -u h2 -c 10 -t js -s english

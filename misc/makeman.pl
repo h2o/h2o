@@ -13,7 +13,7 @@ use HTML::TokeParser::Simple;
 use HTML::Entities;
 
 my $mt = Text::MicroTemplate::File->new(
-    include_path => [ qw(../srcdoc/man-snippets .) ],
+    include_path => [ qw(../srcdoc/man-snippets/h2o.conf.5 .) ],
 );
 
 die "Usage: $0 <src-file> <dst-file>\n"
