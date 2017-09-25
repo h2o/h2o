@@ -125,7 +125,7 @@ static h2o_timerwheel_slot_t *compute_slot(h2o_timerwheel_t *w, h2o_timerwheel_t
 int h2o_timerwheel_add_timer(h2o_timerwheel_t *w, h2o_timerwheel_timer_t *timer, uint64_t abs_expire)
 {
     h2o_timerwheel_slot_t *slot;
-    if (abs_expire - w->last_run > 0xffffffff) {
+    if (abs_expire > w->last_run &&  (abs_expire - w->last_run) > 0xffffffff) {
         return -1;
     }
 
