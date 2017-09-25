@@ -686,7 +686,8 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     }
 
     /* send the entire response immediately */
-    if (h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
+    if (status == 101 || status == 204 || status == 304 ||
+        h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
         h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_FINAL);
     } else {

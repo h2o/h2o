@@ -141,8 +141,13 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
     /* set input stream */
     assert(mrb_nil_p(ctx->refs.input_stream));
-    ctx->refs.input_stream = h2o_mruby_create_data_instance(
-        mrb, mrb_ary_entry(ctx->generator->ctx->shared->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS), ctx, &input_stream_type);
+    mrb_value input_stream_class;
+    if (ctx->req.method_is_head || status == 101 || status == 204 || status == 304) {
+        input_stream_class = mrb_ary_entry(ctx->generator->ctx->shared->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS);
+    } else {
+        input_stream_class = mrb_ary_entry(ctx->generator->ctx->shared->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS);
+    }
+    ctx->refs.input_stream = h2o_mruby_create_data_instance(mrb, input_stream_class, ctx, &input_stream_type);
     mrb_ary_set(mrb, resp, 2, ctx->refs.input_stream);
 
     if (mrb_nil_p(ctx->receiver)) {
@@ -344,6 +349,9 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         if (!mrb_nil_p(t)) {
             t = mrb_str_to_str(mrb, t);
             method = h2o_iovec_init(RSTRING_PTR(t), RSTRING_LEN(t));
+            if (h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"))) {
+                ctx->req.method_is_head = 1;
+            }
         }
     }
 
@@ -483,6 +491,9 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 
     klass = mrb_class_get_under(mrb, module, "HttpInputStream");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
+
+    klass = mrb_class_get_under(mrb, klass, "Empty");
+    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS, mrb_obj_value(klass));
 
     h2o_mruby_define_callback(mrb, "_h2o__http_join_response", H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE);
     h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK);

@@ -45,6 +45,10 @@ module H2O
       end
       s
     end
+
+    class Empty < HttpInputStream
+      def each; end
+    end
   end
 
 end
