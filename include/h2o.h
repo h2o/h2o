@@ -590,10 +590,6 @@ struct st_h2o_context_t {
          */
         h2o_linklist_t _conns;
         /**
-         * graceful shutdown timeout
-         */
-        h2o_timeout_t graceful_shutdown_timeout;
-        /**
          * timeout entry used for graceful shutdown
          */
         h2o_timerwheel_timer_t _graceful_shutdown_timeout;

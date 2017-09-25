@@ -117,7 +117,7 @@ static void graceful_shutdown_resend_goaway(h2o_timerwheel_timer_t *entry)
     if (do_close_stragglers && ctx->globalconf->http2.graceful_shutdown_timeout) {
         h2o_timerwheel_init_timer(&ctx->http2._graceful_shutdown_timeout, graceful_shutdown_close_stragglers);
         uint64_t expire = h2o_now(ctx->loop) + ctx->globalconf->http2.graceful_shutdown_timeout;
-        h2o_timerwheel_add_timer(&ctx->loop->_timerwheel, &ctx->http2._graceful_shutdown_timeout, expire);
+        assert(h2o_timerwheel_add_timer(&ctx->loop->_timerwheel, &ctx->http2._graceful_shutdown_timeout, expire)==0);
     }
 }
 
@@ -145,7 +145,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
         }
     }
     uint64_t expire = h2o_now(ctx->loop) + 1000;
-    h2o_timerwheel_add_timer(&ctx->loop->_timerwheel, &ctx->http2._graceful_shutdown_timeout, expire);
+    assert(h2o_timerwheel_add_timer(&ctx->loop->_timerwheel, &ctx->http2._graceful_shutdown_timeout, expire)==0);
 }
 
 static void on_idle_timeout(h2o_timeout_entry_t *entry)
