@@ -406,7 +406,7 @@ static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd,
 static int on_config_max_buffer_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->max_buffer_size);
+    return h2o_configurator_scanf(cmd, node, "%zu", &self->vars->max_buffer_size);
 }
 
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
