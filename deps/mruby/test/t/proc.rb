@@ -11,6 +11,10 @@ assert('Proc.new', '15.2.17.3.1') do
   end
 
   assert_equal (Proc.new {}).class, Proc
+
+  assert_raise LocalJumpError do
+    Proc.new{ break }.call
+  end
 end
 
 assert('Proc#[]', '15.2.17.4.1') do
@@ -163,4 +167,14 @@ assert('&obj call to_proc if defined') do
   assert_equal :from_to_proc, mock(&obj).call
 
   assert_raise(TypeError){ mock(&(Object.new)) }
+end
+
+assert('Creation of a proc through the block of a method') do
+  def m(&b) b end
+
+  assert_equal m{}.class, Proc
+
+  assert_raise LocalJumpError do
+    m{ break }.call
+  end
 end

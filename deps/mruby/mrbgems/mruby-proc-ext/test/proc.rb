@@ -66,6 +66,10 @@ end
 
 assert('Kernel#proc') do
   assert_true !proc{|a|}.lambda?
+
+  assert_raise LocalJumpError do
+    proc{ break }.call
+  end
 end
 
 assert('mrb_proc_new_cfunc_with_env') do

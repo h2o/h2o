@@ -749,7 +749,7 @@ new_float(parser_state *p, const char *s)
 
 /* (:str . (s . len)) */
 static node*
-new_str(parser_state *p, const char *s, int len)
+new_str(parser_state *p, const char *s, size_t len)
 {
   return cons((node*)NODE_STR, cons((node*)strndup(s, len), nint(len)));
 }
@@ -1384,7 +1384,7 @@ command_asgn    : lhs '=' command_rhs
                       backref_error(p, $1);
                       $$ = new_begin(p, 0);
                     }
-		;
+                ;
 
 command_rhs     : command_call   %prec tOP_ASGN
                 | command_call modifier_rescue stmt
@@ -2968,6 +2968,15 @@ var_ref         : variable
                       snprintf(buf, sizeof(buf), "%d", p->lineno);
                       $$ = new_int(p, buf, 10);
                     }
+                | keyword__ENCODING__
+                    {
+#ifdef MRB_UTF8_STRING
+                      const char *enc = "UTF-8";
+#else
+                      const char *enc = "ASCII-8BIT";
+#endif
+                      $$ = new_str(p, enc, strlen(enc));
+                    }
                 ;
 
 backref         : tNTH_REF
@@ -3361,7 +3370,7 @@ static void
 yyerror(parser_state *p, const char *s)
 {
   char* c;
-  int n;
+  size_t n;
 
   if (! p->capture_errors) {
 #ifndef MRB_DISABLE_STDIO
@@ -3397,7 +3406,7 @@ static void
 yywarn(parser_state *p, const char *s)
 {
   char* c;
-  int n;
+  size_t n;
 
   if (! p->capture_errors) {
 #ifndef MRB_DISABLE_STDIO
@@ -3593,7 +3602,7 @@ peek_n(parser_state *p, int c, int n)
 static mrb_bool
 peeks(parser_state *p, const char *s)
 {
-  int len = strlen(s);
+  size_t len = strlen(s);
 
 #ifndef MRB_DISABLE_STDIO
   if (p->f) {
@@ -3629,7 +3638,7 @@ skips(parser_state *p, const char *s)
     }
     s++;
     if (peeks(p, s)) {
-      int len = strlen(s);
+      size_t len = strlen(s);
 
       while (len--) {
         if (nextc(p) == '\n') {
@@ -3751,28 +3760,28 @@ toklen(parser_state *p)
 #define IS_LABEL_POSSIBLE() ((p->lstate == EXPR_BEG && !cmd_state) || IS_ARG())
 #define IS_LABEL_SUFFIX(n) (peek_n(p, ':',(n)) && !peek_n(p, ':', (n)+1))
 
-static int
+static int32_t
 scan_oct(const int *start, int len, int *retlen)
 {
   const int *s = start;
-  int retval = 0;
+  int32_t retval = 0;
 
   /* mrb_assert(len <= 3) */
   while (len-- && *s >= '0' && *s <= '7') {
     retval <<= 3;
     retval |= *s++ - '0';
   }
-  *retlen = s - start;
+  *retlen = (int)(s - start);
 
   return retval;
 }
 
 static int32_t
-scan_hex(const int *start, int len, int *retlen)
+scan_hex(parser_state *p, const int *start, int len, int *retlen)
 {
   static const char hexdigit[] = "0123456789abcdef0123456789ABCDEF";
   const int *s = start;
-  int32_t retval = 0;
+  uint32_t retval = 0;
   char *tmp;
 
   /* mrb_assert(len <= 8) */
@@ -3781,22 +3790,26 @@ scan_hex(const int *start, int len, int *retlen)
     retval |= (tmp - hexdigit) & 15;
     s++;
   }
-  *retlen = s - start;
+  *retlen = (int)(s - start);
 
-  return retval;
+  return (int32_t)retval;
 }
 
 static int32_t
 read_escape_unicode(parser_state *p, int limit)
 {
-  int32_t c;
   int buf[9];
   int i;
+  int32_t hex;
 
   /* Look for opening brace */
   i = 0;
   buf[0] = nextc(p);
-  if (buf[0] < 0) goto eof;
+  if (buf[0] < 0) {
+  eof:
+    yyerror(p, "invalid escape character syntax");
+    return -1;
+  }
   if (ISXDIGIT(buf[0])) {
     /* \uxxxx form */
     for (i=1; i<limit; i++) {
@@ -3811,17 +3824,12 @@ read_escape_unicode(parser_state *p, int limit)
   else {
     pushback(p, buf[0]);
   }
-  c = scan_hex(buf, i, &i);
-  if (i == 0) {
-  eof:
-    yyerror(p, "Invalid escape character syntax");
+  hex = scan_hex(p, buf, i, &i);
+  if (i == 0 || hex > 0x10FFFF || (hex & 0xFFFFF800) == 0xD800) {
+    yyerror(p, "invalid Unicode code point");
     return -1;
   }
-  if (c < 0 || c > 0x10FFFF || (c & 0xFFFFF800) == 0xD800) {
-    yyerror(p, "Invalid Unicode code point");
-    return -1;
-  }
-  return c;
+  return hex;
 }
 
 /* Return negative to indicate Unicode code point */
@@ -3887,13 +3895,12 @@ read_escape(parser_state *p)
         break;
       }
     }
-    c = scan_hex(buf, i, &i);
     if (i == 0) {
-      yyerror(p, "Invalid escape character syntax");
-      return 0;
+      yyerror(p, "invalid hex escape");
+      return -1;
     }
+    return scan_hex(p, buf, i, &i);
   }
-  return c;
 
   case 'u':     /* Unicode */
     if (peek(p, '{')) {
@@ -3960,9 +3967,9 @@ parse_string(parser_state *p)
 {
   int c;
   string_type type = (string_type)(intptr_t)p->lex_strterm->car;
-  int nest_level = (intptr_t)p->lex_strterm->cdr->car;
-  int beg = (intptr_t)p->lex_strterm->cdr->cdr->car;
-  int end = (intptr_t)p->lex_strterm->cdr->cdr->cdr;
+  int nest_level = intn(p->lex_strterm->cdr->car);
+  int beg = intn(p->lex_strterm->cdr->cdr->car);
+  int end = intn(p->lex_strterm->cdr->cdr->cdr);
   parser_heredoc_info *hinf = (type & STR_FUNC_HEREDOC) ? parsing_heredoc_inf(p) : NULL;
   int cmd_state = p->cmd_start;
 
@@ -5558,7 +5565,7 @@ mrb_parser_parse(parser_state *p, mrbc_context *c)
   p->jmp = &buf1;
 
   MRB_TRY(p->jmp) {
-    int n;
+    int n = 1;
 
     p->cmd_start = TRUE;
     p->in_def = p->in_single = 0;
@@ -5674,7 +5681,7 @@ MRB_API const char*
 mrbc_filename(mrb_state *mrb, mrbc_context *c, const char *s)
 {
   if (s) {
-    int len = strlen(s);
+    size_t len = strlen(s);
     char *p = (char *)mrb_malloc(mrb, len + 1);
 
     memcpy(p, s, len + 1);
@@ -5706,12 +5713,12 @@ mrb_parser_set_filename(struct mrb_parser_state *p, const char *f)
 
   for (i = 0; i < p->filename_table_length; ++i) {
     if (p->filename_table[i] == sym) {
-      p->current_filename_index = i;
+      p->current_filename_index = (int)i;
       return;
     }
   }
 
-  p->current_filename_index = p->filename_table_length++;
+  p->current_filename_index = (int)p->filename_table_length++;
 
   new_table = (mrb_sym*)parser_palloc(p, sizeof(mrb_sym) * p->filename_table_length);
   if (p->filename_table) {
@@ -5746,7 +5753,7 @@ mrb_parse_file(mrb_state *mrb, FILE *f, mrbc_context *c)
 #endif
 
 MRB_API parser_state*
-mrb_parse_nstring(mrb_state *mrb, const char *s, int len, mrbc_context *c)
+mrb_parse_nstring(mrb_state *mrb, const char *s, size_t len, mrbc_context *c)
 {
   parser_state *p;
 
@@ -5765,7 +5772,7 @@ mrb_parse_string(mrb_state *mrb, const char *s, mrbc_context *c)
   return mrb_parse_nstring(mrb, s, strlen(s), c);
 }
 
-static mrb_value
+MRB_API mrb_value
 mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c)
 {
   struct RClass *target = mrb->object_class;
@@ -5777,6 +5784,7 @@ mrb_load_exec(mrb_state *mrb, struct mrb_parser_state *p, mrbc_context *c)
     return mrb_undef_value();
   }
   if (!p->tree || p->nerr) {
+    if (c) c->parser_nerr = p->nerr;
     if (p->capture_errors) {
       char buf[256];
       int n;
@@ -5840,13 +5848,13 @@ mrb_load_file(mrb_state *mrb, FILE *f)
 #endif
 
 MRB_API mrb_value
-mrb_load_nstring_cxt(mrb_state *mrb, const char *s, int len, mrbc_context *c)
+mrb_load_nstring_cxt(mrb_state *mrb, const char *s, size_t len, mrbc_context *c)
 {
   return mrb_load_exec(mrb, mrb_parse_nstring(mrb, s, len, c), c);
 }
 
 MRB_API mrb_value
-mrb_load_nstring(mrb_state *mrb, const char *s, int len)
+mrb_load_nstring(mrb_state *mrb, const char *s, size_t len)
 {
   return mrb_load_nstring_cxt(mrb, s, len, NULL);
 }

@@ -253,7 +253,7 @@ fiber_resume(mrb_state *mrb, mrb_value self)
   mrb_int len;
   mrb_bool vmexec = FALSE;
 
-  mrb_get_args(mrb, "*", &a, &len);
+  mrb_get_args(mrb, "*!", &a, &len);
   if (mrb->c->ci->acc < 0) {
     vmexec = TRUE;
   }
@@ -313,7 +313,7 @@ fiber_transfer(mrb_state *mrb, mrb_value self)
   mrb_int len;
 
   fiber_check_cfunc(mrb, mrb->c);
-  mrb_get_args(mrb, "*", &a, &len);
+  mrb_get_args(mrb, "*!", &a, &len);
 
   if (c == mrb->root_c) {
     mrb->c->status = MRB_FIBER_TRANSFERRED;
@@ -371,7 +371,7 @@ fiber_yield(mrb_state *mrb, mrb_value self)
   mrb_value *a;
   mrb_int len;
 
-  mrb_get_args(mrb, "*", &a, &len);
+  mrb_get_args(mrb, "*!", &a, &len);
   return mrb_fiber_yield(mrb, len, a);
 }
 

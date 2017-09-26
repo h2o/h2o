@@ -1,5 +1,5 @@
-load "#{MRUBY_ROOT}/tasks/mruby_build_gem.rake"
-load "#{MRUBY_ROOT}/tasks/mruby_build_commands.rake"
+require "mruby/build/load_gems"
+require "mruby/build/command"
 
 module MRuby
   class << self
@@ -241,7 +241,7 @@ EOS
         else
           compiler.defines += %w(DISABLE_GEMS)
         end
-        compiler.define_rules build_dir, File.expand_path(File.join(File.dirname(__FILE__), '..'))
+        compiler.define_rules build_dir, File.expand_path(File.join(File.dirname(__FILE__), '..', '..'))
       end
     end
 

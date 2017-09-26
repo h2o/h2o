@@ -432,7 +432,7 @@ EOT
                 map { my $l = $_; chomp $l; $l } <$fh>;
             };
             @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
-            is $log[$#log], "[h2o_mruby] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected:hoge (RuntimeError)";
+            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected:\s*hoge \(RuntimeError\)};
         };
     };
     $tester->("flow style", <<"EOT", 5);
@@ -506,6 +506,23 @@ EOT
         (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         is $body, "main";
     };
+};
+
+subtest 'response with specific statuses should not contain content-length header' => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            [204, {}, []]
+          }
+EOT
+    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 204 OK\r\n}is;
+    unlike $headers, qr{^content-length:}im;
 };
 
 done_testing();

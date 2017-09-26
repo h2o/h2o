@@ -276,8 +276,8 @@ static yoml_t *convert_path_config_node(h2o_configurator_command_t *cmd, yoml_t 
             for (j = 0; j != elem->data.mapping.size; ++j) {
                 yoml_t *elemkey = elem->data.mapping.elements[j].key;
                 yoml_t *elemvalue = elem->data.mapping.elements[j].value;
-                map = h2o_mem_realloc(map, offsetof(yoml_t, data.mapping.elements) +
-                                               sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
+                map = h2o_mem_realloc(
+                    map, offsetof(yoml_t, data.mapping.elements) + sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
                 map->data.mapping.elements[map->data.mapping.size].key = elemkey;
                 map->data.mapping.elements[map->data.mapping.size].value = elemvalue;
                 ++map->data.mapping.size;
@@ -554,6 +554,10 @@ static int assert_is_extension(h2o_configurator_command_t *cmd, yoml_t *node)
         h2o_configurator_errprintf(cmd, node, "given extension \"%s\" does not start with a \".\"", node->data.scalar);
         return -1;
     }
+    if (node->data.scalar[1] == '\0') {
+        h2o_configurator_errprintf(cmd, node, "given extension \".\" is invalid: at least 2 characters are required");
+        return -1;
+    }
     return 0;
 }
 
@@ -633,7 +637,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
 static int on_config_mime_settypes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     h2o_mimemap_t *newmap = h2o_mimemap_create();
-
+    h2o_mimemap_clear_types(newmap);
     h2o_mimemap_set_default_type(newmap, h2o_mimemap_get_default_type(*ctx->mimemap)->data.mimetype.base, NULL);
     if (set_mimetypes(cmd, newmap, node) != 0) {
         h2o_mem_release_shared(newmap);
@@ -688,6 +692,18 @@ static int on_config_mime_setdefaulttype(h2o_configurator_command_t *cmd, h2o_co
     return 0;
 }
 
+static const char *normalize_ext(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    if (strcmp(node->data.scalar, "default") == 0) {
+        /* empty string means default */
+        return "";
+    } else if (assert_is_extension(cmd, node) == 0) {
+        return node->data.scalar + 1;
+    } else {
+        return NULL;
+    }
+}
+
 static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     static const char *ignore_commands[] = {"extension", NULL};
@@ -707,10 +723,9 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
     /* create dynamic type */
     switch (ext_node->type) {
     case YOML_TYPE_SCALAR:
-        if (assert_is_extension(cmd, ext_node) != 0)
-            return -1;
         exts = alloca(2 * sizeof(*exts));
-        exts[0] = ext_node->data.scalar + 1;
+        if ((exts[0] = normalize_ext(cmd, ext_node)) == NULL)
+            return -1;
         exts[1] = NULL;
         break;
     case YOML_TYPE_SEQUENCE: {
@@ -718,9 +733,8 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         size_t i;
         for (i = 0; i != ext_node->data.sequence.size; ++i) {
             yoml_t *n = ext_node->data.sequence.elements[i];
-            if (assert_is_extension(cmd, n) != 0)
+            if ((exts[i] = normalize_ext(cmd, n)) == NULL)
                 return -1;
-            exts[i] = n->data.scalar + 1;
         }
         exts[i] = NULL;
     } break;
@@ -816,7 +830,7 @@ static int on_config_server_name(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_send_server_name(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    switch(h2o_configurator_get_one_of(cmd, node, "OFF,ON,preserve")) {
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON,preserve")) {
     case 0: /* off */
         ctx->globalconf->server_name = h2o_iovec_init(H2O_STRLIT(""));
         break;
@@ -852,12 +866,12 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
 
     { /* `hosts` and `paths` */
         h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
-        h2o_configurator_define_command(c, "hosts", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
-                                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                        on_config_hosts);
-        h2o_configurator_define_command(c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
-                                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                        on_config_paths);
+        h2o_configurator_define_command(
+            c, "hosts", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            on_config_hosts);
+        h2o_configurator_define_command(
+            c, "paths", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING | H2O_CONFIGURATOR_FLAG_DEFERRED,
+            on_config_paths);
     };
 
     { /* setup global configurators */
@@ -905,8 +919,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_reprioritize_blocking_assets);
-        h2o_configurator_define_command(&c->super, "http2-push-preload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
-                                                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(&c->super, "http2-push-preload",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_push_preload);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);

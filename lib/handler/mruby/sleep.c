@@ -42,7 +42,7 @@ static void on_deferred_timeout(h2o_timeout_entry_t *entry)
 static void on_sleep_timeout(h2o_timeout_entry_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
-    assert(! mrb_nil_p(ctx->receiver));
+    assert(!mrb_nil_p(ctx->receiver));
     h2o_mruby_shared_context_t *shared = ctx->ctx->shared;
     mrb_int sleep_sec = (mrb_int)(h2o_now(shared->ctx->loop) - ctx->started_at) / 1000;
 
@@ -60,7 +60,8 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
 {
     mrb_state *mrb = mctx->shared->mrb;
 
-    if (mrb_ary_len(mrb, args) == 0) {
+    assert(mrb_array_p(args));
+    if (RARRAY_LEN(args) == 0) {
         return mrb_nil_value(); /* sleep forever */
     }
     mrb_value arg_sec = mrb_ary_entry(args, 0);

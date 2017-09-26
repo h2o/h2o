@@ -36,6 +36,42 @@ hash_values_at(mrb_state *mrb, mrb_value hash)
   return result;
 }
 
+/*
+ * call-seq:
+ *   hsh.compact!    -> hsh
+ *
+ * Removes all nil values from the hash. Returns the hash.
+ *
+ *   h = { a: 1, b: false, c: nil }
+ *   h.compact!     #=> { a: 1, b: false }
+ */
+static mrb_value
+hash_compact_bang(mrb_state *mrb, mrb_value hash)
+{
+  khiter_t k;
+  khash_t(ht) *h = RHASH_TBL(hash);
+  mrb_int n = -1;
+
+  if (!h) return mrb_nil_value();
+  for (k = kh_begin(h); k != kh_end(h); k++) {
+    if (kh_exist(h, k)) {
+      mrb_value val = kh_value(h, k).v;
+      khiter_t k2;
+
+      if (mrb_nil_p(val)) {
+        kh_del(ht, mrb, h, k);
+        n = kh_value(h, k).n;
+        for (k2 = kh_begin(h); k2 != kh_end(h); k2++) {
+          if (!kh_exist(h, k2)) continue;
+          if (kh_value(h, k2).n > n) kh_value(h, k2).n--;
+        }
+      }
+    }
+  }
+  if (n < 0) return mrb_nil_value();
+  return hash;
+}
+
 void
 mrb_mruby_hash_ext_gem_init(mrb_state *mrb)
 {
@@ -43,6 +79,7 @@ mrb_mruby_hash_ext_gem_init(mrb_state *mrb)
 
   h = mrb->hash_class;
   mrb_define_method(mrb, h, "values_at", hash_values_at, MRB_ARGS_ANY());
+  mrb_define_method(mrb, h, "compact!",  hash_compact_bang, MRB_ARGS_NONE());
 }
 
 void

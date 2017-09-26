@@ -165,11 +165,12 @@ void h2o_mruby_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
 
-    h2o_configurator_define_command(&c->super, "mruby.handler", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                                    H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_mruby_handler);
-    h2o_configurator_define_command(&c->super, "mruby.handler-file", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_define_command(
+        &c->super, "mruby.handler",
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_mruby_handler);
+    h2o_configurator_define_command(&c->super, "mruby.handler-file",
+                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_mruby_handler_file);
     h2o_configurator_define_command(&c->super, "mruby.handler_path", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_mruby_handler_path);

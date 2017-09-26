@@ -168,12 +168,12 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
     self->vars = self->_vars_stack;
     self->vars->index_files = h2o_file_default_index_files;
 
-    h2o_configurator_define_command(&self->super, "file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
-                                                                  H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_dir);
-    h2o_configurator_define_command(&self->super, "file.file", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
-                                                                   H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_file);
+    h2o_configurator_define_command(
+        &self->super, "file.dir", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED,
+        on_config_dir);
+    h2o_configurator_define_command(
+        &self->super, "file.file",
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_file);
     h2o_configurator_define_command(&self->super, "file.index",
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
