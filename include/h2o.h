@@ -560,11 +560,6 @@ struct st_h2o_context_t {
      */
     int shutdown_requested;
 
-    /**
-     * SSL handshake timeout
-     */
-    h2o_timeout_t handshake_timeout;
-
     struct {
         /**
          * request timeout
