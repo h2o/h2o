@@ -68,7 +68,10 @@ size_t h2o_timerwheel_run(h2o_timerwheel_t *wheel, uint64_t now);
  * display the contents of the timerwheel
  */
 void h2o_timerwheel_show(h2o_timerwheel_t *wheel);
-
+/**
+ * find out the time ramaining until the next timer triggers
+ */
+uint64_t h2o_timerwheel_get_wake_at(h2o_timerwheel_t *wheel);
 /**
  * creates a timer
  */

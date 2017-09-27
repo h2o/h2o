@@ -461,6 +461,10 @@ void update_now(h2o_evloop_t *loop)
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 {
     uint64_t wake_at = h2o_timeout_get_wake_at(&loop->_timeouts);
+    uint64_t tw_wake_at = h2o_timerwheel_get_wake_at(&loop->_timerwheel);
+    if (wake_at > tw_wake_at) {
+        wake_at = tw_wake_at;
+    }
 
     update_now(loop);
 
@@ -585,11 +589,11 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
         h2o_timeout_run(loop, timeout, loop->_now);
     }
 
-    h2o_timerwheel_run(&loop->_timerwheel, loop->_now);
-
     /* assert h2o_timeout_run has called run_pending */
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
+
+    h2o_timerwheel_run(&loop->_timerwheel, loop->_now);
 
     if (h2o_sliding_counter_is_running(&loop->exec_time_counter)) {
         update_now(loop);

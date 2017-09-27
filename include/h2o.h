@@ -534,10 +534,6 @@ struct st_h2o_context_t {
      */
     h2o_timeout_t zero_timeout;
     /**
-     * timeout structrue to be used for registering 100-milisecond timeout callbacks
-     */
-    h2o_timeout_t hundred_ms_timeout;
-    /**
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;

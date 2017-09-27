@@ -77,6 +77,19 @@ void h2o_timerwheel_show(h2o_timerwheel_t *w)
     }
 }
 
+uint64_t h2o_timerwheel_get_wake_at(h2o_timerwheel_t *w) {
+    int i = 0;
+
+    for (;i<64;i++) {
+        int real_slot = (w->last_run + i) & H2O_TIMERWHEEL_SLOTS_MASK;
+        h2o_timerwheel_slot_t *slot = &w->wheel[0][real_slot];
+        if (!h2o_linklist_is_empty(slot)) {
+            return w->last_run + i;
+        }
+    }
+    return w->last_run + H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
+}
+
 /* timer APIs */
 h2o_timerwheel_timer_t *h2o_timerwheel_create_timer(h2o_timerwheel_cb cb)
 {
