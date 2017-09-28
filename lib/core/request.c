@@ -700,14 +700,14 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
 static void do_push_path(void *_req, const char *path, size_t path_len, int is_critical)
 {
     h2o_req_t *req = _req;
-    req->conn->callbacks->push_path(req, path, path_len, is_critical);
+
+    if (req->conn->callbacks->push_path != NULL)
+        req->conn->callbacks->push_path(req, path, path_len, is_critical);
 }
 
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
     h2o_iovec_t ret = h2o_iovec_init(value, value_len);
-    if (req->conn->callbacks->push_path == NULL)
-        return ret;
 
     h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
                                            req->input.authority, req->res_is_delegated ? req->scheme : NULL,
