@@ -1947,6 +1947,7 @@ static void setup_configurators(void)
 #endif
 
     h2o_config_register_simple_status_handler(&conf.globalconf, (h2o_iovec_t){H2O_STRLIT("main")}, on_extra_status);
+    h2o_websocket_register_configurator(&conf.globalconf);
 }
 
 int main(int argc, char **argv)
