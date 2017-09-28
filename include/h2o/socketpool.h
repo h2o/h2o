@@ -45,6 +45,7 @@ typedef struct st_h2o_socketpool_target_t {
     int is_ssl;
     struct {
         h2o_iovec_t host;
+        uint16_t port;
         union {
             /* used to specify servname passed to getaddrinfo */
             h2o_iovec_t named_serv;
@@ -56,6 +57,12 @@ typedef struct st_h2o_socketpool_target_t {
         };
     } peer;
     h2o_url_t *url;
+
+    struct {
+        h2o_linklist_t sockets;
+    } _shared;
+
+
 } h2o_socketpool_target_t;
 
 typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
@@ -97,11 +104,15 @@ typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_reques
 
 typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_socketpool_target_t *target);
 /**
- * initializes a socket loop
+ * initializes a socket pool
+ */
+void h2o_socketpool_init(h2o_socketpool_t *pool, size_t capacity);
+/**
+ * initializes a socket pool with address
  */
 void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity);
 /**
- * initializes a socket loop
+ * initializes a socket pool with host and port
  */
 void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity);
 /**
@@ -118,6 +129,9 @@ void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, stru
  */
 void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl,
                                             h2o_url_t *url);
+
+h2o_socketpool_target_t *h2o_socketpool_get_or_add_target(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, h2o_url_t *url);
+
 /**
  * disposes of a socket loop
  */
@@ -131,6 +145,9 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
  */
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **req, h2o_socketpool_t *pool, h2o_loop_t *loop,
                             h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
+
+void h2o_socketpool_connect_to_target(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_socketpool_target_t *target, h2o_loop_t *loop,
+                                      h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
 /**
  * cancels a connect request
  */

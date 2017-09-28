@@ -57,6 +57,7 @@ typedef struct st_h2o_http1client_ctx_t {
     h2o_timeout_t *first_byte_timeout;
     h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
     SSL_CTX *ssl_ctx;
+    h2o_socketpool_t **dynamic_socketpool;
 } h2o_http1client_ctx_t;
 
 struct st_h2o_http1client_t {

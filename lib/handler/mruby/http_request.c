@@ -377,13 +377,20 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     }
 
     /* start building the request */
-    h2o_buffer_reserve(&ctx->req.buf, method.len + 1);
+    h2o_buffer_reserve(&ctx->req.buf, method.len + 1 + url.path.len + sizeof(" HTTP/1.1\r\n") - 1);
     append_to_buffer(&ctx->req.buf, method.base, method.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
-    h2o_buffer_reserve(&ctx->req.buf,
-                       url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
     append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\n"));
+
+    int can_keepalive = shared_ctx->ctx->proxy.client_ctx.dynamic_socketpool != NULL;
+    if (! can_keepalive) {
+        h2o_buffer_reserve(&ctx->req.buf, sizeof("Connection: close\r\n") - 1);
+        append_to_buffer(&ctx->req.buf, H2O_STRLIT("Connection: close\r\n"));
+    }
+
+    h2o_buffer_reserve(&ctx->req.buf, url.authority.len + sizeof("Host: \r\n") - 1);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT("Host: "));
     append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
@@ -424,8 +431,9 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     /* build request and connect */
     ctx->refs.request = h2o_mruby_create_data_instance(
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
-    h2o_http1client_connect(&ctx->client, ctx, &ctx->ctx->shared->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
-                            url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect, 0, NULL);
+
+    h2o_http1client_connect(&ctx->client, ctx, &shared_ctx->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
+                                url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect, 0, NULL);
 
     return ctx->refs.request;
 }

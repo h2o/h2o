@@ -415,6 +415,9 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit a via header
          */
         unsigned emit_via_header : 1;
+
+        int use_dynamic_socketpool : 1;
+        h2o_socketpool_t *dynamic_socketpool;
     } proxy;
 
     /**

@@ -660,9 +660,50 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
+static void connect_with_pool_and_target(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
+                                         h2o_socketpool_t *sockpool, h2o_socketpool_target_t *target, h2o_http1client_connect_cb cb, int is_chunked)
+{
+    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb, is_chunked);
+    client->_cb.on_connect = cb;
+    client->_connect_by_sockpool = 1;
+    client->super.sockpool.pool = sockpool;
+    client->_timeout.cb = on_connect_timeout;
+    client->_location_rewrite_url = NULL;
+    h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
+    h2o_socketpool_connect_to_target(&client->super.sockpool.connect_req, sockpool, target, ctx->loop, ctx->getaddr_receiver, on_pool_connect,
+                           client);
+}
+
+static h2o_socketpool_t *get_dynamic_socketpool(h2o_http1client_ctx_t *ctx)
+{
+    if (ctx->dynamic_socketpool == NULL)
+        return NULL;
+
+    if (*ctx->dynamic_socketpool == NULL) {
+        static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_lock(&init_lock);
+        if (*ctx->dynamic_socketpool == NULL) {
+            h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
+            h2o_socketpool_init(sockpool, SIZE_MAX); /* FIXME */
+            h2o_socketpool_set_timeout(sockpool, ctx->loop, 2000); /* FIXME */
+            __sync_synchronize();
+            *ctx->dynamic_socketpool = sockpool;
+        }
+        pthread_mutex_unlock(&init_lock);
+    }
+    return *ctx->dynamic_socketpool;
+}
+
 void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
                              int is_ssl, h2o_http1client_connect_cb cb, int is_chunked, h2o_url_t *location_rewrite_url)
 {
+    h2o_socketpool_t *dyn_sockpool = get_dynamic_socketpool(ctx);
+    if (dyn_sockpool != NULL) {
+        h2o_socketpool_target_t *target = h2o_socketpool_get_or_add_target(dyn_sockpool, host, port, is_ssl, NULL); /* FIXME url? */
+        connect_with_pool_and_target(_client, data, ctx, dyn_sockpool, target, cb, is_chunked);
+        return;
+    }
+
     struct st_h2o_http1client_private_t *client;
     char serv[sizeof("65536")];
 
@@ -700,18 +741,12 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
                              SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, client);
 }
 
+
+
 void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked)
 {
-    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb, is_chunked);
-    client->_cb.on_connect = cb;
-    client->_connect_by_sockpool = 1;
-    client->super.sockpool.pool = sockpool;
-    client->_timeout.cb = on_connect_timeout;
-    client->_location_rewrite_url = NULL;
-    h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
-    h2o_socketpool_connect(&client->super.sockpool.connect_req, sockpool, ctx->loop, ctx->getaddr_receiver, on_pool_connect,
-                           client);
+    connect_with_pool_and_target(_client, data, ctx, sockpool, NULL, cb, is_chunked);
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *_client)
