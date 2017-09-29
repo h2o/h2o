@@ -123,6 +123,7 @@ static void test_extract_push_path_from_link_header(void)
     // attributes
     DO_CHECK(NULL, NULL, "<http:otherpath>; rel=preload; nopush", NULL, {NULL});
     DO_CHECK(NULL, NULL, "<http:otherpath>; rel=preload; x-http2-push-only", "", {"/basepath/otherpath"});
+    DO_CHECK(NULL, NULL, "<http:otherpath>; rel=preload; critical", NULL, {"/basepath/otherpath", 1});
 
     // multiple entries
     DO_CHECK(&H2O_URL_SCHEME_HTTP, &input_authority, "</firstpath>; rel=preload, </secondpath>; rel=preload", NULL, {"/firstpath"},
