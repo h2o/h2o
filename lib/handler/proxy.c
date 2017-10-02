@@ -188,7 +188,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
     self->super.has_body_stream = 1;
-<<<<<<< HEAD
+
     if (config->get_upstream.cb) {
         self->get_upstream.cb = config->get_upstream.cb;
         self->get_upstream.ctx = config->get_upstream.ctx;
@@ -217,26 +217,6 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
                     h2o_socketpool_init_target_by_address(&targets.entries[i], (void *)&sa, sizeof(sa), is_ssl, &upstreams[i]);
                 }
                 targets.size++;
-=======
-    if (config->keepalive_timeout != 0) {
-        size_t i;
-        int is_ssl;
-        h2o_socketpool_target_vector_t targets = {};
-        h2o_vector_reserve(NULL, &targets, count);
-        self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
-        for (i = 0; i != count; ++i) {
-            if (config->registered_as_backends && config->reverse_path.base != NULL) {
-                upstreams[i].path = config->reverse_path;
-            }
-            to_sa_err = h2o_url_host_to_sun(upstreams[i].host, &sa);
-            is_ssl = upstreams[i].scheme == &H2O_URL_SCHEME_HTTPS;
-            if (to_sa_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
-                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]),
-                                                       is_ssl, &upstreams[i]);
-            } else {
-                assert(to_sa_err == NULL);
-                h2o_socketpool_init_target_by_address(&targets.entries[i], (void *)&sa, sizeof(sa), is_ssl, &upstreams[i]);
->>>>>>> upstream/master
             }
             h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */);
         }
