@@ -396,6 +396,10 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
+         * keepalive timeout (in milliseconds, 0 to disable)
+         */
+        uint64_t keepalive_timeout;
+        /**
          * SSL context for connections initiated by the proxy (optional, governed by the application)
          */
         SSL_CTX *ssl_ctx;
@@ -415,9 +419,6 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit a via header
          */
         unsigned emit_via_header : 1;
-
-        int use_dynamic_socketpool : 1;
-        h2o_socketpool_t *dynamic_socketpool;
     } proxy;
 
     /**
@@ -871,12 +872,9 @@ typedef struct st_h2o_req_overrides_t {
      */
     h2o_socketpool_t *socketpool;
     /**
-     * upstream host:port to connect to (or host.base == NULL)
+     * upstream to connect to (or NULL)
      */
-    struct {
-        h2o_iovec_t host;
-        uint16_t port;
-    } hostport;
+    h2o_url_t *upstream;
     /**
      * parameters for rewriting the `Location` header (only used if match.len != 0)
      */
@@ -1761,16 +1759,18 @@ typedef struct st_h2o_fastcgi_config_vars_t {
     } callbacks;
 } h2o_fastcgi_config_vars_t;
 
-/**
- * registers the fastcgi handler to the context
- */
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
-                                                        h2o_fastcgi_config_vars_t *vars);
-/**
- * registers the fastcgi handler to the context
- */
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
-                                                       h2o_fastcgi_config_vars_t *vars);
+h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_fastcgi_config_vars_t *vars);
+
+///**
+// * registers the fastcgi handler to the context
+// */
+//h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
+//                                                        h2o_fastcgi_config_vars_t *vars);
+///**
+// * registers the fastcgi handler to the context
+// */
+//h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
+//                                                       h2o_fastcgi_config_vars_t *vars);
 /**
  * registers the fastcgi handler to the context
  */

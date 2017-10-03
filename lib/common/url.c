@@ -26,8 +26,9 @@
 #include "h2o/string_.h"
 #include "h2o/url.h"
 
-const h2o_url_scheme_t H2O_URL_SCHEME_HTTP = {{H2O_STRLIT("http")}, 80};
-const h2o_url_scheme_t H2O_URL_SCHEME_HTTPS = {{H2O_STRLIT("https")}, 443};
+const h2o_url_scheme_t H2O_URL_SCHEME_HTTP = {{H2O_STRLIT("http")}, 80, 0};
+const h2o_url_scheme_t H2O_URL_SCHEME_HTTPS = {{H2O_STRLIT("https")}, 443, 1};
+const h2o_url_scheme_t H2O_URL_SCHEME_FASTCGI = {{H2O_STRLIT("fastcgi")}, 65535, 0};
 
 static int decode_hex(int ch)
 {

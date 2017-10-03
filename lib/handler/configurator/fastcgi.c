@@ -79,6 +79,45 @@ static int on_config_send_delegated_uri(h2o_configurator_command_t *cmd, h2o_con
     return 0;
 }
 
+static h2o_iovec_t create_authority_by_hostport(h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host, uint16_t port)
+{
+    h2o_iovec_t authority = {NULL};
+
+    if (port == scheme->default_port) {
+        authority = h2o_strdup(pool, host.base, host.len);
+    } else {
+        char _port[sizeof(H2O_UINT16_LONGEST_STR)];
+        int port_len = sprintf(_port, "%" PRIu16, port);
+        if (port_len < 0)
+            return authority;
+
+        authority.len = host.len + 1 + port_len;
+        authority.base = pool == NULL ? h2o_mem_alloc(authority.len) : h2o_mem_alloc_pool(pool, authority.len);
+        memcpy(authority.base, host.base, host.len);
+        memcpy(authority.base + host.len, ":", 1);
+        memcpy(authority.base + host.len + 1, _port, port_len);
+    }
+
+    return authority;
+}
+
+static h2o_iovec_t create_authority_by_sun_path(h2o_mem_pool_t *pool, h2o_iovec_t sun_path)
+{
+    h2o_iovec_t authority = {NULL};
+
+#define UNIX_PREFIX "[unix:"
+#define UNIX_SUFFIX "]"
+    authority.len = strlen(UNIX_PREFIX UNIX_SUFFIX) + sun_path.len;
+    authority.base = pool == NULL ? h2o_mem_alloc(authority.len) : h2o_mem_alloc_pool(pool, authority.len);
+    memcpy(authority.base, UNIX_PREFIX, sizeof(UNIX_PREFIX) - 1);
+    memcpy(authority.base + sizeof(UNIX_PREFIX) - 1, sun_path.base, sun_path.len);
+    memcpy(authority.base + authority.len - 1, UNIX_SUFFIX, sizeof(UNIX_SUFFIX) - 1);
+#undef UNIX_PREFIX
+#undef UNIX_SUFFIX
+
+    return authority;
+}
+
 static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
@@ -121,17 +160,22 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         return -1;
     }
 
+    h2o_url_t upstream;
+    h2o_iovec_t authority;
+
     if (strcmp(type, "unix") == 0) {
         /* unix socket */
         struct sockaddr_un sa;
-        memset(&sa, 0, sizeof(sa));
+//        memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
-        sa.sun_family = AF_UNIX;
-        strcpy(sa.sun_path, servname);
-        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), self->vars);
+        authority = create_authority_by_sun_path(NULL, h2o_iovec_init(servname, strlen(servname)));
+
+//        sa.sun_family = AF_UNIX;
+//        strcpy(sa.sun_path, servname);
+//        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), self->vars);
     } else if (strcmp(type, "tcp") == 0) {
         /* tcp socket */
         uint16_t port;
@@ -139,11 +183,17 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
             h2o_configurator_errprintf(cmd, node, "invalid port number:%s", servname);
             return -1;
         }
-        h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
+        authority = create_authority_by_hostport(NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(hostname, strlen(hostname)), port);
+
+//        h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
     } else {
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
     }
+
+    h2o_url_init(&upstream, &H2O_URL_SCHEME_FASTCGI, authority, h2o_iovec_init(H2O_STRLIT("/")));
+    h2o_fastcgi_register(ctx->pathconf, &upstream, self->vars);
+    free(authority.base);
 
     return 0;
 }
@@ -327,7 +377,13 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     config_vars = *self->vars;
     config_vars.callbacks.dispose = spawnproc_on_dispose;
     config_vars.callbacks.data = (char *)NULL + spawner_fd;
-    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), &config_vars);
+
+    h2o_iovec_t authority = create_authority_by_sun_path(NULL, h2o_iovec_init(sa.sun_path, strlen(sa.sun_path)));
+    h2o_url_t upstream;
+    h2o_url_init(&upstream, &H2O_URL_SCHEME_FASTCGI, authority, h2o_iovec_init(H2O_STRLIT("/")));
+    h2o_fastcgi_register(ctx->pathconf, &upstream, &config_vars);
+    free(authority.base);
+//    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), &config_vars);
 
     ret = 0;
 Exit:

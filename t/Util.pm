@@ -180,7 +180,7 @@ sub spawn_h2o {
             if $conf->{opts};
         $conf = $conf->{conf};
     }
-    print $conffh <<"EOT";
+    $conf = <<"EOT";
 $conf
 listen:
   host: 0.0.0.0
@@ -192,6 +192,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 EOT
+    print $conffh $conf;
 
     # spawn the server
     my ($guard, $pid) = spawn_server(

@@ -35,12 +35,10 @@ struct st_h2o_http1client_private_t {
         h2o_http1client_head_cb on_head;
         h2o_http1client_body_cb on_body;
     } _cb;
-    h2o_url_t *_location_rewrite_url;
-    int _connect_by_sockpool;
+    h2o_url_t *_origin;
     h2o_timeout_entry_t _timeout;
     int _method_is_head;
-    h2o_hostinfo_getaddr_req_t *_getaddr_req;
-    int _can_keepalive;
+    int _do_keepalive;
     union {
         struct {
             size_t bytesleft;
@@ -64,14 +62,11 @@ struct st_h2o_http1client_private_t {
 
 static void close_client(struct st_h2o_http1client_private_t *client)
 {
-    if (client->_getaddr_req != NULL) {
-        h2o_hostinfo_getaddr_cancel(client->_getaddr_req);
-        client->_getaddr_req = NULL;
-    }
     if (client->super.ssl.server_name != NULL)
         free(client->super.ssl.server_name);
     if (client->super.sock != NULL) {
-        if (client->super.sockpool.pool != NULL && client->_can_keepalive) {
+        if (client->super.sockpool.pool != NULL && client->_do_keepalive) {
+
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
             h2o_buffer_consume(&client->super.sock->input, client->super.sock->input->size);
             h2o_socketpool_return(client->super.sockpool.pool, client->super.sock);
@@ -95,7 +90,7 @@ static void close_client(struct st_h2o_http1client_private_t *client)
 
 static void on_body_error(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
-    client->_can_keepalive = 0;
+    client->_do_keepalive = 0;
     client->_cb.on_body(&client->super, errstr);
     close_client(client);
 }
@@ -146,7 +141,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             if (client->_body_decoder.content_length.bytesleft < sock->bytes_read) {
                 /* remove the trailing garbage from buf, and disable keepalive */
                 client->super.sock->input->size -= sock->bytes_read - client->_body_decoder.content_length.bytesleft;
-                client->_can_keepalive = 0;
+                client->_do_keepalive = 0;
             }
             client->_body_decoder.content_length.bytesleft = 0;
             errstr = h2o_http1client_error_is_eos;
@@ -159,7 +154,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         } else if (ret != 0) {
-            client->_can_keepalive = 0;
+            client->_do_keepalive = 0;
             close_client(client);
             return;
         }
@@ -182,7 +177,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
              * as if the transfer had complete, browsers appear to ignore
              * a missing 0\r\n chunk
              */
-            client->_can_keepalive = 0;
+            client->_do_keepalive = 0;
             client->_cb.on_body(&client->super, h2o_http1client_error_is_eos);
             close_client(client);
         } else {
@@ -200,14 +195,14 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
         switch (phr_decode_chunked(&client->_body_decoder.chunked.decoder, inbuf->bytes + inbuf->size - newsz, &newsz)) {
         case -1: /* error */
             newsz = sock->bytes_read;
-            client->_can_keepalive = 0;
+            client->_do_keepalive = 0;
             errstr = "failed to parse the response (chunked)";
             break;
         case -2: /* incomplete */
             errstr = NULL;
             break;
         default: /* complete, with garbage on tail; should disable keepalive */
-            client->_can_keepalive = 0;
+            client->_do_keepalive = 0;
         /* fallthru */
         case 0: /* complete */
             errstr = h2o_http1client_error_is_eos;
@@ -219,7 +214,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         } else if (cb_ret != 0) {
-            client->_can_keepalive = 0;
+            client->_do_keepalive = 0;
             close_client(client);
             return;
         }
@@ -230,7 +225,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
 
 static void on_error_before_head(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
-    assert(!client->_can_keepalive);
+    assert(!client->_do_keepalive);
     client->_cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
     close_client(client);
 }
@@ -307,13 +302,13 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* parse the headers */
     reader = on_body_until_close;
-    client->_can_keepalive = minor_version >= 1;
+    client->_do_keepalive = minor_version >= 1;
     for (i = 0; i != num_headers; ++i) {
         if (headers[i].name == &H2O_TOKEN_CONNECTION->buf) {
             if (h2o_contains_token(headers[i].value.base, headers[i].value.len, H2O_STRLIT("keep-alive"), ',')) {
-                client->_can_keepalive = 1;
+                client->_do_keepalive = 1;
             } else {
-                client->_can_keepalive = 0;
+                client->_do_keepalive = 0;
             }
         } else if (headers[i].name == &H2O_TOKEN_TRANSFER_ENCODING->buf) {
             if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("chunked"))) {
@@ -344,7 +339,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         is_eos = 0;
         /* close the connection if impossible to determine the end of the response (RFC 7230 3.3.3) */
         if (reader == on_body_until_close)
-            client->_can_keepalive = 0;
+            client->_do_keepalive = 0;
     }
 
     /* call the callback. sock may be stealed and stealed sock need rlen.*/
@@ -355,7 +350,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         close_client(client);
         goto Exit;
     } else if (client->_cb.on_body == NULL) {
-        client->_can_keepalive = 0;
+        client->_do_keepalive = 0;
         close_client(client);
         goto Exit;
     }
@@ -504,7 +499,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 static void on_connect_error(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, client->_location_rewrite_url);
+    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, client->_origin);
     close_client(client);
 }
 
@@ -516,7 +511,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
 
     client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head,
                                                  &client->_write_req_chunk_done.cb, &client->_write_req_chunk_done.ctx, &cur_body,
-                                                 client->_location_rewrite_url);
+                                                 client->_origin);
     if (client->_cb.on_head == NULL) {
         close_client(client);
         return;
@@ -563,15 +558,27 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     on_connection_ready(client);
 }
 
-static void on_connect(h2o_socket_t *sock, const char *err)
+static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *url)
 {
-    struct st_h2o_http1client_private_t *client = sock->data;
+    struct st_h2o_http1client_private_t *client = data;
 
-    if (err != NULL) {
+    client->super.sockpool.connect_req = NULL;
+
+    if (sock == NULL) {
+        assert(errstr != NULL);
         h2o_timeout_unlink(&client->_timeout);
-        on_connect_error(client, err);
+        on_connect_error(client, errstr);
         return;
     }
+
+    client->_origin = url;
+    if (sock->ssl != NULL) {
+        client->super.ssl.server_name = h2o_strdup(NULL, url->host.base, url->host.len).base;
+    }
+
+    client->super.sock = sock;
+    sock->data = client;
+
     if (client->super.ssl.server_name != NULL && client->super.sock->ssl == NULL) {
         h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->super.ssl.server_name,
                                  on_handshake_complete);
@@ -583,58 +590,10 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     on_connection_ready(client);
 }
 
-static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_socketpool_target_t *target)
-{
-    struct st_h2o_http1client_private_t *client = data;
-
-    client->super.sockpool.connect_req = NULL;
-    client->_location_rewrite_url = target->url;
-
-    if (target->is_ssl) {
-        client->super.ssl.server_name = h2o_strdup(NULL, target->peer.host.base, target->peer.host.len).base;
-    }
-
-    if (sock == NULL) {
-        assert(errstr != NULL);
-        on_connect_error(client, errstr);
-        return;
-    }
-
-    client->super.sock = sock;
-    sock->data = client;
-    on_connect(sock, NULL);
-}
-
 static void on_connect_timeout(h2o_timeout_entry_t *entry)
 {
     struct st_h2o_http1client_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_private_t, _timeout, entry);
     on_connect_error(client, "connection timeout");
-}
-
-static void start_connect(struct st_h2o_http1client_private_t *client, struct sockaddr *addr, socklen_t addrlen)
-{
-    if ((client->super.sock = h2o_socket_connect(client->super.ctx->loop, addr, addrlen, on_connect)) == NULL) {
-        on_connect_error(client, "socket create error");
-        return;
-    }
-    client->super.sock->data = client;
-}
-
-static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_client)
-{
-    struct st_h2o_http1client_private_t *client = _client;
-
-    assert(getaddr_req == client->_getaddr_req);
-    client->_getaddr_req = NULL;
-
-    if (errstr != NULL) {
-        on_connect_error(client, errstr);
-        return;
-    }
-
-    /* start connecting */
-    struct addrinfo *selected = h2o_hostinfo_select_one(res);
-    start_connect(client, selected->ai_addr, selected->ai_addrlen);
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
@@ -654,105 +613,34 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
     if (_client != NULL)
         *_client = &client->super;
 
-    client->_connect_by_sockpool = 0;
     return client;
 }
 
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
-static void connect_with_pool_and_target(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                         h2o_socketpool_t *sockpool, h2o_socketpool_target_t *target, h2o_http1client_connect_cb cb, int is_chunked)
+void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool, h2o_url_t *origin, h2o_http1client_connect_cb cb, int is_chunked)
 {
-    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb, is_chunked);
-    client->_cb.on_connect = cb;
-    client->_connect_by_sockpool = 1;
-    client->super.sockpool.pool = sockpool;
-    client->_timeout.cb = on_connect_timeout;
-    client->_location_rewrite_url = NULL;
-    h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
-    h2o_socketpool_connect_to_target(&client->super.sockpool.connect_req, sockpool, target, ctx->loop, ctx->getaddr_receiver, on_pool_connect,
-                           client);
-}
 
-static h2o_socketpool_t *get_dynamic_socketpool(h2o_http1client_ctx_t *ctx)
-{
-    if (ctx->dynamic_socketpool == NULL)
-        return NULL;
-
-    if (*ctx->dynamic_socketpool == NULL) {
-        static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
-        pthread_mutex_lock(&init_lock);
-        if (*ctx->dynamic_socketpool == NULL) {
-            h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, SIZE_MAX); /* FIXME */
-            h2o_socketpool_set_timeout(sockpool, ctx->loop, 2000); /* FIXME */
-            __sync_synchronize();
-            *ctx->dynamic_socketpool = sockpool;
-        }
-        pthread_mutex_unlock(&init_lock);
-    }
-    return *ctx->dynamic_socketpool;
-}
-
-void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_iovec_t host, uint16_t port,
-                             int is_ssl, h2o_http1client_connect_cb cb, int is_chunked, h2o_url_t *location_rewrite_url)
-{
-    h2o_socketpool_t *dyn_sockpool = get_dynamic_socketpool(ctx);
-    if (dyn_sockpool != NULL) {
-        h2o_socketpool_target_t *target = h2o_socketpool_get_or_add_target(dyn_sockpool, host, port, is_ssl, NULL); /* FIXME url? */
-        connect_with_pool_and_target(_client, data, ctx, dyn_sockpool, target, cb, is_chunked);
-        return;
-    }
+    if (socketpool == NULL)
+        socketpool = h2o_socketpool_get_default_socketpool(ctx->loop);
+    assert(socketpool != NULL);
 
     struct st_h2o_http1client_private_t *client;
-    char serv[sizeof("65536")];
 
     /* setup */
-    client = create_client(_client, data, ctx, is_ssl ? host : h2o_iovec_init(NULL, 0), cb, is_chunked);
+    client = create_client(_client, data, ctx, origin->scheme->is_ssl ? origin->host : h2o_iovec_init(NULL, 0), cb, is_chunked);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
-    client->_location_rewrite_url = location_rewrite_url;
+    client->_origin = origin;
+    client->super.sockpool.pool = socketpool;
 
-    { /* directly call connect(2) if `host` is an IP address */
-        struct sockaddr_in sin;
-        memset(&sin, 0, sizeof(sin));
-        if (h2o_hostinfo_aton(host, &sin.sin_addr) == 0) {
-            sin.sin_family = AF_INET;
-            sin.sin_port = htons(port);
-            start_connect(client, (void *)&sin, sizeof(sin));
-            return;
-        }
-    }
-    { /* directly call connect(2) if `host` refers to an UNIX-domain socket */
-        struct sockaddr_un sa;
-        const char *to_sa_err;
-        if ((to_sa_err = h2o_url_host_to_sun(host, &sa)) != h2o_url_host_to_sun_err_is_not_unix_socket) {
-            if (to_sa_err != NULL) {
-                on_connect_error(client, to_sa_err);
-                return;
-            }
-            start_connect(client, (void *)&sa, sizeof(sa));
-            return;
-        }
-    }
-    /* resolve destination and then connect */
-    client->_getaddr_req =
-        h2o_hostinfo_getaddr(ctx->getaddr_receiver, host, h2o_iovec_init(serv, sprintf(serv, "%u", (unsigned)port)), AF_UNSPEC,
-                             SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, client);
-}
-
-
-
-void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                       h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked)
-{
-    connect_with_pool_and_target(_client, data, ctx, sockpool, NULL, cb, is_chunked);
+    h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, origin, ctx->loop, ctx->getaddr_receiver, on_pool_connect, client);
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *_client)
 {
     struct st_h2o_http1client_private_t *client = (void *)_client;
-    client->_can_keepalive = 0;
+    client->_do_keepalive = 0;
     close_client(client);
 }
 
@@ -777,3 +665,4 @@ void h2o_http1client_body_read_resume(h2o_http1client_t *_client)
     struct st_h2o_http1client_private_t *client = (void *)_client;
     h2o_socket_read_start(client->super.sock, client->reader);
 }
+

@@ -111,15 +111,13 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.connect_timeout = &ctx->proxy.connect_timeout;
     ctx->proxy.client_ctx.first_byte_timeout = &ctx->proxy.first_byte_timeout;
     ctx->proxy.client_ctx.ssl_ctx = config->proxy.ssl_ctx;
-    if (config->proxy.use_dynamic_socketpool) {
-        ctx->proxy.client_ctx.dynamic_socketpool = &config->proxy.dynamic_socketpool;
-    }
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
 
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&mutex);
+
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
@@ -128,6 +126,13 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
         }
         h2o_context_init_pathconf_context(ctx, &hostconf->fallback_path);
     }
+
+    /* set dynamic socketpool timeout using first loop */
+    h2o_socketpool_t *sockpool = h2o_socketpool_get_default_socketpool(loop);
+    if (sockpool->timeout == UINT64_MAX) {
+        h2o_socketpool_set_timeout(sockpool, loop, config->proxy.keepalive_timeout);
+    }
+
     pthread_mutex_unlock(&mutex);
 }
 
