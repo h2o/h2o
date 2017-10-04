@@ -21,7 +21,7 @@ my $upstream_hostport = "127.0.0.1:@{[empty_port()]}";
 
 sub create_upstream {
     my @args = (
-        qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen),
+        qw(plackup -s Starlet --keepalive-timeout 100 --max-keepalive-reqs 100 --access-log /dev/null --listen),
         $upstream_hostport,
         ASSETS_DIR . "/upstream.psgi",
     );
@@ -378,6 +378,64 @@ EOT
             like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "";
         };
+    });
+};
+
+subtest 'keep-alive' => sub {
+    my $upstream = create_upstream();
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  default:
+    paths:
+      /default: # should keep-alive
+        mruby.handler: |
+          def doit(headers)
+            resp = http_request("http://$upstream_hostport/", { :headers => headers }).join
+            resp[1]['upstream-connection'] = resp[1]['connection'] || 'keep-alive'
+            resp
+          end
+
+          proc {|env|
+            doit(nil)
+          }
+      /keep-alive:
+        mruby.handler: |
+          proc {|env|
+            doit({ "Connection" => "keep-alive" })
+          }
+      /close:
+        mruby.handler: |
+          proc {|env|
+            doit({ "Connection" => "close" })
+          }
+EOT
+    });
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl_cmd) = @_;
+        $curl_cmd .= ' --silent --dump-header /dev/stderr';
+
+        subtest "default" => sub {
+            my ($headers, $body);
+            ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/default");
+            like $headers, qr{^upstream-connection: keep-alive}im;
+        };
+
+        subtest "keep-alive" => sub {
+            my ($headers, $body);
+            ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/keep-alive");
+            like $headers, qr{^upstream-connection: keep-alive}im;
+        };
+
+        subtest "close" => sub {
+            my ($headers, $body);
+            ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/close");
+            my $server_socket = $body;
+            like $headers, qr{^upstream-connection: close}im;
+        };
+
     });
 };
 
