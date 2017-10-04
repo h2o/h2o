@@ -31,8 +31,9 @@ my $huge_file = create_data_file($huge_file_size);
 my $doit = sub {
     my ($proto, $opt, $port) = @_;
     my $posts = 10;
-    my $out = `nghttp -t 60 $opt -nv -d $huge_file -m $posts $proto://127.0.0.1:$port/echo 2>&1 | grep 'recv WINDOW_UPDATE' | grep -v stream_id=0 | grep -oP stream_id=.. | uniq -c | wc -l`;
+    my $out = `nghttp -t 60 $opt -nv -d $huge_file -m $posts $proto://127.0.0.1:$port/echo 2>&1 | grep 'recv WINDOW_UPDATE' | grep -v stream_id=0 | grep -o stream_id=.. | uniq -c | wc -l`;
     chomp($out);
+    $out =~ s/\A\s*|\s*\z//;
     is $out, $posts, "No interleaving";
 };
 
