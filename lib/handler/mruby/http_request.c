@@ -321,7 +321,7 @@ static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
         return 0;
 
     if (h2o_lcstris(name.base, name.len, H2O_STRLIT("connection"))) {
-        if (! ctx->req.can_keepalive)
+        if (!ctx->req.can_keepalive)
             return 0;
     }
 
@@ -390,7 +390,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 
     h2o_socketpool_t *sockpool = h2o_socketpool_get_default_socketpool(ctx->ctx->shared->ctx->loop);
     ctx->req.can_keepalive = h2o_socketpool_can_keepalive(sockpool);
-    if (! ctx->req.can_keepalive) {
+    if (!ctx->req.can_keepalive) {
         h2o_buffer_reserve(&ctx->req.buf, sizeof("Connection: close\r\n") - 1);
         append_to_buffer(&ctx->req.buf, H2O_STRLIT("Connection: close\r\n"));
     }

@@ -509,9 +509,9 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     size_t reqbufcnt;
     h2o_iovec_t cur_body = h2o_iovec_init(NULL, 0);
 
-    client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head,
-                                                 &client->_write_req_chunk_done.cb, &client->_write_req_chunk_done.ctx, &cur_body,
-                                                 client->_origin);
+    client->_cb.on_head =
+        client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head,
+                               &client->_write_req_chunk_done.cb, &client->_write_req_chunk_done.ctx, &cur_body, client->_origin);
     if (client->_cb.on_head == NULL) {
         close_client(client);
         return;
@@ -618,7 +618,8 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
-void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool, h2o_url_t *origin, h2o_http1client_connect_cb cb, int is_chunked)
+void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
+                             h2o_url_t *origin, h2o_http1client_connect_cb cb, int is_chunked)
 {
 
     if (socketpool == NULL)
@@ -634,7 +635,8 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     client->_origin = origin;
     client->super.sockpool.pool = socketpool;
 
-    h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, origin, ctx->loop, ctx->getaddr_receiver, on_pool_connect, client);
+    h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, origin, ctx->loop, ctx->getaddr_receiver,
+                           on_pool_connect, client);
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *_client)
@@ -665,4 +667,3 @@ void h2o_http1client_body_read_resume(h2o_http1client_t *_client)
     struct st_h2o_http1client_private_t *client = (void *)_client;
     h2o_socket_read_start(client->super.sock, client->reader);
 }
-

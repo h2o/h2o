@@ -1759,18 +1759,10 @@ typedef struct st_h2o_fastcgi_config_vars_t {
     } callbacks;
 } h2o_fastcgi_config_vars_t;
 
+/**
+ * registers the fastcgi handler to the context
+ */
 h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_fastcgi_config_vars_t *vars);
-
-///**
-// * registers the fastcgi handler to the context
-// */
-//h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
-//                                                        h2o_fastcgi_config_vars_t *vars);
-///**
-// * registers the fastcgi handler to the context
-// */
-//h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
-//                                                       h2o_fastcgi_config_vars_t *vars);
 /**
  * registers the fastcgi handler to the context
  */

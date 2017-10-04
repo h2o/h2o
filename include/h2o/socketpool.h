@@ -62,7 +62,6 @@ typedef struct st_h2o_socketpool_target_t {
         h2o_linklist_t sockets;
     } _shared;
 
-
 } h2o_socketpool_target_t;
 
 typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
@@ -123,7 +122,8 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
  * connects to the peer (or returns a pooled connection)
  */
 
-void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop, h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
+void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
 /**
  * cancels a connect request
  */

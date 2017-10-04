@@ -79,7 +79,8 @@ static int on_config_send_delegated_uri(h2o_configurator_command_t *cmd, h2o_con
     return 0;
 }
 
-static h2o_iovec_t create_authority_by_hostport(h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host, uint16_t port)
+static h2o_iovec_t create_authority_by_hostport(h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host,
+                                                uint16_t port)
 {
     h2o_iovec_t authority = {NULL};
 
@@ -166,16 +167,11 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
     if (strcmp(type, "unix") == 0) {
         /* unix socket */
         struct sockaddr_un sa;
-//        memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
         authority = create_authority_by_sun_path(NULL, h2o_iovec_init(servname, strlen(servname)));
-
-//        sa.sun_family = AF_UNIX;
-//        strcpy(sa.sun_path, servname);
-//        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), self->vars);
     } else if (strcmp(type, "tcp") == 0) {
         /* tcp socket */
         uint16_t port;
@@ -184,8 +180,6 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
             return -1;
         }
         authority = create_authority_by_hostport(NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(hostname, strlen(hostname)), port);
-
-//        h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
     } else {
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
@@ -383,7 +377,6 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     h2o_url_init(&upstream, &H2O_URL_SCHEME_FASTCGI, authority, h2o_iovec_init(H2O_STRLIT("/")));
     h2o_fastcgi_register(ctx->pathconf, &upstream, &config_vars);
     free(authority.base);
-//    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), &config_vars);
 
     ret = 0;
 Exit:
