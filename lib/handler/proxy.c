@@ -162,13 +162,12 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     if (config->keepalive_timeout != 0) {
         size_t i;
         self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
-        h2o_socketpool_init(self->sockpool, SIZE_MAX /* FIXME */);
         for (i = 0; i != count; ++i) {
             if (config->registered_as_backends && config->reverse_path.base != NULL) {
                 upstreams[i].path = config->reverse_path;
             }
-            h2o_socketpool_add_target(self->sockpool, &upstreams[i]);
         }
+        h2o_socketpool_init_static(self->sockpool, SIZE_MAX /* FIXME */, upstreams, count);
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);

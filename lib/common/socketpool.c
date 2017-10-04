@@ -200,9 +200,9 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, h2o_iovec_t *hos
     }
 }
 
-void h2o_socketpool_init_target(h2o_socketpool_target_t *target, h2o_url_t *url)
+void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin)
 {
-    assert(url != NULL);
+    assert(origin != NULL);
 
     struct sockaddr_storage sa;
     socklen_t salen;
@@ -211,8 +211,8 @@ void h2o_socketpool_init_target(h2o_socketpool_target_t *target, h2o_url_t *url)
 
     memset(&sa, 0, sizeof(sa));
 
-    target->is_ssl = url->scheme->is_ssl;
-    target->type = detect_target_type(url, &host, &port, &sa, &salen);
+    target->is_ssl = origin->scheme->is_ssl;
+    target->type = detect_target_type(origin, &host, &port, &sa, &salen);
     target->peer.host = h2o_strdup(NULL, host.base, host.len);
     target->peer.port = port;
 
@@ -229,20 +229,37 @@ void h2o_socketpool_init_target(h2o_socketpool_target_t *target, h2o_url_t *url)
     }
 
     target->url = h2o_mem_alloc(sizeof(*target->url));
-    h2o_url_copy(NULL, target->url, url);
+    h2o_url_copy(NULL, target->url, origin);
     h2o_linklist_init_anchor(&target->_shared.sockets);
 }
 
-void h2o_socketpool_init(h2o_socketpool_t *pool, size_t capacity)
+void h2o_socketpool_init_static(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len)
 {
-    common_init(pool, (h2o_socketpool_target_vector_t ){}, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
+    int i;
+    h2o_socketpool_target_vector_t targets = {};
+
+    h2o_vector_reserve(NULL, &targets, origin_len);
+    for (i = 0; i != origin_len; ++i) {
+        h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
+        init_target(target, &origins[i]);
+        targets.entries[i] = target;
+    }
+    targets.size = origin_len;
+
+    common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
 }
 
-h2o_socketpool_target_t *h2o_socketpool_add_target(h2o_socketpool_t *pool, h2o_url_t *url)
+static inline int is_dynamic_pool(h2o_socketpool_t *pool)
 {
+    return pool->_lb.selector == NULL;
+}
+
+static h2o_socketpool_target_t *add_target(h2o_socketpool_t *pool, h2o_url_t *origin)
+{
+    assert(is_dynamic_pool(pool));
     h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
     h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-    h2o_socketpool_init_target(target, url);
+    init_target(target, origin);
     pool->targets.entries[pool->targets.size++] = target;
     return target;
 }
@@ -307,11 +324,6 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
     pool->_interval_cb.entry.cb = on_timeout;
 
     h2o_timeout_link(loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
-}
-
-static inline int is_dynamic_pool(h2o_socketpool_t *pool)
-{
-    return pool->_lb.selector == NULL;
 }
 
 static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *errstr)
@@ -464,7 +476,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (is_dynamic_pool(pool)) {
         target = lookup_target(pool, url);
         if (target == NULL) {
-            target = h2o_socketpool_add_target(pool, url);
+            target = add_target(pool, url);
         }
         sockets = &target->_shared.sockets;
     } else {
@@ -594,7 +606,7 @@ h2o_socketpool_t *h2o_socketpool_get_default_socketpool(h2o_loop_t *loop)
         pthread_mutex_lock(&init_lock);
         if (default_socketpool == NULL) {
             h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init(sockpool, SIZE_MAX /* FIXME */);
+            h2o_socketpool_init_dynamic(sockpool, SIZE_MAX /* FIXME */);
             h2o_socketpool_set_timeout(sockpool, loop, 2000);
             __sync_synchronize();
             default_socketpool = sockpool;

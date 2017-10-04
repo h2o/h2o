@@ -835,7 +835,7 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t 
     handler->config = *vars;
     if (vars->document_root.base != NULL)
         handler->config.document_root = h2o_strdup(NULL, vars->document_root.base, vars->document_root.len);
-    h2o_socketpool_init(&handler->sockpool, SIZE_MAX /* FIXME */);
-    h2o_socketpool_add_target(&handler->sockpool, upstream);
+
+    h2o_socketpool_init_static(&handler->sockpool, SIZE_MAX /* FIXME */, upstream, 1);
     return handler;
 }

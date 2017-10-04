@@ -104,20 +104,13 @@ typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_reques
 
 typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *url);
 /**
- * initializes a socket pool
+ * initializes a static socket pool
  */
-void h2o_socketpool_init(h2o_socketpool_t *pool, size_t capacity);
-
-h2o_socketpool_target_t *h2o_socketpool_add_target(h2o_socketpool_t *pool, h2o_url_t *url);
+void h2o_socketpool_init_static(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len);
 /**
  * initializes a dynamic socket pool
  */
 void h2o_socketpool_init_dynamic(h2o_socketpool_t *pool, size_t capacity);
-/**
- * initializes a target by specified hostport
- */
-void h2o_socketpool_init_target(h2o_socketpool_target_t *target, h2o_url_t *url);
-
 /**
  * disposes of a socket loop
  */
@@ -147,14 +140,14 @@ static int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *
 h2o_socketpool_t *h2o_socketpool_get_default_socketpool(h2o_loop_t *loop);
 void h2o_socketpool_set_default_socketpool(h2o_socketpool_t *socketpool);
 
-int h2o_socketpool_can_keepalive(h2o_socketpool_t *pool);
-
 /* inline defs */
 
 inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {
     return sock->on_close.data == pool;
 }
+
+int h2o_socketpool_can_keepalive(h2o_socketpool_t *pool);
 
 #ifdef __cplusplus
 }
