@@ -510,7 +510,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             close_data->target = entry_target;
             sock->on_close.cb = on_close;
             sock->on_close.data = close_data;
-            cb(sock, NULL, data, url);
+            cb(sock, NULL, data, entry_target->url);
             return;
         }
 
