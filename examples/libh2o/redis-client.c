@@ -22,6 +22,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include "h2o/redis.h"
+#include "hiredis.h"
 
 static h2o_loop_t *loop;
 static int exit_loop;
@@ -43,7 +44,7 @@ static void dump_reply(redisReply *reply, unsigned indent)
     switch (reply->type) {
     case REDIS_REPLY_STRING:
 
-        fprintf(stderr, "string: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "string: %.*s\n", (int)reply->len, reply->str);
         break;
     case REDIS_REPLY_ARRAY:
         fprintf(stderr, "array: %zu\n", reply->elements);
@@ -58,10 +59,10 @@ static void dump_reply(redisReply *reply, unsigned indent)
         fprintf(stderr, "integer: %lld\n", reply->integer);
         break;
     case REDIS_REPLY_STATUS:
-        fprintf(stderr, "status: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "status: %.*s\n", (int)reply->len, reply->str);
         break;
     case REDIS_REPLY_ERROR:
-        fprintf(stderr, "error: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "error: %.*s\n", (int)reply->len, reply->str);
         break;
     default:
         fprintf(stderr, "invalid reply type: %d\n", reply->type);
