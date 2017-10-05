@@ -60,7 +60,7 @@ my $output = run_with_h2get($server, <<"EOR");
     sleep 5;
 EOR
 
-my $resp;
+my $resp = '';
 while (<$nc_out>) {
     $resp = $resp . $_;
 }
@@ -77,7 +77,7 @@ ok($chunked_header_found == 1, "TE:chunked header found");
 my @chunks = split /\r\n/, $body;
 
 my $chunk_len = 0;
-for (my $i = 0; $i < length(@chunks); $i+=3) {
+for (my $i = 0; $i < scalar(@chunks); $i+=3) {
     $chunk_len += hex($chunks[$i]);
 }
 
