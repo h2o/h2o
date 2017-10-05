@@ -90,6 +90,9 @@ static void destroy_attached(struct pool_entry_t *entry)
 
 static void destroy_expired(h2o_socketpool_t *pool)
 {
+    if (pool->_interval_cb.loop == NULL)
+        return;
+
     /* caller should lock the mutex */
     uint64_t expire_before = h2o_now(pool->_interval_cb.loop) - pool->timeout;
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
@@ -318,8 +321,9 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 
 void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
 {
-    pool->timeout = msec;
+    assert(pool->_interval_cb.loop == NULL);
 
+    pool->timeout = msec;
     pool->_interval_cb.loop = loop;
     h2o_timeout_init(loop, &pool->_interval_cb.timeout, 1000);
     pool->_interval_cb.entry.cb = on_timeout;
