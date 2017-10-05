@@ -83,9 +83,30 @@ static void on_gc_dispose_command(mrb_state *mrb, void *_ctx)
     free(ctx);
 }
 
+static struct RClass *get_error_class(mrb_state *mrb, const char *name)
+{
+    h2o_mruby_shared_context_t *shared = mrb->ud;
+    mrb_value h2o = mrb_ary_entry(shared->constants, H2O_MRUBY_H2O_MODULE);
+    struct RClass *redis_klass = mrb_class_get_under(mrb, (struct RClass *)mrb_obj_ptr(h2o), "Redis");
+    struct RClass *error_klass = mrb_class_get_under(mrb, redis_klass, name);
+    return error_klass;
+}
+
+static void pass_reply(struct st_h2o_mruby_redis_command_context_t *ctx, mrb_value reply)
+{
+    mrb_state *mrb = ctx->conn->ctx->shared->mrb;
+    if (mrb_nil_p(ctx->receiver)) {
+        mrb_funcall(mrb, ctx->refs.command, "_on_reply", 1, reply);
+        h2o_mruby_assert(mrb);
+    } else {
+        int gc_arena = mrb_gc_arena_save(mrb);
+        h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
+        mrb_gc_arena_restore(mrb, gc_arena);
+    }
+}
+
 const static struct mrb_data_type redis_type = {"redis", on_gc_dispose_redis};
 const static struct mrb_data_type command_type = {"redis_command", on_gc_dispose_command};
-
 
 static mrb_value setup_method(mrb_state *mrb, mrb_value self)
 {
@@ -129,15 +150,6 @@ static mrb_value disconnect_method(mrb_state *mrb, mrb_value self)
     struct st_h2o_mruby_redis_conn_t *conn = DATA_PTR(self);
     h2o_redis_disconnect(&conn->super);
     return self;
-}
-
-static struct RClass *get_error_class(mrb_state *mrb, const char *name)
-{
-    h2o_mruby_shared_context_t *shared = mrb->ud;
-    mrb_value h2o = mrb_ary_entry(shared->constants, H2O_MRUBY_H2O_MODULE);
-    struct RClass *redis_klass = mrb_class_get_under(mrb, (struct RClass *)mrb_obj_ptr(h2o), "Redis");
-    struct RClass *error_klass = mrb_class_get_under(mrb, redis_klass, name);
-    return error_klass;
 }
 
 /*
@@ -204,17 +216,7 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
         reply = mrb_exc_new(mrb, error_klass, errstr, strlen(errstr));
     }
 
-    if (mrb_nil_p(ctx->receiver)) {
-        mrb_value fiber_runner = mrb_funcall(mrb, ctx->refs.command, "_on_reply", 1, reply);
-        h2o_mruby_assert(mrb);
-        if (! mrb_nil_p(fiber_runner))
-            h2o_mruby_run_fiber(ctx->conn->ctx, fiber_runner, mrb_nil_value(), NULL);
-    } else {
-        int gc_arena = mrb_gc_arena_save(mrb);
-        h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
-        mrb_gc_arena_restore(mrb, gc_arena);
-    }
-
+    pass_reply(ctx, reply);
     mrb_gc_unregister(mrb, ctx->refs.command);
 }
 

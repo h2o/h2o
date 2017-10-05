@@ -223,7 +223,120 @@ EOT
     is($body, '2');
 };
 
-# TODO: add streaming command tests when those are implemented
+subtest 'streaming' => sub {
+    subtest 'basic' => sub {
+        my $confmap = +{
+            '/' => <<"EOT",
+          channel = redis.subscribe('chan1').join
+          proc {|env|
+            begin
+              reply = channel.shift
+              [200, { '$REPLY_HEADER' => reply.join(':') }, []]
+            rescue H2O::Redis::ConnectionError => e
+              [503, {}, []]
+            end
+          }
+EOT
+            '/publish' => <<"EOT",
+          proc {|env|
+            channel, message = env['QUERY_STRING'].split(':')
+            redis.publish(channel, message)
+            [200, {}, []]
+          }
+EOT
+            '/concat-all' => <<"EOT",
+          \$unsubscribe_redis = redis # to unsubscribe later
+          channel = redis.subscribe('chan2').join
+          proc {|env|
+            messages = []
+            loop while channel.shift {|channel, message| messages << message }
+            [200, { '$REPLY_HEADER' => messages.join(':') }, []]
+          }
+EOT
+            '/unsubscribe' => <<"EOT",
+          proc {|env|
+            raise 'oops' if \$unsubscribe_redis.nil?
+            \$unsubscribe_redis.unsubscribe('chan2')
+            [200, {}, []]
+          }
+EOT
+        };
+
+        subtest 'publish before' => sub {
+            my ($tester, $guard) = setup($confmap);
+            $tester->(path => '/publish?chan1:FOO');
+            $tester->(path => '/publish?chan1:BAR');
+
+            my ($status, $headers);
+            ($status, $headers) = $tester->();
+            is $status, 200;
+            is $headers->{$REPLY_HEADER}, 'chan1:FOO';
+
+            ($status, $headers) = $tester->();
+            is $status, 200;
+            is $headers->{$REPLY_HEADER}, 'chan1:BAR';
+        };
+
+        subtest 'publish after' => sub {
+            my ($tester, $guard) = setup($confmap);
+
+            unless (fork) {
+              sleep 1;
+              $tester->(path => '/publish?chan1:FOO');
+              exit;
+            }
+
+            my ($status, $headers);
+            my $start = Time::HiRes::time;
+            ($status, $headers) = $tester->();
+            my $duration = Time::HiRes::time - $start;
+            is $status, 200;
+            is $headers->{$REPLY_HEADER}, 'chan1:FOO';
+            cmp_ok($duration, '>', 1, 'block until publish');
+        };
+
+        subtest 'unsubscribe' => sub {
+            my ($tester, $guard) = setup($confmap);
+
+            $tester->(path => '/publish?chan2:msg1');
+            unless (fork) {
+              sleep 1;
+              $tester->(path => '/publish?chan2:msg2');
+              sleep 1;
+              $tester->(path => '/unsubscribe');
+              exit;
+            }
+
+            my ($status, $headers);
+            my $start = Time::HiRes::time;
+            ($status, $headers) = $tester->(path => '/concat-all');
+            my $duration = Time::HiRes::time - $start;
+            is $status, 200;
+            is $headers->{$REPLY_HEADER}, 'msg1:msg2';
+            cmp_ok($duration, '>', 2, 'block until unsubscribe');
+        };
+
+        subtest 'connection error' => sub {
+            my ($tester, $guard) = setup($confmap);
+
+            local $SIG{ALRM} = sub {
+                undef $guard->{redis}; # shutdown redis-server
+            };
+
+            my ($status, $headers);
+            alarm(1);
+            my $start = Time::HiRes::time;
+            ($status, $headers) = $tester->();
+            my $duration = Time::HiRes::time - $start;
+            alarm(0);
+            is $status, 503;
+            cmp_ok($duration, '>', 1, 'block until shutdown');
+
+            ($status, $headers) = $tester->();
+            is $status, 503, 'raise same error immediately on same subscription';
+        };
+    };
+};
 
 done_testing;
 
@@ -238,26 +351,35 @@ sub spawn_redis {
 }
 
 sub setup {
-    my ($conf_code, $opts) = @_;
+    my ($confmap, $opts) = @_;
     $opts ||= +{};
     my ($redis, $redis_port) = spawn_redis($opts);
-    $conf_code = $conf_code->($redis_port) if ref($conf_code) eq 'CODE';
+    $confmap = $confmap->($redis_port) if ref($confmap) eq 'CODE';
+    unless (ref($confmap)) {
+      $confmap = +{ '/' => $confmap };
+    }
     
     my $conf = <<"EOT";
 num-threads: 1
 hosts:
   default:
     paths:
-      /:
+EOT
+    for my $path (keys %$confmap) {
+      my $code = $confmap->{$path};
+      $conf .= <<"EOT";
+      $path:
         mruby.handler: |
           redis = H2O::Redis.new(:host => '127.0.0.1', :port => $redis_port)
-$conf_code
+$code
 EOT
+    }
+
     my $server = spawn_h2o($conf);
     my $tester = sub {
         local $Test::Builder::Level = $Test::Builder::Level + 1;
         my %args = @_;
-        my $url = "http://127.0.0.1:$server->{port}/";
+        my $url = "http://127.0.0.1:$server->{port}@{[ $args{path} || '/' ]}";
         $url .= '?' . $args{query_string} if $args{query_string};
 
         my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr $url");

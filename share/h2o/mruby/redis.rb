@@ -57,9 +57,6 @@ module H2O
 
     def call(*command_args, &block)
       command_class = _command_class(command_args[0])
-      if command_class == Command::Streaming
-        raise UnavailableCommandError.new("#{command_args[0]} command is now unavailable, but coming soon!")
-      end
       ensure_connected do
         __call(command_args, command_class, &block)
       end
@@ -82,29 +79,33 @@ module H2O
     class Command
       attr_reader :args
 
+      module ReplyReceiver
+        def _validate_reply(reply)
+          raise reply if reply.kind_of?(RuntimeError)
+        end
+      end
+      include ReplyReceiver
+
       def initialize(args)
         @args = args
       end
 
+
       class OneShot < Command
-        def _check_reply(reply)
-          raise reply if reply.kind_of?(RuntimeError)
-        end
         def _on_reply(reply)
           @reply = reply
-          nil
         end
         def join
           if !@reply
             @reply = _h2o__redis_join_reply(self)
           end
-          _check_reply(@reply)
+          _validate_reply(@reply)
           @reply
         end
 
         # exec may contain error reply in array reply, or nil reply when watch failed, so have to check it
         class Exec < OneShot
-          def _check_reply(reply)
+          def _validate_reply(reply)
             if reply.nil?
               raise CommandError.new('transaction was aborted', self)
             end
@@ -126,7 +127,67 @@ module H2O
       end
 
       class Streaming < Command
-        # TODO
+        class Channel
+          include ReplyReceiver
+          def initialize(command)
+            @command = command
+            @replies = []
+            @unsubscribed = false
+            @error = nil
+          end
+          def _on_reply(reply)
+            @replies << reply
+          end
+          def shift
+            raise @error if @error
+            return nil if @replies.empty? && @unsubscribed
+
+            begin
+              if @replies.empty?
+                reply = _h2o__redis_join_reply(@command)
+              else
+                reply = @replies.shift
+              end
+              _validate_reply(reply)
+            rescue => e
+              @error = e # rethrow this error when called again
+              raise e
+            end
+
+            kind, channel, message = reply
+            if kind == 'unsubscribe'
+              return nil
+            elsif kind != 'message'
+              raise "unexpected kind of message: #{reply[0]}"
+            end
+            if block_given?
+              yield channel, message
+            else
+              return channel, message
+            end
+          end
+        end
+
+        def initialize(args)
+          super(args)
+        end
+        def _on_reply(reply)
+          if @channel
+            @channel._on_reply(reply)
+          else
+            @reply = reply
+          end
+        end
+        def join
+          if !@reply
+            @reply = _h2o__redis_join_reply(self)
+          end
+          _validate_reply(@reply)
+          unless @reply[0] == 'subscribe'
+            raise "unexpected kind of message: #{@reply[0]}"
+          end
+          @channel = Channel.new(self)
+        end
       end
     end
 
@@ -232,9 +293,9 @@ module H2O
       %w(
         pubsub publish
       ),
-      # %w(
-      #   psubscribe punsubscribe subscribe unsubscribe
-      # ),
+      %w(
+        psubscribe punsubscribe subscribe unsubscribe
+      ),
 
       # Scripting
       %w(
