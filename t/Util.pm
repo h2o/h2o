@@ -286,11 +286,11 @@ sub run_with_curl {
 sub run_with_h2get {
     my ($server, $script) = @_;
     plan skip_all => "h2get not found"
-        unless prog_exists($ENV{"H2O_ROOT"}."/h2get_bin/h2get");
+        unless prog_exists(bindir()."/h2get_bin/h2get");
     my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
     print $scriptfh $script;
     close($scriptfh);
-    return run_prog($ENV{"H2O_ROOT"}."/h2get_bin/h2get $scriptfn https://127.0.0.1:$server->{tls_port}");
+    return run_prog(bindir()."/h2get_bin/h2get $scriptfn https://127.0.0.1:$server->{tls_port}");
 }
 
 1;
