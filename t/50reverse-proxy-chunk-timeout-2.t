@@ -7,6 +7,9 @@ use Socket qw(SOMAXCONN);
 use Test::More;
 use t::Util;
 
+plan skip_all => 'nghttp not found'
+    unless prog_exists('nghttp');
+
 my $upstream_port = empty_port();
 
 # we can establish SOMAXCONN sockets without actually accepting them
