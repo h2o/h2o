@@ -278,9 +278,9 @@ static void on_command_timeout(h2o_timeout_entry_t *entry)
     h2o_timeout_unlink(entry);
 
     /* don't call on_command to avoid double free and invoke disconnect to finalize inflight commands */
+    command->_did_command_timeout = 1;
     return_reply(command->conn->_redis, NULL, command);
 
-    command->_did_command_timeout = 1;
     invoke_deferred(command->conn, &command->_defer_timeout_entry, on_command_timeout_deferred);
 }
 
