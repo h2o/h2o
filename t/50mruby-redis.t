@@ -391,6 +391,7 @@ hosts:
       /:
         mruby.handler: |
           proc {|env|
+            # if query string is empty, wait forever
             redis = H2O::Redis.new(:host => '127.0.0.1', :port => $port, :command_timeout => env['QUERY_STRING'])
             begin
               redis.get('hoge').join

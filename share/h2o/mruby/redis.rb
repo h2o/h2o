@@ -13,8 +13,8 @@ module H2O
       @port            = config[:port].to_i
       @db              = config[:db].to_i
       @password        = config[:password]
-      @connect_timeout = config[:connect_timeout].to_f
-      @command_timeout = config[:command_timeout].to_f
+      @connect_timeout = (config[:connect_timeout] || config[:timeout] || 5).to_f
+      @command_timeout = (config[:command_timeout] || config[:timeout] || 5).to_f
       __setup
     end
 
