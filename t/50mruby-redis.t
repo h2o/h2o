@@ -284,36 +284,38 @@ EOT
         subtest 'publish after' => sub {
             my ($tester, $guard) = setup($confmap);
 
-            unless (fork) {
+            my $pid = fork or do {
               sleep 1;
               $tester->(path => '/publish?chan1:FOO');
               exit;
-            }
+            };
 
             my ($status, $headers, $body, $resptime);
             ($status, $headers, $body, $resptime) = $tester->();
             is $status, 200;
             is $body, 'chan1:FOO';
             cmp_ok($resptime, '>', 1, 'block until publish');
+            waitpid $pid, 0;
         };
 
         subtest 'unsubscribe' => sub {
             my ($tester, $guard) = setup($confmap);
 
             $tester->(path => '/publish?chan2:msg1');
-            unless (fork) {
+            my $pid = fork or do {
               sleep 1;
               $tester->(path => '/publish?chan2:msg2');
               sleep 1;
               $tester->(path => '/unsubscribe');
               exit;
-            }
+            };
 
             my ($status, $headers, $body, $resptime);
             ($status, $headers, $body, $resptime) = $tester->(path => '/concat-all');
             is $status, 200;
             is $body, 'msg1:msg2';
             cmp_ok($resptime, '>', 2, 'block until unsubscribe');
+            waitpid $pid, 0;
         };
 
         subtest 'connection error' => sub {
@@ -338,7 +340,6 @@ EOT
 
 subtest 'connect timeout' => sub {
     my $spawner = sub {
-        my ($port) = @_;
         my $conf = <<"EOT";
 num-threads: 1
 hosts:
@@ -347,7 +348,8 @@ hosts:
       /:
         mruby.handler: |
           proc {|env|
-            redis = H2O::Redis.new(:host => '127.0.0.1', :port => $port, :connect_timeout => env['QUERY_STRING'])
+            # if query string is empty, wait forever
+            redis = H2O::Redis.new(:host => '192.0.2.0', :port => 6379, :connect_timeout => env['QUERY_STRING'])
             begin
               redis.get('hoge').join
             rescue H2O::Redis::ConnectTimeoutError
@@ -361,17 +363,16 @@ EOT
     };
 
     subtest 'disabled' => sub {
-        my ($guards, $port) = spawn_connect_timeout_mock();
-        my $server = $spawner->($port);
+        my $server = $spawner->();
         my ($status, $headers, $body, $resptime) = request("http://127.0.0.1:@{[$server->{port}]}", +{ timeout => 1 });
         is $status, 0, 'client timeout';
         cmp_ok($resptime, '>', 1);
         cmp_ok($resptime, '<', 2);
+        kill 'KILL', $server->{pid}; # server is blocking forever
     };
 
     subtest '1sec' => sub {
-        my ($guards, $port) = spawn_connect_timeout_mock();
-        my $server = $spawner->($port);
+        my $server = $spawner->();
         my ($status, $headers, $body, $resptime) = request("http://127.0.0.1:@{[$server->{port}]}/?1");
         is $status, 503;
         cmp_ok($resptime, '>', 1);
@@ -410,6 +411,7 @@ EOT
         is $status, 0, 'client timeout';
         cmp_ok($resptime, '>', 1);
         cmp_ok($resptime, '<', 2);
+        kill 'KILL', $server->{pid}; # server is blocking forever
     };
 
     subtest '1sec' => sub {
@@ -432,24 +434,6 @@ sub spawn_redis {
         is_ready => sub { check_port($redis_port) },
     );
     return ($redis, $redis_port);
-}
-
-sub spawn_connect_timeout_mock {
-    my $port = empty_port();
-    my $server = IO::Socket::INET->new(
-        Listen    => 1,
-        LocalAddr => '127.0.0.1',
-        LocalPort => $port,
-        Proto     => 'tcp',
-    ) or die "failed to listen to 127.0.0.1:$port:$!";
-
-    my $client = IO::Socket::INET->new(
-        PeerAddr => '127.0.0.1',
-        PeerPort => $port,
-        Proto    => 'tcp',
-    ) or die "failed to connect to 127.0.0.1:$port:$!";
-
-    return (+{ server => $server, client => $client }, $port);
 }
 
 sub spawn_command_timeout_mock {
