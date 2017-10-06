@@ -69,8 +69,8 @@ static void on_gc_dispose_redis(mrb_state *mrb, void *_conn)
     struct st_h2o_mruby_redis_conn_t *conn = _conn;
     if (conn == NULL) return;
 
-    h2o_redis_free(&conn->super);
     conn->refs.redis = mrb_nil_value();
+    h2o_redis_free(&conn->super);
 }
 
 static void on_gc_dispose_command(mrb_state *mrb, void *_ctx)
@@ -116,6 +116,18 @@ static mrb_value setup_method(mrb_state *mrb, mrb_value self)
     struct st_h2o_mruby_redis_conn_t *conn = (struct st_h2o_mruby_redis_conn_t *)h2o_redis_create_connection(shared->ctx->loop, sizeof(*conn));
     conn->ctx = shared->current_context;
 
+    mrb_value _connect_timeout = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@connect_timeout"));
+    if (! mrb_nil_p(_connect_timeout)) {
+        uint64_t connect_timeout = mrb_float(_connect_timeout) * 1000;
+        conn->super.connect_timeout = connect_timeout;
+    }
+
+    mrb_value _command_timeout = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@command_timeout"));
+    if (! mrb_nil_p(_command_timeout)) {
+        uint64_t command_timeout = mrb_float(_command_timeout) * 1000;
+        conn->super.command_timeout = command_timeout;
+    }
+
     DATA_TYPE(self) = &redis_type;
     DATA_PTR(self) = conn;
 
@@ -128,9 +140,8 @@ static mrb_value connect_method(mrb_state *mrb, mrb_value self)
     if (conn->super.state != H2O_REDIS_CONNECTION_STATE_CLOSED)
         return self;
 
-    mrb_value config = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@config"));
-    mrb_value _host = mrb_hash_get(mrb, config, mrb_symbol_value(mrb_intern_lit(mrb, "host")));
-    mrb_value _port = mrb_hash_get(mrb, config, mrb_symbol_value(mrb_intern_lit(mrb, "port")));
+    mrb_value _host = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@host"));
+    mrb_value _port = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@port"));
     const char *host = mrb_string_value_cstr(mrb, &_host);
     uint16_t port = mrb_fixnum(_port);
 
@@ -199,7 +210,7 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
         if (_reply == NULL) return;
         reply = decode_redis_reply(mrb, _reply, ctx->refs.command);
     } else {
-        struct RClass *error_klass;
+        struct RClass *error_klass = NULL;
         switch(err) {
         case H2O_REDIS_ERROR_CONNECTION:
             error_klass = get_error_class(mrb, "ConnectionError");
@@ -209,6 +220,12 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
             break;
         case H2O_REDIS_ERROR_UNKNOWN:
             error_klass = get_error_class(mrb, "UnknownError");
+            break;
+        case H2O_REDIS_ERROR_CONNECT_TIMEOUT:
+            error_klass = get_error_class(mrb, "ConnectTimeoutError");
+            break;
+        case H2O_REDIS_ERROR_COMMAND_TIMEOUT:
+            error_klass = get_error_class(mrb, "CommandTimeoutError");
             break;
         default:
             assert(!"FIXME");

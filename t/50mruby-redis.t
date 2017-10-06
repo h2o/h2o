@@ -3,6 +3,7 @@ use warnings;
 use IO::Socket::INET;
 use JSON;
 use Net::EmptyPort qw(check_port empty_port);
+use Scope::Guard qw/scope_guard/;
 use Time::HiRes;
 use Test::More;
 use t::Util;
@@ -12,8 +13,6 @@ plan skip_all => "could not find redis-server"
 plan skip_all => "could not find redis-cli"
     unless prog_exists("redis-cli");
 
-my $REPLY_HEADER = 'x-redis-reply';
-
 subtest 'oneshot' => sub {
     subtest 'basic' => sub {
         my ($tester, $guard) = setup(<<"EOT");
@@ -21,12 +20,12 @@ subtest 'oneshot' => sub {
                 redis.set('k1', 1)
                 redis.incrby('k1', 109)
                 reply = redis.get('k1').join
-                [200, { '$REPLY_HEADER' => reply }, []]
+                [200, {}, [reply]]
               }
 EOT
-        my ($status, $headers) = $tester->();
+        my ($status, $headers, $body) = $tester->();
         is $status, 200;
-        is $headers->{$REPLY_HEADER}, '110';
+        is $body, '110';
     };
 
     subtest 'prefetch' => sub {
@@ -34,12 +33,12 @@ EOT
               redis.set('k1', 'prefetched').join
               reply = redis.get('k1').join
               proc {|env|
-                [200, { '$REPLY_HEADER' => reply }, []]
+                [200, {}, [reply]]
               }
 EOT
-        my ($status, $headers) = $tester->();
+        my ($status, $headers, $body) = $tester->();
         is $status, 200;
-        is $headers->{$REPLY_HEADER}, 'prefetched';
+        is $body, 'prefetched';
     };
 
     subtest 'cache' => sub {
@@ -53,12 +52,12 @@ EOT
                   called = true
                   redis.get('k1').join
                 end
-                [200, { '$REPLY_HEADER' => reply }, []]
+                [200, {}, [reply]]
               }
 EOT
-        my ($status, $headers) = $tester->();
+        my ($status, $headers, $body) = $tester->();
         is $status, 200;
-        is $headers->{$REPLY_HEADER}, 'cached';
+        is $body, 'cached';
     };
 
     subtest 'command error' => sub {
@@ -68,15 +67,15 @@ EOT
                 begin
                   redis.lpush('k1', 1).join
                 rescue H2O::Redis::CommandError => e
-                  [503, { '$REPLY_HEADER' => e.message }, []]
+                  [503, {}, [e.message]]
                 else
                   [200, {}, []]
                 end
               }
 EOT
-        my ($status, $headers) = $tester->();
+        my ($status, $headers, $body) = $tester->();
         is $status, 503;
-        is $headers->{$REPLY_HEADER}, 'WRONGTYPE Operation against a key holding the wrong kind of value (command: LPUSH k1 1)';
+        is $body, 'WRONGTYPE Operation against a key holding the wrong kind of value (command: LPUSH k1 1)';
     };
 
     subtest 'connection error' => sub {
@@ -88,19 +87,19 @@ EOT
                 rescue H2O::Redis::ConnectionError => e
                   [503, {}, []]
                 else
-                  [200, { '$REPLY_HEADER' => reply }, []]
+                  [200, {}, [reply]]
                 end
               }
 EOT
-        my ($status, $headers);
+        my ($status, $headers, $body);
 
-        ($status, $headers) = $tester->();
+        ($status, $headers, $body) = $tester->();
         is $status, 200;
-        is $headers->{$REPLY_HEADER}, 'hoge';
+        is $body, 'hoge';
 
         undef $guard->{redis}; # shutdown redis-server
 
-        ($status, $headers) = $tester->();
+        ($status, $headers, $body) = $tester->();
         is $status, 503;
     };
 
@@ -173,19 +172,24 @@ EOT
               another_redis = H2O::Redis.new(:host => '127.0.0.1', :port => $redis_port)
               redis.set('k1', 1).join
               proc {|env|
-                redis.watch('k1') {
-                  val = redis.get('k1').join.to_i
-                  another_redis.set('k1', 110).join
-                  redis.multi {
-                    redis.set('k1', val + 1)
-                  }.join
-                }
-                [200, {}, []]
+                begin
+                    redis.watch('k1') {
+                      val = redis.get('k1').join.to_i
+                      another_redis.set('k1', 110).join
+                      redis.multi {
+                        redis.set('k1', val + 1)
+                      }.join
+                    }
+                rescue H2O::Redis::CommandError
+                  [503, {}, []]
+                else
+                  [200, {}, []]
+                end
               }
 EOT
                 });
                 my ($status, $headers, $body) = $tester->();
-                is $status, 500;
+                is $status, 503;
             };
 
         };
@@ -231,7 +235,7 @@ subtest 'streaming' => sub {
           proc {|env|
             begin
               reply = channel.shift
-              [200, { '$REPLY_HEADER' => reply.join(':') }, []]
+              [200, {}, [reply.join(':')]]
             rescue H2O::Redis::ConnectionError => e
               [503, {}, []]
             end
@@ -250,7 +254,7 @@ EOT
           proc {|env|
             messages = []
             loop while channel.shift {|channel, message| messages << message }
-            [200, { '$REPLY_HEADER' => messages.join(':') }, []]
+            [200, {}, [messages.join(':')]]
           }
 EOT
             '/unsubscribe' => <<"EOT",
@@ -267,14 +271,14 @@ EOT
             $tester->(path => '/publish?chan1:FOO');
             $tester->(path => '/publish?chan1:BAR');
 
-            my ($status, $headers);
-            ($status, $headers) = $tester->();
+            my ($status, $headers, $body);
+            ($status, $headers, $body) = $tester->();
             is $status, 200;
-            is $headers->{$REPLY_HEADER}, 'chan1:FOO';
+            is $body, 'chan1:FOO';
 
-            ($status, $headers) = $tester->();
+            ($status, $headers, $body) = $tester->();
             is $status, 200;
-            is $headers->{$REPLY_HEADER}, 'chan1:BAR';
+            is $body, 'chan1:BAR';
         };
 
         subtest 'publish after' => sub {
@@ -286,13 +290,11 @@ EOT
               exit;
             }
 
-            my ($status, $headers);
-            my $start = Time::HiRes::time;
-            ($status, $headers) = $tester->();
-            my $duration = Time::HiRes::time - $start;
+            my ($status, $headers, $body, $resptime);
+            ($status, $headers, $body, $resptime) = $tester->();
             is $status, 200;
-            is $headers->{$REPLY_HEADER}, 'chan1:FOO';
-            cmp_ok($duration, '>', 1, 'block until publish');
+            is $body, 'chan1:FOO';
+            cmp_ok($resptime, '>', 1, 'block until publish');
         };
 
         subtest 'unsubscribe' => sub {
@@ -307,13 +309,11 @@ EOT
               exit;
             }
 
-            my ($status, $headers);
-            my $start = Time::HiRes::time;
-            ($status, $headers) = $tester->(path => '/concat-all');
-            my $duration = Time::HiRes::time - $start;
+            my ($status, $headers, $body, $resptime);
+            ($status, $headers, $body, $resptime) = $tester->(path => '/concat-all');
             is $status, 200;
-            is $headers->{$REPLY_HEADER}, 'msg1:msg2';
-            cmp_ok($duration, '>', 2, 'block until unsubscribe');
+            is $body, 'msg1:msg2';
+            cmp_ok($resptime, '>', 2, 'block until unsubscribe');
         };
 
         subtest 'connection error' => sub {
@@ -323,18 +323,102 @@ EOT
                 undef $guard->{redis}; # shutdown redis-server
             };
 
-            my ($status, $headers);
+            my ($status, $headers, $body, $resptime);
             alarm(1);
-            my $start = Time::HiRes::time;
-            ($status, $headers) = $tester->();
-            my $duration = Time::HiRes::time - $start;
+            ($status, $headers, $body, $resptime) = $tester->();
             alarm(0);
             is $status, 503;
-            cmp_ok($duration, '>', 1, 'block until shutdown');
+            cmp_ok($resptime, '>', 1, 'block until shutdown');
 
             ($status, $headers) = $tester->();
             is $status, 503, 'raise same error immediately on same subscription';
         };
+    };
+};
+
+subtest 'connect timeout' => sub {
+    my $spawner = sub {
+        my ($port) = @_;
+        my $conf = <<"EOT";
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            redis = H2O::Redis.new(:host => '127.0.0.1', :port => $port, :connect_timeout => env['QUERY_STRING'])
+            begin
+              redis.get('hoge').join
+            rescue H2O::Redis::ConnectTimeoutError
+              [503, {}, []]
+            else
+              [200, {}, []]
+            end
+          }
+EOT
+        return spawn_h2o($conf);
+    };
+
+    subtest 'disabled' => sub {
+        my ($guards, $port) = spawn_connect_timeout_mock();
+        my $server = $spawner->($port);
+        my ($status, $headers, $body, $resptime) = request("http://127.0.0.1:@{[$server->{port}]}", +{ timeout => 1 });
+        is $status, 0, 'client timeout';
+        cmp_ok($resptime, '>', 1);
+        cmp_ok($resptime, '<', 2);
+    };
+
+    subtest '1sec' => sub {
+        my ($guards, $port) = spawn_connect_timeout_mock();
+        my $server = $spawner->($port);
+        my ($status, $headers, $body, $resptime) = request("http://127.0.0.1:@{[$server->{port}]}/?1");
+        is $status, 503;
+        cmp_ok($resptime, '>', 1);
+        cmp_ok($resptime, '<', 2);
+    };
+};
+
+subtest 'command timeout' => sub {
+    my $spawner = sub {
+        my ($port) = @_;
+        my $conf = <<"EOT";
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            redis = H2O::Redis.new(:host => '127.0.0.1', :port => $port, :command_timeout => env['QUERY_STRING'])
+            begin
+              redis.get('hoge').join
+            rescue H2O::Redis::CommandTimeoutError
+              [503, {}, []]
+            else
+              [200, {}, []]
+            end
+          }
+EOT
+        return spawn_h2o($conf);
+    };
+
+    subtest 'disabled' => sub {
+        my ($guards, $port) = spawn_command_timeout_mock();
+        my $server = $spawner->($port);
+        my ($status, $headers, $body, $resptime) = request("http://127.0.0.1:@{[$server->{port}]}", +{ timeout => 1 });
+        is $status, 0, 'client timeout';
+        cmp_ok($resptime, '>', 1);
+        cmp_ok($resptime, '<', 2);
+    };
+
+    subtest '1sec' => sub {
+        my ($guards, $port) = spawn_command_timeout_mock();
+        my $server = $spawner->($port);
+        my ($status, $headers, $body, $resptime) = request("http://127.0.0.1:@{[$server->{port}]}/?1");
+        is $status, 503;
+        cmp_ok($resptime, '>', 1);
+        cmp_ok($resptime, '<', 2);
     };
 };
 
@@ -348,6 +432,74 @@ sub spawn_redis {
         is_ready => sub { check_port($redis_port) },
     );
     return ($redis, $redis_port);
+}
+
+sub spawn_connect_timeout_mock {
+    my $port = empty_port();
+    my $server = IO::Socket::INET->new(
+        Listen    => 1,
+        LocalAddr => '127.0.0.1',
+        LocalPort => $port,
+        Proto     => 'tcp',
+    ) or die "failed to listen to 127.0.0.1:$port:$!";
+
+    my $client = IO::Socket::INET->new(
+        PeerAddr => '127.0.0.1',
+        PeerPort => $port,
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$port:$!";
+
+    return (+{ server => $server, client => $client }, $port);
+}
+
+sub spawn_command_timeout_mock {
+    my ($wait) = @_;
+    $wait ||= 3;
+    my $port = empty_port();
+
+    my $pid = fork;
+    unless ($pid) {
+        my $server = IO::Socket::INET->new(
+            Listen    => 5,
+            LocalAddr => '127.0.0.1',
+            LocalPort => $port,
+            Proto     => 'tcp',
+        ) or die "failed to listen to 127.0.0.1:$port:$!";
+        my @clients;
+        while (1) {
+            push(@clients, $server->accept);
+        }
+    }
+
+    my $guard = scope_guard(sub { kill 'KILL', $pid; });
+    return (+{ guard => $guard }, $port);
+}
+
+sub request {
+    my ($url, $opts) = @_;
+    $opts ||= +{};
+    my $curl = 'curl --silent --dump-header /dev/stderr';
+    if ($opts->{timeout}) {
+        $curl .= " -m $opts->{timeout}";
+    }
+    my $start_at = Time::HiRes::time;
+    my ($headers, $body) = run_prog("$curl $url");
+    my $resptime = Time::HiRes::time - $start_at;
+    my $status;
+    unless ($headers) {
+        return (0, +{}, '', $resptime); # failed to request
+    }
+
+    # parse status and convert headers to hash
+    my @header_lines = split(/\n/, $headers);
+    $_ =~ s/^\s+|\s+$//g for @header_lines;
+    $header_lines[0] =~ qr!HTTP/(?:[\d.]+) (\d+)! or die "status line is invalid : $header_lines[0]";
+    $status = $1;
+    shift(@header_lines);
+    pop(@header_lines);
+    $headers = +{ map { split(/\s*:\s*/, $_, 2) } @header_lines };
+
+    return ($status, $headers, $body, $resptime);
 }
 
 sub setup {
@@ -381,20 +533,7 @@ EOT
         my %args = @_;
         my $url = "http://127.0.0.1:$server->{port}@{[ $args{path} || '/' ]}";
         $url .= '?' . $args{query_string} if $args{query_string};
-
-        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr $url");
-        my $status;
-
-        # parse status and convert headers to hash
-        my @header_lines = split(/\n/, $headers);
-        $_ =~ s/^\s+|\s+$//g for @header_lines;
-        $header_lines[0] =~ qr!HTTP/(?:[\d.]+) (\d+)! or die "status line is invalid : $header_lines[0]";
-        $status = $1;
-        shift(@header_lines);
-        pop(@header_lines);
-        $headers = +{ map { split(/\s*:\s*/, $_, 2) } @header_lines };
-
-        return ($status, $headers, $body);
+        request($url);
     };
     my $redis_client = sub {
         my @commands = @_;

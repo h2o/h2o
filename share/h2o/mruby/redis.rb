@@ -1,8 +1,20 @@
 module H2O
 
   class Redis
+    attr_reader :host
+    attr_reader :port
+    attr_reader :db
+    attr_reader :password
+    attr_reader :connect_timeout
+    attr_reader :command_timeout
+
     def initialize(config)
-      @config = config
+      @host            = config[:host]
+      @port            = config[:port].to_i
+      @db              = config[:db].to_i
+      @password        = config[:password]
+      @connect_timeout = config[:connect_timeout].to_f
+      @command_timeout = config[:command_timeout].to_f
       __setup
     end
 
@@ -13,26 +25,18 @@ module H2O
     def disconnected?; end
     def __call; end
 
-    def password
-      @config[:password]
-    end
-
-    def db
-      @config[:db]
-    end
-
     def db=(_db)
-      old = @config[:db]
-      @config[:db] = _db.to_i
-      if ! disconnected? && @config[:db] != old
-        self.select(@config[:db])
+      old = @db
+      @db = _db.to_i
+      if ! disconnected? && @db != old
+        self.select(@db)
       end
     end
 
     def connect
       __connect
-      self.auth(@config[:password]) if @config[:password]
-      self.select(@config[:db]) if (@config[:db] || 0) != 0
+      self.auth(@password) if @password
+      self.select(@db) if @db != 0
     end
 
     def ensure_connected
@@ -73,6 +77,9 @@ module H2O
     end
     class ConnectionError < BaseError; end
     class ProtocolError < BaseError; end
+    class TimeoutError < BaseError; end
+    class ConnectTimeoutError < TimeoutError; end
+    class CommandTimeoutError < TimeoutError; end
     class UnknownError < BaseError; end
     class UnavailableCommandError < BaseError; end
 
