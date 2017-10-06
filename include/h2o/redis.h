@@ -87,6 +87,7 @@ void h2o_redis_disconnect(h2o_redis_conn_t *conn);
 void h2o_redis_free(h2o_redis_conn_t *conn);
 
 h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
-h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc, const char **argv, const size_t *argvlen);
+h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc,
+                                            const char **argv, const size_t *argvlen);
 
 #endif

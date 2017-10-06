@@ -27,7 +27,6 @@
 
 static void attach_loop(redisAsyncContext *ac, h2o_loop_t *loop);
 
-
 static void invoke_deferred(h2o_redis_conn_t *conn, h2o_timeout_entry_t *entry, h2o_timeout_cb cb)
 {
     entry->cb = cb;
@@ -189,29 +188,28 @@ static void return_reply(redisAsyncContext *redis, redisReply *reply, h2o_redis_
     } else if (redis->err != REDIS_OK) {
         errstr = redis->c.errstr;
         switch (redis->c.err) {
-            case REDIS_ERR_IO:
-                /* hiredis internally checks socket error and set errno */
-                if (errno == ETIMEDOUT) {
-                    err = H2O_REDIS_ERROR_CONNECT_TIMEOUT;
-                    errstr = "Connection timeout";
-                } else {
-                    err = H2O_REDIS_ERROR_CONNECTION;
-                }
-                break;
-            case REDIS_ERR_EOF:
+        case REDIS_ERR_IO:
+            /* hiredis internally checks socket error and set errno */
+            if (errno == ETIMEDOUT) {
+                err = H2O_REDIS_ERROR_CONNECT_TIMEOUT;
+                errstr = "Connection timeout";
+            } else {
                 err = H2O_REDIS_ERROR_CONNECTION;
-                break;
-            case REDIS_ERR_PROTOCOL:
-                err = H2O_REDIS_ERROR_PROTOCOL;
-                break;
-            case REDIS_ERR_OOM:
-            case REDIS_ERR_OTHER:
-                err = H2O_REDIS_ERROR_UNKNOWN;
-                break;
-            default:
-                assert(!"FIXME");
+            }
+            break;
+        case REDIS_ERR_EOF:
+            err = H2O_REDIS_ERROR_CONNECTION;
+            break;
+        case REDIS_ERR_PROTOCOL:
+            err = H2O_REDIS_ERROR_PROTOCOL;
+            break;
+        case REDIS_ERR_OOM:
+        case REDIS_ERR_OTHER:
+            err = H2O_REDIS_ERROR_UNKNOWN;
+            break;
+        default:
+            assert(!"FIXME");
         }
-
     }
 
     command->cb(reply, command->data, err, errstr);
@@ -223,10 +221,9 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
     h2o_redis_command_t *command = (h2o_redis_command_t *)privdata;
 
     /* if timeout has happened, reply has been already returned in on_command_timeout */
-    if (! command->_did_command_timeout) {
+    if (!command->_did_command_timeout) {
         return_reply(redis, reply, command);
     }
-
 
     switch (command->type) {
     case H2O_REDIS_COMMAND_TYPE_SUBSCRIBE:
@@ -273,7 +270,8 @@ static void on_command_timeout(h2o_timeout_entry_t *entry)
     disconnect(command->conn, 1);
 }
 
-static h2o_redis_command_t *create_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, h2o_redis_command_type_t type)
+static h2o_redis_command_t *create_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data,
+                                           h2o_redis_command_type_t type)
 {
     h2o_redis_command_t *command = h2o_mem_alloc(sizeof(h2o_redis_command_t));
     *command = (h2o_redis_command_t){NULL};
@@ -284,7 +282,8 @@ static h2o_redis_command_t *create_command(h2o_redis_conn_t *conn, h2o_redis_com
     command->_defer_timeout_entry.cb = on_command_error_deferred;
     command->_command_timeout_entry.cb = on_command_timeout;
 
-    if (conn->command_timeout != 0 && (type == H2O_REDIS_COMMAND_TYPE_NORMAL || type == H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE || type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE)) {
+    if (conn->command_timeout != 0 && (type == H2O_REDIS_COMMAND_TYPE_NORMAL || type == H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE ||
+                                       type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE)) {
         h2o_timeout_init(conn->loop, &command->_command_timeout, conn->command_timeout);
         h2o_timeout_link(conn->loop, &command->_command_timeout, &command->_command_timeout_entry);
     }
@@ -322,7 +321,9 @@ static void send_command(h2o_redis_conn_t *conn, h2o_redis_command_t *command, c
  */
 static h2o_redis_command_type_t detect_command_type(const char *formatted)
 {
-#define CHECK(c) if (c == NULL) return H2O_REDIS_COMMAND_TYPE_ERROR
+#define CHECK(c)                                                                                                                   \
+    if (c == NULL)                                                                                                                 \
+    return H2O_REDIS_COMMAND_TYPE_ERROR
 
     char *p = (char *)formatted;
     CHECK(p);
@@ -337,11 +338,16 @@ static h2o_redis_command_type_t detect_command_type(const char *formatted)
     CHECK(p);
 
 #define MATCH(c, target) strncasecmp(c, target, sizeof(target) - 1) == 0
-    if (MATCH(p, "subscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_SUBSCRIBE;
-    if (MATCH(p, "unsubscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE;
-    if (MATCH(p, "psubscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE;
-    if (MATCH(p, "punsubscribe\r\n")) return H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE;
-    if (MATCH(p, "monitor\r\n")) return H2O_REDIS_COMMAND_TYPE_MONITOR;
+    if (MATCH(p, "subscribe\r\n"))
+        return H2O_REDIS_COMMAND_TYPE_SUBSCRIBE;
+    if (MATCH(p, "unsubscribe\r\n"))
+        return H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE;
+    if (MATCH(p, "psubscribe\r\n"))
+        return H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE;
+    if (MATCH(p, "punsubscribe\r\n"))
+        return H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE;
+    if (MATCH(p, "monitor\r\n"))
+        return H2O_REDIS_COMMAND_TYPE_MONITOR;
 #undef MATCH
     return H2O_REDIS_COMMAND_TYPE_NORMAL;
 #undef CHECK
@@ -366,7 +372,8 @@ h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command
     return command;
 }
 
-h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc, const char **argv, const size_t *argvlen)
+h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc,
+                                            const char **argv, const size_t *argvlen)
 {
     sds sdscmd;
     int len;
