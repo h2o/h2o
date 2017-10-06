@@ -77,7 +77,7 @@ module H2O
     end
     class ConnectionError < BaseError; end
     class ProtocolError < BaseError; end
-    class TimeoutError < BaseError; end
+    class TimeoutError < ConnectionError; end
     class ConnectTimeoutError < TimeoutError; end
     class CommandTimeoutError < TimeoutError; end
     class UnknownError < BaseError; end

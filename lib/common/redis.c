@@ -69,25 +69,38 @@ static void on_connect(const redisAsyncContext *redis, int status)
     }
 }
 
-static void on_disconnect(const redisAsyncContext *redis, int status)
+static void close_connection(h2o_redis_conn_t *conn)
 {
-    h2o_redis_conn_t *conn = (h2o_redis_conn_t *)redis->data;
     conn->state = H2O_REDIS_CONNECTION_STATE_CLOSED;
-    conn->_redis = NULL;
+
     if (conn->on_close != NULL) {
-        conn->on_close(redis->c.errstr);
+        conn->on_close(conn->_redis->c.errstr);
     }
+    conn->_redis = NULL;
 
     if (h2o_timeout_is_linked(&conn->_connect_timeout_entry)) {
         h2o_timeout_unlink(&conn->_connect_timeout_entry);
+    }
+    if (h2o_linklist_is_linked(&conn->_connect_timeout._link)) {
         h2o_timeout_dispose(conn->loop, &conn->_connect_timeout);
     }
+}
+
+static void on_disconnect(const redisAsyncContext *redis, int status)
+{
+    h2o_redis_conn_t *conn = (h2o_redis_conn_t *)redis->data;
+    close_connection(conn);
 }
 
 static void on_connect_timeout_deferred(h2o_timeout_entry_t *entry)
 {
     h2o_redis_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_redis_conn_t, _defer_timeout_entry, entry);
-    h2o_timeout_dispose(conn->loop, &conn->_connect_timeout);
+
+    assert((conn->_redis->c.flags & REDIS_CONNECTED) == 0);
+    disconnect(conn, 1);
+
+    /* disconnect function (redisAsyncFree) doesn't call disconnect callback when not the connection is not established */
+    close_connection(conn);
 }
 
 static void on_connect_timeout(h2o_timeout_entry_t *entry)
@@ -95,9 +108,9 @@ static void on_connect_timeout(h2o_timeout_entry_t *entry)
     h2o_redis_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_redis_conn_t, _connect_timeout_entry, entry);
     assert(conn->state != H2O_REDIS_CONNECTION_STATE_CLOSED);
     h2o_timeout_unlink(entry);
-    invoke_deferred(conn, &conn->_defer_timeout_entry, on_connect_timeout_deferred);
+
     conn->_did_connect_timeout = 1;
-    disconnect(conn, 1);
+    invoke_deferred(conn, &conn->_defer_timeout_entry, on_connect_timeout_deferred);
 }
 
 h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz)
@@ -166,6 +179,8 @@ static void dispose_command(h2o_redis_command_t *command)
 
     if (h2o_timeout_is_linked(&command->_command_timeout_entry)) {
         h2o_timeout_unlink(&command->_command_timeout_entry);
+    }
+    if (h2o_linklist_is_linked(&command->_command_timeout._link)) {
         h2o_timeout_dispose(command->conn->loop, &command->_command_timeout);
     }
 
@@ -228,16 +243,15 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
     switch (command->type) {
     case H2O_REDIS_COMMAND_TYPE_SUBSCRIBE:
     case H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE:
-        if (reply == NULL) {
-            dispose_command(command);
-        } else {
-            assert(reply->element != NULL);
+        if (reply != NULL && reply->type == REDIS_REPLY_ARRAY) {
             char *unsub = command->type == H2O_REDIS_COMMAND_TYPE_SUBSCRIBE ? "unsubscribe" : "punsubscribe";
             if (strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
                 dispose_command(command);
             } else {
-                /* (p)subscribe commands doesn't get freed until (p)unsubscribe */
+                /* (p)subscribe commands doesn't get freed until (p)unsubscribe or disconnect */
             }
+        } else {
+            dispose_command(command);
         }
         break;
     default:
@@ -255,19 +269,19 @@ static void on_command_error_deferred(h2o_timeout_entry_t *entry)
 static void on_command_timeout_deferred(h2o_timeout_entry_t *entry)
 {
     h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _defer_timeout_entry, entry);
-    h2o_timeout_dispose(command->conn->loop, &command->_command_timeout);
+    disconnect(command->conn, 1);
 }
 
 static void on_command_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _command_timeout_entry, entry);
     h2o_timeout_unlink(entry);
-    invoke_deferred(command->conn, &command->_defer_timeout_entry, on_command_timeout_deferred);
-    command->_did_command_timeout = 1;
 
     /* don't call on_command to avoid double free and invoke disconnect to finalize inflight commands */
     return_reply(command->conn->_redis, NULL, command);
-    disconnect(command->conn, 1);
+
+    command->_did_command_timeout = 1;
+    invoke_deferred(command->conn, &command->_defer_timeout_entry, on_command_timeout_deferred);
 }
 
 static h2o_redis_command_t *create_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data,
