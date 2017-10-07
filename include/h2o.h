@@ -605,18 +605,6 @@ struct st_h2o_context_t {
          * the default client context for proxy
          */
         h2o_http1client_ctx_t client_ctx;
-        /**
-         * timeout handler used by the default client context
-         */
-        h2o_timeout_t io_timeout;
-        /**
-         * timeout handler used by the default client context
-         */
-        h2o_timeout_t connect_timeout;
-        /**
-         * timeout handler used by the default client context
-         */
-        h2o_timeout_t first_byte_timeout;
     } proxy;
 
     /**

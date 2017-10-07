@@ -99,13 +99,10 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_timeout_init(ctx->loop, &ctx->http2.idle_timeout, config->http2.idle_timeout);
     h2o_linklist_init_anchor(&ctx->http2._conns);
     ctx->proxy.client_ctx.loop = loop;
-    h2o_timeout_init(ctx->loop, &ctx->proxy.io_timeout, config->proxy.io_timeout);
-    h2o_timeout_init(ctx->loop, &ctx->proxy.connect_timeout, config->proxy.connect_timeout);
-    h2o_timeout_init(ctx->loop, &ctx->proxy.first_byte_timeout, config->proxy.first_byte_timeout);
     ctx->proxy.client_ctx.getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
-    ctx->proxy.client_ctx.io_timeout = &ctx->proxy.io_timeout;
-    ctx->proxy.client_ctx.connect_timeout = &ctx->proxy.connect_timeout;
-    ctx->proxy.client_ctx.first_byte_timeout = &ctx->proxy.first_byte_timeout;
+    ctx->proxy.client_ctx.connect_timeout = config->proxy.connect_timeout;
+    ctx->proxy.client_ctx.io_timeout = config->proxy.io_timeout;
+    ctx->proxy.client_ctx.first_byte_timeout = config->proxy.first_byte_timeout;
     ctx->proxy.client_ctx.ssl_ctx = config->proxy.ssl_ctx;
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
@@ -142,9 +139,6 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_timeout_dispose(ctx->loop, &ctx->zero_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http1.req_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->proxy.io_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->proxy.connect_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->proxy.first_byte_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
     h2o_filecache_destroy(ctx->filecache);
