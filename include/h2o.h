@@ -530,10 +530,6 @@ struct st_h2o_context_t {
      */
     h2o_loop_t *loop;
     /**
-     * timeout structure to be used for registering deferred callbacks
-     */
-    h2o_timeout_t zero_timeout;
-    /**
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;
@@ -1065,7 +1061,7 @@ struct st_h2o_req_t {
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
-    h2o_timeout_entry_t _timeout_entry;
+    h2o_timerwheel_timer_t _timeout_entry;
 
     /* streaming request body */
     struct {

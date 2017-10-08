@@ -27,19 +27,18 @@
 struct st_h2o_mruby_sleep_context_t {
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
-    h2o_timeout_t timeout;
-    h2o_timeout_entry_t timeout_entry;
+    h2o_timerwheel_timer_t timeout_entry;
     uint64_t started_at;
 };
 
-static void on_deferred_timeout(h2o_timeout_entry_t *entry)
+static void on_deferred_timeout(h2o_timerwheel_timer_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
-    h2o_timeout_dispose(ctx->ctx->shared->ctx->loop, &ctx->timeout);
+    h2o_timerwheel_del_timer(entry);
     free(ctx);
 }
 
-static void on_sleep_timeout(h2o_timeout_entry_t *entry)
+static void on_sleep_timeout(h2o_timerwheel_timer_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
     assert(!mrb_nil_p(ctx->receiver));
@@ -49,11 +48,7 @@ static void on_sleep_timeout(h2o_timeout_entry_t *entry)
     h2o_mruby_run_fiber(ctx->ctx, ctx->receiver, mrb_fixnum_value(sleep_sec), NULL);
 
     mrb_gc_unregister(shared->mrb, ctx->receiver);
-    h2o_timeout_unlink(entry);
-
-    /* defer freeing to avoid concurrent modification onf timeout linklist */
-    entry->cb = on_deferred_timeout;
-    h2o_timeout_link(shared->ctx->loop, &shared->ctx->zero_timeout, entry);
+    on_deferred_timeout(entry);
 }
 
 mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
@@ -84,10 +79,10 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
     memset(ctx, 0, sizeof(*ctx));
     ctx->ctx = mctx;
     ctx->receiver = receiver;
-    h2o_timeout_init(ctx->ctx->shared->ctx->loop, &ctx->timeout, msec);
-    ctx->timeout_entry.cb = on_sleep_timeout;
-    h2o_timeout_link(ctx->ctx->shared->ctx->loop, &ctx->timeout, &ctx->timeout_entry);
-    ctx->started_at = ctx->timeout_entry.registered_at;
+    h2o_timerwheel_init_timer(&ctx->timeout_entry, on_sleep_timeout);
+    h2o_timerwheel_add_timer(&ctx->ctx->shared->ctx->loop->_timerwheel, &ctx->timeout_entry, h2o_now(ctx->ctx->shared->ctx->loop) + msec);
+
+    ctx->started_at = h2o_now(ctx->ctx->shared->ctx->loop);
 
     mrb_gc_register(mrb, receiver);
 

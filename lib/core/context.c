@@ -89,7 +89,6 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
     ctx->globalconf = config;
-    h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
     ctx->queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
@@ -136,7 +135,6 @@ void h2o_context_dispose(h2o_context_t *ctx)
     }
     free(ctx->_pathconfs_inited.entries);
     free(ctx->_module_configs);
-    h2o_timeout_dispose(ctx->loop, &ctx->zero_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http1.req_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
