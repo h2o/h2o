@@ -63,7 +63,7 @@ typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
 
 struct st_fcgi_context_t {
     h2o_fastcgi_handler_t *handler;
-    h2o_timeout_t io_timeout;
+    uint64_t io_timeout;
 };
 
 struct st_fcgi_generator_t {
@@ -78,7 +78,7 @@ struct st_fcgi_generator_t {
         h2o_doublebuffer_t sending;
         h2o_buffer_t *receiving;
     } resp;
-    h2o_timeout_entry_t timeout;
+    h2o_timerwheel_timer_t timeout;
 };
 
 struct st_h2o_fastcgi_handler_t {
@@ -411,21 +411,18 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, 0);
 }
 
-static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timeout_t *timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_fcgi_generator_t *generator, uint64_t timeout, h2o_timerwheel_cb cb)
 {
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
-
-    generator->timeout.cb = cb;
-    h2o_timeout_link(generator->req->conn->ctx->loop, timeout, &generator->timeout);
+    h2o_timerwheel_del_timer(&generator->timeout);
+    h2o_timerwheel_init_timer(&generator->timeout, cb);
+    uint64_t expire = h2o_now(generator->req->conn->ctx->loop) + timeout;
+    h2o_timerwheel_add_timer(&generator->req->conn->ctx->loop->_timerwheel, &generator->timeout, expire);
 }
 
 static void close_generator(struct st_fcgi_generator_t *generator)
 {
     /* can be called more than once */
-
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
+    h2o_timerwheel_del_timer(&generator->timeout);
     if (generator->connect_req != NULL) {
         h2o_socketpool_cancel_connect(generator->connect_req);
         generator->connect_req = NULL;
@@ -467,10 +464,7 @@ static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_ke
     else
         h2o_socket_close(generator->sock);
     generator->sock = NULL;
-
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
-
+    h2o_timerwheel_del_timer(&generator->timeout);
     if (generator->resp.sending.bytes_inflight == 0)
         do_send(generator);
 }
@@ -629,7 +623,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     return 0;
 }
 
-static void on_rw_timeout(h2o_timeout_entry_t *entry)
+static void on_rw_timeout(h2o_timerwheel_timer_t *entry)
 {
     struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
 
@@ -694,7 +688,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     if (generator->sent_headers && generator->resp.sending.bytes_inflight == 0)
         do_send(generator);
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
+    set_timeout(generator, generator->ctx->io_timeout, on_rw_timeout);
     return;
 
 EOS_Received:
@@ -709,7 +703,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_fcgi_generator_t *generator = sock->data;
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
+    set_timeout(generator, generator->ctx->io_timeout, on_rw_timeout);
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
@@ -734,7 +728,7 @@ static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_s
     /* start sending the response */
     h2o_socket_write(generator->sock, vecs.entries, vecs.size, on_send_complete);
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
+    set_timeout(generator, generator->ctx->io_timeout, on_rw_timeout);
 
     /* activate the receiver; note: FCGI spec allows the app to start sending the response before it receives FCGI_STDIN */
     h2o_socket_read_start(sock, on_read);
@@ -754,7 +748,7 @@ static void do_stop(h2o_generator_t *_generator, h2o_req_t *req)
     close_generator(generator);
 }
 
-static void on_connect_timeout(h2o_timeout_entry_t *entry)
+static void on_connect_timeout(h2o_timerwheel_timer_t *entry)
 {
     struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
 
@@ -776,9 +770,10 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->sent_headers = 0;
     h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
-    generator->timeout = (h2o_timeout_entry_t){0};
+    h2o_timerwheel_init_timer(&generator->timeout, on_connect_timeout);
+    uint64_t expire = h2o_now(req->conn->ctx->loop) + generator->ctx->io_timeout;
+    h2o_timerwheel_add_timer(&req->conn->ctx->loop->_timerwheel, &generator->timeout, expire);
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_connect_timeout);
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, req->conn->ctx->loop,
                            &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
 
@@ -796,7 +791,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
                                    handler->config.keepalive_timeout != 0 ? handler->config.keepalive_timeout : 60000);
 
     handler_ctx->handler = handler;
-    h2o_timeout_init(ctx->loop, &handler_ctx->io_timeout, handler->config.io_timeout);
+    handler_ctx->io_timeout = handler->config.io_timeout;
 
     h2o_context_set_handler_context(ctx, &handler->super, handler_ctx);
 }
@@ -809,7 +804,6 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
     if (handler_ctx == NULL)
         return;
 
-    h2o_timeout_dispose(ctx->loop, &handler_ctx->io_timeout);
     free(handler_ctx);
 }
 
