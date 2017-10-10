@@ -63,7 +63,7 @@ static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static void do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, const char *err);
-static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len);
+static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
 static int write_req_chunk(void *req_, h2o_iovec_t payload, int is_end_stream);
@@ -1345,7 +1345,7 @@ static int update_push_memo(h2o_http2_conn_t *conn, h2o_req_t *src_req, const ch
     return h2o_cache_set(conn->push_memo, 0, h2o_iovec_init(&url_hash, sizeof(url_hash)), url_hash, h2o_iovec_init(NULL, 0));
 }
 
-static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len)
+static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical)
 {
     h2o_http2_conn_t *conn = (void *)src_req->conn;
     h2o_http2_stream_t *src_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, src_req);
@@ -1396,7 +1396,11 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     h2o_http2_stream_t *stream = h2o_http2_stream_open(conn, conn->push_stream_ids.max_open + 2, NULL, &h2o_http2_default_priority);
     stream->received_priority.dependency = src_stream->stream_id;
     stream->push.parent_stream_id = src_stream->stream_id;
-    h2o_http2_scheduler_open(&stream->_refs.scheduler, &src_stream->_refs.scheduler.node, 16, 0);
+    if (is_critical) {
+        h2o_http2_scheduler_open(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
+    } else {
+        h2o_http2_scheduler_open(&stream->_refs.scheduler, &src_stream->_refs.scheduler.node, 16, 0);
+    }
     h2o_http2_stream_prepare_for_request(conn, stream);
 
     /* setup request */

@@ -785,7 +785,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * callback for server push (may be NULL)
      */
-    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len, int is_critical);
     /**
      * Return the underlying socket struct
      */
@@ -1224,12 +1224,13 @@ size_t h2o_stringify_proxy_header(h2o_conn_t *conn, char *buf);
 #define H2O_PROXY_HEADER_MAX_LENGTH                                                                                                \
     (sizeof("PROXY TCP6 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n") - 1)
 /**
- * extracts path to be pushed from `Link: rel=preload` header, duplicating the chunk (or returns {NULL,0} if none)
+ * extracts path to be pushed from `Link: rel=preload` header.
  */
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
-                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
-                                                          h2o_iovec_t *base_authority, h2o_iovec_t *filtered_value);
+void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                            const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                            const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                            void (*cb)(void *ctx, const char *path, size_t path_len, int is_critical), void *cb_ctx,
+                                            h2o_iovec_t *filtered_value);
 /**
  * return a bitmap of compressible types, by parsing the `accept-encoding` header
  */
