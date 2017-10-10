@@ -82,20 +82,19 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
         ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
-        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout &&
-        !self->config.websocket.enabled &&
+        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled &&
         self->config.ssl_ctx == ctx->globalconf->proxy.ssl_ctx)
         return;
 
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
-#define ALLOC_TIMEOUT(to_) \
-    if (ctx->globalconf->proxy.to_ == self->config.to_) { \
-        client_ctx->to_ = &ctx->proxy.to_; \
-    } else { \
-        client_ctx->to_ = h2o_mem_alloc(sizeof(*client_ctx->to_)); \
-        h2o_timeout_init(client_ctx->loop, client_ctx->to_, self->config.to_); \
+#define ALLOC_TIMEOUT(to_)                                                                                                         \
+    if (ctx->globalconf->proxy.to_ == self->config.to_) {                                                                          \
+        client_ctx->to_ = &ctx->proxy.to_;                                                                                         \
+    } else {                                                                                                                       \
+        client_ctx->to_ = h2o_mem_alloc(sizeof(*client_ctx->to_));                                                                 \
+        h2o_timeout_init(client_ctx->loop, client_ctx->to_, self->config.to_);                                                     \
     }
     ALLOC_TIMEOUT(io_timeout);
     ALLOC_TIMEOUT(connect_timeout);
@@ -121,10 +120,10 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     if (client_ctx == NULL)
         return;
 
-#define FREE_TIMEOUT(to_) \
-    if (client_ctx->to_ != &ctx->proxy.to_) { \
-        h2o_timeout_dispose(client_ctx->loop, client_ctx->to_); \
-        free(client_ctx->to_); \
+#define FREE_TIMEOUT(to_)                                                                                                          \
+    if (client_ctx->to_ != &ctx->proxy.to_) {                                                                                      \
+        h2o_timeout_dispose(client_ctx->loop, client_ctx->to_);                                                                    \
+        free(client_ctx->to_);                                                                                                     \
     }
     FREE_TIMEOUT(io_timeout);
     FREE_TIMEOUT(connect_timeout);

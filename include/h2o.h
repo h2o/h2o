@@ -115,6 +115,7 @@ typedef struct st_h2o_token_t {
     unsigned char is_init_header_special : 1;
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
+    unsigned char dont_compress : 1;
 } h2o_token_t;
 
 #include "h2o/token.h"
@@ -1606,6 +1607,10 @@ h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const cha
  */
 void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext);
 /**
+ * clears all mime-type mapping
+ */
+void h2o_mimemap_clear_types(h2o_mimemap_t *mimemap);
+/**
  * sets the default mime-type
  */
 h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
@@ -1888,7 +1893,8 @@ typedef struct st_h2o_proxy_config_vars_t {
  */
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config,
                                       void **lb_per_target_conf);
-/**
+
+ /**
  * registers the configurator
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);

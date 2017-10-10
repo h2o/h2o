@@ -508,4 +508,21 @@ EOT
     };
 };
 
+subtest 'response with specific statuses should not contain content-length header' => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            [204, {}, []]
+          }
+EOT
+    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 204 OK\r\n}is;
+    unlike $headers, qr{^content-length:}im;
+};
+
 done_testing();

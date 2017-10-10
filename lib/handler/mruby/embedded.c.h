@@ -113,6 +113,9 @@
     "      end\n"                                                                                                                  \
     "      s\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
+    "    class Empty < HttpInputStream\n"                                                                                          \
+    "      def each; end\n"                                                                                                        \
+    "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"
 

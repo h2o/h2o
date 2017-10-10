@@ -214,8 +214,8 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
 {
     assert(stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING);
 
-    if (stream->req._write_req_chunk_done == NULL && stream->_req_body.body != NULL &&
-        stream->req.content_length != SIZE_MAX && stream->_req_body.body->size != stream->req.content_length) {
+    if (stream->req._write_req_chunk_done == NULL && stream->_req_body.body != NULL && stream->req.content_length != SIZE_MAX &&
+        stream->_req_body.body->size != stream->req.content_length) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         h2o_http2_stream_reset(conn, stream);
         return;

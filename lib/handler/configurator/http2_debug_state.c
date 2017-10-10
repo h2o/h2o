@@ -40,7 +40,7 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf)
 {
     struct st_h2o_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
 
-    h2o_configurator_define_command(c, "http2-debug-state", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                                H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_debug_state);
+    h2o_configurator_define_command(
+        c, "http2-debug-state", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_DEFERRED | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_debug_state);
 }

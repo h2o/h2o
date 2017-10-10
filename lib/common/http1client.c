@@ -430,7 +430,8 @@ static void swap_buffers(h2o_buffer_t **a, h2o_buffer_t **b)
     *a = swap;
 }
 
-void write_chunk_to_socket(struct st_h2o_http1client_private_t *client, h2o_iovec_t headers_top, h2o_iovec_t headers_bottom, h2o_iovec_t chunk, h2o_socket_cb cb)
+void write_chunk_to_socket(struct st_h2o_http1client_private_t *client, h2o_iovec_t headers_top, h2o_iovec_t headers_bottom,
+                           h2o_iovec_t chunk, h2o_socket_cb cb)
 {
     int i = 0;
     h2o_iovec_t chunk_and_reqbufs[5];
@@ -439,7 +440,6 @@ void write_chunk_to_socket(struct st_h2o_http1client_private_t *client, h2o_iove
         chunk_and_reqbufs[i++] = headers_top;
     if (headers_bottom.base)
         chunk_and_reqbufs[i++] = headers_bottom;
-
 
     chunk_and_reqbufs[i].len = snprintf(client->_chunk_len_str, sizeof(client->_chunk_len_str), "%zx\r\n", chunk.len);
     chunk_and_reqbufs[i++].base = client->_chunk_len_str;
@@ -589,7 +589,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
 
     client->super.sockpool.connect_req = NULL;
     client->_location_rewrite_url = target->url;
-    
+
     if (target->is_ssl) {
         client->super.ssl.server_name = h2o_strdup(NULL, target->peer.host.base, target->peer.host.len).base;
     }
@@ -653,7 +653,7 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 
     if (_client != NULL)
         *_client = &client->super;
-    
+
     client->_connect_by_sockpool = 0;
     return client;
 }
@@ -703,8 +703,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
 void h2o_http1client_connect_with_pool(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
                                        h2o_socketpool_t *sockpool, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra)
 {
-    struct st_h2o_http1client_private_t *client =
-        create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb, is_chunked);
+    struct st_h2o_http1client_private_t *client = create_client(_client, data, ctx, h2o_iovec_init(NULL, 0), cb, is_chunked);
     client->_cb.on_connect = cb;
     client->_connect_by_sockpool = 1;
     client->super.sockpool.pool = sockpool;

@@ -78,9 +78,9 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_enter_status;
     c->super.exit = on_exit_status;
 
-    h2o_configurator_define_command(&c->super, "status", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED |
-                                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_status);
+    h2o_configurator_define_command(
+        &c->super, "status", H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_DEFERRED | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        on_config_status);
 
     h2o_configurator_define_command(&c->super, "duration-stats", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_duration_stats);
