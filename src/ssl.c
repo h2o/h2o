@@ -270,7 +270,11 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
     Found:
         EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
         HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
-        ret = i == 0 ? 1 : 2; /* request renew if the key is not the newest one */
+        /* Request renewal if the youngest key is active */
+        if (i != 0 && session_tickets.tickets.entries[i - 1]->not_before <= time(NULL))
+            ret = 2;
+        else
+            ret = 1;
     }
 
 Exit:
