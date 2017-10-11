@@ -103,13 +103,13 @@ typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_reques
 
 typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *url);
 /**
- * initializes a static socket pool
+ * initializes a specific socket pool
  */
-void h2o_socketpool_init_static(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len);
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len);
 /**
- * initializes a dynamic socket pool
+ * initializes a global socket pool
  */
-void h2o_socketpool_init_dynamic(h2o_socketpool_t *pool, size_t capacity);
+void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
 /**
  * disposes of a socket loop
  */

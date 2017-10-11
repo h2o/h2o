@@ -167,7 +167,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
                 upstreams[i].path = config->reverse_path;
             }
         }
-        h2o_socketpool_init_static(self->sockpool, SIZE_MAX /* FIXME */, upstreams, count);
+        h2o_socketpool_init_specific(self->sockpool, SIZE_MAX /* FIXME */, upstreams, count);
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);

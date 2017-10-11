@@ -2196,7 +2196,7 @@ int main(int argc, char **argv)
     /* setup default socketpool for http1client (but set timeout later) */
     {
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_init_dynamic(sockpool, SIZE_MAX /* FIXME */);
+        h2o_socketpool_init_global(sockpool, SIZE_MAX /* FIXME */);
         h2o_socketpool_set_default_socketpool(sockpool);
     }
 
