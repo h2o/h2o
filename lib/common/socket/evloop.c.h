@@ -443,10 +443,11 @@ h2o_evloop_t *create_evloop(size_t sz)
     memset(loop, 0, sz);
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
     h2o_linklist_init_anchor(&loop->_timeouts);
-    h2o_timerwheel_init(&loop->_timerwheel);
-    h2o_timerwheel_run(&loop->_timerwheel, loop->_now);
 
     update_now(loop);
+
+    h2o_timerwheel_init(&loop->_timerwheel);
+    h2o_timerwheel_run(&loop->_timerwheel, loop->_now);
 
     return loop;
 }
