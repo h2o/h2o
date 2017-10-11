@@ -49,7 +49,6 @@ struct st_h2o_socketpool_connect_request_t {
     h2o_socket_t *sock;
     struct {
         h2o_multithread_receiver_t *getaddr_receiver;
-        h2o_socketpool_target_vector_t *targets;
         size_t selected;
         int *tried;
         size_t try_count;
@@ -303,7 +302,7 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     h2o_socketpool_connect_cb cb = req->cb;
     h2o_socket_t *sock = req->sock;
     void *data = req->data;
-    h2o_socketpool_target_vector_t *targets = req->lb.targets;
+    h2o_socketpool_target_vector_t *targets = &req->pool->targets;
     size_t selected = req->lb.selected;
 
     free(req->lb.tried);
@@ -343,7 +342,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     if (err != NULL) {
         h2o_socket_close(sock);
-        if (req->lb.try_count == req->lb.targets->size) {
+        if (req->lb.try_count == req->pool->targets.size) {
             req->sock = NULL;
             errstr = "connection failed";
         } else {
@@ -374,7 +373,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
     }
     close_data = h2o_mem_alloc(sizeof(*close_data));
     close_data->pool = req->pool;
-    close_data->target = &req->lb.targets->entries[req->lb.selected];
+    close_data->target = &req->pool->targets.entries[req->lb.selected];
     req->sock->data = req;
     req->sock->on_close.cb = on_close;
     req->sock->on_close.data = close_data;
@@ -459,7 +458,6 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
     assert(pool->targets.size != 0);
     req->lb.getaddr_receiver = getaddr_receiver;
-    req->lb.targets = &pool->targets;
     req->lb.tried = h2o_mem_alloc(sizeof(int) * pool->targets.size);
     memset(req->lb.tried, 0, sizeof(int) * pool->targets.size);
     req->lb.selected = 0;
