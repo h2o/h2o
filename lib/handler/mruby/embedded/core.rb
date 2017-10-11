@@ -41,7 +41,7 @@ module Kernel
     klass = fiber_res[2][0]
     # This should be called only one time.
     # After that, the fiber is called in mruby_run_fiber and it register receiver in it.
-    klass.register_receiver(receiver, klass)
+    klass.register_receiver(receiver)
   end
 
   def _h2o_define_callback(name, id)

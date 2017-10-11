@@ -26,7 +26,7 @@
     "    klass = fiber_res[2][0]\n"                                                                                                \
     "    # This should be called only one time.\n"                                                                                 \
     "    # After that, the fiber is called in mruby_run_fiber and it register receiver in it.\n"                                   \
-    "    klass.register_receiver(receiver, klass)\n"                                                                               \
+    "    klass.register_receiver(receiver)\n"                                                                               \
     "  end\n"                                                                                                                      \
     "  def _h2o_define_callback(name, id)\n"                                                                                       \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \

@@ -343,10 +343,9 @@ static mrb_value register_receiver_method(mrb_state *mrb, mrb_value self)
     struct st_h2o_mruby_http_request_context_t *ctx;
 
     mrb_value receiver;
-    mrb_value self_obj;
-    mrb_get_args(mrb, "oo", &receiver, &self_obj);
+    mrb_get_args(mrb, "o", &receiver);
 
-    ctx = mrb_data_check_get_ptr(mrb, self_obj, &request_type);
+    ctx = mrb_data_check_get_ptr(mrb, self, &request_type);
 
     attach_receiver(ctx, receiver);
 
@@ -557,11 +556,11 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 
     klass = mrb_class_get_under(mrb, module, "HttpRequest");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_REQUEST_CLASS, mrb_obj_value(klass));
-    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(2));
+    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(1));
 
     klass = mrb_class_get_under(mrb, module, "HttpInputStream");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
-    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(2));
+    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(1));
 
     klass = mrb_class_get_under(mrb, klass, "Empty");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS, mrb_obj_value(klass));

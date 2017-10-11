@@ -64,10 +64,9 @@ static mrb_value register_receiver_method(mrb_state *mrb, mrb_value self)
     struct st_h2o_mruby_channel_context_t *ctx;
 
     mrb_value receiver;
-    mrb_value self_obj;
-    mrb_get_args(mrb, "oo", &receiver, &self_obj);
+    mrb_get_args(mrb, "o", &receiver);
 
-    ctx = mrb_data_check_get_ptr(mrb, self_obj, &channel_type);
+    ctx = mrb_data_check_get_ptr(mrb, self, &channel_type);
 
     attach_receiver(ctx, receiver);
 
@@ -138,6 +137,6 @@ void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *shared_ctx)
     klass = mrb_class_get_under(mrb, module, "Channel");
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHANNEL_CLASS, mrb_obj_value(klass));
     mrb_define_method(mrb, klass, "_notify", channel_notify_method, MRB_ARGS_NONE());
-    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(2));
+    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(1));
     h2o_mruby_define_callback(mrb, "_h2o__channel_wait", H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT);
 }
