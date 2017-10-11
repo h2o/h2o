@@ -701,5 +701,18 @@ void h2o__proxy_process_request(h2o_req_t *req)
         h2o_url_init(&upstream, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
     }
 
+    /*
+      When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
+     connection even when there is a pooled connection to the peer, since the header (as defined in
+     https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) needs to be sent at the beginning of the connection.
+
+     However, currently h2o_http1client_connect doesn't provide an interface to enforce estabilishing a new connection. In other
+     words, there is a chance that we would use a pool connection here.
+
+     OTOH, the probability of seeing such issue is rare; it would only happen if the same destination identified by its host:port is
+     accessed in both ways (i.e. in one path with use_proxy_protocol set and in the other path without).
+
+     So I leave this as it is for the time being.
+     */
     h2o_http1client_connect(&self->client, self, client_ctx, sockpool, &upstream, on_connect, te_chunked);
 }
