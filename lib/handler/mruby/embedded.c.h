@@ -15,7 +15,7 @@
     "      block.call\n"                                                                                                           \
     "      # For when it's called in h2o_mruby_run_fiber and return output,\n"                                                     \
     "      # or block doesn't have asynchronous callback\n"                                                                        \
-    "      Fiber.yield([0, nil, nil])\n"                                                                                           \
+    "      [0, nil, nil]\n"                                                                                           \
     "    end\n"                                                                                                                    \
     "    fiber_res = f.resume()\n"                                                                                                 \
     "    # In case having no asynchronous callback function\n"                                                                     \

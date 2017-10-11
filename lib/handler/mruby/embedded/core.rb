@@ -30,7 +30,7 @@ module Kernel
       block.call
       # For when it's called in h2o_mruby_run_fiber and return output,
       # or block doesn't have asynchronous callback
-      Fiber.yield([0, nil, nil])
+      [0, nil, nil]
     end
     fiber_res = f.resume()
     # In case having no asynchronous callback function
