@@ -20,9 +20,6 @@
 
 module H2O
   class Channel
-    def _init()
-      @queue = []
-    end
     def push(o)
       @queue << o
       self._notify

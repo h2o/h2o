@@ -162,9 +162,6 @@
 #define H2O_MRUBY_CODE_CHANNEL                                                                                                     \
     "module H2O\n"                                                                                                                 \
     "  class Channel\n"                                                                                                            \
-    "    def _init()\n"                                                                                                            \
-    "      @queue = []\n"                                                                                                          \
-    "    end\n"                                                                                                                    \
     "    def push(o)\n"                                                                                                            \
     "      @queue << o\n"                                                                                                          \
     "      self._notify\n"                                                                                                         \
