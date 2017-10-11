@@ -74,8 +74,8 @@ typedef struct st_h2o_socketpool_t {
     uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
     struct {
         h2o_loop_t *loop;
-        h2o_timeout_t timeout;
-        h2o_timeout_entry_t entry;
+        uint64_t timeout;
+        h2o_timerwheel_timer_t entry;
     } _interval_cb;
 
     /* vars that are modified by multiple threads */
