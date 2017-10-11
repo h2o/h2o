@@ -93,11 +93,9 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     if (self->config.websocket.enabled) {
-        /* FIXME avoid creating h2o_timeout_t for every path-level context in case the timeout values are the same */
-        client_ctx->websocket_timeout = h2o_mem_alloc(sizeof(*client_ctx->websocket_timeout));
-        h2o_timeout_init(client_ctx->loop, client_ctx->websocket_timeout, self->config.websocket.timeout);
+        client_ctx->websocket_timeout = self->config.websocket.timeout;
     } else {
-        client_ctx->websocket_timeout = NULL;
+        client_ctx->websocket_timeout = 0;
     }
     client_ctx->ssl_ctx = self->config.ssl_ctx;
 
@@ -111,11 +109,6 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 
     if (client_ctx == NULL)
         return;
-
-    if (client_ctx->websocket_timeout != NULL) {
-        h2o_timeout_dispose(client_ctx->loop, client_ctx->websocket_timeout);
-        free(client_ctx->websocket_timeout);
-    }
     free(client_ctx);
 }
 
