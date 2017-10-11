@@ -561,6 +561,7 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 
     klass = mrb_class_get_under(mrb, module, "HttpInputStream");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
+    mrb_define_method(mrb, klass, "register_receiver", register_receiver_method, MRB_ARGS_REQ(2));
 
     klass = mrb_class_get_under(mrb, klass, "Empty");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS, mrb_obj_value(klass));
