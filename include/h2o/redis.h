@@ -40,8 +40,8 @@ typedef struct st_h2o_redis_conn_t {
     void (*on_close)(const char *errstr);
 
     struct redisAsyncContext *_redis;
-    h2o_timeout_t _defer_timeout;
-    h2o_timeout_entry_t _timeout_entry;
+    h2o_timerwheel_timer_t _timeout_entry;
+    uint64_t _defer_timeout;
 } h2o_redis_conn_t;
 
 typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data);
