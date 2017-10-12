@@ -1890,6 +1890,10 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
+#ifdef H2O_NO_64BIT_ATOMICS
+extern pthread_mutex_t h2o_conn_id_mutex;
+#endif
+
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
@@ -1898,7 +1902,13 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->ctx = ctx;
     conn->hosts = hosts;
     conn->connected_at = connected_at;
+#ifdef H2O_NO_64BIT_ATOMICS
+    pthread_mutex_lock(&h2o_conn_id_mutex);
+    conn->id = ++h2o_connection_id;
+    pthread_mutex_unlock(&h2o_conn_id_mutex);
+#else
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+#endif
     conn->callbacks = callbacks;
 
     return conn;
