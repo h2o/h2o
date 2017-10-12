@@ -2,9 +2,8 @@ Revision history for H2O.
 
 2.3.0-beta1 TBD
 	- [core] disable buffering of stdout, stderr #1347 (Yannick Koechlin)
-	- [core] build on platforms without 64-bit atomics #1433 (Apollon Oikonomopoulos)
 	- [access-log] log connections that closed prior to sending a response #1235 (Kazuho Oku)
-	- [expires] fix incorrect header emitted when units: month or year were used #406 (Frederik Deweerdt)
+	- [expires] fix incorrect header emitted when units: month or year were used #1406 (Frederik Deweerdt)
 	- [fastcgi] never return 304 if the file is a dynamic handler #1385 (Kazuho Oku)
 	- [fastcgi] accept `default` as a keyword of the extensions attribute #1414 (Ichito Nagata)
 	- [http2] support `critical` attribute in preload link header #1436 (Kazuho Oku, Frederik Deweerdt)
@@ -33,6 +32,7 @@ Revision history for H2O.
 	- [doc] add documentation of `duration-stats` #1306 (Frederik Deweerdt)
 	- [misc] include process id in crash backtrace #1254 (Kazuho Oku)
 	- [misc] fix build issues on OpenIndiana #1300 (David Carlier)
+	- [misc] build on platforms without 64-bit atomics #1433 (Apollon Oikonomopoulos)
 
 2.2.2 2017-04-23 03:24:00+0000
 	- [ssl] fix OCSP stapling error when LibreSSL is used #1275 (Ian Moone)
