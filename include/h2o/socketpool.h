@@ -71,11 +71,11 @@ typedef struct st_h2o_socketpool_t {
     /* read-only vars */
     h2o_socketpool_target_vector_t targets;
     size_t capacity;
-    uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
+    uint64_t timeout; /* in milliseconds */
     struct {
         h2o_loop_t *loop;
-        uint64_t timeout;
-        h2o_timerwheel_timer_t entry;
+        h2o_timeout_val_t timeout;
+        h2o_timeout_timer_t entry;
     } _interval_cb;
 
     /* vars that are modified by multiple threads */
@@ -125,7 +125,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
  * sets a close timeout for the sockets being pooled
  */
-void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec);
+void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_val_t msec);
 /**
  * connects to the peer (or returns a pooled connection)
  */

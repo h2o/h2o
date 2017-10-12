@@ -23,7 +23,13 @@
 #define h2o__evloop_h
 
 #include "h2o/linklist.h"
-#include "h2o/timerwheel.h"
+
+/* needs to be defined for timeout.h */
+struct st_h2o_timeout_backend_properties_t {
+    char _dummy; /* sizeof(empty_struct) differs bet. C (GCC extension) and C++ */
+};
+
+#include "h2o/timeout.h"
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
@@ -43,16 +49,11 @@ typedef struct st_h2o_evloop_t {
         struct st_h2o_evloop_socket_t **tail_ref;
     } _statechanged;
     uint64_t _now;
-    h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
-    h2o_timerwheel_t _timerwheel;
+    h2o_timeout_t _timerwheel;
     h2o_sliding_counter_t exec_time_counter;
 } h2o_evloop_t;
 
 typedef h2o_evloop_t h2o_loop_t;
-
-struct st_h2o_timeout_backend_properties_t {
-    char _dummy; /* sizeof(empty_struct) differs bet. C (GCC extension) and C++ */
-};
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
@@ -63,6 +64,8 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
 
 /* inline definitions */
 
+size_t h2o_timeout__run(h2o_loop_t *loop, uint64_t now);
+
 static inline uint64_t h2o_now(h2o_evloop_t *loop)
 {
     return loop->_now;
@@ -72,5 +75,8 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 {
     return loop->exec_time_counter.average;
 }
+
+struct st_h2o_timeout_t;
+int h2o_timeout_add_timer_(struct st_h2o_timeout_t *w, struct st_h2o_timeout_timer_t *timer, h2o_timeout_abs_t abs_expire);
 
 #endif

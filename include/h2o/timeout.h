@@ -27,69 +27,65 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <string.h>
+
 #include "h2o/linklist.h"
+#include "h2o/timeout_val.h"
 #include "h2o/socket.h"
 
-typedef struct st_h2o_timeout_entry_t h2o_timeout_entry_t;
-typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
+typedef uint64_t wheelmask_t;
+/* link list of h2o_timeout_timer_t */
+typedef h2o_linklist_t h2o_timeout_slot_t;
 
-/**
- * an entry linked to h2o_timeout_t.
- * Modules willing to use timeouts should embed this object as part of itself, and link it to a specific timeout by calling
- * h2o_timeout_link.
- */
-struct st_h2o_timeout_entry_t {
-    uint64_t registered_at;
-    h2o_timeout_cb cb;
-    h2o_linklist_t _link;
-};
+#define H2O_TIMERWHEEL_MAX_WHEELS 4
+#define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
+#define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
+#define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
+#define H2O_TIMERWHEEL_MAX_TIMER ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * H2O_TIMERWHEEL_MAX_WHEELS)) - 1)
 
-/**
- * represents a collection of h2o_timeout_entry_t linked to a single timeout value
- */
 typedef struct st_h2o_timeout_t {
-    uint64_t timeout;
-    h2o_linklist_t _link;
-    h2o_linklist_t _entries; /* link list of h2o_timeout_entry_t */
-    struct st_h2o_timeout_backend_properties_t _backend;
+    h2o_timeout_slot_t wheel[H2O_TIMERWHEEL_MAX_WHEELS][H2O_TIMERWHEEL_SLOTS_PER_WHEEL], expired;
+    uint64_t last_run; /* the last time h2o_timeout_run was called */
 } h2o_timeout_t;
 
-/**
- * initializes and registers a timeout
- * @param loop loop to which the timeout should be registered
- * @param timeout the timeout structure to be initialized
- * @param millis timeout in milliseconds
- */
-void h2o_timeout_init(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t millis);
-/**
- *
- */
-void h2o_timeout_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout);
-/**
- * activates a timeout entry, by linking it to a timeout
- */
-void h2o_timeout_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
-/**
- * deactivates a timeout entry, by unlinking it from a timeout
- */
-void h2o_timeout_unlink(h2o_timeout_entry_t *entry);
-/**
- * returns a boolean value indicating if the timeout is linked (i.e. active) or not
- */
-static int h2o_timeout_is_linked(h2o_timeout_entry_t *entry);
+struct st_h2o_timeout_timer_t;
+typedef void (*h2o_timeout_cb)(struct st_h2o_timeout_timer_t *timer);
+typedef struct st_h2o_timeout_timer_t {
+    h2o_linklist_t _link;
+    h2o_timeout_cb cb;
+    uint64_t expire_at; /* absolute expiration time*/
+    struct st_h2o_timeout_backend_properties_t _backend;
+} h2o_timeout_timer_t;
 
-void h2o_timeout_run(h2o_loop_t *loop, h2o_timeout_t *timeout, uint64_t now);
-uint64_t h2o_timeout_get_wake_at(h2o_linklist_t *timeouts);
-void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout);
-void h2o_timeout__do_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout);
-void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry);
-void h2o_timeout__do_post_callback(h2o_loop_t *loop);
+/**
+ * initializes a timerwheel
+ */
+void h2o_timeout_init(h2o_timeout_t *wheel);
+/**
+ * display the contents of the timerwheel
+ */
+void h2o_timeout_show(h2o_timeout_t *wheel);
+/**
+ * find out the time ramaining until the next timer triggers
+ */
+uint64_t h2o_timeout_get_wake_at(h2o_timeout_t *wheel);
 
-/* inline defs */
+/**
+ * creates a timer
+ */
+h2o_timeout_timer_t *h2o_timeout_create_timer(h2o_timeout_cb cb);
+/**
+ * adds a timer to a timerwheel
+ */
 
-inline int h2o_timeout_is_linked(h2o_timeout_entry_t *entry)
+int h2o_timer_is_linked(h2o_timeout_timer_t *timer);
+void h2o_timeout_del_timer(h2o_timeout_timer_t *timer);
+size_t h2o_timeout__run_(h2o_timeout_t *w, uint64_t now);
+
+static inline void h2o_timeout_init_timer(h2o_timeout_timer_t *t, h2o_timeout_cb cb)
 {
-    return h2o_linklist_is_linked(&entry->_link);
+    memset(t, 0, sizeof(*t));
+    t->cb = cb;
 }
 
 #ifdef __cplusplus

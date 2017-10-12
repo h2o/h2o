@@ -92,7 +92,7 @@ doit(1, 0);
 doit(0, 1);
 doit(1, 1);
 
-subtest 'httpoxy' => sub {
+subtest 'httproxy' => sub {
     my $doit = sub {
         my ($drop, $cb) = @_;
         unlink "$tempdir/fcgi.sock";

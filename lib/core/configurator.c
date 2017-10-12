@@ -120,14 +120,17 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
     return 0;
 }
 
-static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_t *slot)
+static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timeout_val_t *slot)
 {
     uint64_t timeout_in_secs;
 
     if (h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout_in_secs) != 0)
         return -1;
 
-    *slot = timeout_in_secs * 1000;
+    if (timeout_in_secs == 0)
+        *slot = H2O_TIMEOUT_VAL_UNSET;
+    else
+        *slot = h2o_timeout_val_from_uint(timeout_in_secs * 1000);
     return 0;
 }
 
@@ -276,8 +279,8 @@ static yoml_t *convert_path_config_node(h2o_configurator_command_t *cmd, yoml_t 
             for (j = 0; j != elem->data.mapping.size; ++j) {
                 yoml_t *elemkey = elem->data.mapping.elements[j].key;
                 yoml_t *elemvalue = elem->data.mapping.elements[j].value;
-                map = h2o_mem_realloc(
-                    map, offsetof(yoml_t, data.mapping.elements) + sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
+                map = h2o_mem_realloc(map, offsetof(yoml_t, data.mapping.elements) +
+                                               sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
                 map->data.mapping.elements[map->data.mapping.size].key = elemkey;
                 map->data.mapping.elements[map->data.mapping.size].value = elemvalue;
                 ++map->data.mapping.size;
@@ -1087,7 +1090,7 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
             goto Error;
         cand_str += 1; /* skip ',' */
     }
-/* not reached */
+    /* not reached */
 
 Error:
     h2o_configurator_errprintf(cmd, node, "argument must be one of: %s", candidates);

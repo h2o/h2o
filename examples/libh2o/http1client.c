@@ -75,7 +75,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         if (sockpool == NULL) {
             sockpool = h2o_mem_alloc(sizeof(*sockpool));
             h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, 10);
-            h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
+            h2o_socketpool_set_timeout(sockpool, ctx->loop, h2o_timeout_val_from_uint(5000) /* in msec */);
         }
         h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect, 0);
     } else {
@@ -147,15 +147,15 @@ static void http1_write_req_chunk_done(void *sock_, size_t written, int done);
 
 struct st_timeout_ctx {
     h2o_socket_t *sock;
-    h2o_timerwheel_timer_t _timeout;
+    h2o_timeout_timer_t _timeout;
 };
-static void timeout_cb(h2o_timeout_entry_t *entry)
+static void timeout_cb(h2o_timeout_timer_t *entry)
 {
     static h2o_iovec_t reqbuf;
     struct st_timeout_ctx *tctx = H2O_STRUCT_FROM_MEMBER(struct st_timeout_ctx, _timeout, entry);
 
     fill_body(&reqbuf);
-    h2o_timeout_unlink(&tctx->_timeout);
+    h2o_timeout_del_timer(&tctx->_timeout);
     h2o_http1client_write_req_chunk(tctx->sock, reqbuf, cur_body_size <= 0);
     free(tctx);
 
@@ -171,9 +171,8 @@ static void http1_write_req_chunk_done(void *sock_, size_t written, int done)
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
         tctx->sock = sock;
-        h2o_timerwheel_init_timer(&tctx->_timeout, timeout_cb);
-        uint64_t expire = h2o_now(client->ctx->loop) + delay_interval_ms;
-        h2o_timerwheel_add_timer(&client->ctx->loop->_timerwheel, &tctx->_timeout, expire);
+        h2o_timeout_init_timer(&tctx->_timeout, timeout_cb);
+        h2o_timeout_add_timer(client->ctx->loop, &tctx->_timeout, h2o_timeout_val_from_uint(delay_interval_ms));
     }
 }
 
@@ -198,9 +197,8 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
         tctx->sock = client->sock;
-        h2o_timerwheel_init_timer(&tctx->_timeout, timeout_cb);
-        uint64_t expire = h2o_now(client->ctx->loop) + delay_interval_ms;
-        h2o_timerwheel_add_timer(&client->ctx->loop->_timerwheel, &tctx->_timeout, expire);
+        h2o_timeout_init_timer(&tctx->_timeout, timeout_cb);
+        h2o_timeout_add_timer(client->ctx->loop, &tctx->_timeout, h2o_timeout_val_from_uint(delay_interval_ms));
     }
 
     return on_head;
@@ -216,8 +214,8 @@ int main(int argc, char **argv)
 {
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
-    h2o_timeout_t io_timeout;
-    h2o_http1client_ctx_t ctx = {NULL, &getaddr_receiver, &io_timeout, &io_timeout, &io_timeout};
+    h2o_timeout_val_t io_timeout = h2o_timeout_val_from_uint(5000); /* 5 seconds */
+    h2o_http1client_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout};
     int opt;
 
     SSL_load_error_strings();
@@ -276,7 +274,6 @@ int main(int argc, char **argv)
 
     queue = h2o_multithread_create_queue(ctx.loop);
     h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
-    h2o_timeout_init(ctx.loop, &io_timeout, 5000); /* 5 seconds */
 
     /* setup the first request */
     start_request(&ctx);

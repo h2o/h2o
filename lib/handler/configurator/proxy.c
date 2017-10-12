@@ -36,11 +36,25 @@ struct proxy_configurator_t {
     h2o_proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
+static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timeout_val_t *timer)
+{
+    int ret;
+    uint64_t timeout;
+    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
+    if (ret < 0)
+        return ret;
+    if (timeout > 0)
+        *timer = h2o_timeout_val_from_uint(timeout);
+    else
+        *timer = H2O_TIMEOUT_VAL_UNSET;
+
+    return 0;
+}
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     int ret;
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->io_timeout);
+    ret = configure_timer(cmd, node, &self->vars->io_timeout);
     if (ret < 0)
         return ret;
     if (!self->connect_timeout_set)
@@ -54,20 +68,20 @@ static int on_config_timeout_connect(h2o_configurator_command_t *cmd, h2o_config
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     self->connect_timeout_set = 1;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->connect_timeout);
+    return configure_timer(cmd, node, &self->vars->connect_timeout);
 }
 
 static int on_config_timeout_first_byte(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     self->first_byte_timeout_set = 1;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->first_byte_timeout);
+    return configure_timer(cmd, node, &self->vars->first_byte_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
+    return configure_timer(cmd, node, &self->vars->keepalive_timeout);
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -93,7 +107,16 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->websocket.timeout);
+    int ret;
+    uint64_t timeout;
+    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
+    if (ret < 0)
+        return ret;
+    if (timeout > 0)
+        self->vars->websocket.timeout = h2o_timeout_val_from_uint(timeout);
+    else
+        self->vars->websocket.timeout = H2O_TIMEOUT_VAL_UNSET;
+    return ret;
 }
 
 static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -268,9 +291,10 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
         return -1;
     }
-    if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+    if (self->vars->keepalive_timeout.set && self->vars->use_proxy_protocol) {
+        h2o_configurator_errprintf(cmd, node,
+                                   "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
+                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
     }
     if (self->vars->reverse_path.base != NULL || self->vars->registered_as_backends) {
@@ -326,7 +350,7 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
     case YOML_TYPE_SEQUENCE:
         sequence = 1;
         count = node->data.sequence.size;
-        if (self->vars->keepalive_timeout == 0 && count > 1) {
+        if (!self->vars->keepalive_timeout.set && count > 1) {
             h2o_configurator_errprintf(cmd, node, "currently we do not support multiple backends with keep-alive disabled");
             return -1;
         }
@@ -477,12 +501,12 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars = c->_vars_stack;
     c->vars->reverse_path.base = NULL;
     c->vars->reverse_path.len = 0;
-    c->vars->io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->keepalive_timeout = 2000;
+    c->vars->io_timeout = h2o_timeout_val_from_uint(H2O_DEFAULT_PROXY_IO_TIMEOUT);
+    c->vars->connect_timeout = h2o_timeout_val_from_uint(H2O_DEFAULT_PROXY_IO_TIMEOUT);
+    c->vars->first_byte_timeout = h2o_timeout_val_from_uint(H2O_DEFAULT_PROXY_IO_TIMEOUT);
+    c->vars->keepalive_timeout = h2o_timeout_val_from_uint(2000);
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
-    c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
+    c->vars->websocket.timeout = h2o_timeout_val_from_uint(H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT);
     c->vars->registered_as_url = 0;
     c->vars->registered_as_backends = 0;
     c->vars->max_buffer_size = SIZE_MAX;

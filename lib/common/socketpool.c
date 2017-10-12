@@ -32,6 +32,7 @@
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
 #include "h2o/timeout.h"
+#include "h2o/socket.h"
 
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
@@ -94,7 +95,7 @@ static void destroy_expired(h2o_socketpool_t *pool)
     }
 }
 
-static void on_timeout(h2o_timerwheel_timer_t *timeout_entry)
+static void on_timeout(h2o_timeout_timer_t *timeout_entry)
 {
     /* FIXME decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well
@@ -106,7 +107,7 @@ static void on_timeout(h2o_timerwheel_timer_t *timeout_entry)
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 
-    h2o_timerwheel_add_timer(&pool->_interval_cb.loop->_timerwheel, &pool->_interval_cb.entry, h2o_now(pool->_interval_cb.loop) + pool->_interval_cb.timeout);
+    h2o_timeout_add_timer(pool->_interval_cb.loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
@@ -263,7 +264,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pool->_lb.dispose(pool->_lb.data);
 
     if (pool->_interval_cb.loop != NULL) {
-        h2o_timerwheel_del_timer(&pool->_interval_cb.entry);
+        h2o_timeout_del_timer(&pool->_interval_cb.entry);
     }
 
     for (i = 0; i < pool->targets.size; i++) {
@@ -286,15 +287,14 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     free(pool->targets.entries);
 }
 
-void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
+void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, h2o_timeout_val_t msec)
 {
-    pool->timeout = msec;
+    pool->timeout = msec.val;
 
     pool->_interval_cb.loop = loop;
-    pool->_interval_cb.timeout = 1000;
-    pool->_interval_cb.entry.cb = on_timeout;
-
-    h2o_timerwheel_add_timer(&loop->_timerwheel,  &pool->_interval_cb.entry, pool->_interval_cb.timeout + h2o_now(loop));
+    pool->_interval_cb.timeout = h2o_timeout_val_from_uint(1000);
+    h2o_timeout_init_timer(&pool->_interval_cb.entry, on_timeout);
+    h2o_timeout_add_timer(loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
 }
 
 static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *errstr)

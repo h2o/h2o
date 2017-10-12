@@ -27,18 +27,18 @@
 struct st_h2o_mruby_sleep_context_t {
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
-    h2o_timerwheel_timer_t timeout_entry;
+    h2o_timeout_timer_t timeout_entry;
     uint64_t started_at;
 };
 
-static void on_deferred_timeout(h2o_timerwheel_timer_t *entry)
+static void on_deferred_timeout(h2o_timeout_timer_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
-    h2o_timerwheel_del_timer(entry);
+    h2o_timeout_del_timer(entry);
     free(ctx);
 }
 
-static void on_sleep_timeout(h2o_timerwheel_timer_t *entry)
+static void on_sleep_timeout(h2o_timeout_timer_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
     assert(!mrb_nil_p(ctx->receiver));
@@ -79,8 +79,8 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
     memset(ctx, 0, sizeof(*ctx));
     ctx->ctx = mctx;
     ctx->receiver = receiver;
-    h2o_timerwheel_init_timer(&ctx->timeout_entry, on_sleep_timeout);
-    h2o_timerwheel_add_timer(&ctx->ctx->shared->ctx->loop->_timerwheel, &ctx->timeout_entry, h2o_now(ctx->ctx->shared->ctx->loop) + msec);
+    h2o_timeout_init_timer(&ctx->timeout_entry, on_sleep_timeout);
+    h2o_timeout_add_timer(ctx->ctx->shared->ctx->loop, &ctx->timeout_entry, h2o_timeout_val_from_uint(msec));
 
     ctx->started_at = h2o_now(ctx->ctx->shared->ctx->loop);
 

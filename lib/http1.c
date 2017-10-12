@@ -38,6 +38,7 @@ struct st_h2o_http1_finalostream_t {
         void *buf;
         h2o_ostream_pull_cb cb;
     } pull;
+    h2o_timeout_val_t zero_timeout;
 };
 
 struct st_h2o_http1_conn_t {
@@ -45,8 +46,8 @@ struct st_h2o_http1_conn_t {
     h2o_socket_t *sock;
     /* internal structure */
     h2o_linklist_t _conns;
-    h2o_timeout_t *_timeout;
-    h2o_timeout_entry_t _timeout_entry;
+    h2o_timeout_val_t *_timeout;
+    h2o_timeout_timer_t _timeout_entry;
     uint64_t _req_index;
     size_t _prevreqlen;
     size_t _reqsize;
@@ -111,7 +112,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
-    h2o_timeout_unlink(&conn->_timeout_entry);
+    h2o_timeout_del_timer(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
@@ -119,16 +120,15 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     free(conn);
 }
 
-static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timeout_t *timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timeout_val_t *timeout, h2o_timeout_cb cb)
 {
     if (conn->_timeout != NULL) {
-        h2o_timeout_unlink(&conn->_timeout_entry);
-        conn->_timeout_entry.cb = NULL;
+        h2o_timeout_del_timer(&conn->_timeout_entry);
     }
     conn->_timeout = timeout;
     if (timeout != NULL) {
-        h2o_timeout_link(conn->super.ctx->loop, timeout, &conn->_timeout_entry);
-        conn->_timeout_entry.cb = cb;
+        h2o_timeout_init_timer(&conn->_timeout_entry, cb);
+        h2o_timeout_add_timer(conn->super.ctx->loop, &conn->_timeout_entry, *conn->_timeout);
     }
 }
 
@@ -499,7 +499,7 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
-static void reqread_on_timeout(h2o_timeout_entry_t *entry)
+static void reqread_on_timeout(h2o_timeout_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
 
@@ -563,6 +563,20 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     conn->_prevreqlen = 0;
     conn->_reqsize = 0;
     reqread_start(conn);
+}
+
+static void on_send_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+    if (err != NULL)
+        conn->req.http1_is_persistent = 0;
+    do_on_send_complete(conn);
+}
+
+static void deferred_send_complete(h2o_timeout_timer_t *entry)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
+    do_on_send_complete(conn);
 }
 
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
@@ -732,7 +746,9 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         h2o_socket_write(conn->sock, bufs, bufcnt,
                          h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
     } else {
-        on_send_complete(conn->sock, 0);
+        assert(send_state != H2O_SEND_STATE_IN_PROGRESS);
+        self->zero_timeout = h2o_timeout_val_from_uint(0);
+        set_timeout(conn, &self->zero_timeout, deferred_send_complete);
     }
 }
 
@@ -832,9 +848,9 @@ void h2o_http1_upgrade(h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o
     conn->upgrade.data = user_data;
     conn->upgrade.cb = on_complete;
 
-    bufs[0].base = h2o_mem_alloc_pool(
-        &conn->req.pool,
-        flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + sizeof("upgrade") - 1));
+    bufs[0].base =
+        h2o_mem_alloc_pool(&conn->req.pool, flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len +
+                                                                                          sizeof("upgrade") - 1));
     bufs[0].len = flatten_headers(bufs[0].base, &conn->req, "upgrade");
     h2o_memcpy(bufs + 1, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
 

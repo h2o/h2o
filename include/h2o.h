@@ -49,7 +49,6 @@ extern "C" {
 #include "h2o/string_.h"
 #include "h2o/time_.h"
 #include "h2o/timeout.h"
-#include "h2o/timerwheel.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
 
@@ -304,7 +303,7 @@ typedef struct st_h2o_status_handler_t {
     h2o_iovec_t name;
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
-    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
+    h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
 } h2o_status_handler_t;
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
@@ -337,13 +336,13 @@ struct st_h2o_globalconf_t {
     /**
      * SSL handshake timeout
      */
-    uint64_t handshake_timeout;
+    h2o_timeout_val_t handshake_timeout;
 
     struct {
         /**
          * request timeout (in milliseconds)
          */
-        uint64_t req_timeout;
+        h2o_timeout_val_t req_timeout;
         /**
          * a boolean value indicating whether or not to upgrade to HTTP/2
          */
@@ -358,11 +357,11 @@ struct st_h2o_globalconf_t {
         /**
          * idle timeout (in milliseconds)
          */
-        uint64_t idle_timeout;
+        h2o_timeout_val_t idle_timeout;
         /**
          * graceful shutdown timeout (in milliseconds)
          */
-        uint64_t graceful_shutdown_timeout;
+        h2o_timeout_val_t graceful_shutdown_timeout;
         /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
          * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value
@@ -387,15 +386,15 @@ struct st_h2o_globalconf_t {
         /**
          * io timeout (in milliseconds)
          */
-        uint64_t io_timeout;
+        h2o_timeout_val_t io_timeout;
         /**
          * io timeout (in milliseconds)
          */
-        uint64_t connect_timeout;
+        h2o_timeout_val_t connect_timeout;
         /**
          * io timeout (in milliseconds)
          */
-        uint64_t first_byte_timeout;
+        h2o_timeout_val_t first_byte_timeout;
         /**
          * SSL context for connections initiated by the proxy (optional, governed by the application)
          */
@@ -560,7 +559,7 @@ struct st_h2o_context_t {
         /**
          * request timeout
          */
-        h2o_timeout_t req_timeout;
+        h2o_timeout_val_t req_timeout;
         /**
          * link-list of h2o_http1_conn_t
          */
@@ -571,7 +570,7 @@ struct st_h2o_context_t {
         /**
          * idle timeout
          */
-        h2o_timeout_t idle_timeout;
+        h2o_timeout_val_t idle_timeout;
         /**
          * link-list of h2o_http2_conn_t
          */
@@ -579,7 +578,7 @@ struct st_h2o_context_t {
         /**
          * timeout entry used for graceful shutdown
          */
-        h2o_timerwheel_timer_t _graceful_shutdown_timeout;
+        h2o_timeout_timer_t _graceful_shutdown_timeout;
         struct {
             /**
              * counter for http2 errors internally emitted by h2o
@@ -1061,7 +1060,7 @@ struct st_h2o_req_t {
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
-    h2o_timerwheel_timer_t _timeout_entry;
+    h2o_timeout_timer_t _timeout_entry;
 
     /* streaming request body */
     struct {
@@ -1716,7 +1715,7 @@ typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
 #define H2O_DEFAULT_FASTCGI_IO_TIMEOUT 30000
 
 typedef struct st_h2o_fastcgi_config_vars_t {
-    uint64_t io_timeout;
+    h2o_timeout_val_t io_timeout;
     uint64_t keepalive_timeout; /* 0 to disable */
     h2o_iovec_t document_root;  /* .base=NULL if not set */
     int send_delegated_uri;     /* whether to send the rewritten HTTP_HOST & REQUEST_URI by delegation, or the original */
@@ -1824,15 +1823,15 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 /* lib/proxy.c */
 
 typedef struct st_h2o_proxy_config_vars_t {
-    uint64_t io_timeout;
-    uint64_t connect_timeout;
-    uint64_t first_byte_timeout;
+    h2o_timeout_val_t io_timeout;
+    h2o_timeout_val_t connect_timeout;
+    h2o_timeout_val_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
+    h2o_timeout_val_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;
-        uint64_t timeout;
+        h2o_timeout_val_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
     h2o_iovec_t reverse_path; /* optional */

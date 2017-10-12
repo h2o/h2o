@@ -159,7 +159,7 @@ int main(int argc, char **argv)
         subtest("lib/common/string.c", test_lib__common__string_c);
         subtest("lib/common/url.c", test_lib__common__url_c);
         subtest("lib/common/time.c", test_lib__common__time_c);
-        subtest("lib/common/timerwheel.c", test_lib__common__timerwheel_c);
+        subtest("lib/common/timerwheel.c", test_lib__common__timeout_c);
         subtest("lib/core/headers.c", test_lib__core__headers_c);
         subtest("lib/core/proxy.c", test_lib__core__proxy_c);
         subtest("lib/core/util.c", test_lib__core__util_c);

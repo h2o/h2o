@@ -79,10 +79,10 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         h2o_socketpool_set_timeout(self->sockpool, ctx->loop, self->config.keepalive_timeout);
 
     /* setup a specific client context only if we need to */
-    if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
-        ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
-        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled &&
-        self->config.ssl_ctx == ctx->globalconf->proxy.ssl_ctx)
+    if (h2o_timeout_val_equal(ctx->globalconf->proxy.io_timeout, self->config.io_timeout) &&
+        h2o_timeout_val_equal(ctx->globalconf->proxy.connect_timeout, self->config.connect_timeout) &&
+        h2o_timeout_val_equal(ctx->globalconf->proxy.first_byte_timeout, self->config.first_byte_timeout) &&
+        !self->config.websocket.enabled && self->config.ssl_ctx == ctx->globalconf->proxy.ssl_ctx)
         return;
 
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
@@ -95,7 +95,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     if (self->config.websocket.enabled) {
         client_ctx->websocket_timeout = self->config.websocket.timeout;
     } else {
-        client_ctx->websocket_timeout = 0;
+        client_ctx->websocket_timeout = H2O_TIMEOUT_VAL_UNSET;
     }
     client_ctx->ssl_ctx = self->config.ssl_ctx;
 
@@ -136,7 +136,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
     self->super.has_body_stream = 1;
-    if (config->keepalive_timeout != 0) {
+    if (config->keepalive_timeout.set != 0 && config->keepalive_timeout.val != 0) {
         size_t i;
         int is_ssl;
         h2o_socketpool_target_vector_t targets = {};

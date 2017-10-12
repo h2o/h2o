@@ -42,7 +42,16 @@ struct fastcgi_configurator_t {
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->io_timeout);
+    uint64_t timeout;
+    int ret;
+    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
+    if (ret < 0)
+        return ret;
+    if (timeout > 0)
+        self->vars->io_timeout = h2o_timeout_val_from_uint(timeout);
+    else
+        self->vars->io_timeout = H2O_TIMEOUT_VAL_UNSET;
+    return ret;
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -361,7 +370,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->io_timeout = H2O_DEFAULT_FASTCGI_IO_TIMEOUT;
+    c->vars->io_timeout = h2o_timeout_val_from_uint(H2O_DEFAULT_FASTCGI_IO_TIMEOUT);
     c->vars->keepalive_timeout = 0;
 
     /* setup handlers */

@@ -33,6 +33,7 @@ extern "C" {
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
+#include "h2o/timeout_val.h"
 
 #ifndef H2O_USE_LIBUV
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
@@ -394,6 +395,10 @@ inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t n
 {
     counter->cur.start_at = now;
 }
+
+struct st_h2o_timeout_timer_t;
+int h2o_timeout_add_timer(h2o_loop_t *l, struct st_h2o_timeout_timer_t *timer, h2o_timeout_val_t t_rel_expire);
+size_t h2o_timeout_run(h2o_loop_t *loop, uint64_t now);
 
 #ifdef __cplusplus
 }
