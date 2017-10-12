@@ -47,14 +47,16 @@
 
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line)
 {
-    fprintf(stderr, "unexpected ruby error at file: \"%s\", line %d: %s", file, line, RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+    fprintf(stderr, "unexpected ruby error at file: \"%s\", line %d: %s", file, line,
+            RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
     abort();
 }
 
 static void on_gc_dispose_generator(mrb_state *mrb, void *_generator)
 {
     h2o_mruby_generator_t *generator = _generator;
-    if (generator == NULL) return;
+    if (generator == NULL)
+        return;
     generator->refs.generator = mrb_nil_value();
 }
 
@@ -83,7 +85,8 @@ void h2o_mruby_setup_globals(mrb_state *mrb)
             fprintf(stderr, "file \"%s/%s\" not found. Did you forget to run `make install` ?", root,
                     "share/h2o/mruby/preloads.rb");
         } else {
-            fprintf(stderr, "an error occurred while loading %s/%s: %s", root, "share/h2o/mruby/preloads.rb", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+            fprintf(stderr, "an error occurred while loading %s/%s: %s", root, "share/h2o/mruby/preloads.rb",
+                    RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         }
         abort();
     }
@@ -324,8 +327,7 @@ mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
     mrb_hash_set(mrb, conf, mrb_symbol_value(mrb_intern_lit(mrb, "line")), mrb_fixnum_value(config.lineno));
 
     /* run code and generate handler */
-    mrb_value result =
-        mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, conf);
+    mrb_value result = mrb_funcall(mrb, mrb_obj_value(mrb->kernel_module), "_h2o_prepare_app", 1, conf);
     h2o_mruby_assert(mrb);
     assert(mrb_array_p(result));
 
@@ -562,7 +564,7 @@ static int handle_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     h2o_strtolower(name.base, name.len);
 
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        if (token->proxy_should_drop) {
+        if (token->proxy_should_drop_for_res) {
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             req->res.content_length = h2o_strtosize(value.base, value.len);
@@ -632,7 +634,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     mrb_value env = build_env(generator);
 
-    mrb_value gen = h2o_mruby_create_data_instance(shared->mrb, mrb_ary_entry(shared->constants, H2O_MRUBY_GENERATOR_CLASS), generator, &generator_type);
+    mrb_value gen = h2o_mruby_create_data_instance(shared->mrb, mrb_ary_entry(shared->constants, H2O_MRUBY_GENERATOR_CLASS),
+                                                   generator, &generator_type);
     generator->refs.generator = gen;
 
     mrb_value args = mrb_ary_new(shared->mrb);
@@ -677,7 +680,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* flatten body if possible */
     if (mrb_array_p(body)) {
-        mrb_int i, len = mrb_ary_len(mrb, body);
+        mrb_int i, len = RARRAY_LEN(body);
         /* calculate the length of the output, while at the same time converting the elements of the output array to string */
         content.len = 0;
         for (i = 0; i != len; ++i) {
@@ -718,7 +721,8 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     }
 
     /* send the entire response immediately */
-    if (h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
+    if (status == 101 || status == 204 || status == 304 ||
+        h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
         h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_FINAL);
     } else {
@@ -762,7 +766,8 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         status = mrb_fixnum(v);
 
         /* if no special actions were necessary, then the output is a rack response */
-        if (status >= 0) break;
+        if (status >= 0)
+            break;
 
         /* take special action depending on the status code */
         if (status == H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED) {
@@ -777,7 +782,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto Exit;
         } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
             mrb_int i;
-            mrb_int len = mrb_ary_len(mrb, ctx->pendings);
+            mrb_int len = RARRAY_LEN(ctx->pendings);
             for (i = 0; i != len; ++i) {
                 mrb_value pending = mrb_ary_entry(ctx->pendings, i);
                 mrb_value resumer = mrb_ary_entry(pending, 0);
@@ -787,7 +792,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             ctx->pendings = mrb_nil_value();
 
             mrb_value exc = mrb_ary_entry(output, 1);
-            if (! mrb_nil_p(exc)) {
+            if (!mrb_nil_p(exc)) {
                 mrb->exc = mrb_obj_ptr(exc);
                 goto GotException;
             }
@@ -818,7 +823,8 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
                 run_again = 1;
                 break;
             }
-            if (run_again == 0) goto Exit;
+            if (run_again == 0)
+                goto Exit;
 
         } else {
             input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "callback from rack app did not receive an array arg");
@@ -932,7 +938,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
 
     if (mrb_hash_p(headers)) {
         mrb_value keys = mrb_hash_keys(mrb, headers);
-        mrb_int i, len = mrb_ary_len(mrb, keys);
+        mrb_int i, len = RARRAY_LEN(keys);
         for (i = 0; i != len; ++i) {
             mrb_value k = mrb_ary_entry(keys, i);
             mrb_value v = mrb_hash_get(mrb, headers, k);
@@ -941,7 +947,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
         }
     } else {
         assert(mrb_array_p(headers));
-        mrb_int i, len = mrb_ary_len(mrb, headers);
+        mrb_int i, len = RARRAY_LEN(headers);
         for (i = 0; i != len; ++i) {
             mrb_value pair = mrb_ary_entry(headers, i);
             if (!mrb_array_p(pair)) {

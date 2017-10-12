@@ -274,7 +274,7 @@ parse_breakcommand(mrdb_state *mrdb, const char **file, uint32_t *line, char **c
       STRTOUL(l, body);
       if (l <= 65535) {
         *line = l;
-        *file = (body == args)? mrb_debug_get_filename(dbg->irep, (uint32_t)(dbg->pc - dbg->irep->iseq)): args;
+        *file = (body == args)? mrb_debug_get_filename(dbg->irep, dbg->pc - dbg->irep->iseq): args;
       }
       else {
         puts(BREAK_ERR_MSG_RANGEOVER);

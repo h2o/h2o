@@ -411,11 +411,8 @@ mrb_obj_extend_m(mrb_state *mrb, mrb_value self)
 {
   mrb_value *argv;
   mrb_int argc;
-  mrb_value args;
 
   mrb_get_args(mrb, "*", &argv, &argc);
-  args = mrb_ary_new_from_values(mrb, argc, argv);
-  argv = (mrb_value*)RARRAY_PTR(args);
   return mrb_obj_extend(mrb, argc, argv, self);
 }
 
@@ -984,7 +981,7 @@ mrb_obj_missing(mrb_state *mrb, mrb_value mod)
   mrb_value *a;
   mrb_int alen;
 
-  mrb_get_args(mrb, "n*", &name, &a, &alen);
+  mrb_get_args(mrb, "n*!", &name, &a, &alen);
   mrb_method_missing(mrb, name, mod, mrb_ary_new_from_values(mrb, alen, a));
   /* not reached */
   return mrb_nil_value();
@@ -1138,12 +1135,24 @@ mrb_obj_ceqq(mrb_state *mrb, mrb_value self)
   return mrb_false_value();
 }
 
+/* 15.3.1.2.7 */
+/*
+ *  call-seq:
+ *     local_variables   -> array
+ *
+ *  Returns the names of local variables in the current scope.
+ *
+ *  [mruby limitation]
+ *  If variable symbol information was stripped out from
+ *  compiled binary files using `mruby-strip -l`, this
+ *  method always returns an empty array.
+ */
 static mrb_value
 mrb_local_variables(mrb_state *mrb, mrb_value self)
 {
   struct RProc *proc;
+  mrb_irep *irep;
   mrb_value vars;
-  struct mrb_irep *irep;
   size_t i;
 
   proc = mrb->c->ci[-1].proc;
@@ -1151,34 +1160,17 @@ mrb_local_variables(mrb_state *mrb, mrb_value self)
   if (MRB_PROC_CFUNC_P(proc)) {
     return mrb_ary_new(mrb);
   }
-
-  irep = proc->body.irep;
-  if (!irep->lv) {
-    return mrb_ary_new(mrb);
-  }
   vars = mrb_hash_new(mrb);
-  for (i = 0; i + 1 < irep->nlocals; ++i) {
-    if (irep->lv[i].name) {
-      mrb_hash_set(mrb, vars, mrb_symbol_value(irep->lv[i].name), mrb_true_value());
-    }
-  }
-  if (proc->env) {
-    struct REnv *e = proc->env;
-
-    while (e) {
-      if (MRB_ENV_STACK_SHARED_P(e) &&
-          !MRB_PROC_CFUNC_P(e->cxt.c->cibase[e->cioff].proc)) {
-        irep = e->cxt.c->cibase[e->cioff].proc->body.irep;
-        if (irep->lv) {
-          for (i = 0; i + 1 < irep->nlocals; ++i) {
-            if (irep->lv[i].name) {
-              mrb_hash_set(mrb, vars, mrb_symbol_value(irep->lv[i].name), mrb_true_value());
-            }
-          }
-        }
+  irep = proc->body.irep;
+  while (irep) {
+    if (!irep->lv) break;
+    for (i = 0; i + 1 < irep->nlocals; ++i) {
+      if (irep->lv[i].name) {
+        mrb_hash_set(mrb, vars, mrb_symbol_value(irep->lv[i].name), mrb_true_value());
       }
-      e = (struct REnv*)e->c;
     }
+    if (!proc->env) break;
+    irep = irep->outer;
   }
 
   return mrb_hash_keys(mrb, vars);

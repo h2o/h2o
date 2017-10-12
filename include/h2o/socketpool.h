@@ -35,7 +35,10 @@ extern "C" {
 #include "h2o/timeout.h"
 #include "h2o/url.h"
 
-typedef enum en_h2o_socketpool_target_type_t { H2O_SOCKETPOOL_TYPE_NAMED, H2O_SOCKETPOOL_TYPE_SOCKADDR } h2o_socketpool_target_type_t;
+typedef enum en_h2o_socketpool_target_type_t {
+    H2O_SOCKETPOOL_TYPE_NAMED,
+    H2O_SOCKETPOOL_TYPE_SOCKADDR
+} h2o_socketpool_target_type_t;
 
 typedef struct st_h2o_socketpool_target_t {
     h2o_socketpool_target_type_t type;
@@ -92,8 +95,7 @@ typedef struct st_h2o_socketpool_t {
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
 
-typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data,
-    h2o_socketpool_target_t *target);
+typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_socketpool_target_t *target);
 /**
  * initializes a socket loop
  */
@@ -109,11 +111,13 @@ void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_targe
 /**
  * initializes a target by specified address
  */
-void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl, h2o_url_t *url);
+void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl,
+                                           h2o_url_t *url);
 /**
  * initializes a target by specified hostport
  */
-void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl, h2o_url_t *url);
+void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl,
+                                            h2o_url_t *url);
 /**
  * disposes of a socket loop
  */

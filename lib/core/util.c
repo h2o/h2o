@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include "hiredis.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
@@ -578,21 +579,18 @@ Unknown:
     return 15;
 }
 
-static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_push, h2o_iovec_t url, h2o_iovec_t base_path,
-                          const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
-                          h2o_iovec_t *base_authority)
+static h2o_iovec_t to_push_path(h2o_mem_pool_t *pool, h2o_iovec_t url, h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
+                                h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
 {
     h2o_url_t parsed, resolved;
 
     /* check the authority, and extract absolute path */
     if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
-        return;
+        goto Invalid;
 
     /* fast-path for abspath form */
     if (base_scheme == NULL && parsed.scheme == NULL && parsed.authority.base == NULL && url.len != 0 && url.base[0] == '/') {
-        h2o_vector_reserve(pool, paths_to_push, paths_to_push->size + 1);
-        paths_to_push->entries[paths_to_push->size++] = h2o_strdup(pool, url.base, url.len);
-        return;
+        return h2o_strdup(pool, url.base, url.len);
     }
 
     /* check scheme and authority if given URL contains either of the two, or if base is specified */
@@ -603,20 +601,22 @@ static void push_one_path(h2o_mem_pool_t *pool, h2o_iovec_vector_t *paths_to_pus
     }
     h2o_url_resolve(pool, &base, &parsed, &resolved);
     if (input_scheme != resolved.scheme)
-        return;
+        goto Invalid;
     if (!h2o_lcstris(input_authority.base, input_authority.len, resolved.authority.base, resolved.authority.len))
-        return;
+        goto Invalid;
 
-    h2o_vector_reserve(pool, paths_to_push, paths_to_push->size + 1);
-    paths_to_push->entries[paths_to_push->size++] = resolved.path;
+    return resolved.path;
+
+Invalid:
+    return h2o_iovec_init(NULL, 0);
 }
 
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
-                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
-                                                          h2o_iovec_t *base_authority, h2o_iovec_t *filtered_value)
+void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                            const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                            const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                            void (*cb)(void *ctx, const char *path, size_t path_len, int is_critical), void *cb_ctx,
+                                            h2o_iovec_t *filtered_value)
 {
-    h2o_iovec_vector_t paths_to_push = {NULL};
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
     const char *token;
     size_t token_len;
@@ -641,22 +641,27 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
             break;
         h2o_iovec_t url_with_brackets = h2o_iovec_init(token, token_len);
         /* find rel=preload */
-        int preload = 0, nopush = 0, push_only = 0;
+        int preload = 0, nopush = 0, push_only = 0, critical = 0;
         while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
                 h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
-                preload++;
+                preload = 1;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("nopush"))) {
-                nopush++;
+                nopush = 1;
             } else if (h2o_lcstris(token, token_len, H2O_STRLIT("x-http2-push-only"))) {
-                push_only++;
+                push_only = 1;
+            } else if (h2o_lcstris(token, token_len, H2O_STRLIT("critical"))) {
+                critical = 1;
             }
         }
         /* push the path */
-        if (!nopush && preload)
-            push_one_path(pool, &paths_to_push, h2o_iovec_init(url_with_brackets.base + 1, url_with_brackets.len - 2), base_path,
-                          input_scheme, input_authority, base_scheme, base_authority);
+        if (!nopush && preload) {
+            h2o_iovec_t path = to_push_path(pool, h2o_iovec_init(url_with_brackets.base + 1, url_with_brackets.len - 2), base_path,
+                                            input_scheme, input_authority, base_scheme, base_authority);
+            if (path.len != 0)
+                (*cb)(cb_ctx, path.base, path.len, critical);
+        }
         /* store the elements that needs to be preserved to filtered_value */
         if (push_only) {
             if (filtered_value->base == NULL) {
@@ -677,8 +682,6 @@ h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, 
     } else {
         *filtered_value = h2o_iovec_init(value, value_len);
     }
-
-    return paths_to_push;
 
 #undef PUSH_FILTERED_VALUE
 }

@@ -203,13 +203,11 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                         goto Error;
                     }
                     break;
-                case 'e':
-                    {
-                        h2o_iovec_t name = h2o_strdup(NULL, pt, quote_end - pt);
-                        NEW_ELEMENT(ELEMENT_TYPE_ENV_VAR);
-                        LAST_ELEMENT()->data.name = name;
-                    }
-                    break;
+                case 'e': {
+                    h2o_iovec_t name = h2o_strdup(NULL, pt, quote_end - pt);
+                    NEW_ELEMENT(ELEMENT_TYPE_ENV_VAR);
+                    LAST_ELEMENT()->data.name = name;
+                } break;
                 case 't':
                     if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("sec"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH);
@@ -237,8 +235,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
         h2o_conn_callbacks_t dummy_;                                                                                               \
         NEW_ELEMENT(ELEMENT_TYPE_PROTOCOL_SPECIFIC);                                                                               \
-        LAST_ELEMENT()->data.protocol_specific_callback_index =                                                                    \
-            &dummy_.log_.cb - dummy_.log_.callbacks;                                                                               \
+        LAST_ELEMENT()->data.protocol_specific_callback_index = &dummy_.log_.cb - dummy_.log_.callbacks;                           \
         goto MAP_EXT_Found;                                                                                                        \
     }
                     MAP_EXT_TO_TYPE("connection-id", ELEMENT_TYPE_CONNECTION_ID);
@@ -559,13 +556,13 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
             pos = append_port(pos, req->conn->callbacks->get_peername, req->conn, nullexpr);
             break;
-        case ELEMENT_TYPE_ENV_VAR:  /* %{..}e */  {
+        case ELEMENT_TYPE_ENV_VAR: /* %{..}e */ {
             h2o_iovec_t *env_var = h2o_req_getenv(req, element->data.name.base, element->data.name.len, 0);
             if (env_var == NULL)
                 goto EmitNull;
             RESERVE(env_var->len * unsafe_factor);
             pos = append_safe_string(pos, env_var->base, env_var->len);
-            } break;
+        } break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
                 size_t len = req->input.path.len - req->input.query_at;

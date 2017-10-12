@@ -109,10 +109,12 @@ typedef struct st_h2o_headers_command_t h2o_headers_command_t;
 typedef struct st_h2o_token_t {
     h2o_iovec_t buf;
     char http2_static_table_name_index; /* non-zero if any */
-    unsigned char proxy_should_drop : 1;
+    unsigned char proxy_should_drop_for_req : 1;
+    unsigned char proxy_should_drop_for_res : 1;
     unsigned char is_init_header_special : 1;
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
+    unsigned char dont_compress : 1;
 } h2o_token_t;
 
 #include "h2o/token.h"
@@ -386,6 +388,14 @@ struct st_h2o_globalconf_t {
          */
         uint64_t io_timeout;
         /**
+         * io timeout (in milliseconds)
+         */
+        uint64_t connect_timeout;
+        /**
+         * io timeout (in milliseconds)
+         */
+        uint64_t first_byte_timeout;
+        /**
          * SSL context for connections initiated by the proxy (optional, governed by the application)
          */
         SSL_CTX *ssl_ctx;
@@ -615,6 +625,14 @@ struct st_h2o_context_t {
          * timeout handler used by the default client context
          */
         h2o_timeout_t io_timeout;
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t connect_timeout;
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t first_byte_timeout;
     } proxy;
 
     /**
@@ -767,7 +785,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * callback for server push (may be NULL)
      */
-    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len, int is_critical);
     /**
      * Return the underlying socket struct
      */
@@ -881,6 +899,10 @@ typedef struct st_h2o_req_overrides_t {
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
     h2o_headers_command_t *headers_cmds;
+    /**
+     * Maximum size to buffer for the response
+     */
+    size_t max_buffer_size;
 } h2o_req_overrides_t;
 
 /**
@@ -1202,12 +1224,13 @@ size_t h2o_stringify_proxy_header(h2o_conn_t *conn, char *buf);
 #define H2O_PROXY_HEADER_MAX_LENGTH                                                                                                \
     (sizeof("PROXY TCP6 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n") - 1)
 /**
- * extracts path to be pushed from `Link: rel=preload` header, duplicating the chunk (or returns {NULL,0} if none)
+ * extracts path to be pushed from `Link: rel=preload` header.
  */
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
-                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
-                                                          h2o_iovec_t *base_authority, h2o_iovec_t *filtered_value);
+void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                            const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                            const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                            void (*cb)(void *ctx, const char *path, size_t path_len, int is_critical), void *cb_ctx,
+                                            h2o_iovec_t *filtered_value);
 /**
  * return a bitmap of compressible types, by parsing the `accept-encoding` header
  */
@@ -1584,6 +1607,10 @@ h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const cha
  */
 void h2o_mimemap_remove_type(h2o_mimemap_t *mimemap, const char *ext);
 /**
+ * clears all mime-type mapping
+ */
+void h2o_mimemap_clear_types(h2o_mimemap_t *mimemap);
+/**
  * sets the default mime-type
  */
 h2o_mimemap_type_t *h2o_mimemap_get_default_type(h2o_mimemap_t *mimemap);
@@ -1831,6 +1858,8 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
+    uint64_t connect_timeout;
+    uint64_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
@@ -1844,12 +1873,14 @@ typedef struct st_h2o_proxy_config_vars_t {
     unsigned registered_as_url : 1;
     unsigned registered_as_backends : 1;
     SSL_CTX *ssl_ctx; /* optional */
+    size_t max_buffer_size;
 } h2o_proxy_config_vars_t;
 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
+                                      h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */
@@ -1924,6 +1955,10 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
+#ifdef H2O_NO_64BIT_ATOMICS
+extern pthread_mutex_t h2o_conn_id_mutex;
+#endif
+
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
@@ -1932,7 +1967,13 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->ctx = ctx;
     conn->hosts = hosts;
     conn->connected_at = connected_at;
+#ifdef H2O_NO_64BIT_ATOMICS
+    pthread_mutex_lock(&h2o_conn_id_mutex);
+    conn->id = ++h2o_connection_id;
+    pthread_mutex_unlock(&h2o_conn_id_mutex);
+#else
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+#endif
     conn->callbacks = callbacks;
 
     return conn;
@@ -2114,11 +2155,12 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     }
 
 COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
-COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at, h2o_timeval_is_null(&req->timestamps.request_body_begin_at)
-                                                                     ? &req->processed_at.at
-                                                                     : &req->timestamps.request_body_begin_at);
-COMPUTE_DURATION(body_time, h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
-                                                                                        : &req->timestamps.request_body_begin_at,
+COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at,
+                 h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                             : &req->timestamps.request_body_begin_at);
+COMPUTE_DURATION(body_time,
+                 h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
+                                                                             : &req->timestamps.request_body_begin_at,
                  &req->processed_at.at);
 COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);

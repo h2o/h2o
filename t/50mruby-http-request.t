@@ -338,4 +338,47 @@ EOT
     };
 };
 
+subtest 'empty body' => sub {
+    my $upstream = create_upstream();
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  default:
+    paths:
+      /no-content:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/no-content").join
+            resp[2] = [resp[2].join]
+            resp
+          }
+      /head:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/index.txt", { :method => 'HEAD' }).join
+            resp[2] = [resp[2].join]
+            resp
+          }
+EOT
+    });
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl_cmd) = @_;
+        $curl_cmd .= ' --silent --dump-header /dev/stderr';
+
+        subtest "no content" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd -m 1 $proto://127.0.0.1:$port/no-content");
+            like $headers, qr{HTTP/[^ ]+ 204\s}is;
+            is $body, "";
+        };
+
+        subtest "head" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd -m 1 $proto://127.0.0.1:$port/head");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, "";
+        };
+    });
+};
+
 done_testing();

@@ -63,6 +63,7 @@ mrb_class(mrb_state *mrb, mrb_value v)
     }\
   }\
 } while (0)
+#define MRB_FLAG_IS_INHERITED (1 << 21)
 #define MRB_INSTANCE_TT_MASK (0xFF)
 #define MRB_SET_INSTANCE_TT(c, tt) c->flags = ((c->flags & ~MRB_INSTANCE_TT_MASK) | (char)tt)
 #define MRB_INSTANCE_TT(c) (enum mrb_vtype)(c->flags & MRB_INSTANCE_TT_MASK)
@@ -75,12 +76,13 @@ MRB_API void mrb_define_method_raw(mrb_state*, struct RClass*, mrb_sym, struct R
 MRB_API void mrb_define_method_id(mrb_state *mrb, struct RClass *c, mrb_sym mid, mrb_func_t func, mrb_aspec aspec);
 MRB_API void mrb_alias_method(mrb_state *mrb, struct RClass *c, mrb_sym a, mrb_sym b);
 
-MRB_API struct RClass *mrb_class_outer_module(mrb_state*, struct RClass *);
 MRB_API struct RProc *mrb_method_search_vm(mrb_state*, struct RClass**, mrb_sym);
 MRB_API struct RProc *mrb_method_search(mrb_state*, struct RClass*, mrb_sym);
 
 MRB_API struct RClass* mrb_class_real(struct RClass* cl);
 
+void mrb_class_name_class(mrb_state*, struct RClass*, struct RClass*, mrb_sym);
+mrb_value mrb_class_find_path(mrb_state*, struct RClass*);
 void mrb_gc_mark_mt(mrb_state*, struct RClass*);
 size_t mrb_gc_mark_mt_size(mrb_state*, struct RClass*);
 void mrb_gc_free_mt(mrb_state*, struct RClass*);

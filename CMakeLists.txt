@@ -49,6 +49,15 @@ FIND_PACKAGE(Threads REQUIRED)
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(ZLIB REQUIRED)
 
+INCLUDE(CheckCSourceCompiles)
+CHECK_C_SOURCE_COMPILES("
+#include <stdint.h>
+int main(void) {
+uint64_t a;
+__sync_add_and_fetch(&a, 1);
+return 0;
+}" ARCH_SUPPORTS_64BIT_ATOMICS)
+
 SET(WITH_BUNDLED_SSL_DEFAULT "ON")
 IF ((NOT UNIX) OR CYGWIN)
     SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
@@ -87,6 +96,9 @@ ELSE (WITH_BUNDLED_SSL)
     IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
         MESSAGE(WARNING "*********************************************************************** OpenSSL 1.0.2 is required for HTTP/2 interoperability with web browsers ***********************************************************************")
     ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
+    IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
+        MESSAGE(WARNING "*********************************************************************** OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed when using external cache ***********************************************************************")
+    ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
 ENDIF (WITH_BUNDLED_SSL)
 
 INCLUDE_DIRECTORIES(
@@ -459,7 +471,7 @@ IF (WITH_MRUBY)
     ELSE ()
         SET(MRUBY_TOOLCHAIN "gcc")
     ENDIF ()
-    ADD_CUSTOM_TARGET(mruby MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby ruby minirake
+    ADD_CUSTOM_TARGET(mruby MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby)
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
@@ -565,7 +577,7 @@ ELSE ()
     ENDIF ()
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/*.t
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
@@ -589,7 +601,7 @@ IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
     ADD_DEPENDENCIES(check h2get)
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/*.t
+ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
@@ -599,10 +611,10 @@ IF (LIBUV_FOUND)
     ENDIF ()
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/90root-*.t
+ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/90root-*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-ADD_CUSTOM_TARGET(check-as-root-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/90root-*.t
+ADD_CUSTOM_TARGET(check-as-root-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/90root-*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 
@@ -638,6 +650,10 @@ IF (BUILD_FUZZER)
     TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
 
 ENDIF (BUILD_FUZZER)
+
+IF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_64BIT_ATOMICS")
+ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
 
 # environment-specific tweaks
 IF (APPLE)

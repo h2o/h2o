@@ -62,17 +62,17 @@ MRB_BEGIN_DECL
 /*
  * Release year.
  */
-#define MRUBY_RELEASE_YEAR 2015
+#define MRUBY_RELEASE_YEAR 2017
 
 /*
  * Release month.
  */
-#define MRUBY_RELEASE_MONTH 11
+#define MRUBY_RELEASE_MONTH 7
 
 /*
  * Release day.
  */
-#define MRUBY_RELEASE_DAY 17
+#define MRUBY_RELEASE_DAY 4
 
 /*
  * Release date as a string.

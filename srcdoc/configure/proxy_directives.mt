@@ -191,6 +191,42 @@ $ctx->{directive}->(
     levels  => [ qw(global host path extension) ],
     default => q{proxy.timeout.io: 30000},
     desc    => q{Sets the upstream I/O timeout in milliseconds.},
+)->(sub {
+?>
+<p>This value will be used for <code>proxy.timeout.connect</code> and <code>proxy.timeout.first_byte</code> as well, unless these parameters are explicitely set.</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.timeout.connect",
+    levels  => [ qw(global host path extension) ],
+    default => q{proxy.timeout.connect: 30000},
+    since   => "2.3",
+    desc    => q{Sets the timeout before establishing the upstream in milliseconds.},
+)->(sub {
+?>
+<p>When connecting to a TLS upstream, this timeout will run until the end of the SSL handshake.</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.timeout.first_byte",
+    levels  => [ qw(global host path extension) ],
+    default => q{proxy.timeout.first_byte: 30000},
+    since   => "2.3",
+    desc    => q{Sets the timeout before receiving the first byte from upstream.},
+)->(sub {
+?>
+<p>This sets the maxium time we will wait for the first byte from upstream, after the establishment of the connection.</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.timeout.io",
+    levels  => [ qw(global host path extension) ],
+    default => q{proxy.timeout.io: 30000},
+    since   => "2.3",
+    desc    => q{Sets the upstream I/O timeout in milliseconds.},
 )->(sub {});
 ?>
 
