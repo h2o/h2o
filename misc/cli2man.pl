@@ -106,7 +106,7 @@ if ($options) {
 		if ($o->{arg}) {
 			print "\n$o->{arg_help}";
 		}
-		if (%{$o->{args}} > 0) {
+		if (%{$o->{args}}) {
 			print "\n.RS";
 			foreach my $arg (@{$o->{args_order}}) {
 				print "\n.PP\n.PP\n\\'\\fB$arg\\fR\\' : ";
