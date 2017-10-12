@@ -171,16 +171,13 @@ static void lb_rr_dispose(void *data)
     free(data);
 }
 
-h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, h2o_iovec_t *host, uint16_t *port, struct sockaddr_storage *sa,
-                                                socklen_t *salen)
+h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url,  struct sockaddr_storage *sa, socklen_t *salen)
 {
     const char *to_sun_err = h2o_url_host_to_sun(url->host, (struct sockaddr_un *)sa);
     if (to_sun_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
         sa->ss_family = AF_INET;
         struct sockaddr_in *sin = (struct sockaddr_in *)sa;
         *salen = sizeof(*sin);
-        *host = url->host;
-        *port = h2o_url_get_port(url);
 
         if (h2o_hostinfo_aton(url->host, &sin->sin_addr) == 0) {
             sin->sin_port = htons(h2o_url_get_port(url));
@@ -192,8 +189,6 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, h2o_iovec_t *hos
         assert(to_sun_err == NULL);
         struct sockaddr_un *sun = (struct sockaddr_un *)sa;
         *salen = sizeof(*sun);
-        *host = h2o_iovec_init(sun->sun_path, strlen(sun->sun_path));
-        *port = 0;
         return H2O_SOCKETPOOL_TYPE_SOCKADDR;
     }
 }
@@ -204,20 +199,18 @@ void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin)
 
     struct sockaddr_storage sa;
     socklen_t salen;
-    h2o_iovec_t host;
-    uint16_t port;
 
     memset(&sa, 0, sizeof(sa));
 
     target->is_ssl = origin->scheme->is_ssl;
-    target->type = detect_target_type(origin, &host, &port, &sa, &salen);
-    target->peer.host = h2o_strdup(NULL, host.base, host.len);
-    target->peer.port = port;
+    target->type = detect_target_type(origin, &sa, &salen);
+    target->peer.host = h2o_strdup(NULL, origin->host.base, origin->host.len);
+    target->peer.port = h2o_url_get_port(origin);
 
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         target->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
-        target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)port);
+        target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)target->peer.port);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         assert(salen <= sizeof(target->peer.sockaddr.bytes));
@@ -432,7 +425,7 @@ static size_t lookup_target(h2o_socketpool_t *pool, h2o_url_t *url)
         h2o_socketpool_target_t *target = &pool->targets.entries[i];
         if (target->is_ssl != url->scheme->is_ssl)
             continue;
-        if (target->peer.port == 0 || target->peer.port != port)
+        if (target->peer.port != port)
             continue;
         if (memcmp(target->peer.host.base, url->host.base, url->host.len) != 0)
             continue;
