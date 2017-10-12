@@ -65,6 +65,11 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
  */
 static int h2o_url_init(h2o_url_t *url, const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path);
 
+int h2o_url_init_with_hostport(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host,
+                               uint16_t port, h2o_iovec_t path);
+int h2o_url_init_with_sun_path(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t sun_path,
+                               h2o_iovec_t path);
+
 /**
  * parses absolute URL (either http or https)
  */
