@@ -8,6 +8,7 @@ Revision history for H2O.
 	- [fastcgi] never return 304 if the file is a dynamic handler #1385 (Kazuho Oku)
 	- [fastcgi] accept `default` as a keyword of the extensions attribute #1414 (Ichito Nagata)
 	- [http2] support `critical` attribute in preload link header #1436 (Kazuho Oku, Frederik Deweerdt)
+	- [http2] do not compress cookies less than 20 bytes long #1389 (Julien Benoist)
 	- [mime] add .mjs as javascript file type #1398 (Jxck)
 	- [mime] flush all existing mapping when file.mime.settypes is used #1416 (Ichito Nagata)
 	- [mruby] allow running asynchronous operations unbounded to the Rack request being processed #1173 (Ichito Nagata)
@@ -35,7 +36,6 @@ Revision history for H2O.
 
 2.2.2 2017-04-23 03:24:00+0000
 	- [ssl] fix OCSP stapling error when LibreSSL is used #1275 (Ian Moone)
-
 
 2.2.1 2017-04-22 22:43:00+0000
 	- [mruby] correct the line number reported on an exception #1239 #1251 (Ichito Nagata)
