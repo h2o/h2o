@@ -20,11 +20,15 @@ plan skip_all => 'Starlet not found'
 my $upstream_hostport = "127.0.0.1:@{[empty_port()]}";
 
 sub create_upstream {
+    my %opts = @_;
     my @args = (
-        qw(plackup -s Starlet --keepalive-timeout 100 --max-keepalive-reqs 100 --access-log /dev/null --listen),
+        qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen),
         $upstream_hostport,
-        ASSETS_DIR . "/upstream.psgi",
     );
+    if ($opts{keepalive}) {
+        push(@args, qw(--max-keepalive-reqs 100));
+    }
+    push(@args, ASSETS_DIR . "/upstream.psgi");
     spawn_server(
         argv     => \@args,
         is_ready =>  sub {
@@ -382,61 +386,80 @@ EOT
 };
 
 subtest 'keep-alive' => sub {
-    my $upstream = create_upstream();
-    my $server = spawn_h2o(sub {
-        my ($port, $tls_port) = @_;
-        return << "EOT";
+    my $upstream = create_upstream(keepalive => 1);
+    my $spawner = sub {
+        my %opts = @_;
+        spawn_h2o(<< "EOT");
+@{[ $opts{keepalive} ? "" : "proxy.timeout.keepalive: 0" ]}
 hosts:
   default:
     paths:
-      /default: # should keep-alive
+      /:
         mruby.handler: |
-          def doit(headers)
-            resp = http_request("http://$upstream_hostport/", { :headers => headers }).join
+          proc {|env|
+            q = env['QUERY_STRING']
+            headers = q.empty? ? nil : { 'Connection' => q }
+            resp = http_request("http://$upstream_hostport/echo-remote-port", { :headers => headers }).join
             resp[1]['upstream-connection'] = resp[1]['connection'] || 'keep-alive'
             resp
-          end
-
-          proc {|env|
-            doit(nil)
-          }
-      /keep-alive:
-        mruby.handler: |
-          proc {|env|
-            doit({ "Connection" => "keep-alive" })
-          }
-      /close:
-        mruby.handler: |
-          proc {|env|
-            doit({ "Connection" => "close" })
           }
 EOT
-    });
+    };
+    my $curl = 'curl --silent --dump-header /dev/stderr';
 
-    run_with_curl($server, sub {
-        my ($proto, $port, $curl_cmd) = @_;
-        $curl_cmd .= ' --silent --dump-header /dev/stderr';
-
+    subtest 'on' => sub {
         subtest "default" => sub {
+            my $server = $spawner->(keepalive => 1);
             my ($headers, $body);
-            ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/default");
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/");
             like $headers, qr{^upstream-connection: keep-alive}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            is $body, $remote_port
         };
 
         subtest "keep-alive" => sub {
+            my $server = $spawner->(keepalive => 1);
             my ($headers, $body);
-            ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/keep-alive");
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
             like $headers, qr{^upstream-connection: keep-alive}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            is $body, $remote_port
         };
 
         subtest "close" => sub {
+            my $server = $spawner->(keepalive => 1);
             my ($headers, $body);
-            ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/close");
-            my $server_socket = $body;
-            like $headers, qr{^upstream-connection: close}im;
-        };
 
-    });
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            isnt $body, $remote_port
+        };
+    };
+
+    subtest 'off' => sub {
+        my $server = $spawner->(keepalive => 0);
+        my ($headers, $body);
+
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
+        like $headers, qr{^upstream-connection: close}im;
+        my $remote_port = $body;
+
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+        like $headers, qr{^upstream-connection: close}im;
+        isnt $body, $remote_port
+    };
 };
 
 done_testing();

@@ -154,6 +154,19 @@ run_with_curl($server, sub {
         $content = `$curl --silent "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files"`;
         is length($content), $files{"index.txt"}->{size}, "redirect handled internally after delegation (size)";
         is md5_hex($content), $files{"index.txt"}->{md5}, "redirect handled internally after delegation (md5)";
+
+        subtest "keep-alive" => sub {
+            my ($headers, $body);
+            my $cmd = "$curl --silent --dump-header /dev/stderr \"$proto://127.0.0.1:$port/?resp:status=302&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/echo-remote-port\"";
+            ($headers, $body) = run_prog($cmd);
+            my $remote_port = $body;
+            ($headers, $body) = run_prog($cmd);
+            if ($h2o_keepalive && $starlet_keepalive) {
+                is $body, $remote_port, "keep-alive is enabled";
+            } else {
+                isnt $body, $remote_port, "keep-alive is disbaled";
+            }
+        };
     };
     subtest "x-forwarded ($proto)" => sub {
         my $resp = `$curl --silent $proto://127.0.0.1:$port/echo-headers`;
