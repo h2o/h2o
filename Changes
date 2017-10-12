@@ -1,5 +1,23 @@
 Revision history for H2O.
 
+2.2.3 TBD
+	- [core] disable buffering of stdout, stderr #1347 (Yannick Koechlin)
+	- [expires] fix incorrect header emitted when units: month or year were used #1406 (Frederik Deweerdt)
+	- [fastcgi] never return 304 if the file is a dynamic handler #1385 (Kazuho Oku)
+	- [mime] flush all existing mapping when file.mime.settypes is used #1416 (Ichito Nagata)
+	- [mruby] update mruby and modules #1320 #1338 #1413
+	- [mruby] expose `SERVER_PROTOCOL` #1353 (Frederik Deweerdt)
+	- [mruby] properly handle content-less response #1430 (Ichito Nagata)
+	- [proxy] do not drop the Date request header #1408 (Ichito Nagata)
+	- [ssl] fix deadlock during lazy initialzation #1425 (Apollon Oikonomopoulos)
+	- [ssl] fix epoll-related crashes on OSCP updates #1427 (Apollon Oikonomopoulos)
+	- [ssl] avoid spurious session ticket renewals #1444 (Apollon Oikonomopoulos)
+	- [websocket] fix bug that might drop the first websocket frame #1276 (wuhanck)
+	- [libh2o] clear OpenSSL's error queue before using it #1448 (Apollon Oikonomopoulos)
+	- [doc] add documentation of `duration-stats` #1306 (Frederik Deweerdt)
+	- [misc] fix build issues on OpenIndiana #1300 (David Carlier)
+	- [misc] build on platforms without 64-bit atomics #1433 (Apollon Oikonomopoulos)
+
 2.2.2 2017-04-23 03:24:00+0000
 	- [ssl] fix OCSP stapling error when LibreSSL is used #1275 (Ian Moone)
 
