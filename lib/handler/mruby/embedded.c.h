@@ -167,12 +167,15 @@
     "      self._notify\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "    def shift\n"                                                                                                              \
-    "      while true\n"                                                                                                           \
-    "        if !@queue.empty?\n"                                                                                                  \
-    "          return @queue.shift\n"                                                                                              \
-    "        end\n"                                                                                                                \
-    "        _h2o__channel_wait(self)\n"                                                                                           \
-    "      end\n"                                                                                                                  \
+    "      if @queue.empty?\n"                                                                                                  \
+    "        _h2o__channel_wait(self)\n"                                                                                              \
+    "      end\n"                                                                                                                \
+    "      begin\n"                                                                                           \
+    "        ret = @queue.shift\n"                                                                                           \
+    "      rescue => ex\n"                                                                                           \
+    "        raise ex\n"                                                                                           \
+    "      end\n"                                                                                           \
+    "      ret\n"                                                                                           \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"

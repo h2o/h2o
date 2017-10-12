@@ -25,12 +25,15 @@ module H2O
       self._notify
     end
     def shift
-      while true
-        if !@queue.empty?
-          return @queue.shift
-        end
+      if @queue.empty?
         _h2o__channel_wait(self)
       end
+      begin
+        ret = @queue.shift
+      rescue => ex
+        raise ex
+      end
+      ret
     end
   end
 end
