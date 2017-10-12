@@ -1,3 +1,4 @@
+BINARY_DIR=..
 VPATH=../srcdoc
 OUTPUT=\
     index.html \
@@ -71,7 +72,7 @@ manpage: $(MAN)
 	cat $(VPATH)/man-snippets/h2o.conf.5/header $(MAN) > h2o.conf.5
 	( cat $(VPATH)/man-snippets/h2o.8/header \
 	      $(VPATH)/man-snippets/h2o.8/description ; \
-	  ../h2o --help | ../misc/cli2man.pl ; \
+	  $(BINARY_DIR)/h2o --help | ../misc/cli2man.pl ; \
 	  cat $(VPATH)/man-snippets/h2o.8/footer ) > h2o.8
 
 search/searchindex.js: html
