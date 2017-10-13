@@ -588,6 +588,9 @@ static int frontend_write_req_chunk(void *priv, h2o_iovec_t payload, int is_end_
 {
     struct rp_generator_t *self = priv;
 
+    if (is_end_stream) {
+        self->src_req->_write_req_chunk.cb = NULL;
+    }
     return h2o_http1client_write_req_chunk(self->client->sock, payload, is_end_stream);
 }
 

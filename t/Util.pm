@@ -12,7 +12,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl run_with_h2get);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl run_with_h2get run_with_h2get_simple);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -291,5 +291,28 @@ sub run_with_h2get {
     close($scriptfh);
     return run_prog(bindir()."/h2get_bin/h2get $scriptfn https://127.0.0.1:$server->{tls_port}");
 }
+
+sub run_with_h2get_simple {
+    my ($server, $script) = @_;
+    my $settings = <<'EOS';
+    h2g = H2.new
+    host = ARGV[0]
+    h2g.connect(host)
+    h2g.send_prefix()
+    h2g.send_settings()
+    i = 0
+    while i < 2 do
+        f = h2g.read(-1)
+        if f.type == "SETTINGS" and (f.flags == ACK) then
+            i += 1
+        elsif f.type == "SETTINGS" then
+            h2g.send_settings_ack()
+            i += 1
+        end
+    end
+EOS
+    run_with_h2get($server, $settings."\n".$script);
+}
+
 
 1;
