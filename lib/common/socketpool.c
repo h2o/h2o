@@ -50,9 +50,9 @@ struct st_h2o_socketpool_connect_request_t {
     h2o_socket_t *sock;
     h2o_multithread_receiver_t *getaddr_receiver;
     size_t selected_target;
+    size_t remaining_try_count;
     struct {
         int *tried;
-        size_t try_count;
     } lb;
 };
 
@@ -332,11 +332,11 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
 {
     h2o_socketpool_target_t *target;
 
+    req->remaining_try_count--;
     if (req->lb.tried != NULL) {
         /* do load balancing */
         req->selected_target = req->pool->_lb.selector(&req->pool->targets, req->pool->_lb.data, req->lb.tried);
         assert(!req->lb.tried[req->selected_target]);
-        req->lb.try_count++;
         req->lb.tried[req->selected_target] = 1;
     }
     target = &req->pool->targets.entries[req->selected_target];
@@ -363,7 +363,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     if (err != NULL) {
         h2o_socket_close(sock);
-        if (is_global_pool(req->pool) || req->lb.try_count == req->pool->targets.size) {
+        if (req->remaining_try_count == 0) {
             req->sock = NULL;
             errstr = "connection failed";
         } else {
@@ -519,7 +519,9 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (target == SIZE_MAX) {
         req->lb.tried = h2o_mem_alloc(sizeof(int) * pool->targets.size);
         memset(req->lb.tried, 0, sizeof(int) * pool->targets.size);
-        req->lb.try_count = 0;
+        req->remaining_try_count = pool->targets.size;
+    } else {
+        req->remaining_try_count = 1;
     }
     try_connect(req);
 }
