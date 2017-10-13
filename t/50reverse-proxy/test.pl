@@ -86,8 +86,8 @@ hosts:
         gzip: ON
       /files:
         file.dir: @{[ DOC_ROOT ]}
-@{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
 reproxy: ON
+@{[ $h2o_keepalive ? "" : "proxy.timeout.keepalive: 0" ]}
 EOT
 
 run_with_curl($server, sub {
