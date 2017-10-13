@@ -156,6 +156,10 @@ run_with_curl($server, sub {
         is md5_hex($content), $files{"index.txt"}->{md5}, "redirect handled internally after delegation (md5)";
 
         subtest "keep-alive" => sub {
+            if ($unix_socket) {
+                pass;
+                return;
+            }
             my ($headers, $body);
             my $cmd = "$curl --silent --dump-header /dev/stderr \"$proto://127.0.0.1:$port/?resp:status=302&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/echo-remote-port\"";
             ($headers, $body) = run_prog($cmd);
