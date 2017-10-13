@@ -428,6 +428,10 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
                                        err_desc)) != 0)
         return ret;
 
+    /* this means we already had a END_STREAM on a previous frame */
+    if (!stream->req._write_req_chunk.cb)
+        return H2O_HTTP2_ERROR_PROTOCOL;
+
     /* trailing headers for are ignored for streaming body, but
        we still need to parse them to keep the HPACK state in sync */
     if (!stream->req._write_req_chunk_done) {
