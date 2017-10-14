@@ -1101,7 +1101,6 @@ struct st_h2o_req_t {
         void *priv;
     } _write_req_chunk;
     h2o_write_req_chunk_done _write_req_chunk_done;
-    char _found_handler;
 
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
