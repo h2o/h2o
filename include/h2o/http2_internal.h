@@ -136,13 +136,37 @@ typedef struct st_h2o_http2_window_t {
 } h2o_http2_window_t;
 
 typedef enum enum_h2o_http2_stream_state_t {
+    /**
+     * stream in idle state (but registered; i.e. priority stream)
+     */
     H2O_HTTP2_STREAM_STATE_IDLE,
+    /**
+     * receiving headers
+     */
     H2O_HTTP2_STREAM_STATE_RECV_HEADERS,
+    /**
+     * receiving body (or trailers), waiting for the arrival of END_STREAM
+     */
     H2O_HTTP2_STREAM_STATE_RECV_BODY,
+    /**
+     * received request but haven't been assigned a handler
+     */
     H2O_HTTP2_STREAM_STATE_REQ_PENDING,
+    /**
+     * waiting for receiving response headers from the handler
+     */
     H2O_HTTP2_STREAM_STATE_SEND_HEADERS,
+    /**
+     * sending body
+     */
     H2O_HTTP2_STREAM_STATE_SEND_BODY,
+    /**
+     * received EOS from handler but still is sending body to client
+     */
     H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL,
+    /**
+     * closed
+     */
     H2O_HTTP2_STREAM_STATE_END_STREAM
 } h2o_http2_stream_state_t;
 
