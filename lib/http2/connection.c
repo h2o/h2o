@@ -385,10 +385,8 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 
     /* update timer */
-    if (!stream->blocked_by_server) {
+    if (!stream->blocked_by_server)
         h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
-        update_idle_timeout(conn);
-    }
 
     /* handle input */
     if (is_end_stream) {
@@ -1003,9 +1001,9 @@ static void on_read(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    update_idle_timeout(conn);
     if (parse_input(conn) != 0)
         return;
+    update_idle_timeout(conn);
 
     /* write immediately, if there is no write in flight and if pending write exists */
     if (h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
