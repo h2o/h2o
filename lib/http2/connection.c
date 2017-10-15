@@ -157,8 +157,7 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
 
-    if (!conn->num_streams.response_blocked_by_server && !conn->num_streams.request_blocked_by_server &&
-        conn->_write.buf_in_flight == NULL) {
+    if (conn->num_streams.blocked_by_server == 0 && conn->_write.buf_in_flight == NULL) {
         conn->_timeout_entry.cb = on_idle_timeout;
         h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
     }
@@ -223,7 +222,8 @@ static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
 
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-    h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
+    if (!stream->blocked_by_server)
+        h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
     execute_or_enqueue_request_core(conn, stream);
 }
 
@@ -385,18 +385,16 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 
     /* update timer */
-    if (!stream->request_blocked_by_server) {
-        h2o_http2_stream_set_request_blocked_by_server(conn, stream, 1);
+    if (!stream->blocked_by_server) {
+        h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
         update_idle_timeout(conn);
     }
 
     /* handle input */
     if (is_end_stream) {
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-        if (stream->req._write_req_chunk_done != NULL) {
+        if (stream->req._write_req_chunk_done != NULL)
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
-            h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
-        }
     }
     if (stream->req._write_req_chunk.cb(stream->req._write_req_chunk.priv, payload, is_end_stream) != 0) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
@@ -558,13 +556,13 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
     }
 }
 
-static void write_req_chunk_done(h2o_req_t *req, size_t written, int done)
+static void write_req_chunk_done(h2o_req_t *req, size_t written, int is_end_stream)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    if (stream->request_blocked_by_server) {
-        h2o_http2_stream_set_request_blocked_by_server(conn, stream, 0);
+    if (stream->blocked_by_server && stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY) {
+        h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
         update_idle_timeout(conn);
     }
 
