@@ -578,9 +578,9 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
     return 0;
 }
 
-static void proxy_write_req_proceed(void *priv, size_t written, int is_end_stream)
+static void proxy_write_req_proceed(h2o_http1client_t *client, size_t written, int is_end_stream)
 {
-    struct rp_generator_t *self = priv;
+    struct rp_generator_t *self = client->data;
     self->frontend_write_req_proceed(self->src_req, written, is_end_stream);
 }
 
@@ -592,7 +592,7 @@ static int proxy_write_req(void *priv, h2o_iovec_t payload, int is_end_stream)
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_http1client_req_proceed_cb *write_req_proceed_cb,
-                                          void **write_req_proceed_ctx, h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
+                                          h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
 {
     struct rp_generator_t *self = client->data;
 
@@ -630,7 +630,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         if (self->src_req->proceed_req != NULL) {
             *cur_body = self->src_req->entity;
             *write_req_proceed_cb = proxy_write_req_proceed;
-            *write_req_proceed_ctx = self;
             self->frontend_write_req_proceed = self->src_req->proceed_req;
             self->src_req->write_req.cb = proxy_write_req;
             self->src_req->write_req.ctx = self;

@@ -51,10 +51,7 @@ struct st_h2o_http1client_private_t {
         } chunked;
     } _body_decoder;
     h2o_socket_cb reader;
-    struct {
-        h2o_http1client_req_proceed_cb cb;
-        void *ctx;
-    } _write_req;
+    h2o_http1client_req_proceed_cb _proceed_req_cb;
     char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
@@ -406,7 +403,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1client_private_t *client = sock->data;
 
     if (client->_body_buf_in_flight != NULL) {
-        client->_write_req.cb(client->_write_req.ctx, client->_body_buf_in_flight->size, client->_body_buf_is_done);
+        client->_proceed_req_cb(&client->super, client->_body_buf_in_flight->size, client->_body_buf_is_done);
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
     }
 
@@ -503,7 +500,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
 static void on_connect_error(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, client->_location_rewrite_url);
+    client->_cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, client->_location_rewrite_url);
     close_client(client);
 }
 
@@ -513,14 +510,13 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     size_t reqbufcnt;
     h2o_iovec_t cur_body = h2o_iovec_init(NULL, 0);
 
-    client->_cb.on_head =
-        client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head, &client->_write_req.cb,
-                               &client->_write_req.ctx, &cur_body, client->_location_rewrite_url);
+    client->_cb.on_head = client->_cb.on_connect(&client->super, NULL, &reqbufs, &reqbufcnt, &client->_method_is_head,
+                                                 &client->_proceed_req_cb, &cur_body, client->_location_rewrite_url);
     if (client->_cb.on_head == NULL) {
         close_client(client);
         return;
     }
-    if (client->_write_req.cb != NULL) {
+    if (client->_proceed_req_cb != NULL) {
         if (cur_body.len != 0) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
             if (h2o_buffer_append(&client->_body_buf, cur_body.base, cur_body.len) == 0) {

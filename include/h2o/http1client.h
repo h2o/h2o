@@ -36,15 +36,14 @@ typedef struct st_h2o_http1client_t h2o_http1client_t;
 
 struct st_h2o_header_t;
 
-typedef void (*h2o_http1client_req_proceed_cb)(void *ctx, size_t written, int is_end_stream);
+typedef void (*h2o_http1client_req_proceed_cb)(h2o_http1client_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_http1client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http1client_body_cb (*h2o_http1client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
                                                            int status, h2o_iovec_t msg, struct st_h2o_header_t *headers,
                                                            size_t num_headers, int rlen);
 typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs,
                                                               size_t *reqbufcnt, int *method_is_head,
-                                                              h2o_http1client_req_proceed_cb *proceed_req_cb,
-                                                              void **proceed_req_ctx, h2o_iovec_t *cur_body,
+                                                              h2o_http1client_req_proceed_cb *proceed_req_cb, h2o_iovec_t *cur_body,
                                                               h2o_url_t *location_rewrite_url);
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 struct st_h2o_header_t *headers, size_t num_headers);

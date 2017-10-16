@@ -41,7 +41,7 @@ static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_http1client_req_proceed_cb *proceed_req_cb,
-                                          void **proceed_req_context, h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url);
+                                          h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
 
@@ -143,7 +143,6 @@ int fill_body(h2o_iovec_t *reqbuf)
     }
 }
 
-static void http1_write_req_chunk_done(void *sock_, size_t written, int done);
 static h2o_timeout_t post_body_timeout;
 
 struct st_timeout_ctx {
@@ -163,15 +162,13 @@ static void timeout_cb(h2o_timeout_entry_t *entry)
     return;
 }
 
-static void http1_write_req_chunk_done(void *sock_, size_t written, int done)
+static void http1_write_req_chunk_done(h2o_http1client_t *client, size_t written, int done)
 {
-    h2o_socket_t *sock = sock_;
-    h2o_http1client_t *client = (h2o_http1client_t *)sock->data;
     if (cur_body_size > 0) {
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
-        tctx->sock = sock;
+        tctx->sock = client->sock;
         tctx->_timeout.cb = timeout_cb;
         h2o_timeout_link(client->ctx->loop, &post_body_timeout, &tctx->_timeout);
     }
@@ -179,7 +176,7 @@ static void http1_write_req_chunk_done(void *sock_, size_t written, int done)
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_http1client_req_proceed_cb *proceed_req_cb,
-                                          void **proceed_req_ctx, h2o_iovec_t *cur_body, h2o_url_t *dummy)
+                                          h2o_iovec_t *cur_body, h2o_url_t *dummy)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -192,7 +189,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *method_is_head = 0;
     if (cur_body_size > 0) {
         *proceed_req_cb = http1_write_req_chunk_done;
-        *proceed_req_ctx = client->sock;
 
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
