@@ -40,7 +40,7 @@ static int delay_interval_ms = 0;
 static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_req_chunk_done_cb *write_req_chunk_done,
+                                          int *method_is_head, h2o_http1client_prcoeed_req_cb *proceed_req_cb,
                                           h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
@@ -156,13 +156,13 @@ static void timeout_cb(h2o_timeout_entry_t *entry)
 
     fill_body(&reqbuf);
     h2o_timeout_unlink(&tctx->_timeout);
-    h2o_http1client_write_req_chunk(tctx->sock, reqbuf, cur_body_size <= 0);
+    h2o_http1client_write_req(tctx->sock, reqbuf, cur_body_size <= 0);
     free(tctx);
 
     return;
 }
 
-static void http1_write_req_chunk_done(h2o_http1client_t *client, size_t written, int done)
+static void proceed_request(h2o_http1client_t *client, size_t written, int is_end_stream)
 {
     if (cur_body_size > 0) {
         struct st_timeout_ctx *tctx;
@@ -175,7 +175,7 @@ static void http1_write_req_chunk_done(h2o_http1client_t *client, size_t written
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_req_chunk_done_cb *write_req_chunk_done,
+                                          int *method_is_head, h2o_http1client_prcoeed_req_cb *proceed_req_cb,
                                           h2o_iovec_t *cur_body, h2o_url_t *dummy)
 {
     if (errstr != NULL) {
@@ -188,7 +188,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *reqbufcnt = 1;
     *method_is_head = 0;
     if (cur_body_size > 0) {
-        *write_req_chunk_done = http1_write_req_chunk_done;
+        *proceed_req_cb = proceed_request;
 
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
