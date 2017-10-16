@@ -159,7 +159,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.on_context_dispose = on_context_dispose;
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
-    self->super.has_body_stream = 1;
+    self->super.supports_request_streaming = 1;
     if (config->keepalive_timeout != 0) {
         size_t i;
         int is_ssl;

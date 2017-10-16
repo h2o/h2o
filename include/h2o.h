@@ -129,7 +129,16 @@ typedef struct st_h2o_handler_t {
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
-    unsigned has_body_stream : 1;
+    /**
+     * If the flag is set, protocol handler may invoke the request handler before receiving the end of the request body. The request
+     * handler can determine if the protocol handler has actually done so by checking if `req->proceed_req` is set to non-NULL.
+     * In such case, the handler should replace `req->write_req.cb` (and ctx) with its own callback to receive the request body
+     * bypassing the buffer of the protocol handler. Parts of the request body being received before the handler replacing the
+     * callback is accessible via `req->entity`.
+     * The request handler can delay replacing the callback to a later moment. In such case, the handler can determine if
+     * `req->entity` already contains a complete request body by checking if `req->proceed_req` is NULL.
+     */
+    unsigned supports_request_streaming : 1;
 } h2o_handler_t;
 
 /**
@@ -1089,11 +1098,17 @@ struct st_h2o_req_t {
      */
     size_t preferred_chunk_size;
 
-    /* streaming request body */
+    /**
+     * callback and context for receiving request body (see h2o_handler_t::supports_request_streaming for details)
+     */
     struct {
         h2o_write_req_cb cb;
         void *ctx;
     } write_req;
+
+    /**
+     * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
+     */
     h2o_proceed_req_cb proceed_req;
 
     /* internal structure */
