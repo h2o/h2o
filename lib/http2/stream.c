@@ -415,7 +415,7 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
         h2o_http2_stream_close(conn, stream);
     } else {
-        if (!conn->num_streams.response_blocked_by_server)
+        if (!stream->response_blocked_by_server)
             h2o_http2_stream_set_response_blocked_by_server(conn, stream, 1);
         h2o_proceed_response(&stream->req);
     }
