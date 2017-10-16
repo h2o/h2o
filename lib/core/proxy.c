@@ -578,9 +578,9 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
     return 0;
 }
 
-static void proxy_write_req_chunk_done(void *priv, size_t written, int done)
+static void proxy_write_req_chunk_done(h2o_http1client_t *client, size_t written, int done)
 {
-    struct rp_generator_t *self = priv;
+    struct rp_generator_t *self = client->data;
     self->frontend_write_req_chunk_done(self->src_req, written, done);
 }
 
@@ -595,8 +595,8 @@ static int frontend_write_req_chunk(void *priv, h2o_iovec_t payload, int is_end_
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_req_chunk_done *write_req_chunk_done,
-                                          void **write_req_chunk_done_ctx, h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
+                                          int *method_is_head, h2o_http1client_write_req_chunk_done_cb *write_req_chunk_done,
+                                          h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
 {
     struct rp_generator_t *self = client->data;
 
@@ -634,7 +634,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         if (self->src_req->_write_req_chunk_done != NULL) {
             *cur_body = self->src_req->entity;
             *write_req_chunk_done = proxy_write_req_chunk_done;
-            *write_req_chunk_done_ctx = self;
             self->frontend_write_req_chunk_done = self->src_req->_write_req_chunk_done;
             self->src_req->_write_req_chunk.cb = frontend_write_req_chunk;
             self->src_req->_write_req_chunk.priv = self;
