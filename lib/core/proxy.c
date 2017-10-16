@@ -43,7 +43,6 @@ struct rp_generator_t {
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
     void (*await_send)(h2o_http1client_t *);
-    h2o_write_req_chunk_done frontend_write_req_chunk_done;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -581,7 +580,8 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
 static void proxy_write_req_chunk_done(h2o_http1client_t *client, size_t written, int done)
 {
     struct rp_generator_t *self = client->data;
-    self->frontend_write_req_chunk_done(self->src_req, written, done);
+    if (self->src_req->_write_req_chunk_done != NULL)
+        self->src_req->_write_req_chunk_done(self->src_req, written, done);
 }
 
 static int frontend_write_req_chunk(void *priv, h2o_iovec_t payload, int is_end_stream)
@@ -634,7 +634,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         if (self->src_req->_write_req_chunk_done != NULL) {
             *cur_body = self->src_req->entity;
             *write_req_chunk_done = proxy_write_req_chunk_done;
-            self->frontend_write_req_chunk_done = self->src_req->_write_req_chunk_done;
             self->src_req->_write_req_chunk.cb = frontend_write_req_chunk;
             self->src_req->_write_req_chunk.priv = self;
         } else {
