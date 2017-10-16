@@ -595,7 +595,7 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_prcoeed_req_cb *proceed_req_cb,
+                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
                                           h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
 {
     struct rp_generator_t *self = client->data;
