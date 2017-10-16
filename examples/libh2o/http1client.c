@@ -40,7 +40,7 @@ static int delay_interval_ms = 0;
 static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_prcoeed_req_cb *proceed_req_cb,
+                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
                                           h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
@@ -175,7 +175,7 @@ static void proceed_request(h2o_http1client_t *client, size_t written, int is_en
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_prcoeed_req_cb *proceed_req_cb,
+                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
                                           h2o_iovec_t *cur_body, h2o_url_t *dummy)
 {
     if (errstr != NULL) {
