@@ -1,6 +1,8 @@
 Revision history for H2O.
 
-2.2.3 TBD
+2.2.3 2017-10-19 06:00:00+0000
+	- [security fix][http1] fix crash when receiving request with invalid framing CVE-2017-10868 #1459 (Frederik Deweerdt)
+	- [security fix][proxy] fix stack overflow when sending huge request body to upstream CVE-2017-10869 #1460 (Frederik Deweerdt)
 	- [core] disable buffering of stdout, stderr #1347 (Yannick Koechlin)
 	- [expires] fix incorrect header emitted when units: month or year were used #1406 (Frederik Deweerdt)
 	- [fastcgi] never return 304 if the file is a dynamic handler #1385 (Kazuho Oku)
