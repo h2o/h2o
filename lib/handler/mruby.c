@@ -870,11 +870,12 @@ static mrb_value build_app_response(struct st_mruby_output_ostream_t *ostream, h
     /* headers */
     {
         mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)req->res.headers.size);
-        h2o_header_t *headers_sorted = alloca(sizeof(*headers_sorted) * req->res.headers.size);
-        memcpy(headers_sorted, req->res.headers.entries, sizeof(*headers_sorted) * req->res.headers.size);
+        h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * req->res.headers.size);
+        for (i = 0; i != req->res.headers.size; ++i)
+            headers_sorted[i] = req->res.headers.entries + i;
         qsort(headers_sorted, req->res.headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
         for (i = 0; i != req->res.headers.size; ++i) {
-            const h2o_header_t *header = headers_sorted + i;
+            const h2o_header_t *header = headers_sorted[i];
             mrb_value n, v;
             if (h2o_iovec_is_token(header->name)) {
                 const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
@@ -887,12 +888,12 @@ static mrb_value build_app_response(struct st_mruby_output_ostream_t *ostream, h
             v = mrb_str_new(mrb, header->value.base, header->value.len);
             while (i + 1 < req->res.headers.size) {
 
-                if (!h2o_memis(headers_sorted[i].name->base, headers_sorted[i].name->len, headers_sorted[i + 1].name->base,
-                                                    headers_sorted[i + 1].name->len))
+                if (!h2o_memis(headers_sorted[i]->name->base, headers_sorted[i]->name->len, headers_sorted[i + 1]->name->base,
+                                                    headers_sorted[i + 1]->name->len))
                     break;
                 ++i;
                 v = mrb_str_cat_lit(mrb, v, "\n");
-                v = mrb_str_cat(mrb, v, headers_sorted[i].value.base, headers_sorted[i].value.len);
+                v = mrb_str_cat(mrb, v, headers_sorted[i]->value.base, headers_sorted[i]->value.len);
             }
             mrb_hash_set(mrb, headers_hash, n, v);
         }
