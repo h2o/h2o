@@ -224,7 +224,7 @@ __DATA__
 61 0 0 0 0 0 0 www-authenticate
 0 1 1 0 1 0 0 connection
 0 0 0 0 0 0 0 x-reproxy-url
-0 1 0 1 1 0 0 upgrade
+0 1 1 1 1 0 0 upgrade
 0 1 0 0 1 0 0 http2-settings
 0 1 0 0 1 0 0 te
 0 1 1 0 0 0 0 keep-alive
