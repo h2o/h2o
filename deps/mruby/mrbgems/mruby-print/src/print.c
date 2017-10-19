@@ -33,6 +33,7 @@ printstr(mrb_state *mrb, mrb_value obj)
     } else
 #endif
       fwrite(RSTRING_PTR(obj), RSTRING_LEN(obj), 1, stdout);
+    fflush(stdout);
   }
 }
 

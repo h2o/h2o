@@ -156,7 +156,7 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
     h2o_send_error_404(req, "File Not Found", "not found", 0);
 }
 
-static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
+static void setup_pathconf(h2o_req_t *req, h2o_hostconf_t *hostconf)
 {
     h2o_pathconf_t *selected_pathconf = &hostconf->fallback_path;
     size_t i;
@@ -173,7 +173,11 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
         }
     }
     h2o_req_bind_conf(req, hostconf, selected_pathconf);
+}
 
+static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
+{
+    setup_pathconf(req, hostconf);
     call_handlers(req, req->pathconf->handlers.entries);
 }
 
@@ -234,6 +238,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->res.reason = "OK"; /* default to "OK" regardless of the status value, it's not important after all (never sent in HTTP2) */
     req->res.content_length = SIZE_MAX;
     req->preferred_chunk_size = SIZE_MAX;
+    req->content_length = SIZE_MAX;
 
     if (src != NULL) {
         size_t i;
@@ -299,10 +304,21 @@ void h2o_dispose_request(h2o_req_t *req)
     h2o_mem_clear_pool(&req->pool);
 }
 
-void h2o_process_request(h2o_req_t *req)
+h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = h2o_req_setup(req);
-    process_hosted_request(req, hostconf);
+    setup_pathconf(req, hostconf);
+    return req->pathconf->handlers.entries[0];
+}
+
+void h2o_process_request(h2o_req_t *req)
+{
+    if (req->pathconf == NULL) {
+        h2o_hostconf_t *hostconf = h2o_req_setup(req);
+        process_hosted_request(req, hostconf);
+    } else {
+        call_handlers(req, req->pathconf->handlers.entries);
+    }
 }
 
 void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler)
@@ -371,6 +387,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 
     /* handle the response using the handlers, if hostconf exists */
     if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority, req->scheme->default_port)) != NULL) {
+        req->pathconf = NULL;
         process_hosted_request(req, hostconf);
         return;
     }
@@ -679,21 +696,21 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
     return method;
 }
 
+static void do_push_path(void *_req, const char *path, size_t path_len, int is_critical)
+{
+    h2o_req_t *req = _req;
+
+    if (req->conn->callbacks->push_path != NULL)
+        req->conn->callbacks->push_path(req, path, path_len, is_critical);
+}
+
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
-    int i;
     h2o_iovec_t ret = h2o_iovec_init(value, value_len);
-    if (req->conn->callbacks->push_path == NULL)
-        return ret;
 
-    h2o_iovec_vector_t paths = h2o_extract_push_path_from_link_header(
-        &req->pool, value, value_len, req->path_normalized, req->input.scheme, req->input.authority,
-        req->res_is_delegated ? req->scheme : NULL, req->res_is_delegated ? &req->authority : NULL, &ret);
-    if (paths.size == 0)
-        return ret;
+    h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
+                                           req->input.authority, req->res_is_delegated ? req->scheme : NULL,
+                                           req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
 
-    for (i = 0; i < paths.size; i++) {
-        req->conn->callbacks->push_path(req, paths.entries[i].base, paths.entries[i].len);
-    }
     return ret;
 }

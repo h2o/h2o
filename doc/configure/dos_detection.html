@@ -81,7 +81,7 @@ Otherwise, the handler returns a <code>399</code> response, and the request is <
     mruby.handler: |
       require &quot;dos_detector.rb&quot;
       DoSDetector.new({
-        :strategy =&gt; DoSDetector.CountingStrategy.new({
+        :strategy =&gt; DoSDetector::CountingStrategy.new({
           :period     =&gt; 10,  # default
           :threshold  =&gt; 100, # default
           :ban_period =&gt; 300, # default
@@ -137,7 +137,7 @@ You can pass the following parameters to <code>DoSDetector.new</code> .
     mruby.handler: |
       require &quot;dos_detector.rb&quot;
       DoSDetector.new({
-        :strategy =&gt; DoSDetector.CountingStrategy.new,
+        :strategy =&gt; DoSDetector::CountingStrategy.new,
         :forwarded =&gt; false,
         :cache_size =&gt; 2048,
         :callback =&gt; proc {|env, detected, ip|

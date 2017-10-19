@@ -14,7 +14,7 @@ plan skip_all => 'Starlet not found'
 my $upstream_port = empty_port();
 
 my $guard = spawn_server(
-    argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port, ASSETS_DIR . "/upstream.psgi" ],
+    argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), "127.0.0.1:$upstream_port", ASSETS_DIR . "/upstream.psgi" ],
     is_ready =>  sub {
         check_port($upstream_port);
     },

@@ -88,7 +88,7 @@ if (! defined $issuer_fn) {
 print STDERR "sending OCSP request to $ocsp_uri\n";
 my $resp = run_openssl(
     "ocsp -issuer $issuer_fn -cert $cert_fn -url $ocsp_uri"
-    . ($openssl_version =~ /^(OpenSSL 1\.|LibreSSL )/is ? " -header Host@{[$openssl_version =~ /^OpenSSL 1\.0\./is ? ' ' : '=']}$ocsp_host" : "")
+    . ($openssl_version =~ /^(OpenSSL 1\.|LibreSSL )/is ? " -header Host@{[$openssl_version =~ /^(OpenSSL 1\.0\.|LibreSSL )/is ? ' ' : '=']}$ocsp_host" : "")
     . " -noverify -respout $tempdir/resp.der " . join(' ', @ARGV),
     1,
 );

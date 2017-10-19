@@ -49,6 +49,15 @@ FIND_PACKAGE(Threads REQUIRED)
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(ZLIB REQUIRED)
 
+INCLUDE(CheckCSourceCompiles)
+CHECK_C_SOURCE_COMPILES("
+#include <stdint.h>
+int main(void) {
+uint64_t a;
+__sync_add_and_fetch(&a, 1);
+return 0;
+}" ARCH_SUPPORTS_64BIT_ATOMICS)
+
 SET(WITH_BUNDLED_SSL_DEFAULT "ON")
 IF ((NOT UNIX) OR CYGWIN)
     SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
@@ -87,6 +96,9 @@ ELSE (WITH_BUNDLED_SSL)
     IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
         MESSAGE(WARNING "*********************************************************************** OpenSSL 1.0.2 is required for HTTP/2 interoperability with web browsers ***********************************************************************")
     ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
+    IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
+        MESSAGE(WARNING "*********************************************************************** OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed when using external cache ***********************************************************************")
+    ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
 ENDIF (WITH_BUNDLED_SSL)
 
 INCLUDE_DIRECTORIES(
@@ -161,7 +173,14 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     ENDIF ()
 ENDIF ()
 
-SET(CMAKE_C_FLAGS "-O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\" -DH2O_CONFIG_PATH=\"${CMAKE_INSTALL_SYSCONFDIR}/h2o.conf\"")
+SET(CMAKE_C_FLAGS "-g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS} -DH2O_ROOT=\"${CMAKE_INSTALL_PREFIX}\" -DH2O_CONFIG_PATH=\"${CMAKE_INSTALL_SYSCONFDIR}/h2o.conf\"")
+
+# CMake defaults to a Debug build, whereas H2O defaults to an optimied build
+IF(NOT CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE Release)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+SET(CMAKE_C_FLAGS_DEBUG  "-O0")
+SET(CMAKE_C_FLAGS_RELEASE  "-O2")
 
 SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/api.c
@@ -452,12 +471,13 @@ IF (WITH_MRUBY)
     ELSE ()
         SET(MRUBY_TOOLCHAIN "gcc")
     ENDIF ()
-    ADD_CUSTOM_TARGET(mruby MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby ruby minirake
+    ADD_CUSTOM_TARGET(mruby MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby)
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
+        lib/handler/mruby/sleep.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
@@ -504,7 +524,9 @@ ENDIF ()
 INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fastcgi-cgi share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
 INSTALL(FILES share/h2o/ca-bundle.crt DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
 INSTALL(FILES share/h2o/status/index.html DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o/status)
-INSTALL(DIRECTORY doc/ DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "README.md" EXCLUDE)
+INSTALL(DIRECTORY doc/ DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/h2o PATTERN "Makefile" EXCLUDE PATTERN "h2o.8" EXCLUDE PATTERN "README.md" EXCLUDE)
+INSTALL(FILES doc/h2o.8 DESTINATION ${CMAKE_INSTALL_MANDIR}/man8/)
+INSTALL(FILES doc/h2o.conf.5 DESTINATION ${CMAKE_INSTALL_MANDIR}/man5/)
 INSTALL(DIRECTORY examples/ DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/doc/h2o/examples)
 IF (WITH_MRUBY)
     INSTALL(DIRECTORY share/h2o/mruby DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
@@ -545,7 +567,17 @@ ELSE (WITH_BUNDLED_SSL)
     ENDIF (OPENSSL_FOUND)
 ENDIF (WITH_BUNDLED_SSL)
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/*.t
+include(ExternalProject)
+
+IF (WITH_BUNDLED_SSL)
+    SET(H2GET_SSL_ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/")
+ELSE ()
+    IF (OPENSSL_FOUND)
+        GET_FILENAME_COMPONENT(H2GET_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} DIRECTORY)
+    ENDIF ()
+ENDIF ()
+
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
@@ -555,8 +587,36 @@ IF (LIBUV_FOUND)
     ENDIF ()
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -v t/90root-*.t
+IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
+    ExternalProject_Add(h2get
+                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${H2GET_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/h2get_bin
+                        BUILD_COMMAND make
+                        INSTALL_COMMAND true)
+    SET_TARGET_PROPERTIES(h2get PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    IF (WITH_BUNDLED_SSL)
+        ADD_DEPENDENCIES(h2get bundled-ssl)
+    ENDIF ()
+    ADD_DEPENDENCIES(check h2get)
+ENDIF ()
+
+ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS h2o t-00unit-evloop.t)
+IF (LIBUV_FOUND)
+    ADD_DEPENDENCIES(check t-00unit-libuv.t)
+    IF (OPENSSL_FOUND)
+        ADD_DEPENDENCIES(check lib-examples)
+    ENDIF ()
+ENDIF ()
+
+ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/90root-*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+ADD_CUSTOM_TARGET(check-as-root-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/90root-*.t
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
 
 IF (BUILD_FUZZER)
     IF(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -567,7 +627,7 @@ IF (BUILD_FUZZER)
     ADD_EXECUTABLE(h2o-fuzzer-url fuzz/driver_url.cc)
     SET_TARGET_PROPERTIES(h2o-fuzzer-http1 PROPERTIES COMPILE_FLAGS "-DHTTP1")
     SET_TARGET_PROPERTIES(h2o-fuzzer-http2 PROPERTIES COMPILE_FLAGS "-DHTTP2")
-    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address")
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_C_FLAGS}")
     IF (OSS_FUZZ)
         # Use https://github.com/google/oss-fuzz compatible options
         SET(LIB_FUZZER FuzzingEngine)
@@ -590,6 +650,10 @@ IF (BUILD_FUZZER)
     TARGET_LINK_LIBRARIES(h2o-fuzzer-url libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})
 
 ENDIF (BUILD_FUZZER)
+
+IF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_64BIT_ATOMICS")
+ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
 
 # environment-specific tweaks
 IF (APPLE)

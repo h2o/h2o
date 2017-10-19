@@ -46,7 +46,6 @@ MRuby::CrossBuild.new("ArduinoDue") do |conf|
 
     #configuration for low memory environment
     cc.defines << %w(MRB_HEAP_PAGE_SIZE=64)
-    cc.defines << %w(MRB_USE_IV_SEGLIST)
     cc.defines << %w(KHASH_DEFAULT_SIZE=8)
     cc.defines << %w(MRB_STR_BUF_MIN_SIZE=20)
     cc.defines << %w(MRB_GC_STRESS)

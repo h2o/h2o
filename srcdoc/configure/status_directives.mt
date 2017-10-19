@@ -34,9 +34,29 @@ The information returned by the <code>/json</code> handler can be filtered out u
 There are currently three modules defined:
 <ul>
 <li><code>requests</code>: displays the requests currently in-flight.</li>
+<li><code>durations</code>: displays durations statistics for requests since server start time in seconds (returns all zeros unless <code>duration-stats</code> is <code>ON</code>).</li>
 <li><code>errors</code>: displays counters for internally generated errors.</li>
 <li><code>main</code>: displays general daemon-wide stats.</li>
 </ul>
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "duration-stats",
+    levels  => [ qw(global) ],
+    since   => '2.1',
+    default => 'duration-stats: OFF',
+    desc    => q{Gather timing stats for requests.},
+)->(sub {
+?>
+</p>
+<p>
+If the argument is <code>ON</code>, this directive populates duration statistics in seconds, to be consumed by status handlers.
+Enabling this feature has a noticeable CPU and memory impact.
+</p>
+<p>
+Note that the time spent while processing a request in a blocking manner (such as opening a file or a mruby handler that does invoke a network operation) will not be reflected to the <code>process_time</code> element of the duration stats due to the fact that the timer being used for measuring the time spent is updated only once per loop.
 </p>
 ? })
 

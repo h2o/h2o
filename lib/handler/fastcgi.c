@@ -504,7 +504,7 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
         const h2o_token_t *token;
         h2o_strtolower((char *)headers[i].name, headers[i].name_len);
         if ((token = h2o_lookup_token(headers[i].name, headers[i].name_len)) != NULL) {
-            if (token->proxy_should_drop) {
+            if (token->proxy_should_drop_for_res) {
                 /* skip */
             } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX) {
@@ -713,7 +713,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
-static void on_connect(h2o_socket_t *sock, const char *errstr, void *data)
+static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_socketpool_target_t *_dummy)
 {
     struct st_fcgi_generator_t *generator = data;
     iovec_vector_t vecs;

@@ -7,7 +7,7 @@ use t::Util;
 plan skip_all => 'plackup not found'
     unless prog_exists('plackup');
 
-my $upstream_port = empty_port();
+my $upstream_port = empty_port({ host => '0.0.0.0' });
 my $upstream = spawn_server(
     argv => [
         qw(

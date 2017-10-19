@@ -5,22 +5,22 @@
 */
 
 #include <math.h>
-#include <stdio.h>
 #include <time.h>
 #include <mruby.h>
 #include <mruby/class.h>
 #include <mruby/data.h>
 
+#ifndef DISABLE_STDIO
+#include <stdio.h>
+#else
+#include <string.h>
+#endif
+
 #define NDIV(x,y) (-(-((x)+1)/(y))-1)
 
-#if _MSC_VER < 1800
+#if defined(_MSC_VER) && _MSC_VER < 1800
 double round(double x) {
-  if (x >= 0.0) {
-    return (double)((int)(x + 0.5));
-  }
-  else {
-    return (double)((int)(x - 0.5));
-  }
+  return floor(x + 0.5);
 }
 #endif
 
@@ -54,6 +54,13 @@ double round(double x) {
 #define NO_GMTIME_R
 #endif
 #endif
+
+/* asctime(3) */
+/* mruby usually use its own implementation of struct tm to string conversion */
+/* except when DISABLE_STDIO is set. In that case, it uses asctime() or asctime_r(). */
+/* By default mruby tries to use asctime_r() which is reentrant. */
+/* Undef following macro on platforms that does not have asctime_r(). */
+/* #define NO_ASCTIME_R */
 
 /* timegm(3) */
 /* mktime() creates tm structure for localtime; timegm() is for UTC time */
@@ -166,6 +173,7 @@ static const mrb_timezone_name timezone_names[] = {
   { "LOCAL", sizeof("LOCAL") - 1 },
 };
 
+#ifndef DISABLE_STDIO
 static const char mon_names[12][4] = {
   "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 };
@@ -173,6 +181,7 @@ static const char mon_names[12][4] = {
 static const char wday_names[7][4] = {
   "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
 };
+#endif
 
 struct mrb_time {
   time_t              sec;
@@ -241,12 +250,12 @@ time_alloc(mrb_state *mrb, double sec, double usec, enum mrb_timezone timezone)
   tm->sec  = tsec;
   tm->usec = (time_t)llround((sec - tm->sec) * 1.0e6 + usec);
   if (tm->usec < 0) {
-    long sec2 = NDIV(usec,1000000); /* negative div */
+    long sec2 = (long)NDIV(usec,1000000); /* negative div */
     tm->usec -= sec2 * 1000000;
     tm->sec += sec2;
   }
   else if (tm->usec >= 1000000) {
-    long sec2 = usec / 1000000;
+    long sec2 = (long)(usec / 1000000);
     tm->usec -= sec2 * 1000000;
     tm->sec += sec2;
   }
@@ -528,18 +537,28 @@ mrb_time_zone(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_time_asctime(mrb_state *mrb, mrb_value self)
 {
-  struct mrb_time *tm;
-  struct tm *d;
-  char buf[256];
+  struct mrb_time *tm = time_get_ptr(mrb, self);
+  struct tm *d = &tm->datetime;
   int len;
 
-  tm = time_get_ptr(mrb, self);
-  d = &tm->datetime;
+#if defined(DISABLE_STDIO)
+  char *s;
+# ifdef NO_ASCTIME_R
+  s = asctime(d);
+# else
+  char buf[32];
+  s = asctime_r(d, buf);
+# endif
+  len = strlen(s)-1;            /* truncate the last newline */
+#else
+  char buf[256];
+
   len = snprintf(buf, sizeof(buf), "%s %s %02d %02d:%02d:%02d %s%d",
     wday_names[d->tm_wday], mon_names[d->tm_mon], d->tm_mday,
     d->tm_hour, d->tm_min, d->tm_sec,
     tm->timezone == MRB_TIMEZONE_UTC ? "UTC " : "",
     d->tm_year + 1900);
+#endif
   return mrb_str_new(mrb, buf, len);
 }
 

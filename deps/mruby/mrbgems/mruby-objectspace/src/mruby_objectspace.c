@@ -9,7 +9,7 @@ struct os_count_struct {
   mrb_int counts[MRB_TT_MAXDEFINE+1];
 };
 
-static void
+static int
 os_count_object_type(mrb_state *mrb, struct RBasic *obj, void *data)
 {
   struct os_count_struct *obj_count;
@@ -23,6 +23,7 @@ os_count_object_type(mrb_state *mrb, struct RBasic *obj, void *data)
   else {
     obj_count->counts[obj->tt]++;
   }
+  return MRB_EACH_OBJ_OK;
 }
 
 /*
@@ -109,35 +110,36 @@ struct os_each_object_data {
   mrb_int count;
 };
 
-static void
+static int
 os_each_object_cb(mrb_state *mrb, struct RBasic *obj, void *ud)
 {
   struct os_each_object_data *d = (struct os_each_object_data*)ud;
 
   /* filter dead objects */
   if (mrb_object_dead_p(mrb, obj)) {
-    return;
+    return MRB_EACH_OBJ_OK;
   }
 
   /* filter internal objects */
   switch (obj->tt) {
   case MRB_TT_ENV:
   case MRB_TT_ICLASS:
-    return;
+    return MRB_EACH_OBJ_OK;
   default:
     break;
   }
 
   /* filter half baked (or internal) objects */
-  if (!obj->c) return;
+  if (!obj->c) return MRB_EACH_OBJ_OK;
 
   /* filter class kind if target module defined */
   if (d->target_module && !mrb_obj_is_kind_of(mrb, mrb_obj_value(obj), d->target_module)) {
-    return;
+    return MRB_EACH_OBJ_OK;
   }
 
   mrb_yield(mrb, d->block, mrb_obj_value(obj));
   ++d->count;
+  return MRB_EACH_OBJ_OK;
 }
 
 /*

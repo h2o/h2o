@@ -147,6 +147,10 @@ void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz)
         return newp->bytes;
     }
 
+    /* return a valid pointer even for 0 sized allocs */
+    if (sz == 0)
+        sz = 1;
+
     /* 16-bytes rounding */
     sz = (sz + 15) & ~15;
     if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {

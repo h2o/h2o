@@ -448,6 +448,69 @@ If set to <code>ON</code>, the HTTP client implementation of H2O verifies the pe
 Sets the upstream I/O timeout in milliseconds.
 </p>
 
+<p>This value will be used for <code>proxy.timeout.connect</code> and <code>proxy.timeout.first_byte</code> as well, unless these parameters are explicitely set.</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.timeout.io: 30000</pre></code>
+</dl>
+
+<div id="proxy.timeout.connect" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/proxy_directives.html#proxy.timeout.connect"><code>"proxy.timeout.connect"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets the timeout before establishing the upstream in milliseconds.
+</p>
+
+<p>When connecting to a TLS upstream, this timeout will run until the end of the SSL handshake.</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.timeout.connect: 30000</pre></code>
+</dl>
+
+<div id="proxy.timeout.first_byte" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/proxy_directives.html#proxy.timeout.first_byte"><code>"proxy.timeout.first_byte"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets the timeout before receiving the first byte from upstream.
+</p>
+
+<p>This sets the maxium time we will wait for the first byte from upstream, after the establishment of the connection.</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.timeout.first_byte: 30000</pre></code>
+</dl>
+
+<div id="proxy.timeout.io" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/proxy_directives.html#proxy.timeout.io"><code>"proxy.timeout.io"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets the upstream I/O timeout in milliseconds.
+</p>
+
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path, extension</dd>

@@ -220,6 +220,7 @@ static void setup_bio(h2o_socket_t *sock)
             __sync_synchronize();
             bio_methods = biom;
         }
+        pthread_mutex_unlock(&init_lock);
     }
 
     BIO *bio = BIO_new(bio_methods);
@@ -276,6 +277,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
         { /* call SSL_read (while detecting SSL renegotiation and reporting it as error) */
             int did_write_in_read = 0;
             sock->ssl->did_write_in_read = &did_write_in_read;
+            ERR_clear_error();
             rlen = SSL_read(sock->ssl->ossl, buf.base, (int)buf.len);
             sock->ssl->did_write_in_read = NULL;
             if (did_write_in_read)
@@ -378,7 +380,8 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         ret = 1; /* close the socket after sending close_notify */
     } else
 #endif
-        if (sock->ssl->ossl != NULL) {
+    if (sock->ssl->ossl != NULL) {
+        ERR_clear_error();
         if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
             goto Close;
     } else {
@@ -1090,6 +1093,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
     }
 
 Redo:
+    ERR_clear_error();
     if (SSL_is_server(sock->ssl->ossl)) {
         ret = SSL_accept(sock->ssl->ossl);
     } else {

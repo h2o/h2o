@@ -47,7 +47,6 @@ MRB_API void mrb_iv_check(mrb_state *mrb, mrb_sym sym);
 MRB_API mrb_value mrb_obj_iv_get(mrb_state *mrb, struct RObject *obj, mrb_sym sym);
 MRB_API void mrb_obj_iv_set(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v);
 MRB_API mrb_bool mrb_obj_iv_defined(mrb_state *mrb, struct RObject *obj, mrb_sym sym);
-MRB_API void mrb_obj_iv_ifnone(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v);
 MRB_API mrb_value mrb_iv_get(mrb_state *mrb, mrb_value obj, mrb_sym sym);
 MRB_API void mrb_iv_set(mrb_state *mrb, mrb_value obj, mrb_sym sym, mrb_value v);
 MRB_API mrb_bool mrb_iv_defined(mrb_state*, mrb_value, mrb_sym);
@@ -126,7 +125,6 @@ mrb_value mrb_obj_instance_variables(mrb_state*, mrb_value);
 mrb_value mrb_mod_class_variables(mrb_state*, mrb_value);
 mrb_value mrb_mod_cv_get(mrb_state *mrb, struct RClass * c, mrb_sym sym);
 mrb_bool mrb_mod_cv_defined(mrb_state *mrb, struct RClass * c, mrb_sym sym);
-mrb_sym mrb_class_sym(mrb_state *mrb, struct RClass *c, struct RClass *outer);
 
 /* GC functions */
 void mrb_gc_mark_gv(mrb_state*);
