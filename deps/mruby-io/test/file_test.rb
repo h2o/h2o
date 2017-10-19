@@ -6,8 +6,13 @@ assert('FileTest TEST SETUP') do
 end
 
 assert("FileTest.directory?") do
-  assert_equal true,  FileTest.directory?("/tmp")
-  assert_equal false, FileTest.directory?("/bin/sh")
+  dir = MRubyIOTestUtil.mkdtemp("mruby-io-test.XXXXXX")
+  begin
+    assert_true  FileTest.directory?(dir)
+    assert_false FileTest.directory?($mrbtest_io_rfname)
+  ensure
+    MRubyIOTestUtil.rmdir dir
+  end
 end
 
 assert("FileTest.exist?") do
@@ -23,14 +28,23 @@ assert("FileTest.exist?") do
 end
 
 assert("FileTest.file?") do
-  assert_equal false, FileTest.file?("/tmp")
-  assert_equal true,  FileTest.file?("/bin/sh")
+  dir = MRubyIOTestUtil.mkdtemp("mruby-io-test.XXXXXX")
+  begin
+    assert_true  FileTest.file?($mrbtest_io_rfname)
+    assert_false FileTest.file?(dir)
+  ensure
+    MRubyIOTestUtil.rmdir dir
+  end
 end
 
 assert("FileTest.pipe?") do
-  io = IO.popen("ls")
-  assert_equal true,  FileTest.pipe?(io)
-  assert_equal false, FileTest.pipe?("/tmp")
+  begin
+    assert_equal false, FileTest.pipe?("/tmp")
+    io = IO.popen("ls")
+    assert_equal true,  FileTest.pipe?(io)
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert('FileTest.size') do
@@ -61,11 +75,19 @@ assert("FileTest.size?") do
 end
 
 assert("FileTest.socket?") do
-  assert_true FileTest.socket?($mrbtest_io_socketname)
+  begin
+    assert_true FileTest.socket?($mrbtest_io_socketname)
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert("FileTest.symlink?") do
-  assert_true FileTest.symlink?($mrbtest_io_symlinkname)
+  begin
+    assert_true FileTest.symlink?($mrbtest_io_symlinkname)
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert("FileTest.zero?") do
