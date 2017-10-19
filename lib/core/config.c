@@ -195,6 +195,10 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
     config->mimemap = h2o_mimemap_create();
 
+    h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
+    h2o_socketpool_init_global(sockpool, SIZE_MAX /* FIXME */);
+    config->proxy.global_socketpool = sockpool;
+
     h2o_configurator__init_core(config);
 }
 
