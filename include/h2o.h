@@ -419,6 +419,10 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit a via header
          */
         unsigned emit_via_header : 1;
+        /**
+         * global socketpool
+         */
+        h2o_socketpool_t *global_socketpool;
     } proxy;
 
     /**
@@ -637,6 +641,10 @@ struct st_h2o_context_t {
          * timeout handler used by the default client context
          */
         h2o_timeout_t first_byte_timeout;
+        /**
+         * global socket pool
+         */
+        h2o_socketpool_t *global_socketpool;
     } proxy;
 
     /**

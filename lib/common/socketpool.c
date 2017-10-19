@@ -572,34 +572,6 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     return 0;
 }
 
-static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
-static h2o_socketpool_t *default_socketpool = NULL;
-
-h2o_socketpool_t *h2o_socketpool_get_default_socketpool(h2o_loop_t *loop)
-{
-    if (default_socketpool == NULL) {
-        pthread_mutex_lock(&init_lock);
-        if (default_socketpool == NULL) {
-            h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init_global(sockpool, SIZE_MAX /* FIXME */);
-            h2o_socketpool_set_timeout(sockpool, loop, 2000);
-            __sync_synchronize();
-            default_socketpool = sockpool;
-        }
-        pthread_mutex_unlock(&init_lock);
-    }
-    return default_socketpool;
-}
-
-void h2o_socketpool_set_default_socketpool(h2o_socketpool_t *socketpool)
-{
-    pthread_mutex_lock(&init_lock);
-    if (default_socketpool != NULL)
-        h2o_socketpool_dispose(default_socketpool);
-    default_socketpool = socketpool;
-    pthread_mutex_unlock(&init_lock);
-}
-
 int h2o_socketpool_can_keepalive(h2o_socketpool_t *pool)
 {
     return pool->timeout > 0;

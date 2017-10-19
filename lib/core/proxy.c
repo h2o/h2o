@@ -685,7 +685,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
     h2o_socketpool_t *sockpool = overrides != NULL ? overrides->socketpool : NULL;
     if (sockpool == NULL) {
-        sockpool = h2o_socketpool_get_default_socketpool(req->conn->ctx->loop);
+        sockpool = req->conn->ctx->proxy.global_socketpool;
     }
     int keepalive = h2o_socketpool_can_keepalive(sockpool);
     if (overrides != NULL && overrides->use_proxy_protocol) {

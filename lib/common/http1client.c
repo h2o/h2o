@@ -621,11 +621,7 @@ const char *const h2o_http1client_error_is_eos = "end of stream";
 void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
                              h2o_url_t *origin, h2o_http1client_connect_cb cb, int is_chunked)
 {
-
-    if (socketpool == NULL)
-        socketpool = h2o_socketpool_get_default_socketpool(ctx->loop);
     assert(socketpool != NULL);
-
     struct st_h2o_http1client_private_t *client;
 
     /* setup */

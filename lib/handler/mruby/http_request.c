@@ -388,7 +388,8 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\n"));
 
-    h2o_socketpool_t *sockpool = h2o_socketpool_get_default_socketpool(ctx->ctx->shared->ctx->loop);
+
+    h2o_socketpool_t *sockpool = shared_ctx->ctx->proxy.global_socketpool;
     ctx->req.can_keepalive = h2o_socketpool_can_keepalive(sockpool);
     if (!ctx->req.can_keepalive) {
         h2o_buffer_reserve(&ctx->req.buf, sizeof("Connection: close\r\n") - 1);
@@ -438,7 +439,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     ctx->refs.request = h2o_mruby_create_data_instance(
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
 
-    h2o_http1client_connect(&ctx->client, ctx, &shared_ctx->ctx->proxy.client_ctx, NULL, &url, on_connect, 0);
+    h2o_http1client_connect(&ctx->client, ctx, &shared_ctx->ctx->proxy.client_ctx, sockpool, &url, on_connect, 0);
 
     return ctx->refs.request;
 }

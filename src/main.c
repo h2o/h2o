@@ -2193,11 +2193,11 @@ int main(int argc, char **argv)
         free(ssl_contexts.entries);
     }
 
-    /* setup default socketpool for http1client (but set timeout later) */
+    /* setup global socketpool for http1client (but set timeout later) */
     {
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
         h2o_socketpool_init_global(sockpool, SIZE_MAX /* FIXME */);
-        h2o_socketpool_set_default_socketpool(sockpool);
+        conf.globalconf.proxy.global_socketpool = sockpool;
     }
 
     /* all setup should be complete by now */

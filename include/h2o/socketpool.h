@@ -137,9 +137,6 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock);
  */
 static int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock);
 
-h2o_socketpool_t *h2o_socketpool_get_default_socketpool(h2o_loop_t *loop);
-void h2o_socketpool_set_default_socketpool(h2o_socketpool_t *socketpool);
-
 /* inline defs */
 
 inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock)
