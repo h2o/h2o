@@ -37,6 +37,12 @@ hosts:
             [399, { "link" => "</index.txt.gz>; rel=preload" }, [] ]
           end
         proxy.reverse.url: http://127.0.0.1:$upstream_port
+      /mruby-critical:
+        mruby.handler: |
+          Proc.new do |env|
+            [399, { "link" => "</halfdome.jpg?1>; rel=preload, </halfdome.jpg?2>; rel=preload, </halfdome.jpg?3>; rel=preload; critical," }, [] ]
+          end
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
       /assets:
         file.dir: @{[DOC_ROOT]}
 EOT
@@ -64,6 +70,10 @@ EOT
         subtest 'push-while-sleep' => sub {
             my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/mruby/sleep-and-respond?sleep=1'`;
             like $resp, qr{\nid\s*responseEnd\s.*\s/index\.txt\.gz\n.*\s/mruby/sleep-and-respond}is;
+        };
+        subtest 'push-critical' => sub {
+            my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/mruby-critical/sleep-and-respond?sleep=1'`;
+            like $resp, qr{\nid\s*responseEnd\s.*\s/halfdome\.jpg\?3\n.*\s/halfdome\.jpg\?[12]\n.*\s/halfdome\.jpg\?[12]\n.*\s/mruby-critical/sleep-and-respond}is;
         };
     };
 
