@@ -450,7 +450,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
 
-    /* TODO is this needed in this critical section? */
+    /* TODO lookup outside this critical section */
     if (is_global_pool(pool)) {
         target = lookup_target(pool, url);
         if (target == SIZE_MAX) {
