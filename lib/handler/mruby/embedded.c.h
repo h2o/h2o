@@ -22,7 +22,7 @@
     "  def _h2o_create_resumer()\n"                                                                                                \
     "    me = Fiber.current\n"                                                                                                     \
     "    Proc.new do |v|\n"                                                                                                        \
-    "    me.resume(v)\n"                                                                                                           \
+    "      me.resume(v)\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  def _h2o_proc_each_to_array()\n"                                                                                            \
@@ -48,11 +48,14 @@
     "        while 1\n"                                                                                                            \
     "          begin\n"                                                                                                            \
     "            while 1\n"                                                                                                        \
+    "              H2O.set_generator(self_fiber, generator)\n"                                                                     \
     "              resp = app.call(req)\n"                                                                                         \
+    "              H2O.set_generator(self_fiber, nil)\n"                                                                           \
     "              cached = self_fiber\n"                                                                                          \
     "              (req, generator) = Fiber.yield(*resp, generator)\n"                                                             \
     "            end\n"                                                                                                            \
     "          rescue => e\n"                                                                                                      \
+    "            H2O.set_generator(self_fiber, nil)\n"                                                                             \
     "            cached = self_fiber\n"                                                                                            \
     "            (req, generator) = Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e, generator])\n"                               \
     "          end\n"                                                                                                              \
@@ -80,7 +83,63 @@
     "    [runner, configurator]\n"                                                                                                 \
     "  end\n"                                                                                                                      \
     "  def sleep(*sec)\n"                                                                                                          \
-    "    _h2o__sleep(*sec)\n"                                                                                                      \
+    "    _h2o__sleep(*sec) end\n"                                                                                                  \
+    "end\n"                                                                                                                        \
+    "module H2O\n"                                                                                                                 \
+    "  class App\n"                                                                                                                \
+    "    def call(env)\n"                                                                                                          \
+    "      generator = H2O.get_generator(Fiber.current)\n"                                                                         \
+    "      _h2o_invoke_app(env, generator, false)\n"                                                                               \
+    "    end\n"                                                                                                                    \
+    "    def reprocess(env)\n"                                                                                                     \
+    "      generator = H2O.get_generator(Fiber.current)\n"                                                                         \
+    "      _h2o_invoke_app(env, generator, true)\n"                                                                                \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "  class << self\n"                                                                                                            \
+    "    @@app = App.new\n"                                                                                                        \
+    "    def app\n"                                                                                                                \
+    "      @@app\n"                                                                                                                \
+    "    end\n"                                                                                                                    \
+    "    # mruby doesn't allow built-in object (i.e Fiber) to have instance variable\n"                                            \
+    "    # so manage it with hash table here\n"                                                                                    \
+    "    @@fiber_to_generator = {}\n"                                                                                              \
+    "    def set_generator(fiber, generator)\n"                                                                                    \
+    "        if generator.nil?\n"                                                                                                  \
+    "          @@fiber_to_generator.delete(fiber.object_id)\n"                                                                     \
+    "        else\n"                                                                                                               \
+    "          @@fiber_to_generator[fiber.object_id] = generator\n"                                                                \
+    "        end\n"                                                                                                                \
+    "    end\n"                                                                                                                    \
+    "    def get_generator(fiber)\n"                                                                                               \
+    "        @@fiber_to_generator[fiber.object_id]\n"                                                                              \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "  class OutputFilterStream\n"                                                                                                 \
+    "    def initialize\n"                                                                                                         \
+    "      @chunks = []\n"                                                                                                         \
+    "      @finished = false\n"                                                                                                    \
+    "      @canceled = false\n"                                                                                                    \
+    "    end\n"                                                                                                                    \
+    "    def each\n"                                                                                                               \
+    "      loop do\n"                                                                                                              \
+    "        if @canceled\n"                                                                                                       \
+    "          raise 'this stream is already canceled by following H2O.app.call'\n"                                                \
+    "        end\n"                                                                                                                \
+    "        while c = @chunks.shift\n"                                                                                            \
+    "          yield c\n"                                                                                                          \
+    "        end\n"                                                                                                                \
+    "        break if @finished\n"                                                                                                 \
+    "        _h2o_output_filter_wait_chunk(self)\n"                                                                                \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "    def join\n"                                                                                                               \
+    "      s = \"\"\n"                                                                                                             \
+    "      each do |c|\n"                                                                                                          \
+    "        s << c\n"                                                                                                             \
+    "      end\n"                                                                                                                  \
+    "      s\n"                                                                                                                    \
+    "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"
 

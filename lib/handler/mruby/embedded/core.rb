@@ -39,7 +39,7 @@ module Kernel
   def _h2o_create_resumer()
     me = Fiber.current
     Proc.new do |v|
-    me.resume(v)
+      me.resume(v)
     end
   end
 
@@ -68,11 +68,14 @@ module Kernel
         while 1
           begin
             while 1
+              H2O.set_generator(self_fiber, generator)
               resp = app.call(req)
+              H2O.set_generator(self_fiber, nil)
               cached = self_fiber
               (req, generator) = Fiber.yield(*resp, generator)
             end
           rescue => e
+            H2O.set_generator(self_fiber, nil)
             cached = self_fiber
             (req, generator) = Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e, generator])
           end
@@ -103,7 +106,69 @@ module Kernel
   end
 
   def sleep(*sec)
-    _h2o__sleep(*sec)
-  end
+    _h2o__sleep(*sec) end
 
 end
+
+module H2O
+
+  class App
+    def call(env)
+      generator = H2O.get_generator(Fiber.current)
+      _h2o_invoke_app(env, generator, false)
+    end
+    def reprocess(env)
+      generator = H2O.get_generator(Fiber.current)
+      _h2o_invoke_app(env, generator, true)
+    end
+  end
+
+  class << self
+    @@app = App.new
+    def app
+      @@app
+    end
+
+    # mruby doesn't allow built-in object (i.e Fiber) to have instance variable
+    # so manage it with hash table here
+    @@fiber_to_generator = {}
+    def set_generator(fiber, generator)
+        if generator.nil?
+          @@fiber_to_generator.delete(fiber.object_id)
+        else
+          @@fiber_to_generator[fiber.object_id] = generator
+        end
+    end
+    def get_generator(fiber)
+        @@fiber_to_generator[fiber.object_id]
+    end
+  end
+
+  class OutputFilterStream
+    def initialize
+      @chunks = []
+      @finished = false
+      @canceled = false
+    end
+    def each
+      loop do
+        if @canceled
+          raise 'this stream is already canceled by following H2O.app.call'
+        end
+        while c = @chunks.shift
+          yield c
+        end
+        break if @finished
+        _h2o_output_filter_wait_chunk(self)
+      end
+    end
+    def join
+      s = ""
+      each do |c|
+        s << c
+      end
+      s
+    end
+  end
+end
+

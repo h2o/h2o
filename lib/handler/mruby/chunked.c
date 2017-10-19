@@ -27,22 +27,6 @@
 #include "h2o/mruby_.h"
 #include "embedded.c.h"
 
-struct st_h2o_mruby_chunked_t {
-    h2o_doublebuffer_t sending;
-    size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
-    enum { H2O_MRUBY_CHUNKED_TYPE_CALLBACK, H2O_MRUBY_CHUNKED_TYPE_SHORTCUT } type;
-    mrb_value body_obj; /* becomes nil on eos */
-    union {
-        struct {
-            h2o_buffer_t *receiving;
-        } callback;
-        struct {
-            h2o_mruby_http_request_context_t *client;
-            h2o_buffer_t *remaining;
-        } shortcut;
-    };
-};
-
 static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int is_final)
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
@@ -64,7 +48,7 @@ static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int 
         is_final = 0;
     }
 
-    h2o_send(generator->req, &buf, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    h2o_mruby_send(generator, &buf, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
@@ -150,11 +134,11 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     chunked->bytes_left = h2o_memis(generator->req->method.base, generator->req->method.len, H2O_STRLIT("HEAD"))
                               ? 0
                               : generator->req->res.content_length;
-    generator->super.proceed = do_proceed;
+    chunked->proceed = do_proceed;
     generator->chunked = chunked;
     mrb_value ret;
 
-    h2o_start_response(generator->req, &generator->super);
+    h2o_mruby_start_response(generator);
 
     if (client != NULL) {
         chunked->type = H2O_MRUBY_CHUNKED_TYPE_SHORTCUT;
@@ -199,8 +183,9 @@ static mrb_value check_precond(mrb_state *mrb, h2o_mruby_generator_t *generator)
 {
     if (generator == NULL || generator->req == NULL)
         return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
-    if (generator->req->_generator == NULL)
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "cannot send chunk before sending headers");
+
+    /* NOTE: if mruby handler uses output filter, req->_generator becomes NULL when successor handlers sent H2O_SEND_STATE_FINAL */
+
     return mrb_nil_value();
 }
 
@@ -262,6 +247,7 @@ mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_val
 void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator)
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
+    if (chunked == NULL) return;
 
     /* run_fiber will never be called once we enter the fast path, and therefore this function will never get called in that case */
     assert(chunked->type == H2O_MRUBY_CHUNKED_TYPE_CALLBACK);
