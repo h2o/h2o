@@ -5,10 +5,13 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 
+plan skip_all => "nc not found"
+    unless prog_exists("nc");
+
 my $upstream_port = empty_port();
 $| = 1;
 
-open(my $nc_out, "nc -q -1 -dl $upstream_port |");
+open(my $nc_out, "nc -dl $upstream_port |");
 
 my $server = spawn_h2o(<< "EOT");
 http2-idle-timeout: 2
@@ -57,7 +60,7 @@ my $output = run_with_h2get($server, <<"EOR");
     sleep 5;
 EOR
 
-my $resp;
+my $resp = '';
 while (<$nc_out>) {
     $resp = $resp . $_;
 }
@@ -74,7 +77,7 @@ ok($chunked_header_found == 1, "TE:chunked header found");
 my @chunks = split /\r\n/, $body;
 
 my $chunk_len = 0;
-for (my $i = 0; $i < length(@chunks); $i+=3) {
+for (my $i = 0; $i < scalar(@chunks); $i+=3) {
     $chunk_len += hex($chunks[$i]);
 }
 

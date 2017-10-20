@@ -66,6 +66,10 @@ static void queue_cb(h2o_multithread_queue_t *queue)
     pthread_mutex_unlock(&queue->mutex);
 }
 
+#ifdef H2O_NO_64BIT_ATOMICS
+pthread_mutex_t h2o_conn_id_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 #if H2O_USE_LIBUV
 #else
 

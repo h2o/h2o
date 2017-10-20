@@ -94,7 +94,7 @@ The parser, standalone since v0.12.0, can now be compiled on Windows
 
 * Add IPv6 support
 
-* Remove possiblity of multiple close on same fd
+* Remove possibility of multiple close on same fd
 
 * Add ability to bind source address on connect
 

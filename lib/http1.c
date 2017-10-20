@@ -435,13 +435,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                                        H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
                     return;
                 }
-                static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
-                h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
             }
             if (create_entity_reader(conn, headers + entity_body_header_index) != 0) {
                 return;
             }
             if (expect.base != NULL) {
+                static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
+                h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
                 /* processing of the incoming entity is postponed until the 100 response is sent */
                 h2o_socket_read_stop(conn->sock);
                 return;
@@ -832,9 +832,9 @@ void h2o_http1_upgrade(h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o
     conn->upgrade.data = user_data;
     conn->upgrade.cb = on_complete;
 
-    bufs[0].base =
-        h2o_mem_alloc_pool(&conn->req.pool, flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len +
-                                                                                          sizeof("upgrade") - 1));
+    bufs[0].base = h2o_mem_alloc_pool(
+        &conn->req.pool,
+        flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + sizeof("upgrade") - 1));
     bufs[0].len = flatten_headers(bufs[0].base, &conn->req, "upgrade");
     h2o_memcpy(bufs + 1, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
 
