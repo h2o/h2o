@@ -87,7 +87,7 @@ static h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_head
 #define H2O_HTTP2_FRAME_TYPE_GOAWAY 7
 #define H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE 8
 #define H2O_HTTP2_FRAME_TYPE_CONTINUATION 9
-#define H2O_HTTP2_FRAME_TYPE_ORIGIN 11
+#define H2O_HTTP2_FRAME_TYPE_ORIGIN 12
 
 #define H2O_HTTP2_FRAME_FLAG_END_STREAM 0x1
 #define H2O_HTTP2_FRAME_FLAG_ACK 0x1
