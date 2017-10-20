@@ -34,6 +34,7 @@ enum {
     ELEMENT_TYPE_METHOD,                        /* %m */
     ELEMENT_TYPE_LOCAL_PORT,                    /* %p, %{local}p */
     ELEMENT_TYPE_REMOTE_PORT,                   /* %{remote}p */
+    ELEMENT_TYPE_ENV_VAR,                       /* %{..}e */
     ELEMENT_TYPE_QUERY,                         /* %q */
     ELEMENT_TYPE_REQUEST_LINE,                  /* %r */
     ELEMENT_TYPE_STATUS,                        /* %s */
@@ -75,6 +76,8 @@ struct log_element_t {
         h2o_iovec_t name;
         size_t protocol_specific_callback_index;
     } data;
+    unsigned magically_quoted_json : 1; /* whether to omit surrounding doublequotes when the output is null */
+    unsigned original_response : 1;
 };
 
 struct st_h2o_logconf_t {
@@ -87,6 +90,43 @@ static h2o_iovec_t strdup_lowercased(const char *s, size_t len)
     h2o_iovec_t v = h2o_strdup(NULL, s, len);
     h2o_strtolower(v.base, v.len);
     return v;
+}
+
+static int determine_magicquote_nodes(h2o_logconf_t *logconf, char *errbuf)
+{
+    size_t element_index;
+    int quote_char = '\0'; /* the quote char being used if the state machine is within a string literal */
+    int just_in = 0;       /* if we just went into the string literal */
+
+    for (element_index = 0; element_index < logconf->elements.size; ++element_index) {
+        h2o_iovec_t suffix = logconf->elements.entries[element_index].suffix;
+        logconf->elements.entries[element_index].magically_quoted_json = just_in && suffix.len != 0 && suffix.base[0] == quote_char;
+
+        just_in = 0;
+
+        size_t i;
+        for (i = 0; i < suffix.len; ++i) {
+            just_in = 0;
+            if (quote_char != '\0') {
+                if (quote_char == suffix.base[i]) {
+                    /* out of quote? */
+                    size_t j, num_bs = 0;
+                    for (j = i; j != 0; ++num_bs)
+                        if (suffix.base[--j] != '\\')
+                            break;
+                    if (num_bs % 2 == 0)
+                        quote_char = '\0';
+                }
+            } else {
+                if (suffix.base[i] == '"' || suffix.base[i] == '\'') {
+                    quote_char = suffix.base[i];
+                    just_in = 1;
+                }
+            }
+        }
+    }
+
+    return 1;
 }
 
 h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
@@ -109,11 +149,23 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     } while (0)
 
     while (*pt != '\0') {
-        if (*pt == '%') {
+        if (memcmp(pt, "%%", 2) == 0) {
+            ++pt; /* emit % */
+        } else if (*pt == '%') {
             ++pt;
-            if (*pt == '%') {
-                /* skip */
-            } else if (*pt == '{') {
+            /* handle < and > */
+            int log_original = 0;
+            for (;; ++pt) {
+                if (*pt == '<') {
+                    log_original = 1;
+                } else if (*pt == '>') {
+                    log_original = 0;
+                } else {
+                    break;
+                }
+            }
+            /* handle {...}n */
+            if (*pt == '{') {
                 const h2o_token_t *token;
                 const char *quote_end = strchr(++pt, '}');
                 if (quote_end == NULL) {
@@ -139,6 +191,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                         NEW_ELEMENT(modifier == 'i' ? ELEMENT_TYPE_IN_HEADER_STRING : ELEMENT_TYPE_OUT_HEADER_STRING);
                         LAST_ELEMENT()->data.name = name;
                     }
+                    LAST_ELEMENT()->original_response = log_original;
                 } break;
                 case 'p':
                     if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("local"))) {
@@ -150,6 +203,11 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                         goto Error;
                     }
                     break;
+                case 'e': {
+                    h2o_iovec_t name = h2o_strdup(NULL, pt, quote_end - pt);
+                    NEW_ELEMENT(ELEMENT_TYPE_ENV_VAR);
+                    LAST_ELEMENT()->data.name = name;
+                } break;
                 case 't':
                     if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("sec"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH);
@@ -175,9 +233,9 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
     }
 #define MAP_EXT_TO_PROTO(name, cb)                                                                                                 \
     if (h2o_lcstris(pt, quote_end - pt, H2O_STRLIT(name))) {                                                                       \
+        h2o_conn_callbacks_t dummy_;                                                                                               \
         NEW_ELEMENT(ELEMENT_TYPE_PROTOCOL_SPECIFIC);                                                                               \
-        LAST_ELEMENT()->data.protocol_specific_callback_index =                                                                    \
-            &((h2o_conn_callbacks_t *)NULL)->log_.cb - ((h2o_conn_callbacks_t *)NULL)->log_.callbacks;                             \
+        LAST_ELEMENT()->data.protocol_specific_callback_index = &dummy_.log_.cb - dummy_.log_.callbacks;                           \
         goto MAP_EXT_Found;                                                                                                        \
     }
                     MAP_EXT_TO_TYPE("connection-id", ELEMENT_TYPE_CONNECTION_ID);
@@ -213,7 +271,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
 #undef MAP_EXT_TO_PROTO
                     break;
                 default:
-                    sprintf(errbuf, "failed to compile log format: header name is not followed by either `i`, `o`, `x`");
+                    sprintf(errbuf, "failed to compile log format: header name is not followed by either `i`, `o`, `x`, `e`");
                     goto Error;
                 }
                 pt = quote_end + 2;
@@ -232,6 +290,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     TYPE_MAP('l', ELEMENT_TYPE_LOGNAME);
                     TYPE_MAP('m', ELEMENT_TYPE_METHOD);
                     TYPE_MAP('p', ELEMENT_TYPE_LOCAL_PORT);
+                    TYPE_MAP('e', ELEMENT_TYPE_ENV_VAR);
                     TYPE_MAP('q', ELEMENT_TYPE_QUERY);
                     TYPE_MAP('r', ELEMENT_TYPE_REQUEST_LINE);
                     TYPE_MAP('s', ELEMENT_TYPE_STATUS);
@@ -246,6 +305,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     goto Error;
                 }
                 NEW_ELEMENT(type);
+                LAST_ELEMENT()->original_response = log_original;
                 continue;
             }
         }
@@ -262,6 +322,11 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
 
 #undef NEW_ELEMENT
 #undef LAST_ELEMENT
+
+    if (escape == H2O_LOGCONF_ESCAPE_JSON) {
+        if (!determine_magicquote_nodes(logconf, errbuf))
+            goto Error;
+    }
 
     return logconf;
 
@@ -337,7 +402,7 @@ static char *append_unsafe_string_json(char *pos, const char *src, size_t len)
     return pos;
 }
 
-static char *append_addr(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn)
+static char *append_addr(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn, h2o_iovec_t nullexpr)
 {
     struct sockaddr_storage ss;
     socklen_t sslen;
@@ -351,11 +416,12 @@ static char *append_addr(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct soc
     return pos;
 
 Fail:
-    *pos++ = '-';
+    memcpy(pos, nullexpr.base, nullexpr.len);
+    pos += nullexpr.len;
     return pos;
 }
 
-static char *append_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn)
+static char *append_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *sa), h2o_conn_t *conn, h2o_iovec_t nullexpr)
 {
     struct sockaddr_storage ss;
     socklen_t sslen;
@@ -369,57 +435,30 @@ static char *append_port(char *pos, socklen_t (*cb)(h2o_conn_t *conn, struct soc
     return pos;
 
 Fail:
-    *pos++ = '-';
+    memcpy(pos, nullexpr.base, nullexpr.len);
+    pos += nullexpr.len;
     return pos;
 }
-
-#define DURATION_MAX_LEN (sizeof(H2O_INT32_LONGEST_STR ".999999") - 1)
 
 #define APPEND_DURATION(pos, name)                                                                                                 \
     do {                                                                                                                           \
         int64_t delta_usec;                                                                                                        \
-        if (!h2o_time_compute_##name(req, &delta_usec)) {                                                                          \
-            *pos++ = '-';                                                                                                          \
-        } else {                                                                                                                   \
-            int32_t delta_sec = (int32_t)(delta_usec / (1000 * 1000));                                                             \
-            delta_usec -= ((int64_t)delta_sec * (1000 * 1000));                                                                    \
-            pos += sprintf(pos, "%" PRId32, delta_sec);                                                                            \
-            if (delta_usec != 0) {                                                                                                 \
-                int i;                                                                                                             \
-                *pos++ = '.';                                                                                                      \
-                for (i = 5; i >= 0; --i) {                                                                                         \
-                    pos[i] = '0' + delta_usec % 10;                                                                                \
-                    delta_usec /= 10;                                                                                              \
-                }                                                                                                                  \
-                pos += 6;                                                                                                          \
+        if (!h2o_time_compute_##name(req, &delta_usec))                                                                            \
+            goto EmitNull;                                                                                                         \
+        int32_t delta_sec = (int32_t)(delta_usec / (1000 * 1000));                                                                 \
+        delta_usec -= ((int64_t)delta_sec * (1000 * 1000));                                                                        \
+        RESERVE(sizeof(H2O_INT32_LONGEST_STR ".999999") - 1);                                                                      \
+        pos += sprintf(pos, "%" PRId32, delta_sec);                                                                                \
+        if (delta_usec != 0) {                                                                                                     \
+            int i;                                                                                                                 \
+            *pos++ = '.';                                                                                                          \
+            for (i = 5; i >= 0; --i) {                                                                                             \
+                pos[i] = '0' + delta_usec % 10;                                                                                    \
+                delta_usec /= 10;                                                                                                  \
             }                                                                                                                      \
+            pos += 6;                                                                                                              \
         }                                                                                                                          \
     } while (0);
-
-static char *append_duration(char *pos, struct timeval *from, struct timeval *until)
-{
-    if (h2o_timeval_is_null(from) || h2o_timeval_is_null(until)) {
-        *pos++ = '-';
-    } else {
-        int32_t delta_sec = (int32_t)until->tv_sec - (int32_t)from->tv_sec;
-        int32_t delta_usec = (int32_t)until->tv_usec - (int32_t)from->tv_usec;
-        if (delta_usec < 0) {
-            delta_sec -= 1;
-            delta_usec += 1000000;
-        }
-        pos += sprintf(pos, "%" PRId32, delta_sec);
-        if (delta_usec != 0) {
-            int i;
-            *pos++ = '.';
-            for (i = 5; i >= 0; --i) {
-                pos[i] = '0' + delta_usec % 10;
-                delta_usec /= 10;
-            }
-            pos += 6;
-        }
-    }
-    return pos;
-}
 
 static char *expand_line_buf(char *line, size_t cur_size, size_t required, int should_realloc)
 {
@@ -445,6 +484,7 @@ static char *expand_line_buf(char *line, size_t cur_size, size_t required, int s
 char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char *buf)
 {
     char *line = buf, *pos = line, *line_end = line + *len;
+    h2o_iovec_t nullexpr;
     char *(*append_unsafe_string)(char *pos, const char *src, size_t len);
     size_t element_index, unsafe_factor;
     struct tm localt = {0};
@@ -452,10 +492,12 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
     switch (logconf->escape) {
     case H2O_LOGCONF_ESCAPE_APACHE:
+        nullexpr = h2o_iovec_init(H2O_STRLIT("-"));
         append_unsafe_string = append_unsafe_string_apache;
         unsafe_factor = 4;
         break;
     case H2O_LOGCONF_ESCAPE_JSON:
+        nullexpr = h2o_iovec_init(H2O_STRLIT("null"));
         append_unsafe_string = append_unsafe_string_json;
         unsafe_factor = 6;
         break;
@@ -484,32 +526,43 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_LOCAL_ADDR: /* %A */
             RESERVE(NI_MAXHOST);
-            pos = append_addr(pos, req->conn->callbacks->get_sockname, req->conn);
+            pos = append_addr(pos, req->conn->callbacks->get_sockname, req->conn, nullexpr);
             break;
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, (uint64_t)req->bytes_sent);
             break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
+            if (req->version == 0)
+                goto EmitNull;
             RESERVE(sizeof("HTTP/1.1"));
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_REMOTE_ADDR: /* %h */
             RESERVE(NI_MAXHOST);
-            pos = append_addr(pos, req->conn->callbacks->get_peername, req->conn);
+            pos = append_addr(pos, req->conn->callbacks->get_peername, req->conn, nullexpr);
             break;
         case ELEMENT_TYPE_METHOD: /* %m */
+            if (req->input.method.len == 0)
+                goto EmitNull;
             RESERVE(req->input.method.len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             break;
         case ELEMENT_TYPE_LOCAL_PORT: /* %p */
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
-            pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn);
+            pos = append_port(pos, req->conn->callbacks->get_sockname, req->conn, nullexpr);
             break;
         case ELEMENT_TYPE_REMOTE_PORT: /* %{remote}p */
             RESERVE(sizeof(H2O_UINT16_LONGEST_STR) - 1);
-            pos = append_port(pos, req->conn->callbacks->get_peername, req->conn);
+            pos = append_port(pos, req->conn->callbacks->get_peername, req->conn, nullexpr);
             break;
+        case ELEMENT_TYPE_ENV_VAR: /* %{..}e */ {
+            h2o_iovec_t *env_var = h2o_req_getenv(req, element->data.name.base, element->data.name.len, 0);
+            if (env_var == NULL)
+                goto EmitNull;
+            RESERVE(env_var->len * unsafe_factor);
+            pos = append_safe_string(pos, env_var->base, env_var->len);
+        } break;
         case ELEMENT_TYPE_QUERY: /* %q */
             if (req->input.query_at != SIZE_MAX) {
                 size_t len = req->input.path.len - req->input.query_at;
@@ -518,6 +571,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
+            if (req->version == 0)
+                goto EmitNull;
             RESERVE((req->input.method.len + req->input.path.len) * unsafe_factor + sizeof("  HTTP/1.1"));
             pos = append_unsafe_string(pos, req->input.method.base, req->input.method.len);
             *pos++ = ' ';
@@ -526,12 +581,14 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += h2o_stringify_protocol_version(pos, req->version);
             break;
         case ELEMENT_TYPE_STATUS: /* %s */
+            if (req->res.status == 0)
+                goto EmitNull;
             RESERVE(sizeof(H2O_INT32_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRId32, (int32_t)req->res.status);
+            pos += sprintf(pos, "%" PRId32, (int32_t)(element->original_response ? req->res.original.status : req->res.status));
             break;
         case ELEMENT_TYPE_TIMESTAMP: /* %t */
             if (h2o_timeval_is_null(&req->processed_at.at))
-                goto EmitDash;
+                goto EmitNull;
             RESERVE(H2O_TIMESTR_LOG_LEN + 2);
             *pos++ = '[';
             pos = append_safe_string(pos, req->processed_at.str->log, H2O_TIMESTR_LOG_LEN);
@@ -539,7 +596,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_TIMESTAMP_STRFTIME: /* %{...}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
-                goto EmitDash;
+                goto EmitNull;
             {
                 size_t bufsz, len;
                 if (localt.tm_year == 0)
@@ -554,37 +611,39 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
-                goto EmitDash;
+                goto EmitNull;
             RESERVE(sizeof(H2O_UINT32_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
-                goto EmitDash;
+                goto EmitNull;
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64,
                            (uint64_t)req->processed_at.at.tv_sec * 1000 + (uint64_t)req->processed_at.at.tv_usec / 1000);
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_SINCE_EPOCH: /* %{usec}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
-                goto EmitDash;
+                goto EmitNull;
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos +=
                 sprintf(pos, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec * 1000000 + (uint64_t)req->processed_at.at.tv_usec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_FRAC: /* %{msec_frac}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
-                goto EmitDash;
+                goto EmitNull;
             RESERVE(3);
             pos += sprintf(pos, "%03u", (unsigned)(req->processed_at.at.tv_usec / 1000));
             break;
         case ELEMENT_TYPE_TIMESTAMP_USEC_FRAC: /* %{usec_frac}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
-                goto EmitDash;
+                goto EmitNull;
             RESERVE(6);
             pos += sprintf(pos, "%06u", (unsigned)req->processed_at.at.tv_usec);
             break;
         case ELEMENT_TYPE_URL_PATH: /* %U */ {
+            if (req->input.path.len == 0)
+                goto EmitNull;
             size_t path_len = req->input.query_at == SIZE_MAX ? req->input.path.len : req->input.query_at;
             RESERVE(path_len * unsafe_factor);
             pos = append_unsafe_string(pos, req->input.path.base, path_len);
@@ -592,7 +651,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_REMOTE_USER: /* %u */ {
             h2o_iovec_t *remote_user = h2o_req_getenv(req, H2O_STRLIT("REMOTE_USER"), 0);
             if (remote_user == NULL)
-                goto EmitDash;
+                goto EmitNull;
             RESERVE(remote_user->len * unsafe_factor);
             pos = append_unsafe_string(pos, remote_user->base, remote_user->len);
         } break;
@@ -605,11 +664,12 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos = append_unsafe_string(pos, req->hostconf->authority.hostport.base, req->hostconf->authority.hostport.len);
             break;
 
-#define EMIT_HEADER(headers, findcall, concat)                                                                                     \
+#define EMIT_HEADER(__headers, concat, findfunc, ...)                                                                              \
     do {                                                                                                                           \
+        h2o_headers_t *headers = (__headers);                                                                                      \
         ssize_t index = -1;                                                                                                        \
         int found = 0;                                                                                                             \
-        while ((index = (findcall)) != -1) {                                                                                       \
+        while ((index = (findfunc)(headers, __VA_ARGS__, index)) != -1) {                                                          \
             if (found) {                                                                                                           \
                 RESERVE(2);                                                                                                        \
                 *pos++ = ',';                                                                                                      \
@@ -617,32 +677,33 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             } else {                                                                                                               \
                 found = 1;                                                                                                         \
             }                                                                                                                      \
-            const h2o_header_t *header = (headers)->entries + index;                                                               \
+            const h2o_header_t *header = headers->entries + index;                                                                 \
             RESERVE(header->value.len *unsafe_factor);                                                                             \
             pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                \
             if (!concat)                                                                                                           \
                 break;                                                                                                             \
         }                                                                                                                          \
         if (!found)                                                                                                                \
-            goto EmitDash;                                                                                                         \
+            goto EmitNull;                                                                                                         \
     } while (0)
 
         case ELEMENT_TYPE_IN_HEADER_TOKEN:
-            EMIT_HEADER(&req->headers, h2o_find_header(&req->headers, element->data.header_token, index), 0);
+            EMIT_HEADER(&req->headers, 0, h2o_find_header, element->data.header_token);
             break;
         case ELEMENT_TYPE_IN_HEADER_STRING:
-            EMIT_HEADER(&req->headers,
-                        h2o_find_header_by_str(&req->headers, element->data.name.base, element->data.name.len, index), 0);
+            EMIT_HEADER(&req->headers, 0, h2o_find_header_by_str, element->data.name.base, element->data.name.len);
             break;
         case ELEMENT_TYPE_OUT_HEADER_TOKEN:
-            EMIT_HEADER(&req->res.headers, h2o_find_header(&req->res.headers, element->data.header_token, index), 0);
+            EMIT_HEADER(element->original_response ? &req->res.original.headers : &req->res.headers, 0, h2o_find_header,
+                        element->data.header_token);
             break;
         case ELEMENT_TYPE_OUT_HEADER_STRING:
-            EMIT_HEADER(&req->res.headers,
-                        h2o_find_header_by_str(&req->res.headers, element->data.name.base, element->data.name.len, index), 0);
+            EMIT_HEADER(element->original_response ? &req->res.original.headers : &req->res.headers, 0, h2o_find_header_by_str,
+                        element->data.name.base, element->data.name.len);
             break;
         case ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED:
-            EMIT_HEADER(&req->res.headers, h2o_find_header(&req->res.headers, element->data.header_token, index), 1);
+            EMIT_HEADER(element->original_response ? &req->res.original.headers : &req->res.headers, 1, h2o_find_header,
+                        element->data.header_token);
             break;
 
 #undef EMIT_HEADER
@@ -653,38 +714,30 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         case ELEMENT_TYPE_CONNECT_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, connect_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_HEADER_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, header_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_BODY_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, body_time);
             break;
 
         case ELEMENT_TYPE_REQUEST_TOTAL_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, request_total_time);
-            pos = append_duration(pos, &req->timestamps.request_begin_at, &req->processed_at.at);
             break;
 
         case ELEMENT_TYPE_PROCESS_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, process_time);
             break;
 
         case ELEMENT_TYPE_RESPONSE_TIME:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, response_time);
             break;
 
         case ELEMENT_TYPE_DURATION:
-            RESERVE(DURATION_MAX_LEN);
             APPEND_DURATION(pos, duration);
             break;
 
@@ -706,18 +759,27 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];
             if (cb != NULL) {
                 h2o_iovec_t s = cb(req);
+                if (s.base == NULL)
+                    goto EmitNull;
                 RESERVE(s.len);
                 pos = append_safe_string(pos, s.base, s.len);
             } else {
-                goto EmitDash;
+                goto EmitNull;
             }
         } break;
 
         case ELEMENT_TYPE_LOGNAME:      /* %l */
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
-        EmitDash:
-            RESERVE(1);
-            *pos++ = '-';
+        EmitNull:
+            RESERVE(nullexpr.len);
+            /* special case that trims surrounding quotes */
+            if (element->magically_quoted_json) {
+                --pos;
+                pos = append_safe_string(pos, nullexpr.base, nullexpr.len);
+                pos = append_safe_string(pos, element->suffix.base + 1, element->suffix.len - 1);
+                continue;
+            }
+            pos = append_safe_string(pos, nullexpr.base, nullexpr.len);
             break;
 
         default:

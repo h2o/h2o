@@ -39,11 +39,15 @@ typedef struct mrb_irep {
 
   struct mrb_locals *lv;
   /* debug info */
+  mrb_bool own_filename;
   const char *filename;
   uint16_t *lines;
   struct mrb_irep_debug_info* debug_info;
 
-  size_t ilen, plen, slen, rlen, refcnt;
+  int ilen, plen, slen, rlen, refcnt;
+
+  struct mrb_irep *outer;       /* Refers outer scope */
+  struct RClass *target_class;
 } mrb_irep;
 
 #define MRB_ISEQ_NO_FREE 1

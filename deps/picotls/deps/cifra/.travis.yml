@@ -1,0 +1,29 @@
+language: c
+
+before_install:
+ - sudo pip install cpp-coveralls
+
+script:
+ - cd src
+ - make clean
+ - make test
+
+after_success:
+ - coveralls --exclude src/ext --gcov-options '\-lp'
+
+compiler:
+ - gcc
+
+env:
+  global:
+   - secure: "W9IUnUWNc03gIBGLPOxXCVJUOb3RY2fS4lgOo+wIsCSk0rsJAB6gruAZDoz1sMxCJyBhCv0dKV5WPkAxkZ0y55wiuUcCepgR0qis6S6rJxldPdEWc3RQaeU9LbVRKRBYUBqSsFlXr5pdOvl0CBDWmx8lhcRxAw8z+JVDrAGVsTQ="
+
+addons:
+  coverity_scan:
+    project:
+      name: "ctz/cifra"
+      description: "Cifra is a collection of cryptographic primitives targeted at embedded use."
+    notification_email: jpixton@gmail.com
+    build_command_prepend: "cd src ; make clean"
+    build_command: "make"
+    branch_pattern: coverity-scan

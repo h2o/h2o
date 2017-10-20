@@ -43,6 +43,9 @@ class Enumerator
     end
 
     def to_enum(meth=:each, *args, &block)
+      unless self.respond_to?(meth)
+        raise NoMethodError, "undefined method #{meth}"
+      end
       lz = Lazy.new(self, &block)
       lz.obj = self
       lz.meth = meth
@@ -69,7 +72,7 @@ class Enumerator
 
     def reject(&block)
       Lazy.new(self){|yielder, val|
-        if not block.call(val)
+        unless block.call(val)
           yielder << val
         end
       }

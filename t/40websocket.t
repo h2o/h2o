@@ -14,7 +14,7 @@ plan skip_all => 'Starlet not found'
 my $upstream_port = empty_port();
 my $upstream = spawn_server(
     argv     => [
-        qw(plackup -s Starlet --access-log /dev/null -p), $upstream_port, ASSETS_DIR . "/upstream.psgi",
+        qw(plackup -s Starlet --access-log /dev/null --listen), "127.0.0.1:$upstream_port", ASSETS_DIR . "/upstream.psgi",
     ],
     is_ready => sub {
         check_port($upstream_port);
@@ -59,6 +59,7 @@ sub doit {
     like $rbuf, qr{^HTTP\/1\.1 101 }is;
     like $rbuf, qr{\r\n\r\n$}is;
     like $rbuf, qr{\r\nupgrade: websocket\r\n}is;
+    unlike $rbuf, qr{\r\nupgrade:.*\r\nupgrade:}is;
     like $rbuf, qr{\r\nsec-websocket-accept: .*\r\n}is;
     for my $i (1..10) {
         my $msg = "hello world $i\n";

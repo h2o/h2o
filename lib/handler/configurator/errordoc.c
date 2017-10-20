@@ -28,12 +28,29 @@ struct errordoc_configurator_t {
     H2O_VECTOR(h2o_errordoc_t) * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
+static int scan_and_check_status(h2o_configurator_command_t *cmd, yoml_t *value, int *slot)
+{
+    if (value->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, value, "status must be must be either of: scalar, sequence of scalar");
+        return -1;
+    }
+    if (h2o_configurator_scanf(cmd, value, "%d", slot) != 0)
+        return -1;
+    if (!(400 <= *slot && *slot <= 599)) {
+        h2o_configurator_errprintf(cmd, value, "status must be within range of 400 to 599");
+        return -1;
+    }
+    return 0;
+}
+
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
 {
     struct errordoc_configurator_t *self = (void *)cmd->configurator;
-    int status = -1;
+    int status[200];
+    size_t status_len = 0;
+    int parsed;
     const char *url = NULL;
-    size_t i;
+    size_t i, j, k;
     yoml_t *key, *value;
 
     for (i = 0; i != hash->data.mapping.size; ++i) {
@@ -42,14 +59,32 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
         if (key->type != YOML_TYPE_SCALAR)
             goto UnknownKeyError;
         if (strcmp(key->data.scalar, "status") == 0) {
-            if (status != -1)
+            if (status_len != 0)
                 goto KeyAlreadyDefinedError;
-            if (h2o_configurator_scanf(cmd, value, "%d", &status) != 0)
-                return -1;
-            if (!(400 <= status && status <= 599)) {
-                h2o_configurator_errprintf(cmd, value, "status must be within range of 400 to 599");
-                return -1;
+
+            if (value->type == YOML_TYPE_SEQUENCE) {
+                if (value->data.sequence.size == 0) {
+                    h2o_configurator_errprintf(cmd, value, "status sequence must not be empty");
+                    return -1;
+                }
+                for (j = 0; j != value->data.sequence.size; ++j) {
+                    if (scan_and_check_status(cmd, value->data.sequence.elements[j], &parsed) != 0)
+                        return -1;
+                    /* check the scanned status hasn't already appeared */
+                    for (k = 0; k != status_len; ++k) {
+                        if (status[k] == parsed) {
+                            h2o_configurator_errprintf(cmd, value, "status %d appears multiple times", status[k]);
+                            return -1;
+                        }
+                    }
+                    status[status_len++] = parsed;
+                }
+            } else {
+                if (scan_and_check_status(cmd, value, &parsed) != 0)
+                    return -1;
+                status[status_len++] = parsed;
             }
+
         } else if (strcmp(key->data.scalar, "url") == 0) {
             if (url != NULL)
                 goto KeyAlreadyDefinedError;
@@ -63,7 +98,7 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
         }
     }
 
-    if (status == -1) {
+    if (status_len == 0) {
         h2o_configurator_errprintf(cmd, hash, "mandatory key `status` is not defined");
         return -1;
     }
@@ -72,11 +107,13 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
         return -1;
     }
 
-    { /* register */
+    h2o_iovec_t _url = h2o_strdup(&self->pool, url, SIZE_MAX);
+    for (i = 0; i != status_len; ++i) {
+        /* register */
         h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
         h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
-        errordoc->status = status;
-        errordoc->url = h2o_strdup(&self->pool, url, SIZE_MAX);
+        errordoc->status = status[i];
+        errordoc->url = _url;
     }
 
     return 0;
@@ -127,7 +164,7 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
     /* copy vars */
     memset(&self->vars[1], 0, sizeof(self->vars[1]));
     h2o_vector_reserve(&self->pool, &self->vars[1], self->vars[0].size);
-    memcpy(self->vars[1].entries, self->vars[0].entries, sizeof(self->vars[0].entries[0]) * self->vars[0].size);
+    h2o_memcpy(self->vars[1].entries, self->vars[0].entries, sizeof(self->vars[0].entries[0]) * self->vars[0].size);
     self->vars[1].size = self->vars[0].size;
 
     ++self->vars;

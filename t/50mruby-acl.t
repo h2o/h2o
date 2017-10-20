@@ -9,8 +9,7 @@ plan skip_all => 'mruby support is off'
     unless server_features()->{mruby};
 
 subtest "invalid configuration 1" => sub {
-    throws_ok sub {
-        spawn_h2o(<< 'EOT');
+    my $server = spawn_h2o(<< 'EOT');
 hosts:
   default:
     paths:
@@ -19,12 +18,13 @@ hosts:
           acl { respond(403) }
           acl { respond(200) }
 EOT
-    }, qr/server failed to start/, 'acl cannot be called more than once';
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $stderr, qr{^HTTP\/1.1 500 }s, "500 response";
+    
 };
 
 subtest "invalid configuration 2" => sub {
-    throws_ok sub {
-        spawn_h2o(<< 'EOT');
+    my $server = spawn_h2o(<< 'EOT');
 hosts:
   default:
     paths:
@@ -33,7 +33,8 @@ hosts:
           acl { respond(403) }
           proc {|env| [200, {}, []]}
 EOT
-    }, qr/server failed to start/, 'acl configuration is ignored';
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $stderr, qr{^HTTP\/1.1 500 }s, "500 response";
 };
 
 done_testing();

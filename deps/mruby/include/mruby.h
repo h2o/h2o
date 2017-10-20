@@ -1,7 +1,7 @@
 /*
 ** mruby - An embeddable Ruby implementation
 **
-** Copyright (c) mruby developers 2010-2016
+** Copyright (c) mruby developers 2010-2017
 **
 ** Permission is hereby granted, free of charge, to any person obtaining
 ** a copy of this software and associated documentation files (the
@@ -65,6 +65,16 @@
 
 #include "mrbconf.h"
 
+#ifndef FLT_EPSILON
+#define FLT_EPSILON (1.19209290e-07f)
+#endif
+#ifndef DBL_EPSILON
+#define DBL_EPSILON ((double)2.22044604925031308085e-16L)
+#endif
+#ifndef LDBL_EPSILON
+#define LDBL_EPSILON (1.08420217248550443401e-19L)
+#endif
+
 #ifdef MRB_USE_FLOAT
 #define MRB_FLOAT_EPSILON FLT_EPSILON
 #else
@@ -113,7 +123,7 @@ typedef struct {
   mrb_value *stackent;
   int nregs;
   int ridx;
-  int eidx;
+  int epos;
   struct REnv *env;
   mrb_code *pc;                 /* return address */
   mrb_code *err;                /* error position */
@@ -143,22 +153,30 @@ struct mrb_context {
   mrb_code **rescue;                      /* exception handler stack */
   int rsize;
   struct RProc **ensure;                  /* ensure handler stack */
-  int esize;
+  int esize, eidx;
 
   enum mrb_fiber_state status;
   mrb_bool vmexec;
   struct RFiber *fib;
 };
 
-struct mrb_jmpbuf;
+#ifdef MRB_METHOD_CACHE_SIZE
+# define MRB_METHOD_CACHE
+#else
+/* default method cache size: 128 */
+/* cache size needs to be power of 2 */
+# define MRB_METHOD_CACHE_SIZE (1<<7)
+#endif
 
-typedef struct {
-  const char *filename;
-  int lineno;
-  struct RClass *klass;
-  char sep;
-  mrb_sym method_id;
-} mrb_backtrace_entry;
+#ifdef MRB_METHOD_CACHE
+struct mrb_cache_entry {
+  struct RClass *c;
+  mrb_sym mid;
+  struct RProc *m;
+};
+#endif
+
+struct mrb_jmpbuf;
 
 typedef void (*mrb_atexit_func)(struct mrb_state*);
 
@@ -174,15 +192,9 @@ typedef struct mrb_state {
 
   struct mrb_context *c;
   struct mrb_context *root_c;
+  struct iv_tbl *globals;                 /* global variable table */
 
   struct RObject *exc;                    /* exception */
-  struct {
-    struct RObject *exc;
-    int n;
-    int n_allocated;
-    mrb_backtrace_entry *entries;
-  } backtrace;
-  struct iv_tbl *globals;                 /* global variable table */
 
   struct RObject *top_self;
   struct RClass *object_class;            /* Object class */
@@ -192,6 +204,7 @@ typedef struct mrb_state {
   struct RClass *string_class;
   struct RClass *array_class;
   struct RClass *hash_class;
+  struct RClass *range_class;
 
   struct RClass *float_class;
   struct RClass *fixnum_class;
@@ -203,6 +216,10 @@ typedef struct mrb_state {
 
   struct alloca_header *mems;
   mrb_gc gc;
+
+#ifdef MRB_METHOD_CACHE
+  struct mrb_cache_entry cache[MRB_METHOD_CACHE_SIZE];
+#endif
 
   mrb_sym symidx;
   struct kh_n2s *name2sym;      /* symbol hash */
@@ -221,6 +238,7 @@ typedef struct mrb_state {
   struct RClass *eException_class;
   struct RClass *eStandardError_class;
   struct RObject *nomem_err;              /* pre-allocated NoMemoryError */
+  struct RObject *stack_err;              /* pre-allocated SysStackError */
 #ifdef MRB_GC_FIXED_ARENA
   struct RObject *arena_err;              /* pre-allocated arena overfow error */
 #endif
@@ -608,6 +626,14 @@ MRB_API mrb_bool mrb_class_defined(mrb_state *mrb, const char *name);
 MRB_API struct RClass * mrb_class_get(mrb_state *mrb, const char *name);
 
 /**
+ * Gets a exception class.
+ * @param [mrb_state*] mrb The current mruby state.
+ * @param [const char *] name The name of the class.
+ * @return [struct RClass *] A reference to the class.
+*/
+MRB_API struct RClass * mrb_exc_get(mrb_state *mrb, const char *name);
+
+/**
  * Returns an mrb_bool. True if inner class was defined, and false if the inner class was not defined.
  *
  * Example:
@@ -950,8 +976,8 @@ MRB_API mrb_value mrb_str_new_static(mrb_state *mrb, const char *p, size_t len);
 #define mrb_str_new_lit(mrb, lit) mrb_str_new_static(mrb, (lit), mrb_strlen_lit(lit))
 
 #ifdef _WIN32
-char* mrb_utf8_from_locale(const char *p, size_t len);
-char* mrb_locale_from_utf8(const char *p, size_t len);
+char* mrb_utf8_from_locale(const char *p, int len);
+char* mrb_locale_from_utf8(const char *p, int len);
 #define mrb_locale_free(p) free(p)
 #define mrb_utf8_free(p) free(p)
 #else
@@ -1034,11 +1060,27 @@ MRB_API mrb_value mrb_Float(mrb_state *mrb, mrb_value val);
 MRB_API mrb_value mrb_inspect(mrb_state *mrb, mrb_value obj);
 MRB_API mrb_bool mrb_eql(mrb_state *mrb, mrb_value obj1, mrb_value obj2);
 
+static inline int mrb_gc_arena_save(mrb_state*);
+static inline void mrb_gc_arena_restore(mrb_state*,int);
+
+static inline int
+mrb_gc_arena_save(mrb_state *mrb)
+{
+  return mrb->gc.arena_idx;
+}
+
+static inline void
+mrb_gc_arena_restore(mrb_state *mrb, int idx)
+{
+  mrb->gc.arena_idx = idx;
+}
+
+MRB_API int mrb_gc_arena_save(mrb_state*);
+MRB_API void mrb_gc_arena_restore(mrb_state*,int);
+
 MRB_API void mrb_garbage_collect(mrb_state*);
 MRB_API void mrb_full_gc(mrb_state*);
 MRB_API void mrb_incremental_gc(mrb_state *);
-MRB_API int mrb_gc_arena_save(mrb_state*);
-MRB_API void mrb_gc_arena_restore(mrb_state*,int);
 MRB_API void mrb_gc_mark(mrb_state*,struct RBasic*);
 #define mrb_gc_mark_value(mrb,val) do {\
   if (!mrb_immediate_p(val)) mrb_gc_mark((mrb), mrb_basic_ptr(val)); \
@@ -1091,27 +1133,31 @@ MRB_API void mrb_print_error(mrb_state *mrb);
    + those E_* macros requires mrb_state* variable named mrb.
    + exception objects obtained from those macros are local to mrb
 */
-#define E_RUNTIME_ERROR             (mrb_class_get(mrb, "RuntimeError"))
-#define E_TYPE_ERROR                (mrb_class_get(mrb, "TypeError"))
-#define E_ARGUMENT_ERROR            (mrb_class_get(mrb, "ArgumentError"))
-#define E_INDEX_ERROR               (mrb_class_get(mrb, "IndexError"))
-#define E_RANGE_ERROR               (mrb_class_get(mrb, "RangeError"))
-#define E_NAME_ERROR                (mrb_class_get(mrb, "NameError"))
-#define E_NOMETHOD_ERROR            (mrb_class_get(mrb, "NoMethodError"))
-#define E_SCRIPT_ERROR              (mrb_class_get(mrb, "ScriptError"))
-#define E_SYNTAX_ERROR              (mrb_class_get(mrb, "SyntaxError"))
-#define E_LOCALJUMP_ERROR           (mrb_class_get(mrb, "LocalJumpError"))
-#define E_REGEXP_ERROR              (mrb_class_get(mrb, "RegexpError"))
-#define E_SYSSTACK_ERROR            (mrb_class_get(mrb, "SystemStackError"))
+#define E_RUNTIME_ERROR             (mrb_exc_get(mrb, "RuntimeError"))
+#define E_TYPE_ERROR                (mrb_exc_get(mrb, "TypeError"))
+#define E_ARGUMENT_ERROR            (mrb_exc_get(mrb, "ArgumentError"))
+#define E_INDEX_ERROR               (mrb_exc_get(mrb, "IndexError"))
+#define E_RANGE_ERROR               (mrb_exc_get(mrb, "RangeError"))
+#define E_NAME_ERROR                (mrb_exc_get(mrb, "NameError"))
+#define E_NOMETHOD_ERROR            (mrb_exc_get(mrb, "NoMethodError"))
+#define E_SCRIPT_ERROR              (mrb_exc_get(mrb, "ScriptError"))
+#define E_SYNTAX_ERROR              (mrb_exc_get(mrb, "SyntaxError"))
+#define E_LOCALJUMP_ERROR           (mrb_exc_get(mrb, "LocalJumpError"))
+#define E_REGEXP_ERROR              (mrb_exc_get(mrb, "RegexpError"))
 
-#define E_NOTIMP_ERROR              (mrb_class_get(mrb, "NotImplementedError"))
-#define E_FLOATDOMAIN_ERROR         (mrb_class_get(mrb, "FloatDomainError"))
+#define E_NOTIMP_ERROR              (mrb_exc_get(mrb, "NotImplementedError"))
+#define E_FLOATDOMAIN_ERROR         (mrb_exc_get(mrb, "FloatDomainError"))
 
-#define E_KEY_ERROR                 (mrb_class_get(mrb, "KeyError"))
+#define E_KEY_ERROR                 (mrb_exc_get(mrb, "KeyError"))
 
 MRB_API mrb_value mrb_yield(mrb_state *mrb, mrb_value b, mrb_value arg);
 MRB_API mrb_value mrb_yield_argv(mrb_state *mrb, mrb_value b, mrb_int argc, const mrb_value *argv);
 MRB_API mrb_value mrb_yield_with_class(mrb_state *mrb, mrb_value b, mrb_int argc, const mrb_value *argv, mrb_value self, struct RClass *c);
+
+/* continue execution to the proc */
+/* this function should always be called as the last function of a method */
+/* e.g. return mrb_yield_cont(mrb, proc, self, argc, argv); */
+mrb_value mrb_yield_cont(mrb_state *mrb, mrb_value b, mrb_value self, mrb_int argc, const mrb_value *argv);
 
 /* mrb_gc_protect() leaves the object in the arena */
 MRB_API void mrb_gc_protect(mrb_state *mrb, mrb_value obj);
@@ -1139,6 +1185,7 @@ MRB_API mrb_value mrb_attr_get(mrb_state *mrb, mrb_value obj, mrb_sym id);
 
 MRB_API mrb_bool mrb_respond_to(mrb_state *mrb, mrb_value obj, mrb_sym mid);
 MRB_API mrb_bool mrb_obj_is_instance_of(mrb_state *mrb, mrb_value obj, struct RClass* c);
+MRB_API mrb_bool mrb_func_basic_p(mrb_state *mrb, mrb_value obj, mrb_sym mid, mrb_func_t func);
 
 
 /*
@@ -1160,7 +1207,7 @@ MRB_API mrb_value mrb_fiber_yield(mrb_state *mrb, mrb_int argc, const mrb_value 
  *
  * @mrbgem mruby-fiber
  */
-#define E_FIBER_ERROR (mrb_class_get(mrb, "FiberError"))
+#define E_FIBER_ERROR (mrb_exc_get(mrb, "FiberError"))
 
 /* memory pool implementation */
 typedef struct mrb_pool mrb_pool;
@@ -1177,6 +1224,33 @@ MRB_API void mrb_show_version(mrb_state *mrb);
 MRB_API void mrb_show_copyright(mrb_state *mrb);
 
 MRB_API mrb_value mrb_format(mrb_state *mrb, const char *format, ...);
+
+#if 0
+/* memcpy and memset does not work with gdb reverse-next on my box */
+/* use naive memcpy and memset instead */
+#undef memcpy
+#undef memset
+static inline void*
+mrbmemcpy(void *dst, const void *src, size_t n)
+{
+  char *d = (char*)dst;
+  const char *s = (const char*)src;
+  while (n--)
+    *d++ = *s++;
+  return d;
+}
+#define memcpy(a,b,c) mrbmemcpy(a,b,c)
+
+static inline void*
+mrbmemset(void *s, int c, size_t n)
+{
+  char *t = (char*)s;
+  while (n--)
+    *t++ = c;
+  return s;
+}
+#define memset(a,b,c) mrbmemset(a,b,c)
+#endif
 
 MRB_END_DECL
 

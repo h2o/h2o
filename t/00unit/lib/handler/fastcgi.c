@@ -85,8 +85,8 @@ static void test_build_request(void)
     conn->req.version = 0x101;
     conn->req.hostconf = *ctx.globalconf->hosts;
     conn->req.pathconf = conn->req.hostconf->paths.entries;
-    h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_COOKIE, H2O_STRLIT("foo=bar"));
-    h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_USER_AGENT,
+    h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_COOKIE, NULL, H2O_STRLIT("foo=bar"));
+    h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_USER_AGENT, NULL,
                    H2O_STRLIT("Mozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9"));
 
     /* build with max_record_size=65535 */
@@ -117,7 +117,7 @@ static void test_build_request(void)
 
     /* build with max_record_size=64, DOCUMENT_ROOT, additional cookie, and content */
     config.document_root = h2o_iovec_init(H2O_STRLIT("/var/www/htdocs"));
-    h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_COOKIE, H2O_STRLIT("hoge=fuga"));
+    h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_COOKIE, NULL, H2O_STRLIT("hoge=fuga"));
     conn->req.entity = h2o_iovec_init(H2O_STRLIT("The above copyright notice and this permission notice shall be included in all "
                                                  "copies or substantial portions of the Software."));
     build_request(&conn->req, &vecs, 0x1234, 64, &config);

@@ -88,7 +88,7 @@ $ctx->{directive}->(
 $ctx->{directive}->(
     name    => "fastcgi.timeout.keepalive",
     levels  => [ qw(global host path extension) ],
-    default => q{proxy.timeout.keepalive: 0},
+    default => q{fastcgi.timeout.keepalive: 0},
     desc    => 'Sets the keepl-alive timeout for idle connections in milliseconds.',
 )->(sub {
 ?>

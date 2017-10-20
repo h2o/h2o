@@ -1,7 +1,6 @@
 #include <mruby.h>
 #include <mruby/range.h>
 #include <math.h>
-#include <float.h>
 
 static mrb_bool
 r_le(mrb_state *mrb, mrb_value a, mrb_value b)
@@ -156,7 +155,7 @@ mrb_range_size(mrb_state *mrb, mrb_value range)
     }
     if (isinf(n+1))
       return mrb_float_value(mrb, INFINITY);
-    return mrb_fixnum_value(n+1);
+    return mrb_fixnum_value((mrb_int)n+1);
   }
   return mrb_nil_value();
 }

@@ -13,6 +13,14 @@ assert('Array.[]', '15.2.12.4.1') do
   assert_equal([1, 2, 3], Array.[](1,2,3))
 end
 
+class SubArray < Array
+end
+
+assert('SubArray.[]') do
+  a = SubArray[1, 2, 3]
+  assert_equal(SubArray, a.class)
+end
+
 assert('Array#+', '15.2.12.5.1') do
   assert_equal([1, 1], [1].+([1]))
 end
@@ -229,6 +237,8 @@ assert('Array#pop', '15.2.12.5.21') do
   assert_nil([].pop)
   assert_equal([1,2], a)
   assert_equal(3, b)
+
+  assert_raise(RuntimeError) { [].freeze.pop }
 end
 
 assert('Array#push', '15.2.12.5.22') do
@@ -276,6 +286,8 @@ assert('Array#shift', '15.2.12.5.27') do
   assert_nil([].shift)
   assert_equal([2,3], a)
   assert_equal(1, b)
+
+  assert_raise(RuntimeError) { [].freeze.shift }
 end
 
 assert('Array#size', '15.2.12.5.28') do

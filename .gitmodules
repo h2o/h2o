@@ -10,3 +10,6 @@
 [submodule "misc/cache-digest.js"]
 	path = misc/cache-digest.js
 	url = https://github.com/h2o/cache-digest.js.git
+[submodule "misc/h2get"]
+	path = misc/h2get
+	url = https://github.com/deweerdt/h2get.git

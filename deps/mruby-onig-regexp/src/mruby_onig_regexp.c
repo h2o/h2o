@@ -35,13 +35,45 @@ THE SOFTWARE.
 #ifdef _MSC_VER
 #define ONIG_EXTERN extern
 #endif
+#ifdef HAVE_ONIGMO_H
+#include <onigmo.h>
+#elif defined(HAVE_ONIGURUMA_H)
+#include <oniguruma.h>
+#else
 #include "oniguruma.h"
+#endif
 
 #ifdef MRUBY_VERSION
 #define mrb_args_int mrb_int
 #else
 #define mrb_args_int int
 #endif
+
+static const char utf8len_codepage[256] =
+{
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+  2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+  3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,1,1,1,1,1,1,1,1,1,1,1,
+};
+
+static mrb_int
+utf8len(const char* p, const char* e)
+{
+  mrb_int len;
+  mrb_int i;
+
+  len = utf8len_codepage[(unsigned char)*p];
+  if (p + len > e) return 1;
+  for (i = 1; i < len; ++i)
+    if ((p[i] & 0xc0) != 0x80)
+      return 1;
+  return len;
+}
 
 static void
 onig_regexp_free(mrb_state *mrb, void *p) {
@@ -68,7 +100,6 @@ onig_regexp_initialize(mrb_state *mrb, mrb_value self) {
   mrb_get_args(mrb, "S|oo", &str, &flag, &code);
 
   int cflag = 0;
-  OnigSyntaxType* syntax = ONIG_SYNTAX_RUBY;
   OnigEncoding enc = ONIG_ENCODING_UTF8;
   if(mrb_string_p(code)) {
     char const* str_code = mrb_string_value_ptr(mrb, code);
@@ -96,7 +127,7 @@ onig_regexp_initialize(mrb_state *mrb, mrb_value self) {
   OnigErrorInfo einfo;
   OnigRegex reg;
   int result = onig_new(&reg, (OnigUChar*)RSTRING_PTR(str), (OnigUChar*) RSTRING_PTR(str) + RSTRING_LEN(str),
-                        cflag, enc, syntax, &einfo);
+                        cflag, enc, ONIG_SYNTAX_RUBY, &einfo);
   if (result != ONIG_NORMAL) {
     char err[ONIG_MAX_ERROR_MESSAGE_LEN] = "";
     onig_error_code_to_str((OnigUChar*)err, result);
@@ -325,52 +356,52 @@ onig_regexp_to_s(mrb_state *mrb, mrb_value self) {
 
  again:
   if (len >= 4 && ptr[0] == '(' && ptr[1] == '?') {
-	int err = 1;
-	ptr += 2;
-	if ((len -= 2) > 0) {
+    int err = 1;
+    ptr += 2;
+    if ((len -= 2) > 0) {
       do {
         if(strchr(ptr, 'i')) { options |= ONIG_OPTION_IGNORECASE; }
         if(strchr(ptr, 'x')) { options |= ONIG_OPTION_EXTEND; }
         if(strchr(ptr, 'm')) { options |= ONIG_OPTION_MULTILINE; }
-		++ptr;
+        ++ptr;
       } while (--len > 0);
-	}
-	if (len > 1 && *ptr == '-') {
+    }
+    if (len > 1 && *ptr == '-') {
       ++ptr;
       --len;
       do {
         if(strchr(ptr, 'i')) { options &= ~ONIG_OPTION_IGNORECASE; }
         if(strchr(ptr, 'x')) { options &= ~ONIG_OPTION_EXTEND; }
         if(strchr(ptr, 'm')) { options &= ~ONIG_OPTION_MULTILINE; }
-		++ptr;
+        ++ptr;
       } while (--len > 0);
-	}
-	if (*ptr == ')') {
+    }
+    if (*ptr == ')') {
       --len;
       ++ptr;
       goto again;
-	}
-	if (*ptr == ':' && ptr[len-1] == ')') {
+    }
+    if (*ptr == ':' && ptr[len-1] == ')') {
       OnigRegex rp;
       ++ptr;
       len -= 2;
       err = onig_new(&rp, (OnigUChar*)ptr, (OnigUChar*)ptr + len, ONIG_OPTION_DEFAULT,
                      ONIG_ENCODING_UTF8, OnigDefaultSyntax, NULL);
       onig_free(rp);
-	}
-	if (err) {
+    }
+    if (err) {
       options = onig_get_options(reg);
       ptr = RSTRING_PTR(src);
       len = RSTRING_LEN(src);
-	}
+    }
   }
 
   if (*option_to_str(optbuf, options)) mrb_str_cat_cstr(mrb, str, optbuf);
 
   if ((options & embeddable) != embeddable) {
-	optbuf[0] = '-';
-	option_to_str(optbuf + 1, ~options);
-	mrb_str_cat_cstr(mrb, str, optbuf);
+    optbuf[0] = '-';
+    option_to_str(optbuf + 1, ~options);
+    mrb_str_cat_cstr(mrb, str, optbuf);
   }
 
   mrb_str_cat_cstr(mrb, str, ":");
@@ -618,11 +649,9 @@ append_replace_str(mrb_state* mrb, mrb_value result, mrb_value replace,
       default:
         if (isdigit(*ch)) { // group number 0-9
           int const idx = *ch - '0';
-          if (idx >= match->num_regs) {
-            mrb_raisef(mrb, E_INDEX_ERROR, "undefined group number reference: %S (max: %S)",
-                       mrb_fixnum_value(idx), mrb_fixnum_value(match->num_regs));
+          if (idx < match->num_regs) {
+            mrb_str_cat(mrb, result, RSTRING_PTR(src) + match->beg[idx], match->end[idx] - match->beg[idx]);
           }
-          mrb_str_cat(mrb, result, RSTRING_PTR(src) + match->beg[idx], match->end[idx] - match->beg[idx]);
         } else {
           char const str[] = { '\\', *ch };
           mrb_str_cat(mrb, result, str, 2);
@@ -649,7 +678,7 @@ string_gsub(mrb_state* mrb, mrb_value self) {
   }
 
   if(!mrb_nil_p(blk) && !mrb_nil_p(replace_expr)) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "both block and replace expression must not be passed");
+    blk = mrb_nil_value();
   }
 
   OnigRegex reg;
@@ -674,6 +703,18 @@ string_gsub(mrb_state* mrb, mrb_value self) {
     }
 
     last_end_pos = match->end[0];
+    if (match->beg[0] == match->end[0]) {
+      /*
+       * Always consume at least one character of the input string
+       * in order to prevent infinite loops.
+       */
+      char* p = RSTRING_PTR(self) + last_end_pos;
+      char* e = p + RSTRING_LEN(self);
+      int len = utf8len(p, e);
+      if (RSTRING_LEN(self) < last_end_pos + len) break;
+      mrb_str_cat(mrb, result, p, len);
+      last_end_pos += len;
+    }
   }
 
   mrb_str_cat(mrb, result, RSTRING_PTR(self) + last_end_pos, RSTRING_LEN(self) - last_end_pos);
@@ -946,7 +987,9 @@ mrb_mruby_onig_regexp_gem_init(mrb_state* mrb) {
   mrb_define_const(mrb, clazz, "CAPTURE_GROUP", mrb_fixnum_value(ONIG_OPTION_CAPTURE_GROUP));
   mrb_define_const(mrb, clazz, "NOTBOL", mrb_fixnum_value(ONIG_OPTION_NOTBOL));
   mrb_define_const(mrb, clazz, "NOTEOL", mrb_fixnum_value(ONIG_OPTION_NOTEOL));
+#ifdef ONIG_OPTION_POSIX_REGION
   mrb_define_const(mrb, clazz, "POSIX_REGION", mrb_fixnum_value(ONIG_OPTION_POSIX_REGION));
+#endif
 #ifdef ONIG_OPTION_ASCII_RANGE
   mrb_define_const(mrb, clazz, "ASCII_RANGE", mrb_fixnum_value(ONIG_OPTION_ASCII_RANGE));
 #endif

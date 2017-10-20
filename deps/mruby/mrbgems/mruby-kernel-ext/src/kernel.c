@@ -2,6 +2,64 @@
 #include <mruby/error.h>
 #include <mruby/array.h>
 #include <mruby/hash.h>
+#include <mruby/range.h>
+
+static mrb_value
+mrb_f_caller(mrb_state *mrb, mrb_value self)
+{
+  mrb_value bt, v, length;
+  mrb_int bt_len, argc, lev, n;
+
+  bt = mrb_get_backtrace(mrb);
+  bt_len = RARRAY_LEN(bt);
+  argc = mrb_get_args(mrb, "|oo", &v, &length);
+
+  switch (argc) {
+    case 0:
+      lev = 1;
+      n = bt_len - lev;
+      break;
+    case 1:
+      if (mrb_type(v) == MRB_TT_RANGE) {
+        mrb_int beg, len;
+        if (mrb_range_beg_len(mrb, v, &beg, &len, bt_len, TRUE) == 1) {
+          lev = beg;
+          n = len;
+        }
+        else {
+          return mrb_nil_value();
+        }
+      }
+      else {
+        v = mrb_to_int(mrb, v);
+        lev = mrb_fixnum(v);
+        if (lev < 0) {
+          mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative level (%S)", v);
+        }
+        n = bt_len - lev;
+      }
+      break;
+    case 2:
+      lev = mrb_fixnum(mrb_to_int(mrb, v));
+      n = mrb_fixnum(mrb_to_int(mrb, length));
+      if (lev < 0) {
+        mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative level (%S)", v);
+      }
+      if (n < 0) {
+        mrb_raisef(mrb, E_ARGUMENT_ERROR, "negative size (%S)", length);
+      }
+      break;
+    default:
+      lev = n = 0;
+      break;
+  }
+
+  if (n == 0) {
+    return mrb_ary_new(mrb);
+  }
+
+  return mrb_funcall(mrb, bt, "[]", 2, mrb_fixnum_value(lev), mrb_fixnum_value(n));
+}
 
 /*
  *  call-seq:
@@ -170,6 +228,7 @@ mrb_mruby_kernel_ext_gem_init(mrb_state *mrb)
   struct RClass *krn = mrb->kernel_module;
 
   mrb_define_module_function(mrb, krn, "fail", mrb_f_raise, MRB_ARGS_OPT(2));
+  mrb_define_module_function(mrb, krn, "caller", mrb_f_caller, MRB_ARGS_OPT(2));
   mrb_define_method(mrb, krn, "__method__", mrb_f_method, MRB_ARGS_NONE());
   mrb_define_module_function(mrb, krn, "Integer", mrb_f_integer, MRB_ARGS_ANY());
   mrb_define_module_function(mrb, krn, "Float", mrb_f_float, MRB_ARGS_REQ(1));

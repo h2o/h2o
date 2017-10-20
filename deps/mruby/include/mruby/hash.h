@@ -24,7 +24,7 @@ struct RHash {
 #define mrb_hash_ptr(v)    ((struct RHash*)(mrb_ptr(v)))
 #define mrb_hash_value(p)  mrb_obj_value((void*)(p))
 
-MRB_API mrb_value mrb_hash_new_capa(mrb_state*, int);
+MRB_API mrb_value mrb_hash_new_capa(mrb_state*, mrb_int);
 
 /*
  * Initializes a new hash.

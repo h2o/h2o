@@ -15,7 +15,6 @@
 #if !defined(MRB_32BIT) && !defined(MRB_64BIT)
 #if UINT64_MAX == SIZE_MAX
 #define MRB_64BIT
-#define MRB_INT64
 #else
 #define MRB_32BIT
 #endif
@@ -35,6 +34,17 @@
 /* add -DMRB_INT64 to use 64bit integer for mrb_int; conflict with MRB_INT16 */
 //#define MRB_INT64
 
+/* if no specific integer type is chosen */
+#if !defined(MRB_INT16) && !defined(MRB_INT32) && !defined(MRB_INT64)
+# if defined(MRB_64BIT) && !defined(MRB_NAN_BOXING)
+/* Use 64bit integers on 64bit architecture (without MRB_NAN_BOXING) */
+#  define MRB_INT64
+# else
+/* Otherwise use 32bit integers */
+#  define MRB_INT32
+# endif
+#endif
+
 /* represent mrb_value in boxed double; conflict with MRB_USE_FLOAT */
 //#define MRB_NAN_BOXING
 
@@ -52,12 +62,6 @@
 
 /* number of object per heap page */
 //#define MRB_HEAP_PAGE_SIZE 1024
-
-/* use segmented list for IV table */
-//#define MRB_USE_IV_SEGLIST
-
-/* initial size for IV khash; ignored when MRB_USE_IV_SEGLIST is set */
-//#define MRB_IVHASH_INIT_SIZE 8
 
 /* if _etext and _edata available, mruby can reduce memory used by symbols */
 //#define MRB_USE_ETEXT_EDATA
@@ -94,10 +98,10 @@
 //#define MRB_FIXED_STATE_ATEXIT_STACK
 
 /* -DMRB_DISABLE_XXXX to drop following features */
-//#define MRB_DISABLE_STDIO	/* use of stdio */
+//#define MRB_DISABLE_STDIO /* use of stdio */
 
 /* -DMRB_ENABLE_XXXX to enable following features */
-//#define MRB_ENABLE_DEBUG_HOOK	/* hooks for debugger */
+//#define MRB_ENABLE_DEBUG_HOOK /* hooks for debugger */
 
 /* end of configuration */
 

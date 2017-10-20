@@ -260,6 +260,8 @@ end
 assert('Kernel#freeze') do
   obj = Object.new
   assert_equal obj, obj.freeze
+  assert_equal 0, 0.freeze
+  assert_equal :a, :a.freeze
 end
 
 assert('Kernel#global_variables', '15.3.1.3.14') do
@@ -357,6 +359,26 @@ assert('Kernel#method_missing', '15.3.1.3.30') do
   mm_test = MMTestClass.new
   assert_equal 'A call to no_method_named_this', mm_test.no_method_named_this
 
+  class SuperMMTestClass < MMTestClass
+    def no_super_method_named_this
+      super
+    end
+  end
+  super_mm_test = SuperMMTestClass.new
+  assert_equal 'A call to no_super_method_named_this', super_mm_test.no_super_method_named_this
+
+  class NoSuperMethodTestClass
+    def no_super_method_named_this
+      super
+    end
+  end
+  no_super_test = NoSuperMethodTestClass.new
+  begin
+    no_super_test.no_super_method_named_this
+  rescue NoMethodError => e
+    assert_equal "undefined method 'no_super_method_named_this' for #{no_super_test}", e.message
+  end
+
   a = String.new
   begin
     a.no_method_named_this
@@ -385,7 +407,7 @@ assert('Kernel#method_missing', '15.3.1.3.30') do
   begin
     c.no_method_named_this
   rescue NoMethodError => e
-    assert_equal "undefined method 'no_method_named_this' for #{c.to_s}", e.message
+    assert_equal "undefined method 'no_method_named_this' for #{c}", e.message
   end
 
   class NoInspectClass
@@ -395,7 +417,7 @@ assert('Kernel#method_missing', '15.3.1.3.30') do
   begin
     d.no_method_named_this
   rescue NoMethodError => e
-    assert_equal "undefined method 'no_method_named_this' for #{d.to_s}", e.message
+    assert_equal "undefined method 'no_method_named_this' for #{d}", e.message
   end
 end
 
@@ -547,11 +569,10 @@ assert('Kernel.local_variables', '15.3.1.2.7') do
   vars = Kernel.local_variables.sort
   assert_equal [:a, :b, :vars], vars
 
-  Proc.new {
+  assert_equal [:a, :b, :c, :vars], Proc.new { |a, b|
     c = 2
-    vars = Kernel.local_variables.sort
-    assert_equal [:a, :b, :c, :vars], vars
-  }.call
+    Kernel.local_variables.sort
+  }.call(-1, -2)
 end
 
 assert('Kernel#!=') do
@@ -620,4 +641,3 @@ assert('stack extend') do
 
   assert_equal 6, recurse(0, 5)
 end
-

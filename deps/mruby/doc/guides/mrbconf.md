@@ -122,20 +122,9 @@ largest value of required alignment.
 * If defined `Float` will be a mruby object with `RBasic`.
 
 ## Instance variable configuration.
-`MRB_USE_IV_SEGLIST`
-* If defined enable segmented list in instance variable table instead of khash.
-* Segmented list is a linked list of key and value segments.
-* It will linear search instead of hash search.
-
-`MRB_SEGMENT_SIZE`
+`MRB_IV_SEGMENT_SIZE`
 * Default value is `4`.
 * Specifies size of each segment in segment list.
-* Ignored when `MRB_USE_IV_SEGLIST` isn't defined.
-
-`MRB_IVHASH_INIT_SIZE`
-* Default value is `8`.
-* Specifies initial size for instance variable table.
-* Ignored when `MRB_USE_IV_SEGLIST` is defined.
 
 ## Other configuration.
 `MRB_UTF8_STRING`

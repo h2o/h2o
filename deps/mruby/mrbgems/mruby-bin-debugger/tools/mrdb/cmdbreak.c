@@ -70,12 +70,12 @@ parse_breakpoint_no(char* args)
   char* ps = args;
   uint32_t l;
 
-  if((*ps == '0')||(strlen(ps) >= BPNO_LETTER_NUM)) {
+  if ((*ps == '0')||(strlen(ps) >= BPNO_LETTER_NUM)) {
     return 0;
   }
 
-  while( !(ISBLANK(*ps)||ISCNTRL(*ps)) ) {
-    if(!ISDIGIT(*ps)) {
+  while (!(ISBLANK(*ps)||ISCNTRL(*ps))) {
+    if (!ISDIGIT(*ps)) {
       return 0;
     }
     ps++;
@@ -90,7 +90,7 @@ exe_set_command_all(mrb_state *mrb, mrdb_state *mrdb, all_command_func func)
 {
   int32_t ret = MRB_DEBUG_OK;
 
-  if(mrdb->wcnt == 1) {
+  if (mrdb->wcnt == 1) {
     ret = func(mrb, mrdb->dbg);
     print_api_common_error(ret);
     return TRUE;
@@ -109,15 +109,15 @@ exe_set_command_select(mrb_state *mrb, mrdb_state *mrdb, select_command_func fun
   for(i=1; i<mrdb->wcnt; i++) {
     ps = mrdb->words[i];
     bpno = parse_breakpoint_no(ps);
-    if(bpno == 0) {
+    if (bpno == 0) {
       printf(BREAK_ERR_MSG_INVALIDBPNO, ps);
       break;
     }
     ret = func(mrb, mrdb->dbg, (uint32_t)bpno);
-    if(ret == MRB_DEBUG_BREAK_INVALID_NO) {
+    if (ret == MRB_DEBUG_BREAK_INVALID_NO) {
       printf(BREAK_ERR_MSG_NOBPNO, bpno);
     }
-    else if(ret != MRB_DEBUG_OK) {
+    else if (ret != MRB_DEBUG_OK) {
       print_api_common_error(ret);
     }
   }
@@ -128,24 +128,24 @@ check_bptype(char* args)
 {
   char* ps = args;
 
-  if(ISBLANK(*ps)||ISCNTRL(*ps)) {
+  if (ISBLANK(*ps)||ISCNTRL(*ps)) {
     puts(BREAK_ERR_MSG_BLANK);
     return MRB_DEBUG_BPTYPE_NONE;
   }
 
-  if(!ISDIGIT(*ps)) {
+  if (!ISDIGIT(*ps)) {
     return MRB_DEBUG_BPTYPE_METHOD;
   }
 
-  while( !(ISBLANK(*ps)||ISCNTRL(*ps)) ) {
-    if(!ISDIGIT(*ps)) {
+  while (!(ISBLANK(*ps)||ISCNTRL(*ps))) {
+    if (!ISDIGIT(*ps)) {
       printf(BREAK_ERR_MSG_INVALIDSTR, args);
       return MRB_DEBUG_BPTYPE_NONE;
     }
     ps++;
   }
 
-  if((*args == '0')||(strlen(args) >= LINENO_MAX_DIGIT)) {
+  if ((*args == '0')||(strlen(args) >= LINENO_MAX_DIGIT)) {
     puts(BREAK_ERR_MSG_RANGEOVER);
     return MRB_DEBUG_BPTYPE_NONE;
   }
@@ -158,12 +158,12 @@ print_breakpoint(mrb_debug_breakpoint *bp)
 {
   const char* enable_letter[] = {BREAK_INFO_MSG_DISABLE, BREAK_INFO_MSG_ENABLE};
 
-  if(bp->type == MRB_DEBUG_BPTYPE_LINE) {
+  if (bp->type == MRB_DEBUG_BPTYPE_LINE) {
     printf(BREAK_INFO_MSG_LINEBREAK,
       bp->bpno, enable_letter[bp->enable], bp->point.linepoint.file, bp->point.linepoint.lineno);
   }
   else {
-    if(bp->point.methodpoint.class_name == NULL) {
+    if (bp->point.methodpoint.class_name == NULL) {
       printf(BREAK_INFO_MSG_METHODBREAK_NOCLASS,
         bp->bpno, enable_letter[bp->enable], bp->point.methodpoint.method_name);
     }
@@ -183,18 +183,18 @@ info_break_all(mrb_state *mrb, mrdb_state *mrdb)
   mrb_debug_breakpoint *bp_list;
 
   bpnum = mrb_debug_get_breaknum(mrb, mrdb->dbg);
-  if(bpnum < 0) {
+  if (bpnum < 0) {
     print_api_common_error(bpnum);
     return;
   }
-  else if(bpnum == 0) {
+  else if (bpnum == 0) {
     puts(BREAK_ERR_MSG_NOBPNO_INFOALL);
     return;
   }
   bp_list = (mrb_debug_breakpoint*)mrb_malloc(mrb, bpnum * sizeof(mrb_debug_breakpoint));
 
   ret = mrb_debug_get_break_all(mrb, mrdb->dbg, (uint32_t)bpnum, bp_list);
-  if(ret < 0) {
+  if (ret < 0) {
     print_api_common_error(ret);
     return;
   }
@@ -219,21 +219,21 @@ info_break_select(mrb_state *mrb, mrdb_state *mrdb)
   for(i=2; i<mrdb->wcnt; i++) {
     ps = mrdb->words[i];
     bpno = parse_breakpoint_no(ps);
-    if(bpno == 0) {
+    if (bpno == 0) {
       puts(BREAK_ERR_MSG_INVALIDBPNO_INFO);
       break;
     }
 
     ret = mrb_debug_get_break(mrb, mrdb->dbg, bpno, &bp);
-    if(ret == MRB_DEBUG_BREAK_INVALID_NO) {
+    if (ret == MRB_DEBUG_BREAK_INVALID_NO) {
       printf(BREAK_ERR_MSG_NOBPNO_INFO, bpno);
       break;
     }
-    else if(ret != MRB_DEBUG_OK) {
+    else if (ret != MRB_DEBUG_OK) {
       print_api_common_error(ret);
       break;
     }
-    else if(isFirst == TRUE) {
+    else if (isFirst == TRUE) {
       isFirst = FALSE;
       puts(BREAK_INFO_MSG_HEADER);
     }
@@ -250,17 +250,18 @@ parse_breakcommand(mrdb_state *mrdb, const char **file, uint32_t *line, char **c
   mrb_debug_bptype type;
   uint32_t l;
 
-  if(mrdb->wcnt <= 1) {
+  if (mrdb->wcnt <= 1) {
     puts(BREAK_ERR_MSG_BLANK);
     return MRB_DEBUG_BPTYPE_NONE;
   }
 
   args = mrdb->words[1];
-  if((body = strrchr(args, ':')) == NULL) {
+  if ((body = strrchr(args, ':')) == NULL) {
     body = args;
     type = check_bptype(body);
-  } else {
-    if(body == args) {
+  }
+  else {
+    if (body == args) {
       printf(BREAK_ERR_MSG_INVALIDSTR, args);
       return MRB_DEBUG_BPTYPE_NONE;
     }
@@ -271,26 +272,29 @@ parse_breakcommand(mrdb_state *mrdb, const char **file, uint32_t *line, char **c
   switch(type) {
     case MRB_DEBUG_BPTYPE_LINE:
       STRTOUL(l, body);
-      if( l <= 65535 ) {
+      if (l <= 65535) {
         *line = l;
-        *file = (body == args)? mrb_debug_get_filename(dbg->irep, (uint32_t)(dbg->pc - dbg->irep->iseq)): args;
-      } else {
+        *file = (body == args)? mrb_debug_get_filename(dbg->irep, dbg->pc - dbg->irep->iseq): args;
+      }
+      else {
         puts(BREAK_ERR_MSG_RANGEOVER);
         type = MRB_DEBUG_BPTYPE_NONE;
       }
       break;
     case MRB_DEBUG_BPTYPE_METHOD:
-      if(body == args) {
+      if (body == args) {
         /* method only */
-        if( ISUPPER(*body)||ISLOWER(*body)||(*body == '_') ) {
+        if (ISUPPER(*body)||ISLOWER(*body)||(*body == '_')) {
           *method = body;
           *cname = NULL;
-        } else {
+        }
+        else {
           printf(BREAK_ERR_MSG_INVALIDMETHOD, args);
           type = MRB_DEBUG_BPTYPE_NONE;
         }
-      } else {
-        if( ISUPPER(*args) ) {
+      }
+      else {
+        if (ISUPPER(*args)) {
           switch(*body) {
             case '@': case '$': case '?': case '.': case ',': case ':':
             case ';': case '#': case '\\': case '\'': case '\"':
@@ -302,7 +306,8 @@ parse_breakcommand(mrdb_state *mrdb, const char **file, uint32_t *line, char **c
             *cname = args;
             break;
           }
-        } else {
+        }
+        else {
           printf(BREAK_ERR_MSG_INVALIDCLASS, args);
           type = MRB_DEBUG_BPTYPE_NONE;
         }
@@ -343,12 +348,15 @@ dbgcmd_break(mrb_state *mrb, mrdb_state *mrdb)
   if (ret >= 0) {
     if (type == MRB_DEBUG_BPTYPE_LINE) {
       printf(BREAK_SET_MSG_LINE, ret, file, line);
-    } else if ((type == MRB_DEBUG_BPTYPE_METHOD)&&(cname == NULL)) {
+    }
+    else if ((type == MRB_DEBUG_BPTYPE_METHOD)&&(cname == NULL)) {
       printf(BREAK_SET_MSG_METHOD, ret, method);
-    } else {
+    }
+    else {
       printf(BREAK_SET_MSG_CLASS_METHOD, ret, cname, method);
     }
-  } else {
+  }
+  else {
     switch (ret) {
       case MRB_DEBUG_BREAK_INVALID_LINENO:
         printf(BREAK_ERR_MSG_INVALIDLINENO, line, file);
@@ -379,7 +387,7 @@ dbgcmd_break(mrb_state *mrb, mrdb_state *mrdb)
 dbgcmd_state
 dbgcmd_info_break(mrb_state *mrb, mrdb_state *mrdb)
 {
-  if(mrdb->wcnt == 2) {
+  if (mrdb->wcnt == 2) {
     info_break_all(mrb, mrdb);
   }
   else {
@@ -395,7 +403,7 @@ dbgcmd_delete(mrb_state *mrb, mrdb_state *mrdb)
   mrb_bool ret = FALSE;
 
   ret = exe_set_command_all(mrb, mrdb, mrb_debug_delete_break_all);
-  if(ret != TRUE) {
+  if (ret != TRUE) {
     exe_set_command_select(mrb, mrdb, mrb_debug_delete_break);
   }
 
@@ -408,7 +416,7 @@ dbgcmd_enable(mrb_state *mrb, mrdb_state *mrdb)
   mrb_bool ret = FALSE;
 
   ret = exe_set_command_all(mrb, mrdb, mrb_debug_enable_break_all);
-  if(ret != TRUE) {
+  if (ret != TRUE) {
     exe_set_command_select(mrb, mrdb, mrb_debug_enable_break);
   }
 
@@ -421,7 +429,7 @@ dbgcmd_disable(mrb_state *mrb, mrdb_state *mrdb)
   mrb_bool ret = FALSE;
 
   ret = exe_set_command_all(mrb, mrdb, mrb_debug_disable_break_all);
-  if(ret != TRUE) {
+  if (ret != TRUE) {
     exe_set_command_select(mrb, mrdb, mrb_debug_disable_break);
   }
   return DBGST_PROMPT;

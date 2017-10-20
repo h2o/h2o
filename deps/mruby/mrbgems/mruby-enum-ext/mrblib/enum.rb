@@ -124,6 +124,7 @@ module Enumerable
       ary << val.__svalue
       block.call(ary.dup) if ary.size == n
     end
+    nil
   end
 
   ##
@@ -154,6 +155,7 @@ module Enumerable
       end
     end
     block.call(ary) unless ary.empty?
+    nil
   end
 
   ##
@@ -199,7 +201,7 @@ module Enumerable
       ary.push([block.call(e), i])
     }
     if ary.size > 1
-      __sort_sub__(ary, ::Array.new(ary.size), 0, 0, ary.size - 1) do |a,b|
+      __sort_sub__(ary, 0, ary.size - 1) do |a,b|
         a <=> b
       end
     end

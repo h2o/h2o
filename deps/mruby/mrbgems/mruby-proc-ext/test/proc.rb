@@ -53,20 +53,10 @@ assert('Proc#parameters') do
   assert_equal([[:req, :a]], lambda {|a|}.parameters)
   assert_equal([[:opt, :a]], lambda {|a=nil|}.parameters)
   assert_equal([[:req, :a]], ->(a){}.parameters)
+  assert_equal([[:rest]], lambda { |*| }.parameters)
   assert_equal([[:rest, :a]], Proc.new {|*a|}.parameters)
   assert_equal([[:opt, :a], [:opt, :b], [:opt, :c], [:opt, :d], [:rest, :e], [:opt, :f], [:opt, :g], [:block, :h]], Proc.new {|a,b,c=:c,d=:d,*e,f,g,&h|}.parameters)
   assert_equal([[:req, :a], [:req, :b], [:opt, :c], [:opt, :d], [:rest, :e], [:req, :f], [:req, :g], [:block, :h]], lambda {|a,b,c=:c,d=:d,*e,f,g,&h|}.parameters)
-end
-
-assert('Proc#parameters with uninitialized Proc') do
-  begin
-    Proc.alias_method(:original_initialize, :initialize)
-    Proc.remove_method(:initialize)
-    assert_equal [], Proc.new{|a, b, c| 1}.parameters
-  ensure
-    Proc.alias_method(:initialize, :original_initialize)
-    Proc.remove_method(:original_initialize)
-  end
 end
 
 assert('Proc#to_proc') do
@@ -76,6 +66,10 @@ end
 
 assert('Kernel#proc') do
   assert_true !proc{|a|}.lambda?
+
+  assert_raise LocalJumpError do
+    proc{ break }.call
+  end
 end
 
 assert('mrb_proc_new_cfunc_with_env') do

@@ -3,7 +3,6 @@ addons:
   apt:
     packages:
       - gperf
-      - libonig-dev
 script:
   - export MRUBY_CONFIG="$TRAVIS_BUILD_DIR/.travis_config.rb"
   - git clone --depth 1 "https://github.com/mruby/mruby.git"

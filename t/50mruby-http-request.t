@@ -110,14 +110,25 @@ hosts:
             resp[2] = ESIResponse.new(resp[2].join)
             resp
           end
-      /fast-path-partial:
+      /partial:
         mruby.handler: |
+          class PartialBody
+            def initialize(body)
+              \@body = body
+            end
+            def each
+             \@body.each {|buf|
+               if \@first_received
+                 yield buf
+               else
+                 \@first_received = true
+               end
+             }
+            end
+          end
           Proc.new do |env|
             resp = http_request("http://$upstream_hostport/streaming-body").join
-            resp[2].each do |x|
-              break
-            end
-            resp
+            [resp[0], resp[1], PartialBody.new(resp[2])]
           end
       /async-delegate:
         mruby.handler: |
@@ -204,8 +215,8 @@ run_with_curl($server, sub {
         like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, "Hello to the world, from H2O!\n";
     };
-    subtest "fast-path-partial" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/fast-path-partial/");
+    subtest "partial" => sub {
+        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/partial/");
         like $headers, qr{HTTP/[^ ]+ 200\s}is;
         is $body, join "", 2..30;
     };
@@ -222,5 +233,152 @@ run_with_curl($server, sub {
         };
     };
 });
+
+subtest 'cache-response' => sub {
+    my $upstream = create_upstream();
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  default:
+    paths:
+      /cache-response:
+        mruby.handler: |
+          resp = http_request("http://$upstream_hostport/index.txt").join
+          resp[2] = [resp[2].join]
+          Proc.new do |env|
+            resp
+          end
+EOT
+    });
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl_cmd) = @_;
+        $curl_cmd .= ' --silent --dump-header /dev/stderr';
+
+        subtest "cache-response" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cache-response");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, "hello\n";
+        };
+    });
+};
+
+subtest 'double consume' => sub {
+    my $upstream = create_upstream();
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /check-alive:
+        mruby.handler: proc { [200, {}, []] }
+      /join-join:
+        mruby.handler: |
+          Proc.new do |env|
+            resp = http_request("http://$upstream_hostport/index.txt").join
+            resp[2].join
+            resp[2].join
+            [200, {}, []]
+          end
+      /join-chunked:
+        mruby.handler: |
+          Proc.new do |env|
+            resp = http_request("http://$upstream_hostport/index.txt").join
+            resp[2].join
+            [200, {}, resp[2]]
+          end
+      /chunked-join:
+        mruby.handler: |
+          resp = nil
+          Proc.new do |env|
+            if resp
+              resp[2].join
+            else
+              resp = http_request("http://$upstream_hostport/index.txt").join
+            end
+            [200, {}, resp[2]]
+          end
+      /chunked-chunked:
+        mruby.handler: |
+          resp = nil
+          Proc.new do |env|
+            resp ||= http_request("http://$upstream_hostport/index.txt").join
+            [200, {}, resp[2]]
+          end
+EOT
+    });
+
+    my $tester = sub {
+        local $Test::Builder::Level = $Test::Builder::Level + 1;
+        my ($path, $expected) = @_;
+        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}$path");
+        like $headers, qr{HTTP/[^ ]+ $expected\s}is;
+    };
+
+    subtest "join-join" => sub {
+        $tester->('/join-join', 500);
+        $tester->('/check-alive', 200);
+    };
+    subtest "join-chunked" => sub {
+        $tester->('/join-chunked', 500);
+        $tester->('/check-alive', 200);
+    };
+    subtest "chunked-join" => sub {
+        $tester->('/chunked-join', 200);
+        $tester->('/chunked-join', 500);
+        $tester->('/check-alive', 200);
+    };
+    subtest "chunked-chunked" => sub {
+        $tester->('/chunked-chunked', 200);
+        $tester->('/chunked-chunked', 500);
+        $tester->('/check-alive', 200);
+    };
+};
+
+subtest 'empty body' => sub {
+    my $upstream = create_upstream();
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  default:
+    paths:
+      /no-content:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/no-content").join
+            resp[2] = [resp[2].join]
+            resp
+          }
+      /head:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/index.txt", { :method => 'HEAD' }).join
+            resp[2] = [resp[2].join]
+            resp
+          }
+EOT
+    });
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl_cmd) = @_;
+        $curl_cmd .= ' --silent --dump-header /dev/stderr';
+
+        subtest "no content" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd -m 1 $proto://127.0.0.1:$port/no-content");
+            like $headers, qr{HTTP/[^ ]+ 204\s}is;
+            is $body, "";
+        };
+
+        subtest "head" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd -m 1 $proto://127.0.0.1:$port/head");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, "";
+        };
+    });
+};
 
 done_testing();

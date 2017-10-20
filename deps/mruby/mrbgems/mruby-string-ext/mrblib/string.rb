@@ -95,6 +95,7 @@ class String
   #    "hello".lstrip!      #=> nil
   #
   def lstrip!
+    raise RuntimeError, "can't modify frozen String" if frozen?
     s = self.lstrip
     (s == self) ? nil : self.replace(s)
   end
@@ -111,6 +112,7 @@ class String
   #    "hello".rstrip!      #=> nil
   #
   def rstrip!
+    raise RuntimeError, "can't modify frozen String" if frozen?
     s = self.rstrip
     (s == self) ? nil : self.replace(s)
   end
@@ -123,6 +125,7 @@ class String
   #  <code>nil</code> if <i>str</i> was not altered.
   #
   def strip!
+    raise RuntimeError, "can't modify frozen String" if frozen?
     s = self.strip
     (s == self) ? nil : self.replace(s)
   end
@@ -183,6 +186,7 @@ class String
   #    string                  #=> "thsa sting"
   #
   def slice!(arg1, arg2=nil)
+    raise RuntimeError, "can't modify frozen String" if frozen?
     raise "wrong number of arguments (for 1..2)" if arg1.nil? && arg2.nil?
 
     if !arg1.nil? && !arg2.nil?
@@ -275,15 +279,11 @@ class String
   #     "hello".ljust(20)           #=> "hello               "
   #     "hello".ljust(20, '1234')   #=> "hello123412341234123"
   def ljust(idx, padstr = ' ')
-    if idx <= self.size
-      return self
-    end
-    newstr = self.dup
-    newstr << padstr
-    while newstr.size <= idx
-      newstr << padstr
-    end
-    return newstr.slice(0,idx)
+    raise ArgumentError, 'zero width padding' if padstr == ''
+    return self if idx <= self.size
+    pad_repetitions = (idx / padstr.length).ceil
+    padding = (padstr * pad_repetitions)[0...(idx - self.length)]
+    self + padding
   end
 
   ##
@@ -298,58 +298,11 @@ class String
   #     "hello".rjust(20)           #=> "               hello"
   #     "hello".rjust(20, '1234')   #=> "123412341234123hello"
   def rjust(idx, padstr = ' ')
-    if idx <= self.size
-      return self
-    end
-      padsize = idx - self.size
-      newstr = padstr.dup
-      while newstr.size <= padsize
-        newstr << padstr
-      end
-    return newstr.slice(0,padsize) + self
-  end
-
-  #     str.upto(other_str, exclusive=false) {|s| block }   -> str
-  #     str.upto(other_str, exclusive=false)                -> an_enumerator
-  #
-  #  Iterates through successive values, starting at <i>str</i> and
-  #  ending at <i>other_str</i> inclusive, passing each value in turn to
-  #  the block. The <code>String#succ</code> method is used to generate
-  #  each value.  If optional second argument exclusive is omitted or is false,
-  #  the last value will be included; otherwise it will be excluded.
-  #
-  #  If no block is given, an enumerator is returned instead.
-  #
-  #     "a8".upto("b6") {|s| print s, ' ' }
-  #     for s in "a8".."b6"
-  #       print s, ' '
-  #     end
-  #
-  #  <em>produces:</em>
-  #
-  #     a8 a9 b0 b1 b2 b3 b4 b5 b6
-  #     a8 a9 b0 b1 b2 b3 b4 b5 b6
-  #
-  #  If <i>str</i> and <i>other_str</i> contains only ascii numeric characters,
-  #  both are recognized as decimal numbers. In addition, the width of
-  #  string (e.g. leading zeros) is handled appropriately.
-  #
-  #     "9".upto("11").to_a   #=> ["9", "10", "11"]
-  #     "25".upto("5").to_a   #=> []
-  #     "07".upto("11").to_a  #=> ["07", "08", "09", "10", "11"]
-  #
-  def upto(other_str, excl=false, &block)
-    return to_enum :upto, other_str, excl unless block
-
-    str = self
-    n = self.<=>other_str
-    return self if n > 0 || (self == other_str && excl)
-    while true
-      block.call(str)
-      return self if !excl && str == other_str
-      str = str.succ
-      return self if excl && str == other_str
-    end
+    raise ArgumentError, 'zero width padding' if padstr == ''
+    return self if idx <= self.size
+    pad_repetitions = (idx / padstr.length).ceil
+    padding = (padstr * pad_repetitions)[0...(idx - self.length)]
+    padding + self
   end
 
   def chars(&block)
@@ -385,4 +338,18 @@ class String
     end
   end
   alias each_codepoint codepoints
+
+  ##
+  # call-seq:
+  #    str.prepend(other_str)  -> str
+  #
+  # Prepend---Prepend the given string to <i>str</i>.
+  #
+  #    a = "world"
+  #    a.prepend("hello ") #=> "hello world"
+  #    a                   #=> "hello world"
+  def prepend(arg)
+    self[0, 0] = arg
+    self
+  end
 end

@@ -66,6 +66,10 @@ static void queue_cb(h2o_multithread_queue_t *queue)
     pthread_mutex_unlock(&queue->mutex);
 }
 
+#ifdef H2O_NO_64BIT_ATOMICS
+pthread_mutex_t h2o_conn_id_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 #if H2O_USE_LIBUV
 #else
 
@@ -230,4 +234,41 @@ void h2o_sem_set_capacity(h2o_sem_t *sem, ssize_t new_capacity)
     sem->_capacity = new_capacity;
     pthread_cond_broadcast(&sem->_cond);
     pthread_mutex_unlock(&sem->_mutex);
+}
+
+/* barrier */
+
+void h2o_barrier_init(h2o_barrier_t *barrier, size_t count)
+{
+    pthread_mutex_init(&barrier->_mutex, NULL);
+    pthread_cond_init(&barrier->_cond, NULL);
+    barrier->_count = count;
+}
+
+int h2o_barrier_wait(h2o_barrier_t *barrier)
+{
+    int ret;
+    pthread_mutex_lock(&barrier->_mutex);
+    barrier->_count--;
+    if (barrier->_count == 0) {
+        pthread_cond_broadcast(&barrier->_cond);
+        ret = 1;
+    } else {
+        while (barrier->_count)
+            pthread_cond_wait(&barrier->_cond, &barrier->_mutex);
+        ret = 0;
+    }
+    pthread_mutex_unlock(&barrier->_mutex);
+    return ret;
+}
+
+int h2o_barrier_done(h2o_barrier_t *barrier)
+{
+    return __sync_add_and_fetch(&barrier->_count, 0) == 0;
+}
+
+void h2o_barrier_destroy(h2o_barrier_t *barrier)
+{
+    pthread_mutex_destroy(&barrier->_mutex);
+    pthread_cond_destroy(&barrier->_cond);
 }

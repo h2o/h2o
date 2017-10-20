@@ -6,13 +6,17 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'racy under valgrind' if $ENV{"H2O_VALGRIND"};
 
 my $tempdir = tempdir(CLEANUP => 1);
 
 sub doit {
-    my ($cmd, $format, @expected) = @_;
+    my ($cmd, $args, @expected) = @_;
 
     unlink "$tempdir/access_log";
+
+    $args = { format => $args }
+        unless ref $args;
 
     my $server = spawn_h2o(<< "EOT");
 ssl-session-resumption:
@@ -35,7 +39,8 @@ hosts:
         header.add: "cache-control: must-revalidate"
         header.add: "cache-control: no-store"
     access-log:
-      format: "$format"
+      format: "$args->{format}"
+@{[$args->{escape} ? "      escape: $args->{escape}" : ""]}
       path: $tempdir/access_log
 EOT
 
@@ -213,8 +218,37 @@ subtest 'set-cookie' => sub {
             my $server = shift;
             system("curl --silent http://127.0.0.1:$server->{port}/set-cookie/ > /dev/null");
         },
-        '%{set-cookie}o %{cache-control}o',
-        qr{^a=b, c=d must-revalidate$}s,
+        '\\"%<{set-cookie}o\\" \\"%>{set-cookie}o\\" \\"%{set-cookie}o\\" \\"%{cache-control}o\\"',
+        qr{^"-" "a=b, c=d" "a=b, c=d" "must-revalidate"$}s,
+    );
+};
+
+subtest 'escape' => sub {
+    for my $i ([default => qr{^/\\xe3\\x81\\x82$}s], [apache => qr{^/\\xe3\\x81\\x82$}s], [json => qr{^/\\u00e3\\u0081\\u0082$}s]) {
+        my ($escape, $expected) = @$i;
+        subtest $escape => sub {
+            doit(
+                sub {
+                    my $server = shift;
+                    system("curl --silent http://127.0.0.1:$server->{port}/\xe3\x81\x82 > /dev/null");
+                },
+                $escape eq 'default' ? '%U' : { format => '%U', escape => $escape },
+                $expected,
+            );
+        };
+    }
+};
+
+subtest "json-null" => sub {
+    doit(
+        sub {
+            my $server = shift;
+            system("curl --silent http://127.0.0.1:$server->{port}/ > /dev/null");
+        },
+        # single specifier surrounded by quotes that consist a string literal in JSON should be converted to `null` if the specifier
+        # resolves to null
+        { format => '\\"%h\\" %l \\"%l\\" \'%l\' \'%l \' \'\\"%l\\"\'', escape => 'json' },
+        qr{^"127\.0\.0\.1" null null null 'null ' '"null"'$},
     );
 };
 

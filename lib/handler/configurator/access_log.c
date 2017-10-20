@@ -34,6 +34,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
 {
     struct st_h2o_access_log_configurator_t *self = (void *)cmd->configurator;
     const char *path, *fmt = NULL;
+    int escape = H2O_LOGCONF_ESCAPE_APACHE;
     h2o_access_log_filehandle_t *fh;
 
     switch (node->type) {
@@ -60,6 +61,19 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
             }
             fmt = t->data.scalar;
         }
+        /* get escape */
+        if ((t = yoml_get(node, "escape")) != NULL) {
+            switch (h2o_configurator_get_one_of(cmd, t, "apache,json")) {
+            case 0:
+                escape = H2O_LOGCONF_ESCAPE_APACHE;
+                break;
+            case 1:
+                escape = H2O_LOGCONF_ESCAPE_JSON;
+                break;
+            default:
+                return -1;
+            }
+        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
@@ -67,7 +81,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
     }
 
     if (!ctx->dry_run) {
-        if ((fh = h2o_access_log_open_handle(path, fmt)) == NULL)
+        if ((fh = h2o_access_log_open_handle(path, fmt, escape)) == NULL)
             return -1;
         h2o_vector_reserve(NULL, self->handles, self->handles->size + 1);
         self->handles->entries[self->handles->size++] = fh;

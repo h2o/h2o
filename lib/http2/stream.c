@@ -45,7 +45,6 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
     h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
     stream->received_priority = *received_priority;
-    stream->_expected_content_length = SIZE_MAX;
 
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
@@ -65,8 +64,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    if (stream->_req_body != NULL)
-        h2o_buffer_dispose(&stream->_req_body);
+    if (stream->_req_body.body != NULL)
+        h2o_buffer_dispose(&stream->_req_body.body);
     if (stream->cache_digests != NULL)
         h2o_cache_digests_destroy(stream->cache_digests);
     h2o_dispose_request(&stream->req);
@@ -234,7 +233,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
     /* reset casper cookie in case cache-digests exist */
     if (stream->cache_digests != NULL && stream->req.hostconf->http2.casper.capacity_bits != 0) {
-        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE,
+        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, NULL,
                        H2O_STRLIT("h2o_casper=; Path=/; Expires=Sat, 01 Jan 2000 00:00:00 GMT"));
     }
 
@@ -262,7 +261,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
                 goto SkipCookie;
         }
         h2o_iovec_t cookie = h2o_http2_casper_get_cookie(conn->casper);
-        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, cookie.base, cookie.len);
+        h2o_add_header(&stream->req.pool, &stream->req.res.headers, H2O_TOKEN_SET_COOKIE, NULL, cookie.base, cookie.len);
     SkipCookie:;
     }
 
@@ -284,7 +283,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
     /* send HEADERS, as well as start sending body */
     if (h2o_http2_stream_is_push(stream->stream_id))
-        h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, H2O_STRLIT("pushed"));
+        h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
+                              H2O_STRLIT("pushed"));
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                conn->peer_settings.max_frame_size, &stream->req.res, &ts, &conn->super.ctx->globalconf->server_name,
                                stream->req.res.content_length);
@@ -294,7 +294,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     return 0;
 
 CancelPush:
-    h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, H2O_STRLIT("cancelled"));
+    h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
+                          H2O_STRLIT("cancelled"));
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
     h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
     if (stream->push.promise_sent) {
@@ -311,6 +312,9 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
 
     assert(stream->req._ostr_top == &stream->_ostr_final);
     assert(stream->state == H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+
+    assert(stream->blocked_by_server);
+    h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
 
     /* register the pull callback */
     stream->_pull_cb = cb;
@@ -335,10 +339,19 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
     assert(stream->_data.size == 0);
 
+    if (stream->blocked_by_server)
+        h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
+
     stream->send_state = state;
 
     /* send headers */
     switch (stream->state) {
+    case H2O_HTTP2_STREAM_STATE_RECV_BODY:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+    /* fallthru */
+    case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+    /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
         if (send_headers(conn, stream) != 0)
             return;
@@ -402,6 +415,8 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
         h2o_http2_stream_close(conn, stream);
     } else {
+        if (!stream->blocked_by_server)
+            h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
         h2o_proceed_response(&stream->req);
     }
 }

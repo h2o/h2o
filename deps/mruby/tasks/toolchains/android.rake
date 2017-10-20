@@ -186,6 +186,22 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
     @platform
   end
 
+  def armeabi_v7a_mfpu
+    @armeabi_v7a_mfpu ||= (params[:mfpu] || 'vfpv3-d16').to_s
+  end
+
+  def armeabi_v7a_mfloat_abi
+    @armeabi_v7a_mfloat_abi ||= (params[:mfloat_abi] || 'softfp').to_s
+  end
+
+  def no_warn_mismatch
+    if %W(soft softfp).include? armeabi_v7a_mfloat_abi
+      ''
+    else
+      ',--no-warn-mismatch'
+    end
+  end
+
   def cc
     case toolchain
     when :gcc then bin_gcc('gcc')
@@ -200,24 +216,21 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
     end
   end
 
-  def cflags
+  def ctarget
     flags = []
 
-    flags += %W(-D__android__ --sysroot="#{sysroot}")
     case toolchain
     when :gcc
-      flags += %W(-mandroid)
       case arch
       when /armeabi-v7a/  then flags += %W(-march=armv7-a)
       when /armeabi/      then flags += %W(-march=armv5te)
       when /arm64-v8a/    then flags += %W(-march=armv8-a)
       when /x86_64/       then flags += %W(-march=x86-64)
       when /x86/          then flags += %W(-march=i686)
-      when /mips64/       then flags += %W(-march=mips64)
+      when /mips64/       then flags += %W(-march=mips64r6)
       when /mips/         then flags += %W(-march=mips32)
       end
     when :clang
-      flags += %W(-gcc-toolchain "#{gcc_toolchain_path.to_s}")
       case arch
       when /armeabi-v7a/  then flags += %W(-target armv7-none-linux-androideabi)
       when /armeabi/      then flags += %W(-target armv5te-none-linux-androideabi)
@@ -229,9 +242,66 @@ Set ANDROID_PLATFORM environment variable or set :platform parameter
       end
     end
 
+    case arch
+    when /armeabi-v7a/  then flags += %W(-mfpu=#{armeabi_v7a_mfpu} -mfloat-abi=#{armeabi_v7a_mfloat_abi})
+    when /armeabi/      then flags += %W(-mtune=xscale -msoft-float)
+    when /arm64-v8a/    then flags += %W()
+    when /x86_64/       then flags += %W()
+    when /x86/          then flags += %W()
+    when /mips64/       then flags += %W(-fmessage-length=0)
+    when /mips/         then flags += %W(-fmessage-length=0)
+    end
+
     flags
   end
 
+  def cflags
+    flags = []
+
+    flags += %W(-MMD -MP -D__android__ -DANDROID --sysroot="#{sysroot}")
+    flags += ctarget
+    case toolchain
+    when :gcc
+    when :clang
+      flags += %W(-gcc-toolchain "#{gcc_toolchain_path}" -Wno-invalid-command-line-argument -Wno-unused-command-line-argument)
+    end
+    flags += %W(-fpic -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes)
+
+    flags
+  end
+
+  def ldflags
+    flags = []
+
+    flags += %W(--sysroot="#{sysroot}")
+
+    flags
+  end
+
+  def ldflags_before_libraries
+    flags = []
+
+    case toolchain
+    when :gcc
+      case arch
+      when /armeabi-v7a/  then flags += %W(-Wl#{no_warn_mismatch})
+      end
+    when :clang
+      flags += %W(-gcc-toolchain "#{gcc_toolchain_path.to_s}")
+      case arch
+      when /armeabi-v7a/  then flags += %W(-target armv7-none-linux-androideabi -Wl,--fix-cortex-a8#{no_warn_mismatch})
+      when /armeabi/      then flags += %W(-target armv5te-none-linux-androideabi)
+      when /arm64-v8a/    then flags += %W(-target aarch64-none-linux-android)
+      when /x86_64/       then flags += %W(-target x86_64-none-linux-android)
+      when /x86/          then flags += %W(-target i686-none-linux-android)
+      when /mips64/       then flags += %W(-target mips64el-none-linux-android)
+      when /mips/         then flags += %W(-target mipsel-none-linux-android)
+      end
+    end
+    flags += %W(-no-canonical-prefixes)
+
+    flags
+  end
 end
 
 MRuby::Toolchain.new(:android) do |conf, params|
@@ -246,5 +316,6 @@ MRuby::Toolchain.new(:android) do |conf, params|
 
   conf.archiver.command = android.ar
   conf.linker.command = android.cc
-  conf.linker.flags = []
+  conf.linker.flags = android.ldflags
+  conf.linker.flags_before_libraries = android.ldflags_before_libraries
 end

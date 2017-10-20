@@ -1,6 +1,7 @@
 #include <mruby.h>
 #include <mruby/array.h>
 #include <mruby/class.h>
+#include <mruby/proc.h>
 
 /*
  *  call-seq:
@@ -62,7 +63,7 @@ nil_to_i(mrb_state *mrb, mrb_value obj)
 static mrb_value
 mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
 {
-  mrb_value *argv;
+  const mrb_value *argv;
   mrb_int argc;
   mrb_value blk;
   struct RClass *c;
@@ -83,8 +84,8 @@ mrb_obj_instance_exec(mrb_state *mrb, mrb_value self)
     c = mrb_class_ptr(mrb_singleton_class(mrb, self));
     break;
   }
-
-  return mrb_yield_with_class(mrb, blk, argc, argv, self, c);
+  mrb->c->ci->target_class = c;
+  return mrb_yield_cont(mrb, blk, self, argc, argv);
 }
 
 void
@@ -96,7 +97,7 @@ mrb_mruby_object_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, n, "to_f", nil_to_f,       MRB_ARGS_NONE());
   mrb_define_method(mrb, n, "to_i", nil_to_i,       MRB_ARGS_NONE());
 
-  mrb_define_method(mrb, mrb->object_class, "instance_exec", mrb_obj_instance_exec, MRB_ARGS_ANY() | MRB_ARGS_BLOCK());
+  mrb_define_method(mrb, mrb->kernel_module, "instance_exec", mrb_obj_instance_exec, MRB_ARGS_ANY() | MRB_ARGS_BLOCK());
 }
 
 void

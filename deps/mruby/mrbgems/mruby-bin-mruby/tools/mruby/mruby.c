@@ -6,7 +6,6 @@
 #include <mruby/compile.h>
 #include <mruby/dump.h>
 #include <mruby/variable.h>
-#include <mruby/throw.h>
 
 #ifdef MRB_DISABLE_STDIO
 static void
@@ -177,8 +176,6 @@ main(int argc, char **argv)
   mrbc_context *c;
   mrb_value v;
   mrb_sym zero_sym;
-  struct mrb_jmpbuf c_jmp;
-  int ai;
 
   if (mrb == NULL) {
     fputs("Invalid mrb_state, exiting mruby\n", stderr);
@@ -191,10 +188,8 @@ main(int argc, char **argv)
     usage(argv[0]);
     return n;
   }
-
-  ai = mrb_gc_arena_save(mrb);
-  MRB_TRY(&c_jmp) {
-    mrb->jmp = &c_jmp;
+  else {
+    int ai = mrb_gc_arena_save(mrb);
     ARGV = mrb_ary_new_capa(mrb, args.argc);
     for (i = 0; i < args.argc; i++) {
       char* utf8 = mrb_utf8_from_locale(args.argv[i], -1);
@@ -241,7 +236,10 @@ main(int argc, char **argv)
     mrb_gc_arena_restore(mrb, ai);
     mrbc_context_free(mrb, c);
     if (mrb->exc) {
-      if (!mrb_undef_p(v)) {
+      if (mrb_undef_p(v)) {
+        mrb_p(mrb, mrb_obj_value(mrb->exc));
+      }
+      else {
         mrb_print_error(mrb);
       }
       n = -1;
@@ -250,9 +248,6 @@ main(int argc, char **argv)
       printf("Syntax OK\n");
     }
   }
-  MRB_CATCH(&c_jmp) {           /* error */
-  }
-  MRB_END_EXC(&c_jmp);
   cleanup(mrb, &args);
 
   return n == 0 ? EXIT_SUCCESS : EXIT_FAILURE;

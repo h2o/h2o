@@ -52,7 +52,7 @@ mrb_proc_inspect(mrb_state *mrb, mrb_value self)
 
     line = mrb_debug_get_line(irep, 0);
     if (line != -1) {
-      mrb_str_append(mrb, str, mrb_fixnum_value(line));
+      str = mrb_format(mrb, "%S:%S", str, mrb_fixnum_value(line));
     }
     else {
       mrb_str_cat_lit(mrb, str, "-");
@@ -107,7 +107,7 @@ mrb_proc_parameters(mrb_state *mrb, mrb_value self)
   const struct RProc *proc = mrb_proc_ptr(self);
   const struct mrb_irep *irep = proc->body.irep;
   mrb_aspec aspec;
-  mrb_value parameters;
+  mrb_value sname, parameters;
   int i, j;
 
   if (MRB_PROC_CFUNC_P(proc)) {
@@ -137,14 +137,17 @@ mrb_proc_parameters(mrb_state *mrb, mrb_value self)
   parameters_list[4].size = MRB_ASPEC_BLOCK(aspec);
 
   parameters = mrb_ary_new_capa(mrb, irep->nlocals-1);
+
   for (i = 0, p = parameters_list; p->name; p++) {
-    mrb_value sname = mrb_symbol_value(mrb_intern_cstr(mrb, p->name));
+    if (p->size <= 0) continue;
+    sname = mrb_symbol_value(mrb_intern_cstr(mrb, p->name));
     for (j = 0; j < p->size; i++, j++) {
-      mrb_assert(i < (irep->nlocals-1));
-      mrb_ary_push(mrb, parameters, mrb_assoc_new(mrb,
-        sname,
-        mrb_symbol_value(irep->lv[i].name)
-      ));
+      mrb_value a = mrb_ary_new(mrb);
+      mrb_ary_push(mrb, a, sname);
+      if (irep->lv[i].name) {
+        mrb_ary_push(mrb, a, mrb_symbol_value(irep->lv[i].name));
+      }
+      mrb_ary_push(mrb, parameters, a);
     }
   }
   return parameters;

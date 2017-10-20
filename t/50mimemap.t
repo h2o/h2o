@@ -71,4 +71,18 @@ EOT
     is $ct, "text/plain; charset=mycharset";
 };
 
+subtest "reset mimemap to minimum" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+file.mime.setdefaulttype: "application/octet-stream"
+file.mime.settypes: {}
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: t/assets/doc_root
+EOT
+    my $ct = `$CURL_CMD http://127.0.0.1:$server->{port}/index.txt`;
+    is $ct, "application/octet-stream";
+};
+
 done_testing;

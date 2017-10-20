@@ -16,9 +16,13 @@
  */
 MRB_BEGIN_DECL
 
-#define POSFIXABLE(f) ((f) <= MRB_INT_MAX)
-#define NEGFIXABLE(f) ((f) >= MRB_INT_MIN)
-#define FIXABLE(f) (POSFIXABLE(f) && NEGFIXABLE(f))
+#define TYPED_POSFIXABLE(f,t) ((f) <= (t)MRB_INT_MAX)
+#define TYPED_NEGFIXABLE(f,t) ((f) >= (t)MRB_INT_MIN)
+#define TYPED_FIXABLE(f,t) (TYPED_POSFIXABLE(f,t) && TYPED_NEGFIXABLE(f,t))
+#define POSFIXABLE(f) TYPED_POSFIXABLE(f,mrb_int)
+#define NEGFIXABLE(f) TYPED_NEGFIXABLE(f,mrb_int)
+#define FIXABLE(f) TYPED_FIXABLE(f,mrb_int)
+#define FIXABLE_FLOAT(f) TYPED_FIXABLE(f,double)
 
 MRB_API mrb_value mrb_flo_to_fixnum(mrb_state *mrb, mrb_value val);
 MRB_API mrb_value mrb_fixnum_to_str(mrb_state *mrb, mrb_value x, int base);
@@ -40,6 +44,18 @@ mrb_value mrb_num_div(mrb_state *mrb, mrb_value x, mrb_value y);
      __has_builtin(__builtin_sub_overflow) && \
      __has_builtin(__builtin_mul_overflow))
 # define MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS
+#endif
+
+/*
+// Clang 3.8 and 3.9 have problem compiling mruby in 32-bit mode, when MRB_INT64 is set
+// because of missing __mulodi4 and similar functions in its runtime. We need to use custom
+// implementation for them.
+*/
+#ifdef MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS
+#if defined(__clang__) && (__clang_major__ == 3) && (__clang_minor__ >= 8) && \
+    defined(MRB_32BIT) && defined(MRB_INT64)
+#undef MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS
+#endif
 #endif
 
 #ifdef MRB_HAVE_TYPE_GENERIC_CHECKED_ARITHMETIC_BUILTINS

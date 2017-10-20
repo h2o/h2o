@@ -94,7 +94,7 @@
 #  define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 #endif
 
-#include "extconf.h"
+#include "config.h"
 
 #define STAT(p,s) stat(p,s)
 #ifdef HAVE_LSTAT
@@ -152,11 +152,18 @@ file_s_lstat(mrb_state *mrb, mrb_value klass)
   struct RClass *file_class;
   struct RClass *stat_class;
   struct stat st, *ptr;
-  mrb_value fname;
-  mrb_get_args(mrb, "S", &fname);
+  mrb_value fname, tmp;
+  char *path;
 
-  if (LSTAT(RSTRING_PTR(fname), &st) == -1) {
-    mrb_sys_fail(mrb, RSTRING_PTR(fname));
+  mrb_get_args(mrb, "o", &fname);
+
+  tmp = mrb_check_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_path");
+  if (mrb_nil_p(tmp)) {
+    tmp = mrb_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_str");
+  }
+  path = mrb_str_to_cstr(mrb, tmp);
+  if (LSTAT(path, &st) == -1) {
+    mrb_sys_fail(mrb, path);
   }
 
   file_class = mrb_class_ptr(klass);
@@ -171,12 +178,18 @@ static mrb_value
 stat_initialize(mrb_state *mrb, mrb_value self)
 {
   struct stat st, *ptr;
-  mrb_value fname;
+  mrb_value fname, tmp;
+  char *path;
 
-  mrb_get_args(mrb, "S", &fname);
+  mrb_get_args(mrb, "o", &fname);
 
-  if (STAT(RSTRING_PTR(fname), &st) == -1) {
-    mrb_sys_fail(mrb, RSTRING_PTR(fname));
+  tmp = mrb_check_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_path");
+  if (mrb_nil_p(tmp)) {
+    tmp = mrb_convert_type(mrb, fname, MRB_TT_STRING, "String", "to_str");
+  }
+  path = mrb_str_to_cstr(mrb, tmp);
+  if (STAT(path, &st) == -1) {
+    mrb_sys_fail(mrb, path);
   }
 
   ptr = (struct stat *)DATA_PTR(self);

@@ -239,6 +239,7 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       printf("OP_RETURN\tR%d", GETARG_A(c));
       switch (GETARG_B(c)) {
       case OP_R_NORMAL:
+        printf("\tnormal\t"); break;
       case OP_R_RETURN:
         printf("\treturn\t"); break;
       case OP_R_BREAK:
@@ -258,7 +259,15 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       break;
 
     case OP_LAMBDA:
-      printf("OP_LAMBDA\tR%d\tI(%+d)\t%d", GETARG_A(c), GETARG_b(c)+1, GETARG_c(c));
+      printf("OP_LAMBDA\tR%d\tI(%+d)\t", GETARG_A(c), GETARG_b(c)+1);
+      switch (GETARG_c(c)) {
+      case OP_L_METHOD:
+        printf("method"); break;
+      case OP_L_BLOCK:
+        printf("block"); break;
+      case OP_L_LAMBDA:
+        printf("lambda"); break;
+      }
       print_lv(mrb, irep, c, RA);
       break;
     case OP_RANGE:
@@ -408,16 +417,29 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       printf("OP_ONERR\t%03d\n", i+GETARG_sBx(c));
       break;
     case OP_RESCUE:
-      printf("OP_RESCUE\tR%d\t\t", GETARG_A(c));
-      print_lv(mrb, irep, c, RA);
+      {
+        int a = GETARG_A(c);
+        int b = GETARG_B(c);
+        int cnt = GETARG_C(c);
+
+        if (b == 0) {
+          printf("OP_RESCUE\tR%d\t\t%s", a, cnt ? "cont" : "");
+          print_lv(mrb, irep, c, RA);
+          break;
+        }
+        else {
+          printf("OP_RESCUE\tR%d\tR%d\t%s", a, b, cnt ? "cont" : "");
+          print_lv(mrb, irep, c, RAB);
+          break;
+        }
+      }
       break;
     case OP_RAISE:
       printf("OP_RAISE\tR%d\t\t", GETARG_A(c));
       print_lv(mrb, irep, c, RA);
       break;
     case OP_POPERR:
-      printf("OP_POPERR\t%d\t\t", GETARG_A(c));
-      print_lv(mrb, irep, c, RA);
+      printf("OP_POPERR\t%d\t\t\n", GETARG_A(c));
       break;
     case OP_EPOP:
       printf("OP_EPOP\t%d\n", GETARG_A(c));
@@ -437,7 +459,7 @@ codedump(mrb_state *mrb, mrb_irep *irep)
 static void
 codedump_recur(mrb_state *mrb, mrb_irep *irep)
 {
-  size_t i;
+  int i;
 
   codedump(mrb, irep);
   for (i=0; i<irep->rlen; i++) {

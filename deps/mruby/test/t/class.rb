@@ -384,6 +384,19 @@ assert('class variable and class << self style class method') do
   assert_equal("value", ClassVariableTest.class_variable)
 end
 
+assert('class variable definition in singleton_class') do
+  class ClassVariableDefinitionInSingletonTest
+    class << self
+      @@class_variable = "value"
+    end
+    def class_variable
+      @@class_variable
+    end
+  end
+
+  assert_equal("value", ClassVariableDefinitionInSingletonTest.new.class_variable)
+end
+
 assert('class variable in module and class << self style class method') do
   module ClassVariableInModuleTest
     @@class_variable = "value"
@@ -395,6 +408,20 @@ assert('class variable in module and class << self style class method') do
   end
 
   assert_equal("value", ClassVariableInModuleTest.class_variable)
+end
+
+assert('child class/module defined in singleton class get parent constant') do
+  actual = module GetParentConstantTest
+            EXPECT = "value"
+            class << self
+              class CHILD
+                class << self
+                    EXPECT
+                end
+              end
+            end
+          end
+  assert_equal("value", actual)
 end
 
 assert('overriding class variable with a module (#3235)') do

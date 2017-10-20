@@ -1,8 +1,16 @@
 mruby-io
 ========
+[![Build Status](https://travis-ci.org/iij/mruby-io.svg?branch=master)](https://travis-ci.org/iij/mruby-io)
 
-IO, File module for mruby
 
+`IO` and `File` classes for mruby
+
+## Installation
+Add the line below to your `build_config.rb`:
+
+```
+  conf.gem :github => 'iij/mruby-io'
+```
 
 ## Implemented methods
 
@@ -16,7 +24,7 @@ IO, File module for mruby
 | IO.copy_stream             |          |      |
 | IO.new, IO.for_fd, IO.open |  o  |     |
 | IO.foreach                 |          |      |
-| IO.pipe                    |          |      |
+| IO.pipe                    |    o     |      |
 | IO.popen                   |    o     |      |
 | IO.read                    |    o     |      |
 | IO.readlines               |          |      |
@@ -56,7 +64,7 @@ IO, File module for mruby
 | IO#gets                    |    o     |      |
 | IO#internal_encoding       |          |      |
 | IO#ioctl                   |          |      |
-| IO#isatty, IO#tty?         |          |      |
+| IO#isatty, IO#tty?         |    o     |      |
 | IO#lineno                  |          |      |
 | IO#lineno=                 |          |      |
 | IO#lines                   |          | obsolete |
@@ -100,7 +108,7 @@ IO, File module for mruby
 | File.basename               |   o      |      |
 | File.blockdev?              |          | FileTest |
 | File.chardev?               |          | FileTest |
-| File.chmod                  |          |      |
+| File.chmod                  |   o      |      |
 | File.chown                  |          |      |
 | File.ctime                  |          |      |
 | File.delete, File.unlink    |   o      |      |
@@ -128,7 +136,7 @@ IO, File module for mruby
 | File.pipe?                  |   o      | FileTest |
 | File.readable?              |          | FileTest |
 | File.readable_real?         |          | FileTest |
-| File.readlink               |          |      |
+| File.readlink               |   o      |      |
 | File.realdirpath            |          |      |
 | File.realpath               |   o      |      |
 | File.rename                 |   o      |      |

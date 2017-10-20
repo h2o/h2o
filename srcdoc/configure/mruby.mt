@@ -115,10 +115,10 @@ paths:
         push_paths = []
         # push css and js when request is to dir root or HTML
         if /(\/|\.html)\z/.match(env["PATH_INFO"])
-          push_paths << "/css/style.css"
-          push_paths << "/js/app.js"
+          push_paths << ["/css/style.css", "style"]
+          push_paths << ["/js/app.js", "script"]
         end
-        [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\n")}, []]
+        [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p[0]}>; rel=preload; as=#{p[1]}"}.join("\n")}, []]
       end
     fastcgi.connect: ...
 EOT
@@ -167,5 +167,33 @@ Since the API provides an asynchronous HTTP client, it is possible to effectivel
 <p>
 When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
 </p>
+
+<h3 id="logging-arbitrary-variable">Logging Arbitrary Variable</h3>
+
+<p>
+In version 2.3, it is possible from mruby to set and log an arbitrary-named variable that is associated to a HTTP request.
+A HTTP response header that starts with <code>x-fallthru-set-</code> is handled specially by the H2O server. Instead of sending the header downstream, the server accepts the value as a request environment variable, taking the suffix of the header name as the name of the variable.
+</p>
+<p>
+This example shows how to read request data, parse json and then log data from mruby.
+</p>
+
+<?= $ctx->{example}->('Logging the content of a POST request via request environment variable', <<'EOT')
+paths:
+  "/":
+    mruby.handler: |
+      Proc.new do |env|
+        input = env["rack.input"] ? env["rack.input"].read : '{"default": "true"}'
+        parsed_json = JSON.parse(input)
+        parsed_json["time"] = Time.now.to_i
+        logdata = parsed_json.to_s
+        [204, {"x-fallthru-set-POSTDATA" => logdata}, []]
+      end
+    access-log:
+      path: /path/to/access-log.json
+      escape: json
+      format: '{"POST": %{POSTDATA}e}'
+EOT
+?>
 
 ? })

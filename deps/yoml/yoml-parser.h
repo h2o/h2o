@@ -55,6 +55,16 @@ static inline yoml_t *yoml__new_node(const char *filename, yoml_type_t type, siz
     node->filename = filename != NULL ? strdup(filename) : NULL;
     node->type = type;
     node->line = event->start_mark.line;
+    if (type == YOML_TYPE_SCALAR) {
+        switch (event->data.scalar.style) {
+        case YAML_LITERAL_SCALAR_STYLE:
+        case YAML_FOLDED_SCALAR_STYLE:
+            ++node->line;
+            break;
+        default:
+            break;
+        }
+    }
     node->column = event->start_mark.column;
     node->anchor = anchor != NULL ? yoml__strdup(anchor) : NULL;
     node->tag = tag != NULL ? yoml__strdup(tag) : NULL;

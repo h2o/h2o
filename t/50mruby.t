@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
 
@@ -93,6 +94,17 @@ EOT
         like $body, qr{"HTTP_USER_AGENT":"h2o_mruby_test"}, "HTTP_USER_AGENT";
         like $body, qr{"rack.url_scheme":"http"}, "url_scheme";
         like $body, qr{"SERVER_SOFTWARE":"h2o/[0-9]+\.[0-9]+\.[0-9]+}, "SERVER_SOFTWARE";
+    };
+    subtest "protocol" => sub {
+        run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my $content = `$curl --silent --show-error $proto://127.0.0.1:$port/echo`;
+                if ($curl =~ /http2/) {
+                    like $content, qr{"SERVER_PROTOCOL":"HTTP/2"}, "SERVER_PROTOCOL";
+                } else {
+                    like $content, qr{"SERVER_PROTOCOL":"HTTP/1\.1"}, "SERVER_PROTOCOL";
+                }
+            });
     };
     subtest "headers" => sub {
         ($headers, $body) = $fetch->("/headers/");
@@ -400,6 +412,117 @@ EOT
     ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
     like $headers, qr{^HTTP/1\.1 200 }is;
     is $body, "hello";
+};
+
+subtest "log lineno" => sub {
+    my $tester = sub {
+        my ($name, $conf, $expected) = @_;
+
+        subtest $name => sub {
+            my $tempdir = tempdir(CLEANUP => 1);
+            unlink "$tempdir/error_log";
+            my $server = spawn_h2o(<< "EOT");
+$conf
+error-log: $tempdir/error_log
+EOT
+            run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+            my @log = do {
+                open my $fh, "<", "$tempdir/error_log"
+                    or die "failed to open error_log:$!";
+                map { my $l = $_; chomp $l; $l } <$fh>;
+            };
+            @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
+            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected:\s*hoge \(RuntimeError\)};
+        };
+    };
+    $tester->("flow style", <<"EOT", 5);
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: Proc.new do |env| raise "hoge" end
+EOT
+    $tester->("block style", <<"EOT", 7);
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            raise "hoge"
+          end
+EOT
+};
+
+subtest 'namespace' => sub {
+    subtest 'modules and classes are defined under top_self (not under Kernel)' => sub {
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          module Foo
+          end
+          class Bar
+          end
+          proc {|env|
+            [200, {}, ["#{Foo.name},#{Bar.name}"]]
+          }
+EOT
+        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $body, "Foo,Bar";
+    };
+    subtest 'require works as the same' => sub {
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          \$LOAD_PATH << '@{[ ASSETS_DIR . '/mruby' ]}'
+          require 'namespace'
+          proc {|env|
+            [200, {}, ["#{Foo.name},#{Bar.name}"]]
+          }
+EOT
+        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $body, "Foo,Bar";
+    };
+    subtest 'self must be top_self' => sub {
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            [200, {}, [self.to_s]]
+          }
+EOT
+        (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $body, "main";
+    };
+};
+
+subtest 'response with specific statuses should not contain content-length header' => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            [204, {}, []]
+          }
+EOT
+    my ($headers, $body) = run_prog("curl --silent --data 'hello' --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 204 OK\r\n}is;
+    unlike $headers, qr{^content-length:}im;
 };
 
 done_testing();

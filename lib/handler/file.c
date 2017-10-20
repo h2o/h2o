@@ -263,7 +263,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, path, O_RDONLY | O_CLOEXEC)) != NULL) {
         goto Opened;
     }
-    if ((flags & H2O_FILE_FLAG_GUNZIP) != 0 && req->version >= 0x101){
+    if ((flags & H2O_FILE_FLAG_GUNZIP) != 0 && req->version >= 0x101) {
         char *variant_path = h2o_mem_alloc_pool(&req->pool, path_len + sizeof(".gz"));
         memcpy(variant_path, path, path_len);
         strcpy(variant_path + path_len, ".gz");
@@ -306,7 +306,7 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
      * guiding cache updates. */
     if (self->send_etag) {
         size_t etag_len = h2o_filecache_get_etag(self->file.ref, self->header_bufs.etag);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, self->header_bufs.etag, etag_len);
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ETAG, NULL, self->header_bufs.etag, etag_len);
     }
     if (self->send_vary)
         h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
@@ -338,22 +338,22 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         mime_type.base = h2o_mem_alloc_pool(&req->pool, 52);
         mime_type.len = sprintf(mime_type.base, "multipart/byteranges; boundary=%s", self->ranged.boundary.base);
     }
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, mime_type.base, mime_type.len);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, mime_type.base, mime_type.len);
     h2o_filecache_get_last_modified(self->file.ref, self->header_bufs.last_modified);
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, self->header_bufs.last_modified,
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_LAST_MODIFIED, NULL, self->header_bufs.last_modified,
                    H2O_TIMESTR_RFC1123_LEN);
     add_headers_unconditional(self, req);
     if (self->content_encoding.base != NULL)
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, self->content_encoding.base,
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, NULL, self->content_encoding.base,
                        self->content_encoding.len);
     if (self->ranged.range_count == 0)
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ACCEPT_RANGES, H2O_STRLIT("bytes"));
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ACCEPT_RANGES, NULL, H2O_STRLIT("bytes"));
     else if (self->ranged.range_count == 1) {
         h2o_iovec_t content_range;
         content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
         content_range.len = sprintf(content_range.base, "bytes %zd-%zd/%zd", self->ranged.range_infos[0],
                                     self->ranged.range_infos[0] + self->ranged.range_infos[1] - 1, self->ranged.filesize);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, NULL, content_range.base, content_range.len);
     }
 
     /* special path for cases where we do not need to send any data */
@@ -425,7 +425,7 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     /* send response */
     req->res.status = 200;
     req->res.reason = "OK";
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, H2O_STRLIT("text/html; charset=utf-8"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/html; charset=utf-8"));
 
     /* send headers */
     if (!is_get) {
@@ -599,7 +599,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
 
 static void send_method_not_allowed(h2o_req_t *req)
 {
-    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, H2O_STRLIT("GET, HEAD"));
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ALLOW, NULL, H2O_STRLIT("GET, HEAD"));
     h2o_send_error_405(req, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
@@ -619,6 +619,13 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         method_type = METHOD_IS_OTHER;
     }
 
+    /* obtain mime type */
+    if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
+        do_close(&generator->super, req);
+        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
+    }
+    assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
+
     /* if-non-match and if-modified-since */
     if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
@@ -636,13 +643,6 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         }
     }
 
-    /* obtain mime type */
-    if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
-        do_close(&generator->super, req);
-        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
-    }
-    assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
-
     /* only allow GET or POST for static files */
     if (method_type == METHOD_IS_OTHER) {
         do_close(&generator->super, req);
@@ -659,7 +659,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
             h2o_iovec_t content_range;
             content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
             content_range.len = sprintf(content_range.base, "bytes */%zu", generator->bytesleft);
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, content_range.base, content_range.len);
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, NULL, content_range.base, content_range.len);
             h2o_send_error_416(req, "Request Range Not Satisfiable", "requested range not satisfiable",
                                H2O_SEND_ERROR_KEEP_HEADERS);
             goto Close;

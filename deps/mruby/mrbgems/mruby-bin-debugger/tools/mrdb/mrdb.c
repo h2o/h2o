@@ -406,7 +406,7 @@ print_info_stopped_break(mrb_state *mrb, mrdb_state *mrdb)
   const char *class_name;
 
   ret = mrb_debug_get_break(mrb, mrdb->dbg, mrdb->dbg->stopped_bpno, &bp);
-  if(ret == 0) {
+  if (ret == 0) {
     switch(bp.type) {
       case MRB_DEBUG_BPTYPE_LINE:
         file = bp.point.linepoint.file;
@@ -416,13 +416,13 @@ print_info_stopped_break(mrb_state *mrb, mrdb_state *mrdb)
       case MRB_DEBUG_BPTYPE_METHOD:
         method_name = bp.point.methodpoint.method_name;
         class_name = bp.point.methodpoint.class_name;
-        if(class_name == NULL) {
+        if (class_name == NULL) {
           printf("Breakpoint %d, %s\n", bp.bpno, method_name);
         }
         else {
           printf("Breakpoint %d, %s:%s\n", bp.bpno, class_name, method_name);
         }
-        if(mrdb->dbg->isCfunc) {
+        if (mrdb->dbg->isCfunc) {
           printf("Stopped before calling the C function.\n");
         }
         break;
@@ -445,7 +445,7 @@ print_info_stopped_code(mrb_state *mrb, mrdb_state *mrdb)
 {
   char* file = mrb_debug_get_source(mrb, mrdb, mrdb->srcpath, mrdb->dbg->prvfile);
   uint16_t lineno = mrdb->dbg->prvline;
-  if(file != NULL) {
+  if (file != NULL) {
     mrb_debug_list(mrb, mrdb->dbg, file, lineno, lineno);
     mrb_free(mrb, file);
   }
@@ -531,9 +531,9 @@ check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value 
       sym = 0;
       break;
   }
-  if(sym != 0) {
+  if (sym != 0) {
     dbg->method_bpno = mrb_debug_check_breakpoint_method(mrb, dbg, c, sym, &isCfunc);
-    if(isCfunc) {
+    if (isCfunc) {
       bpno = dbg->method_bpno;
       dbg->method_bpno = 0;
     }
@@ -557,7 +557,7 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
   dbg->pc   = pc;
   dbg->regs = regs;
 
-  if(dbg->xphase == DBG_PHASE_RESTART) {
+  if (dbg->xphase == DBG_PHASE_RESTART) {
     dbg->root_irep = irep;
     dbg->prvfile = NULL;
     dbg->prvline = 0;
@@ -566,8 +566,8 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
     dbg->xphase = DBG_PHASE_RUNNING;
   }
 
-  file = mrb_debug_get_filename(irep, (uint32_t)(pc - irep->iseq));
-  line = mrb_debug_get_line(irep, (uint32_t)(pc - irep->iseq));
+  file = mrb_debug_get_filename(irep, pc - irep->iseq);
+  line = mrb_debug_get_line(irep, pc - irep->iseq);
 
   switch (dbg->xm) {
   case DBG_STEP:
@@ -582,7 +582,7 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
     if (!file || (dbg->prvfile == file && dbg->prvline == line)) {
       return;
     }
-    if((intptr_t)(dbg->prvci) < (intptr_t)(mrb->c->ci)) {
+    if ((intptr_t)(dbg->prvci) < (intptr_t)(mrb->c->ci)) {
       return;
     }
     dbg->prvci = NULL;
@@ -623,7 +623,7 @@ mrb_code_fetch_hook(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value *reg
   dbg->prvfile = file;
   dbg->prvline = line;
 
-  if(dbg->bm == BRK_BREAK && --dbg->ccnt > 0) {
+  if (dbg->bm == BRK_BREAK && --dbg->ccnt > 0) {
     return;
   }
   dbg->break_hook(mrb, dbg);
@@ -646,7 +646,7 @@ mrb_debug_break_hook(mrb_state *mrb, mrb_debug_context *dbg)
 
     st = cmd->func(mrb, mrdb);
 
-    if( (st == DBGST_CONTINUE) || (st == DBGST_RESTART) ) break;
+    if ((st == DBGST_CONTINUE) || (st == DBGST_RESTART)) break;
   }
   return dbg->xm;
 }
@@ -683,7 +683,7 @@ main(int argc, char **argv)
   mrb_assert(mrdb && mrdb->dbg);
   mrdb->srcpath = args.srcpath;
 
-  if(mrdb->dbg->xm == DBG_QUIT) {
+  if (mrdb->dbg->xm == DBG_QUIT) {
     mrdb->dbg->xphase = DBG_PHASE_RESTART;
   }
   else {
@@ -750,7 +750,7 @@ main(int argc, char **argv)
       break;
     }
 
-    if( cmd->func(mrb, mrdb) == DBGST_RESTART ) goto l_restart;
+    if ( cmd->func(mrb, mrdb) == DBGST_RESTART ) goto l_restart;
   }
 
   cleanup(mrb, &args);

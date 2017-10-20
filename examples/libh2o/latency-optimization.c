@@ -310,8 +310,6 @@ int main(int argc, char **argv)
         } else {
             host = "0.0.0.0";
             port = argv[optind];
-            hostport = malloc(strlen(host) + strlen(port) + 2);
-            sprintf(hostport, "%s:%s", host, port);
         }
     }
 

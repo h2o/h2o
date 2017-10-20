@@ -182,10 +182,10 @@ Or in the example below, the handler triggers <a href="configure/http2_directive
         push_paths = []
         # push css and js when request is to dir root or HTML
         if /(\/|\.html)\z/.match(env[&quot;PATH_INFO&quot;])
-          push_paths &lt;&lt; &quot;/css/style.css&quot;
-          push_paths &lt;&lt; &quot;/js/app.js&quot;
+          push_paths &lt;&lt; [&quot;/css/style.css&quot;, &quot;style&quot;]
+          push_paths &lt;&lt; [&quot;/js/app.js&quot;, &quot;script&quot;]
         end
-        [399, push_paths.empty? ? {} : {&quot;link&quot; =&gt; push_paths.map{|p| &quot;&lt;#{p}&gt;; rel=preload&quot;}.join(&quot;\n&quot;)}, []]
+        [399, push_paths.empty? ? {} : {&quot;link&quot; =&gt; push_paths.map{|p| &quot;&lt;#{p[0]}&gt;; rel=preload; as=#{p[1]}&quot;}.join(&quot;\n&quot;)}, []]
       end
     fastcgi.connect: ...
 </code></pre>
@@ -237,6 +237,36 @@ Since the API provides an asynchronous HTTP client, it is possible to effectivel
 <p>
 When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
 </p>
+
+<h3 id="logging-arbitrary-variable">Logging Arbitrary Variable</h3>
+
+<p>
+In version 2.3, it is possible from mruby to set and log an arbitrary-named variable that is associated to a HTTP request.
+A HTTP response header that starts with <code>x-fallthru-set-</code> is handled specially by the H2O server. Instead of sending the header downstream, the server accepts the value as a request environment variable, taking the suffix of the header name as the name of the variable.
+</p>
+<p>
+This example shows how to read request data, parse json and then log data from mruby.
+</p>
+
+<div class="example">
+<div class="caption">Example. Logging the content of a POST request via request environment variable</div>
+<pre><code>paths:
+  &quot;/&quot;:
+    mruby.handler: |
+      Proc.new do |env|
+        input = env[&quot;rack.input&quot;] ? env[&quot;rack.input&quot;].read : &#39;{&quot;default&quot;: &quot;true&quot;}&#39;
+        parsed_json = JSON.parse(input)
+        parsed_json[&quot;time&quot;] = Time.now.to_i
+        logdata = parsed_json.to_s
+        [204, {&quot;x-fallthru-set-POSTDATA&quot; =&gt; logdata}, []]
+      end
+    access-log:
+      path: /path/to/access-log.json
+      escape: json
+      format: &#39;{&quot;POST&quot;: %{POSTDATA}e}&#39;
+</code></pre>
+</div>
+
 
 
 

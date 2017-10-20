@@ -1,4 +1,5 @@
 # mruby-iijson
+[![Build Status](https://travis-ci.org/iij/mruby-iijson.svg?branch=master)](https://travis-ci.org/iij/mruby-iijson)
 
 "mruby-iijson" is JSON module for mruby.
 

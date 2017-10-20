@@ -56,8 +56,14 @@ mrb_str_byteslice(mrb_state *mrb, mrb_value str)
       mrb_int beg;
 
       len = RSTRING_LEN(str);
-      if (mrb_range_beg_len(mrb, a1, &beg, &len, len)) {
+      switch (mrb_range_beg_len(mrb, a1, &beg, &len, len, TRUE)) {
+      case 0:                   /* not range */
+        break;
+      case 1:                   /* range */
         return mrb_str_substr(mrb, str, beg, len);
+      case 2:                   /* out of range */
+        mrb_raisef(mrb, E_RANGE_ERROR, "%S out of range", a1);
+        break;
       }
       return mrb_nil_value();
     }
@@ -128,6 +134,8 @@ mrb_str_swapcase(mrb_state *mrb, mrb_value self)
   return str;
 }
 
+static mrb_value mrb_fixnum_chr(mrb_state *mrb, mrb_value num);
+
 /*
  *  call-seq:
  *     str << integer       -> str
@@ -144,10 +152,15 @@ mrb_str_swapcase(mrb_state *mrb, mrb_value self)
  *     a.concat(33)   #=> "hello world!"
  */
 static mrb_value
-mrb_str_concat2(mrb_state *mrb, mrb_value self)
+mrb_str_concat_m(mrb_state *mrb, mrb_value self)
 {
   mrb_value str;
-  mrb_get_args(mrb, "S", &str);
+
+  mrb_get_args(mrb, "o", &str);
+  if (mrb_fixnum_p(str))
+    str = mrb_fixnum_chr(mrb, str);
+  else
+    str = mrb_string_type(mrb, str);
   mrb_str_concat(mrb, self, str);
   return self;
 }
@@ -315,7 +328,7 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "&", &blk);
 
   result = mrb_ary_new(mrb);
-
+  ai = mrb_gc_arena_save(mrb);
   if (!mrb_nil_p(blk)) {
     while (p < e) {
       t = p;
@@ -324,6 +337,7 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
       len = (mrb_int) (p - t);
       arg = mrb_str_new(mrb, t, len);
       mrb_yield_argv(mrb, blk, 1, &arg);
+      mrb_gc_arena_restore(mrb, ai);
       if (b != RSTRING_PTR(self)) {
         ptrdiff_t diff = p - b;
         b = RSTRING_PTR(self);
@@ -334,7 +348,6 @@ mrb_str_lines(mrb_state *mrb, mrb_value self)
     return self;
   }
   while (p < e) {
-    ai = mrb_gc_arena_save(mrb);
     t = p;
     while (p < e && *p != '\n') p++;
     if (*p == '\n') p++;
@@ -361,7 +374,7 @@ mrb_str_succ_bang(mrb_state *mrb, mrb_value self)
   unsigned char *p, *e, *b, *t;
   const char *prepend;
   struct RString *s = mrb_str_ptr(self);
-  size_t l;
+  mrb_int l;
 
   if (RSTRING_LEN(self) == 0)
     return self;
@@ -381,7 +394,8 @@ mrb_str_succ_bang(mrb_state *mrb, mrb_value self)
   if (e < b) {
     e = p + l - 1;
     result = mrb_str_new_lit(mrb, "");
-  } else {
+  }
+  else {
     // find leading letter of the ascii/number
     b = e;
     while (b > p) {
@@ -399,7 +413,8 @@ mrb_str_succ_bang(mrb_state *mrb, mrb_value self)
       if (*e == 0xff) {
         mrb_str_cat_lit(mrb, result, "\x01");
         (*e) = 0;
-      } else
+      }
+      else
         (*e)++;
       break;
     }
@@ -407,13 +422,16 @@ mrb_str_succ_bang(mrb_state *mrb, mrb_value self)
     if (*e == '9') {
       if (e == b) prepend = "1";
       *e = '0';
-    } else if (*e == 'z') {
+    }
+    else if (*e == 'z') {
       if (e == b) prepend = "a";
       *e = 'a';
-    } else if (*e == 'Z') {
+    }
+    else if (*e == 'Z') {
       if (e == b) prepend = "A";
       *e = 'A';
-    } else {
+    }
+    else {
       (*e)++;
       break;
     }
@@ -435,44 +453,6 @@ mrb_str_succ(mrb_state *mrb, mrb_value self)
   str = mrb_str_dup(mrb, self);
   mrb_str_succ_bang(mrb, str);
   return str;
-}
-
-/*
- *  call-seq:
- *     str.prepend(other_str)  -> str
- *
- *  Prepend---Prepend the given string to <i>str</i>.
- *
- *     a = "world"
- *     a.prepend("hello ") #=> "hello world"
- *     a                   #=> "hello world"
- */
-static mrb_value
-mrb_str_prepend(mrb_state *mrb, mrb_value self)
-{
-  struct RString *s1 = mrb_str_ptr(self), *s2, *temp_s;
-  mrb_int len;
-  mrb_value other, temp_str;
-
-  mrb_get_args(mrb, "S", &other);
-
-  mrb_str_modify(mrb, s1);
-  if (!mrb_string_p(other)) {
-    other = mrb_str_to_str(mrb, other);
-  }
-  s2 = mrb_str_ptr(other);
-  len = RSTR_LEN(s1) + RSTR_LEN(s2);
-  temp_str = mrb_str_new(mrb, NULL, RSTR_LEN(s1));
-  temp_s = mrb_str_ptr(temp_str);
-  memcpy(RSTR_PTR(temp_s), RSTR_PTR(s1), RSTR_LEN(s1));
-  if (RSTRING_CAPA(self) < len) {
-    mrb_str_resize(mrb, self, len);
-  }
-  memcpy(RSTR_PTR(s1), RSTR_PTR(s2), RSTR_LEN(s2));
-  memcpy(RSTR_PTR(s1) + RSTR_LEN(s2), RSTR_PTR(temp_s), RSTR_LEN(temp_s));
-  RSTR_SET_LEN(s1, len);
-  RSTR_PTR(s1)[len] = '\0';
-  return self;
 }
 
 #ifdef MRB_UTF8_STRING
@@ -541,6 +521,135 @@ mrb_str_ord(mrb_state* mrb, mrb_value str)
 }
 #endif
 
+static mrb_bool
+all_digits_p(const char *s, mrb_int len)
+{
+  while (len-- > 0) {
+    if (!ISDIGIT(*s)) return FALSE;
+    s++;
+  }
+  return TRUE;
+}
+
+/*
+ *  call-seq:
+ *     str.upto(other_str, exclusive=false) {|s| block }   -> str
+ *     str.upto(other_str, exclusive=false)                -> an_enumerator
+ *
+ *  Iterates through successive values, starting at <i>str</i> and
+ *  ending at <i>other_str</i> inclusive, passing each value in turn to
+ *  the block. The <code>String#succ</code> method is used to generate
+ *  each value.  If optional second argument exclusive is omitted or is false,
+ *  the last value will be included; otherwise it will be excluded.
+ *
+ *  If no block is given, an enumerator is returned instead.
+ *
+ *     "a8".upto("b6") {|s| print s, ' ' }
+ *     for s in "a8".."b6"
+ *       print s, ' '
+ *     end
+ *
+ *  <em>produces:</em>
+ *
+ *     a8 a9 b0 b1 b2 b3 b4 b5 b6
+ *     a8 a9 b0 b1 b2 b3 b4 b5 b6
+ *
+ *  If <i>str</i> and <i>other_str</i> contains only ascii numeric characters,
+ *  both are recognized as decimal numbers. In addition, the width of
+ *  string (e.g. leading zeros) is handled appropriately.
+ *
+ *     "9".upto("11").to_a   #=> ["9", "10", "11"]
+ *     "25".upto("5").to_a   #=> []
+ *     "07".upto("11").to_a  #=> ["07", "08", "09", "10", "11"]
+ */
+static mrb_value
+mrb_str_upto(mrb_state *mrb, mrb_value beg)
+{
+  mrb_value end;
+  mrb_value exclusive = mrb_false_value();
+  mrb_value block = mrb_nil_value();
+  mrb_value current, after_end;
+  mrb_int n;
+  mrb_bool excl;
+
+  mrb_get_args(mrb, "o|o&", &end, &exclusive, &block);
+
+  if (mrb_nil_p(block)) {
+    return mrb_funcall(mrb, beg, "to_enum", 3, mrb_symbol_value(mrb_intern_lit(mrb, "upto")), end, exclusive);
+  }
+  end = mrb_string_type(mrb, end);
+  excl = mrb_test(exclusive);
+
+  /* single character */
+  if (RSTRING_LEN(beg) == 1 && RSTRING_LEN(end) == 1 &&
+  ISASCII(RSTRING_PTR(beg)[0]) && ISASCII(RSTRING_PTR(end)[0])) {
+    char c = RSTRING_PTR(beg)[0];
+    char e = RSTRING_PTR(end)[0];
+    int ai = mrb_gc_arena_save(mrb);
+
+    if (c > e || (excl && c == e)) return beg;
+    for (;;) {
+      mrb_yield(mrb, block, mrb_str_new(mrb, &c, 1));
+      mrb_gc_arena_restore(mrb, ai);
+      if (!excl && c == e) break;
+      c++;
+      if (excl && c == e) break;
+    }
+    return beg;
+  }
+  /* both edges are all digits */
+  if (ISDIGIT(RSTRING_PTR(beg)[0]) && ISDIGIT(RSTRING_PTR(end)[0]) &&
+      all_digits_p(RSTRING_PTR(beg), RSTRING_LEN(beg)) &&
+      all_digits_p(RSTRING_PTR(end), RSTRING_LEN(end))) {
+    mrb_int min_width = RSTRING_LEN(beg);
+    mrb_int bi = mrb_int(mrb, mrb_str_to_inum(mrb, beg, 10, FALSE));
+    mrb_int ei = mrb_int(mrb, mrb_str_to_inum(mrb, end, 10, FALSE));
+    int ai = mrb_gc_arena_save(mrb);
+
+    while (bi <= ei) {
+      mrb_value ns, str;
+
+      if (excl && bi == ei) break;
+      ns = mrb_format(mrb, "%S", mrb_fixnum_value(bi));
+      if (min_width > RSTRING_LEN(ns)) {
+        str = mrb_str_new(mrb, NULL, min_width);
+        memset(RSTRING_PTR(str), '0', min_width-RSTRING_LEN(ns));
+        memcpy(RSTRING_PTR(str)+min_width-RSTRING_LEN(ns),
+               RSTRING_PTR(ns), RSTRING_LEN(ns));
+      }
+      else {
+        str = ns;
+      }
+      mrb_yield(mrb, block, str);
+      mrb_gc_arena_restore(mrb, ai);
+      bi++;
+    }
+
+    return beg;
+  }
+  /* normal case */
+  n = mrb_int(mrb, mrb_funcall(mrb, beg, "<=>", 1, end));
+  if (n > 0 || (excl && n == 0)) return beg;
+
+  after_end = mrb_funcall(mrb, end, "succ", 0);
+  current = mrb_str_dup(mrb, beg);
+  while (!mrb_str_equal(mrb, current, after_end)) {
+    int ai = mrb_gc_arena_save(mrb);
+    mrb_value next = mrb_nil_value();
+    if (excl || !mrb_str_equal(mrb, current, end))
+      next = mrb_funcall(mrb, current, "succ", 0);
+    mrb_yield(mrb, block, current);
+    if (mrb_nil_p(next)) break;
+    current = mrb_str_to_str(mrb, next);
+    if (excl && mrb_str_equal(mrb, current, end)) break;
+    if (RSTRING_LEN(current) > RSTRING_LEN(end) || RSTRING_LEN(current) == 0)
+      break;
+    mrb_gc_arena_restore(mrb, ai);
+  }
+
+  return beg;
+}
+
 void
 mrb_mruby_string_ext_gem_init(mrb_state* mrb)
 {
@@ -552,8 +661,8 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "byteslice",       mrb_str_byteslice,       MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   mrb_define_method(mrb, s, "swapcase!",       mrb_str_swapcase_bang,   MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "swapcase",        mrb_str_swapcase,        MRB_ARGS_NONE());
-  mrb_define_method(mrb, s, "concat",          mrb_str_concat2,         MRB_ARGS_REQ(1));
-  mrb_define_method(mrb, s, "<<",              mrb_str_concat2,         MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "concat",          mrb_str_concat_m,        MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "<<",              mrb_str_concat_m,        MRB_ARGS_REQ(1));
   mrb_define_method(mrb, s, "start_with?",     mrb_str_start_with,      MRB_ARGS_REST());
   mrb_define_method(mrb, s, "end_with?",       mrb_str_end_with,        MRB_ARGS_REST());
   mrb_define_method(mrb, s, "hex",             mrb_str_hex,             MRB_ARGS_NONE());
@@ -562,10 +671,10 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "lines",           mrb_str_lines,           MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ",            mrb_str_succ,            MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ!",           mrb_str_succ_bang,       MRB_ARGS_NONE());
-  mrb_define_method(mrb, s, "prepend",         mrb_str_prepend,         MRB_ARGS_REQ(1));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next"), mrb_intern_lit(mrb, "succ"));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next!"), mrb_intern_lit(mrb, "succ!"));
   mrb_define_method(mrb, s, "ord", mrb_str_ord, MRB_ARGS_NONE());
+  mrb_define_method(mrb, s, "upto", mrb_str_upto, MRB_ARGS_ANY());
 
   mrb_define_method(mrb, mrb->fixnum_class, "chr", mrb_fixnum_chr, MRB_ARGS_NONE());
 }
