@@ -67,7 +67,14 @@ static int on_config_timeout_first_byte(h2o_configurator_command_t *cmd, h2o_con
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
+    int ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
+
+    if (ret == 0 && ctx->parent == NULL) {
+        /* update global keepalive timeout */
+        ctx->globalconf->proxy.keepalive_timeout = self->vars->keepalive_timeout;
+    }
+
+    return ret;
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

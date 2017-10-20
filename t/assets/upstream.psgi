@@ -124,6 +124,15 @@ builder {
             [$env->{"SERVER_PORT"}],
         ];
     };
+    mount "/echo-remote-port" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REMOTE_PORT"} || ''],
+        ];
+    };
     mount "/streaming-body" => sub {
         my $env = shift;
         return sub {
