@@ -26,8 +26,11 @@ class IO
     end
   end
 
-  def self.popen(command, mode = 'r', &block)
-    io = self._popen(command, mode)
+  def self.popen(command, mode = 'r', opts={}, &block)
+    if !self.respond_to?(:_popen)
+      raise NotImplementedError, "popen is not supported on this platform"
+    end
+    io = self._popen(command, mode, opts)
     return io unless block
 
     begin
@@ -41,6 +44,22 @@ class IO
     end
   end
 
+  def self.pipe(&block)
+    if !self.respond_to?(:_pipe)
+      raise NotImplementedError, "pipe is not supported on this platform"
+    end
+    if block
+      begin
+        r, w = IO._pipe
+        yield r, w
+      ensure
+        r.close unless r.closed?
+        w.close unless w.closed?
+      end
+    else
+      IO._pipe
+    end
+  end
 
   def self.read(path, length=nil, offset=nil, opt=nil)
     if not opt.nil?        # 4 arguments
@@ -95,40 +114,42 @@ class IO
     self
   end
 
+  def hash
+    # We must define IO#hash here because IO includes Enumerable and
+    # Enumerable#hash will call IO#read...
+    self.__id__
+  end
+
   def write(string)
     str = string.is_a?(String) ? string : string.to_s
     return str.size unless str.size > 0
-
-    len = syswrite(str)
-    if len != -1
-      @pos += len
-      return len
+    if 0 < @buf.length
+      # reset real pos ignore buf
+      seek(pos, SEEK_SET)
     end
+    len = syswrite(str)
+    len
+  end
 
-    raise IOError
+  def <<(str)
+    write(str)
+    self
   end
 
   def eof?
-    return true if @buf && @buf.size > 0
-
-    ret = false
-    char = ''
-
+    _check_readable
     begin
-      char = sysread(1)
-    rescue EOFError => e
-      ret = true
-    ensure
-      _ungets(char)
+      buf = _read_buf
+      return buf.size == 0
+    rescue EOFError
+      return true
     end
-
-    ret
   end
   alias_method :eof, :eof?
 
   def pos
     raise IOError if closed?
-    @pos
+    sysseek(0, SEEK_CUR) - @buf.length
   end
   alias_method :tell, :pos
 
@@ -136,9 +157,13 @@ class IO
     seek(i, SEEK_SET)
   end
 
+  def rewind
+    seek(0, SEEK_SET)
+  end
+
   def seek(i, whence = SEEK_SET)
     raise IOError if closed?
-    @pos = sysseek(i, whence)
+    sysseek(i, whence)
     @buf = ''
     0
   end
@@ -148,25 +173,17 @@ class IO
     @buf = sysread(BUF_SIZE)
   end
 
-  def _ungets(substr)
+  def ungetc(substr)
     raise TypeError.new "expect String, got #{substr.class}" unless substr.is_a?(String)
-    raise IOError if @pos == 0 || @pos.nil?
-    @pos -= substr.size
     if @buf.empty?
-      @buf = substr
+      @buf = substr.dup
     else
       @buf = substr + @buf
     end
     nil
   end
 
-  def ungetc(char)
-    raise IOError if @pos == 0 || @pos.nil?
-    _ungets(char)
-    nil
-  end
-
-  def read(length = nil)
+  def read(length = nil, outbuf = "")
     unless length.nil?
       unless length.is_a? Fixnum
         raise TypeError.new "can't convert #{length.class} into Integer"
@@ -180,29 +197,32 @@ class IO
     end
 
     array = []
-    start_pos = @pos
     while 1
       begin
         _read_buf
-      rescue EOFError => e
+      rescue EOFError
         array = nil if array.empty? and (not length.nil?) and length != 0
         break
       end
 
-      if length && (@pos - start_pos + @buf.size) >= length
-        len = length - (@pos - start_pos)
-        array.push @buf[0, len]
-        @pos += len
-        @buf = @buf[len, @buf.size - len]
-        break
+      if length
+        consume = (length <= @buf.size) ? length : @buf.size
+        array.push @buf[0, consume]
+        @buf = @buf[consume, @buf.size - consume]
+        length -= consume
+        break if length == 0
       else
         array.push @buf
-        @pos += @buf.size
         @buf = ''
       end
     end
 
-    array && array.join
+    if array.nil?
+      outbuf.replace("")
+      nil
+    else
+      outbuf.replace(array.join)
+    end
   end
 
   def readline(arg = $/, limit = nil)
@@ -225,30 +245,25 @@ class IO
     end
 
     array = []
-    start_pos = @pos
     while 1
       begin
         _read_buf
-      rescue EOFError => e
+      rescue EOFError
         array = nil if array.empty?
         break
       end
 
-      if limit && (@pos - start_pos + @buf.size) >= limit
-        len = limit - (@pos - start_pos)
-        array.push @buf[0, len]
-        @pos += len
-        @buf = @buf[len, @buf.size - len]
+      if limit && limit <= @buf.size
+        array.push @buf[0, limit]
+        @buf = @buf[limit, @buf.size - limit]
         break
       elsif idx = @buf.index(rs)
         len = idx + rs.size
         array.push @buf[0, len]
-        @pos += len
         @buf = @buf[len, @buf.size - len]
         break
       else
         array.push @buf
-        @pos += @buf.size
         @buf = ''
       end
     end
@@ -261,7 +276,7 @@ class IO
   def gets(*args)
     begin
       readline(*args)
-    rescue EOFError => e
+    rescue EOFError
       nil
     end
   end
@@ -270,14 +285,13 @@ class IO
     _read_buf
     c = @buf[0]
     @buf = @buf[1, @buf.size]
-    @pos += 1
     c
   end
 
   def getc
     begin
       readchar
-    rescue EOFError => e
+    rescue EOFError
       nil
     end
   end
@@ -339,6 +353,7 @@ class IO
   end
 
   alias_method :to_i, :fileno
+  alias_method :tty?, :isatty
 end
 
 STDIN  = IO.open(0, "r")
@@ -351,22 +366,22 @@ $stderr = STDERR
 
 module Kernel
   def print(*args)
-    STDOUT.print(*args)
+    $stdout.print(*args)
   end
 
   def puts(*args)
-    STDOUT.puts(*args)
+    $stdout.puts(*args)
   end
 
   def printf(*args)
-    STDOUT.printf(*args)
+    $stdout.printf(*args)
   end
 
   def gets(*args)
-    STDIN.gets(*args)
+    $stdin.gets(*args)
   end
 
   def getc(*args)
-    STDIN.getc(*args)
+    $stdin.getc(*args)
   end
 end

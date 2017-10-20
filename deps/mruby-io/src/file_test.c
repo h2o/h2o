@@ -128,6 +128,9 @@ mrb_filetest_s_directory_p(mrb_state *mrb, mrb_value klass)
 mrb_value
 mrb_filetest_s_pipe_p(mrb_state *mrb, mrb_value klass)
 {
+#if defined(_WIN32) || defined(_WIN64)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "pipe is not supported on this platform");
+#else
 #ifdef S_IFIFO
 #  ifndef S_ISFIFO
 #    define S_ISFIFO(m) (((m) & S_IFMT) == S_IFIFO)
@@ -145,6 +148,7 @@ mrb_filetest_s_pipe_p(mrb_state *mrb, mrb_value klass)
 
 #endif
   return mrb_false_value();
+#endif
 }
 
 /*
@@ -157,6 +161,9 @@ mrb_filetest_s_pipe_p(mrb_state *mrb, mrb_value klass)
 mrb_value
 mrb_filetest_s_symlink_p(mrb_state *mrb, mrb_value klass)
 {
+#if defined(_WIN32) || defined(_WIN64)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "symlink is not supported on this platform");
+#else
 #ifndef S_ISLNK
 #  ifdef _S_ISLNK
 #    define S_ISLNK(m) _S_ISLNK(m)
@@ -184,6 +191,7 @@ mrb_filetest_s_symlink_p(mrb_state *mrb, mrb_value klass)
 #endif
 
   return mrb_false_value();
+#endif
 }
 
 /*
@@ -196,6 +204,9 @@ mrb_filetest_s_symlink_p(mrb_state *mrb, mrb_value klass)
 mrb_value
 mrb_filetest_s_socket_p(mrb_state *mrb, mrb_value klass)
 {
+#if defined(_WIN32) || defined(_WIN64)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "socket is not supported on this platform");
+#else
 #ifndef S_ISSOCK
 #  ifdef _S_ISSOCK
 #    define S_ISSOCK(m) _S_ISSOCK(m)
@@ -223,6 +234,7 @@ mrb_filetest_s_socket_p(mrb_state *mrb, mrb_value klass)
 #endif
 
   return mrb_false_value();
+#endif
 }
 
 /*
