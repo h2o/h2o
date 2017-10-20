@@ -194,10 +194,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.latency_optimization.max_cwnd = 65535;
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
     config->mimemap = h2o_mimemap_create();
-
-    h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-    h2o_socketpool_init_global(sockpool, SIZE_MAX /* FIXME */);
-    config->proxy.global_socketpool = sockpool;
+    h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX /* FIXME */);
 
     h2o_configurator__init_core(config);
 }
@@ -286,7 +283,7 @@ void h2o_config_dispose(h2o_globalconf_t *config)
     }
     free(config->hosts);
 
-    h2o_socketpool_dispose(config->proxy.global_socketpool);
+    h2o_socketpool_dispose(&config->proxy.global_socketpool);
     h2o_mem_release_shared(config->mimemap);
     h2o_configurator__dispose_configurators(config);
 }

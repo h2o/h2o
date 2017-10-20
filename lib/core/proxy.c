@@ -684,14 +684,12 @@ void h2o__proxy_process_request(h2o_req_t *req)
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
     int te_chunked = 0;
 
-    h2o_socketpool_t *sockpool = overrides != NULL ? overrides->socketpool : NULL;
-    if (sockpool == NULL) {
-        sockpool = req->conn->ctx->proxy.global_socketpool;
-    }
-    int keepalive = h2o_socketpool_can_keepalive(sockpool);
-    if (overrides != NULL && overrides->use_proxy_protocol) {
+    h2o_socketpool_t *socketpool = &req->conn->ctx->globalconf->proxy.global_socketpool;
+    if (overrides != NULL && overrides->socketpool != NULL)
+        socketpool = overrides->socketpool;
+    int keepalive = h2o_socketpool_can_keepalive(socketpool);
+    if (overrides != NULL && overrides->use_proxy_protocol)
         keepalive = 0;
-    }
 
     struct rp_generator_t *self = proxy_send_prepare(req, keepalive, &te_chunked);
 
@@ -715,5 +713,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_http1client_connect(&self->client, self, client_ctx, sockpool, &upstream, on_connect, te_chunked);
+    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, &upstream, on_connect, te_chunked);
 }

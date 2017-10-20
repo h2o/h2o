@@ -431,7 +431,7 @@ struct st_h2o_globalconf_t {
         /**
          * global socketpool
          */
-        h2o_socketpool_t *global_socketpool;
+        h2o_socketpool_t global_socketpool;
     } proxy;
 
     /**
@@ -650,10 +650,6 @@ struct st_h2o_context_t {
          * timeout handler used by the default client context
          */
         h2o_timeout_t first_byte_timeout;
-        /**
-         * global socket pool
-         */
-        h2o_socketpool_t *global_socketpool;
     } proxy;
 
     /**
