@@ -59,6 +59,7 @@ sub doit {
     like $rbuf, qr{^HTTP\/1\.1 101 }is;
     like $rbuf, qr{\r\n\r\n$}is;
     like $rbuf, qr{\r\nupgrade: websocket\r\n}is;
+    unlike $rbuf, qr{\r\nupgrade:.*\r\nupgrade:}is;
     like $rbuf, qr{\r\nsec-websocket-accept: .*\r\n}is;
     for my $i (1..10) {
         my $msg = "hello world $i\n";
