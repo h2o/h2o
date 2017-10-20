@@ -477,6 +477,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby.c
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
+        lib/handler/mruby/redis.c
         lib/handler/mruby/sleep.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")

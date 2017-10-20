@@ -38,19 +38,47 @@ typedef struct st_h2o_redis_conn_t {
     h2o_redis_connection_state_t state;
     void (*on_connect)(void);
     void (*on_close)(const char *errstr);
+    uint64_t connect_timeout;
+    uint64_t command_timeout;
 
     struct redisAsyncContext *_redis;
     h2o_timeout_t _defer_timeout;
-    h2o_timeout_entry_t _timeout_entry;
+    h2o_timeout_entry_t _defer_timeout_entry;
+    h2o_timeout_t _connect_timeout;
+    h2o_timeout_entry_t _connect_timeout_entry;
+    int _did_connect_timeout : 1;
 } h2o_redis_conn_t;
 
-typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data);
+typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, int err, const char *errstr);
+
+typedef enum enum_h2o_redis_command_type_t {
+    H2O_REDIS_COMMAND_TYPE_NORMAL = 1,
+    H2O_REDIS_COMMAND_TYPE_SUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE,
+    H2O_REDIS_COMMAND_TYPE_MONITOR,
+    H2O_REDIS_COMMAND_TYPE_ERROR
+} h2o_redis_command_type_t;
+
+enum {
+    H2O_REDIS_ERROR_NONE,
+    H2O_REDIS_ERROR_CONNECTION,
+    H2O_REDIS_ERROR_PROTOCOL,
+    H2O_REDIS_ERROR_CONNECT_TIMEOUT,
+    H2O_REDIS_ERROR_COMMAND_TIMEOUT,
+    H2O_REDIS_ERROR_UNKNOWN
+};
 
 typedef struct st_h2o_redis_command_t {
     h2o_redis_conn_t *conn;
     h2o_redis_command_cb cb;
     void *data;
-    h2o_timeout_entry_t _timeout_entry;
+    h2o_redis_command_type_t type;
+    h2o_timeout_entry_t _defer_timeout_entry;
+    h2o_timeout_t _command_timeout;
+    h2o_timeout_entry_t _command_timeout_entry;
+    int _did_command_timeout : 1;
 } h2o_redis_command_t;
 
 h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz);
@@ -59,5 +87,7 @@ void h2o_redis_disconnect(h2o_redis_conn_t *conn);
 void h2o_redis_free(h2o_redis_conn_t *conn);
 
 h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
+h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc,
+                                            const char **argv, const size_t *argvlen);
 
 #endif

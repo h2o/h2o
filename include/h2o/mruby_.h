@@ -57,6 +57,7 @@ enum {
     H2O_MRUBY_PROC_EACH_TO_ARRAY,
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
+    H2O_MRUBY_H2O_MODULE,
     H2O_MRUBY_GENERATOR_CLASS,
 
     /* used by chunked.c */
@@ -100,6 +101,7 @@ typedef struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
+    h2o_context_t *ctx;
     mrb_value pendings;
 } h2o_mruby_context_t;
 
@@ -117,12 +119,14 @@ typedef struct st_h2o_mruby_generator_t {
     } refs;
 } h2o_mruby_generator_t;
 
+#define H2O_MRUBY_CALLBACK_ID_NOOP 0
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP -2
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP -3
 #define H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS -4
 #define H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE -5
 #define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -6
+#define H2O_MRUBY_CALLBACK_ID_REDIS_JOIN_REPLY -7
 #define H2O_MRUBY_CALLBACK_ID_SLEEP -999
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
@@ -182,6 +186,10 @@ h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mr
                                                               h2o_mruby_generator_t *generator);
 void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator);
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final);
+
+/* handler/mruby/redis.c */
+void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx);
+mrb_value h2o_mruby_redis_join_reply_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value args, int *next_action);
 
 /* handler/mruby/sleep.c */
 void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);

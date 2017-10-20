@@ -22,6 +22,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include "h2o/redis.h"
+#include "hiredis.h"
 
 static h2o_loop_t *loop;
 static int exit_loop;
@@ -43,7 +44,7 @@ static void dump_reply(redisReply *reply, unsigned indent)
     switch (reply->type) {
     case REDIS_REPLY_STRING:
 
-        fprintf(stderr, "string: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "string: %.*s\n", (int)reply->len, reply->str);
         break;
     case REDIS_REPLY_ARRAY:
         fprintf(stderr, "array: %zu\n", reply->elements);
@@ -58,23 +59,25 @@ static void dump_reply(redisReply *reply, unsigned indent)
         fprintf(stderr, "integer: %lld\n", reply->integer);
         break;
     case REDIS_REPLY_STATUS:
-        fprintf(stderr, "status: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "status: %.*s\n", (int)reply->len, reply->str);
         break;
     case REDIS_REPLY_ERROR:
-        fprintf(stderr, "error: %.*s\n", reply->len, reply->str);
+        fprintf(stderr, "error: %.*s\n", (int)reply->len, reply->str);
         break;
     default:
         fprintf(stderr, "invalid reply type: %d\n", reply->type);
     }
 }
 
-static void on_redis_command(redisReply *reply, void *cb_data)
+static void on_redis_command(redisReply *reply, void *cb_data, int err, const char *errstr)
 {
-    if (reply == NULL) {
-        fprintf(stderr, "redis command failed due to some connection problems\n");
+    if (err != H2O_REDIS_ERROR_NONE) {
+        fprintf(stderr, "redis error(%d): %s\n", err, errstr);
         return;
     }
-    dump_reply(reply, 0);
+    if (reply != NULL) {
+        dump_reply(reply, 0);
+    }
 }
 
 static void on_redis_connect(void)
@@ -127,7 +130,7 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
         uv_run(loop, UV_RUN_DEFAULT);
 #else
-        h2o_evloop_run(loop);
+        h2o_evloop_run(loop, INT32_MAX);
 #endif
     }
 
