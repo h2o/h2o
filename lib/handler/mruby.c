@@ -164,6 +164,13 @@ struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *co
         abort();
     }
 
+    /* adjust stack length of toplevel environment (see https://github.com/h2o/h2o/issues/1464#issuecomment-337880408) */
+    if (mrb->c->cibase->env) {
+        struct REnv *e = mrb->c->cibase->env;
+        if (MRB_ENV_STACK_LEN(e) < proc->body.irep->nlocals)
+            MRB_SET_ENV_STACK_LEN(e, proc->body.irep->nlocals);
+    }
+
 Exit:
     mrb_parser_free(parser);
     mrbc_context_free(mrb, cxt);
