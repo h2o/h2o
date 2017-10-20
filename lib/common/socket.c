@@ -794,7 +794,7 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
 #if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
-            if (cipher != NULL)
+            if (cipher == NULL)
                 return 0;
             return (int)cipher->aead->key_size;
         } else
