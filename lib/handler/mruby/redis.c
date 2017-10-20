@@ -99,9 +99,7 @@ static void pass_reply(struct st_h2o_mruby_redis_command_context_t *ctx, mrb_val
         mrb_funcall(mrb, ctx->refs.command, "_on_reply", 1, reply);
         h2o_mruby_assert(mrb);
     } else {
-        int gc_arena = mrb_gc_arena_save(mrb);
         h2o_mruby_run_fiber(ctx->conn->ctx, detach_receiver(ctx, 1), reply, NULL);
-        mrb_gc_arena_restore(mrb, gc_arena);
     }
 }
 
@@ -206,6 +204,8 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
     mrb_state *mrb = ctx->conn->ctx->shared->mrb;
     mrb_value reply = mrb_nil_value();
 
+    int gc_arena = mrb_gc_arena_save(mrb);
+
     if (err == H2O_REDIS_ERROR_NONE) {
         if (_reply == NULL) return;
         reply = decode_redis_reply(mrb, _reply, ctx->refs.command);
@@ -234,6 +234,8 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
     }
 
     pass_reply(ctx, reply);
+
+    mrb_gc_arena_restore(mrb, gc_arena);
     mrb_gc_unregister(mrb, ctx->refs.command);
 }
 
