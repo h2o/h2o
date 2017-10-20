@@ -152,9 +152,19 @@ mrb_value h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config
         abort();
     }
 
+    /* adjust stack length of toplevel environment (see https://github.com/h2o/h2o/issues/1464#issuecomment-337880408) */
+    if (mrb->c->cibase->env) {
+        struct REnv *e = mrb->c->cibase->env;
+        fprintf(stderr, "@@@stack len: %u, nlocals: %u\n", (unsigned)MRB_ENV_STACK_LEN(e), (unsigned)proc->body.irep->nlocals);
+        if (MRB_ENV_STACK_LEN(e) < proc->body.irep->nlocals)
+            MRB_SET_ENV_STACK_LEN(e, proc->body.irep->nlocals);
+    }
+
     /* reset configuration context */
     h2o_mruby_eval_expr(mrb, "H2O::ConfigurationContext.reset");
     h2o_mruby_assert(mrb);
+    if (mrb->c->cibase->env)
+        fprintf(stderr, "!!!stack len: %u\n", (unsigned)MRB_ENV_STACK_LEN(mrb->c->cibase->env));
 
     /* run code and generate handler */
     result = mrb_run(mrb, proc, mrb_top_self(mrb));
