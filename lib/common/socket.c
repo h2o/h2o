@@ -970,7 +970,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
             sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
         } else
 #endif
-        {
+        if (sock->ssl->ossl != NULL) {
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
             switch (SSL_CIPHER_get_id(cipher)) {
             case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
