@@ -1,6 +1,26 @@
 ##
 # IO Test
 
+unless Object.respond_to? :assert_nothing_raised
+  def assert_nothing_raised(*exp)
+    ret = true
+    if $mrbtest_assert
+      $mrbtest_assert_idx += 1
+      msg = exp.last.class == String ? exp.pop : ""
+      begin
+        yield
+      rescue Exception => e
+        msg = "#{msg} exception raised."
+        diff = "      Class: <#{e.class}>\n" +
+          "    Message: #{e.message}"
+        $mrbtest_assert.push([$mrbtest_assert_idx, msg, diff])
+        ret = false
+      end
+    end
+    ret
+  end
+end
+
 assert('IO TEST SETUP') do
   MRubyIOTestUtil.io_test_setup
 end
@@ -50,14 +70,28 @@ end
 #assert('IO#each_line', '15.2.20.5.5') do
 
 assert('IO#eof?', '15.2.20.5.6') do
-  io = IO.new(IO.sysopen($mrbtest_io_rfname))
-  $mrbtest_io_msg.each_char { |ch|
-    # XXX
-    #assert_false io.eof?
-    io.getc
-  }
+  io = IO.new(IO.sysopen($mrbtest_io_wfname, 'w'), 'w')
+  assert_raise(IOError) do
+    io.eof?
+  end
+  io.close
+
+  # empty file
+  io = IO.open(IO.sysopen($mrbtest_io_wfname, 'w'), 'w')
+  io.close
+  io = IO.open(IO.sysopen($mrbtest_io_wfname, 'r'), 'r')
   assert_true io.eof?
   io.close
+
+  # nonempty file
+  io = IO.new(IO.sysopen($mrbtest_io_rfname))
+  assert_false io.eof?
+  io.readchar
+  assert_false io.eof?
+  io.read
+  assert_true io.eof?
+  io.close
+
   true
 end
 
@@ -106,6 +140,13 @@ assert('IO#read', '15.2.20.5.14') do
   end
 end
 
+assert "IO#read(n) with n > IO::BUF_SIZE" do
+  r,w = IO.pipe
+  n = IO::BUF_SIZE+1
+  w.write 'a'*n
+  assert_equal r.read(n), 'a'*n
+end
+
 assert('IO#readchar', '15.2.20.5.15') do
   # almost same as IO#getc
   IO.open(IO.sysopen($mrbtest_io_rfname)) do |io|
@@ -146,6 +187,24 @@ end
 assert('IO#write', '15.2.20.5.20') do
   io = IO.open(IO.sysopen($mrbtest_io_wfname))
   assert_equal 0, io.write("")
+  io.close
+
+  io = IO.open(IO.sysopen($mrbtest_io_wfname, "r+"), "r+")
+  assert_equal 7, io.write("abcdefg")
+  io.rewind
+  assert_equal "ab", io.read(2)
+  assert_equal 3, io.write("123")
+  io.rewind
+  assert_equal "ab123fg", io.read
+  io.close
+
+  true
+end
+
+assert('IO#<<') do
+  io = IO.open(IO.sysopen($mrbtest_io_wfname))
+  io << "" << ""
+  assert_equal 0, io.pos
   io.close
   true
 end
@@ -191,8 +250,22 @@ assert('IO.sysopen, IO#sysread') do
     io.sysread(10000)
     io.sysread(10000)
   end
+
+  assert_raise RuntimeError do
+    io.sysread(5, "abcde".freeze)
+  end
+
   io.close
+  assert_equal "", io.sysread(0)
+  assert_raise(IOError) { io.sysread(1) }
+  assert_raise(ArgumentError) { io.sysread(-1) }
   io.closed?
+
+  fd = IO.sysopen $mrbtest_io_wfname, "w"
+  io = IO.new fd, "w"
+  assert_raise(IOError) { io.sysread(1) }
+  io.close
+  true
 end
 
 assert('IO.sysopen, IO#syswrite') do
@@ -234,6 +307,18 @@ assert('IO#_read_buf') do
   io.closed?
 end
 
+assert('IO#isatty') do
+  f1 = File.open("/dev/tty")
+  f2 = File.open($mrbtest_io_rfname)
+
+  assert_true  f1.isatty
+  assert_false f2.isatty
+
+  f1.close
+  f2.close
+  true
+end
+
 assert('IO#pos=, IO#seek') do
   fd = IO.sysopen $mrbtest_io_rfname
   io = IO.new fd
@@ -243,6 +328,17 @@ assert('IO#pos=, IO#seek') do
   assert_equal 'm', io.getc
   assert_equal 1, io.pos
   assert_equal 0, io.seek(0)
+  assert_equal 0, io.pos
+  io.close
+  io.closed?
+end
+
+assert('IO#rewind') do
+  fd = IO.sysopen $mrbtest_io_rfname
+  io = IO.new fd
+  assert_equal 'm', io.getc
+  assert_equal 1, io.pos
+  assert_equal 0, io.rewind
   assert_equal 0, io.pos
   io.close
   io.closed?
@@ -320,15 +416,65 @@ assert('IO#gets - paragraph mode') do
 end
 
 assert('IO.popen') do
-  io = IO.popen("ls")
-  assert_true io.close_on_exec?
-  assert_equal Fixnum, io.pid.class
-  ls = io.read
-  assert_equal ls.class, String
-  assert_include ls, 'AUTHORS'
-  assert_include ls, 'mrblib'
-  io.close
-  io.closed?
+  begin
+    $? = nil
+    io = IO.popen("echo mruby-io")
+    assert_true io.close_on_exec?
+    assert_equal Fixnum, io.pid.class
+
+    out = io.read
+    assert_equal out.class, String
+    assert_include out, 'mruby-io'
+
+    io.close
+    if Object.const_defined? :Process
+      assert_true $?.success?
+    else
+      assert_equal 0, $?
+    end
+
+    assert_true io.closed?
+  rescue NotImplementedError => e
+    skip e.message
+  end
+end
+
+assert('IO.popen with in option') do
+  begin
+    IO.pipe do |r, w|
+      w.write 'hello'
+      w.close
+      assert_equal "hello", IO.popen("cat", "r", in: r) { |i| i.read }
+      assert_equal "", r.read
+    end
+    assert_raise(ArgumentError) { IO.popen("hello", "r", in: Object.new) }
+  rescue NotImplementedError => e
+    skip e.message
+  end
+end
+
+assert('IO.popen with out option') do
+  begin
+    IO.pipe do |r, w|
+      IO.popen("echo 'hello'", "w", out: w) {}
+      w.close
+      assert_equal "hello\n", r.read
+    end
+  rescue NotImplementedError => e
+    skip e.message
+  end
+end
+
+assert('IO.popen with err option') do
+  begin
+    IO.pipe do |r, w|
+      assert_equal "", IO.popen("echo 'hello' 1>&2", "r", err: w) { |i| i.read }
+      w.close
+      assert_equal "hello\n", r.read
+    end
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert('IO.read') do
@@ -383,32 +529,79 @@ assert('IO#close_on_exec') do
   io.close
   io.closed?
 
-  # # Use below when IO.pipe is implemented.
-  # begin
-  #   r, w = IO.pipe
-  #   assert_equal(false, r.close_on_exec?)
-  #   r.close_on_exec = true
-  #   assert_equal(true, r.close_on_exec?)
-  #   r.close_on_exec = false
-  #   assert_equal(false, r.close_on_exec?)
-  #   r.close_on_exec = true
-  #   assert_equal(true, r.close_on_exec?)
+  begin
+    r, w = IO.pipe
+    assert_equal(true, r.close_on_exec?)
+    r.close_on_exec = false
+    assert_equal(false, r.close_on_exec?)
+    r.close_on_exec = true
+    assert_equal(true, r.close_on_exec?)
 
-  #   assert_equal(false, w.close_on_exec?)
-  #   w.close_on_exec = true
-  #   assert_equal(true, w.close_on_exec?)
-  #   w.close_on_exec = false
-  #   assert_equal(false, w.close_on_exec?)
-  #   w.close_on_exec = true
-  #   assert_equal(true, w.close_on_exec?)
-  # ensure
-  #   r.close unless r.closed?
-  #   w.close unless w.closed?
-  # end
+    assert_equal(true, w.close_on_exec?)
+    w.close_on_exec = false
+    assert_equal(false, w.close_on_exec?)
+    w.close_on_exec = true
+    assert_equal(true, w.close_on_exec?)
+  ensure
+    r.close unless r.closed?
+    w.close unless w.closed?
+  end
+end
+
+assert('IO#sysseek') do
+  IO.open(IO.sysopen($mrbtest_io_rfname)) do |io|
+    assert_equal 2, io.sysseek(2)
+    assert_equal 5, io.sysseek(3, IO::SEEK_CUR) # 2 + 3 => 5
+    assert_equal $mrbtest_io_msg.size - 4, io.sysseek(-4, IO::SEEK_END)
+  end
+end
+
+assert('IO.pipe') do
+  begin
+    called = false
+    IO.pipe do |r, w|
+      assert_true r.kind_of?(IO)
+      assert_true w.kind_of?(IO)
+      assert_false r.closed?
+      assert_false w.closed?
+      assert_true FileTest.pipe?(r)
+      assert_true FileTest.pipe?(w)
+      assert_nil r.pid
+      assert_nil w.pid
+      assert_true 2 < r.fileno
+      assert_true 2 < w.fileno
+      assert_true r.fileno != w.fileno
+      assert_false r.sync
+      assert_true w.sync
+      assert_equal 8, w.write('test for')
+      assert_equal 'test', r.read(4)
+      assert_equal ' for', r.read(4)
+      assert_equal 5, w.write(' pipe')
+      assert_equal nil, w.close
+      assert_equal ' pipe', r.read
+      called = true
+      assert_raise(IOError) { r.write 'test' }
+      # TODO:
+      # This assert expect raise IOError but got RuntimeError
+      # Because mruby-io not have flag for I/O readable
+      # assert_raise(IOError) { w.read }
+    end
+    assert_true called
+
+    assert_nothing_raised do
+      IO.pipe { |r, w| r.close; w.close }
+    end
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert('`cmd`') do
-  assert_equal `echo foo`, "foo\n"
+  begin
+    assert_equal `echo foo`, "foo\n"
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert('IO TEST CLEANUP') do

@@ -40,15 +40,55 @@
 #include <string.h>
 
 
+static void mrb_io_free(mrb_state *mrb, void *ptr);
+struct mrb_data_type mrb_io_type = { "IO", mrb_io_free };
+
+
+static struct mrb_io *io_get_open_fptr(mrb_state *mrb, mrb_value self);
 static int mrb_io_modestr_to_flags(mrb_state *mrb, const char *modestr);
 static int mrb_io_flags_to_modenum(mrb_state *mrb, int flags);
-static void fptr_finalize(mrb_state *mrb, struct mrb_io *fptr, int noraise);
+static void fptr_finalize(mrb_state *mrb, struct mrb_io *fptr, int quiet);
 
 #if MRUBY_RELEASE_NO < 10000
 static struct RClass *
 mrb_module_get(mrb_state *mrb, const char *name)
 {
   return mrb_class_get(mrb, name);
+}
+#endif
+
+static struct mrb_io *
+io_get_open_fptr(mrb_state *mrb, mrb_value self)
+{
+  struct mrb_io *fptr;
+
+  fptr = (struct mrb_io *)mrb_get_datatype(mrb, self, &mrb_io_type);
+  if (fptr->fd < 0) {
+    mrb_raise(mrb, E_IO_ERROR, "closed stream.");
+  }
+  return fptr;
+}
+
+#if !defined(_WIN32) && !defined(_WIN64)
+static void
+io_set_process_status(mrb_state *mrb, pid_t pid, int status)
+{
+  struct RClass *c_process, *c_status;
+  mrb_value v;
+
+  c_status = NULL;
+  if (mrb_class_defined(mrb, "Process")) {
+    c_process = mrb_module_get(mrb, "Process");
+    if (mrb_const_defined(mrb, mrb_obj_value(c_process), mrb_intern_cstr(mrb, "Status"))) {
+      c_status = mrb_class_get_under(mrb, c_process, "Status");
+    }
+  }
+  if (c_status != NULL) {
+    v = mrb_funcall(mrb, mrb_obj_value(c_status), "new", 2, mrb_fixnum_value(pid), mrb_fixnum_value(status));
+  } else {
+    v = mrb_fixnum_value(WEXITSTATUS(status));
+  }
+  mrb_gv_set(mrb, mrb_intern_cstr(mrb, "$?"), v);
 }
 #endif
 
@@ -128,9 +168,9 @@ mrb_io_flags_to_modenum(mrb_state *mrb, int flags)
 void
 mrb_fd_cloexec(mrb_state *mrb, int fd)
 {
+#if defined(F_GETFD) && defined(F_SETFD) && defined(FD_CLOEXEC)
   int flags, flags2;
 
-#if defined(F_GETFD) && defined(F_SETFD) && defined(FD_CLOEXEC)
   flags = fcntl(fd, F_GETFD);
   if (flags == -1) {
     mrb_sys_fail(mrb, "fcntl");
@@ -150,6 +190,32 @@ mrb_fd_cloexec(mrb_state *mrb, int fd)
 }
 
 #ifndef _WIN32
+static int
+mrb_cloexec_pipe(mrb_state *mrb, int fildes[2])
+{
+  int ret;
+  ret = pipe(fildes);
+  if (ret == -1)
+    return -1;
+  mrb_fd_cloexec(mrb, fildes[0]);
+  mrb_fd_cloexec(mrb, fildes[1]);
+  return ret;
+}
+
+static int
+mrb_pipe(mrb_state *mrb, int pipes[2])
+{
+  int ret;
+  ret = mrb_cloexec_pipe(mrb, pipes);
+  if (ret == -1) {
+    if (errno == EMFILE || errno == ENFILE) {
+      mrb_garbage_collect(mrb);
+      ret = mrb_cloexec_pipe(mrb, pipes);
+    }
+  }
+  return ret;
+}
+
 static int
 mrb_proc_exec(const char *pname)
 {
@@ -179,8 +245,6 @@ mrb_io_free(mrb_state *mrb, void *ptr)
   }
 }
 
-struct mrb_data_type mrb_io_type = { "IO", mrb_io_free };
-
 static struct mrb_io *
 mrb_io_alloc(mrb_state *mrb)
 {
@@ -190,6 +254,7 @@ mrb_io_alloc(mrb_state *mrb)
   fptr->fd = -1;
   fptr->fd2 = -1;
   fptr->pid = 0;
+  fptr->readable = 0;
   fptr->writable = 0;
   fptr->sync = 0;
   return fptr;
@@ -200,6 +265,26 @@ mrb_io_alloc(mrb_state *mrb)
 #endif
 
 #ifndef _WIN32
+static int
+option_to_fd(mrb_state *mrb, mrb_value obj, const char *key)
+{
+  mrb_value opt = mrb_funcall(mrb, obj, "[]", 1, mrb_symbol_value(mrb_intern_static(mrb, key, strlen(key))));
+  if (mrb_nil_p(opt)) {
+    return -1;
+  }
+
+  switch (mrb_type(opt)) {
+    case MRB_TT_DATA: /* IO */
+      return mrb_fixnum(mrb_io_fileno(mrb, opt));
+    case MRB_TT_FIXNUM:
+      return mrb_fixnum(opt);
+    default:
+      mrb_raise(mrb, E_ARGUMENT_ERROR, "wrong exec redirect action");
+      break;
+  }
+  return -1; /* never reached */
+}
+
 mrb_value
 mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
 {
@@ -214,6 +299,7 @@ mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
   int pw[2] = { -1, -1 };
   int doexec;
   int saved_errno;
+  int opt_in, opt_out, opt_err;
 
   mrb_get_args(mrb, "S|SH", &cmd, &mode, &opt);
   io = mrb_obj_value(mrb_data_object_alloc(mrb, mrb_class_ptr(klass), NULL, &mrb_io_type));
@@ -222,6 +308,9 @@ mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
   flags = mrb_io_modestr_to_flags(mrb, mrb_string_value_cstr(mrb, &mode));
 
   doexec = (strcmp("-", pname) != 0);
+  opt_in = option_to_fd(mrb, opt, "in");
+  opt_out = option_to_fd(mrb, opt, "out");
+  opt_err = option_to_fd(mrb, opt, "err");
 
   if (flags & FMODE_READABLE) {
     if (pipe(pr) == -1) {
@@ -251,6 +340,15 @@ mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
   result = mrb_nil_value();
   switch (pid = fork()) {
     case 0: /* child */
+      if (opt_in != -1) {
+        dup2(opt_in, 0);
+      }
+      if (opt_out != -1) {
+        dup2(opt_out, 1);
+      }
+      if (opt_err != -1) {
+        dup2(opt_err, 2);
+      }
       if (flags & FMODE_READABLE) {
         close(pr[0]);
         if (pr[1] != 1) {
@@ -291,12 +389,12 @@ mrb_io_s_popen(mrb_state *mrb, mrb_value klass)
       }
 
       mrb_iv_set(mrb, io, mrb_intern_cstr(mrb, "@buf"), mrb_str_new_cstr(mrb, ""));
-      mrb_iv_set(mrb, io, mrb_intern_cstr(mrb, "@pos"), mrb_fixnum_value(0));
 
       fptr = mrb_io_alloc(mrb);
       fptr->fd = fd;
       fptr->fd2 = write_fd;
       fptr->pid = pid;
+      fptr->readable = ((flags & FMODE_READABLE) != 0);
       fptr->writable = ((flags & FMODE_WRITABLE) != 0);
       fptr->sync = 0;
 
@@ -344,11 +442,10 @@ mrb_io_initialize(mrb_state *mrb, mrb_value io)
   flags = mrb_io_modestr_to_flags(mrb, mrb_string_value_cstr(mrb, &mode));
 
   mrb_iv_set(mrb, io, mrb_intern_cstr(mrb, "@buf"), mrb_str_new_cstr(mrb, ""));
-  mrb_iv_set(mrb, io, mrb_intern_cstr(mrb, "@pos"), mrb_fixnum_value(0));
 
-  fptr = DATA_PTR(io);
+  fptr = (struct mrb_io *)DATA_PTR(io);
   if (fptr != NULL) {
-    fptr_finalize(mrb, fptr, 0);
+    fptr_finalize(mrb, fptr, TRUE);
     mrb_free(mrb, fptr);
   }
   fptr = mrb_io_alloc(mrb);
@@ -357,45 +454,77 @@ mrb_io_initialize(mrb_state *mrb, mrb_value io)
   DATA_PTR(io) = fptr;
 
   fptr->fd = fd;
+  fptr->readable = ((flags & FMODE_READABLE) != 0);
   fptr->writable = ((flags & FMODE_WRITABLE) != 0);
   fptr->sync = 0;
   return io;
 }
 
 static void
-fptr_finalize(mrb_state *mrb, struct mrb_io *fptr, int noraise)
+fptr_finalize(mrb_state *mrb, struct mrb_io *fptr, int quiet)
 {
-  int n = 0;
+  int saved_errno = 0;
 
   if (fptr == NULL) {
     return;
   }
 
   if (fptr->fd > 2) {
-    n = close(fptr->fd);
-    if (n == 0) {
-      fptr->fd = -1;
+    if (close(fptr->fd) == -1) {
+      saved_errno = errno;
     }
+    fptr->fd = -1;
   }
+
   if (fptr->fd2 > 2) {
-    n = close(fptr->fd2);
-    if (n == 0) {
-      fptr->fd2 = -1;
+    if (close(fptr->fd2) == -1) {
+      if (saved_errno == 0) {
+        saved_errno = errno;
+      }
     }
+    fptr->fd2 = -1;
   }
 
 #if !defined(_WIN32) && !defined(_WIN64)
   if (fptr->pid != 0) {
     pid_t pid;
+    int status;
     do {
-      pid = waitpid(fptr->pid, NULL, 0);
+      pid = waitpid(fptr->pid, &status, 0);
     } while (pid == -1 && errno == EINTR);
+    if (!quiet && pid == fptr->pid) {
+      io_set_process_status(mrb, pid, status);
+    }
+    fptr->pid = 0;
+    /* Note: we don't raise an exception when waitpid(3) fails */
   }
 #endif
 
-  if (!noraise && n != 0) {
+  if (!quiet && saved_errno != 0) {
+    errno = saved_errno;
     mrb_sys_fail(mrb, "fptr_finalize failed.");
   }
+}
+
+mrb_value
+mrb_io_check_readable(mrb_state *mrb, mrb_value self)
+{
+  struct mrb_io *fptr = io_get_open_fptr(mrb, self);
+  if (! fptr->readable) {
+    mrb_raise(mrb, E_IO_ERROR, "not opened for reading");
+  }
+  return mrb_nil_value();
+}
+
+mrb_value
+mrb_io_isatty(mrb_state *mrb, mrb_value self)
+{
+  struct mrb_io *fptr;
+
+  fptr = io_get_open_fptr(mrb, self);
+  if (isatty(fptr->fd) == 0)
+    return mrb_false_value();
+  return mrb_true_value();
 }
 
 mrb_value
@@ -425,6 +554,7 @@ mrb_io_s_sysclose(mrb_state *mrb, mrb_value klass)
 int
 mrb_cloexec_open(mrb_state *mrb, const char *pathname, mrb_int flags, mrb_int mode)
 {
+  mrb_value emsg;
   int fd, retry = FALSE;
 
 #ifdef O_CLOEXEC
@@ -445,7 +575,10 @@ reopen:
         goto reopen;
       }
     }
-    mrb_sys_fail(mrb, "open");
+
+    emsg = mrb_format(mrb, "open %S", mrb_str_new_cstr(mrb, pathname));
+    mrb_str_modify(mrb, mrb_str_ptr(emsg));
+    mrb_sys_fail(mrb, RSTRING_PTR(emsg));
   }
 
   if (fd <= 2) {
@@ -488,17 +621,26 @@ mrb_io_sysread(mrb_state *mrb, mrb_value io)
 
   mrb_get_args(mrb, "i|S", &maxlen, &buf);
   if (maxlen < 0) {
-    return mrb_nil_value();
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "negative expanding string size");
+  }
+  else if (maxlen == 0) {
+    return mrb_str_new(mrb, NULL, maxlen);
   }
 
   if (mrb_nil_p(buf)) {
     buf = mrb_str_new(mrb, NULL, maxlen);
   }
+
   if (RSTRING_LEN(buf) != maxlen) {
     buf = mrb_str_resize(mrb, buf, maxlen);
+  } else {
+    mrb_str_modify(mrb, RSTRING(buf));
   }
 
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
+  fptr = (struct mrb_io *)io_get_open_fptr(mrb, io);
+  if (!fptr->readable) {
+    mrb_raise(mrb, E_IO_ERROR, "not opened for reading");
+  }
   ret = read(fptr->fd, RSTRING_PTR(buf), maxlen);
   switch (ret) {
     case 0: /* EOF */
@@ -525,7 +667,7 @@ mrb_value
 mrb_io_sysseek(mrb_state *mrb, mrb_value io)
 {
   struct mrb_io *fptr;
-  int pos;
+  off_t pos;
   mrb_int offset, whence = -1;
 
   mrb_get_args(mrb, "i|i", &offset, &whence);
@@ -535,11 +677,14 @@ mrb_io_sysseek(mrb_state *mrb, mrb_value io)
 
   fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
   pos = lseek(fptr->fd, offset, whence);
-  if (pos < 0) {
-    mrb_raise(mrb, E_IO_ERROR, "sysseek faield");
+  if (pos == -1) {
+    mrb_sys_fail(mrb, "sysseek");
   }
-
-  return mrb_fixnum_value(pos);
+  if (pos > MRB_INT_MAX) {
+    return mrb_float_value(mrb, (mrb_float)pos);
+  } else {
+    return mrb_fixnum_value(pos);
+  }
 }
 
 mrb_value
@@ -567,18 +712,18 @@ mrb_io_syswrite(mrb_state *mrb, mrb_value io)
     fd = fptr->fd2;
   }
   length = write(fd, RSTRING_PTR(buf), RSTRING_LEN(buf));
+  if (length == -1) {
+    mrb_sys_fail(mrb, 0);
+  }
 
   return mrb_fixnum_value(length);
 }
 
 mrb_value
-mrb_io_close(mrb_state *mrb, mrb_value io)
+mrb_io_close(mrb_state *mrb, mrb_value self)
 {
   struct mrb_io *fptr;
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
-  if (fptr && fptr->fd < 0) {
-    mrb_raise(mrb, E_IO_ERROR, "closed stream.");
-  }
+  fptr = io_get_open_fptr(mrb, self);
   fptr_finalize(mrb, fptr, FALSE);
   return mrb_nil_value();
 }
@@ -640,6 +785,44 @@ mrb_io_read_data_pending(mrb_state *mrb, mrb_value io)
   }
   return 0;
 }
+
+#ifndef _WIN32
+static mrb_value
+mrb_io_s_pipe(mrb_state *mrb, mrb_value klass)
+{
+  mrb_value r = mrb_nil_value();
+  mrb_value w = mrb_nil_value();
+  struct mrb_io *fptr_r;
+  struct mrb_io *fptr_w;
+  int pipes[2];
+
+  if (mrb_pipe(mrb, pipes) == -1) {
+    mrb_sys_fail(mrb, "pipe");
+  }
+
+  r = mrb_obj_value(mrb_data_object_alloc(mrb, mrb_class_ptr(klass), NULL, &mrb_io_type));
+  mrb_iv_set(mrb, r, mrb_intern_cstr(mrb, "@buf"), mrb_str_new_cstr(mrb, ""));
+  fptr_r = mrb_io_alloc(mrb);
+  fptr_r->fd = pipes[0];
+  fptr_r->readable = 1;
+  fptr_r->writable = 0;
+  fptr_r->sync = 0;
+  DATA_TYPE(r) = &mrb_io_type;
+  DATA_PTR(r)  = fptr_r;
+
+  w = mrb_obj_value(mrb_data_object_alloc(mrb, mrb_class_ptr(klass), NULL, &mrb_io_type));
+  mrb_iv_set(mrb, w, mrb_intern_cstr(mrb, "@buf"), mrb_str_new_cstr(mrb, ""));
+  fptr_w = mrb_io_alloc(mrb);
+  fptr_w->fd = pipes[1];
+  fptr_w->readable = 0;
+  fptr_w->writable = 1;
+  fptr_w->sync = 1;
+  DATA_TYPE(w) = &mrb_io_type;
+  DATA_PTR(w)  = fptr_w;
+
+  return mrb_assoc_new(mrb, r, w);
+}
+#endif
 
 static mrb_value
 mrb_io_s_select(mrb_state *mrb, mrb_value klass)
@@ -812,16 +995,13 @@ mrb_io_fileno(mrb_state *mrb, mrb_value io)
 }
 
 mrb_value
-mrb_io_close_on_exec_p(mrb_state *mrb, mrb_value io)
+mrb_io_close_on_exec_p(mrb_state *mrb, mrb_value self)
 {
 #if defined(F_GETFD) && defined(F_SETFD) && defined(FD_CLOEXEC)
   struct mrb_io *fptr;
   int ret;
 
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
-  if (fptr->fd < 0) {
-    mrb_raise(mrb, E_IO_ERROR, "closed stream");
-  }
+  fptr = io_get_open_fptr(mrb, self);
 
   if (fptr->fd2 >= 0) {
     if ((ret = fcntl(fptr->fd2, F_GETFD)) == -1) mrb_sys_fail(mrb, "F_GETFD failed");
@@ -839,18 +1019,14 @@ mrb_io_close_on_exec_p(mrb_state *mrb, mrb_value io)
 }
 
 mrb_value
-mrb_io_set_close_on_exec(mrb_state *mrb, mrb_value io)
+mrb_io_set_close_on_exec(mrb_state *mrb, mrb_value self)
 {
 #if defined(F_GETFD) && defined(F_SETFD) && defined(FD_CLOEXEC)
   struct mrb_io *fptr;
   int flag, ret;
   mrb_bool b;
 
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
-  if (fptr->fd < 0) {
-    mrb_raise(mrb, E_IO_ERROR, "closed stream");
-  }
-
+  fptr = io_get_open_fptr(mrb, self);
   mrb_get_args(mrb, "b", &b);
   flag = b ? FD_CLOEXEC : 0;
 
@@ -884,11 +1060,7 @@ mrb_io_set_sync(mrb_state *mrb, mrb_value self)
   struct mrb_io *fptr;
   mrb_bool b;
 
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, self, &mrb_io_type);
-  if (fptr->fd < 0) {
-    mrb_raise(mrb, E_IO_ERROR, "closed stream.");
-  }
-
+  fptr = io_get_open_fptr(mrb, self);
   mrb_get_args(mrb, "b", &b);
   fptr->sync = b;
   return mrb_bool_value(b);
@@ -898,11 +1070,7 @@ mrb_value
 mrb_io_sync(mrb_state *mrb, mrb_value self)
 {
   struct mrb_io *fptr;
-
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, self, &mrb_io_type);
-  if (fptr->fd < 0) {
-    mrb_raise(mrb, E_IO_ERROR, "closed stream.");
-  }
+  fptr = io_get_open_fptr(mrb, self);
   return mrb_bool_value(fptr->sync);
 }
 
@@ -922,8 +1090,13 @@ mrb_init_io(mrb_state *mrb)
   mrb_define_class_method(mrb, io, "for_fd",  mrb_io_s_for_fd,   MRB_ARGS_ANY());
   mrb_define_class_method(mrb, io, "select",  mrb_io_s_select,  MRB_ARGS_ANY());
   mrb_define_class_method(mrb, io, "sysopen", mrb_io_s_sysopen, MRB_ARGS_ANY());
+#ifndef _WIN32
+  mrb_define_class_method(mrb, io, "_pipe", mrb_io_s_pipe, MRB_ARGS_NONE());
+#endif
 
   mrb_define_method(mrb, io, "initialize", mrb_io_initialize, MRB_ARGS_ANY());    /* 15.2.20.5.21 (x)*/
+  mrb_define_method(mrb, io, "_check_readable", mrb_io_check_readable, MRB_ARGS_NONE());
+  mrb_define_method(mrb, io, "isatty",     mrb_io_isatty,     MRB_ARGS_NONE());
   mrb_define_method(mrb, io, "sync",       mrb_io_sync,       MRB_ARGS_NONE());
   mrb_define_method(mrb, io, "sync=",      mrb_io_set_sync,   MRB_ARGS_REQ(1));
   mrb_define_method(mrb, io, "sysread",    mrb_io_sysread,    MRB_ARGS_ANY());
