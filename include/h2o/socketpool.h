@@ -64,7 +64,7 @@ typedef struct st_h2o_socketpool_target_t {
 
 } h2o_socketpool_target_t;
 
-typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
+typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
 
 typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried);
 
