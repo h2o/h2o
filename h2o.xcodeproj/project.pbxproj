@@ -855,6 +855,10 @@
 		E9BC76C31EE4AA4600EB7A09 /* 50reverse-proxy-preserve-case.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-preserve-case.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BC76C41EE4AA9700EB7A09 /* 50reverse-proxy-session-resumption.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-session-resumption.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80graceful-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9CD04271F8F1D5D00524877 /* Changes */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Changes; sourceTree = "<group>"; };
+		E9CD04281F8F1D7500524877 /* CONTRIBUTING.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = CONTRIBUTING.md; sourceTree = "<group>"; };
+		E9CD04291F8F1D7F00524877 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		E9CD042A1F8F1D8A00524877 /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1291,8 +1295,12 @@
 		1079230C19A320A700C52AD6 = {
 			isa = PBXGroup;
 			children = (
+				E9CD04271F8F1D5D00524877 /* Changes */,
 				1082150B1AB26F2F00D27E66 /* cmake */,
 				1082150A1AB26F2A00D27E66 /* CMakeLists.txt */,
+				E9CD04281F8F1D7500524877 /* CONTRIBUTING.md */,
+				E9CD042A1F8F1D8A00524877 /* LICENSE */,
+				E9CD04291F8F1D7F00524877 /* README.md */,
 				1079231E19A3210D00C52AD6 /* deps */,
 				10583BEC1AE5A353004A3AD6 /* doc */,
 				1079239E19A3215F00C52AD6 /* include */,

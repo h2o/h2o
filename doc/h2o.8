@@ -1,0 +1,45 @@
+.TH H2O 8
+.SH NAME
+H2O \- the optimized HTTP/1.x, HTTP/2 server
+.SH DESCRIPTION
+H2O, the optimized HTTP/1.x and HTTP/2 server.
+.SH SYNOPSIS
+.B h2o
+[\fB\-c,\-\-conf\fR] \fIFILE\fR
+[\fB\-m,\-\-mode\fR] \fIMODE\fR
+[\fB\-t,\-\-test\fR]
+[\fB\-v,\-\-version\fR]
+[\fB\-h,\-\-help\fR]
+.SH OPTIONS
+.TP
+.BR \-c ", " \-\-conf =\fIFILE\fR
+configuration file (default: etc/h2o.conf)
+.TP
+.BR \-m ", " \-\-mode =\fIMODE\fR
+specifies one of the following modes:
+.RS
+.PP
+.PP
+\'\fBworker\fR\' : invoked process handles incoming connections (default)
+
+.PP
+.PP
+\'\fBdaemon\fR\' : spawns a master process and exits. `error-log` must be configured when using this mode, as all the errors are logged to the file instead of being emitted to STDERR
+
+.PP
+.PP
+\'\fBmaster\fR\' : invoked process becomes a master process (using the `share/h2o/start_server` command) and spawns a worker process for handling incoming connections. Users may send SIGHUP to the master process to reconfigure or upgrade the server.
+
+.PP
+.PP
+\'\fBtest\fR\' : tests the configuration and exits
+
+.RE
+.TP
+.BR \-t ", " \-\-test
+.TP
+.BR \-v ", " \-\-version
+.TP
+.BR \-h ", " \-\-help
+.SH SEE ALSO
+h2o.conf(5)

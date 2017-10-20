@@ -43,7 +43,6 @@ struct rp_generator_t {
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
     void (*await_send)(h2o_http1client_t *);
-    h2o_write_req_chunk_done frontend_write_req_chunk_done;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -234,7 +233,7 @@ static h2o_iovec_t build_request_rest_headers(h2o_req_t *req, int keepalive, int
 
     /* CL or TE? Depends on whether we're streaming the request body or
        not, and if CL was advertised in the original request */
-    if (req->_write_req_chunk_done == NULL) {
+    if (req->proceed_req == NULL) {
         if (req->entity.base != NULL || req_requires_content_length(req)) {
             RESERVE(sizeof("content-length: " H2O_UINT64_LONGEST_STR) - 1);
             offset += sprintf(buf.base + offset, "content-length: %zu\r\n", req->entity.len);
@@ -578,22 +577,26 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
     return 0;
 }
 
-static void proxy_write_req_chunk_done(void *priv, size_t written, int done)
+static void proceed_request(h2o_http1client_t *client, size_t written, int is_end_stream)
 {
-    struct rp_generator_t *self = priv;
-    self->frontend_write_req_chunk_done(self->src_req, written, done);
+    struct rp_generator_t *self = client->data;
+    if (self->src_req->proceed_req != NULL)
+        self->src_req->proceed_req(self->src_req, written, is_end_stream);
 }
 
-static int frontend_write_req_chunk(void *priv, h2o_iovec_t payload, int is_end_stream)
+static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 {
-    struct rp_generator_t *self = priv;
+    struct rp_generator_t *self = ctx;
 
-    return h2o_http1client_write_req_chunk(self->client->sock, payload, is_end_stream);
+    if (is_end_stream) {
+        self->src_req->write_req.cb = NULL;
+    }
+    return h2o_http1client_write_req(self->client->sock, chunk, is_end_stream);
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_req_chunk_done *write_req_chunk_done,
-                                          void **write_req_chunk_done_ctx, h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
+                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
+                                          h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
 {
     struct rp_generator_t *self = client->data;
 
@@ -628,13 +631,11 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     *method_is_head = self->up_req.is_head;
 
     if (self->src_req->entity.base != NULL) {
-        if (self->src_req->_write_req_chunk_done != NULL) {
+        if (self->src_req->proceed_req != NULL) {
             *cur_body = self->src_req->entity;
-            *write_req_chunk_done = proxy_write_req_chunk_done;
-            *write_req_chunk_done_ctx = self;
-            self->frontend_write_req_chunk_done = self->src_req->_write_req_chunk_done;
-            self->src_req->_write_req_chunk.cb = frontend_write_req_chunk;
-            self->src_req->_write_req_chunk.priv = self;
+            *proceed_req_cb = proceed_request;
+            self->src_req->write_req.cb = write_req;
+            self->src_req->write_req.ctx = self;
         } else {
             self->up_req.bufs[2] = self->src_req->entity;
             *reqbufcnt = 3;

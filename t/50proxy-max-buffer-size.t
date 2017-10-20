@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
+use Time::HiRes qw(time);
 use IO::Socket::INET;
 use t::Util;
 
@@ -42,11 +43,15 @@ sub handler_curl {
     my $header = "HTTP/1.0 200 Ok\r\nConnection: close\r\n\r\n";
     $client_socket->send($header);
     my $start = time();
-    $client_socket->send("a" x 200000000);
+    for (1..200) {
+        $client_socket->send("abcabcabc\n" x 100000) == 1000000
+             or die "failed to write to socket:$!";
+    }
     my $duration = time() - $start;
     $client_socket->send("\n$duration");
 
-    close($client_socket);
+    close($client_socket)
+        or die "close failed:$!";
 };
 
 my $upstream = create_upstream();
@@ -82,9 +87,9 @@ EOT
         # OTOH, when the setting is set, it will take about the same time
         # to write to H2O, as it will take for curl download  the response
         if ($max_on) {
-            ok($duration - $resp <= 2, "Writing to H2O was as fast as the curl download");
+            cmp_ok($duration - $resp, '<=', 2, "Writing to H2O was as fast as the curl download");
         } else {
-            ok($duration - $resp > 3, "Writing to H2O was much faster than the curl download");
+            cmp_ok($duration - $resp, '>', 3, "Writing to H2O was much faster than the curl download");
         }
     });
 }
