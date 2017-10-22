@@ -118,10 +118,16 @@ typedef struct st_h2o_mruby_generator_t {
         h2o_ostream_t **slot;
         h2o_ostream_t *ostream;
         h2o_generator_t *original_generator;
+        h2o_timeout_entry_t defer_close_timeout_entry;
     } output_filter;
     struct {
         mrb_value generator;
     } refs;
+    struct {
+        h2o_timeout_entry_t timeout_entry;
+        mrb_value receiver;
+        mrb_value args;
+    } defer_invoke;
 } h2o_mruby_generator_t;
 
 typedef struct st_h2o_mruby_chunked_t {

@@ -50,6 +50,11 @@ struct st_mruby_output_prefilter_t {
     h2o_mruby_context_t *ctx;
     h2o_mruby_generator_t *generator;
     mrb_value receiver;
+
+    struct {
+        h2o_timeout_entry_t timeout_entry;
+        mrb_value resp;
+    } defer_resume;
 };
 
 struct st_mruby_output_ostream_t {
@@ -702,6 +707,15 @@ static void do_generator_stop(h2o_generator_t *_generator, h2o_req_t *req)
     }
 }
 
+static void on_original_generator_defer_close_timeout(h2o_timeout_entry_t *entry)
+{
+    h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, output_filter.defer_close_timeout_entry, entry);
+    h2o_generator_t *original_generator = generator->output_filter.original_generator;
+    assert(original_generator != NULL);
+    assert(original_generator->stop != NULL);
+    original_generator->stop(original_generator, generator->req);
+}
+
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
@@ -721,6 +735,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->output_filter.ostream = NULL;
     generator->output_filter.prefilter = NULL;
     generator->output_filter.slot = NULL;
+    generator->output_filter.defer_close_timeout_entry.cb = on_original_generator_defer_close_timeout;
 
     mrb_value env = build_env(generator);
 
@@ -939,6 +954,7 @@ static void ostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbu
     if (! h2o_send_state_is_in_progress(state)) {
         /* when the following handler finished sending it's response and call h2o_send, req->_generator is set NULL, but we want to keep processing here, so fulfill req->_generator again. This may be a bit tricky code.. */
         assert(req->_generator == NULL);
+        /* at this point, we assume that original_generator has done finalization (i.e. free, close something, etc..) */
         self->generator->output_filter.original_generator = NULL;
         req->_generator = &self->generator->super;
         fprintf(stderr, "##### prefilter(%p) ostream_send: fill generator\n", self->generator->output_filter.prefilter);
@@ -1059,10 +1075,10 @@ static void dump_ostreams(h2o_req_t *req)
     fprintf(stderr, "\n");
 }
 
-static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
+static void on_prefilter_defer_resume_timeout(h2o_timeout_entry_t *entry)
 {
-    struct st_mruby_output_prefilter_t *self = (void *)_self;
-    mrb_state *mrb = self->ctx->shared->mrb;
+    struct st_mruby_output_prefilter_t *self = H2O_STRUCT_FROM_MEMBER(struct st_mruby_output_prefilter_t, defer_resume.timeout_entry, entry);
+    mrb_state *mrb = self->generator->ctx->shared->mrb;
 
     int gc_arena = mrb_gc_arena_save(mrb);
 
@@ -1072,12 +1088,29 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     mrb_gc_protect(mrb, receiver);
     self->receiver = mrb_nil_value();
 
+    /* detach resp */
+    mrb_value resp = self->defer_resume.resp;
+    mrb_gc_unregister(mrb, resp);
+    mrb_gc_protect(mrb, resp);
+    self->defer_resume.resp = mrb_nil_value();
+
+    h2o_mruby_run_fiber(self->ctx, receiver, resp, NULL);
+
+    mrb_gc_arena_restore(mrb, gc_arena);
+}
+
+static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
+{
+    struct st_mruby_output_prefilter_t *self = (void *)_self;
+    mrb_state *mrb = self->generator->ctx->shared->mrb;
+
     /* set wrapping generator */
     assert(req->_generator != NULL && req->_generator != &self->generator->super);
     self->generator->output_filter.original_generator = req->_generator;
     req->_generator = &self->generator->super;
     fprintf(stderr, "##### on_prefilter_setup_stream: set wrapping generator\n");
 
+    /* setup ostream */
     struct st_mruby_output_ostream_t *ostream = (struct st_mruby_output_ostream_t *)self->generator->output_filter.ostream;
     if (ostream == NULL) {
         ostream = (void *)h2o_add_ostream(req, sizeof(struct st_mruby_output_ostream_t), slot);
@@ -1090,8 +1123,15 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
         self->generator->output_filter.ostream = &ostream->super;
         self->generator->output_filter.slot = slot;
     }
+
+    int gc_arena = mrb_gc_arena_save(mrb);
+
+    /* build app response */
     mrb_value resp = build_app_response(ostream, req);
+    mrb_gc_register(mrb, resp);
     ostream->ref = mrb_ary_entry(resp, 2);
+
+    mrb_gc_arena_restore(mrb, gc_arena);
 
     /* clear the response except for original */
     req->res.status = 0;
@@ -1100,39 +1140,33 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     req->res.headers = (h2o_headers_t){NULL};
     req->res.mime_attr = NULL;
 
-    h2o_mruby_run_fiber(self->ctx, receiver, resp, NULL);
-
-    mrb_gc_arena_restore(mrb, gc_arena);
+    self->defer_resume.resp = resp;
+    self->defer_resume.timeout_entry.cb = on_prefilter_defer_resume_timeout;
+    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &self->defer_resume.timeout_entry);
 }
-
-struct st_defer_invoke_t {
-    h2o_timeout_entry_t timeout_entry;
-    h2o_mruby_generator_t *generator;
-    mrb_value receiver;
-    mrb_value args;
-};
 
 static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
 {
-    struct st_defer_invoke_t *invoke = H2O_STRUCT_FROM_MEMBER(struct st_defer_invoke_t, timeout_entry, entry);
-    h2o_timeout_unlink(entry);
+    h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, defer_invoke.timeout_entry, entry);
 
-    h2o_mruby_generator_t *generator = invoke->generator;
     h2o_req_t *req = generator->req;
     h2o_mruby_context_t *ctx = generator->ctx;
     mrb_state *mrb = ctx->shared->mrb;
-    mrb_value receiver = invoke->receiver;
-    mrb_value reprocess = mrb_ary_entry(invoke->args, 2);
-    mrb_value env = mrb_ary_entry(invoke->args, 0);
+    mrb_value receiver = generator->defer_invoke.receiver;
+    mrb_value args = generator->defer_invoke.args;
+    mrb_value reprocess = mrb_ary_entry(args, 2);
+    mrb_value env = mrb_ary_entry(args, 0);
+    generator->defer_invoke.receiver = mrb_nil_value();
+    generator->defer_invoke.args = mrb_nil_value();
     mrb_gc_unregister(mrb, receiver);
-    mrb_gc_unregister(mrb, invoke->args);
-    free(invoke);
+    mrb_gc_unregister(mrb, args);
 
     struct st_mruby_output_prefilter_t *prefilter = (struct st_mruby_output_prefilter_t *)generator->output_filter.prefilter;
 
     /* cancel former call */
     if (prefilter == NULL) {
         prefilter = (void *)h2o_add_prefilter(req, sizeof(*prefilter));
+        memset(prefilter, 0, sizeof(*prefilter));
         prefilter->super.on_setup_ostream = on_prefilter_setup_stream;
         prefilter->ctx = ctx;
         prefilter->generator = generator;
@@ -1195,7 +1229,6 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
     }
 
 }
-typedef void (*h2o_timeout_cb)(h2o_timeout_entry_t *entry);
 
 static mrb_value invoke_app_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value args, int *run_again)
 {
@@ -1223,13 +1256,10 @@ static mrb_value invoke_app_callback(h2o_mruby_context_t *ctx, mrb_value receive
         return exc;
     }
 
-    struct st_defer_invoke_t *invoke = h2o_mem_alloc(sizeof(*invoke));
-    memset(invoke, 0, sizeof(*invoke));
-    invoke->timeout_entry.cb = on_defer_invoke_timeout;
-    invoke->generator = generator;
-    invoke->receiver = receiver;
-    invoke->args = args;
-    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &invoke->timeout_entry);
+    generator->defer_invoke.timeout_entry.cb = on_defer_invoke_timeout;
+    generator->defer_invoke.receiver = receiver;
+    generator->defer_invoke.args = args;
+    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &generator->defer_invoke.timeout_entry);
     mrb_gc_register(mrb, receiver);
     mrb_gc_register(mrb, args);
 
@@ -1293,8 +1323,14 @@ void h2o_mruby_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t 
         assert(generator->output_filter.ostream != NULL);
 
         if (!h2o_send_state_is_in_progress(state)) {
-            assert(req->_generator != NULL);
-            req->_generator = NULL;
+            assert(req->_generator == &generator->super);
+            req->_generator = NULL; /* do the same behavior as h2o_send */
+
+            if (generator->output_filter.original_generator != NULL && generator->output_filter.original_generator->stop != NULL) {
+                /* this means that original generator haven't send final yet (see ostream_send), so we should defer close it */
+                h2o_context_t *ctx = generator->ctx->shared->ctx;
+                h2o_timeout_link(ctx->loop, &ctx->zero_timeout, &generator->output_filter.defer_close_timeout_entry);
+            }
         }
 
         h2o_ostream_send_next(generator->output_filter.ostream, req, bufs, bufcnt, state);
