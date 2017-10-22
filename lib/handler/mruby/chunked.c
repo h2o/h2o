@@ -59,6 +59,7 @@ static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     int is_final;
 
     h2o_doublebuffer_consume(&chunked->sending);
+    fprintf(stderr, "##### prefilter(%p) buffer consumed: bytes_inflight = %d\n", chunked->sending.bytes_inflight);
 
     switch (chunked->type) {
     case H2O_MRUBY_CHUNKED_TYPE_CALLBACK:
@@ -122,6 +123,7 @@ static void close_body_obj(h2o_mruby_generator_t *generator)
 
 mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_value body)
 {
+    fprintf(stderr, "##### prefilter(%p): send_chunked_init\n", generator->output_filter.prefilter);
     mrb_state *mrb = generator->ctx->shared->mrb;
 
     h2o_mruby_http_request_context_t *client = h2o_mruby_http_set_shortcut(mrb, body, on_shortcut_notify, generator);
@@ -254,6 +256,7 @@ void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator)
 
     close_body_obj(generator);
 
+    fprintf(stderr, "##### prefilter(%p): send_chunked_close: bytes_inflight = %d\n", generator->output_filter.prefilter, chunked->sending.bytes_inflight);
     if (chunked->sending.bytes_inflight == 0)
         do_send(generator, &chunked->callback.receiving, 1);
 }

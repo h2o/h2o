@@ -1995,6 +1995,7 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 
 inline void h2o_proceed_response(h2o_req_t *req)
 {
+    fprintf(stderr, "##### h2o_proceed_response: generator = %p\n", req->_generator);
     if (req->_generator != NULL) {
         req->_generator->proceed(req->_generator, req);
     } else {

@@ -744,6 +744,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
 void h2o_mruby_start_response(h2o_mruby_generator_t *generator)
 {
+    fprintf(stderr, "##### prefilter(%p): h2o_mruby_start_response\n", generator->output_filter.prefilter);
     /* the response may have been already initiated by other handlers if H2O.app.call was called */
     if (output_filter_is_registered(generator)) {
         h2o_setup_next_prefilter(generator->output_filter.prefilter, generator->req, generator->output_filter.slot);
@@ -915,6 +916,7 @@ static void ostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbu
     struct st_mruby_output_ostream_t *self = (void *)_self;
     mrb_state *mrb = self->ctx->shared->mrb;
     mrb_value receiver = self->receiver;
+    fprintf(stderr, "##### prefilter(%p): ostream_send (state = %s)\n", self->generator->output_filter.prefilter, (h2o_send_state_is_in_progress(state) ? "PROGRESS" : "FINAL"));
 
     if (inbufcnt > 0) {
         /* push incoming chunks to ostream */
@@ -939,6 +941,7 @@ static void ostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbu
         assert(req->_generator == NULL);
         self->generator->output_filter.original_generator = NULL;
         req->_generator = &self->generator->super;
+        fprintf(stderr, "##### prefilter(%p) ostream_send: fill generator\n", self->generator->output_filter.prefilter);
 
         if (! mrb_nil_p(self->ref)) {
             mrb_iv_set(mrb, self->ref, mrb_intern_lit(mrb, "@finished"), mrb_true_value());
@@ -950,6 +953,7 @@ static void ostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbu
         mrb_gc_unregister(mrb, receiver);
         mrb_gc_protect(mrb, receiver);
         self->receiver = mrb_nil_value();
+        fprintf(stderr, "##### prefilter(%p) ostream_send: detach receiver\n", self->generator->output_filter.prefilter);
 
         /* resume _h2o_output_filter_wait_chunk (which expects no arguments) */
         /* TODO: fast path */
@@ -1038,6 +1042,23 @@ static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb
     return mrb_nil_value();
 }
 
+static void dump_ostreams(h2o_req_t *req)
+{
+    h2o_ostream_t *cur = req->_ostr_top;
+    fprintf(stderr, "##### ostreams: ");
+    int first = 1;
+    while (cur != NULL) {
+        if (first) {
+            first = 0;
+        } else {
+            fprintf(stderr, " -> ");
+        }
+        fprintf(stderr, "%p", cur);
+        cur = cur->next;
+    }
+    fprintf(stderr, "\n");
+}
+
 static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     struct st_mruby_output_prefilter_t *self = (void *)_self;
@@ -1055,6 +1076,7 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     assert(req->_generator != NULL && req->_generator != &self->generator->super);
     self->generator->output_filter.original_generator = req->_generator;
     req->_generator = &self->generator->super;
+    fprintf(stderr, "##### on_prefilter_setup_stream: set wrapping generator\n");
 
     struct st_mruby_output_ostream_t *ostream = (struct st_mruby_output_ostream_t *)self->generator->output_filter.ostream;
     if (ostream == NULL) {
@@ -1064,6 +1086,7 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
         ostream->ctx = self->ctx;
         ostream->generator = self->generator;
         ostream->receiver = mrb_nil_value();
+        fprintf(stderr, "##### prefilter(%p) ostream(%p)\n", self, ostream);
         self->generator->output_filter.ostream = &ostream->super;
         self->generator->output_filter.slot = slot;
     }
@@ -1144,6 +1167,7 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
         if (req->_generator != NULL) {
             assert(req->_generator == &generator->super);
             req->_generator = NULL;
+            fprintf(stderr, "##### prefilter(%p) on_defer_invoke_timeout: clear enerator\n", prefilter);
         }
     }
     prefilter->receiver = receiver;
@@ -1223,6 +1247,7 @@ static mrb_value output_filter_wait_chunk_callback(h2o_mruby_context_t *mctx, mr
 
     assert(mrb_nil_p(ostream->receiver));
     ostream->receiver = receiver;
+    fprintf(stderr, "##### prefilter(%p) output_filter_wait_chunk_callback: set ostream->receiver\n", ostream->generator->output_filter.prefilter);
     mrb_gc_register(mrb, receiver);
     return mrb_nil_value();
 }
@@ -1234,6 +1259,35 @@ static void swallow_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_
 
 void h2o_mruby_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
+    fprintf(stderr, "##### h2o_mruby_send\n");
+
+    // h2o_ostream_send_next
+    /*
+    if (!h2o_send_state_is_in_progress(state)) {
+        assert(req->_ostr_top == ostream);
+        req->_ostr_top = ostream->next;
+    } else if (bufcnt == 0) {
+        h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
+        return;
+    }
+    ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
+     */
+
+    // h2o_send
+    /*
+     size_t i;
+
+     assert(req->_generator != NULL);
+
+     if (!h2o_send_state_is_in_progress(state))
+        req->_generator = NULL;
+
+     for (i = 0; i != bufcnt; ++i)
+        req->bytes_sent += bufs[i].len;
+
+     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, state);
+     */
+
     h2o_req_t *req = generator->req;
     if (output_filter_is_registered(generator)) {
         assert(generator->output_filter.ostream != NULL);

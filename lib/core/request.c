@@ -435,6 +435,7 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
+    fprintf(stderr, "##### h2o_send: bufcnt = %d, finished = %s\n", bufcnt, h2o_send_state_is_in_progress(state) ? "false" : "true");
     size_t i;
 
     assert(req->_generator != NULL);
