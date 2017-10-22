@@ -16,9 +16,12 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
 sub create_upstream {
-    my ($port) = @_;
+    my ($port, $mode) = @_;
+    my $server = $mode eq 'proxy'   ? 'Starlet' :
+                 $mode eq 'fastcgi' ? 'FCGI' :
+                          die "unknown mode: $mode";
     my @args = (
-        qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen),
+        qw(plackup -s), $server, qw(--keepalive-timeout 100 --access-log /dev/null --listen),
         "127.0.0.1:$port",
         ASSETS_DIR . "/upstream.psgi",
     );
@@ -29,15 +32,22 @@ sub create_upstream {
 };
 
 sub get {
-  my ($server, $path) = @_;
-  my ($hstr, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path");
-  my ($sline, @hlines) = split(/\r\n/, $hstr);
-  unless (($sline || '') =~ m{^HTTP/[\d\.]+ (\d+)}) {
-    die "failed to get $path: @{[$sline || '']}";
-  }
-  my $status = $1 + 0;
-  my $headers = +{ map { split(': ', $_, 2) } @hlines };
-  return ($status, $headers, $body);
+    my ($server, $path) = @_;
+    local $SIG{ALRM} = sub { die };
+    alarm(3);
+    my ($hstr, $body) = eval { run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path") };
+    my $timeout = !! $@;
+    alarm(0);
+    if ($timeout) {
+        die "timeout";
+    }
+    my ($sline, @hlines) = split(/\r\n/, $hstr);
+    unless (($sline || '') =~ m{^HTTP/[\d\.]+ (\d+)}) {
+        die "failed to get $path: @{[$sline || '']}";
+    }
+    my $status = $1 + 0;
+    my $headers = +{ map { split(': ', $_, 2) } @hlines };
+    return ($status, $headers, $body);
 }
 
 my %files = map { do {
@@ -47,15 +57,35 @@ my %files = map { do {
 # } } qw(index.txt halfdome.jpg);
 
 sub doit {
-    my ($next) = @_;
-    my $server = spawn_h2o(<< "EOT");
+    my ($next, $opts) = @_;
+    $opts ||= +{};
+    my $spawner = sub {
+        my $conf = shift;
+        spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
       /live-check:
-        - mruby.handler: proc {|env| [200, {}, []] }
+        - mruby.handler: |
+            proc {|env| [200, {}, []] }
+      /:
+$conf
+EOT
+    };
 
-      /modify-response-header:
+    my $live_check = sub {
+        my $server = shift;
+        local $Test::Builder::Level = $Test::Builder::Level + 1;
+        lives_ok {
+            my ($status, $headers, $body) = get($server, '/live-check');
+            is $status, 200, 'live status check';
+        }, 'live check';
+    };
+
+    for my $file (sort keys %files) {
+        subtest $file => sub {
+            subtest 'modify response header' => sub {
+                my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
               resp = H2O.app.call(env)
@@ -63,16 +93,34 @@ hosts:
               resp
             }
         - $next
+EOT
+                my ($status, $headers, $body) = get($server, "/$file");
+                is $status, 200;
+                is $headers->{'foo'}, 'FOO';
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                $live_check->($server);
+            };
 
-      /stream-response-body:
+            subtest 'stream response body' => sub {
+                my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
               resp = H2O.app.call(env)
               resp
             }
         - $next
+EOT
+                my ($status, $headers, $body) = get($server, "/$file");
+                is $status, 200;
+                is $headers->{'Content-Length'} || '', '';
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                $live_check->($server);
+            };
 
-      /join-response-body:
+            subtest 'join response body' => sub {
+                my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
               resp = H2O.app.call(env)
@@ -80,16 +128,32 @@ hosts:
               resp
             }
         - $next
+EOT
+                my ($status, $headers, $body) = get($server, "/$file");
+                is $status, 200;
+                is $headers->{'Content-Length'}, length($body);
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                $live_check->($server);
+            };
 
-      /discard-response:
+            subtest 'discard response' => sub {
+                my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
               resp = H2O.app.call(env)
               [200, {}, ['mruby']]
             }
         - $next
+EOT
+                my ($status, $headers, $body) = get($server, "/$file");
+                is $status, 200;
+                is $body, 'mruby';
+                $live_check->($server);
+            };
 
-      /discard-response-and-each:
+            subtest 'discard response and each' => sub {
+                my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
               resp = H2O.app.call(env)
@@ -100,8 +164,15 @@ hosts:
               end.new]
             }
         - $next
+EOT
+                my ($status, $headers, $body) = get($server, "/$file");
+                is $status, 200;
+                is $body, 'mruby';
+                $live_check->($server);
+            };
 
-      /wrapped-body:
+            subtest 'wrapped body' => sub {
+                my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
               status, header, body = H2O.app.call(env)
@@ -116,62 +187,37 @@ hosts:
             }
         - $next
 EOT
-    my $live_check = sub {
-        local $Test::Builder::Level = $Test::Builder::Level + 1;
-        lives_ok {
-            my ($status, $headers, $body) = get($server, '/live-check');
-            is $status, 200, 'live status check';
-        }, 'live check';
-    };
-    for my $file (sort keys %files) {
-        subtest $file => sub {
-            subtest 'modify response header' => sub {
-                my ($status, $headers, $body) = get($server, "/modify-response-header/$file");
-                is $status, 200;
-                is $headers->{'foo'}, 'FOO';
-                is length($body), $files{$file}->{size};
-                is md5_hex($body), $files{$file}->{md5};
-                $live_check->();
-            };
-
-            subtest 'stream response body' => sub {
-                my ($status, $headers, $body) = get($server, "/stream-response-body/$file");
-                is $status, 200;
-                is $headers->{'Content-Length'} || '', '';
-                is length($body), $files{$file}->{size};
-                is md5_hex($body), $files{$file}->{md5};
-                $live_check->();
-            };
-
-            subtest 'join response body' => sub {
-                my ($status, $headers, $body) = get($server, "/join-response-body/$file");
-                is $status, 200;
-                is $headers->{'Content-Length'}, length($body);
-                is length($body), $files{$file}->{size};
-                is md5_hex($body), $files{$file}->{md5};
-                $live_check->();
-            };
-
-            subtest 'discard response' => sub {
-                my ($status, $headers, $body) = get($server, "/discard-response/$file");
-                is $status, 200;
-                is $body, 'mruby';
-                $live_check->();
-            };
-
-            subtest 'discard response and each' => sub {
-                my ($status, $headers, $body) = get($server, "/discard-response-and-each/$file");
-                is $status, 200;
-                is $body, 'mruby';
-                $live_check->();
-            };
-
-            subtest 'wrapped body' => sub {
-                my ($status, $headers, $body) = get($server, "/wrapped-body/$file");
+                my ($status, $headers, $body) = get($server, "/$file");
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
-                $live_check->();
+                $live_check->($server);
+            };
+
+            subtest 'multi handlers' => sub {
+                my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              resp = H2O.app.call(env);
+              resp[1]['x-middleware-order'] ||= ''
+              resp[1]['x-middleware-order'] += '1'
+              resp
+            }
+        - mruby.handler: |
+            proc {|env|
+              resp = H2O.app.call(env);
+              resp[1]['x-middleware-order'] ||= ''
+              resp[1]['x-middleware-order'] += '2'
+              resp
+            }
+        - $next
+EOT
+                my ($status, $headers, $body) = get($server, "/$file");
+                is $status, 200;
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                is $headers->{'x-middleware-order'}, '21', 'middleware order';
+                $live_check->($server);
             };
         };
     }
@@ -183,8 +229,14 @@ subtest 'file' => sub {
 
 subtest 'proxy' => sub {
     my $port = empty_port();
-    my $guard = create_upstream($port);
+    my $guard = create_upstream($port, 'proxy');
     doit("proxy.reverse.url: http://127.0.0.1:$port/");
+};
+
+subtest 'fastcgi' => sub {
+    my $port = empty_port();
+    my $guard = create_upstream($port, 'fastcgi');
+    doit("fastcgi.connect: $port", +{ remove_script_name => 1 });
 };
 
 subtest 'multiple calls' => sub {

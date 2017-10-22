@@ -106,6 +106,7 @@ typedef struct st_h2o_mruby_context_t {
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
 typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;
+typedef struct st_h2o_mruby_generator_t h2o_mruby_generator_t;
 
 typedef struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
@@ -117,7 +118,8 @@ typedef struct st_h2o_mruby_generator_t {
         h2o_req_prefilter_t *prefilter;
         h2o_ostream_t **slot;
         h2o_ostream_t *ostream;
-        h2o_generator_t *original_generator;
+        h2o_generator_t *prev;
+        h2o_mruby_generator_t *next;
         h2o_timeout_entry_t defer_close_timeout_entry;
     } output_filter;
     struct {

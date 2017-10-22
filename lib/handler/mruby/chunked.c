@@ -59,7 +59,7 @@ static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     int is_final;
 
     h2o_doublebuffer_consume(&chunked->sending);
-    fprintf(stderr, "##### prefilter(%p) buffer consumed: bytes_inflight = %d\n", chunked->sending.bytes_inflight);
+    fprintf(stderr, "##### prefilter(%p) buffer consumed: bytes_inflight = %d\n", generator->output_filter.prefilter, (int)chunked->sending.bytes_inflight);
 
     switch (chunked->type) {
     case H2O_MRUBY_CHUNKED_TYPE_CALLBACK:

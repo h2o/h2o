@@ -679,18 +679,21 @@ static int output_filter_is_registered(h2o_mruby_generator_t *generator)
 static void do_generator_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 {
     h2o_mruby_generator_t *generator = (void *)_generator;
+    fprintf(stderr, "      ##### prefilter(%p) do_generator_proceed\n", generator->output_filter.prefilter);
 
     if (output_filter_is_registered(generator)) {
         struct st_mruby_output_ostream_t *ostream = (void *)generator->output_filter.ostream;
         if (! mrb_nil_p(ostream->receiver)) {
-            h2o_generator_t *original_generator = generator->output_filter.original_generator;
-            if (original_generator != NULL && original_generator->proceed != NULL) {
-                original_generator->proceed(original_generator, req);
+            h2o_generator_t *prev = generator->output_filter.prev;
+            if (prev != NULL && prev->proceed != NULL) {
+                fprintf(stderr, "      ##### prefilter(%p) call prev->proceed\n", generator->output_filter.prefilter);
+                prev->proceed(prev, req);
             }
         }
     }
 
     if (generator->chunked != NULL) {
+        fprintf(stderr, "      ##### prefilter(%p) call chunked->proceed\n", generator->output_filter.prefilter);
         generator->chunked->proceed(_generator, req);
     }
 }
@@ -700,20 +703,20 @@ static void do_generator_stop(h2o_generator_t *_generator, h2o_req_t *req)
     h2o_mruby_generator_t *generator = (void *)_generator;
 
     if (output_filter_is_registered(generator)) {
-        h2o_generator_t *original_generator = generator->output_filter.original_generator;
-        if (original_generator != NULL && original_generator->stop != NULL) {
-            original_generator->stop(original_generator, req);
+        h2o_generator_t *prev = generator->output_filter.prev;
+        if (prev != NULL && prev->stop != NULL) {
+            prev->stop(prev, req);
         }
     }
 }
 
-static void on_original_generator_defer_close_timeout(h2o_timeout_entry_t *entry)
+static void on_prev_defer_close_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, output_filter.defer_close_timeout_entry, entry);
-    h2o_generator_t *original_generator = generator->output_filter.original_generator;
-    assert(original_generator != NULL);
-    assert(original_generator->stop != NULL);
-    original_generator->stop(original_generator, generator->req);
+    h2o_generator_t *prev = generator->output_filter.prev;
+    assert(prev != NULL);
+    assert(prev->stop != NULL);
+    prev->stop(prev, generator->req);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -735,7 +738,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->output_filter.ostream = NULL;
     generator->output_filter.prefilter = NULL;
     generator->output_filter.slot = NULL;
-    generator->output_filter.defer_close_timeout_entry.cb = on_original_generator_defer_close_timeout;
+    generator->output_filter.defer_close_timeout_entry.cb = on_prev_defer_close_timeout;
 
     mrb_value env = build_env(generator);
 
@@ -952,11 +955,18 @@ static void ostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbu
     }
 
     if (! h2o_send_state_is_in_progress(state)) {
+        /* NOTE: at this point, we assume that prev has done finalization (i.e. free, close something, etc..) */
+
         /* when the following handler finished sending it's response and call h2o_send, req->_generator is set NULL, but we want to keep processing here, so fulfill req->_generator again. This may be a bit tricky code.. */
         assert(req->_generator == NULL);
-        /* at this point, we assume that original_generator has done finalization (i.e. free, close something, etc..) */
-        self->generator->output_filter.original_generator = NULL;
-        req->_generator = &self->generator->super;
+        h2o_mruby_generator_t *last = self->generator;
+        while (last->output_filter.next != NULL) {
+            last = last->output_filter.next;
+            assert(output_filter_is_registered(last));
+        }
+        req->_generator = &last->super;
+        self->generator->output_filter.prev = NULL;
+
         fprintf(stderr, "##### prefilter(%p) ostream_send: fill generator\n", self->generator->output_filter.prefilter);
 
         if (! mrb_nil_p(self->ref)) {
@@ -969,7 +979,6 @@ static void ostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbu
         mrb_gc_unregister(mrb, receiver);
         mrb_gc_protect(mrb, receiver);
         self->receiver = mrb_nil_value();
-        fprintf(stderr, "##### prefilter(%p) ostream_send: detach receiver\n", self->generator->output_filter.prefilter);
 
         /* resume _h2o_output_filter_wait_chunk (which expects no arguments) */
         /* TODO: fast path */
@@ -1005,7 +1014,7 @@ static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
     return 0;
 }
 
-static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_value env)
+static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_value env, int reprocess)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
@@ -1035,8 +1044,12 @@ static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb
     mrb_str_concat(mrb, url, server_addr);
     mrb_str_concat(mrb, url, mrb_str_new_lit(mrb, ":"));
     mrb_str_concat(mrb, url, server_port);
-    mrb_str_concat(mrb, url, script_name);
-    mrb_str_concat(mrb, url, path_info);
+    if (reprocess) {
+        mrb_str_concat(mrb, url, script_name);
+        mrb_str_concat(mrb, url, path_info);
+    } else {
+        mrb_str_concat(mrb, url, mrb_str_new(mrb, req->path_normalized.base, req->path_normalized.len));
+    }
     if (RSTRING_LEN(query_string) != 0) {
         mrb_str_concat(mrb, url, mrb_str_new_lit(mrb, "?"));
         mrb_str_concat(mrb, url, query_string);
@@ -1045,34 +1058,20 @@ static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb
         /* TODO is there any other way to show better error message? */
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "env variable contains invalid values");
     }
+    h2o_iovec_t stringified = h2o_url_stringify(NULL, &url_parsed);
+    fprintf(stderr, "********************* url: %s\n", stringified.base);
     req->scheme = url_parsed.scheme;
     req->method = h2o_strdup(&req->pool, RSTRING_PTR(method), RSTRING_LEN(method));
     req->authority = url_parsed.authority;
     req->path = url_parsed.path;
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
+    fprintf(stderr, "********************* path_normalized: %s\n", req->path_normalized.base);
 
     /* TODO preseve original headers */
     req->headers = (h2o_headers_t){NULL};
     h2o_mruby_iterate_headers(ctx->shared, env, handle_request_header, req);
 
     return mrb_nil_value();
-}
-
-static void dump_ostreams(h2o_req_t *req)
-{
-    h2o_ostream_t *cur = req->_ostr_top;
-    fprintf(stderr, "##### ostreams: ");
-    int first = 1;
-    while (cur != NULL) {
-        if (first) {
-            first = 0;
-        } else {
-            fprintf(stderr, " -> ");
-        }
-        fprintf(stderr, "%p", cur);
-        cur = cur->next;
-    }
-    fprintf(stderr, "\n");
 }
 
 static void on_prefilter_defer_resume_timeout(h2o_timeout_entry_t *entry)
@@ -1104,9 +1103,14 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     struct st_mruby_output_prefilter_t *self = (void *)_self;
     mrb_state *mrb = self->generator->ctx->shared->mrb;
 
-    /* set wrapping generator */
     assert(req->_generator != NULL && req->_generator != &self->generator->super);
-    self->generator->output_filter.original_generator = req->_generator;
+
+    /* wrap generator and swap */
+    self->generator->output_filter.prev = req->_generator;
+    if (self->generator->output_filter.prev->proceed == do_generator_proceed) {
+        h2o_mruby_generator_t *prev_generator = (h2o_mruby_generator_t *)self->generator->output_filter.prev;
+        prev_generator->output_filter.next = self->generator;
+    }
     req->_generator = &self->generator->super;
     fprintf(stderr, "##### on_prefilter_setup_stream: set wrapping generator\n");
 
@@ -1166,11 +1170,12 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
     /* cancel former call */
     if (prefilter == NULL) {
         prefilter = (void *)h2o_add_prefilter(req, sizeof(*prefilter));
-        memset(prefilter, 0, sizeof(*prefilter));
         prefilter->super.on_setup_ostream = on_prefilter_setup_stream;
         prefilter->ctx = ctx;
         prefilter->generator = generator;
         prefilter->receiver = mrb_nil_value();
+        prefilter->defer_resume.timeout_entry = (h2o_timeout_entry_t){0};
+        prefilter->defer_resume.resp = mrb_nil_value();
         generator->output_filter.prefilter = &prefilter->super;
 
     } else {
@@ -1189,12 +1194,12 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
             ostream->receiver = mrb_nil_value();
         }
 
-        /* clear original_generator */
-        h2o_generator_t *original_generator = generator->output_filter.original_generator;
-        if (original_generator != NULL) {
-            if (original_generator->stop != NULL)
-                original_generator->stop(original_generator, req);
-            generator->output_filter.original_generator = NULL;
+        /* clear prev */
+        h2o_generator_t *prev = generator->output_filter.prev;
+        if (prev != NULL) {
+            if (prev->stop != NULL)
+                prev->stop(prev, req);
+            generator->output_filter.prev = NULL;
         }
 
         /* clear req->_generator (it'll be set again in h2o_start_response and on_prefilter_setup_ostream */
@@ -1250,7 +1255,8 @@ static mrb_value invoke_app_callback(h2o_mruby_context_t *ctx, mrb_value receive
     }
 
     // TODO: preserve headers and others, like errordoc
-    mrb_value exc = setup_req_for_env(ctx, req, env);
+    mrb_value reprocess = mrb_ary_entry(args, 2);
+    mrb_value exc = setup_req_for_env(ctx, req, env, mrb_bool(reprocess));
     if (! mrb_nil_p(exc)) {
         *run_again = 1;
         return exc;
@@ -1280,11 +1286,6 @@ static mrb_value output_filter_wait_chunk_callback(h2o_mruby_context_t *mctx, mr
     fprintf(stderr, "##### prefilter(%p) output_filter_wait_chunk_callback: set ostream->receiver\n", ostream->generator->output_filter.prefilter);
     mrb_gc_register(mrb, receiver);
     return mrb_nil_value();
-}
-
-static void swallow_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
-{
-    /* nothing to do */
 }
 
 void h2o_mruby_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
@@ -1323,10 +1324,10 @@ void h2o_mruby_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t 
         assert(generator->output_filter.ostream != NULL);
 
         if (!h2o_send_state_is_in_progress(state)) {
-            assert(req->_generator == &generator->super);
+//            assert(req->_generator == &generator->super);
             req->_generator = NULL; /* do the same behavior as h2o_send */
 
-            if (generator->output_filter.original_generator != NULL && generator->output_filter.original_generator->stop != NULL) {
+            if (generator->output_filter.prev != NULL && generator->output_filter.prev->stop != NULL) {
                 /* this means that original generator haven't send final yet (see ostream_send), so we should defer close it */
                 h2o_context_t *ctx = generator->ctx->shared->ctx;
                 h2o_timeout_link(ctx->loop, &ctx->zero_timeout, &generator->output_filter.defer_close_timeout_entry);
@@ -1335,10 +1336,6 @@ void h2o_mruby_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t 
 
         h2o_ostream_send_next(generator->output_filter.ostream, req, bufs, bufcnt, state);
 
-        if (!h2o_send_state_is_in_progress(state)) {
-            h2o_ostream_t *ostream = h2o_add_ostream(req, sizeof(*ostream), &req->_ostr_top);
-            ostream->do_send = swallow_ostream_send;
-        }
     } else {
         h2o_send(req, bufs, bufcnt, state);
     }
