@@ -1080,7 +1080,7 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
 
     struct st_mruby_output_ostream_t *ostream = (struct st_mruby_output_ostream_t *)self->generator->output_filter.ostream;
     if (ostream == NULL) {
-        ostream = (void *)h2o_add_ostream(req, sizeof(struct st_mruby_output_ostream_t), &req->_ostr_top);
+        ostream = (void *)h2o_add_ostream(req, sizeof(struct st_mruby_output_ostream_t), slot);
         ostream->super.do_send = ostream_send;
         slot = &ostream->super.next;
         ostream->ctx = self->ctx;
@@ -1291,6 +1291,12 @@ void h2o_mruby_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t 
     h2o_req_t *req = generator->req;
     if (output_filter_is_registered(generator)) {
         assert(generator->output_filter.ostream != NULL);
+
+        if (!h2o_send_state_is_in_progress(state)) {
+            assert(req->_generator != NULL);
+            req->_generator = NULL;
+        }
+
         h2o_ostream_send_next(generator->output_filter.ostream, req, bufs, bufcnt, state);
 
         if (!h2o_send_state_is_in_progress(state)) {
