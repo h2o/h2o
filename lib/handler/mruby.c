@@ -1125,18 +1125,16 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     fprintf(stderr, "##### on_prefilter_setup_stream: set wrapping generator\n");
 
     /* setup ostream */
-    struct st_mruby_output_ostream_t *ostream = (struct st_mruby_output_ostream_t *)self->generator->output_filter.ostream;
-    if (ostream == NULL) {
-        ostream = (void *)h2o_add_ostream(req, sizeof(struct st_mruby_output_ostream_t), slot);
-        ostream->super.do_send = ostream_send;
-        slot = &ostream->super.next;
-        ostream->ctx = self->ctx;
-        ostream->generator = self->generator;
-        ostream->receiver = mrb_nil_value();
-        fprintf(stderr, "##### prefilter(%p) ostream(%p)\n", self, ostream);
-        self->generator->output_filter.ostream = &ostream->super;
-        self->generator->output_filter.slot = slot;
-    }
+    assert(self->generator->output_filter.ostream == NULL);
+    struct st_mruby_output_ostream_t *ostream  = (void *)h2o_add_ostream(req, sizeof(struct st_mruby_output_ostream_t), slot);
+    ostream->super.do_send = ostream_send;
+    slot = &ostream->super.next;
+    ostream->ctx = self->ctx;
+    ostream->generator = self->generator;
+    ostream->receiver = mrb_nil_value();
+    fprintf(stderr, "##### prefilter(%p) ostream(%p)\n", self, ostream);
+    self->generator->output_filter.ostream = &ostream->super;
+    self->generator->output_filter.slot = slot;
 
     int gc_arena = mrb_gc_arena_save(mrb);
 
@@ -1169,7 +1167,6 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
     mrb_value receiver = generator->defer_invoke.receiver;
     mrb_value args = generator->defer_invoke.args;
     mrb_value reprocess = mrb_ary_entry(args, 2);
-    mrb_value env = mrb_ary_entry(args, 0);
     generator->defer_invoke.receiver = mrb_nil_value();
     generator->defer_invoke.args = mrb_nil_value();
     mrb_gc_unregister(mrb, receiver);
@@ -1177,7 +1174,6 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
 
     struct st_mruby_output_prefilter_t *prefilter = (struct st_mruby_output_prefilter_t *)generator->output_filter.prefilter;
 
-    /* cancel former call */
     if (prefilter == NULL) {
         prefilter = (void *)h2o_add_prefilter(req, sizeof(*prefilter));
         prefilter->super.on_setup_ostream = on_prefilter_setup_stream;
@@ -1189,11 +1185,14 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
         generator->output_filter.prefilter = &prefilter->super;
 
     } else {
+        /* cancel former call */
         assert(mrb_nil_p(prefilter->receiver));
         assert(generator->output_filter.ostream != NULL);
 
         /* clear ostream */
         struct st_mruby_output_ostream_t *ostream = (struct st_mruby_output_ostream_t *)generator->output_filter.ostream;
+        assert(ostream != NULL);
+        assert(&ostream->super == req->_ostr_top);
         if (! mrb_nil_p(ostream->ref)) {
             /* mark canceled to raise error when body.join is called since now */
             mrb_iv_set(mrb, ostream->ref, mrb_intern_lit(mrb, "@canceled"), mrb_true_value());
@@ -1203,6 +1202,13 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
             mrb_gc_unregister(mrb, ostream->receiver);
             ostream->receiver = mrb_nil_value();
         }
+        generator->output_filter.ostream = NULL;
+        req->_ostr_top = req->_ostr_top->next;
+
+        /* clear timeouts */
+        if (h2o_timeout_is_linked(&generator->output_filter.defer_proceed_timeout_entry))
+            h2o_timeout_unlink(&generator->output_filter.defer_proceed_timeout_entry);
+        assert(! h2o_timeout_is_linked(&generator->output_filter.defer_close_timeout_entry));
 
         /* clear prev */
         h2o_generator_t *prev = generator->output_filter.prev;
@@ -1223,22 +1229,7 @@ static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
     mrb_gc_register(mrb, receiver);
 
     if (mrb_bool(reprocess)) {
-        mrb_value script_name = mrb_hash_get(mrb, env, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_LIT_SCRIPT_NAME));
-        mrb_value path_info = mrb_hash_get(mrb, env, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_LIT_PATH_INFO));
-
-        h2o_iovec_t path;
-        path.len = RSTRING_LEN(script_name);
-        if (RSTRING_LEN(path_info) > 0)
-            path.len += RSTRING_LEN(path_info) + 1;
-        path.base = h2o_mem_alloc_pool(&req->pool, path.len);
-        memcpy(path.base, RSTRING_PTR(script_name), RSTRING_LEN(script_name));
-        if (RSTRING_LEN(path_info) > 0) {
-            memcpy(path.base + RSTRING_LEN(script_name), "/", 1);
-            memcpy(path.base + 1 + RSTRING_LEN(script_name), RSTRING_PTR(path_info), RSTRING_LEN(path_info));
-        }
-
-        h2o_reprocess_request(req, req->method, req->scheme, req->authority, path, req->overrides, 1);
-        /* TODO: what the is_delegate argument means? */
+        h2o_reprocess_request(req, req->method, req->scheme, req->authority, req->path, req->overrides, 0);
     } else {
         h2o_delegate_request(req, &generator->ctx->handler->super);
     }
