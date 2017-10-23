@@ -790,11 +790,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     h2o_fastcgi_handler_t *handler = (void *)_handler;
     struct st_fcgi_context_t *handler_ctx = h2o_mem_alloc(sizeof(*handler_ctx));
 
-    /* use the first event loop for handling timeouts of the socket pool */
-    if (handler->sockpool.timeout == UINT64_MAX)
-        h2o_socketpool_set_timeout(&handler->sockpool, ctx->loop,
-                                   handler->config.keepalive_timeout != 0 ? handler->config.keepalive_timeout : 60000);
-
+    h2o_socketpool_register_loop(&handler->sockpool, ctx->loop);
     handler_ctx->handler = handler;
     h2o_timeout_init(ctx->loop, &handler_ctx->io_timeout, handler->config.io_timeout);
 
@@ -809,7 +805,7 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
     if (handler_ctx == NULL)
         return;
 
-    h2o_socketpool_unregister_timeout(&handler->sockpool, ctx->loop);
+    h2o_socketpool_unregister_loop(&handler->sockpool, ctx->loop);
     h2o_timeout_dispose(ctx->loop, &handler_ctx->io_timeout);
     free(handler_ctx);
 }
@@ -838,5 +834,6 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t 
         handler->config.document_root = h2o_strdup(NULL, vars->document_root.base, vars->document_root.len);
 
     h2o_socketpool_init_specific(&handler->sockpool, SIZE_MAX /* FIXME */, upstream, 1);
+    h2o_socketpool_set_timeout(&handler->sockpool, handler->config.keepalive_timeout);
     return handler;
 }

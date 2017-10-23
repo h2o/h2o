@@ -74,8 +74,10 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
 
     /* use the loop of first context for handling socketpool timeouts */
-    if (self->sockpool != NULL && self->sockpool->timeout == UINT64_MAX)
-        h2o_socketpool_set_timeout(self->sockpool, ctx->loop, self->config.keepalive_timeout);
+    if (self->sockpool != NULL) {
+        h2o_socketpool_set_timeout(self->sockpool, self->config.keepalive_timeout);
+        h2o_socketpool_register_loop(self->sockpool, ctx->loop);
+    }
 
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
@@ -133,7 +135,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
         free(client_ctx->websocket_timeout);
     }
     if (self->sockpool != NULL)
-        h2o_socketpool_unregister_timeout(self->sockpool, ctx->loop);
+        h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
     free(client_ctx);
 }
 

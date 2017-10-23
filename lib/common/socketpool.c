@@ -120,7 +120,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     memset(pool, 0, sizeof(*pool));
 
     pool->capacity = capacity;
-    pool->timeout = UINT64_MAX;
+    pool->timeout = 2000;
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
@@ -297,7 +297,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         pool->_lb.dispose(pool->_lb.data);
 
     if (pool->_interval_cb.loop != NULL)
-        h2o_socketpool_unregister_timeout(pool, pool->_interval_cb.loop);
+        h2o_socketpool_unregister_loop(pool, pool->_interval_cb.loop);
 
     for (i = 0; i < pool->targets.size; i++) {
         dispose_target(pool->targets.entries[i]);
@@ -305,20 +305,18 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     free(pool->targets.entries);
 }
 
-void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
+void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
     if (pool->_interval_cb.loop != NULL)
         return;
 
-    pool->timeout = msec;
     pool->_interval_cb.loop = loop;
     h2o_timeout_init(loop, &pool->_interval_cb.timeout, 1000);
     pool->_interval_cb.entry.cb = on_timeout;
-
     h2o_timeout_link(loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-void h2o_socketpool_unregister_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop)
+void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
     if (pool->_interval_cb.loop != loop)
         return;

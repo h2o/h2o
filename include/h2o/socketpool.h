@@ -77,7 +77,7 @@ typedef struct st_h2o_socketpool_t {
     /* read-only vars */
     h2o_socketpool_target_vector_t targets;
     size_t capacity;
-    uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
+    uint64_t timeout; /* in milliseconds */
     struct {
         h2o_loop_t *loop;
         h2o_timeout_t timeout;
@@ -115,13 +115,21 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
- * sets a close timeout for the sockets being pooled
+ *
  */
-void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec);
+static uint64_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool);
 /**
- * unregisters the timeout if necessary
+ *
  */
-void h2o_socketpool_unregister_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop);
+static void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, uint64_t msec);
+/**
+ * associates a loop
+ */
+void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
+/**
+ * unregisters the associated loop
+ */
+void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
 /**
  * connects to the peer (or returns a pooled connection)
  */
@@ -142,6 +150,16 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock);
 static int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock);
 
 /* inline defs */
+
+inline uint64_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool)
+{
+    return pool->timeout;
+}
+
+inline void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, uint64_t msec)
+{
+    pool->timeout = msec;
+}
 
 inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {

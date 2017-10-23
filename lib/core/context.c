@@ -118,10 +118,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&mutex);
 
-    /* set dynamic socketpool timeout using first loop */
-    if (ctx->globalconf->proxy.global_socketpool.timeout == UINT64_MAX) {
-        h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, loop, config->proxy.keepalive_timeout);
-    }
+    h2o_socketpool_register_loop(&ctx->globalconf->proxy.global_socketpool, loop);
 
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
@@ -140,7 +137,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_globalconf_t *config = ctx->globalconf;
     size_t i, j;
 
-    h2o_socketpool_unregister_timeout(&ctx->globalconf->proxy.global_socketpool, ctx->loop);
+    h2o_socketpool_unregister_loop(&ctx->globalconf->proxy.global_socketpool, ctx->loop);
 
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];

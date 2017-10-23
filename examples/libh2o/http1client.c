@@ -72,7 +72,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     if (sockpool == NULL) {
         sockpool = h2o_mem_alloc(sizeof(*sockpool));
         h2o_socketpool_init_specific(sockpool, 10, &url_parsed, 1);
-        h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
+        h2o_socketpool_set_timeout(sockpool, 5000 /* in msec */);
+        h2o_socketpool_register_loop(sockpool, ctx->loop);
     }
     h2o_http1client_connect(NULL, req, ctx, sockpool, &url_parsed, on_connect, 0);
 }

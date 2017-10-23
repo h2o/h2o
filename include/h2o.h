@@ -405,10 +405,6 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
-         * keepalive timeout (in milliseconds, 0 to disable)
-         */
-        uint64_t keepalive_timeout;
-        /**
          * SSL context for connections initiated by the proxy (optional, governed by the application)
          */
         SSL_CTX *ssl_ctx;

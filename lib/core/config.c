@@ -186,7 +186,6 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     config->proxy.emit_x_forwarded_headers = 1;
     config->proxy.emit_via_header = 1;
-    config->proxy.keepalive_timeout = 2000;
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams;
     config->http2.max_streams_for_priority = 16;
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
