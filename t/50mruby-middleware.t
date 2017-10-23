@@ -53,8 +53,7 @@ sub get {
 my %files = map { do {
     my $fn = DOC_ROOT . "/$_";
     +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
-} } qw(index.txt);
-# } } qw(index.txt halfdome.jpg);
+} } qw(index.txt halfdome.jpg);
 
 sub doit {
     my ($next, $opts) = @_;
