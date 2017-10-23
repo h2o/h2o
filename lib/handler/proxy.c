@@ -74,10 +74,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
 
     /* use the loop of first context for handling socketpool timeouts */
-    if (self->sockpool != NULL) {
-        h2o_socketpool_set_timeout(self->sockpool, self->config.keepalive_timeout);
+    if (self->sockpool != NULL)
         h2o_socketpool_register_loop(self->sockpool, ctx->loop);
-    }
 
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
@@ -172,6 +170,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
             }
         }
         h2o_socketpool_init_specific(self->sockpool, SIZE_MAX /* FIXME */, upstreams, count);
+        h2o_socketpool_set_timeout(self->sockpool, self->config.keepalive_timeout);
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);
