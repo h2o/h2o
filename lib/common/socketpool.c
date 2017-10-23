@@ -296,10 +296,8 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     if (pool->_lb.dispose != NULL)
         pool->_lb.dispose(pool->_lb.data);
 
-    if (pool->_interval_cb.loop != NULL) {
-        h2o_timeout_unlink(&pool->_interval_cb.entry);
-        h2o_timeout_dispose(pool->_interval_cb.loop, &pool->_interval_cb.timeout);
-    }
+    if (pool->_interval_cb.loop != NULL)
+        h2o_socketpool_unregister_timeout(pool, pool->_interval_cb.loop);
 
     for (i = 0; i < pool->targets.size; i++) {
         dispose_target(pool->targets.entries[i]);
@@ -309,7 +307,8 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
 
 void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec)
 {
-    assert(pool->_interval_cb.loop == NULL);
+    if (pool->_interval_cb.loop != NULL)
+        return;
 
     pool->timeout = msec;
     pool->_interval_cb.loop = loop;
@@ -317,6 +316,15 @@ void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64
     pool->_interval_cb.entry.cb = on_timeout;
 
     h2o_timeout_link(loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
+}
+
+void h2o_socketpool_unregister_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop)
+{
+    if (pool->_interval_cb.loop != loop)
+        return;
+    h2o_timeout_unlink(&pool->_interval_cb.entry);
+    h2o_timeout_dispose(loop, &pool->_interval_cb.timeout);
+    pool->_interval_cb.loop = NULL;
 }
 
 static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *errstr)

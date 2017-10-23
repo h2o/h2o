@@ -809,6 +809,7 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
     if (handler_ctx == NULL)
         return;
 
+    h2o_socketpool_unregister_timeout(&handler->sockpool, ctx->loop);
     h2o_timeout_dispose(ctx->loop, &handler_ctx->io_timeout);
     free(handler_ctx);
 }

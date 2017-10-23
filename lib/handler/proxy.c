@@ -132,6 +132,8 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
         h2o_timeout_dispose(client_ctx->loop, client_ctx->websocket_timeout);
         free(client_ctx->websocket_timeout);
     }
+    if (self->sockpool != NULL)
+        h2o_socketpool_unregister_timeout(self->sockpool, ctx->loop);
     free(client_ctx);
 }
 

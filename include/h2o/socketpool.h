@@ -119,6 +119,10 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool);
  */
 void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec);
 /**
+ * unregisters the timeout if necessary
+ */
+void h2o_socketpool_unregister_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop);
+/**
  * connects to the peer (or returns a pooled connection)
  */
 
