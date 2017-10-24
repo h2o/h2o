@@ -326,10 +326,6 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
     case YOML_TYPE_SEQUENCE:
         sequence = 1;
         count = node->data.sequence.size;
-        if (self->vars->keepalive_timeout == 0 && count > 1) {
-            h2o_configurator_errprintf(cmd, node, "currently we do not support multiple backends with keep-alive disabled");
-            return -1;
-        }
         upstreams = alloca(count * sizeof(h2o_url_t));
         for (i = 0; i != node->data.sequence.size; ++i) {
             yoml_t *element = node->data.sequence.elements[i];
@@ -350,12 +346,6 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
         break;
     default:
         h2o_configurator_errprintf(cmd, node, "argument to proxy.reverse.url must be either a scalar or a sequence");
-        return -1;
-    }
-
-    if (self->vars->use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node,
-                                   "currently we do not support multiple backends with `proxy.use-proxy-protocol` enabled");
         return -1;
     }
 

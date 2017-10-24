@@ -3,7 +3,7 @@ use warnings;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
-use File::Temp qw(tempfile);
+use File::Temp qw(tempdir);
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
@@ -11,6 +11,44 @@ plan skip_all => 'plackup not found'
     unless prog_exists('plackup');
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
+
+my $tempdir = tempdir(CLEANUP => 1);
+
+sub run_test {
+    my ($conf, @candidates) = @_;
+    my ($server, $use_keepalive);
+
+    my $regex = join "|", map { quotemeta $_ } @candidates;
+    $regex = qr/^($regex)$/
+        or die "failed to compile regex";
+
+    my $test = sub {
+        for my $i (0..20) {
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($headers, $body) = run_prog("$curl --dump-header /dev/stderr --silent $proto://127.0.0.1:$port/");
+                like $headers, qr/^req-connection: @{[$use_keepalive ? "keep-alive" : "close"]}/im
+                    unless $curl =~ / --http2( |$)/;
+                like $body, $regex;
+            });
+        }
+    };
+
+    subtest "keepalive-on", sub {
+        $server = spawn_h2o($conf);
+        $use_keepalive = 1;
+        $test->();
+    };
+
+    subtest "keepalive-off", sub {
+        $server = spawn_h2o(<< "EOT");
+$conf
+proxy.timeout.keepalive: 0
+EOT
+        $use_keepalive = 0;
+        $test->();
+    };
+}
 
 subtest "both-tcp", sub {
     my $upstream_port1 = empty_port();
@@ -30,7 +68,7 @@ subtest "both-tcp", sub {
         },
     );
 
-    my $server = spawn_h2o(<< "EOT");
+    run_test(<< "EOT", $upstream_port1, $upstream_port2);
 hosts:
   default:
     paths:
@@ -40,33 +78,11 @@ hosts:
           - http://127.0.0.1.XIP.IO:$upstream_port2
         proxy.reverse.path: /echo-server-port
 EOT
-
-    for my $i (0..20) {
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my $resp = `$curl --silent $proto://127.0.0.1:$port/`;
-            ok $resp eq $upstream_port1 || $resp eq $upstream_port2;
-        });
-    }
 };
 
-sub get_unix_socket {
-    my ($unix_socket_file, $unix_socket_guard) = do {
-        (undef, my $fn) = tempfile(UNLINK => 0);
-        unlink $fn;
-        +(
-            $fn,
-            Scope::Guard->new(sub {
-                unlink $fn;
-            }),
-        );
-    };
-    return $unix_socket_file
-}
-
 subtest "both-unix", sub {
-    my $upstream_file1 = get_unix_socket();
-    my $upstream_file2 = get_unix_socket();
+    my $upstream_file1 = "$tempdir/sock1";
+    my $upstream_file2 = "$tempdir/sock2";
 
     my $guard1 = spawn_server(
         argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_file1, ASSETS_DIR . "/upstream.psgi" ],
@@ -82,7 +98,7 @@ subtest "both-unix", sub {
         },
     );
 
-    my $server = spawn_h2o(<< "EOT");
+    run_test(<< "EOT", $upstream_file1, $upstream_file2);
 hosts:
   default:
     paths:
@@ -92,19 +108,11 @@ hosts:
           - http://[unix:$upstream_file2]
         proxy.reverse.path: /echo-server-port
 EOT
-
-    for my $i (0..20) {
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my $resp = `$curl --silent $proto://127.0.0.1:$port/`;
-            ok $resp eq $upstream_file1 || $resp eq $upstream_file2;
-        });
-    }
 };
 
 subtest "tcp-unix", sub {
     my $upstream_port = empty_port();
-    my $upstream_file = get_unix_socket();
+    my $upstream_file = "$tempdir/sock3";
 
     my $guard1 = spawn_server(
         argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port, ASSETS_DIR . "/upstream.psgi" ],
@@ -120,7 +128,7 @@ subtest "tcp-unix", sub {
         },
     );
 
-    my $server = spawn_h2o(<< "EOT");
+    run_test(<< "EOT", $upstream_port, $upstream_file);
 hosts:
   default:
     paths:
@@ -130,14 +138,6 @@ hosts:
           - http://[unix:$upstream_file]
         proxy.reverse.path: /echo-server-port
 EOT
-
-    for my $i (0..20) {
-        run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my $resp = `$curl --silent $proto://127.0.0.1:$port/`;
-            ok $resp eq $upstream_port || $resp eq $upstream_file;
-        });
-    }
 };
 
 done_testing();

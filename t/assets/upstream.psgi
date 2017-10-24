@@ -120,6 +120,7 @@ builder {
             200,
             [
                 'x-server' => $env->{"SERVER_PORT"},
+                'req-connection' => $env->{"HTTP_CONNECTION"} || '',
             ],
             [$env->{"SERVER_PORT"}],
         ];
