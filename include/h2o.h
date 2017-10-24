@@ -1877,11 +1877,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     h2o_headers_command_t *headers_cmds;
     h2o_iovec_t reverse_path; /* optional */
     struct {
-        h2o_socketpool_lb_initializer init;
-        h2o_socketpool_lb_selector selector;
-        h2o_socketpool_lb_dispose_cb dispose;
-        h2o_balancer_per_target_conf_parser target_parser;
-        h2o_balancer_overall_conf_parser overall_parser;
+        const h2o_balancer_callbacks_t *callbacks;
         void *lb_conf;
     } lb;
     SSL_CTX *ssl_ctx; /* optional */

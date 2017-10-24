@@ -25,14 +25,14 @@ struct least_conn_t {
     pthread_mutex_t mutex;
 };
 
-void h2o_balancer_lc_init(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
+static void init(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
 {
     struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
     pthread_mutex_init(&self->mutex, NULL);
     *data = self;
 }
 
-size_t h2o_balancer_lc_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
+static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
                                 int *tried, void *dummy)
 {
     size_t i;
@@ -55,9 +55,20 @@ size_t h2o_balancer_lc_selector(h2o_socketpool_target_vector_t *targets, h2o_soc
     return result;
 }
 
-void h2o_balancer_lc_dispose(void *data)
+static void dispose(void *data)
 {
     struct least_conn_t *self = data;
     pthread_mutex_destroy(&self->mutex);
     free(data);
+}
+
+const h2o_balancer_callbacks_t *h2o_balancer_lc_get_callbacks() {
+    static const h2o_balancer_callbacks_t lc_callbacks = {
+        NULL,
+        NULL,
+        init,
+        selector,
+        dispose
+    };
+    return &lc_callbacks;
 }

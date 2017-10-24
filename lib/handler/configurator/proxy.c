@@ -330,23 +330,11 @@ static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_confi
     }
 
     if (strcmp(lb_type_node->data.scalar, "round-robin") == 0) {
-        self->vars->lb.init = h2o_balancer_rr_init;
-        self->vars->lb.selector = h2o_balancer_rr_selector;
-        self->vars->lb.dispose = h2o_balancer_rr_dispose;
-        self->vars->lb.target_parser = h2o_balancer_rr_per_target_conf_parser;
-        self->vars->lb.overall_parser = NULL;
+        self->vars->lb.callbacks = h2o_balancer_rr_get_callbacks();
     } else if (strcmp(lb_type_node->data.scalar, "least-conn") == 0) {
-        self->vars->lb.init = h2o_balancer_lc_init;
-        self->vars->lb.selector = h2o_balancer_lc_selector;
-        self->vars->lb.dispose = h2o_balancer_lc_dispose;
-        self->vars->lb.target_parser = NULL;
-        self->vars->lb.overall_parser = NULL;
+        self->vars->lb.callbacks = h2o_balancer_lc_get_callbacks();
     } else if (strcmp(lb_type_node->data.scalar, "hash") == 0) {
-        self->vars->lb.init = h2o_balancer_hash_init;
-        self->vars->lb.selector = h2o_balancer_hash_selector;
-        self->vars->lb.dispose = h2o_balancer_hash_dispose;
-        self->vars->lb.target_parser = NULL;
-        self->vars->lb.overall_parser = h2o_balancer_hash_overall_parser;
+        self->vars->lb.callbacks = h2o_balancer_hash_get_callbacks();
     } else {
         h2o_configurator_errprintf(cmd, node,
                                    "specified balancer is currently not supported. supported balancers are: "
@@ -354,10 +342,10 @@ static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_confi
         return -1;
     }
 
-    if (self->vars->lb.overall_parser != NULL && node->type == YOML_TYPE_MAPPING) {
+    if (self->vars->lb.callbacks->overall_conf_parser != NULL && node->type == YOML_TYPE_MAPPING) {
         yoml_t *errnode;
         char *errstr;
-        if (self->vars->lb.overall_parser(node, &self->vars->lb.lb_conf, &errnode, &errstr) != 0) {
+        if (self->vars->lb.callbacks->overall_conf_parser(node, &self->vars->lb.lb_conf, &errnode, &errstr) != 0) {
             h2o_configurator_errprintf(cmd, errnode, "%s\n", errstr);
             return -1;
         }
@@ -472,8 +460,8 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
                 return -1;
             }
 
-            if (self->vars->lb.target_parser != NULL) {
-                if (self->vars->lb.target_parser(node_for_parsing, &extra_lb_data[i], &errnode, &errstr) != 0) {
+            if (self->vars->lb.callbacks->target_conf_parser != NULL) {
+                if (self->vars->lb.callbacks->target_conf_parser(node_for_parsing, &extra_lb_data[i], &errnode, &errstr) != 0) {
                     h2o_configurator_errprintf(cmd, errnode, "%s\n", errstr);
                     return -1;
                 }
@@ -605,11 +593,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
     c->vars->registered_as_url = 0;
     c->vars->registered_as_backends = 0;
-    c->vars->lb.init = h2o_balancer_rr_init;
-    c->vars->lb.selector = h2o_balancer_rr_selector;
-    c->vars->lb.dispose = h2o_balancer_rr_dispose;
-    c->vars->lb.target_parser = h2o_balancer_rr_per_target_conf_parser;
-    c->vars->lb.overall_parser = NULL;
+    c->vars->lb.callbacks = h2o_balancer_rr_get_callbacks();
     c->vars->lb.lb_conf = NULL;
     c->vars->max_buffer_size = SIZE_MAX;
 

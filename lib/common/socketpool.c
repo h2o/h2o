@@ -112,8 +112,7 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
-                        h2o_socketpool_lb_initializer lb_init, h2o_socketpool_lb_selector lb_selector,
-                        h2o_socketpool_lb_dispose_cb lb_dispose, void *lb_conf)
+                        const h2o_balancer_callbacks_t *callbacks, void *lb_conf)
 {
     size_t i;
     memset(pool, 0, sizeof(*pool));
@@ -133,9 +132,8 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
 
     /* we only need balancing if there're more than one backends */
     if (targets.size > 1) {
-        lb_init(&pool->targets, lb_conf, &pool->_lb.data);
-        pool->_lb.selector = lb_selector;
-        pool->_lb.dispose = lb_dispose;
+        callbacks->init(&pool->targets, lb_conf, &pool->_lb.data);
+        pool->_lb.callbacks = callbacks;
     }
 }
 
@@ -175,7 +173,8 @@ void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa,
     h2o_vector_reserve(NULL, &targets, 1);
     h2o_socketpool_init_target_by_address(&targets.entries[0], sa, salen, is_ssl, NULL);
     targets.size = 1;
-    common_init(pool, targets, capacity, h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose, NULL);
+    const h2o_balancer_callbacks_t *rr_callbacks = h2o_balancer_rr_get_callbacks();
+    common_init(pool, targets, capacity, rr_callbacks, NULL);
 }
 
 void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl,
@@ -211,15 +210,15 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
     h2o_vector_reserve(NULL, &targets, 1);
     h2o_socketpool_init_target_by_hostport(&targets.entries[0], host, port, is_ssl, NULL);
     targets.size = 1;
-    common_init(pool, targets, capacity, h2o_balancer_rr_init, h2o_balancer_rr_selector, h2o_balancer_rr_dispose, NULL);
+    const h2o_balancer_callbacks_t *rr_callbacks = h2o_balancer_rr_get_callbacks();
+    common_init(pool, targets, capacity, rr_callbacks, NULL);
 }
 
 void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
-                                    h2o_socketpool_lb_initializer lb_init, h2o_socketpool_lb_selector lb_selector,
-                                    h2o_socketpool_lb_dispose_cb lb_dispose, void *lb_conf)
+                                    const h2o_balancer_callbacks_t *callbacks, void *lb_conf)
 {
     assert(targets.size > 0);
-    common_init(pool, targets, capacity, lb_init, lb_selector, lb_dispose, lb_conf);
+    common_init(pool, targets, capacity, callbacks, lb_conf);
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
@@ -239,8 +238,8 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_destroy(&pool->_shared.mutex);
     free(&pool->_shared.status.entries);
 
-    if (pool->_lb.dispose != NULL) {
-        pool->_lb.dispose(pool->_lb.data);
+    if (pool->_lb.callbacks != NULL) {
+        pool->_lb.callbacks->dispose(pool->_lb.data);
     }
 
     if (pool->_interval_cb.loop != NULL) {
@@ -350,8 +349,8 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     struct pool_entry_t *entry = NULL;
     struct on_close_data_t *close_data;
 
-    if (req->pool->_lb.selector != NULL) {
-        req->lb.selected = req->pool->_lb.selector(&req->pool->targets, &req->pool->_shared.status, req->pool->_lb.data,
+    if (req->pool->_lb.callbacks != NULL) {
+        req->lb.selected = req->pool->_lb.callbacks->selector(&req->pool->targets, &req->pool->_shared.status, req->pool->_lb.data,
                                                    req->lb.tried, req->lb.req_extra);
         assert(!req->lb.tried[req->lb.selected]);
         req->lb.try_count++;

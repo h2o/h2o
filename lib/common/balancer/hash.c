@@ -72,7 +72,7 @@ static size_t range_bsearch(const void *key, const void *base, size_t num, size_
     return end;
 }
 
-uint64_t compute_hash(const void *key, size_t key_len)
+static uint64_t compute_hash(const void *key, size_t key_len)
 {
     uint8_t hashtag_array[8];
     siphash(key, key_len, hash_key, hashtag_array, 8);
@@ -119,7 +119,7 @@ static void add_bucket(hash_bucket_vector_t *ring, h2o_socketpool_target_status_
     insert_new_bucket(ring, &bucket);
 }
 
-void h2o_balancer_hash_init(h2o_socketpool_target_vector_t *targets, void *_conf, void **data)
+static void init(h2o_socketpool_target_vector_t *targets, void *_conf, void **data)
 {
     struct bounded_hash_conf_t *conf = _conf;
     size_t i;
@@ -145,7 +145,7 @@ void h2o_balancer_hash_init(h2o_socketpool_target_vector_t *targets, void *_conf
     *data = self;
 }
 
-size_t h2o_balancer_hash_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
+static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
                                 int *tried, void *_req)
 {
     h2o_req_t *req = _req;
@@ -226,7 +226,7 @@ size_t h2o_balancer_hash_selector(h2o_socketpool_target_vector_t *targets, h2o_s
     return index;
 }
 
-int h2o_balancer_hash_overall_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr)
+static int overall_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr)
 {
     struct bounded_hash_conf_t *result;
     if (node != NULL && node->type == YOML_TYPE_MAPPING) {
@@ -284,11 +284,22 @@ int h2o_balancer_hash_overall_parser(yoml_t *node, void **data, yoml_t **errnode
     return -1;
 }
 
-void h2o_balancer_hash_dispose(void *data)
+static void dispose(void *data)
 {
     struct bounded_hash_t *self = data;
 
     pthread_mutex_destroy(&self->mutex);
     
     free(self->buckets.entries);
+}
+
+const h2o_balancer_callbacks_t *h2o_balancer_hash_get_callbacks() {
+    static const h2o_balancer_callbacks_t hash_callbacks = {
+        NULL,
+        overall_parser,
+        init,
+        selector,
+        dispose
+    };
+    return &hash_callbacks;
 }

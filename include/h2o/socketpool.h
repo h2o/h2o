@@ -69,12 +69,7 @@ typedef struct st_h2o_socketpool_target_t {
 
 typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
 
-typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                             void *data, int *tried, void *req_extra);
-
-typedef void (*h2o_socketpool_lb_initializer)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
-
-typedef void (*h2o_socketpool_lb_dispose_cb)(void *data);
+typedef struct st_h2o_balancer_callbacks_t h2o_balancer_callbacks_t;
 
 typedef struct st_h2o_socketpool_t {
 
@@ -97,8 +92,7 @@ typedef struct st_h2o_socketpool_t {
 
     /* vars used by load balancing, modified by multiple threads */
     struct {
-        h2o_socketpool_lb_selector selector;
-        h2o_socketpool_lb_dispose_cb dispose;
+        const h2o_balancer_callbacks_t *callbacks;
         void *data;
     } _lb;
 } h2o_socketpool_t;
@@ -118,8 +112,7 @@ void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, u
  * initializes a socket pool with specified target vector
  */
 void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
-                                    h2o_socketpool_lb_initializer lb_init, h2o_socketpool_lb_selector lb_selector,
-                                    h2o_socketpool_lb_dispose_cb lb_dispose, void *lb_conf);
+                                    const h2o_balancer_callbacks_t *callbacks, void *lb_conf);
 /**
  * initializes a target by specified address
  */

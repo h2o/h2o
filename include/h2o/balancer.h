@@ -35,31 +35,36 @@ typedef int (*h2o_balancer_per_target_conf_parser)(yoml_t *node, void **data, yo
 /* function for parsing overall configuration of a load balancer */
 typedef int (*h2o_balancer_overall_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
 
+typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
+                                             void *data, int *tried, void *req_extra);
+
+typedef void (*h2o_balancer_initializer)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
+
+typedef void (*h2o_balancer_dispose_cb)(void *data);
+
+typedef struct st_h2o_balancer_callbacks_t {
+    h2o_balancer_per_target_conf_parser target_conf_parser;
+    h2o_balancer_overall_conf_parser overall_conf_parser;
+    h2o_balancer_initializer init;
+    h2o_balancer_selector selector;
+    h2o_balancer_dispose_cb dispose;
+} h2o_balancer_callbacks_t;
+
 /* round robin */
-void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void *unused, void **data);
-size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
-                                int *tried, void *dummy);
-void h2o_balancer_rr_dispose(void *data);
-int h2o_balancer_rr_per_target_conf_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
+const h2o_balancer_callbacks_t *h2o_balancer_rr_get_callbacks();
 
 /* least connection */
-void h2o_balancer_lc_init(h2o_socketpool_target_vector_t *targets, void *unused, void **data);
-size_t h2o_balancer_lc_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
-                                int *tried, void *dummy);
-void h2o_balancer_lc_dispose(void *data);
+const h2o_balancer_callbacks_t *h2o_balancer_lc_get_callbacks();
 
 /* bounded hash */
-void h2o_balancer_hash_init(h2o_socketpool_target_vector_t *targets, void *_conf, void **data);
-size_t h2o_balancer_hash_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
-                                  int *tried, void *_req);
-void h2o_balancer_hash_dispose(void *data);
-int h2o_balancer_hash_overall_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
+const h2o_balancer_callbacks_t *h2o_balancer_hash_get_callbacks();
 
 typedef enum en_h2o_balancer_hash_key_type {
     H2O_BALANCER_HASH_KEY_TYPE_PATH,
     H2O_BALANCER_HASH_KEY_TYPE_IP,
     H2O_BALANCER_HASH_KEY_TYPE_IP_PORT
 } h2o_balancer_hash_key_type;
+
 #ifdef __cplusplus
 }
 #endif

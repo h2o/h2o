@@ -33,7 +33,7 @@ struct round_robin_target_conf_t {
     size_t weight;
 };
 
-void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
+static void init(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
 {
     size_t i;
     struct round_robin_target_conf_t *target_conf;
@@ -53,7 +53,7 @@ void h2o_balancer_rr_init(h2o_socketpool_target_vector_t *targets, void *unused,
     *data = self;
 }
 
-int h2o_balancer_rr_per_target_conf_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr)
+static int per_target_conf_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr)
 {
     struct round_robin_target_conf_t *result;
     if (node == NULL || node->type == YOML_TYPE_SCALAR) {
@@ -100,7 +100,7 @@ int h2o_balancer_rr_per_target_conf_parser(yoml_t *node, void **data, yoml_t **e
     return -1;
 }
 
-size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
+static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
                                 int *tried, void *dummy)
 {
     size_t i;
@@ -138,10 +138,21 @@ size_t h2o_balancer_rr_selector(h2o_socketpool_target_vector_t *targets, h2o_soc
     return result;
 }
 
-void h2o_balancer_rr_dispose(void *data)
+static void dispose(void *data)
 {
     struct round_robin_t *self = data;
     pthread_mutex_destroy(&self->mutex);
     free(self->floor_next_target);
     free(data);
+}
+
+const h2o_balancer_callbacks_t *h2o_balancer_rr_get_callbacks() {
+    static const h2o_balancer_callbacks_t rr_callbacks = {
+        per_target_conf_parser,
+        NULL,
+        init,
+        selector,
+        dispose
+    };
+    return &rr_callbacks;
 }
