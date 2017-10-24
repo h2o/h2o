@@ -247,6 +247,7 @@ sub run_prog {
     my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
     my $stderr = `$cmd 2>&1 > $tempfn`;
     my $stdout = do { local $/; <$tempfh> };
+    close $tempfh; # tempfile does not close the file automatically (see perldoc)
     return ($stderr, $stdout);
 }
 
