@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port check_port);
 use Test::More;
 use Test::Exception;
@@ -32,10 +33,18 @@ sub create_upstream {
 };
 
 sub get {
-    my ($server, $path) = @_;
+    my ($proto, $port, $curl, $path, $req_headers) = @_;
+
+    # build curl command
+    my @curl_cmd = ($curl);
+    push(@curl_cmd, qw(--silent --dump-header /dev/stderr));
+    push(@curl_cmd, map { ('-H', "'$_'") } @{ $req_headers || [] });
+    push(@curl_cmd, "$proto://127.0.0.1:$port$path");
+    my $curl_cmd = join(' ', @curl_cmd);
+
     local $SIG{ALRM} = sub { die };
     alarm(3);
-    my ($hstr, $body) = eval { run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}$path") };
+    my ($hstr, $body) = eval { run_prog($curl_cmd) };
     my $timeout = !! $@;
     alarm(0);
     if ($timeout) {
@@ -47,6 +56,7 @@ sub get {
     }
     my $status = $1 + 0;
     my $headers = +{ map { split(': ', $_, 2) } @hlines };
+    $headers = +{ map { lc($_) => $headers->{$_} } keys %$headers };
     return ($status, $headers, $body);
 }
 
@@ -69,7 +79,7 @@ sub doit {
             << "EOT";
 hosts:
   "127.0.0.1:$port":
-    paths:
+    paths: &paths
       /live-check:
         - mruby.handler: |
             def modify_env(env)
@@ -78,6 +88,8 @@ hosts:
       /:
 $conf
         - $next
+  "127.0.0.1:$tls_port":
+    paths: *paths
 EOT
             });
         };
@@ -91,7 +103,7 @@ EOT
 fastcgi.send-delegated-uri: ON
 hosts:
   "127.0.0.1:$port":
-    paths:
+    paths: &paths
       /live-check:
         - mruby.handler: |
             def modify_env(env)
@@ -103,6 +115,8 @@ hosts:
         - $next
       /for-reprocess:
 $conf
+  "127.0.0.1:$tls_port":
+    paths: *paths
 EOT
             });
         };
@@ -111,10 +125,10 @@ EOT
     }
 
     my $live_check = sub {
-        my $server = shift;
+        my ($proto, $port, $curl) = @_;
         local $Test::Builder::Level = $Test::Builder::Level + 1;
         lives_ok {
-            my ($status, $headers, $body) = get($server, '/live-check');
+            my ($status, $headers, $body) = get($proto, $port, $curl, '/live-check');
             is $status, 200, 'live status check';
         }, 'live check';
     };
@@ -129,13 +143,16 @@ EOT
               resp
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 200;
-        is $headers->{'foo'}, 'FOO';
-        is length($body), $files{$file}->{size};
-        is md5_hex($body), $files{$file}->{md5};
-        is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
-        $live_check->($server);
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $headers->{'foo'}, 'FOO';
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     subtest 'stream response body' => sub {
@@ -147,13 +164,16 @@ EOT
               resp
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 200;
-        is $headers->{'Content-Length'} || '', '';
-        is length($body), $files{$file}->{size};
-        is md5_hex($body), $files{$file}->{md5};
-        is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
-        $live_check->($server);
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $headers->{'content-length'} || '', '';
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     subtest 'join response body' => sub {
@@ -166,13 +186,16 @@ EOT
               resp
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 200;
-        is $headers->{'Content-Length'}, length($body);
-        is length($body), $files{$file}->{size};
-        is md5_hex($body), $files{$file}->{md5};
-        is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
-        $live_check->($server);
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $headers->{'content-length'}, length($body);
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     subtest 'discard response' => sub {
@@ -184,10 +207,13 @@ EOT
               [200, {}, ['mruby']]
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 200;
-        is $body, 'mruby';
-        $live_check->($server);
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $body, 'mruby';
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     subtest 'discard response and each' => sub {
@@ -203,10 +229,13 @@ EOT
               end.new]
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 200;
-        is $body, 'mruby';
-        $live_check->($server);
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $body, 'mruby';
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     subtest 'wrapped body' => sub {
@@ -225,12 +254,15 @@ EOT
               end.new(body)]
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 200;
-        is length($body), $files{$file}->{size};
-        is md5_hex($body), $files{$file}->{md5};
-        is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
-        $live_check->($server);
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     subtest 'multiple one-by-one' => sub {
@@ -245,10 +277,13 @@ EOT
               [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 200;
-        is $body, $files{$file}->{md5} x 2;
-        $live_check->($server);
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $body, $files{$file}->{md5} x 2;
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     subtest 'multiple concurrent' => sub {
@@ -267,9 +302,13 @@ EOT
               end
             }
 EOT
-        my ($status, $headers, $body) = get($server, "$path/$file");
-        is $status, 503;
-        is $body, 'this stream is already canceled by following H2O.app.call';
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 503;
+            is $body, 'this stream is already canceled by following H2O.app.call';
+            $live_check->($proto, $port, $curl);
+        });
     };
 
     if ($mode eq 'call') {
@@ -292,12 +331,15 @@ EOT
               resp
             }
 EOT
-            my ($status, $headers, $body) = get($server, "$path/$file");
-            is $status, 200;
-            is length($body), $files{$file}->{size};
-            is md5_hex($body), $files{$file}->{md5};
-            is $headers->{'x-middleware-order'}, '21', 'middleware order';
-            $live_check->($server);
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+                is $status, 200;
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                is $headers->{'x-middleware-order'}, '21', 'middleware order';
+                $live_check->($proto, $port, $curl);
+            });
         };
     }
 }
@@ -348,18 +390,69 @@ subtest 'infinite reprocess' => sub {
         << "EOT";
 hosts:
   "127.0.0.1:$port":
-    paths:
+    paths: &paths
       /:
         - mruby.handler: |
             proc {|env|
               H2O.app.reprocess(env)
             }
-        - file.dir: @{[ ASSETS_DIR ]}/doc_root
+  "127.0.0.1:$tls_port":
+    paths: *paths
 EOT
     });
-    my ($status, $headers, $body) = get($server, '/one-by-one/index.txt');
-    is $status, 502;
-    is $body, "too many internal reprocesses";
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($status, $headers, $body) = get($proto, $port, $curl, '/');
+        is $status, 502;
+        is $body, "too many internal reprocesses";
+    });
+};
+
+subtest 'preserve original request headers' => sub {
+    my $tempdir = tempdir(CLEANUP => 1);
+    my $access_log = "$tempdir/access.log";
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths: &paths
+      /:
+        - mruby.handler: |
+            proc {|env|
+              env['HTTP_X_FOO'] = env['QUERY_STRING'] unless env['QUERY_STRING'].empty?
+              H2O.app.call(env)
+            }
+        - mruby.handler: |
+            proc {|env|
+              [200, {}, [env['HTTP_X_FOO']]]
+            }
+  "127.0.0.1:$tls_port":
+    paths: *paths
+access-log:
+  path: $access_log
+  format: "%{x-foo}i"
+EOT
+    });
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        truncate $access_log, 0;
+
+        my ($status, $headers, $body);
+        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt', ['X-Foo: FOO']);
+        is $status, 200;
+        is $body, 'FOO';
+        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt?BAR', ['X-Foo: FOO']);
+        is $status, 200;
+        is $body, 'BAR';
+
+        my @log = do {
+            open my $fh, "<", "$tempdir/access.log" or die "failed to open access.log:$!";
+            map { my $l = $_; chomp $l; $l } <$fh>;
+        };
+        is $log[0], 'FOO';
+        is $log[1], 'FOO';
+    });
 };
 
 done_testing();
