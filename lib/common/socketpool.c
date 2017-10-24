@@ -173,6 +173,7 @@ static void lb_rr_dispose(void *data)
 
 h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url,  struct sockaddr_storage *sa, socklen_t *salen)
 {
+    memset(sa, 0, sizeof(*sa));
     const char *to_sun_err = h2o_url_host_to_sun(url->host, (struct sockaddr_un *)sa);
     if (to_sun_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
         sa->ss_family = AF_INET;
@@ -195,22 +196,20 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url,  struct sockaddr
 
 void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin)
 {
-    assert(origin != NULL);
-
     struct sockaddr_storage sa;
     socklen_t salen;
 
-    memset(&sa, 0, sizeof(sa));
-
-    target->is_ssl = origin->scheme->is_ssl;
+    h2o_url_copy(NULL, &target->url, origin);
     target->type = detect_target_type(origin, &sa, &salen);
-    target->peer.host = h2o_strdup(NULL, origin->host.base, origin->host.len);
-    target->peer.port = h2o_url_get_port(origin);
+    if (!(target->type == H2O_SOCKETPOOL_TYPE_SOCKADDR && sa.ss_family == AF_UNIX)) {
+        h2o_strtolower(target->url.authority.base, target->url.authority.len);
+        h2o_strtolower(target->url.host.base, target->url.host.len);
+    }
 
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         target->peer.named_serv.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
-        target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)target->peer.port);
+        target->peer.named_serv.len = sprintf(target->peer.named_serv.base, "%u", (unsigned)h2o_url_get_port(&target->url));
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         assert(salen <= sizeof(target->peer.sockaddr.bytes));
@@ -219,8 +218,6 @@ void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin)
         break;
     }
 
-    target->url = h2o_mem_alloc(sizeof(*target->url));
-    h2o_url_copy(NULL, target->url, origin);
     h2o_linklist_init_anchor(&target->_shared.sockets);
 }
 
@@ -262,7 +259,6 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity)
 
 void dispose_target(h2o_socketpool_target_t *target)
 {
-    free(target->peer.host.base);
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         free(target->peer.named_serv.base);
@@ -270,13 +266,9 @@ void dispose_target(h2o_socketpool_target_t *target)
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         break;
     }
-    if (target->url != NULL) {
-        free(target->url->authority.base);
-        free(target->url->host.base);
-        free(target->url->path.base);
-        free(target->url);
-    }
-
+    free(target->url.authority.base);
+    free(target->url.host.base);
+    free(target->url.path.base);
     free(target);
 }
 
@@ -337,7 +329,7 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     }
 
     free(req);
-    cb(sock, errstr, data, selected_target->url);
+    cb(sock, errstr, data, &selected_target->url);
 }
 
 static void try_connect(h2o_socketpool_connect_request_t *req)
@@ -356,7 +348,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
-        req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->peer.host, target->peer.named_serv, AF_UNSPEC,
+        req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
                                                 SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
@@ -435,11 +427,11 @@ static size_t lookup_target(h2o_socketpool_t *pool, h2o_url_t *url)
     size_t i = 0;
     for (; i != pool->targets.size; ++i) {
         h2o_socketpool_target_t *target = pool->targets.entries[i];
-        if (target->is_ssl != url->scheme->is_ssl)
+        if (target->url.scheme != url->scheme)
             continue;
-        if (target->peer.port != port)
+        if (h2o_url_get_port(&target->url) != port)
             continue;
-        if (memcmp(target->peer.host.base, url->host.base, url->host.len) != 0)
+        if (!h2o_url_hosts_are_equal(&target->url, url))
             continue;
         return i;
     }
@@ -497,7 +489,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             close_data->target = entry_target;
             sock->on_close.cb = on_close;
             sock->on_close.data = close_data;
-            cb(sock, NULL, data, pool->targets.entries[entry_target]->url);
+            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url);
             return;
         }
 

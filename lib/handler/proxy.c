@@ -33,7 +33,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
     h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
-    h2o_url_t *upstream_url = self->sockpool.targets.entries[0]->url;
+    h2o_url_t *upstream_url = &self->sockpool.targets.entries[0]->url;
     const h2o_url_scheme_t *scheme;
     h2o_iovec_t *authority;
 
@@ -140,11 +140,12 @@ static void on_handler_dispose(h2o_handler_t *_self)
     h2o_socketpool_dispose(&self->sockpool);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count, h2o_proxy_config_vars_t *config)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
+                                      h2o_proxy_config_vars_t *config)
 {
-    struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
+    assert(num_upstreams != 0);
 
-    assert(count != 0);
+    struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
 
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
@@ -153,16 +154,17 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.supports_request_streaming = 1;
     self->config = *config;
 
-    /* FIXME who's the owner of `upstreams`? */
-    size_t i;
-    for (i = 0; i != count; ++i) {
-        struct sockaddr_un sa;
-        if (h2o_url_host_to_sun(upstreams[i].host, &sa) != NULL)
-            h2o_strtolower(upstreams[i].host.base, upstreams[i].host.len);
-        if (config->registered_as_backends && config->reverse_path.base != NULL)
+    /* init socket pool */
+    if (config->registered_as_backends && config->reverse_path.base != NULL) {
+        /* create shallow copy of upstreams so that we can modify them */
+        h2o_url_t *p = alloca(sizeof(*upstreams) * num_upstreams);
+        memcpy(p, upstreams, sizeof(*upstreams) * num_upstreams);
+        upstreams = p;
+        size_t i;
+        for (i = 0; i != num_upstreams; ++i)
             upstreams[i].path = config->reverse_path;
     }
-    h2o_socketpool_init_specific(&self->sockpool, SIZE_MAX /* FIXME */, upstreams, count);
+    h2o_socketpool_init_specific(&self->sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams);
     h2o_socketpool_set_timeout(&self->sockpool, config->keepalive_timeout);
 
     if (self->config.ssl_ctx != NULL)

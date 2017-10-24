@@ -41,22 +41,26 @@ typedef enum en_h2o_socketpool_target_type_t {
 } h2o_socketpool_target_type_t;
 
 typedef struct st_h2o_socketpool_target_t {
+    /**
+     * target URL
+     */
+    h2o_url_t url;
+    /**
+     * target type (extracted from url)
+     */
     h2o_socketpool_target_type_t type;
-    int is_ssl;
-    struct {
-        h2o_iovec_t host;
-        uint16_t port;
-        union {
-            /* used to specify servname passed to getaddrinfo */
-            h2o_iovec_t named_serv;
-            /* if type is sockaddr, the `host` is not resolved but is used for TLS SNI and hostname verification */
-            struct {
-                struct sockaddr_storage bytes;
-                socklen_t len;
-            } sockaddr;
-        };
+    /**
+     * peer address (extracted from url)
+     */
+    union {
+        /* used to specify servname passed to getaddrinfo */
+        h2o_iovec_t named_serv;
+        /* if type is sockaddr, the `host` is not resolved but is used for TLS SNI and hostname verification */
+        struct {
+            struct sockaddr_storage bytes;
+            socklen_t len;
+        } sockaddr;
     } peer;
-    h2o_url_t *url;
 
     struct {
         h2o_linklist_t sockets;
