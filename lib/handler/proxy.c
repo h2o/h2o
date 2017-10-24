@@ -33,34 +33,21 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
     h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
-    h2o_url_t *upstream_url = &self->sockpool.targets.entries[0]->url;
-    const h2o_url_scheme_t *scheme;
-    h2o_iovec_t *authority;
 
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
     overrides->socketpool = &self->sockpool;
-    overrides->location_rewrite.match = upstream_url;
+    overrides->location_rewrite.match = &self->sockpool.targets.entries[0]->url; /* FIXME do we need to set this here? */
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->max_buffer_size = self->config.max_buffer_size;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
     overrides->headers_cmds = self->config.headers_cmds;
-
-    /* determine the scheme and authority */
-    if (self->config.preserve_host) {
-        scheme = req->scheme;
-        authority = &req->authority;
-        overrides->proxy_preserve_host = 1;
-    } else {
-        scheme = upstream_url->scheme;
-        authority = &upstream_url->authority;
-        overrides->proxy_preserve_host = 0;
-    }
+    overrides->proxy_preserve_host = self->config.preserve_host;
 
     /* request reprocess */
-    h2o_reprocess_request(req, req->method, scheme, *authority,
-                          h2o_build_destination(req, upstream_url->path.base, upstream_url->path.len, 0), overrides, 0);
+    h2o_reprocess_request(req, req->method, req->scheme, req->authority, h2o_build_destination(req, H2O_STRLIT("/"), 0), overrides,
+                          0);
 
     return 0;
 }
