@@ -923,6 +923,11 @@ static void on_defer_proceed_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, output_filter.defer_proceed_timeout_entry, entry);
     assert(generator->output_filter.prev != NULL);
+
+    /* if mruby handler already returned the response, stop calling proceed */
+    if (h2o_timeout_is_linked(&generator->output_filter.defer_close_timeout_entry))
+        return;
+
     generator->output_filter.prev->proceed(generator->output_filter.prev, generator->req);
 }
 
