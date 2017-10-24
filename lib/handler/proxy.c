@@ -42,8 +42,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     if (self->sockpool != NULL) {
         overrides->socketpool = self->sockpool;
     } else if (self->config.preserve_host) {
-        overrides->hostport.host = self->upstream.host;
-        overrides->hostport.port = h2o_url_get_port(&self->upstream);
+        overrides->upstream = &self->upstream;
     }
     overrides->location_rewrite.match = &self->upstream;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
@@ -75,8 +74,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
 
     /* use the loop of first context for handling socketpool timeouts */
-    if (self->sockpool != NULL && self->sockpool->timeout == UINT64_MAX)
-        h2o_socketpool_set_timeout(self->sockpool, ctx->loop, self->config.keepalive_timeout);
+    if (self->sockpool != NULL)
+        h2o_socketpool_register_loop(self->sockpool, ctx->loop);
 
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
@@ -133,6 +132,8 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
         h2o_timeout_dispose(client_ctx->loop, client_ctx->websocket_timeout);
         free(client_ctx->websocket_timeout);
     }
+    if (self->sockpool != NULL)
+        h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
     free(client_ctx);
 }
 
@@ -162,26 +163,14 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.supports_request_streaming = 1;
     if (config->keepalive_timeout != 0) {
         size_t i;
-        int is_ssl;
-        h2o_socketpool_target_vector_t targets = {};
-        h2o_vector_reserve(NULL, &targets, count);
         self->sockpool = h2o_mem_alloc(sizeof(*self->sockpool));
         for (i = 0; i != count; ++i) {
             if (config->registered_as_backends && config->reverse_path.base != NULL) {
                 upstreams[i].path = config->reverse_path;
             }
-            to_sa_err = h2o_url_host_to_sun(upstreams[i].host, &sa);
-            is_ssl = upstreams[i].scheme == &H2O_URL_SCHEME_HTTPS;
-            if (to_sa_err == h2o_url_host_to_sun_err_is_not_unix_socket) {
-                h2o_socketpool_init_target_by_hostport(&targets.entries[i], upstreams[i].host, h2o_url_get_port(&upstreams[i]),
-                                                       is_ssl, &upstreams[i]);
-            } else {
-                assert(to_sa_err == NULL);
-                h2o_socketpool_init_target_by_address(&targets.entries[i], (void *)&sa, sizeof(sa), is_ssl, &upstreams[i]);
-            }
-            targets.size++;
         }
-        h2o_socketpool_init_by_targets(self->sockpool, targets, SIZE_MAX /* FIXME */);
+        h2o_socketpool_init_specific(self->sockpool, SIZE_MAX /* FIXME */, upstreams, count);
+        h2o_socketpool_set_timeout(self->sockpool, self->config.keepalive_timeout);
     }
     to_sa_err = h2o_url_host_to_sun(upstreams[0].host, &sa);
     h2o_url_copy(NULL, &self->upstream, &upstreams[0]);
