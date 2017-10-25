@@ -265,7 +265,7 @@ EOT
         });
     };
 
-    subtest 'multiple one-by-one' => sub {
+    subtest 'multiple one-by-one calls' => sub {
         my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
@@ -286,7 +286,7 @@ EOT
         });
     };
 
-    subtest 'multiple concurrent' => sub {
+    subtest 'multiple concurrent calls' => sub {
         my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
@@ -312,7 +312,7 @@ EOT
     };
 
     if ($mode eq 'call') {
-        subtest 'multi handlers' => sub {
+        subtest 'multiple handlers' => sub {
             my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|

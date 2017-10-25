@@ -1005,15 +1005,12 @@ static void ostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbu
         /* push incoming chunks to ostream */
         int gc_arena = mrb_gc_arena_save(mrb);
 
-        mrb_value incoming_chunks = mrb_ary_new_capa(mrb, (mrb_int)inbufcnt);
-        mrb_int i;
+        mrb_value chunks = mrb_iv_get(mrb, self->ref, mrb_intern_lit(mrb, "@chunks"));
+        int i;
         for (i = 0; i < inbufcnt; ++i) {
             mrb_value chunk = mrb_str_new(mrb, inbufs[i].base, inbufs[i].len);
-            mrb_ary_set(mrb, incoming_chunks, i, chunk);
+            mrb_ary_push(mrb, chunks, chunk);
         }
-
-        mrb_value chunks = mrb_iv_get(mrb, self->ref, mrb_intern_lit(mrb, "@chunks"));
-        mrb_ary_concat(mrb, chunks, incoming_chunks);
         h2o_mruby_assert(mrb);
 
         mrb_gc_arena_restore(mrb, gc_arena);
@@ -1091,11 +1088,10 @@ static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb
 {
     mrb_state *mrb = ctx->shared->mrb;
 
-
 #define RETRIEVE_ENV(key, v) do { \
     v = mrb_hash_get(mrb, env, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_LIT_ ## key)); \
     if (mrb_nil_p(v)) { \
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed"); \
+        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: ## key"); \
     } \
     v = h2o_mruby_to_str(mrb, v); \
 } while (0)
@@ -1134,8 +1130,8 @@ static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb
 
     req->scheme = url_parsed.scheme;
     req->method = h2o_strdup(&req->pool, RSTRING_PTR(method), RSTRING_LEN(method));
-    req->authority = url_parsed.authority;
-    req->path = url_parsed.path;
+    req->authority = h2o_strdup(&req->pool, url_parsed.authority.base, url_parsed.authority.len);
+    req->path = h2o_strdup(&req->pool, url_parsed.path.base, url_parsed.path.len);
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     req->headers = (h2o_headers_t){NULL};
     h2o_mruby_iterate_headers(ctx->shared, env, handle_request_header, req);
@@ -1311,7 +1307,11 @@ static mrb_value invoke_app_callback(h2o_mruby_context_t *ctx, mrb_value receive
     }
 
     mrb_value reprocess = mrb_ary_entry(args, 2);
+
+    int gc_arena = mrb_gc_arena_save(mrb);
+    mrb_gc_protect(mrb, env);
     mrb_value exc = setup_req_for_env(ctx, req, env, mrb_bool(reprocess));
+    mrb_gc_arena_restore(mrb, gc_arena);
     if (! mrb_nil_p(exc)) {
         *run_again = 1;
         return exc;
