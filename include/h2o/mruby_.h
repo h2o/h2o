@@ -133,22 +133,7 @@ typedef struct st_h2o_mruby_generator_t {
     } defer_invoke;
 } h2o_mruby_generator_t;
 
-typedef struct st_h2o_mruby_chunked_t {
-    h2o_doublebuffer_t sending;
-    size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
-    enum { H2O_MRUBY_CHUNKED_TYPE_CALLBACK, H2O_MRUBY_CHUNKED_TYPE_SHORTCUT } type;
-    mrb_value body_obj; /* becomes nil on eos */
-    union {
-        struct {
-            h2o_buffer_t *receiving;
-        } callback;
-        struct {
-            h2o_mruby_http_request_context_t *client;
-            h2o_buffer_t *remaining;
-        } shortcut;
-    };
-    void (*proceed)(struct st_h2o_generator_t *self, h2o_req_t *req);
-} h2o_mruby_chunked_t;
+
 
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP -2

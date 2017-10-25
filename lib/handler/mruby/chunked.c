@@ -27,6 +27,22 @@
 #include "h2o/mruby_.h"
 #include "embedded.c.h"
 
+struct st_h2o_mruby_chunked_t {
+    h2o_doublebuffer_t sending;
+    size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
+    enum { H2O_MRUBY_CHUNKED_TYPE_CALLBACK, H2O_MRUBY_CHUNKED_TYPE_SHORTCUT } type;
+    mrb_value body_obj; /* becomes nil on eos */
+    union {
+        struct {
+            h2o_buffer_t *receiving;
+        } callback;
+        struct {
+            h2o_mruby_http_request_context_t *client;
+            h2o_buffer_t *remaining;
+        } shortcut;
+    };
+};
+
 static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int is_final)
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
@@ -141,7 +157,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     chunked->bytes_left = h2o_memis(generator->req->method.base, generator->req->method.len, H2O_STRLIT("HEAD"))
                               ? 0
                               : generator->req->res.content_length;
-    chunked->proceed = do_proceed;
+    generator->super.proceed = do_proceed;
     generator->chunked = chunked;
     mrb_value ret;
 

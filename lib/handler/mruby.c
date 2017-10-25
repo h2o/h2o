@@ -689,11 +689,7 @@ static void on_generator_dispose(void *_generator)
 
 static void do_generator_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 {
-    h2o_mruby_generator_t *generator = (void *)_generator;
-
-    if (generator->chunked != NULL) {
-        generator->chunked->proceed(_generator, req);
-    }
+    assert(!"FIXME this callback must not be called");
 }
 
 static void do_generator_stop(h2o_generator_t *_generator, h2o_req_t *req)
