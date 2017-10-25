@@ -64,7 +64,6 @@ struct st_h2o_http1client_t {
         h2o_socketpool_t *pool;
         h2o_socketpool_connect_request_t *connect_req;
     } sockpool;
-    char *sni_name; /* set even if SSL is not used */
     h2o_socket_t *sock;
     void *data;
     h2o_http1client_informational_cb informational_cb;

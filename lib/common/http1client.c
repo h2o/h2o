@@ -59,8 +59,6 @@ struct st_h2o_http1client_private_t {
 
 static void close_client(struct st_h2o_http1client_private_t *client)
 {
-    if (client->super.sni_name != NULL)
-        free(client->super.sni_name);
     if (client->super.sock != NULL) {
         if (client->super.sockpool.pool != NULL && client->_do_keepalive) {
 
@@ -569,11 +567,9 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     sock->data = client;
     client->_origin = origin;
 
+    /* perform TLS handshake if necessary */
     if (client->_origin->scheme->is_ssl && sock->ssl == NULL) {
-        /* performe TLS handshake if necessary */
-        if (client->super.sni_name == NULL)
-            client->super.sni_name = h2o_strdup(NULL, client->_origin->host.base, client->_origin->host.len).base;
-        h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->super.sni_name, on_handshake_complete);
+        h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->_origin->host.base, on_handshake_complete);
         return;
     }
 
@@ -589,13 +585,11 @@ static void on_connect_timeout(h2o_timeout_entry_t *entry)
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                                          h2o_iovec_t *sni_name, int is_chunked, h2o_http1client_connect_cb cb)
+                                                          int is_chunked, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
     *client = (struct st_h2o_http1client_private_t){{ctx}};
-    if (sni_name != NULL)
-        client->super.sni_name = h2o_strdup(NULL, sni_name->base, sni_name->len).base;
     client->super.data = data;
     client->_cb.on_connect = cb;
     client->_is_chunked = is_chunked;
@@ -616,7 +610,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     struct st_h2o_http1client_private_t *client;
 
     /* setup */
-    client = create_client(_client, data, ctx, target != NULL ? &target->host : NULL, is_chunked, cb);
+    client = create_client(_client, data, ctx, is_chunked, cb);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
     client->super.sockpool.pool = socketpool;
