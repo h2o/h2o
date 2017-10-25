@@ -1209,16 +1209,16 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
 
 static void on_defer_invoke_timeout(h2o_timeout_entry_t *entry)
 {
-    h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, defer_invoke.timeout_entry, entry);
+    h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, output_filter.defer_invoke.timeout_entry, entry);
 
     h2o_req_t *req = generator->req;
     h2o_mruby_context_t *ctx = generator->ctx;
     mrb_state *mrb = ctx->shared->mrb;
-    mrb_value receiver = generator->defer_invoke.receiver;
-    mrb_value args = generator->defer_invoke.args;
+    mrb_value receiver = generator->output_filter.defer_invoke.receiver;
+    mrb_value args = generator->output_filter.defer_invoke.args;
     mrb_value reprocess = mrb_ary_entry(args, 2);
-    generator->defer_invoke.receiver = mrb_nil_value();
-    generator->defer_invoke.args = mrb_nil_value();
+    generator->output_filter.defer_invoke.receiver = mrb_nil_value();
+    generator->output_filter.defer_invoke.args = mrb_nil_value();
     mrb_gc_unregister(mrb, receiver);
     mrb_gc_unregister(mrb, args);
 
@@ -1314,10 +1314,10 @@ static mrb_value invoke_app_callback(h2o_mruby_context_t *ctx, mrb_value receive
         return exc;
     }
 
-    generator->defer_invoke.timeout_entry.cb = on_defer_invoke_timeout;
-    generator->defer_invoke.receiver = receiver;
-    generator->defer_invoke.args = args;
-    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &generator->defer_invoke.timeout_entry);
+    generator->output_filter.defer_invoke.timeout_entry.cb = on_defer_invoke_timeout;
+    generator->output_filter.defer_invoke.receiver = receiver;
+    generator->output_filter.defer_invoke.args = args;
+    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &generator->output_filter.defer_invoke.timeout_entry);
     mrb_gc_register(mrb, receiver);
     mrb_gc_register(mrb, args);
 

@@ -122,15 +122,16 @@ typedef struct st_h2o_mruby_generator_t {
         h2o_mruby_generator_t *next;
         h2o_timeout_entry_t defer_proceed_timeout_entry;
         h2o_timeout_entry_t defer_close_timeout_entry;
+        struct {
+            h2o_timeout_entry_t timeout_entry;
+            mrb_value receiver;
+            mrb_value args;
+        } defer_invoke;
     } output_filter;
     struct {
         mrb_value generator;
     } refs;
-    struct {
-        h2o_timeout_entry_t timeout_entry;
-        mrb_value receiver;
-        mrb_value args;
-    } defer_invoke;
+
 } h2o_mruby_generator_t;
 
 
