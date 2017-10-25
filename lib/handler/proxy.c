@@ -141,15 +141,6 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->config = *config;
 
     /* init socket pool */
-    if (config->registered_as_backends && config->reverse_path.base != NULL) {
-        /* create shallow copy of upstreams so that we can modify them */
-        h2o_url_t *p = alloca(sizeof(*upstreams) * num_upstreams);
-        memcpy(p, upstreams, sizeof(*upstreams) * num_upstreams);
-        upstreams = p;
-        size_t i;
-        for (i = 0; i != num_upstreams; ++i)
-            upstreams[i].path = config->reverse_path;
-    }
     h2o_socketpool_init_specific(&self->sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams);
     h2o_socketpool_set_timeout(&self->sockpool, config->keepalive_timeout);
 
