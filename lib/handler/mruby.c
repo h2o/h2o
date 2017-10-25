@@ -1130,6 +1130,7 @@ static mrb_value setup_req_for_env(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb
     req->path = h2o_strdup(&req->pool, url_parsed.path.base, url_parsed.path.len);
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     req->headers = (h2o_headers_t){NULL};
+    req->overrides = NULL;
     h2o_mruby_iterate_headers(ctx->shared, env, handle_request_header, req);
 
     return mrb_nil_value();
