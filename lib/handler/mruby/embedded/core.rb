@@ -156,11 +156,9 @@ module H2O
           raise 'this stream is already canceled by following H2O.app.call'
         end
         while c = @chunks.shift
-puts "$$$$$ ostream got chunk, yield.."
           yield c
         end
         break if @finished
-puts "$$$$$ ostream wait chunk"
         _h2o_output_filter_wait_chunk(self)
       end
     end

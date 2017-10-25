@@ -127,11 +127,9 @@
     "          raise 'this stream is already canceled by following H2O.app.call'\n"                                                \
     "        end\n"                                                                                                                \
     "        while c = @chunks.shift\n"                                                                                            \
-    "puts \"$$$$$ ostream got chunk, yield..\"\n"                                                                                  \
     "          yield c\n"                                                                                                          \
     "        end\n"                                                                                                                \
     "        break if @finished\n"                                                                                                 \
-    "puts \"$$$$$ ostream wait chunk\"\n"                                                                                          \
     "        _h2o_output_filter_wait_chunk(self)\n"                                                                                \
     "      end\n"                                                                                                                  \
     "    end\n"                                                                                                                    \
@@ -188,12 +186,9 @@
     "      src, generator = *args\n"                                                                                               \
     "      fiber = Fiber.new do\n"                                                                                                 \
     "        begin\n"                                                                                                              \
-    "puts \"$$$$$ chunked each start\"\n"                                                                                          \
     "          src.each do |chunk|\n"                                                                                              \
-    "puts \"$$$$$ chunked got chunk, send chunk..\"\n"                                                                             \
     "            _h2o_send_chunk(chunk, generator)\n"                                                                              \
     "          end\n"                                                                                                              \
-    "puts \"$$$$$ chunked each end, send eos..\"\n"                                                                                \
     "          _h2o_send_chunk_eos(generator)\n"                                                                                   \
     "          [0]\n"                                                                                                              \
     "        rescue => e\n"                                                                                                        \

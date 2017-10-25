@@ -25,12 +25,9 @@ module Kernel
       src, generator = *args
       fiber = Fiber.new do
         begin
-puts "$$$$$ chunked each start"
           src.each do |chunk|
-puts "$$$$$ chunked got chunk, send chunk.."
             _h2o_send_chunk(chunk, generator)
           end
-puts "$$$$$ chunked each end, send eos.."
           _h2o_send_chunk_eos(generator)
           [0]
         rescue => e
