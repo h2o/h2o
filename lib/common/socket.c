@@ -380,7 +380,7 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         ret = 1; /* close the socket after sending close_notify */
     } else
 #endif
-    if (sock->ssl->ossl != NULL) {
+        if (sock->ssl->ossl != NULL) {
         ERR_clear_error();
         if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
             goto Close;
@@ -996,7 +996,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     }
 
     /* set ssl session into the cache */
-    if (sock->ssl->handshake.client.session_cache != NULL && sock->ssl->ossl != NULL) {
+    if (sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl) && sock->ssl->handshake.client.session_cache != NULL) {
         if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
             SSL_SESSION *session = SSL_get1_session(sock->ssl->ossl);
             h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
@@ -1080,7 +1080,8 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
         create_ossl(sock);
     }
 
-    if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
+    if (sock->ssl->ossl != NULL && SSL_is_server(sock->ssl->ossl) &&
+        sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
         if (sock->ssl->input.encrypted->size <= 1024) {
             /* retain a copy of input if performing async resumption */
             first_input = h2o_iovec_init(alloca(sock->ssl->input.encrypted->size), sock->ssl->input.encrypted->size);
