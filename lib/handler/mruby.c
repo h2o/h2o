@@ -1242,7 +1242,6 @@ static mrb_value invoke_app_callback(h2o_mruby_context_t *ctx, mrb_value receive
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "env must be a hash");
     }
 
-    // TODO: preserve headers and others, like errordoc
     mrb_value reprocess = mrb_ary_entry(args, 2);
     mrb_value exc = setup_req_for_env(ctx, req, env, mrb_bool(reprocess));
     if (! mrb_nil_p(exc)) {

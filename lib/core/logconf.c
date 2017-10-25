@@ -688,10 +688,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
     } while (0)
 
         case ELEMENT_TYPE_IN_HEADER_TOKEN:
-            EMIT_HEADER(&req->headers, 0, h2o_find_header, element->data.header_token);
+            EMIT_HEADER(&req->input.headers, 0, h2o_find_header, element->data.header_token);
             break;
         case ELEMENT_TYPE_IN_HEADER_STRING:
-            EMIT_HEADER(&req->headers, 0, h2o_find_header_by_str, element->data.name.base, element->data.name.len);
+            EMIT_HEADER(&req->input.headers, 0, h2o_find_header_by_str, element->data.name.base, element->data.name.len);
             break;
         case ELEMENT_TYPE_OUT_HEADER_TOKEN:
             EMIT_HEADER(element->original_response ? &req->res.original.headers : &req->res.headers, 0, h2o_find_header,

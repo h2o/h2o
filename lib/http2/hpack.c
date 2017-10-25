@@ -564,14 +564,16 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                         /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
                         h2o_cache_digests_load_header(digests, r.value->base, r.value->len);
                     }
-                    h2o_add_header(&req->pool, &req->headers, token, NULL, r.value->base, r.value->len);
+                    h2o_add_header(&req->pool, &req->input.headers, token, NULL, r.value->base, r.value->len);
                 }
             } else {
-                h2o_add_header_by_str(&req->pool, &req->headers, r.name->base, r.name->len, 0, NULL, r.value->base, r.value->len);
+                h2o_add_header_by_str(&req->pool, &req->input.headers, r.name->base, r.name->len, 0, NULL, r.value->base, r.value->len);
             }
         }
     Next:;
     }
+
+    req->headers = req->input.headers;
 
     if (*err_desc) {
         return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
