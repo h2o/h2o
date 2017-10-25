@@ -998,7 +998,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     }
 
     /* set ssl session into the cache */
-    if (sock->ssl->handshake.client.session_cache != NULL && sock->ssl->ossl != NULL) {
+    if (sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl) && sock->ssl->handshake.client.session_cache != NULL) {
         if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
             SSL_SESSION *session = SSL_get1_session(sock->ssl->ossl);
             h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
