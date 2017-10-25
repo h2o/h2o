@@ -1082,7 +1082,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
         create_ossl(sock);
     }
 
-    if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
+    if (SSL_is_server(sock->ssl->ossl) && sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_RECORD) {
         if (sock->ssl->input.encrypted->size <= 1024) {
             /* retain a copy of input if performing async resumption */
             first_input = h2o_iovec_init(alloca(sock->ssl->input.encrypted->size), sock->ssl->input.encrypted->size);
