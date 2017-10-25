@@ -270,7 +270,6 @@ mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_val
 void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator)
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
-    if (chunked == NULL) return;
 
     /* run_fiber will never be called once we enter the fast path, and therefore this function will never get called in that case */
     assert(chunked->type == H2O_MRUBY_CHUNKED_TYPE_CALLBACK);
