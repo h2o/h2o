@@ -41,6 +41,7 @@ matrix:
         - misc/install-perl-module.pl JSON
         - misc/install-perl-module.pl Path::Tiny
         - misc/install-perl-module.pl Test::Exception
+        - if [ "`perl -MIO::Socket::SSL -e 'print IO::Socket::SSL->can_server_sni'`" != 1 ] ; then cpanm --sudo --notest Net::SSLeay IO::Socket::SSL ; fi
           # install the `ab` command (a.k.a. ApacheBench; optionally required for running some of the tests)
         - sudo apt-get install -qq apache2-utils
           # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
