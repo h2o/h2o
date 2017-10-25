@@ -152,7 +152,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                                                    "      \"created\": %" PRIu64 "\n"
                                                    "    },",
                          stream->stream_id, state_string, stream->input_window._avail, stream->output_window._avail,
-                         h2o_http2_stream_req_body_size(stream), stream->req.bytes_sent,
+                         stream->_req_body.bytes_received, stream->req.bytes_sent,
                          (uint64_t)stream->req.timestamps.request_begin_at.tv_sec);
         });
 

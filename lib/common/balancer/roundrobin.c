@@ -43,10 +43,10 @@ static void init(h2o_socketpool_target_vector_t *targets, void *unused, void **d
     pthread_mutex_init(&self->mutex, NULL);
     self->floor_next_target = h2o_mem_alloc(sizeof(*self->floor_next_target) * targets->size);
 
-    target_conf = targets->entries[0].data_for_balancer;
+    target_conf = targets->entries[0]->data_for_balancer;
     self->floor_next_target[0] = target_conf->weight;
     for (i = 1; i < targets->size; i++) {
-        target_conf = targets->entries[i].data_for_balancer;
+        target_conf = targets->entries[i]->data_for_balancer;
         self->floor_next_target[i] = self->floor_next_target[i - 1] + target_conf->weight;
     }
     self->pos_less_than = self->floor_next_target[targets->size - 1];
@@ -100,8 +100,7 @@ static int per_target_conf_parser(yoml_t *node, void **data, yoml_t **errnode, c
     return -1;
 }
 
-static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
-                                int *tried, void *dummy)
+static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, void *dummy)
 {
     size_t i;
     size_t result = 0;

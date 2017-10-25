@@ -5,23 +5,21 @@ use Test::More;
 use t::Util;
 
 plan skip_all => 'curl not found'
-    unless prog_exists('curl');
+unless prog_exists('curl');
 plan skip_all => 'plackup not found'
-    unless prog_exists('plackup');
+unless prog_exists('plackup');
 plan skip_all => 'Starlet not found'
-    unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
+unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
 my $upstream_port = empty_port();
 my $unused_port = empty_port();
 
 my $guard = spawn_server(
-    argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port, ASSETS_DIR . "/upstream.psgi" ],
-    is_ready =>  sub {
-        check_port($upstream_port);
-    },
+argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port, ASSETS_DIR . "/upstream.psgi" ],
+is_ready =>  sub {
+    check_port($upstream_port);
+},
 );
-
-my $unexpected = 0;
 
 sub do_test {
     my $balancer = shift;
@@ -36,26 +34,14 @@ hosts:
         proxy.reverse.path: /echo-server-port
         proxy.reverse.balancer: $balancer
 EOT
-    my $doit = sub {    
-#        my ($server, $balancer) = @_;
-#
+    
+    for my $i (1..50) {
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             my $resp = `$curl --silent $proto://127.0.0.1:$port/`;
-            if ($resp ne $upstream_port) {
-                $unexpected = 1;
-            }
-            isnt $unexpected, 1, "no unexpected port"
+            is $resp, $upstream_port;
         });
-    };
-
-    for my $i (1..50) {
-        $doit->();
-        if ($unexpected == 1) {
-            last
-        }
     }
-    isnt $unexpected, 1, "no unexpected port";
 }
 
 do_test("round-robin");

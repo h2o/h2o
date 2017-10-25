@@ -35,8 +35,7 @@ typedef int (*h2o_balancer_per_target_conf_parser)(yoml_t *node, void **data, yo
 /* function for parsing overall configuration of a load balancer */
 typedef int (*h2o_balancer_overall_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
 
-typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status,
-                                             void *data, int *tried, void *req_extra);
+typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried, void *req_extra);
 
 typedef void (*h2o_balancer_initializer)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
 

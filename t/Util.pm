@@ -12,7 +12,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl run_with_h2get);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl run_with_h2get run_with_h2get_simple);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -180,7 +180,7 @@ sub spawn_h2o {
             if $conf->{opts};
         $conf = $conf->{conf};
     }
-    print $conffh <<"EOT";
+    $conf = <<"EOT";
 $conf
 listen:
   host: 0.0.0.0
@@ -192,6 +192,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 EOT
+    print $conffh $conf;
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
@@ -247,6 +248,7 @@ sub run_prog {
     my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
     my $stderr = `$cmd 2>&1 > $tempfn`;
     my $stdout = do { local $/; <$tempfh> };
+    close $tempfh; # tempfile does not close the file automatically (see perldoc)
     return ($stderr, $stdout);
 }
 
@@ -285,11 +287,34 @@ sub run_with_curl {
 sub run_with_h2get {
     my ($server, $script) = @_;
     plan skip_all => "h2get not found"
-        unless prog_exists($ENV{"H2O_ROOT"}."/h2get_bin/h2get");
+        unless prog_exists(bindir()."/h2get_bin/h2get");
     my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
     print $scriptfh $script;
     close($scriptfh);
-    return run_prog($ENV{"H2O_ROOT"}."/h2get_bin/h2get $scriptfn https://127.0.0.1:$server->{tls_port}");
+    return run_prog(bindir()."/h2get_bin/h2get $scriptfn https://127.0.0.1:$server->{tls_port}");
 }
+
+sub run_with_h2get_simple {
+    my ($server, $script) = @_;
+    my $settings = <<'EOS';
+    h2g = H2.new
+    host = ARGV[0]
+    h2g.connect(host)
+    h2g.send_prefix()
+    h2g.send_settings()
+    i = 0
+    while i < 2 do
+        f = h2g.read(-1)
+        if f.type == "SETTINGS" and (f.flags == ACK) then
+            i += 1
+        elsif f.type == "SETTINGS" then
+            h2g.send_settings_ack()
+            i += 1
+        end
+    end
+EOS
+    run_with_h2get($server, $settings."\n".$script);
+}
+
 
 1;

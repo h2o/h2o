@@ -28,9 +28,10 @@
 typedef struct st_h2o_url_scheme_t {
     h2o_iovec_t name;
     uint16_t default_port;
+    int is_ssl;
 } h2o_url_scheme_t;
 
-extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS;
+extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS, H2O_URL_SCHEME_FASTCGI;
 
 typedef struct st_h2o_url_t {
     const h2o_url_scheme_t *scheme;
@@ -63,6 +64,12 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
  * @return 0 if successful
  */
 static int h2o_url_init(h2o_url_t *url, const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path);
+
+int h2o_url_init_with_hostport(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host,
+                               uint16_t port, h2o_iovec_t path);
+int h2o_url_init_with_sun_path(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t sun_path,
+                               h2o_iovec_t path);
+
 /**
  * parses absolute URL (either http or https)
  */

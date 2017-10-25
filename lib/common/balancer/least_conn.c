@@ -32,8 +32,7 @@ static void init(h2o_socketpool_target_vector_t *targets, void *unused, void **d
     *data = self;
 }
 
-static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
-                                int *tried, void *dummy)
+static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, void *dummy)
 {
     size_t i;
     size_t result = 0;
@@ -44,8 +43,8 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_t
 
     assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
-        if (!tried[i] && status->entries[i].request_count < least_conn) {
-            least_conn = status->entries[i].request_count;
+        if (!tried[i] && targets->entries[i]->_shared.request_count < least_conn) {
+            least_conn = targets->entries[i]->_shared.request_count;
             result = i;
         }
     }

@@ -395,17 +395,6 @@ static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_confi
         break;
     case YOML_TYPE_SEQUENCE:
         count = node->data.sequence.size;
-        if (count > 1) {
-            if (self->vars->keepalive_timeout == 0) {
-                h2o_configurator_errprintf(cmd, node, "currently we do not support multiple backends with keep-alive disabled");
-                return -1;
-            }
-            if (self->vars->use_proxy_protocol) {
-                h2o_configurator_errprintf(cmd, node,
-                                           "currently we do not support multiple backends with `proxy.use-proxy-protocol` enabled");
-                return -1;
-            }
-        }
         upstreams = alloca(count * sizeof(h2o_url_t));
         extra_lb_data = alloca(count * sizeof(void *));
         for (i = 0; i != node->data.sequence.size; ++i) {
@@ -557,6 +546,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.connect_timeout = self->vars->connect_timeout;
         ctx->globalconf->proxy.first_byte_timeout = self->vars->first_byte_timeout;
         ctx->globalconf->proxy.ssl_ctx = self->vars->ssl_ctx;
+        h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->keepalive_timeout);
     } else {
         SSL_CTX_free(self->vars->ssl_ctx);
     }
@@ -588,7 +578,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
-    c->vars->keepalive_timeout = 2000;
+    c->vars->keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
     c->vars->registered_as_url = 0;

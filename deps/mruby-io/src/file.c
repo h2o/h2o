@@ -46,12 +46,13 @@
   #include <pwd.h>
 #endif
 
+#define FILE_SEPARATOR "/"
+
 #if defined(_WIN32) || defined(_WIN64)
   #define PATH_SEPARATOR ";"
-  #define FILE_SEPARATOR "\\"
+  #define FILE_ALT_SEPARATOR "\\"
 #else
   #define PATH_SEPARATOR ":"
-  #define FILE_SEPARATOR "/"
 #endif
 
 #ifndef LOCK_SH
@@ -118,9 +119,11 @@ mrb_file_s_rename(mrb_state *mrb, mrb_value obj)
   src = mrb_string_value_cstr(mrb, &from);
   dst = mrb_string_value_cstr(mrb, &to);
   if (rename(src, dst) < 0) {
+#if defined(_WIN32) || defined(_WIN64)
     if (CHMOD(dst, 0666) == 0 && UNLINK(dst) == 0 && rename(src, dst) == 0) {
       return mrb_fixnum_value(0);
     }
+#endif
     mrb_sys_fail(mrb, mrb_str_to_cstr(mrb, mrb_format(mrb, "(%S, %S)", from, to)));
   }
   return mrb_fixnum_value(0);
@@ -129,17 +132,28 @@ mrb_file_s_rename(mrb_state *mrb, mrb_value obj)
 static mrb_value
 mrb_file_dirname(mrb_state *mrb, mrb_value klass)
 {
-  #if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64)
   char dname[_MAX_DIR], vname[_MAX_DRIVE];
   char buffer[_MAX_DRIVE + _MAX_DIR];
   char *path;
+  size_t ridx;
   mrb_value s;
   mrb_get_args(mrb, "S", &s);
   path = mrb_str_to_cstr(mrb, s);
   _splitpath((const char*)path, vname, dname, NULL, NULL);
   snprintf(buffer, _MAX_DRIVE + _MAX_DIR, "%s%s", vname, dname);
+  ridx = strlen(buffer);
+  if (ridx == 0) {
+    strncpy(buffer, ".", 2);  /* null terminated */
+  } else if (ridx > 1) {
+    ridx--;
+    while (ridx > 0 && (buffer[ridx] == '/' || buffer[ridx] == '\\')) {
+      buffer[ridx] = '\0';  /* remove last char */
+      ridx--;
+    }
+  }
   return mrb_str_new_cstr(mrb, buffer);
-  #else
+#else
   char *dname, *path;
   mrb_value s;
   mrb_get_args(mrb, "S", &s);
@@ -148,25 +162,37 @@ mrb_file_dirname(mrb_state *mrb, mrb_value klass)
   if ((dname = dirname(path)) == NULL) {
     mrb_sys_fail(mrb, "dirname");
   }
-  #endif
+#endif
   return mrb_str_new_cstr(mrb, dname);
 }
 
 static mrb_value
 mrb_file_basename(mrb_state *mrb, mrb_value klass)
 {
-  #if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64)
   char bname[_MAX_DIR];
   char extname[_MAX_EXT];
   char *path;
+  size_t ridx;
   char buffer[_MAX_DIR + _MAX_EXT];
   mrb_value s;
   mrb_get_args(mrb, "S", &s);
   path = mrb_str_to_cstr(mrb, s);
+  ridx = strlen(path);
+  if (ridx > 0) {
+    ridx--;
+    while (ridx > 0 && (path[ridx] == '/' || path[ridx] == '\\')) {
+      path[ridx] = '\0';
+      ridx--;
+    }
+    if (strncmp(path, "/", 2) == 0) {
+      return mrb_str_new_cstr(mrb, path);
+    }
+  }
   _splitpath((const char*)path, NULL, NULL, bname, extname);
   snprintf(buffer, _MAX_DIR + _MAX_EXT, "%s%s", bname, extname);
   return mrb_str_new_cstr(mrb, buffer);
-  #else
+#else
   char *bname, *path;
   mrb_value s;
   mrb_get_args(mrb, "S", &s);
@@ -175,7 +201,7 @@ mrb_file_basename(mrb_state *mrb, mrb_value klass)
     mrb_sys_fail(mrb, "basename");
   }
   return mrb_str_new_cstr(mrb, bname);
-  #endif
+#endif
 }
 
 static mrb_value
@@ -254,12 +280,11 @@ mrb_file__gethome(mrb_state *mrb, mrb_value klass)
 #endif
 }
 
-#ifndef _WIN32
 mrb_value
 mrb_file_flock(mrb_state *mrb, mrb_value self)
 {
-#if defined(sun)
-  mrb_raise(mrb, E_RUNTIME_ERROR, "flock is not supported on Illumos/Solaris");
+#if defined(_WIN32) || defined(_WIN64) || defined(sun)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "flock is not supported on Illumos/Solaris/Windows");
 #else
   mrb_int operation;
   int fd;
@@ -288,7 +313,78 @@ mrb_file_flock(mrb_state *mrb, mrb_value self)
 #endif
   return mrb_fixnum_value(0);
 }
+
+static mrb_value
+mrb_file_s_symlink(mrb_state *mrb, mrb_value klass)
+{
+#if defined(_WIN32) || defined(_WIN64)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "symlink is not supported on this platform");
+#else
+  mrb_value from, to;
+  const char *src, *dst;
+  int ai = mrb_gc_arena_save(mrb);
+
+  mrb_get_args(mrb, "SS", &from, &to);
+  src = mrb_str_to_cstr(mrb, from);
+  dst = mrb_str_to_cstr(mrb, to);
+
+  if (symlink(src, dst) == -1) {
+    mrb_sys_fail(mrb, mrb_str_to_cstr(mrb, mrb_format(mrb, "(%S, %S)", from, to)));
+  }
+  mrb_gc_arena_restore(mrb, ai);
 #endif
+  return mrb_fixnum_value(0);
+}
+
+static mrb_value
+mrb_file_s_chmod(mrb_state *mrb, mrb_value klass) {
+  mrb_int mode;
+  mrb_int argc, i;
+  mrb_value *filenames;
+  int ai = mrb_gc_arena_save(mrb);
+
+  mrb_get_args(mrb, "i*", &mode, &filenames, &argc);
+  for (i = 0; i < argc; i++) {
+    char *path = mrb_str_to_cstr(mrb, filenames[i]);
+    if (CHMOD(path, mode) == -1) {
+      mrb_sys_fail(mrb, path);
+    }
+  }
+
+  mrb_gc_arena_restore(mrb, ai);
+  return mrb_fixnum_value(argc);
+}
+
+static mrb_value
+mrb_file_s_readlink(mrb_state *mrb, mrb_value klass) {
+#if defined(_WIN32) || defined(_WIN64)
+  mrb_raise(mrb, E_NOTIMP_ERROR, "readlink is not supported on this platform");
+  return mrb_nil_value(); // unreachable
+#else
+  char *path, *buf;
+  size_t bufsize = 100;
+  ssize_t rc;
+  mrb_value ret;
+  int ai = mrb_gc_arena_save(mrb);
+
+  mrb_get_args(mrb, "z", &path);
+
+  buf = (char *)mrb_malloc(mrb, bufsize);
+  while ((rc = readlink(path, buf, bufsize)) == bufsize && rc != -1) {
+    bufsize *= 2;
+    buf = (char *)mrb_realloc(mrb, buf, bufsize);
+  }
+  if (rc == -1) {
+    mrb_free(mrb, buf);
+    mrb_sys_fail(mrb, path);
+  }
+  ret = mrb_str_new(mrb, buf, rc);
+  mrb_free(mrb, buf);
+
+  mrb_gc_arena_restore(mrb, ai);
+  return ret;
+#endif
+}
 
 void
 mrb_init_file(mrb_state *mrb)
@@ -302,6 +398,9 @@ mrb_init_file(mrb_state *mrb)
   mrb_define_class_method(mrb, file, "delete", mrb_file_s_unlink, MRB_ARGS_ANY());
   mrb_define_class_method(mrb, file, "unlink", mrb_file_s_unlink, MRB_ARGS_ANY());
   mrb_define_class_method(mrb, file, "rename", mrb_file_s_rename, MRB_ARGS_REQ(2));
+  mrb_define_class_method(mrb, file, "symlink", mrb_file_s_symlink, MRB_ARGS_REQ(2));
+  mrb_define_class_method(mrb, file, "chmod", mrb_file_s_chmod, MRB_ARGS_REQ(1) | MRB_ARGS_REST());
+  mrb_define_class_method(mrb, file, "readlink", mrb_file_s_readlink, MRB_ARGS_REQ(1));
 
   mrb_define_class_method(mrb, file, "dirname",   mrb_file_dirname,    MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, file, "basename",  mrb_file_basename,   MRB_ARGS_REQ(1));
@@ -309,9 +408,7 @@ mrb_init_file(mrb_state *mrb)
   mrb_define_class_method(mrb, file, "_getwd",    mrb_file__getwd,     MRB_ARGS_NONE());
   mrb_define_class_method(mrb, file, "_gethome",  mrb_file__gethome,   MRB_ARGS_OPT(1));
 
-  #ifndef _WIN32
   mrb_define_method(mrb, file, "flock", mrb_file_flock, MRB_ARGS_REQ(1));
-  #endif
 
   cnst = mrb_define_module_under(mrb, file, "Constants");
   mrb_define_const(mrb, cnst, "LOCK_SH", mrb_fixnum_value(LOCK_SH));
@@ -320,6 +417,11 @@ mrb_init_file(mrb_state *mrb)
   mrb_define_const(mrb, cnst, "LOCK_NB", mrb_fixnum_value(LOCK_NB));
   mrb_define_const(mrb, cnst, "SEPARATOR", mrb_str_new_cstr(mrb, FILE_SEPARATOR));
   mrb_define_const(mrb, cnst, "PATH_SEPARATOR", mrb_str_new_cstr(mrb, PATH_SEPARATOR));
+#if defined(_WIN32) || defined(_WIN64)
+  mrb_define_const(mrb, cnst, "ALT_SEPARATOR", mrb_str_new_cstr(mrb, FILE_ALT_SEPARATOR));
+#else
+  mrb_define_const(mrb, cnst, "ALT_SEPARATOR", mrb_nil_value());
+#endif
   mrb_define_const(mrb, cnst, "NULL", mrb_str_new_cstr(mrb, NULL_FILE));
 
 }

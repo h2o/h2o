@@ -25,7 +25,7 @@
 
 struct hash_bucket_t {
     uint64_t hash;
-    h2o_socketpool_target_status_t *status;
+    size_t *request_count;
 };
 
 typedef H2O_VECTOR(struct hash_bucket_t) hash_bucket_vector_t;
@@ -110,9 +110,9 @@ static void insert_new_bucket(hash_bucket_vector_t *ring, struct hash_bucket_t *
     ring->size++;
 }
 
-static void add_bucket(hash_bucket_vector_t *ring, h2o_socketpool_target_status_t *status, const void *key, size_t key_len)
+static void add_bucket(hash_bucket_vector_t *ring, size_t *request_count, const void *key, size_t key_len)
 {
-    struct hash_bucket_t bucket = {compute_hash(key, key_len), status};
+    struct hash_bucket_t bucket = {compute_hash(key, key_len), request_count};
     if (ring->capacity == ring->size) {
         h2o_vector_reserve(NULL, ring, 2 * ring->capacity);
     }
@@ -139,14 +139,41 @@ static void init(h2o_socketpool_target_vector_t *targets, void *_conf, void **da
     
     h2o_vector_reserve(NULL, &self->buckets, targets->size);
     for (i = 0; i < targets->size; i++) {
-        tag_buf_len = sprintf(tag_buf, "%s:%zu", targets->entries[i].peer.host.base, i);
-        add_bucket(&self->buckets, targets->entries[i].status, tag_buf, tag_buf_len);
+        tag_buf_len = sprintf(tag_buf, "%s:%zu", targets->entries[i]->url.host.base, i);
+        add_bucket(&self->buckets, &targets->entries[i]->_shared.request_count, tag_buf, tag_buf_len);
     }
     *data = self;
 }
 
-static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_target_status_vector_t *status, void *_data,
-                                int *tried, void *_req)
+static size_t bounded_find_bucket(hash_bucket_vector_t buckets, size_t startat, double c)
+{
+    size_t index = startat;
+    size_t i;
+    size_t total = 0;
+    double lower_total_bound = (1.0 / (c - 1)) * buckets.size;
+    for (i = 0; i < buckets.size; i++) {
+        total += *buckets.entries[i].request_count;
+    }
+    
+    double bound_total = c * (total + 1);
+    
+    if (total > lower_total_bound) {
+        for (i = 0; i < buckets.size; i++) {
+            if (bound_total >= buckets.size * (*buckets.entries[i].request_count + 1)) {
+                break;
+            }
+            if (++index == buckets.size) {
+                index = 0;
+            }
+        }
+    }
+    
+    assert(bound_total <= lower_total_bound || i != buckets.size);
+    
+    return index;
+}
+
+static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, void *_req)
 {
     h2o_req_t *req = _req;
     struct bounded_hash_t *self = _data;
@@ -154,9 +181,6 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_t
     
     size_t index;
     size_t i;
-    size_t total = 0;
-    double c = self->c;
-    double lower_total_bound = (1.0 / (c - 1)) * self->buckets.size;
     hash_bucket_vector_t buckets = self->buckets;
     
     size_t remote_addr_len = SIZE_MAX;
@@ -193,24 +217,7 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, h2o_socketpool_t
     
     pthread_mutex_lock(&self->mutex);
     
-    for (i = 0; i < buckets.size; i++) {
-        total += buckets.entries[i].status->request_count;
-    }
-    
-    double bound_total = c * (total + 1);
-    
-    if (total > lower_total_bound) {
-        for (i = 0; i < buckets.size; i++) {
-            if (bound_total >= buckets.size * (buckets.entries[i].status->request_count + 1)) {
-                break;
-            }
-            if (++index == buckets.size) {
-                index = 0;
-            }
-        }
-    }
-    
-    assert(bound_total <= lower_total_bound || i != buckets.size);
+    index = bounded_find_bucket(buckets, index, self->c);
     
     /* If the chosen bucket was used (i.e. failed to connect), fall back to find next available bucket */
     if (tried[index]) {

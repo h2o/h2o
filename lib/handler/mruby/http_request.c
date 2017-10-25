@@ -39,6 +39,7 @@ struct st_h2o_mruby_http_request_context_t {
         unsigned method_is_head : 1;
         unsigned has_transfer_encoding : 1;
         h2o_iovec_t _bufs[2];
+        unsigned can_keepalive : 1;
     } req;
     struct {
         h2o_buffer_t *after_closed; /* when client becomes NULL, rest of the data will be stored to this pointer */
@@ -282,8 +283,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_req_chunk_done *req_body_done,
-                                          void **req_body_done_ctx, h2o_iovec_t *cur_body, h2o_url_t *dummy)
+                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
+                                          h2o_iovec_t *cur_body, h2o_url_t *dummy)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -316,9 +317,13 @@ static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
 
     /* ignore certain headers */
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length")) ||
-        h2o_lcstris(name.base, name.len, H2O_STRLIT("connection")) || h2o_lcstris(name.base, name.len, H2O_STRLIT("host")))
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length")) || h2o_lcstris(name.base, name.len, H2O_STRLIT("host")))
         return 0;
+
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("connection"))) {
+        if (!ctx->req.can_keepalive)
+            return 0;
+    }
 
     /* mark the existence of transfer-encoding in order to prevent us from adding content-length header */
     if (h2o_lcstris(name.base, name.len, H2O_STRLIT("transfer-encoding")))
@@ -377,13 +382,20 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     }
 
     /* start building the request */
-    h2o_buffer_reserve(&ctx->req.buf, method.len + 1);
+    h2o_buffer_reserve(&ctx->req.buf, method.len + 1 + url.path.len + sizeof(" HTTP/1.1\r\n") - 1);
     append_to_buffer(&ctx->req.buf, method.base, method.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
-    h2o_buffer_reserve(&ctx->req.buf,
-                       url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
     append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\n"));
+
+    ctx->req.can_keepalive = h2o_socketpool_can_keepalive(&shared_ctx->ctx->globalconf->proxy.global_socketpool);
+    if (!ctx->req.can_keepalive) {
+        h2o_buffer_reserve(&ctx->req.buf, sizeof("Connection: close\r\n") - 1);
+        append_to_buffer(&ctx->req.buf, H2O_STRLIT("Connection: close\r\n"));
+    }
+
+    h2o_buffer_reserve(&ctx->req.buf, url.authority.len + sizeof("Host: \r\n") - 1);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT("Host: "));
     append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
@@ -424,8 +436,9 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     /* build request and connect */
     ctx->refs.request = h2o_mruby_create_data_instance(
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
-    h2o_http1client_connect(&ctx->client, ctx, &ctx->ctx->shared->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
-                            url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect, 0, NULL);
+
+    h2o_http1client_connect(&ctx->client, ctx, &shared_ctx->ctx->proxy.client_ctx,
+                            &shared_ctx->ctx->globalconf->proxy.global_socketpool, &url, on_connect, 0, NULL);
 
     return ctx->refs.request;
 }

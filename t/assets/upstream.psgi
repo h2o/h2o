@@ -120,8 +120,18 @@ builder {
             200,
             [
                 'x-server' => $env->{"SERVER_PORT"},
+                'req-connection' => $env->{"HTTP_CONNECTION"} || '',
             ],
             [$env->{"SERVER_PORT"}],
+        ];
+    };
+    mount "/echo-remote-port" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REMOTE_PORT"} || ''],
         ];
     };
     mount "/streaming-body" => sub {
