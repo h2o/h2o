@@ -1101,6 +1101,8 @@ Redo:
     }
 
     switch (sock->ssl->handshake.server.async_resumption.state) {
+    case ASYNC_RESUMPTION_STATE_COMPLETE:
+        break;
     case ASYNC_RESUMPTION_STATE_RECORD:
         /* async resumption has not been triggered; proceed the state to complete */
         sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
@@ -1119,6 +1121,7 @@ Redo:
         return;
     }
     default:
+        h2o_fatal("unexpected async resumption state");
         break;
     }
 
