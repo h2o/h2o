@@ -846,6 +846,9 @@
 		E9708B061E49A3130029E0A5 /* sha256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha256.c; sourceTree = "<group>"; };
 		E9708B071E49A3130029E0A5 /* tassert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tassert.h; sourceTree = "<group>"; };
 		E9708B1B1E49A3480029E0A5 /* handy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = handy.h; sourceTree = "<group>"; };
+		E9A410951F9EA2E400D9B0FB /* 50reverse-proxy-multiple-backends-with-down.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-multiple-backends-with-down.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9A410961F9EA2F100D9B0FB /* 50reverse-proxy-multiple-backends.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-multiple-backends.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9A410971F9EA2F200D9B0FB /* 50reverse-proxy-round-robin.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-round-robin.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BC76BF1EE3D71000EB7A09 /* 40redis-session-resumption.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40redis-session-resumption.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BC76C01EE3D8A100EB7A09 /* 40server-push-attrs.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40server-push-attrs.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BC76C11EE3D9A900EB7A09 /* 50compress-hint.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50compress-hint.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1681,8 +1684,11 @@
 				104C65021A6DF36B000AC190 /* 50reverse-proxy-config.t */,
 				108102151C3DB05100C024CD /* 50reverse-proxy-disconnected-keepalive.t */,
 				10DA969A1CCEF2C200679165 /* 50reverse-proxy-https.t */,
+				E9A410961F9EA2F100D9B0FB /* 50reverse-proxy-multiple-backends.t */,
+				E9A410951F9EA2E400D9B0FB /* 50reverse-proxy-multiple-backends-with-down.t */,
 				E9BC76C31EE4AA4600EB7A09 /* 50reverse-proxy-preserve-case.t */,
 				10FEF2441D6444E900E11B1D /* 50reverse-proxy-proxy-protocol.t */,
+				E9A410971F9EA2F200D9B0FB /* 50reverse-proxy-round-robin.t */,
 				E9BC76C41EE4AA9700EB7A09 /* 50reverse-proxy-session-resumption.t */,
 				10AA2EB21A9479B4004322AC /* 50reverse-proxy-upstream-down.t */,
 				104B9A2B1A4BBDA4009EEE64 /* 50server-starter.t */,
