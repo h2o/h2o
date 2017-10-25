@@ -48,7 +48,7 @@
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
-#ifdef __GLIBC__
+#ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
 #endif
 #if H2O_USE_PICOTLS
@@ -1435,7 +1435,8 @@ static void on_sigterm(int signo)
     notify_all_threads();
 }
 
-#ifdef __GLIBC__
+#ifdef LIBC_HAS_BACKTRACE
+
 static int popen_crash_handler(void)
 {
     char *cmd_fullpath = h2o_configurator_get_cmd_path(conf.crash_handler), *argv[] = {cmd_fullpath, NULL};
@@ -1487,13 +1488,14 @@ static void on_sigfatal(int signo)
 
     raise(signo);
 }
-#endif
+
+#endif /* LIBC_HAS_BACKTRACE */
 
 static void setup_signal_handlers(void)
 {
     h2o_set_signal_handler(SIGTERM, on_sigterm);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
-#ifdef __GLIBC__
+#ifdef LIBC_HAS_BACKTRACE
     if ((crash_handler_fd = popen_crash_handler()) == -1)
         crash_handler_fd = 2;
     h2o_set_signal_handler(SIGABRT, on_sigfatal);

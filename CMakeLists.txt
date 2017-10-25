@@ -58,6 +58,19 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
+CHECK_C_SOURCE_COMPILES("
+#include <execinfo.h>
+int main(void) {
+void *p[10];
+int ret = backtrace(p, 10);
+backtrace_symbols_fd(p, ret, 2);
+return 0;
+}" LIBC_HAS_BACKTRACE)
+
+IF (LIBC_HAS_BACKTRACE)
+    ADD_DEFINITIONS("-DLIBC_HAS_BACKTRACE")
+ENDIF ()
+
 SET(WITH_BUNDLED_SSL_DEFAULT "ON")
 IF ((NOT UNIX) OR CYGWIN)
     SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
