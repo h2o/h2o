@@ -83,7 +83,7 @@ EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             my $resp = `$curl --silent $proto://2130706433:$port/sni-name`;
-            is $resp, $flag ? "2130706433" : "127.0.0.1";
+            is $resp, "127.0.0.1";
         });
     };
     subtest "off" => sub {
