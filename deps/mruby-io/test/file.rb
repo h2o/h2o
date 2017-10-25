@@ -56,28 +56,70 @@ end
 
 assert('IO#flock') do
   f = File.open $mrbtest_io_rfname
-  assert_equal(f.flock(File::LOCK_SH), 0)
-  assert_equal(f.flock(File::LOCK_UN), 0)
-  assert_equal(f.flock(File::LOCK_EX | File::LOCK_NB), 0)
-  assert_equal(f.flock(File::LOCK_UN), 0)
-  f.close
-  true
+  begin
+    assert_equal(f.flock(File::LOCK_SH), 0)
+    assert_equal(f.flock(File::LOCK_UN), 0)
+    assert_equal(f.flock(File::LOCK_EX | File::LOCK_NB), 0)
+    assert_equal(f.flock(File::LOCK_UN), 0)
+  rescue NotImplementedError => e
+    skip e.message
+  ensure
+    f.close
+  end
 end
 
 assert('File.join') do
-  File.join() == "" and
-  File.join("a") == "a" and
-  File.join("/a") == "/a" and
-  File.join("a/") == "a/" and
-  File.join("a", "b", "c") == "a/b/c" and
-  File.join("/a", "b", "c") == "/a/b/c" and
-  File.join("a", "b", "c/") == "a/b/c/" and
-  File.join("a/", "/b/", "/c") == "a/b/c"
+  assert_equal "", File.join()
+  assert_equal "a", File.join("a")
+  assert_equal "/a", File.join("/a")
+  assert_equal "a/", File.join("a/")
+  assert_equal "a/b/c", File.join("a", "b", "c")
+  assert_equal "/a/b/c", File.join("/a", "b", "c")
+  assert_equal "a/b/c/", File.join("a", "b", "c/")
+  assert_equal "a/b/c", File.join("a/", "/b/", "/c")
+  assert_equal "a/b/c", File.join(["a", "b", "c"])
+  assert_equal "a/b/c", File.join("a", ["b", ["c"]])
 end
 
 assert('File.realpath') do
-  usrbin = IO.popen("cd bin; /bin/pwd -P") { |f| f.read.chomp }
-  assert_equal usrbin, File.realpath("bin")
+  if File::ALT_SEPARATOR
+    readme_path = File._getwd + File::ALT_SEPARATOR + "README.md"
+    assert_equal readme_path, File.realpath("README.md")
+  else
+    dir = MRubyIOTestUtil.mkdtemp("mruby-io-test.XXXXXX")
+    begin
+      dir1 = File.realpath($mrbtest_io_rfname)
+      dir2 = File.realpath("./#{dir}//./../#{$mrbtest_io_symlinkname}")
+      assert_equal dir1, dir2
+    ensure
+      MRubyIOTestUtil.rmdir dir
+    end
+  end
+end
+
+assert("File.readlink") do
+  begin
+    assert_equal $mrbtest_io_rfname, File.readlink($mrbtest_io_symlinkname)
+  rescue NotImplementedError => e
+    skip e.message
+  end
+end
+
+assert("File.readlink fails with non-symlink") do
+  begin
+    assert_raise(RuntimeError) {
+      begin
+        File.readlink($mrbtest_io_rfname)
+      rescue => e
+        if Object.const_defined?(:SystemCallError) and e.kind_of?(SystemCallError)
+          raise RuntimeError, "SystemCallError converted to RuntimeError"
+        end
+        raise e
+      end
+    }
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert('File TEST CLEANUP') do
@@ -95,7 +137,12 @@ assert('File.expand_path') do
   assert_equal "/hoge", File.expand_path("////tmp/..///////hoge")
 
   assert_equal "/", File.expand_path("../../../..", "/")
-  assert_equal "/", File.expand_path(([".."] * 100).join("/"))
+  if File._getwd[1] == ":"
+    drive_letter = File._getwd[0]
+    assert_equal drive_letter + ":\\", File.expand_path(([".."] * 100).join("/"))
+  else
+    assert_equal "/", File.expand_path(([".."] * 100).join("/"))
+  end
 end
 
 assert('File.expand_path (with ENV)') do
@@ -105,4 +152,37 @@ assert('File.expand_path (with ENV)') do
   assert_equal ENV['HOME'], File.expand_path("~/", "/"), "home with base_dir"
 
   assert_equal "#{ENV['HOME']}/user", File.expand_path("user", ENV['HOME']), "relative with base_dir"
+end
+
+assert('File.path') do
+  assert_equal "", File.path("")
+  assert_equal "a/b/c", File.path("a/b/c")
+  assert_equal "a/../b/./c", File.path("a/../b/./c")
+  assert_raise(TypeError) { File.path(nil) }
+  assert_raise(TypeError) { File.path(123) }
+
+end
+
+assert('File.symlink') do
+  target_name = "/usr/bin"
+  symlink_name = "test-bin-dummy"
+  if !File.exist?(target_name)
+    skip("target directory of File.symlink is not found")
+  else
+    assert_equal 0, File.symlink(target_name, symlink_name)
+    begin
+      assert_equal true, File.symlink?(symlink_name)
+    ensure
+      File.delete symlink_name
+    end
+  end
+end
+
+assert('File.chmod') do
+  File.open('chmod-test', 'w') {}
+  begin
+    assert_equal 1, File.chmod(0400, 'chmod-test')
+  ensure
+    File.delete('chmod-test')
+  end
 end

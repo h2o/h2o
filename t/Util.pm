@@ -180,7 +180,7 @@ sub spawn_h2o {
             if $conf->{opts};
         $conf = $conf->{conf};
     }
-    print $conffh <<"EOT";
+    $conf = <<"EOT";
 $conf
 listen:
   host: 0.0.0.0
@@ -192,6 +192,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 EOT
+    print $conffh $conf;
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
@@ -247,6 +248,7 @@ sub run_prog {
     my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
     my $stderr = `$cmd 2>&1 > $tempfn`;
     my $stdout = do { local $/; <$tempfh> };
+    close $tempfh; # tempfile does not close the file automatically (see perldoc)
     return ($stderr, $stdout);
 }
 

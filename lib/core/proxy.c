@@ -596,24 +596,22 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url)
+                                          h2o_iovec_t *cur_body, h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
 
     h2o_req_t *req = self->src_req;
 
     if (errstr == NULL) {
+        assert(origin != NULL);
         int use_proxy_protocol = 0;
         if (req->overrides != NULL) {
             use_proxy_protocol = req->overrides->use_proxy_protocol;
-            if (location_rewrite_url != NULL) {
-                if (req->overrides != NULL)
-                    req->overrides->location_rewrite.match = location_rewrite_url;
+            req->overrides->location_rewrite.match = origin;
 
-                if (!req->overrides->proxy_preserve_host) {
-                    req->scheme = location_rewrite_url->scheme;
-                    req->authority = location_rewrite_url->authority;
-                }
+            if (!req->overrides->proxy_preserve_host) {
+                req->scheme = origin->scheme;
+                req->authority = origin->authority;
             }
         }
         self->up_req.bufs[0] = build_request_line_host(req, use_proxy_protocol);
@@ -657,7 +655,7 @@ static void on_generator_dispose(void *_self)
     h2o_doublebuffer_dispose(&self->sending);
 }
 
-static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, int use_proxy_protocol, int *te_chunked)
+static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, int *te_chunked)
 {
     struct rp_generator_t *self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
@@ -684,38 +682,36 @@ void h2o__proxy_process_request(h2o_req_t *req)
 {
     h2o_req_overrides_t *overrides = req->overrides;
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
-    struct rp_generator_t *self;
     int te_chunked = 0;
 
-    if (overrides != NULL) {
-        if (overrides->socketpool != NULL) {
-            if (overrides->use_proxy_protocol)
-                assert(!"proxy protocol cannot be used for a persistent upstream connection");
-            self = proxy_send_prepare(req, 1, 0, &te_chunked);
-            h2o_http1client_connect_with_pool(&self->client, self, client_ctx, overrides->socketpool, on_connect, te_chunked);
-            return;
-        } else if (overrides->hostport.host.base != NULL) {
-            self = proxy_send_prepare(req, 0, overrides->use_proxy_protocol, &te_chunked);
-            h2o_http1client_connect(&self->client, self, client_ctx, req->overrides->hostport.host, req->overrides->hostport.port,
-                                    0, on_connect, te_chunked, overrides->location_rewrite.match);
-            return;
-        }
+    h2o_socketpool_t *socketpool = &req->conn->ctx->globalconf->proxy.global_socketpool;
+    if (overrides != NULL && overrides->socketpool != NULL)
+        socketpool = overrides->socketpool;
+    int keepalive = h2o_socketpool_can_keepalive(socketpool);
+    if (overrides != NULL && overrides->use_proxy_protocol)
+        keepalive = 0;
+
+    struct rp_generator_t *self = proxy_send_prepare(req, keepalive, &te_chunked);
+
+    h2o_url_t upstream;
+    if (overrides != NULL && overrides->upstream != NULL) {
+        upstream = *overrides->upstream;
+    } else {
+        h2o_url_init(&upstream, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
     }
-    { /* default logic */
-        h2o_iovec_t host;
-        uint16_t port;
-        if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL) {
-            h2o_req_log_error(req, "lib/core/proxy.c", "invalid URL supplied for internal redirection:%s://%.*s%.*s",
-                              req->scheme->name.base, (int)req->authority.len, req->authority.base, (int)req->path.len,
-                              req->path.base);
-            h2o_send_error_502(req, "Gateway Error", "internal error", 0);
-            return;
-        }
-        if (port == 65535)
-            port = req->scheme->default_port;
-        self = proxy_send_prepare(req, 0, overrides != NULL && overrides->use_proxy_protocol, &te_chunked);
-        h2o_http1client_connect(&self->client, self, client_ctx, host, port, req->scheme == &H2O_URL_SCHEME_HTTPS, on_connect,
-                                te_chunked, NULL);
-        return;
-    }
+
+    /*
+      When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
+     connection even when there is a pooled connection to the peer, since the header (as defined in
+     https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) needs to be sent at the beginning of the connection.
+
+     However, currently h2o_http1client_connect doesn't provide an interface to enforce estabilishing a new connection. In other
+     words, there is a chance that we would use a pool connection here.
+
+     OTOH, the probability of seeing such issue is rare; it would only happen if the same destination identified by its host:port is
+     accessed in both ways (i.e. in one path with use_proxy_protocol set and in the other path without).
+
+     So I leave this as it is for the time being.
+     */
+    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, &upstream, on_connect, te_chunked);
 }

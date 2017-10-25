@@ -41,7 +41,7 @@ static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url);
+                                          h2o_iovec_t *cur_body, h2o_url_t *origin);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
 
@@ -49,7 +49,6 @@ static void start_request(h2o_http1client_ctx_t *ctx)
 {
     h2o_url_t url_parsed;
     h2o_iovec_t *req;
-    int is_ssl;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
@@ -59,7 +58,6 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
-    is_ssl = url_parsed.scheme == &H2O_URL_SCHEME_HTTPS;
 
     /* build request */
     req = h2o_mem_alloc_pool(&pool, sizeof(*req));
@@ -71,16 +69,13 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     assert(req->len < 1024);
 
     /* initiate the request */
-    if (1) {
-        if (sockpool == NULL) {
-            sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, 10);
-            h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
-        }
-        h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect, 0);
-    } else {
-        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, on_connect, 0, NULL);
+    if (sockpool == NULL) {
+        sockpool = h2o_mem_alloc(sizeof(*sockpool));
+        h2o_socketpool_init_specific(sockpool, 10, &url_parsed, 1);
+        h2o_socketpool_set_timeout(sockpool, 5000 /* in msec */);
+        h2o_socketpool_register_loop(sockpool, ctx->loop);
     }
+    h2o_http1client_connect(NULL, req, ctx, sockpool, &url_parsed, on_connect, 0);
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)

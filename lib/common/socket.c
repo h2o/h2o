@@ -794,7 +794,7 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
 #if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
-            if (cipher != NULL)
+            if (cipher == NULL)
                 return 0;
             return (int)cipher->aead->key_size;
         } else
@@ -1096,30 +1096,32 @@ Redo:
     ERR_clear_error();
     if (SSL_is_server(sock->ssl->ossl)) {
         ret = SSL_accept(sock->ssl->ossl);
+        switch (sock->ssl->handshake.server.async_resumption.state) {
+        case ASYNC_RESUMPTION_STATE_COMPLETE:
+            break;
+        case ASYNC_RESUMPTION_STATE_RECORD:
+            /* async resumption has not been triggered; proceed the state to complete */
+            sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
+            break;
+        case ASYNC_RESUMPTION_STATE_REQUEST_SENT: {
+            /* sent async request, reset the ssl state, and wait for async response */
+            assert(ret < 0);
+            SSL_free(sock->ssl->ossl);
+            create_ossl(sock);
+            clear_output_buffer(sock->ssl);
+            h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
+            h2o_buffer_reserve(&sock->ssl->input.encrypted, first_input.len);
+            memcpy(sock->ssl->input.encrypted->bytes, first_input.base, first_input.len);
+            sock->ssl->input.encrypted->size = first_input.len;
+            h2o_socket_read_stop(sock);
+            return;
+        }
+        default:
+            h2o_fatal("unexpected async resumption state");
+            break;
+        }
     } else {
         ret = SSL_connect(sock->ssl->ossl);
-    }
-
-    switch (sock->ssl->handshake.server.async_resumption.state) {
-    case ASYNC_RESUMPTION_STATE_RECORD:
-        /* async resumption has not been triggered; proceed the state to complete */
-        sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
-        break;
-    case ASYNC_RESUMPTION_STATE_REQUEST_SENT: {
-        /* sent async request, reset the ssl state, and wait for async response */
-        assert(ret < 0);
-        SSL_free(sock->ssl->ossl);
-        create_ossl(sock);
-        clear_output_buffer(sock->ssl);
-        h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
-        h2o_buffer_reserve(&sock->ssl->input.encrypted, first_input.len);
-        memcpy(sock->ssl->input.encrypted->bytes, first_input.base, first_input.len);
-        sock->ssl->input.encrypted->size = first_input.len;
-        h2o_socket_read_stop(sock);
-        return;
-    }
-    default:
-        break;
     }
 
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {

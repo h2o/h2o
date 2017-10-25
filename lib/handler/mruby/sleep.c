@@ -46,7 +46,9 @@ static void on_sleep_timeout(h2o_timeout_entry_t *entry)
     h2o_mruby_shared_context_t *shared = ctx->ctx->shared;
     mrb_int sleep_sec = (mrb_int)(h2o_now(shared->ctx->loop) - ctx->started_at) / 1000;
 
+    int gc_arena = mrb_gc_arena_save(shared->mrb);
     h2o_mruby_run_fiber(ctx->ctx, ctx->receiver, mrb_fixnum_value(sleep_sec), NULL);
+    mrb_gc_arena_restore(shared->mrb, gc_arena);
 
     mrb_gc_unregister(shared->mrb, ctx->receiver);
     h2o_timeout_unlink(entry);
