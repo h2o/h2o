@@ -2029,7 +2029,6 @@ inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
     h2o_send_state_t send_state;
     assert(req->_generator != NULL);
     send_state = cb(req->_generator, req, buf);
-    req->bytes_sent += buf->len;
     if (!h2o_send_state_is_in_progress(send_state))
         req->_generator = NULL;
     return send_state;
