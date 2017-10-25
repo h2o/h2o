@@ -201,6 +201,8 @@ mrb_value h2o_mruby_each_to_array(h2o_mruby_shared_context_t *shared_ctx, mrb_va
 int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value headers,
                               int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data);
 
+int h2o_mruby_output_filter_set_shortcut(mrb_state *mrb, mrb_value obj);
+
 /* handler/mruby/chunked.c */
 void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *ctx);
 void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator);

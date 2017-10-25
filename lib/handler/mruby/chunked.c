@@ -124,6 +124,13 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
 {
     mrb_state *mrb = generator->ctx->shared->mrb;
 
+    /* try output filter shortcut. if succeed, there are no need to setup chunked */
+    int output_filter_shortcutted = h2o_mruby_output_filter_set_shortcut(mrb, body);
+    if (mrb->exc != NULL || output_filter_shortcutted) {
+        return mrb_nil_value();
+    }
+
+    /* try http input stream shortcut */
     h2o_mruby_http_request_context_t *client = h2o_mruby_http_set_shortcut(mrb, body, on_shortcut_notify, generator);
     if (mrb->exc != NULL) {
         return mrb_nil_value();

@@ -1316,6 +1316,12 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
 /**
+ * remove output-stream filter which is already added in ostream chain
+ * @param req the request
+ * @param ostream output-strema to be removed
+ */
+void h2o_remove_ostream(h2o_req_t *req, h2o_ostream_t *ostream);
+/**
  * prepares the request for processing by looking at the method, URI, headers
  */
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);

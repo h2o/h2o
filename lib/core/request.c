@@ -483,6 +483,24 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
     return ostr;
 }
 
+void h2o_remove_ostream(h2o_req_t *req, h2o_ostream_t *ostream)
+{
+    /* can't remove final ostream */
+    assert(ostream->next != NULL);
+
+    h2o_ostream_t **slot = &req->_ostr_top;
+    do {
+        if (*slot == ostream) {
+            *slot = ostream->next;
+            ostream->next = NULL;
+            return;
+        }
+        slot = &(*slot)->next;
+    } while (*slot != NULL);
+
+    assert(!"ostream not found");
+}
+
 static void apply_env(h2o_req_t *req, h2o_envconf_t *env)
 {
     size_t i;
