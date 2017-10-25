@@ -28,10 +28,9 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.backends:
-          - http://127.0.0.1.XIP.IO:$unused_port
-          - http://127.0.0.1.XIP.IO:$upstream_port
-        proxy.reverse.path: /echo-server-port
+        proxy.reverse.url:
+          - http://127.0.0.1.XIP.IO:$unused_port/echo-server-port
+          - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
 EOT
 
 for my $i (1..50) {

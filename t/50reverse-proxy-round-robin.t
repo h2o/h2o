@@ -37,10 +37,9 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.backends:
-          - http://127.0.0.1.XIP.IO:$upstream_port1
-          - http://127.0.0.1.XIP.IO:$upstream_port2
-        proxy.reverse.path: /echo-server-port
+        proxy.reverse.url:
+          - http://127.0.0.1.XIP.IO:$upstream_port1/echo-server-port
+          - http://127.0.0.1.XIP.IO:$upstream_port2/echo-server-port
 EOT
 
 sub do_test {
