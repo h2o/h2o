@@ -37,7 +37,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
     overrides->socketpool = &self->sockpool;
-    overrides->location_rewrite.match = &self->sockpool.targets.entries[0]->url; /* FIXME do we need to set this here? */
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->max_buffer_size = self->config.max_buffer_size;
