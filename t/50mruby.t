@@ -525,4 +525,20 @@ EOT
     unlike $headers, qr{^content-length:}im;
 };
 
+subtest 'PATH_INFO should be kept undecoded' => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /foo:
+        mruby.handler: |
+          proc {|env|
+            [200, {}, [env['PATH_INFO']]]
+          }
+EOT
+    (undef, my $body) = run_prog("curl --silent http://127.0.0.1:$server->{port}/foo/bar%20baz");
+    is $body, '/bar%20baz';
+};
+
 done_testing();
