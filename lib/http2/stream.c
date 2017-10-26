@@ -123,6 +123,7 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
         h2o_http2_window_consume_window(&conn->_write.window, length);
         h2o_http2_window_consume_window(&stream->output_window, length);
         (*outbuf)->size += length + H2O_HTTP2_FRAME_HEADER_SIZE;
+        stream->req.bytes_sent += length;
     }
     /* send a RST_STREAM if there's an error */
     if (send_state == H2O_SEND_STATE_ERROR) {

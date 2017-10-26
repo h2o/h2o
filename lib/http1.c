@@ -670,6 +670,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
             conn->req.http1_is_persistent = 0;
         }
         buf.len += cbuf.len;
+        conn->req.bytes_sent += cbuf.len;
     } else {
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
@@ -715,9 +716,17 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     struct st_h2o_http1_finalostream_t *self = (void *)_self;
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
     h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1));
+    int i;
     int bufcnt = 0;
 
     assert(self == &conn->_ostr_final);
+
+    /* count bytes_sent if other ostreams haven't counted */
+    if (req->bytes_counted_by_ostream == 0) {
+        for (i = 0; i != inbufcnt; ++i) {
+            req->bytes_sent += inbufs[i].len;
+        }
+    }
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
