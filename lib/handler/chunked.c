@@ -39,6 +39,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     chunk_size = 0;
     for (i = 0; i != inbufcnt; ++i)
         chunk_size += inbufs[i].len;
+    req->bytes_sent += chunk_size;
 
     /* create chunk header and output data */
     if (chunk_size != 0) {

@@ -269,7 +269,7 @@ subtest 'compressed-body-size' => sub {
     };
     subtest 'http1' => sub {
         $doit->("", 1661);
-        $doit->("-H 'Accept-Encoding: gzip'", 920); # gzip content size (908) + chunked encoding overhead (12)
+        $doit->("-H 'Accept-Encoding: gzip'", 908); # it doesn't contain chunked encoding overhead (12)
     };
     subtest 'http2' => sub {
         plan skip_all => "curl does not support HTTP/2"
