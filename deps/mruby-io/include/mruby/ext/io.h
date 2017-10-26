@@ -13,7 +13,8 @@ struct mrb_io {
   int fd;   /* file descriptor, or -1 */
   int fd2;  /* file descriptor to write if it's different from fd, or -1 */
   int pid;  /* child's pid (for pipes)  */
-  unsigned int writable:1,
+  unsigned int readable:1,
+               writable:1,
                sync:1;
 };
 

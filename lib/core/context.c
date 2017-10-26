@@ -102,13 +102,15 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.connect_timeout = config->proxy.connect_timeout;
     ctx->proxy.client_ctx.io_timeout = config->proxy.io_timeout;
     ctx->proxy.client_ctx.first_byte_timeout = config->proxy.first_byte_timeout;
-    ctx->proxy.client_ctx.ssl_ctx = config->proxy.ssl_ctx;
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
 
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
     pthread_mutex_lock(&mutex);
+
+    h2o_socketpool_register_loop(&ctx->globalconf->proxy.global_socketpool, loop);
+
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
@@ -117,6 +119,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
         }
         h2o_context_init_pathconf_context(ctx, &hostconf->fallback_path);
     }
+
     pthread_mutex_unlock(&mutex);
 }
 
@@ -124,6 +127,8 @@ void h2o_context_dispose(h2o_context_t *ctx)
 {
     h2o_globalconf_t *config = ctx->globalconf;
     size_t i, j;
+
+    h2o_socketpool_unregister_loop(&ctx->globalconf->proxy.global_socketpool, ctx->loop);
 
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];

@@ -254,12 +254,18 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
     h2o_iovec_t *bufs;
+    h2o_iovec_t *tofree = NULL;
 
     assert(sock->super._cb.write == NULL);
     assert(sock->_wreq.cnt == 0);
     sock->super._cb.write = cb;
 
-    bufs = alloca(sizeof(*bufs) * bufcnt);
+    /* cap the number of buffers, since we're using alloca */
+    if (bufcnt > 10000)
+        bufs = tofree = h2o_mem_alloc(sizeof(*bufs) * bufcnt);
+    else
+        bufs = alloca(sizeof(*bufs) * bufcnt);
+
     memcpy(bufs, _bufs, sizeof(*bufs) * bufcnt);
 
     /* try to write now */
@@ -270,13 +276,13 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
         *sock->_wreq.bufs = h2o_iovec_init(H2O_STRLIT("deadbeef"));
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
-        return;
+        goto Out;
     }
     if (bufcnt == 0) {
         /* write complete, schedule the callback */
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
-        return;
+        goto Out;
     }
 
     /* setup the buffer to send pending data */
@@ -291,6 +297,8 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
 
     /* schedule the write */
     link_to_statechanged(sock);
+Out:
+    free(tofree);
 }
 
 int h2o_socket_get_fd(h2o_socket_t *_sock)

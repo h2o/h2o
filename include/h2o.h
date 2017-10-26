@@ -129,7 +129,16 @@ typedef struct st_h2o_handler_t {
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
-    unsigned has_body_stream : 1;
+    /**
+     * If the flag is set, protocol handler may invoke the request handler before receiving the end of the request body. The request
+     * handler can determine if the protocol handler has actually done so by checking if `req->proceed_req` is set to non-NULL.
+     * In such case, the handler should replace `req->write_req.cb` (and ctx) with its own callback to receive the request body
+     * bypassing the buffer of the protocol handler. Parts of the request body being received before the handler replacing the
+     * callback is accessible via `req->entity`.
+     * The request handler can delay replacing the callback to a later moment. In such case, the handler can determine if
+     * `req->entity` already contains a complete request body by checking if `req->proceed_req` is NULL.
+     */
+    unsigned supports_request_streaming : 1;
 } h2o_handler_t;
 
 /**
@@ -396,10 +405,6 @@ struct st_h2o_globalconf_t {
          */
         h2o_timeout_val_t first_byte_timeout;
         /**
-         * SSL context for connections initiated by the proxy (optional, governed by the application)
-         */
-        SSL_CTX *ssl_ctx;
-        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -415,6 +420,10 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit a via header
          */
         unsigned emit_via_header : 1;
+        /**
+         * global socketpool
+         */
+        h2o_socketpool_t global_socketpool;
     } proxy;
 
     /**
@@ -752,7 +761,7 @@ typedef struct st_h2o_conn_callbacks_t {
     /**
      * callback for server push (may be NULL)
      */
-    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len);
+    void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len, int is_critical);
     /**
      * Return the underlying socket struct
      */
@@ -835,12 +844,9 @@ typedef struct st_h2o_req_overrides_t {
      */
     h2o_socketpool_t *socketpool;
     /**
-     * upstream host:port to connect to (or host.base == NULL)
+     * upstream to connect to (or NULL)
      */
-    struct {
-        h2o_iovec_t host;
-        uint16_t port;
-    } hostport;
+    h2o_url_t *upstream;
     /**
      * parameters for rewriting the `Location` header (only used if match.len != 0)
      */
@@ -888,8 +894,8 @@ typedef struct st_h2o_req_error_log_t {
     h2o_iovec_t msg;
 } h2o_req_error_log_t;
 
-typedef void (*h2o_write_req_chunk_done)(struct st_h2o_req_t *req, size_t written, int done);
-typedef int (*h2o_write_req_chunk)(void *priv, h2o_iovec_t req_chunk, int is_end);
+typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
+typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 
 /**
  * a HTTP request
@@ -1034,12 +1040,17 @@ struct st_h2o_req_t {
      * whether or not the connection is persistent.
      * Applications should set this flag to zero in case the connection cannot be kept keep-alive (due to an error etc.)
      */
-    char http1_is_persistent;
+    unsigned char http1_is_persistent : 1;
     /**
      * whether if the response has been delegated (i.e. reproxied).
      * For delegated responses, redirect responses would be handled internally.
      */
-    char res_is_delegated;
+    unsigned char res_is_delegated : 1;
+    /**
+     * whether if the bytes sent is counted by ostreams other than final ostream
+     */
+    unsigned char bytes_counted_by_ostream : 1;
+
     /**
      * Whether the producer of the response has explicitely disabled or
      * enabled compression. One of H2O_COMPRESS_HINT_*
@@ -1056,19 +1067,24 @@ struct st_h2o_req_t {
      */
     size_t preferred_chunk_size;
 
+    /**
+     * callback and context for receiving request body (see h2o_handler_t::supports_request_streaming for details)
+     */
+    struct {
+        h2o_write_req_cb cb;
+        void *ctx;
+    } write_req;
+
+    /**
+     * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
+     */
+    h2o_proceed_req_cb proceed_req;
+
     /* internal structure */
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
     h2o_timeout_timer_t _timeout_entry;
-
-    /* streaming request body */
-    struct {
-        h2o_write_req_chunk cb;
-        void *priv;
-    } _write_req_chunk;
-    h2o_write_req_chunk_done _write_req_chunk_done;
-    char _found_handler;
 
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
@@ -1191,12 +1207,13 @@ size_t h2o_stringify_proxy_header(h2o_conn_t *conn, char *buf);
 #define H2O_PROXY_HEADER_MAX_LENGTH                                                                                                \
     (sizeof("PROXY TCP6 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n") - 1)
 /**
- * extracts path to be pushed from `Link: rel=preload` header, duplicating the chunk (or returns {NULL,0} if none)
+ * extracts path to be pushed from `Link: rel=preload` header.
  */
-h2o_iovec_vector_t h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len,
-                                                          h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
-                                                          h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme,
-                                                          h2o_iovec_t *base_authority, h2o_iovec_t *filtered_value);
+void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
+                                            const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
+                                            const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                            void (*cb)(void *ctx, const char *path, size_t path_len, int is_critical), void *cb_ctx,
+                                            h2o_iovec_t *filtered_value);
 /**
  * return a bitmap of compressible types, by parsing the `accept-encoding` header
  */
@@ -1716,7 +1733,7 @@ typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
 
 typedef struct st_h2o_fastcgi_config_vars_t {
     h2o_timeout_val_t io_timeout;
-    uint64_t keepalive_timeout; /* 0 to disable */
+    h2o_timeout_val_t keepalive_timeout; /* 0 to disable */
     h2o_iovec_t document_root;  /* .base=NULL if not set */
     int send_delegated_uri;     /* whether to send the rewritten HTTP_HOST & REQUEST_URI by delegation, or the original */
     struct {
@@ -1728,13 +1745,7 @@ typedef struct st_h2o_fastcgi_config_vars_t {
 /**
  * registers the fastcgi handler to the context
  */
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
-                                                        h2o_fastcgi_config_vars_t *vars);
-/**
- * registers the fastcgi handler to the context
- */
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
-                                                       h2o_fastcgi_config_vars_t *vars);
+h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_fastcgi_config_vars_t *vars);
 /**
  * registers the fastcgi handler to the context
  */
@@ -1828,25 +1839,19 @@ typedef struct st_h2o_proxy_config_vars_t {
     h2o_timeout_val_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    h2o_timeout_val_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;
         h2o_timeout_val_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
-    h2o_iovec_t reverse_path; /* optional */
-    /* I don't know how to detect if handler registered on same path twice, so temporarily use these switches to do so. */
-    unsigned registered_as_url : 1;
-    unsigned registered_as_backends : 1;
-    SSL_CTX *ssl_ctx; /* optional */
     size_t max_buffer_size;
 } h2o_proxy_config_vars_t;
 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
-                                      h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
+                                      h2o_timeout_val_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */
@@ -1921,6 +1926,10 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 
 /* inline defs */
 
+#ifdef H2O_NO_64BIT_ATOMICS
+extern pthread_mutex_t h2o_conn_id_mutex;
+#endif
+
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
@@ -1929,7 +1938,13 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->ctx = ctx;
     conn->hosts = hosts;
     conn->connected_at = connected_at;
+#ifdef H2O_NO_64BIT_ATOMICS
+    pthread_mutex_lock(&h2o_conn_id_mutex);
+    conn->id = ++h2o_connection_id;
+    pthread_mutex_unlock(&h2o_conn_id_mutex);
+#else
     conn->id = __sync_add_and_fetch(&h2o_connection_id, 1);
+#endif
     conn->callbacks = callbacks;
 
     return conn;
@@ -1976,7 +1991,6 @@ inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
     h2o_send_state_t send_state;
     assert(req->_generator != NULL);
     send_state = cb(req->_generator, req, buf);
-    req->bytes_sent += buf->len;
     if (!h2o_send_state_is_in_progress(send_state))
         req->_generator = NULL;
     return send_state;

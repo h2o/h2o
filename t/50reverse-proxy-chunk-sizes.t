@@ -32,10 +32,11 @@ sub test {
     my $file = create_data_file($size);
     my $file_md5 = md5_file($file);
     note("$size, cl:'$cl', trailer:'$trailer', h2c");
-    my $resp = `nghttp $cl $trailer -d $file -u http://127.0.0.1:$server->{port}/echo`;
+    my $resp;
+    $resp = `nghttp $cl $trailer -d $file -u http://127.0.0.1:$server->{port}/echo`;
     is md5_hex($resp), $file_md5, "body matches";
     note("$size, cl:'$cl', trailer:'$trailer', h2");
-    my $resp = `nghttp $cl $trailer -d $file https://127.0.0.1:$server->{tls_port}/echo`;
+    $resp = `nghttp $cl $trailer -d $file https://127.0.0.1:$server->{tls_port}/echo`;
     is md5_hex($resp), $file_md5, "body matches";
 }
 my @sizes = ( 1000, 65535, 1000000 );

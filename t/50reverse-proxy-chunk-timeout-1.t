@@ -5,10 +5,13 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 
+plan skip_all => "nc not found"
+    unless prog_exists("nc");
+
 my $upstream_port = empty_port();
 $| = 1;
 
-open(my $nc_out, "nc -q -1 -dl $upstream_port |");
+open(my $nc_out, "nc -dl $upstream_port |");
 
 my $server = spawn_h2o(<< "EOT");
 http2-idle-timeout: 2

@@ -388,7 +388,6 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 
     /* handle the response using the handlers, if hostconf exists */
     if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority, req->scheme->default_port)) != NULL) {
-        req->_found_handler = 0;
         req->pathconf = NULL;
         process_hosted_request(req, hostconf);
         return;
@@ -437,15 +436,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    size_t i;
-
     assert(req->_generator != NULL);
 
     if (!h2o_send_state_is_in_progress(state))
         req->_generator = NULL;
-
-    for (i = 0; i != bufcnt; ++i)
-        req->bytes_sent += bufs[i].len;
 
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, state);
 }
@@ -698,21 +692,21 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status)
     return method;
 }
 
+static void do_push_path(void *_req, const char *path, size_t path_len, int is_critical)
+{
+    h2o_req_t *req = _req;
+
+    if (req->conn->callbacks->push_path != NULL)
+        req->conn->callbacks->push_path(req, path, path_len, is_critical);
+}
+
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len)
 {
-    int i;
     h2o_iovec_t ret = h2o_iovec_init(value, value_len);
-    if (req->conn->callbacks->push_path == NULL)
-        return ret;
 
-    h2o_iovec_vector_t paths = h2o_extract_push_path_from_link_header(
-        &req->pool, value, value_len, req->path_normalized, req->input.scheme, req->input.authority,
-        req->res_is_delegated ? req->scheme : NULL, req->res_is_delegated ? &req->authority : NULL, &ret);
-    if (paths.size == 0)
-        return ret;
+    h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
+                                           req->input.authority, req->res_is_delegated ? req->scheme : NULL,
+                                           req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
 
-    for (i = 0; i < paths.size; i++) {
-        req->conn->callbacks->push_path(req, paths.entries[i].base, paths.entries[i].len);
-    }
     return ret;
 }

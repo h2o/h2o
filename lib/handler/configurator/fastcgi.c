@@ -39,25 +39,31 @@ struct fastcgi_configurator_t {
     h2o_fastcgi_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timeout_val_t *timer)
 {
-    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    uint64_t timeout;
     int ret;
+    uint64_t timeout;
     ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
     if (ret < 0)
         return ret;
     if (timeout > 0)
-        self->vars->io_timeout = h2o_timeout_val_from_uint(timeout);
+        *timer = h2o_timeout_val_from_uint(timeout);
     else
-        self->vars->io_timeout = H2O_TIMEOUT_VAL_UNSET;
-    return ret;
+        *timer = H2O_TIMEOUT_VAL_UNSET;
+
+    return 0;
+}
+
+static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct fastcgi_configurator_t *self = (void *)cmd->configurator;
+    return configure_timer(cmd, node, &self->vars->io_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
+    return configure_timer(cmd, node, &self->vars->keepalive_timeout);
 }
 
 static int on_config_document_root(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -130,17 +136,17 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         return -1;
     }
 
+    h2o_url_t upstream;
+
     if (strcmp(type, "unix") == 0) {
         /* unix socket */
         struct sockaddr_un sa;
-        memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
-        sa.sun_family = AF_UNIX;
-        strcpy(sa.sun_path, servname);
-        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), self->vars);
+        h2o_url_init_with_sun_path(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(servname, strlen(servname)),
+                                   h2o_iovec_init(H2O_STRLIT("/")));
     } else if (strcmp(type, "tcp") == 0) {
         /* tcp socket */
         uint16_t port;
@@ -148,11 +154,15 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
             h2o_configurator_errprintf(cmd, node, "invalid port number:%s", servname);
             return -1;
         }
-        h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
+        h2o_url_init_with_hostport(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(hostname, strlen(hostname)), port,
+                                   h2o_iovec_init(H2O_STRLIT("/")));
     } else {
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
     }
+
+    h2o_fastcgi_register(ctx->pathconf, &upstream, self->vars);
+    free(upstream.authority.base);
 
     return 0;
 }
@@ -336,7 +346,12 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     config_vars = *self->vars;
     config_vars.callbacks.dispose = spawnproc_on_dispose;
     config_vars.callbacks.data = (char *)NULL + spawner_fd;
-    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), &config_vars);
+
+    h2o_url_t upstream;
+    h2o_url_init_with_sun_path(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(sa.sun_path, strlen(sa.sun_path)),
+                               h2o_iovec_init(H2O_STRLIT("/")));
+    h2o_fastcgi_register(ctx->pathconf, &upstream, &config_vars);
+    free(upstream.authority.base);
 
     ret = 0;
 Exit:
@@ -371,7 +386,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
     /* set default vars */
     c->vars = c->_vars_stack;
     c->vars->io_timeout = h2o_timeout_val_from_uint(H2O_DEFAULT_FASTCGI_IO_TIMEOUT);
-    c->vars->keepalive_timeout = 0;
+    c->vars->keepalive_timeout = H2O_TIMEOUT_VAL_UNSET;
 
     /* setup handlers */
     c->super.enter = on_config_enter;

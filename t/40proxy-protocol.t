@@ -10,7 +10,7 @@ use t::Util;
 my $tempdir = tempdir(CLEANUP => 1);
 my $port = empty_port();
 
-sub spawn_h2o {
+sub _spawn_h2o {
     my ($proxy_protocol, $ssl) = @_;
 
     open my $fh, ">", "$tempdir/h2o.conf"
@@ -99,7 +99,7 @@ sub test_timeout {
 }
 
 subtest "http" => sub {
-    my $guard = spawn_h2o(1, 0);
+    my $guard = _spawn_h2o(1, 0);
     subtest "with proxy" => sub {
         my $resp = fetch("PROXY TCP4 1.2.3.4 5.6.7.8 1234 9999\r\nGET / HTTP/1.0\r\n\r\n");
         like $resp, qr{^HTTP/1.1 200 OK\r\n}s;
@@ -116,7 +116,7 @@ subtest "http" => sub {
 };
 
 subtest "https" => sub {
-    my $guard = spawn_h2o(1, 1);
+    my $guard = _spawn_h2o(1, 1);
     subtest "with proxy" => sub {
         my $resp = fetch_ssl("PROXY TCP4 1.2.3.4 5.6.7.8 1234 9999\r\n", "GET / HTTP/1.0\r\n\r\n");
         like $resp, qr{^HTTP/1.1 200 OK\r\n}s;
@@ -133,7 +133,7 @@ subtest "https" => sub {
 };
 
 subtest "off" => sub {
-    my $guard = spawn_h2o(0, 0);
+    my $guard = _spawn_h2o(0, 0);
     subtest "with proxy" => sub {
         my $resp = fetch("PROXY TCP4 1.2.3.4 5.6.7.8 1234 9999\r\nGET / HTTP/1.0\r\n\r\n");
         unlike $resp, qr{^HTTP/1.1 200 OK\r\n}s;
@@ -146,7 +146,7 @@ subtest "off" => sub {
 
 subtest "https handshake timeout" => sub {
     # timeout test for PROXY:OFF over HTTPS is implemented here since it is easier to do so
-    my $guard = spawn_h2o(0, 1);
+    my $guard = _spawn_h2o(0, 1);
     test_timeout();
 };
 

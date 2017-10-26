@@ -386,7 +386,7 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     /* first entry is FCGI_BEGIN_REQUEST */
     h2o_vector_reserve(&req->pool, vecs, 5 /* we send at least 5 iovecs */);
     vecs->entries[0] =
-        create_begin_request(&req->pool, request_id, FCGI_RESPONDER, config->keepalive_timeout != 0 ? FCGI_KEEP_CONN : 0);
+        create_begin_request(&req->pool, request_id, FCGI_RESPONDER, config->keepalive_timeout.val != 0 ? FCGI_KEEP_CONN : 0);
     /* second entry is reserved for FCGI_PARAMS header */
     vecs->entries[1] = h2o_iovec_init(NULL, APPEND_BLOCKSIZE); /* dummy value set to prevent params being appended to the entry */
     vecs->size = 2;
@@ -458,7 +458,7 @@ static void do_send(struct st_fcgi_generator_t *generator)
 
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
 {
-    if (generator->ctx->handler->config.keepalive_timeout != 0 && can_keepalive)
+    if (generator->ctx->handler->config.keepalive_timeout.val != 0 && can_keepalive)
         h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock);
     else
         h2o_socket_close(generator->sock);
@@ -706,7 +706,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
-static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_socketpool_target_t *_dummy)
+static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *_dummy)
 {
     struct st_fcgi_generator_t *generator = data;
     iovec_vector_t vecs;
@@ -772,8 +772,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_timeout_init_timer(&generator->timeout, on_connect_timeout);
     h2o_timeout_add_timer(req->conn->ctx->loop, &generator->timeout, generator->ctx->io_timeout);
 
-    h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, req->conn->ctx->loop,
-                           &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
+    h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
+                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
 
     return 0;
 }
@@ -783,12 +783,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     h2o_fastcgi_handler_t *handler = (void *)_handler;
     struct st_fcgi_context_t *handler_ctx = h2o_mem_alloc(sizeof(*handler_ctx));
 
-    /* use the first event loop for handling timeouts of the socket pool */
-    if (handler->sockpool.timeout == UINT64_MAX)
-        h2o_socketpool_set_timeout(
-            &handler->sockpool, ctx->loop,
-            h2o_timeout_val_from_uint(handler->config.keepalive_timeout != 0 ? handler->config.keepalive_timeout : 60000));
-
+    h2o_socketpool_register_loop(&handler->sockpool, ctx->loop);
     handler_ctx->handler = handler;
     handler_ctx->io_timeout = handler->config.io_timeout;
 
@@ -803,6 +798,7 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
     if (handler_ctx == NULL)
         return;
 
+    h2o_socketpool_unregister_loop(&handler->sockpool, ctx->loop);
     free(handler_ctx);
 }
 
@@ -817,7 +813,7 @@ static void on_handler_dispose(h2o_handler_t *_handler)
     free(handler->config.document_root.base);
 }
 
-static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fastcgi_config_vars_t *vars)
+h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_fastcgi_config_vars_t *vars)
 {
     h2o_fastcgi_handler_t *handler = (void *)h2o_create_handler(pathconf, sizeof(*handler));
 
@@ -829,23 +825,7 @@ static h2o_fastcgi_handler_t *register_common(h2o_pathconf_t *pathconf, h2o_fast
     if (vars->document_root.base != NULL)
         handler->config.document_root = h2o_strdup(NULL, vars->document_root.base, vars->document_root.len);
 
-    return handler;
-}
-
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
-                                                        h2o_fastcgi_config_vars_t *vars)
-{
-    h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
-
-    h2o_socketpool_init_by_hostport(&handler->sockpool, h2o_iovec_init(host, strlen(host)), port, 0, SIZE_MAX /* FIXME */);
-    return handler;
-}
-
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
-                                                       h2o_fastcgi_config_vars_t *vars)
-{
-    h2o_fastcgi_handler_t *handler = register_common(pathconf, vars);
-
-    h2o_socketpool_init_by_address(&handler->sockpool, sa, salen, 0, SIZE_MAX /* FIXME */);
+    h2o_socketpool_init_specific(&handler->sockpool, SIZE_MAX /* FIXME */, upstream, 1);
+    h2o_socketpool_set_timeout(&handler->sockpool, handler->config.keepalive_timeout);
     return handler;
 }

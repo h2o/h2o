@@ -435,13 +435,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                                        H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
                     return;
                 }
-                static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
-                h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
             }
             if (create_entity_reader(conn, headers + entity_body_header_index) != 0) {
                 return;
             }
             if (expect.base != NULL) {
+                static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
+                h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
                 /* processing of the incoming entity is postponed until the 100 response is sent */
                 h2o_socket_read_stop(conn->sock);
                 return;
@@ -565,20 +565,6 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     reqread_start(conn);
 }
 
-static void on_send_complete(h2o_socket_t *sock, const char *err)
-{
-    struct st_h2o_http1_conn_t *conn = sock->data;
-    if (err != NULL)
-        conn->req.http1_is_persistent = 0;
-    do_on_send_complete(conn);
-}
-
-static void deferred_send_complete(h2o_timeout_timer_t *entry)
-{
-    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
-    do_on_send_complete(conn);
-}
-
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = socket->data;
@@ -676,6 +662,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
             conn->req.http1_is_persistent = 0;
         }
         buf.len += cbuf.len;
+        conn->req.bytes_sent += cbuf.len;
     } else {
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
@@ -721,9 +708,17 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     struct st_h2o_http1_finalostream_t *self = (void *)_self;
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
     h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1));
+    int i;
     int bufcnt = 0;
 
     assert(self == &conn->_ostr_final);
+
+    /* count bytes_sent if other ostreams haven't counted */
+    if (req->bytes_counted_by_ostream == 0) {
+        for (i = 0; i != inbufcnt; ++i) {
+            req->bytes_sent += inbufs[i].len;
+        }
+    }
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
@@ -746,9 +741,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         h2o_socket_write(conn->sock, bufs, bufcnt,
                          h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
     } else {
-        assert(send_state != H2O_SEND_STATE_IN_PROGRESS);
-        self->zero_timeout = h2o_timeout_val_from_uint(0);
-        set_timeout(conn, &self->zero_timeout, deferred_send_complete);
+        on_send_complete(conn->sock, 0);
     }
 }
 

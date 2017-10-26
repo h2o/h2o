@@ -39,6 +39,7 @@ struct st_h2o_mruby_http_request_context_t {
         unsigned method_is_head : 1;
         unsigned has_transfer_encoding : 1;
         h2o_iovec_t _bufs[2];
+        unsigned can_keepalive : 1;
     } req;
     struct {
         h2o_buffer_t *after_closed; /* when client becomes NULL, rest of the data will be stored to this pointer */
@@ -157,8 +158,13 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
     /* set input stream */
     assert(mrb_nil_p(ctx->refs.input_stream));
-    ctx->refs.input_stream = h2o_mruby_create_data_instance(
-        mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS), ctx, &input_stream_type);
+    mrb_value input_stream_class;
+    if (ctx->req.method_is_head || status == 101 || status == 204 || status == 304) {
+        input_stream_class = mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS);
+    } else {
+        input_stream_class = mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS);
+    }
+    ctx->refs.input_stream = h2o_mruby_create_data_instance(mrb, input_stream_class, ctx, &input_stream_type);
     mrb_ary_set(mrb, resp, 2, ctx->refs.input_stream);
 
     if (mrb_nil_p(ctx->receiver)) {
@@ -277,8 +283,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_write_req_chunk_done *req_body_done,
-                                          void **req_body_done_ctx, h2o_iovec_t *cur_body, h2o_url_t *dummy)
+                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
+                                          h2o_iovec_t *cur_body, h2o_url_t *dummy)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -311,9 +317,13 @@ static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
 
     /* ignore certain headers */
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length")) ||
-        h2o_lcstris(name.base, name.len, H2O_STRLIT("connection")) || h2o_lcstris(name.base, name.len, H2O_STRLIT("host")))
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length")) || h2o_lcstris(name.base, name.len, H2O_STRLIT("host")))
         return 0;
+
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("connection"))) {
+        if (!ctx->req.can_keepalive)
+            return 0;
+    }
 
     /* mark the existence of transfer-encoding in order to prevent us from adding content-length header */
     if (h2o_lcstris(name.base, name.len, H2O_STRLIT("transfer-encoding")))
@@ -365,17 +375,27 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         if (!mrb_nil_p(t)) {
             t = mrb_str_to_str(mrb, t);
             method = h2o_iovec_init(RSTRING_PTR(t), RSTRING_LEN(t));
+            if (h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"))) {
+                ctx->req.method_is_head = 1;
+            }
         }
     }
 
     /* start building the request */
-    h2o_buffer_reserve(&ctx->req.buf, method.len + 1);
+    h2o_buffer_reserve(&ctx->req.buf, method.len + 1 + url.path.len + sizeof(" HTTP/1.1\r\n") - 1);
     append_to_buffer(&ctx->req.buf, method.base, method.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
-    h2o_buffer_reserve(&ctx->req.buf,
-                       url.path.len + url.authority.len + sizeof(" HTTP/1.1\r\nConnection: close\r\nHost: \r\n") - 1);
     append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\nConnection: close\r\nHost: "));
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\n"));
+
+    ctx->req.can_keepalive = h2o_socketpool_can_keepalive(&shared_ctx->ctx->globalconf->proxy.global_socketpool);
+    if (!ctx->req.can_keepalive) {
+        h2o_buffer_reserve(&ctx->req.buf, sizeof("Connection: close\r\n") - 1);
+        append_to_buffer(&ctx->req.buf, H2O_STRLIT("Connection: close\r\n"));
+    }
+
+    h2o_buffer_reserve(&ctx->req.buf, url.authority.len + sizeof("Host: \r\n") - 1);
+    append_to_buffer(&ctx->req.buf, H2O_STRLIT("Host: "));
     append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
@@ -416,8 +436,9 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     /* build request and connect */
     ctx->refs.request = h2o_mruby_create_data_instance(
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
-    h2o_http1client_connect(&ctx->client, ctx, &ctx->ctx->shared->ctx->proxy.client_ctx, url.host, h2o_url_get_port(&url),
-                            url.scheme == &H2O_URL_SCHEME_HTTPS, on_connect, 0, NULL);
+
+    h2o_http1client_connect(&ctx->client, ctx, &shared_ctx->ctx->proxy.client_ctx,
+                            &shared_ctx->ctx->globalconf->proxy.global_socketpool, &url, on_connect, 0);
 
     return ctx->refs.request;
 }
@@ -524,6 +545,9 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
 
     klass = mrb_class_get_under(mrb, module, "HttpInputStream");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
+
+    klass = mrb_class_get_under(mrb, klass, "Empty");
+    mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS, mrb_obj_value(klass));
 
     h2o_mruby_define_callback(mrb, "_h2o__http_join_response", H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE);
     h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK);

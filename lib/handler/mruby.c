@@ -82,10 +82,10 @@ void h2o_mruby_setup_globals(mrb_state *mrb)
     h2o_mruby_eval_expr(mrb, "require \"#{$H2O_ROOT}/share/h2o/mruby/preloads.rb\"");
     if (mrb->exc != NULL) {
         if (mrb_obj_is_instance_of(mrb, mrb_obj_value(mrb->exc), mrb_class_get(mrb, "LoadError"))) {
-            fprintf(stderr, "file \"%s/%s\" not found. Did you forget to run `make install` ?", root,
+            fprintf(stderr, "file \"%s/%s\" not found. Did you forget to run `make install`?\n", root,
                     "share/h2o/mruby/preloads.rb");
         } else {
-            fprintf(stderr, "an error occurred while loading %s/%s: %s", root, "share/h2o/mruby/preloads.rb",
+            fprintf(stderr, "an error occurred while loading %s/%s: %s\n", root, "share/h2o/mruby/preloads.rb",
                     RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         }
         abort();
@@ -721,7 +721,8 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     }
 
     /* send the entire response immediately */
-    if (h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
+    if (status == 101 || status == 204 || status == 304 ||
+        h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
         h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_FINAL);
     } else {
