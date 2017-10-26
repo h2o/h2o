@@ -34,7 +34,6 @@
 struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
     int sent_headers;
-    int count_bytes_sent; /* whether count bytes_sent in finalostream (or it's counted in chunked ostream */
     struct {
         void *buf;
         h2o_ostream_pull_cb cb;
@@ -108,7 +107,6 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     conn->_ostr_final.super.do_send = finalostream_send;
     conn->_ostr_final.super.start_pull = finalostream_start_pull;
     conn->_ostr_final.sent_headers = 0;
-    conn->_ostr_final.count_bytes_sent = 0;
 }
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
@@ -716,10 +714,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     assert(self == &conn->_ostr_final);
 
     /* count bytes_sent if other ostreams haven't counted */
-    if (inbufcnt > 0 && req->bytes_sent == 0) {
-        self->count_bytes_sent = 1;
-    }
-    if (self->count_bytes_sent) {
+    if (req->bytes_counted_by_ostream == 0) {
         for (i = 0; i != inbufcnt; ++i) {
             req->bytes_sent += inbufs[i].len;
         }

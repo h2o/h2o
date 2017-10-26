@@ -94,6 +94,9 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     /* set content-encoding header */
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
 
+    /* set the flag that tells finalostream that req->bytes_sent is already counted */
+    req->bytes_counted_by_ostream = 1;
+
     /* setup filter */
     encoder = (void *)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
     encoder->super.do_send = send_chunk;
