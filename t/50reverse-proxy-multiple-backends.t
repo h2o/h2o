@@ -84,10 +84,9 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.backends:
-          - http://127.0.0.1.XIP.IO:$upstream_port1
-          - http://127.0.0.1.XIP.IO:$upstream_port2
-        proxy.reverse.path: /echo-server-port
+        proxy.reverse.url:
+          - http://127.0.0.1.XIP.IO:$upstream_port1/echo-server-port
+          - http://127.0.0.1.XIP.IO:$upstream_port2/echo-server-port
 EOT
 };
 
@@ -114,10 +113,9 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.backends:
-          - http://[unix:$upstream_file1]
-          - http://[unix:$upstream_file2]
-        proxy.reverse.path: /echo-server-port
+        proxy.reverse.url:
+          - http://[unix:$upstream_file1]/echo-server-port
+          - http://[unix:$upstream_file2]/echo-server-port
 EOT
 };
 
@@ -144,10 +142,9 @@ hosts:
   default:
     paths:
       /:
-        proxy.reverse.backends:
-          - http://127.0.0.1.XIP.IO:$upstream_port
-          - http://[unix:$upstream_file]
-        proxy.reverse.path: /echo-server-port
+        proxy.reverse.url:
+          - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
+          - http://[unix:$upstream_file]/echo-server-port
 EOT
 };
 

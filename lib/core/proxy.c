@@ -608,11 +608,18 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         if (req->overrides != NULL) {
             use_proxy_protocol = req->overrides->use_proxy_protocol;
             req->overrides->location_rewrite.match = origin;
-
             if (!req->overrides->proxy_preserve_host) {
                 req->scheme = origin->scheme;
                 req->authority = origin->authority;
             }
+            h2o_iovec_t append = req->path;
+            if (origin->path.base[origin->path.len - 1] == '/' && append.base[0] == '/') {
+                append.base += 1;
+                append.len -= 1;
+            }
+            req->path = h2o_concat(&req->pool, origin->path, append);
+            req->path_normalized =
+                h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
         }
         self->up_req.bufs[0] = build_request_line_host(req, use_proxy_protocol);
     }
@@ -682,23 +689,22 @@ void h2o__proxy_process_request(h2o_req_t *req)
 {
     h2o_req_overrides_t *overrides = req->overrides;
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
+    h2o_url_t target_buf, *target = &target_buf;
     int te_chunked = 0;
 
     h2o_socketpool_t *socketpool = &req->conn->ctx->globalconf->proxy.global_socketpool;
-    if (overrides != NULL && overrides->socketpool != NULL)
+    if (overrides != NULL && overrides->socketpool != NULL) {
         socketpool = overrides->socketpool;
+        if (!overrides->proxy_preserve_host)
+            target = NULL;
+    }
     int keepalive = h2o_socketpool_can_keepalive(socketpool);
     if (overrides != NULL && overrides->use_proxy_protocol)
         keepalive = 0;
+    if (target == &target_buf)
+        h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
 
     struct rp_generator_t *self = proxy_send_prepare(req, keepalive, &te_chunked);
-
-    h2o_url_t upstream;
-    if (overrides != NULL && overrides->upstream != NULL) {
-        upstream = *overrides->upstream;
-    } else {
-        h2o_url_init(&upstream, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
-    }
 
     /*
       When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
@@ -713,5 +719,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, &upstream, on_connect, te_chunked, req);
+    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect, te_chunked, req);
 }

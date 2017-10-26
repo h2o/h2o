@@ -260,39 +260,6 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
     return 0;
 }
 
-static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    struct proxy_configurator_t *self = (void *)cmd->configurator;
-    h2o_url_t parsed;
-
-    if (h2o_url_parse(node->data.scalar, SIZE_MAX, &parsed) != 0) {
-        h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
-        return -1;
-    }
-    if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node,
-                                   "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
-
-        return -1;
-    }
-    if (self->vars->reverse_path.base != NULL || self->vars->registered_as_backends) {
-        h2o_configurator_errprintf(cmd, node,
-                                   "please either set `proxy.reverse.backends` with `proxy.reverse.path` to support "
-                                   "multiple backends or only set `proxy.reverse.url`; the features are mutually exclusive");
-        return -1;
-    }
-
-    if (self->vars->headers_cmds != NULL)
-        h2o_mem_addref_shared(self->vars->headers_cmds);
-
-    /* register */
-    self->vars->registered_as_url = 1;
-    h2o_proxy_register_reverse_proxy(ctx->pathconf, &parsed, 1, self->vars, NULL);
-
-    return 0;
-}
-
 static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -353,123 +320,95 @@ static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_confi
     return 0;
 }
 
-static int on_config_reverse_path(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
 
-    self->vars->reverse_path = h2o_strdup(NULL, node->data.scalar, strlen(node->data.scalar));
-    /* we should check if path is legal here */
-    return 0;
-}
-
-static int on_config_reverse_backends(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    struct proxy_configurator_t *self = (void *)cmd->configurator;
-
-    h2o_url_t parsed;
-    h2o_url_t *upstreams;
     void **extra_lb_data = NULL;
-    size_t count;
-    size_t i;
+    yoml_t **inputs;
+    size_t num_upstreams, i, j;
 
-    if (self->vars->registered_as_url) {
-        h2o_configurator_errprintf(cmd, node,
-                                   "please either set `proxy.reverse.backends` with `proxy.reverse.path` to support "
-                                   "multiple backends or only set `proxy.reverse.url`; the features are mutually exclusive");
-        return -1;
-    }
-
+    /* parse the URL(s) */
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        if (h2o_url_parse(node->data.scalar, SIZE_MAX, &parsed) != 0) {
-            h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", node->data.scalar);
-            return -1;
-        }
-        if (parsed.path.len != 1 || parsed.path.base[0] != '/') {
-            h2o_configurator_errprintf(cmd, node, "backends should have no path");
-            return -1;
-        }
-        upstreams = &parsed;
-        count = 1;
-
+        inputs = &node;
+        num_upstreams = 1;
         break;
     case YOML_TYPE_SEQUENCE:
-        count = node->data.sequence.size;
-        upstreams = alloca(count * sizeof(h2o_url_t));
-        extra_lb_data = alloca(count * sizeof(void *));
-        for (i = 0; i != node->data.sequence.size; ++i) {
-            yoml_t *url_node = NULL;
-            yoml_t *element = node->data.sequence.elements[i];
-            yoml_t *node_for_parsing = element;
-            yoml_t *errnode;
-            char *errstr;
-            size_t j;
-
-            switch (element->type) {
-            case YOML_TYPE_SCALAR:
-                url_node = element;
-                node_for_parsing = NULL;
-                break;
-            case YOML_TYPE_MAPPING:
-                for (j = 0; j < element->data.mapping.size; j++) {
-                    yoml_t *key = element->data.mapping.elements[j].key;
-                    yoml_t *value = element->data.mapping.elements[j].value;
-                    if (key->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, key, "key must be a scalar");
+        inputs = node->data.sequence.elements;
+        num_upstreams = node->data.sequence.size;
+        break;
+    default:
+        h2o_fatal("unexpected node type");
+        return -1;
+    }
+    h2o_url_t *upstreams = alloca(sizeof(*upstreams) * num_upstreams);
+    extra_lb_data = alloca(num_upstreams * sizeof(void *));
+    for (i = 0; i != num_upstreams; ++i) {
+        yoml_t *url_node = NULL;
+        yoml_t *node_for_parsing;
+        yoml_t *errnode;
+        char *errstr;
+        switch (inputs[i]->type) {
+        case YOML_TYPE_SCALAR:
+            url_node = inputs[i];
+            node_for_parsing = NULL;
+            break;
+        case YOML_TYPE_MAPPING:
+            node_for_parsing = inputs[i];
+            for (j = 0; j < inputs[i]->data.mapping.size; j++) {
+                yoml_t *key = inputs[i]->data.mapping.elements[j].key;
+                yoml_t *value = inputs[i]->data.mapping.elements[j].value;
+                if (key->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, key, "key must be a scalar");
+                    return -1;
+                }
+                if (strcasecmp(key->data.scalar, "url") == 0) {
+                    if (value->type != YOML_TYPE_SCALAR) {
+                        h2o_configurator_errprintf(cmd, value, "value must be a scalar");
                         return -1;
                     }
-                    if (strcasecmp(key->data.scalar, "url") == 0) {
-                        if (value->type != YOML_TYPE_SCALAR) {
-                            h2o_configurator_errprintf(cmd, value, "value must be a scalar");
-                            return -1;
-                        }
-                        url_node = value;
-                        break;
-                    }
+                    url_node = value;
+                    break;
                 }
+            }
 
-                if (url_node == NULL) {
-                    h2o_configurator_errprintf(
-                        cmd, element, "mapping element of a sequence passed to proxy.backends must have `url` configured.");
-                    return -1;
-                }
-                break;
-            default:
-                h2o_configurator_errprintf(cmd, element,
-                                           "element of a sequence passed to proxy.reverse.backends must"
-                                           "be either a scalar or a mapping");
-                return -1;
-            }
-            if (h2o_url_parse(url_node->data.scalar, SIZE_MAX, &upstreams[i]) != 0) {
-                h2o_configurator_errprintf(cmd, node, "failed to parse URL: %s\n", element->data.scalar);
-                return -1;
-            }
-            if (upstreams[i].path.len != 1 || upstreams[i].path.base[0] != '/') {
-                h2o_configurator_errprintf(cmd, node, "backends should have no path");
+            if (url_node == NULL) {
+                h2o_configurator_errprintf(
+                                           cmd, inputs[i], "mapping element of a sequence passed to proxy.reverse.url must have `url` configured.");
                 return -1;
             }
 
-            if (self->vars->lb.callbacks->target_conf_parser != NULL) {
-                if (self->vars->lb.callbacks->target_conf_parser(node_for_parsing, &extra_lb_data[i], &errnode, &errstr) != 0) {
-                    h2o_configurator_errprintf(cmd, errnode, "%s\n", errstr);
-                    return -1;
-                }
+            break;
+        default:
+            h2o_configurator_errprintf(cmd, inputs[i],
+                                       "items of arguments passed to proxy.reverse.url must"
+                                       "be either a scalar or a mapping");
+            return -1;
+        }
+        if (h2o_url_parse(url_node->data.scalar, SIZE_MAX, upstreams + i) != 0) {
+            h2o_configurator_errprintf(cmd, url_node, "failed to parse URL: %s\n", url_node->data.scalar);
+            return -1;
+        }
+
+        if (self->vars->lb.callbacks->target_conf_parser != NULL) {
+            if (self->vars->lb.callbacks->target_conf_parser(node_for_parsing, &extra_lb_data[i], &errnode, &errstr) != 0) {
+                h2o_configurator_errprintf(cmd, errnode, "%s\n", errstr);
+                return -1;
             }
         }
 
-        break;
-    default:
-        h2o_configurator_errprintf(cmd, node, "argument to proxy.reverse.url must be either a scalar or a sequence");
-        return -1;
     }
 
+    if (self->vars->keepalive_timeout != 0 && self->vars->use_proxy_protocol) {
+        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
+                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+        return -1;
+    }
     if (self->vars->headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars->headers_cmds);
 
-    /* register */
-    self->vars->registered_as_backends = 1;
-    h2o_proxy_register_reverse_proxy(ctx->pathconf, upstreams, count, self->vars, extra_lb_data);
-
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, upstreams, num_upstreams, self->vars, extra_lb_data);
     return 0;
 }
 
@@ -554,9 +493,6 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     if (self->vars->headers_cmds != NULL)
         h2o_mem_release_shared(self->vars->headers_cmds);
 
-    if (self->vars->reverse_path.base != NULL)
-        free(self->vars->reverse_path.base);
-
     --self->vars;
     return 0;
 }
@@ -573,16 +509,12 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->reverse_path.base = NULL;
-    c->vars->reverse_path.len = 0;
     c->vars->io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
     c->vars->websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
-    c->vars->registered_as_url = 0;
-    c->vars->registered_as_backends = 0;
     c->vars->lb.callbacks = h2o_balancer_rr_get_callbacks();
     c->vars->lb.lb_conf = NULL;
     c->vars->max_buffer_size = SIZE_MAX;
@@ -590,20 +522,14 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     /* setup handlers */
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
-    h2o_configurator_define_command(
-        &c->super, "proxy.reverse.url",
-        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_url);
-    /* if reverse proxy with multiple backends, they should be equivalent. then use backends & path instead of url. */
-    h2o_configurator_define_command(&c->super, "proxy.reverse.backends",
+    h2o_configurator_define_command(&c->super, "proxy.reverse.url",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_reverse_backends);
-    h2o_configurator_define_command(&c->super, "proxy.reverse.path",
-                                    H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_reverse_path);
+                                    on_config_reverse_url);
     /* support selecting wanted load balancing strategy */
     h2o_configurator_define_command(&c->super, "proxy.reverse.balancer",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
+                                    H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                     on_config_reverse_balancer);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

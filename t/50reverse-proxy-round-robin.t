@@ -11,60 +11,53 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $upstream_port1 = empty_port();
-my $upstream_port2 = empty_port();
-
-my $guard1 = spawn_server(
-    argv     => [ qw(plackup -s Starlet --max-keepalive-reqs=5 --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port1, ASSETS_DIR . "/upstream.psgi" ],
+my $upstream_port = empty_port();
+my $guard = spawn_server(
+    argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port, ASSETS_DIR . "/upstream.psgi" ],
     is_ready =>  sub {
-        check_port($upstream_port1);
+        check_port($upstream_port);
     },
 );
-
-my $guard2 = spawn_server(
-    argv     => [ qw(plackup -s Starlet --max-keepalive-reqs=5 --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port2, ASSETS_DIR . "/upstream.psgi" ],
-    is_ready =>  sub {
-        check_port($upstream_port2);
-    },
-);
-
-my $access_count1 = 0;
-my $access_count2 = 0;
-my $unexpected = 0;
 
 my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
       /:
-        proxy.reverse.backends:
-          - http://127.0.0.1.XIP.IO:$upstream_port1
-          - http://127.0.0.1.XIP.IO:$upstream_port2
-        proxy.reverse.path: /echo-server-port
+        proxy.reverse.url:
+          - http://127.0.0.1.XIP.IO:$upstream_port/
+          - http://127.0.0.1.XIP.IO:$upstream_port/subdir/
 EOT
 
-sub do_test {
-    run_with_curl($server, sub {
-            my ($proto, $port, $curl) = @_;
-            my $resp = `$curl --silent $proto://127.0.0.1:$port/`;
-            if ($resp eq $upstream_port1) {
-                $access_count1 += 1;
-            } elsif ($resp eq $upstream_port2) {
-                $access_count2 += 1;
-            } else {
-                $unexpected = 1;
-            }
-            isnt $unexpected, 1, "no unexpected port"
-        });
-}
+my $expected1 = do {
+    open my $fh, "<", "@{[DOC_ROOT]}/index.txt"
+        or die "failed to open file:@{[DOC_ROOT]}/index.txt:$!";
+    local $/;
+    <$fh>;
+};
+my $expected2 = do {
+    open my $fh, "<", "@{[DOC_ROOT]}/subdir/index.txt"
+        or die "failed to open file:@{[DOC_ROOT]}/subdir/index.txt:$!";
+    local $/;
+    <$fh>;
+};
+my $body_re = qr/^@{[ join "|", map { quotemeta $_ } ($expected1, $expected2) ]}$/s;
+my $access_count1 = 0;
+my $access_count2 = 0;
 
 for my $i (1..50) {
-    do_test();
-    if ($unexpected == 1) {
-        last
-    }
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/index.txt`;
+        like $resp, $body_re;
+        if ($resp eq $expected1) {
+            $access_count1 += 1;
+        } else {
+            $access_count2 += 1;
+        }
+    });
 }
 
-isnt $unexpected, 1, "no unexpected port";
 is $access_count1, $access_count2, "load balanced";
+
 done_testing();

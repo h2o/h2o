@@ -64,9 +64,6 @@ struct st_h2o_http1client_t {
         h2o_socketpool_t *pool;
         h2o_socketpool_connect_request_t *connect_req;
     } sockpool;
-    struct {
-        char *server_name; /* non-null if ssl is to be used */
-    } ssl;
     h2o_socket_t *sock;
     void *data;
     h2o_http1client_informational_cb informational_cb;
@@ -75,8 +72,18 @@ struct st_h2o_http1client_t {
 extern const char *const h2o_http1client_error_is_eos;
 
 int h2o_http1client_write_req(void *priv, h2o_iovec_t chunk, int is_end_stream);
+/**
+ * connects to a HTTP/1.1 server
+ * @param client
+ * @param data
+ * @param ctx
+ * @param socketpool
+ * @param target URL of the target to connect to (or NULL if relying on a non-global socket pool to connect and supply SNI value)
+ * @param is_chunked
+ * @param cb
+ */
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *origin, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra);
+                             h2o_url_t *target, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *client);
 void h2o_http1client_body_read_stop(h2o_http1client_t *client);

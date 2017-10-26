@@ -1876,16 +1876,12 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    /* I don't know how to detect if handler registered on same path twice, so temporarily use these switches to do so. */
-    unsigned registered_as_url : 1;
-    unsigned registered_as_backends : 1;
     uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;
         uint64_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
-    h2o_iovec_t reverse_path; /* optional */
     struct {
         const h2o_balancer_callbacks_t *callbacks;
         void *lb_conf;
