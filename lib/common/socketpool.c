@@ -402,6 +402,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     } else {
         h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
         if (target_url->scheme->is_ssl) {
+            assert(req->pool->_ssl_ctx != NULL && "h2o_socketpool_set_ssl_ctx must be called for a pool that contains SSL target");
             h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, on_handshake_complete);
             return;
         }
