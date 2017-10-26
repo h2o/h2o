@@ -298,6 +298,14 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     free(pool->targets.entries);
 }
 
+void h2o_socketpool_set_ssl_ctx(h2o_socketpool_t *pool, SSL_CTX *ssl_ctx)
+{
+    if (pool->_ssl_ctx != NULL)
+        SSL_CTX_free(pool->_ssl_ctx);
+    SSL_CTX_up_ref(ssl_ctx);
+    pool->_ssl_ctx = ssl_ctx;
+}
+
 void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
     if (pool->_interval_cb.loop != NULL)
