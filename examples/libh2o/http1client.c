@@ -74,6 +74,12 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         h2o_socketpool_init_specific(sockpool, 10, &url_parsed, 1, NULL, NULL, NULL);
         h2o_socketpool_set_timeout(sockpool, 5000 /* in msec */);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
+
+        SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
+        SSL_CTX_free(ssl_ctx);
     }
     h2o_http1client_connect(NULL, req, ctx, sockpool, &url_parsed, on_connect, 0, NULL);
 }
@@ -213,9 +219,6 @@ int main(int argc, char **argv)
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
-    ctx.ssl_ctx = SSL_CTX_new(TLSv1_client_method());
-    SSL_CTX_load_verify_locations(ctx.ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
-    SSL_CTX_set_verify(ctx.ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
     while ((opt = getopt(argc, argv, "t:m:b:c:i:")) != -1) {
         switch (opt) {
