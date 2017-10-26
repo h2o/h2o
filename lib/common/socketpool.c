@@ -289,6 +289,9 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     if (pool->_lb.dispose != NULL)
         pool->_lb.dispose(pool->_lb.data);
 
+    if (pool->_ssl_ctx != NULL)
+        SSL_CTX_free(pool->_ssl_ctx);
+
     if (pool->_interval_cb.loop != NULL)
         h2o_socketpool_unregister_loop(pool, pool->_interval_cb.loop);
 
