@@ -171,7 +171,7 @@ static void lb_rr_dispose(void *data)
     free(data);
 }
 
-h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url,  struct sockaddr_storage *sa, socklen_t *salen)
+h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_storage *sa, socklen_t *salen)
 {
     memset(sa, 0, sizeof(*sa));
     const char *to_sun_err = h2o_url_host_to_sun(url->host, (struct sockaddr_un *)sa);

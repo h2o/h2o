@@ -284,7 +284,6 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
         goto Out;
     }
 
-
     /* setup the buffer to send pending data */
     if (bufcnt <= sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
         sock->_wreq.bufs = sock->_wreq.smallbufs;
