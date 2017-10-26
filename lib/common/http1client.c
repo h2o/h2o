@@ -532,24 +532,6 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static void on_handshake_complete(h2o_socket_t *sock, const char *err)
-{
-    struct st_h2o_http1client_private_t *client = sock->data;
-    h2o_timeout_unlink(&client->_timeout);
-
-    if (err == NULL) {
-        /* success */
-    } else if (err == h2o_socket_error_ssl_cert_name_mismatch &&
-               (SSL_CTX_get_verify_mode(client->super.ctx->ssl_ctx) & SSL_VERIFY_PEER) == 0) {
-        /* peer verification skipped */
-    } else {
-        on_connect_error(client, err);
-        return;
-    }
-
-    on_connection_ready(client);
-}
-
 static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin)
 {
     struct st_h2o_http1client_private_t *client = data;
@@ -566,13 +548,6 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     client->super.sock = sock;
     sock->data = client;
     client->_origin = origin;
-
-    /* perform TLS handshake if necessary */
-    if (client->_origin->scheme->is_ssl && sock->ssl == NULL) {
-        h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->_origin->host.base, on_handshake_complete);
-        return;
-    }
-
     h2o_timeout_unlink(&client->_timeout);
 
     on_connection_ready(client);

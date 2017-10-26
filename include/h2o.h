@@ -405,10 +405,6 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
-         * SSL context for connections initiated by the proxy (optional, governed by the application)
-         */
-        SSL_CTX *ssl_ctx;
-        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -1876,21 +1872,19 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;
         uint64_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
-    SSL_CTX *ssl_ctx; /* optional */
     size_t max_buffer_size;
 } h2o_proxy_config_vars_t;
 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
-                                      h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
+                                      uint64_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */

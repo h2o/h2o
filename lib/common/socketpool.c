@@ -289,6 +289,9 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     if (pool->_lb.dispose != NULL)
         pool->_lb.dispose(pool->_lb.data);
 
+    if (pool->_ssl_ctx != NULL)
+        SSL_CTX_free(pool->_ssl_ctx);
+
     if (pool->_interval_cb.loop != NULL)
         h2o_socketpool_unregister_loop(pool, pool->_interval_cb.loop);
 
@@ -296,6 +299,15 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         dispose_target(pool->targets.entries[i]);
     }
     free(pool->targets.entries);
+}
+
+void h2o_socketpool_set_ssl_ctx(h2o_socketpool_t *pool, SSL_CTX *ssl_ctx)
+{
+    if (pool->_ssl_ctx != NULL)
+        SSL_CTX_free(pool->_ssl_ctx);
+    if (ssl_ctx != NULL)
+        SSL_CTX_up_ref(ssl_ctx);
+    pool->_ssl_ctx = ssl_ctx;
 }
 
 void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
@@ -359,6 +371,22 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     }
 }
 
+static void on_handshake_complete(h2o_socket_t *sock, const char *err)
+{
+    h2o_socketpool_connect_request_t *req = sock->data;
+
+    assert(req->sock == sock);
+
+    if (err == h2o_socket_error_ssl_cert_name_mismatch && (SSL_CTX_get_verify_mode(req->pool->_ssl_ctx) & SSL_VERIFY_PEER) == 0) {
+        /* ignore CN mismatch if we are not verifying peer */
+    } else if (err != NULL) {
+        h2o_socket_close(sock);
+        req->sock = NULL;
+    }
+
+    call_connect_cb(req, err);
+}
+
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
@@ -370,12 +398,20 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         h2o_socket_close(sock);
         if (req->remaining_try_count == 0) {
             req->sock = NULL;
-            errstr = "connection failed";
+            errstr = "connection failed"; /* shouldn't we return err? */
         } else {
             try_connect(req);
             return;
         }
+    } else {
+        h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
+        if (target_url->scheme->is_ssl) {
+            assert(req->pool->_ssl_ctx != NULL && "h2o_socketpool_set_ssl_ctx must be called for a pool that contains SSL target");
+            h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, on_handshake_complete);
+            return;
+        }
     }
+
     call_connect_cb(req, errstr);
 }
 

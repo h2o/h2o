@@ -61,8 +61,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
         ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
-        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled &&
-        self->config.ssl_ctx == ctx->globalconf->proxy.ssl_ctx)
+        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled)
         return;
 
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
@@ -86,7 +85,6 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     } else {
         client_ctx->websocket_timeout = NULL;
     }
-    client_ctx->ssl_ctx = self->config.ssl_ctx;
 
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);
 }
@@ -121,13 +119,11 @@ static void on_handler_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void *)_self;
 
-    if (self->config.ssl_ctx != NULL)
-        SSL_CTX_free(self->config.ssl_ctx);
     h2o_socketpool_dispose(&self->sockpool);
 }
 
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      h2o_proxy_config_vars_t *config)
+                                      uint64_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config)
 {
     assert(num_upstreams != 0);
 
@@ -142,8 +138,6 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
 
     /* init socket pool */
     h2o_socketpool_init_specific(&self->sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams);
-    h2o_socketpool_set_timeout(&self->sockpool, config->keepalive_timeout);
-
-    if (self->config.ssl_ctx != NULL)
-        SSL_CTX_up_ref(self->config.ssl_ctx);
+    h2o_socketpool_set_timeout(&self->sockpool, keepalive_timeout);
+    h2o_socketpool_set_ssl_ctx(&self->sockpool, ssl_ctx);
 }
