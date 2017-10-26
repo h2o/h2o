@@ -66,8 +66,8 @@ struct st_fcgi_context_t {
     h2o_timeout_t io_timeout;
 };
 
-struct st_fcgi_generator_t {
-    h2o_generator_t super;
+struct st_fcgi_ostream_t {
+    h2o_ostream_t super;
     struct st_fcgi_context_t *ctx;
     h2o_req_t *req;
     h2o_socketpool_connect_request_t *connect_req;
@@ -411,77 +411,77 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, 0);
 }
 
-static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timeout_t *timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_fcgi_ostream_t *ostream, h2o_timeout_t *timeout, h2o_timeout_cb cb)
 {
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
+    if (h2o_timeout_is_linked(&ostream->timeout))
+        h2o_timeout_unlink(&ostream->timeout);
 
-    generator->timeout.cb = cb;
-    h2o_timeout_link(generator->req->conn->ctx->loop, timeout, &generator->timeout);
+    ostream->timeout.cb = cb;
+    h2o_timeout_link(ostream->req->conn->ctx->loop, timeout, &ostream->timeout);
 }
 
-static void close_generator(struct st_fcgi_generator_t *generator)
+static void close_ostream(struct st_fcgi_ostream_t *ostream)
 {
     /* can be called more than once */
 
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
-    if (generator->connect_req != NULL) {
-        h2o_socketpool_cancel_connect(generator->connect_req);
-        generator->connect_req = NULL;
+    if (h2o_timeout_is_linked(&ostream->timeout))
+        h2o_timeout_unlink(&ostream->timeout);
+    if (ostream->connect_req != NULL) {
+        h2o_socketpool_cancel_connect(ostream->connect_req);
+        ostream->connect_req = NULL;
     }
-    if (generator->sock != NULL) {
-        h2o_socket_close(generator->sock);
-        generator->sock = NULL;
+    if (ostream->sock != NULL) {
+        h2o_socket_close(ostream->sock);
+        ostream->sock = NULL;
     }
-    if (generator->resp.sending.buf != NULL)
-        h2o_doublebuffer_dispose(&generator->resp.sending);
-    if (generator->resp.receiving != NULL)
-        h2o_buffer_dispose(&generator->resp.receiving);
+    if (ostream->resp.sending.buf != NULL)
+        h2o_doublebuffer_dispose(&ostream->resp.sending);
+    if (ostream->resp.receiving != NULL)
+        h2o_buffer_dispose(&ostream->resp.receiving);
 }
 
-static void do_send(struct st_fcgi_generator_t *generator)
+static void do_send(struct st_fcgi_ostream_t *ostream)
 {
     h2o_iovec_t vecs[1];
     size_t veccnt;
     int is_final;
 
-    vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending, &generator->resp.receiving, generator->req->preferred_chunk_size);
+    vecs[0] = h2o_doublebuffer_prepare(&ostream->resp.sending, &ostream->resp.receiving, ostream->req->preferred_chunk_size);
     veccnt = vecs[0].len != 0 ? 1 : 0;
-    if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size && generator->resp.receiving->size == 0) {
+    if (ostream->sock == NULL && vecs[0].len == ostream->resp.sending.buf->size && ostream->resp.receiving->size == 0) {
         is_final = 1;
-        if (!(generator->leftsize == 0 || generator->leftsize == SIZE_MAX))
-            generator->req->http1_is_persistent = 0;
+        if (!(ostream->leftsize == 0 || ostream->leftsize == SIZE_MAX))
+            ostream->req->http1_is_persistent = 0;
     } else {
         if (veccnt == 0)
             return;
         is_final = 0;
     }
-    h2o_send(generator->req, vecs, veccnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    h2o_send(&ostream->super, vecs, veccnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
 }
 
-static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
+static void send_eos_and_close(struct st_fcgi_ostream_t *ostream, int can_keepalive)
 {
-    if (generator->ctx->handler->config.keepalive_timeout != 0 && can_keepalive)
-        h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock);
+    if (ostream->ctx->handler->config.keepalive_timeout != 0 && can_keepalive)
+        h2o_socketpool_return(&ostream->ctx->handler->sockpool, ostream->sock);
     else
-        h2o_socket_close(generator->sock);
-    generator->sock = NULL;
+        h2o_socket_close(ostream->sock);
+    ostream->sock = NULL;
 
-    if (h2o_timeout_is_linked(&generator->timeout))
-        h2o_timeout_unlink(&generator->timeout);
+    if (h2o_timeout_is_linked(&ostream->timeout))
+        h2o_timeout_unlink(&ostream->timeout);
 
-    if (generator->resp.sending.bytes_inflight == 0)
-        do_send(generator);
+    if (ostream->resp.sending.bytes_inflight == 0)
+        do_send(ostream);
 }
 
-static void errorclose(struct st_fcgi_generator_t *generator)
+static void errorclose(struct st_fcgi_ostream_t *ostream)
 {
-    if (generator->sent_headers) {
-        send_eos_and_close(generator, 0);
+    if (ostream->sent_headers) {
+        send_eos_and_close(ostream, 0);
     } else {
-        h2o_req_t *req = generator->req;
-        close_generator(generator);
+        h2o_req_t *req = ostream->req;
+        close_ostream(ostream);
         h2o_send_error_503(req, "Internal Server Error", "Internal Server Error", 0);
     }
 }
@@ -549,26 +549,26 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
     return 0;
 }
 
-static void append_content(struct st_fcgi_generator_t *generator, const void *src, size_t len)
+static void append_content(struct st_fcgi_ostream_t *ostream, const void *src, size_t len)
 {
     /* do not accumulate more than content-length bytes */
-    if (generator->leftsize != SIZE_MAX) {
-        if (generator->leftsize < len) {
-            len = generator->leftsize;
+    if (ostream->leftsize != SIZE_MAX) {
+        if (ostream->leftsize < len) {
+            len = ostream->leftsize;
             if (len == 0)
                 return;
         }
-        generator->leftsize -= len;
+        ostream->leftsize -= len;
     }
 
-    h2o_iovec_t reserved = h2o_buffer_reserve(&generator->resp.receiving, len);
+    h2o_iovec_t reserved = h2o_buffer_reserve(&ostream->resp.receiving, len);
     memcpy(reserved.base, src, len);
-    generator->resp.receiving->size += len;
+    ostream->resp.receiving->size += len;
 }
 
-static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_fcgi_record_header_t *header)
+static int handle_stdin_record(struct st_fcgi_ostream_t *ostream, struct st_fcgi_record_header_t *header)
 {
-    h2o_buffer_t *input = generator->sock->input;
+    h2o_buffer_t *input = ostream->sock->input;
     struct phr_header headers[100];
     size_t num_headers;
     int parse_result;
@@ -576,54 +576,55 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     if (header->contentLength == 0)
         return 0;
 
-    if (generator->sent_headers) {
+    if (ostream->sent_headers) {
         /* simply accumulate the data to response buffer */
-        append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
+        append_content(ostream, input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
         return 0;
     }
 
     /* parse the headers using the input buffer (or keep it in response buffer and parse) */
     num_headers = sizeof(headers) / sizeof(headers[0]);
-    if (generator->resp.receiving->size == 0) {
+    if (ostream->resp.receiving->size == 0) {
         parse_result = phr_parse_headers(input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength, headers, &num_headers, 0);
     } else {
-        size_t prevlen = generator->resp.receiving->size;
-        memcpy(h2o_buffer_reserve(&generator->resp.receiving, header->contentLength).base, input->bytes + FCGI_RECORD_HEADER_SIZE,
+        size_t prevlen = ostream->resp.receiving->size;
+        memcpy(h2o_buffer_reserve(&ostream->resp.receiving, header->contentLength).base, input->bytes + FCGI_RECORD_HEADER_SIZE,
                header->contentLength);
-        generator->resp.receiving->size = prevlen + header->contentLength;
+        ostream->resp.receiving->size = prevlen + header->contentLength;
         parse_result =
-            phr_parse_headers(generator->resp.receiving->bytes, generator->resp.receiving->size, headers, &num_headers, prevlen);
+            phr_parse_headers(ostream->resp.receiving->bytes, ostream->resp.receiving->size, headers, &num_headers, prevlen);
     }
     if (parse_result < 0) {
         if (parse_result == -2) {
             /* incomplete */
-            if (generator->resp.receiving->size == 0) {
-                memcpy(h2o_buffer_reserve(&generator->resp.receiving, header->contentLength).base,
+            if (ostream->resp.receiving->size == 0) {
+                memcpy(h2o_buffer_reserve(&ostream->resp.receiving, header->contentLength).base,
                        input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
-                generator->resp.receiving->size = header->contentLength;
+                ostream->resp.receiving->size = header->contentLength;
             }
             return 0;
         } else {
-            h2o_req_log_error(generator->req, MODULE_NAME, "received broken response");
+            h2o_req_log_error(ostream->req, MODULE_NAME, "received broken response");
             return -1;
         }
     }
 
     /* fill-in the headers, and start the response */
-    if (fill_headers(generator->req, headers, num_headers) != 0)
+    if (fill_headers(ostream->req, headers, num_headers) != 0)
         return -1;
-    generator->leftsize = generator->req->res.content_length;
-    h2o_start_response(generator->req, &generator->super);
-    generator->sent_headers = 1;
+    ostream->leftsize = ostream->req->res.content_length;
+    h2o_start_response(ostream->req);
+    h2o_insert_ostream(&ostream->super, NULL);
+    ostream->sent_headers = 1;
 
     /* rest of the contents should be stored in the response buffer */
-    if (generator->resp.receiving->size == 0) {
+    if (ostream->resp.receiving->size == 0) {
         size_t leftlen = header->contentLength - parse_result;
         if (leftlen != 0) {
-            append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE + parse_result, leftlen);
+            append_content(ostream, input->bytes + FCGI_RECORD_HEADER_SIZE + parse_result, leftlen);
         }
     } else {
-        h2o_buffer_consume(&generator->resp.receiving, parse_result);
+        h2o_buffer_consume(&ostream->resp.receiving, parse_result);
     }
 
     return 0;
@@ -631,22 +632,22 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
 
 static void on_rw_timeout(h2o_timeout_entry_t *entry)
 {
-    struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
+    struct st_fcgi_ostream_t *ostream = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_ostream_t, timeout, entry);
 
-    h2o_req_log_error(generator->req, MODULE_NAME, "I/O timeout");
-    errorclose(generator);
+    h2o_req_log_error(ostream->req, MODULE_NAME, "I/O timeout");
+    errorclose(ostream);
 }
 
 static void on_read(h2o_socket_t *sock, const char *err)
 {
-    struct st_fcgi_generator_t *generator = sock->data;
+    struct st_fcgi_ostream_t *ostream = sock->data;
     int can_keepalive = 0;
 
     if (err != NULL) {
         /* note: FastCGI server is allowed to close the connection any time after sending an empty FCGI_STDOUT record */
-        if (!generator->sent_headers)
-            h2o_req_log_error(generator->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
-        errorclose(generator);
+        if (!ostream->sent_headers)
+            h2o_req_log_error(ostream->req, MODULE_NAME, "fastcgi connection closed unexpectedly");
+        errorclose(ostream);
         return;
     }
 
@@ -663,124 +664,124 @@ static void on_read(h2o_socket_t *sock, const char *err)
         /* we have a complete record */
         switch (header.type) {
         case FCGI_STDOUT:
-            if (handle_stdin_record(generator, &header) != 0)
+            if (handle_stdin_record(ostream, &header) != 0)
                 goto Error;
             h2o_buffer_consume(&sock->input, recsize);
             break;
         case FCGI_STDERR:
             if (header.contentLength != 0)
-                h2o_req_log_error(generator->req, MODULE_NAME, "%.*s", (int)header.contentLength,
+                h2o_req_log_error(ostream->req, MODULE_NAME, "%.*s", (int)header.contentLength,
                                   sock->input->bytes + FCGI_RECORD_HEADER_SIZE);
             h2o_buffer_consume(&sock->input, recsize);
             break;
         case FCGI_END_REQUEST:
-            if (!generator->sent_headers) {
-                h2o_req_log_error(generator->req, MODULE_NAME, "received FCGI_END_REQUEST before end of the headers");
+            if (!ostream->sent_headers) {
+                h2o_req_log_error(ostream->req, MODULE_NAME, "received FCGI_END_REQUEST before end of the headers");
                 goto Error;
             }
             h2o_buffer_consume(&sock->input, recsize);
             can_keepalive = 1;
             goto EOS_Received;
         default:
-            h2o_req_log_error(generator->req, MODULE_NAME, "received unexpected record, type: %u", header.type);
+            h2o_req_log_error(ostream->req, MODULE_NAME, "received unexpected record, type: %u", header.type);
             h2o_buffer_consume(&sock->input, recsize);
-            if (!generator->sent_headers)
+            if (!ostream->sent_headers)
                 goto Error;
             goto EOS_Received;
         }
     }
 
     /* send data if necessary */
-    if (generator->sent_headers && generator->resp.sending.bytes_inflight == 0)
-        do_send(generator);
+    if (ostream->sent_headers && ostream->resp.sending.bytes_inflight == 0)
+        do_send(ostream);
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
+    set_timeout(ostream, &ostream->ctx->io_timeout, on_rw_timeout);
     return;
 
 EOS_Received:
-    send_eos_and_close(generator, can_keepalive);
+    send_eos_and_close(ostream, can_keepalive);
     return;
 
 Error:
-    errorclose(generator);
+    errorclose(ostream);
 }
 
 static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
-    struct st_fcgi_generator_t *generator = sock->data;
+    struct st_fcgi_ostream_t *ostream = sock->data;
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
+    set_timeout(ostream, &ostream->ctx->io_timeout, on_rw_timeout);
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
 static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *_dummy)
 {
-    struct st_fcgi_generator_t *generator = data;
+    struct st_fcgi_ostream_t *ostream = data;
     iovec_vector_t vecs;
 
-    generator->connect_req = NULL;
+    ostream->connect_req = NULL;
 
     if (sock == NULL) {
-        h2o_req_log_error(generator->req, MODULE_NAME, "connection failed:%s", errstr);
-        errorclose(generator);
+        h2o_req_log_error(ostream->req, MODULE_NAME, "connection failed:%s", errstr);
+        errorclose(ostream);
         return;
     }
 
-    generator->sock = sock;
-    sock->data = generator;
+    ostream->sock = sock;
+    sock->data = ostream;
 
-    build_request(generator->req, &vecs, 1, 65535, &generator->ctx->handler->config);
+    build_request(ostream->req, &vecs, 1, 65535, &ostream->ctx->handler->config);
 
     /* start sending the response */
-    h2o_socket_write(generator->sock, vecs.entries, vecs.size, on_send_complete);
+    h2o_socket_write(ostream->sock, vecs.entries, vecs.size, on_send_complete);
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_rw_timeout);
+    set_timeout(ostream, &ostream->ctx->io_timeout, on_rw_timeout);
 
     /* activate the receiver; note: FCGI spec allows the app to start sending the response before it receives FCGI_STDIN */
     h2o_socket_read_start(sock, on_read);
 }
 
-static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
+static void do_proceed(h2o_ostream_t *_ostream, h2o_req_t *req)
 {
-    struct st_fcgi_generator_t *generator = (void *)_generator;
+    struct st_fcgi_ostream_t *ostream = (void *)_ostream;
 
-    h2o_doublebuffer_consume(&generator->resp.sending);
-    do_send(generator);
+    h2o_doublebuffer_consume(&ostream->resp.sending);
+    do_send(ostream);
 }
 
-static void do_stop(h2o_generator_t *_generator, h2o_req_t *req)
+static void do_stop(h2o_ostream_t *_ostream, h2o_req_t *req)
 {
-    struct st_fcgi_generator_t *generator = (void *)_generator;
-    close_generator(generator);
+    struct st_fcgi_ostream_t *ostream = (void *)_ostream;
+    close_ostream(ostream);
 }
 
 static void on_connect_timeout(h2o_timeout_entry_t *entry)
 {
-    struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
+    struct st_fcgi_ostream_t *ostream = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_ostream_t, timeout, entry);
 
-    h2o_req_log_error(generator->req, MODULE_NAME, "connect timeout");
-    errorclose(generator);
+    h2o_req_log_error(ostream->req, MODULE_NAME, "connect timeout");
+    errorclose(ostream);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     h2o_fastcgi_handler_t *handler = (void *)_handler;
-    struct st_fcgi_generator_t *generator;
+    struct st_fcgi_ostream_t *ostream;
 
-    generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), (void (*)(void *))close_generator);
-    generator->super.proceed = do_proceed;
-    generator->super.stop = do_stop;
-    generator->ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
-    generator->req = req;
-    generator->sock = NULL;
-    generator->sent_headers = 0;
-    h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
-    generator->timeout = (h2o_timeout_entry_t){0};
+    ostream = (void *)h2o_create_ostream(req, sizeof(*ostream), (void (*)(void *))close_ostream);
+    ostream->super.proceed = do_proceed;
+    ostream->super.stop = do_stop;
+    ostream->ctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super);
+    ostream->req = req;
+    ostream->sock = NULL;
+    ostream->sent_headers = 0;
+    h2o_doublebuffer_init(&ostream->resp.sending, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&ostream->resp.receiving, &h2o_socket_buffer_prototype);
+    ostream->timeout = (h2o_timeout_entry_t){0};
 
-    set_timeout(generator, &generator->ctx->io_timeout, on_connect_timeout);
-    h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
-                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
+    set_timeout(ostream, &ostream->ctx->io_timeout, on_connect_timeout);
+    h2o_socketpool_connect(&ostream->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
+                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, ostream);
 
     return 0;
 }

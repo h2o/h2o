@@ -31,8 +31,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct st_h2o_http2_debug_state_handler_t *self = (void *)_self;
 
-    static h2o_generator_t generator = {NULL, NULL};
-
     if (req->conn->callbacks->get_debug_state == NULL) {
         return -1;
     }
@@ -53,10 +51,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("conn-flow-out"), 0, NULL, conn_flow_out.base,
                           conn_flow_out.len);
 
-    h2o_start_response(req, &generator);
-    h2o_send(req, debug_state->json.entries,
-             h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")) ? 0 : debug_state->json.size,
-             H2O_SEND_STATE_FINAL);
+    h2o_start_response(req);
+    h2o_send_inline(req, debug_state->json.entries, debug_state->json.size);
     return 0;
 }
 

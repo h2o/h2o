@@ -50,8 +50,8 @@ struct st_h2o_mruby_http_request_context_t {
         mrb_value input_stream;
     } refs;
     struct {
-        h2o_mruby_generator_t *generator;
-        void (*notify_cb)(h2o_mruby_generator_t *generator);
+        h2o_mruby_ostream_t *ostream;
+        void (*notify_cb)(h2o_mruby_ostream_t *ostream);
     } shortcut;
 };
 
@@ -76,8 +76,8 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
     assert(mrb_nil_p(ctx->refs.request) && mrb_nil_p(ctx->refs.input_stream));
 
-    /* ctx must be alive until generator gets disposed when shortcut used */
-    assert(ctx->shortcut.generator == NULL);
+    /* ctx must be alive until ostream gets disposed when shortcut used */
+    assert(ctx->shortcut.ostream == NULL);
 
     /* clear the refs */
     if (ctx->client != NULL) {
@@ -238,8 +238,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
     if (ctx->resp.has_content) {
         if (ctx->shortcut.notify_cb != NULL) {
-            assert(ctx->shortcut.generator);
-            ctx->shortcut.notify_cb(ctx->shortcut.generator);
+            assert(ctx->shortcut.ostream);
+            ctx->shortcut.notify_cb(ctx->shortcut.ostream);
         } else if (!mrb_nil_p(ctx->receiver)) {
             int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
             mrb_value chunk = build_chunk(ctx);
@@ -494,8 +494,8 @@ mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_val
     return ret;
 }
 
-h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *),
-                                                              h2o_mruby_generator_t *generator)
+h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_ostream_t *),
+                                                              h2o_mruby_ostream_t *ostream)
 {
     assert(mrb->exc == NULL);
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -509,17 +509,17 @@ h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mr
     }
     ctx->consumed = 1;
 
-    assert(ctx->shortcut.generator == NULL);
+    assert(ctx->shortcut.ostream == NULL);
     ctx->shortcut.notify_cb = cb;
-    ctx->shortcut.generator = generator;
+    ctx->shortcut.ostream = ostream;
     return ctx;
 }
 
-void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator)
+void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_ostream_t *ostream)
 {
-    assert(ctx->shortcut.generator == generator);
+    assert(ctx->shortcut.ostream == ostream);
     ctx->shortcut.notify_cb = NULL;
-    ctx->shortcut.generator = NULL;
+    ctx->shortcut.ostream = NULL;
 }
 
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)

@@ -106,16 +106,16 @@ typedef struct st_h2o_mruby_context_t {
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
 typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;
 
-typedef struct st_h2o_mruby_generator_t {
-    h2o_generator_t super;
-    h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
+typedef struct st_h2o_mruby_ostream_t {
+    h2o_ostream_t super;
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
     h2o_mruby_chunked_t *chunked;
     struct {
         mrb_value generator;
     } refs;
-} h2o_mruby_generator_t;
+    unsigned char response_is_started : 1;
+} h2o_mruby_ostream_t;
 
 #define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
 #define H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP -2
@@ -166,9 +166,9 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
 
 /* handler/mruby/chunked.c */
 void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *ctx);
-void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator);
-mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_value body);
-void h2o_mruby_send_chunked_dispose(h2o_mruby_generator_t *generator);
+void h2o_mruby_send_chunked_close(h2o_mruby_ostream_t *ostream);
+mrb_value h2o_mruby_send_chunked_init(h2o_mruby_ostream_t *ostream, mrb_value body);
+void h2o_mruby_send_chunked_dispose(h2o_mruby_ostream_t *ostream);
 
 mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *next_action);
 
@@ -178,9 +178,9 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx);
 mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value args, int *next_action);
 mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *next_action);
 
-h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *),
-                                                              h2o_mruby_generator_t *generator);
-void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_generator_t *generator);
+h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_ostream_t *),
+                                                              h2o_mruby_ostream_t *ostream);
+void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_context_t *ctx, h2o_mruby_ostream_t *ostream);
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final);
 
 /* handler/mruby/sleep.c */
@@ -190,6 +190,6 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
 
-h2o_mruby_generator_t *h2o_mruby_get_generator(mrb_state *mrb, mrb_value obj);
+h2o_mruby_ostream_t *h2o_mruby_get_ostream(mrb_state *mrb, mrb_value obj);
 
 #endif

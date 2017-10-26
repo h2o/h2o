@@ -690,28 +690,13 @@ typedef struct st_h2o_header_t {
  */
 typedef H2O_VECTOR(h2o_header_t) h2o_headers_t;
 
-/**
- * an object that generates a response.
- * The object is typically constructed by handlers calling the h2o_start_response function.
- */
-typedef struct st_h2o_generator_t {
-    /**
-     * called by the core to request new data to be pushed via the h2o_send function.
-     */
-    void (*proceed)(struct st_h2o_generator_t *self, h2o_req_t *req);
-    /**
-     * called by the core when there is a need to terminate the response abruptly
-     */
-    void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
-} h2o_generator_t;
-
 typedef enum h2o_send_state {
     H2O_SEND_STATE_IN_PROGRESS,
     H2O_SEND_STATE_FINAL,
     H2O_SEND_STATE_ERROR,
 } h2o_send_state_t;
 
-typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
+typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *buf);
 
 static inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
 {
@@ -722,13 +707,16 @@ static inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
  */
 struct st_h2o_ostream_t {
+    h2o_req_t *req;
     /**
      * points to the next output stream
      */
     struct st_h2o_ostream_t *next;
+
+    void (*proceed)(struct st_h2o_ostream_t *self, h2o_req_t *req);
     /**
      * called by the core to send output.
-     * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
+     * Intermediary output streams should process the given output and call the h2o_send function if any data can be
      * sent.
      */
     void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
@@ -757,7 +745,7 @@ typedef struct st_h2o_res_t {
     /**
      * length of the content (that is sent as the Content-Length header).
      * The default value is SIZE_MAX, which means that the length is indeterminate.
-     * Generators should set this value whenever possible.
+     * Ostreams should set this value whenever possible.
      */
     size_t content_length;
     /**
@@ -1049,7 +1037,7 @@ struct st_h2o_req_t {
      */
     h2o_res_t res;
     /**
-     * number of bytes sent by the generator (excluding headers)
+     * number of bytes sent by the ostream (excluding headers)
      */
     size_t bytes_sent;
     /**
@@ -1118,7 +1106,6 @@ struct st_h2o_req_t {
     h2o_proceed_req_cb proceed_req;
 
     /* internal structure */
-    h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
     h2o_timeout_entry_t _timeout_entry;
@@ -1304,11 +1291,10 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
                                     h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated);
 /**
- * called by handlers to set the generator
+ * called by handlers to setup ostreams
  * @param req the request
- * @param generator the generator
  */
-void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
+void h2o_start_response(h2o_req_t *req);
 /**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request
@@ -1316,7 +1302,9 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  * @param slot where the stream should be inserted
  * @return pointer to the ostream filter
  */
-h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+//h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot, void (*dispose)(void *));
+h2o_ostream_t *h2o_create_ostream(h2o_req_t *req, size_t sz, void (*dispose)(void *));
+void h2o_insert_ostream(h2o_ostream_t *ostream, h2o_ostream_t **slot);
 /**
  * prepares the request for processing by looking at the method, URI, headers
  */
@@ -1327,16 +1315,16 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
 
 /**
- * called by the generators to send output
- * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
- * @param req the request
+ * called by the ostream to send output
+ * note: ostreams should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
+ * @param ostream the ostream
  * @param bufs an array of buffers
  * @param bufcnt length of the buffers array
  * @param state describes if the output is final, has an error, or is in progress
  */
-void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+void h2o_send(h2o_ostream_t *ostream, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 /**
- * called by the connection layer to pull the content from generator (if pull mode is being used)
+ * called by the connection layer to pull the content from ostream (if pull mode is being used)
  */
 static h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
 /**
@@ -1361,9 +1349,9 @@ static void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot);
  * @param bufcnt length of the buffers array
  * @param state whether the output is in progress, final, or in error
  */
-void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+//void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 /**
- * called by the connection layer to request additional data to the generator
+ * called by the connection layer to request additional data to the ostream
  */
 static void h2o_proceed_response(h2o_req_t *req);
 /**
@@ -1500,7 +1488,7 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
  */
 static void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *));
 
-/* built-in generators */
+/* built-in functions to send data */
 
 enum {
     /**
@@ -1514,9 +1502,9 @@ enum {
 };
 
 /**
- * sends the given string as the response
+ * sends the given buffers as the response
  */
-void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
+void h2o_send_inline(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt);
 /**
  * sends the given information as an error response to the client
  */
@@ -1991,8 +1979,8 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 
 inline void h2o_proceed_response(h2o_req_t *req)
 {
-    if (req->_generator != NULL) {
-        req->_generator->proceed(req->_generator, req);
+    if (req->_ostr_top->next != NULL) {
+        req->_ostr_top->proceed(req->_ostr_top, req);
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, H2O_SEND_STATE_FINAL);
     }
@@ -2028,10 +2016,7 @@ Found:
 inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
 {
     h2o_send_state_t send_state;
-    assert(req->_generator != NULL);
-    send_state = cb(req->_generator, req, buf);
-    if (!h2o_send_state_is_in_progress(send_state))
-        req->_generator = NULL;
+    send_state = cb(req->_ostr_top, req, buf);
     return send_state;
 }
 

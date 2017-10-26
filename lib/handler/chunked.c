@@ -67,7 +67,7 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         outbufcnt++;
     }
 
-    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
+    h2o_send(&self->super, outbufs, outbufcnt, state);
 }
 
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -98,8 +98,9 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     req->bytes_counted_by_ostream = 1;
 
     /* setup filter */
-    encoder = (void *)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
+    encoder = (void *)h2o_create_ostream(req, sizeof(chunked_encoder_t), NULL);
     encoder->super.do_send = send_chunk;
+    h2o_insert_ostream(&encoder->super, slot);
     slot = &encoder->super.next;
 
 Next:
