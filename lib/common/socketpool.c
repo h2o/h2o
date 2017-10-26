@@ -305,7 +305,8 @@ void h2o_socketpool_set_ssl_ctx(h2o_socketpool_t *pool, SSL_CTX *ssl_ctx)
 {
     if (pool->_ssl_ctx != NULL)
         SSL_CTX_free(pool->_ssl_ctx);
-    SSL_CTX_up_ref(ssl_ctx);
+    if (ssl_ctx != NULL)
+        SSL_CTX_up_ref(ssl_ctx);
     pool->_ssl_ctx = ssl_ctx;
 }
 
