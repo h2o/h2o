@@ -200,6 +200,7 @@ void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin)
     socklen_t salen;
 
     h2o_url_copy(NULL, &target->url, origin);
+    assert(target->url.host.base[target->url.host.len] == '\0'); /* needs to be null-terminated in order to be used in SNI */
     target->type = detect_target_type(origin, &sa, &salen);
     if (!(target->type == H2O_SOCKETPOOL_TYPE_SOCKADDR && sa.ss_family == AF_UNIX)) {
         h2o_strtolower(target->url.authority.base, target->url.authority.len);

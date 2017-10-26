@@ -134,6 +134,10 @@ builder {
             [$env->{"REMOTE_PORT"} || ''],
         ];
     };
+    mount "/sni-name" => sub {
+        my $env = shift;
+        [200, [], [$env->{"psgix.io"}->get_servername]];
+    };
     mount "/streaming-body" => sub {
         my $env = shift;
         return sub {
