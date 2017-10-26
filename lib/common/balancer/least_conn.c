@@ -25,7 +25,7 @@ struct least_conn_t {
     pthread_mutex_t mutex;
 };
 
-static void init(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
+static void construct(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
 {
     struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
     pthread_mutex_init(&self->mutex, NULL);
@@ -43,8 +43,8 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int
 
     assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
-        if (!tried[i] && targets->entries[i]->_shared.request_count < least_conn) {
-            least_conn = targets->entries[i]->_shared.request_count;
+        if (!tried[i] && targets->entries[i]->_shared.leased_count < least_conn) {
+            least_conn = targets->entries[i]->_shared.leased_count;
             result = i;
         }
     }
@@ -54,7 +54,7 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int
     return result;
 }
 
-static void dispose(void *data)
+static void finalize(void *data)
 {
     struct least_conn_t *self = data;
     pthread_mutex_destroy(&self->mutex);
@@ -65,9 +65,9 @@ const h2o_balancer_callbacks_t *h2o_balancer_lc_get_callbacks() {
     static const h2o_balancer_callbacks_t lc_callbacks = {
         NULL,
         NULL,
-        init,
+        construct,
         selector,
-        dispose
+        finalize
     };
     return &lc_callbacks;
 }

@@ -119,7 +119,7 @@ static void add_bucket(hash_bucket_vector_t *ring, size_t *request_count, const 
     insert_new_bucket(ring, &bucket);
 }
 
-static void init(h2o_socketpool_target_vector_t *targets, void *_conf, void **data)
+static void construct(h2o_socketpool_target_vector_t *targets, void *_conf, void **data)
 {
     struct bounded_hash_conf_t *conf = _conf;
     size_t i;
@@ -140,7 +140,7 @@ static void init(h2o_socketpool_target_vector_t *targets, void *_conf, void **da
     h2o_vector_reserve(NULL, &self->buckets, targets->size);
     for (i = 0; i < targets->size; i++) {
         tag_buf_len = sprintf(tag_buf, "%s:%zu", targets->entries[i]->url.host.base, i);
-        add_bucket(&self->buckets, &targets->entries[i]->_shared.request_count, tag_buf, tag_buf_len);
+        add_bucket(&self->buckets, &targets->entries[i]->_shared.leased_count, tag_buf, tag_buf_len);
     }
     *data = self;
 }
@@ -291,7 +291,7 @@ static int overall_parser(yoml_t *node, void **data, yoml_t **errnode, char **er
     return -1;
 }
 
-static void dispose(void *data)
+static void finalize(void *data)
 {
     struct bounded_hash_t *self = data;
 
@@ -304,9 +304,9 @@ const h2o_balancer_callbacks_t *h2o_balancer_hash_get_callbacks() {
     static const h2o_balancer_callbacks_t hash_callbacks = {
         NULL,
         overall_parser,
-        init,
+        construct,
         selector,
-        dispose
+        finalize
     };
     return &hash_callbacks;
 }

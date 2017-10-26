@@ -65,7 +65,7 @@ typedef struct st_h2o_socketpool_target_t {
 
     struct {
         h2o_linklist_t sockets;
-        size_t request_count;   /* synchoronus operations should be used, counting requests on the fly */
+        size_t leased_count;   /* synchoronus operations should be used, counting requests on the fly */
     } _shared;
 } h2o_socketpool_target_t;
 

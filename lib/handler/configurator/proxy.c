@@ -411,11 +411,22 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
                                    "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
     }
+
+    if (num_upstreams == 0) {
+        h2o_configurator_errprintf(cmd, node, "please set at least one backend url for reverse proxy");
+        return -1;
+    }
+
     if (self->vars->conf.headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars->conf.headers_cmds);
 
-    h2o_proxy_register_reverse_proxy(ctx->pathconf, upstreams, num_upstreams, self->vars->keepalive_timeout, self->vars->ssl_ctx,
-                                     &self->vars->conf, extra_lb_data);
+    h2o_socketpool_t *sockpool = malloc(sizeof(*sockpool));
+    memset(sockpool, 0, sizeof(*sockpool));
+    /* init socket pool */
+    h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams, self->vars->conf.lb.callbacks, self->vars->conf.lb.lb_conf, extra_lb_data);
+    h2o_socketpool_set_timeout(sockpool, self->vars->keepalive_timeout);
+    h2o_socketpool_set_ssl_ctx(sockpool, self->vars->ssl_ctx);
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, &self->vars->conf, sockpool);
     return 0;
 }
 

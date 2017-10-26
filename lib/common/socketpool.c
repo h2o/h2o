@@ -124,7 +124,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
 
     /* we only need balancing if there're more than one backends */
     if (targets.size > 1) {
-        lb_callbacks->init(&pool->targets, lb_conf, &pool->_lb.data);
+        lb_callbacks->construct(&pool->targets, lb_conf, &pool->_lb.data);
         pool->_lb.callbacks = lb_callbacks;
     }
 }
@@ -177,7 +177,7 @@ void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin, void *lb_ta
         break;
     }
     target->data_for_balancer = lb_target_conf;
-    target->_shared.request_count = 0;
+    target->_shared.leased_count = 0;
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
 }
@@ -256,7 +256,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_destroy(&pool->_shared.mutex);
 
     if (pool->_lb.callbacks != NULL) {
-        pool->_lb.callbacks->dispose(pool->_lb.data);
+        pool->_lb.callbacks->finalize(pool->_lb.data);
     }
 
     if (pool->_ssl_ctx != NULL)
@@ -339,7 +339,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     assert(req->sock == sock);
 
     if (err != NULL) {
-        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.request_count, 1);
+        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         h2o_socket_close(sock);
         if (req->remaining_try_count == 0) {
             req->sock = NULL;
@@ -364,7 +364,7 @@ static void on_close(void *data)
 {
     struct on_close_data_t *close_data = data;
     h2o_socketpool_t *pool = close_data->pool;
-    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.request_count, 1);
+    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);
     free(close_data);
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
@@ -403,7 +403,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
                                                                       req->lb.tried, req->lb.req_extra);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
-            __sync_add_and_fetch(&pool->targets.entries[req->selected_target]->_shared.request_count, 1);
+            __sync_add_and_fetch(&pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         } else {
             req->selected_target = 0;
         }
@@ -572,7 +572,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     target = close_data->target;
     /* reset the on_close callback */
     assert(close_data->pool == pool);
-    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.request_count, 1);
+    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);
     free(close_data);
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;

@@ -26,7 +26,7 @@
 
 struct rp_handler_t {
     h2o_handler_t super;
-    h2o_socketpool_t sockpool;
+    h2o_socketpool_t *sockpool;
     h2o_proxy_config_vars_t config;
 };
 
@@ -37,7 +37,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
-    overrides->socketpool = &self->sockpool;
+    overrides->socketpool = self->sockpool;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->max_buffer_size = self->config.max_buffer_size;
@@ -57,7 +57,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
 
     /* use the loop of first context for handling socketpool timeouts */
-    h2o_socketpool_register_loop(&self->sockpool, ctx->loop);
+    h2o_socketpool_register_loop(self->sockpool, ctx->loop);
 
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
@@ -112,7 +112,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
         h2o_timeout_dispose(client_ctx->loop, client_ctx->websocket_timeout);
         free(client_ctx->websocket_timeout);
     }
-    h2o_socketpool_unregister_loop(&self->sockpool, ctx->loop);
+    h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
     free(client_ctx);
 }
 
@@ -120,15 +120,12 @@ static void on_handler_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void *)_self;
 
-    h2o_socketpool_dispose(&self->sockpool);
+    h2o_socketpool_dispose(self->sockpool);
+    free(self->sockpool);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      uint64_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config,
-                                      void **lb_per_target_conf)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool)
 {
-    assert(num_upstreams != 0);
-
     struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
 
     self->super.on_context_init = on_context_init;
@@ -137,9 +134,5 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.on_req = on_req;
     self->super.supports_request_streaming = 1;
     self->config = *config;
-
-    /* init socket pool */
-    h2o_socketpool_init_specific(&self->sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams, config->lb.callbacks, config->lb.lb_conf, lb_per_target_conf);
-    h2o_socketpool_set_timeout(&self->sockpool, keepalive_timeout);
-    h2o_socketpool_set_ssl_ctx(&self->sockpool, ssl_ctx);
+    self->sockpool = sockpool;
 }

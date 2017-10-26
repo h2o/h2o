@@ -33,7 +33,7 @@ struct round_robin_target_conf_t {
     size_t weight;
 };
 
-static void init(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
+static void construct(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
 {
     size_t i;
     struct round_robin_target_conf_t *target_conf;
@@ -137,7 +137,7 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int
     return result;
 }
 
-static void dispose(void *data)
+static void finalize(void *data)
 {
     struct round_robin_t *self = data;
     pthread_mutex_destroy(&self->mutex);
@@ -149,9 +149,9 @@ const h2o_balancer_callbacks_t *h2o_balancer_rr_get_callbacks() {
     static const h2o_balancer_callbacks_t rr_callbacks = {
         per_target_conf_parser,
         NULL,
-        init,
+        construct,
         selector,
-        dispose
+        finalize
     };
     return &rr_callbacks;
 }

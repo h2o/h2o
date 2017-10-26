@@ -37,16 +37,16 @@ typedef int (*h2o_balancer_overall_conf_parser)(yoml_t *node, void **data, yoml_
 
 typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried, void *req_extra);
 
-typedef void (*h2o_balancer_initializer)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
+typedef void (*h2o_balancer_constructor)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
 
-typedef void (*h2o_balancer_dispose_cb)(void *data);
+typedef void (*h2o_balancer_finalizer)(void *data);
 
 typedef struct st_h2o_balancer_callbacks_t {
     h2o_balancer_per_target_conf_parser target_conf_parser;
     h2o_balancer_overall_conf_parser overall_conf_parser;
-    h2o_balancer_initializer init;
+    h2o_balancer_constructor construct;
     h2o_balancer_selector selector;
-    h2o_balancer_dispose_cb dispose;
+    h2o_balancer_finalizer finalize;
 } h2o_balancer_callbacks_t;
 
 /* round robin */
