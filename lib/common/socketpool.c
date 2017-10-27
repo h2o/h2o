@@ -54,7 +54,7 @@ struct st_h2o_socketpool_connect_request_t {
     size_t remaining_try_count;
     struct {
         int *tried;
-        void *req_extra;
+        h2o_balancer_request_info *req_info;
     } lb;
 };
 
@@ -400,7 +400,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     if (req->lb.tried != NULL) {
         if (req->pool->_lb.callbacks != NULL) {
             req->selected_target = req->pool->_lb.callbacks->selector(&req->pool->targets, req->pool->_lb.data,
-                                                                      req->lb.tried, req->lb.req_extra);
+                                                                      req->lb.tried, req->lb.req_info);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
             __sync_add_and_fetch(&pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
@@ -504,7 +504,8 @@ static size_t lookup_target(h2o_socketpool_t *pool, h2o_url_t *url)
 }
 
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data, void *req_extra)
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data,
+                            h2o_balancer_request_info *req_info)
 {
     if (_req != NULL)
         *_req = NULL;
@@ -542,7 +543,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         req->lb.tried = h2o_mem_alloc(sizeof(int) * pool->targets.size);
         memset(req->lb.tried, 0, sizeof(int) * pool->targets.size);
         req->remaining_try_count = pool->targets.size;
-        req->lb.req_extra = req_extra;
+        req->lb.req_info = req_info;
     } else {
         req->remaining_try_count = 1;
     }

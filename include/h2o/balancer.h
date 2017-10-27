@@ -26,8 +26,16 @@
 extern "C" {
 #endif
 
+#include <netdb.h>
 #include "h2o/socketpool.h"
 #include "yoml.h"
+
+typedef struct st_h2o_balancer_request_info {
+    char remote_addr[NI_MAXHOST];
+    size_t remote_addr_len;
+    int32_t port;
+    h2o_iovec_t path;
+} h2o_balancer_request_info;
 
 /* function for configure per-target extra data when parsing configuration. node = NULL for default */
 typedef int (*h2o_balancer_per_target_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
@@ -35,7 +43,8 @@ typedef int (*h2o_balancer_per_target_conf_parser)(yoml_t *node, void **data, yo
 /* function for parsing overall configuration of a load balancer */
 typedef int (*h2o_balancer_overall_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
 
-typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried, void *req_extra);
+typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried,
+                                        h2o_balancer_request_info *req_info);
 
 typedef void (*h2o_balancer_constructor)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
 

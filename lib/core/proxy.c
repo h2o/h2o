@@ -43,6 +43,7 @@ struct rp_generator_t {
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
     void (*await_send)(h2o_http1client_t *);
+    h2o_balancer_request_info lb_req_info;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -691,6 +692,11 @@ void h2o__proxy_process_request(h2o_req_t *req)
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
     h2o_url_t target_buf, *target = &target_buf;
     int te_chunked = 0;
+    size_t remote_addr_len = SIZE_MAX;
+    char remote_addr[NI_MAXHOST];
+    struct sockaddr_storage ss;
+    socklen_t sslen;
+    int32_t port = 0;
 
     h2o_socketpool_t *socketpool = &req->conn->ctx->globalconf->proxy.global_socketpool;
     if (overrides != NULL && overrides->socketpool != NULL) {
@@ -706,6 +712,22 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
     struct rp_generator_t *self = proxy_send_prepare(req, keepalive, &te_chunked);
 
+    if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0) {
+        remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
+        port = h2o_socket_getport((void *)&ss);
+    }
+    
+    /* if remote addr cannot be fetched, use a default one */
+    if (remote_addr_len == SIZE_MAX) {
+        strcpy(remote_addr, "169.254.0.1");
+        remote_addr_len = strlen(remote_addr);
+        port = 1000;
+    }
+
+    self->lb_req_info.path = req->path;
+    self->lb_req_info.port = port;
+    memcpy(self->lb_req_info.remote_addr, remote_addr, remote_addr_len);
+    self->lb_req_info.remote_addr_len = remote_addr_len;
     /*
       When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
      connection even when there is a pooled connection to the peer, since the header (as defined in
@@ -719,5 +741,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect, te_chunked, req);
+    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect, te_chunked, &self->lb_req_info);
 }

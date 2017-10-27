@@ -82,7 +82,8 @@ int h2o_http1client_write_req(void *priv, h2o_iovec_t chunk, int is_end_stream);
  * @param cb
  */
 void h2o_http1client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *target, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra);
+                             h2o_url_t *target, h2o_http1client_connect_cb cb, int is_chunked,
+                             h2o_balancer_request_info *req_info);
 void h2o_http1client_cancel(h2o_http1client_t *client);
 h2o_socket_t *h2o_http1client_steal_socket(h2o_http1client_t *client);
 void h2o_http1client_body_read_stop(h2o_http1client_t *client);

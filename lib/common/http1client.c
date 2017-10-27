@@ -579,7 +579,8 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
 void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *target, h2o_http1client_connect_cb cb, int is_chunked, void *req_extra)
+                             h2o_url_t *target, h2o_http1client_connect_cb cb, int is_chunked,
+                             h2o_balancer_request_info *req_info)
 {
     assert(socketpool != NULL);
     struct st_h2o_http1client_private_t *client;
@@ -591,7 +592,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     client->super.sockpool.pool = socketpool;
 
     h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, target, ctx->loop, ctx->getaddr_receiver,
-                           on_pool_connect, client, req_extra);
+                           on_pool_connect, client, req_info);
 }
 
 void h2o_http1client_cancel(h2o_http1client_t *_client)

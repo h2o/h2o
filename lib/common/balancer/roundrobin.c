@@ -100,7 +100,7 @@ static int per_target_conf_parser(yoml_t *node, void **data, yoml_t **errnode, c
     return -1;
 }
 
-static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, void *dummy)
+static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, h2o_balancer_request_info *dummy)
 {
     size_t i;
     size_t result = 0;

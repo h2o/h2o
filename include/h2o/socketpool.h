@@ -73,6 +73,8 @@ typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
 
 typedef struct st_h2o_balancer_callbacks_t h2o_balancer_callbacks_t;
 
+typedef struct st_h2o_balancer_request_info h2o_balancer_request_info;
+
 typedef struct st_h2o_socketpool_t {
 
     /* read-only vars */
@@ -141,7 +143,8 @@ void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
  * connects to the peer (or returns a pooled connection)
  */
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data, void *req_extra);
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data,
+                            h2o_balancer_request_info *req_info);
 /**
  * cancels a connect request
  */

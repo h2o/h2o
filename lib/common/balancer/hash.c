@@ -173,44 +173,29 @@ static size_t bounded_find_bucket(hash_bucket_vector_t buckets, size_t startat, 
     return index;
 }
 
-static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, void *_req)
+static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, h2o_balancer_request_info *req_info)
 {
-    h2o_req_t *req = _req;
     struct bounded_hash_t *self = _data;
     h2o_iovec_t hash_key;
     
     size_t index;
     size_t i;
     hash_bucket_vector_t buckets = self->buckets;
-    
-    size_t remote_addr_len = SIZE_MAX;
+
     char remote_addr[NI_MAXHOST + sizeof(":65535")];
-    struct sockaddr_storage ss;
-    socklen_t sslen;
-    int32_t port;
-    
-    if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0) {
-        remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
-        port = h2o_socket_getport((void *)&ss);
-    }
-    
-    /* if remote addr cannot be fetched, use a default one */
-    if (remote_addr_len == SIZE_MAX) {
-        strcpy(remote_addr, "169.254.0.1");
-        remote_addr_len = strlen(remote_addr);
-    }
+    memcpy(remote_addr, req_info->remote_addr, req_info->remote_addr_len);
     
     switch (self->type) {
         case H2O_BALANCER_HASH_KEY_TYPE_IP:
-            hash_key.base = remote_addr;
-            hash_key.len = remote_addr_len;
+            hash_key.base = req_info->remote_addr;
+            hash_key.len = req_info->remote_addr_len;
             break;
         case H2O_BALANCER_HASH_KEY_TYPE_IP_PORT:
             hash_key.base = remote_addr;
-            hash_key.len = sprintf(remote_addr + remote_addr_len, ":%d", port);
+            hash_key.len = sprintf(remote_addr + req_info->remote_addr_len, ":%d", req_info->port);
             break;
         case H2O_BALANCER_HASH_KEY_TYPE_PATH:
-            hash_key = req->path;
+            hash_key = req_info->path;
             break;
     }
     index = find_bucket_for_item(&self->buckets, hash_key.base, hash_key.len);
