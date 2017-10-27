@@ -454,7 +454,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         --confpath_len_wo_slash;
 
     assert(confpath_len_wo_slash <= generator->req->path_normalized.len);
-    size_t path_info_offset = generator->req->norm_indexes != NULL ? generator->req->norm_indexes[confpath_len_wo_slash] - 1 : confpath_len_wo_slash;
+    size_t path_info_offset = generator->req->norm_indexes != NULL ? generator->req->norm_indexes[confpath_len_wo_slash - 1] : confpath_len_wo_slash;
     size_t path_info_length = (generator->req->query_at != SIZE_MAX ? generator->req->query_at : generator->req->path.len) - path_info_offset;
 
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SCRIPT_NAME),

@@ -525,7 +525,7 @@ EOT
     unlike $headers, qr{^content-length:}im;
 };
 
-subtest 'PATH_INFO' => sub {
+subtest 'PATH_INFO and SCRIPT_NAME' => sub {
     plan skip_all => "nc not found"
         unless prog_exists("nc");
 
@@ -537,7 +537,13 @@ hosts:
       /abc:
         mruby.handler: |
           proc {|env|
-            [200, {}, [env['PATH_INFO']]]
+            [200, {}, [env['SCRIPT_NAME'] + ', ' + env['PATH_INFO']]]
+          }
+
+      "/foo bar":
+        mruby.handler: |
+          proc {|env|
+            [200, {}, [env['SCRIPT_NAME'] + ', ' + env['PATH_INFO']]]
           }
 EOT
     my $nc = sub {
@@ -548,11 +554,14 @@ EOT
     };
     my $body;
     (undef, $body) = $nc->('/abc/def%20ghi');
-    is $body, '/def%20ghi', 'should be kept undecoded';
+    is $body, '/abc, /def%20ghi', 'should be kept undecoded';
     (undef, $body) = $nc->('/abc/def/../ghi/../jhk');
-    is $body, '/def/../ghi/../jhk', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339614160';
+    is $body, '/abc, /def/../ghi/../jhk', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339614160';
     (undef, $body) = $nc->('/123/../abc/def/../ghi');
-    is $body, '/def/../ghi', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339658134';
+    is $body, '/abc, /def/../ghi', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339658134';
+
+    (undef, $body) = $nc->('/foo%20bar/baz');
+    is $body, '/foo bar, /baz', 'paths should be decoded';
 };
 
 done_testing();
