@@ -667,6 +667,9 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
+    if (! h2o_send_state_is_in_progress(send_state))
+        conn->req._ostr_top = &conn->_ostr_final.super;
+
     /* write */
     h2o_socket_write(conn->sock, &buf, 1, h2o_send_state_is_in_progress(send_state) ? on_send_next_pull : on_send_complete);
 }
@@ -719,6 +722,9 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
             req->bytes_sent += inbufs[i].len;
         }
     }
+
+    if (! h2o_send_state_is_in_progress(send_state))
+        req->_ostr_top = &self->super;
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);

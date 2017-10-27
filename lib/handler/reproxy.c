@@ -55,8 +55,9 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     h2o_send_redirect_internal(req, method, dest.base, dest.len, 0);
 
     /* setup filter (that swallows the response until the timeout gets fired) */
-    h2o_ostream_t *ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
+    h2o_ostream_t *ostream = h2o_create_ostream(req, sizeof(*ostream), NULL);
     ostream->do_send = on_send;
+    h2o_insert_ostream(ostream, slot);
 }
 
 void h2o_reproxy_register(h2o_pathconf_t *pathconf)

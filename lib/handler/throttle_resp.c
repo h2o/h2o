@@ -59,7 +59,7 @@ static void real_send(throttle_resp_t *self)
 
     self->tokens -= token_consume;
 
-    h2o_ostream_send_next(&self->super, self->req, self->state.bufs.entries, self->state.bufs.size, self->state.stream_state);
+    h2o_send(&self->super, self->state.bufs.entries, self->state.bufs.size, self->state.stream_state);
     if (!h2o_send_state_is_in_progress(self->state.stream_state))
         h2o_timeout_unlink(&self->timeout_entry);
 }
@@ -123,7 +123,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     if (H2O_UNLIKELY((traffic_limit = h2o_strtosizefwd(&buf, traffic_header_value.len)) == SIZE_MAX))
         goto Next;
 
-    throttle = (void *)h2o_add_ostream(req, sizeof(throttle_resp_t), slot);
+    throttle = (void *)h2o_create_ostream(req, sizeof(throttle_resp_t), NULL);
+    h2o_insert_ostream(&throttle->super, slot);
 
     /* calculate the token increment per 100ms */
     throttle->token_inc = traffic_limit * HUNDRED_MS / ONE_SECOND;

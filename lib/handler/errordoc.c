@@ -123,9 +123,11 @@ Found:
     req->headers = (h2o_headers_t){NULL};
     req->res.headers = (h2o_headers_t){NULL};
     h2o_send_redirect_internal(req, method, errordoc->url.base, errordoc->url.len, 0);
-    /* create fake ostream that swallows the contents emitted by the generator */
-    ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
+    /* create fake ostream that swallows the contents emitted by previous ostream */
+
+    ostream = h2o_create_ostream(req, sizeof(*ostream), NULL);
     ostream->do_send = on_ostream_send;
+    h2o_insert_ostream(ostream, slot);
 }
 
 void h2o_errordoc_register(h2o_pathconf_t *pathconf, h2o_errordoc_t *errdocs, size_t cnt)

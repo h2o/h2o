@@ -35,7 +35,14 @@ struct st_compress_filter_t {
 struct st_compress_encoder_t {
     h2o_ostream_t super;
     h2o_compress_context_t *compressor;
+    h2o_timeout_entry_t defer_proceed_timeout_entry;
 };
+
+static void on_defer_proceed_timeout(h2o_timeout_entry_t *entry)
+{
+    struct st_compress_encoder_t *self = H2O_STRUCT_FROM_MEMBER(struct st_compress_encoder_t, defer_proceed_timeout_entry, entry);
+    h2o_proceed_response(self->super.req);
+}
 
 static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
@@ -44,7 +51,11 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
     size_t outbufcnt;
 
     self->compressor->transform(self->compressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
-    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
+    if (h2o_send_state_is_in_progress(state) && outbufcnt == 0) {
+        h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &self->defer_proceed_timeout_entry);
+    } else {
+        h2o_send(&self->super, outbufs, outbufcnt, state);
+    }
 }
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -123,10 +134,12 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     }
 
     /* setup filter */
-    encoder = (void *)h2o_add_ostream(req, sizeof(*encoder), slot);
+    encoder = (void *)h2o_create_ostream(req, sizeof(*encoder), NULL);
     encoder->super.do_send = do_send;
-    slot = &encoder->super.next;
     encoder->compressor = compressor;
+    encoder->defer_proceed_timeout_entry = (h2o_timeout_entry_t){0, on_defer_proceed_timeout};
+    h2o_insert_ostream(&encoder->super, slot);
+    slot = &encoder->super.next;
 
     /* adjust preferred chunk size (compress by 8192 bytes) */
     if (req->preferred_chunk_size > BUF_SIZE)

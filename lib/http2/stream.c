@@ -345,6 +345,9 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
     stream->send_state = state;
 
+    if (! h2o_send_state_is_in_progress(state))
+        req->_ostr_top = self;
+
     /* send headers */
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
