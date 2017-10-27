@@ -525,20 +525,34 @@ EOT
     unlike $headers, qr{^content-length:}im;
 };
 
-subtest 'PATH_INFO should be kept undecoded' => sub {
+subtest 'PATH_INFO' => sub {
+    plan skip_all => "nc not found"
+        unless prog_exists("nc");
+
     my $server = spawn_h2o(<< "EOT");
 num-threads: 1
 hosts:
   default:
     paths:
-      /foo:
+      /abc:
         mruby.handler: |
           proc {|env|
             [200, {}, [env['PATH_INFO']]]
           }
 EOT
-    (undef, my $body) = run_prog("curl --silent http://127.0.0.1:$server->{port}/foo/bar%20baz");
-    is $body, '/bar%20baz';
+    my $nc = sub {
+        my $path = shift;
+        my $cmd = "echo 'GET $path HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r' | nc 127.0.0.1 $server->{port}";
+        (undef, my $r) = run_prog($cmd);
+        split(/\r\n\r\n/, $r, 2);
+    };
+    my $body;
+    (undef, $body) = $nc->('/abc/def%20ghi');
+    is $body, '/def%20ghi', 'should be kept undecoded';
+    (undef, $body) = $nc->('/abc/def/../ghi/../jhk');
+    is $body, '/def/../ghi/../jhk', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339614160';
+    (undef, $body) = $nc->('/123/../abc/def/../ghi');
+    is $body, '/def/../ghi', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339658134';
 };
 
 done_testing();
