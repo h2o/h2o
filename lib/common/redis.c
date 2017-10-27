@@ -64,11 +64,11 @@ h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz)
     return conn;
 }
 
-static void on_connect_error_deferred(h2o_timeout_timer_t *timeout_entry)
+static void on_connect_error_deferred(h2o_timer_t *timeout_entry)
 {
     h2o_redis_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_redis_conn_t, _timeout_entry, timeout_entry);
     on_redis_disconnect(conn->_redis, REDIS_ERR);
-    h2o_timeout_del_timer(timeout_entry);
+    h2o_timer_del(timeout_entry);
     redisAsyncFree(conn->_redis);
 }
 
@@ -89,8 +89,8 @@ void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port)
 
     if (redis->err != REDIS_OK) {
         /* some connection failures can be detected at this time */
-        h2o_timeout_init_timer(&conn->_timeout_entry, on_connect_error_deferred);
-        h2o_timeout_add_timer(conn->loop, &conn->_timeout_entry, h2o_timeout_val_from_uint(0));
+        h2o_timer_init(&conn->_timeout_entry, on_connect_error_deferred);
+        h2o_timer_add(conn->loop, &conn->_timeout_entry, h2o_timer_val_from_uint(0));
         return;
     }
 
@@ -117,10 +117,10 @@ static void on_command(redisAsyncContext *redis, void *reply, void *privdata)
     free(command);
 }
 
-static void on_command_error_deferred(h2o_timeout_timer_t *entry)
+static void on_command_error_deferred(h2o_timer_t *entry)
 {
     struct st_h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(struct st_h2o_redis_command_t, _timeout_entry, entry);
-    h2o_timeout_del_timer(entry);
+    h2o_timer_del(entry);
     on_command(command->conn->_redis, NULL, command);
 }
 
@@ -131,17 +131,17 @@ h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command
     command->conn = conn;
     command->cb = cb;
     command->data = cb_data;
-    h2o_timeout_init_timer(&command->_timeout_entry, on_command_error_deferred);
+    h2o_timer_init(&command->_timeout_entry, on_command_error_deferred);
 
     if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
-        h2o_timeout_add_timer(conn->loop, &conn->_timeout_entry, h2o_timeout_val_from_uint(0));
+        h2o_timer_add(conn->loop, &conn->_timeout_entry, h2o_timer_val_from_uint(0));
     } else {
         va_list ap;
         va_start(ap, format);
         if (redisvAsyncCommand(conn->_redis, on_command, command, format, ap) != REDIS_OK) {
             /* the case that redisAsyncContext is disconnecting or freeing */
             /* call the callback immediately with NULL reply */
-            h2o_timeout_add_timer(conn->loop, &conn->_timeout_entry, h2o_timeout_val_from_uint(0));
+            h2o_timer_add(conn->loop, &conn->_timeout_entry, h2o_timer_val_from_uint(0));
         }
         va_end(ap);
     }

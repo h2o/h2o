@@ -264,7 +264,7 @@ SET(LIB_SOURCE_FILES
     lib/common/socketpool.c
     lib/common/string.c
     lib/common/time.c
-    lib/common/timeout.c
+    lib/common/timer.c
     lib/common/url.c
 
     lib/core/config.c

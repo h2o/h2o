@@ -120,7 +120,7 @@ static int setup_configurators(h2o_configurator_context_t *ctx, int is_enter, yo
     return 0;
 }
 
-static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timeout_val_t *slot)
+static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timer_val_t *slot)
 {
     uint64_t timeout_in_secs;
 
@@ -130,7 +130,7 @@ static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, h2o_tim
     if (timeout_in_secs == 0)
         *slot = H2O_TIMEOUT_VAL_UNSET;
     else
-        *slot = h2o_timeout_val_from_uint(timeout_in_secs * 1000);
+        *slot = h2o_timer_val_from_uint(timeout_in_secs * 1000);
     return 0;
 }
 

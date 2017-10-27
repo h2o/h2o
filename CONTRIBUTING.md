@@ -152,17 +152,17 @@ uses the `H2O_STRUCT_FROM_MEMBER` macro (which in turn uses
 compute the offset of a member in a struct. This way, given a pointer to
 a member, we can obtain a pointer to the enclosing struct.
 
-Linked lists (`h2o_linklist_t`) and timers (`h2o_timeout_entry_t`)
+Linked lists (`h2o_linklist_t`) and timers (`h2o_timer_wheel_entry_t`)
 are typical users of the technique.
 
 Here's an example demonstrating how to pass context alongside a timer pointer:
 ```c
 struct st_mycontext_t {
   int nr_timer_hits;
-  h2o_timeout_entry_t timer;
+  h2o_timer_wheel_entry_t timer;
 };
 
-void timer(h2o_timeout_entry_t *t)
+void timer(h2o_timer_wheel_entry_t *t)
 {
     struct st_mycontext_t *mc = H2O_STRUCT_FROM_MEMBER(struct st_mycontext_t, timer, t);
     mc->nr_timer_hits++;

@@ -63,7 +63,7 @@ typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
 
 struct st_fcgi_context_t {
     h2o_fastcgi_handler_t *handler;
-    h2o_timeout_val_t io_timeout;
+    h2o_timer_val_t io_timeout;
 };
 
 struct st_fcgi_generator_t {
@@ -78,7 +78,7 @@ struct st_fcgi_generator_t {
         h2o_doublebuffer_t sending;
         h2o_buffer_t *receiving;
     } resp;
-    h2o_timeout_timer_t timeout;
+    h2o_timer_t timeout;
 };
 
 struct st_h2o_fastcgi_handler_t {
@@ -411,17 +411,17 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, 0);
 }
 
-static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timeout_val_t timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timer_val_t timeout, h2o_timer_cb cb)
 {
-    h2o_timeout_del_timer(&generator->timeout);
-    h2o_timeout_init_timer(&generator->timeout, cb);
-    h2o_timeout_add_timer(generator->req->conn->ctx->loop, &generator->timeout, timeout);
+    h2o_timer_del(&generator->timeout);
+    h2o_timer_init(&generator->timeout, cb);
+    h2o_timer_add(generator->req->conn->ctx->loop, &generator->timeout, timeout);
 }
 
 static void close_generator(struct st_fcgi_generator_t *generator)
 {
     /* can be called more than once */
-    h2o_timeout_del_timer(&generator->timeout);
+    h2o_timer_del(&generator->timeout);
     if (generator->connect_req != NULL) {
         h2o_socketpool_cancel_connect(generator->connect_req);
         generator->connect_req = NULL;
@@ -463,7 +463,7 @@ static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_ke
     else
         h2o_socket_close(generator->sock);
     generator->sock = NULL;
-    h2o_timeout_del_timer(&generator->timeout);
+    h2o_timer_del(&generator->timeout);
     if (generator->resp.sending.bytes_inflight == 0)
         do_send(generator);
 }
@@ -622,7 +622,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     return 0;
 }
 
-static void on_rw_timeout(h2o_timeout_timer_t *entry)
+static void on_rw_timeout(h2o_timer_t *entry)
 {
     struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
 
@@ -747,7 +747,7 @@ static void do_stop(h2o_generator_t *_generator, h2o_req_t *req)
     close_generator(generator);
 }
 
-static void on_connect_timeout(h2o_timeout_timer_t *entry)
+static void on_connect_timeout(h2o_timer_t *entry)
 {
     struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
 
@@ -769,8 +769,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->sent_headers = 0;
     h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
-    h2o_timeout_init_timer(&generator->timeout, on_connect_timeout);
-    h2o_timeout_add_timer(req->conn->ctx->loop, &generator->timeout, generator->ctx->io_timeout);
+    h2o_timer_init(&generator->timeout, on_connect_timeout);
+    h2o_timer_add(req->conn->ctx->loop, &generator->timeout, generator->ctx->io_timeout);
 
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
                            req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);

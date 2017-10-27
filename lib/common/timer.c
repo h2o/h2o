@@ -25,31 +25,31 @@
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/socket.h"
-#include "h2o/timeout.h"
+#include "h2o/timer.h"
 
 #if H2O_USE_LIBUV
 
 static void on_timeout(uv_timer_t *uv_timer)
 {
-    h2o_timeout_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timeout_timer_t, _backend.timer, uv_timer);
+    h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _backend.timer, uv_timer);
     timer->cb(timer);
 }
 
-int h2o_timeout_add_timer(h2o_loop_t *l, h2o_timeout_timer_t *timer, h2o_timeout_val_t t_rel_expire)
+int h2o_timer_add(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
 {
     uv_timer_init(l, &timer->_backend.timer);
     uv_timer_start(&timer->_backend.timer, on_timeout, h2o_now(l) + t_rel_expire.val, 0);
     return 1;
 }
 
-void h2o_timeout_del_timer(h2o_timeout_timer_t *timer)
+void h2o_timer_del(h2o_timer_t *timer)
 {
     uv_timer_stop(&timer->_backend.timer);
 }
 
-h2o_timeout_timer_t *h2o_timeout_create_timer(h2o_timeout_cb cb)
+h2o_timer_t *h2o_timer_create(h2o_timer_cb cb)
 {
-    return calloc(1, sizeof(h2o_timeout_timer_t));
+    return calloc(1, sizeof(h2o_timer_t));
 }
 
 #else

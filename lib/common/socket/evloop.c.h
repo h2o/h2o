@@ -61,7 +61,7 @@ static void write_pending(struct st_h2o_evloop_socket_t *sock);
 static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
 static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
-static int h2o_timeout_is_empty(h2o_timeout_t *w);
+static int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 
 /* functions to be defined in the backends */
 static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
@@ -454,8 +454,8 @@ h2o_evloop_t *create_evloop(size_t sz)
 
     update_now(loop);
 
-    h2o_timeout_init(&loop->_timerwheel);
-    h2o_timeout_run(loop, loop->_now);
+    h2o_timer_wheel_init(&loop->_timerwheel);
+    h2o_timer_wheel_run(loop, loop->_now);
 
     return loop;
 }
@@ -469,7 +469,7 @@ void update_now(h2o_evloop_t *loop)
 
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 {
-    uint64_t wake_at = h2o_timeout_get_wake_at(&loop->_timerwheel);
+    uint64_t wake_at = h2o_timer_wheel_get_wake_at(&loop->_timerwheel);
 
     update_now(loop);
 
@@ -551,7 +551,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     struct st_h2o_evloop_socket_t *sock;
 
     /* timeouts are governed by the application and MUST be destroyed prior to destroying the loop */
-    assert(h2o_timeout_is_empty(&loop->_timerwheel));
+    assert(h2o_timer_wheel_is_empty(&loop->_timerwheel));
 
     /* dispose all socket */
     while ((sock = loop->_pending_as_client) != NULL) {
@@ -585,9 +585,9 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 
     /* run the pending callbacks */
     run_pending(loop);
-    h2o_timeout_run(loop, loop->_now);
+    h2o_timer_wheel_run(loop, loop->_now);
 
-    /* assert h2o_timeout_run has called run_pending */
+    /* assert h2o_timer_wheel_run has called run_pending */
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
 
@@ -616,7 +616,7 @@ static inline int clz(uint64_t n)
 #define WHEEL_DEBUG(...)
 #endif
 
-static void h2o_timer_show(h2o_timeout_timer_t *timer)
+static void h2o_timer_show(h2o_timer_t *timer)
 {
     WHEEL_DEBUG("timer with expire_at %" PRIu64 "\n", timer->expire_at);
 #ifdef TW_DEBUG_VERBOSE
@@ -626,37 +626,37 @@ static void h2o_timer_show(h2o_timeout_timer_t *timer)
 #endif
 }
 
-static void h2o_timeout_slot_show(h2o_timeout_slot_t *slot)
+static void h2o_timer_wheel_slot_show(h2o_timer_wheel_slot_t *slot)
 {
     h2o_linklist_t *node;
     if (h2o_linklist_is_empty(slot))
         return;
 
     for (node = slot->next; node != slot; node = node->next) {
-        h2o_timeout_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_timer_t, _link, node);
+        h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, node);
         h2o_timer_show(entry);
     }
 }
 
-void h2o_timeout_show(h2o_timeout_t *w)
+void h2o_timer_wheel_show(h2o_timer_wheel_t *w)
 {
     int i, slot;
 
     for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
-            h2o_timeout_slot_t *s = &(w->wheel[i][slot]);
-            h2o_timeout_slot_show(s);
+            h2o_timer_wheel_slot_t *s = &(w->wheel[i][slot]);
+            h2o_timer_wheel_slot_show(s);
         }
     }
 }
 
-uint64_t h2o_timeout_get_wake_at(h2o_timeout_t *w)
+uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *w)
 {
     int i = 0;
 
     for (; i < 64; i++) {
         int real_slot = (w->last_run + i) & H2O_TIMERWHEEL_SLOTS_MASK;
-        h2o_timeout_slot_t *slot = &w->wheel[0][real_slot];
+        h2o_timer_wheel_slot_t *slot = &w->wheel[0][real_slot];
         if (!h2o_linklist_is_empty(slot)) {
             return w->last_run + i;
         }
@@ -665,10 +665,10 @@ uint64_t h2o_timeout_get_wake_at(h2o_timeout_t *w)
 }
 
 /* timer APIs */
-h2o_timeout_timer_t *h2o_timeout_create_timer(h2o_timeout_cb cb)
+h2o_timer_t *h2o_timer_create(h2o_timer_cb cb)
 {
-    h2o_timeout_timer_t *t = h2o_mem_alloc(sizeof(h2o_timeout_timer_t));
-    memset((void *)t, 0, sizeof(struct st_h2o_timeout_timer_t));
+    h2o_timer_t *t = h2o_mem_alloc(sizeof(h2o_timer_t));
+    memset((void *)t, 0, sizeof(struct st_h2o_timer_t));
     t->cb = cb;
 
     return t;
@@ -689,9 +689,9 @@ static inline int timer_slot(int wheel, uint64_t expire)
     return H2O_TIMERWHEEL_SLOTS_MASK & (expire >> wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL);
 }
 
-static h2o_timeout_slot_t *compute_slot(h2o_timeout_t *w, h2o_timeout_timer_t *timer)
+static h2o_timer_wheel_slot_t *compute_slot(h2o_timer_wheel_t *w, h2o_timer_t *timer)
 {
-    h2o_timeout_slot_t *slot;
+    h2o_timer_wheel_slot_t *slot;
     uint64_t diff = timer->expire_at - w->last_run;
     if (diff < H2O_TIMERWHEEL_SLOTS_PER_WHEEL) {
         slot = &w->wheel[0][0] + (timer->expire_at & H2O_TIMERWHEEL_SLOTS_MASK);
@@ -705,9 +705,9 @@ static h2o_timeout_slot_t *compute_slot(h2o_timeout_t *w, h2o_timeout_timer_t *t
     return slot;
 }
 
-int h2o_timeout_add_timer_(h2o_timeout_t *w, h2o_timeout_timer_t *timer, h2o_timeout_abs_t t_abs_expire)
+int h2o_timer_add_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t t_abs_expire)
 {
-    h2o_timeout_slot_t *slot;
+    h2o_timer_wheel_slot_t *slot;
     uint64_t abs_expire = t_abs_expire.val;
 
     assert(t_abs_expire.set == 1);
@@ -733,14 +733,14 @@ int h2o_timeout_add_timer_(h2o_timeout_t *w, h2o_timeout_timer_t *timer, h2o_tim
     return 0;
 }
 
-void h2o_timeout_del_timer(h2o_timeout_timer_t *timer)
+void h2o_timer_del(h2o_timer_t *timer)
 {
     if (h2o_linklist_is_linked(&timer->_link)) {
         h2o_linklist_unlink(&timer->_link);
     }
 }
 
-inline int h2o_timer_is_linked(h2o_timeout_timer_t *entry)
+inline int h2o_timer_is_linked(h2o_timer_t *entry)
 {
     return h2o_linklist_is_linked(&entry->_link);
 }
@@ -750,10 +750,10 @@ inline int h2o_timer_is_linked(h2o_timeout_timer_t *entry)
 /**
  * initializes a timerwheel
  */
-void h2o_timeout_init(h2o_timeout_t *w)
+void h2o_timer_wheel_init(h2o_timer_wheel_t *w)
 {
     int i, j;
-    memset(w, 0, sizeof(h2o_timeout_t));
+    memset(w, 0, sizeof(h2o_timer_wheel_t));
 
     for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
         for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++) {
@@ -767,21 +767,21 @@ void h2o_timeout_init(h2o_timeout_t *w)
  * cascading happens when the lower wheel wraps around and ticks the next
  * higher wheel
  */
-static void cascade(h2o_timeout_t *w, int wheel, int slot)
+static void cascade(h2o_timer_wheel_t *w, int wheel, int slot)
 {
     /* cannot cascade timers on wheel 0 */
     assert(wheel > 0);
 
     WHEEL_DEBUG("cascade timers on wheel %d slot %d\n", wheel, slot);
-    h2o_timeout_slot_t *s = &w->wheel[wheel][slot];
+    h2o_timer_wheel_slot_t *s = &w->wheel[wheel][slot];
     while (!h2o_linklist_is_empty(s)) {
-        h2o_timeout_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_timer_t, _link, s->next);
+        h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
         h2o_linklist_unlink(&entry->_link);
-        h2o_timeout_add_timer_(w, entry, h2o_timeout_abs_from_uint(entry->expire_at));
+        h2o_timer_add_(w, entry, h2o_timer_abs_from_uint(entry->expire_at));
     }
 }
 
-int h2o_timeout_is_empty(h2o_timeout_t *w)
+int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
 {
     int i, slot;
 
@@ -793,7 +793,7 @@ int h2o_timeout_is_empty(h2o_timeout_t *w)
     return 1;
 }
 
-size_t h2o_timeout__run_(h2o_timeout_t *w, uint64_t now)
+size_t h2o_timer_wheel__run_(h2o_timer_wheel_t *w, uint64_t now)
 {
     int i, j, now_slot, prev_slot, end_slot;
     uint64_t abs_wtime = w->last_run;
@@ -806,7 +806,7 @@ size_t h2o_timeout__run_(h2o_timeout_t *w, uint64_t now)
     /* how the wheel is run: based on abs_wtime and now, we should be able
      * to figure out the wheel id on which most update happens. Most likely
      * the operating wheel is wheel 0 (wid == 0), since we optimize the case
-     * where h2o_timeout_run() is called very frequently, i.e the gap
+     * where h2o_timer_wheel_run() is called very frequently, i.e the gap
      * between abs_wtime and now is normally small. */
     int wid = timer_wheel(abs_wtime, now);
     WHEEL_DEBUG(" wtime %" PRIu64 ", now %" PRIu64 " wid %d\n", abs_wtime, now, wid);
@@ -838,7 +838,7 @@ size_t h2o_timeout__run_(h2o_timeout_t *w, uint64_t now)
 
     /* expiration processing */
     while (!h2o_linklist_is_empty(&todo)) {
-        h2o_timeout_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timeout_timer_t, _link, todo.next);
+        h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, todo.next);
         /* remove this timer from todo list */
         h2o_linklist_unlink(&timer->_link);
         timer->cb(timer);
@@ -848,26 +848,26 @@ size_t h2o_timeout__run_(h2o_timeout_t *w, uint64_t now)
     return count;
 }
 
-size_t h2o_timeout__run(h2o_loop_t *loop, uint64_t now)
+size_t h2o_timer_wheel__run(h2o_loop_t *loop, uint64_t now)
 {
-    size_t ret = h2o_timeout__run_(&loop->_timerwheel, now);
+    size_t ret = h2o_timer_wheel__run_(&loop->_timerwheel, now);
     run_pending(loop);
     return ret;
 }
 
-static h2o_timeout_abs_t h2o_timeout_now_plus(h2o_loop_t *loop, h2o_timeout_val_t timeout)
+static h2o_timer_abs_t h2o_timer_now_plus(h2o_loop_t *loop, h2o_timer_val_t timeout)
 {
     assert(timeout.set == 1);
-    h2o_timeout_abs_t abs = {1, timeout.val + h2o_now(loop)};
+    h2o_timer_abs_t abs = {1, timeout.val + h2o_now(loop)};
     return abs;
 }
 
-int h2o_timeout_add_timer(h2o_loop_t *l, h2o_timeout_timer_t *timer, h2o_timeout_val_t t_rel_expire)
+int h2o_timer_add(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
 {
-    return h2o_timeout_add_timer_(&l->_timerwheel, timer, h2o_timeout_now_plus(l, t_rel_expire));
+    return h2o_timer_add_(&l->_timerwheel, timer, h2o_timer_now_plus(l, t_rel_expire));
 }
 
-size_t h2o_timeout_run(h2o_loop_t *loop, uint64_t now)
+size_t h2o_timer_wheel_run(h2o_loop_t *loop, uint64_t now)
 {
-    return h2o_timeout__run(loop, now);
+    return h2o_timer_wheel__run(loop, now);
 }

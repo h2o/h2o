@@ -350,20 +350,20 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
         /* Create a single h2o host with multiple request handlers */
         h2o_config_init(&config);
-        config.http2.idle_timeout = h2o_timeout_val_from_uint(10 * 1000);
-        config.http1.req_timeout = h2o_timeout_val_from_uint(10 * 1000);
-        config.proxy.io_timeout = h2o_timeout_val_from_uint(10 * 1000);
-        config.proxy.connect_timeout = h2o_timeout_val_from_uint(0);
-        config.proxy.first_byte_timeout = h2o_timeout_val_from_uint(0);
+        config.http2.idle_timeout = h2o_timer_val_from_uint(10 * 1000);
+        config.http1.req_timeout = h2o_timer_val_from_uint(10 * 1000);
+        config.proxy.io_timeout = h2o_timer_val_from_uint(10 * 1000);
+        config.proxy.connect_timeout = h2o_timer_val_from_uint(0);
+        config.proxy.first_byte_timeout = h2o_timer_val_from_uint(0);
         h2o_proxy_config_vars_t proxy_config = {};
 
-        proxy_config.io_timeout = h2o_timeout_val_from_uint(10 * 1000);
-        proxy_config.connect_timeout = h2o_timeout_val_from_uint(0);
-        proxy_config.first_byte_timeout = h2o_timeout_val_from_uint(0);
+        proxy_config.io_timeout = h2o_timer_val_from_uint(10 * 1000);
+        proxy_config.connect_timeout = h2o_timer_val_from_uint(0);
+        proxy_config.first_byte_timeout = h2o_timer_val_from_uint(0);
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT(unix_listener)), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
         h2o_url_parse(unix_listener, strlen(unix_listener), &upstream);
-        h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &upstream, 1, h2o_timeout_val_from_uint(2000), NULL,
+        h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &upstream, 1, h2o_timer_val_from_uint(2000), NULL,
                                          &proxy_config);
         h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "./examples/doc_root", NULL, NULL, 0);
 

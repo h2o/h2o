@@ -158,11 +158,6 @@ void h2o_context_dispose(h2o_context_t *ctx)
 
     if (ctx->_timestamp_cache.value != NULL)
         h2o_mem_release_shared(ctx->_timestamp_cache.value);
-
-#if H2O_USE_LIBUV
-    /* make sure the handles released by h2o_timeout_dispose get freed */
-    uv_run(ctx->loop, UV_RUN_NOWAIT);
-#endif
 }
 
 void h2o_context_request_shutdown(h2o_context_t *ctx)

@@ -30,7 +30,7 @@
 
 typedef uv_loop_t h2o_loop_t;
 
-struct st_h2o_timeout_backend_properties_t {
+struct st_h2o_timer_backend_properties_t {
     uv_timer_t timer;
 };
 

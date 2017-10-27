@@ -31,7 +31,7 @@
 #include "h2o/linklist.h"
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
-#include "h2o/timeout.h"
+#include "h2o/timer.h"
 #include "h2o/socket.h"
 
 struct pool_entry_t {
@@ -99,7 +99,7 @@ static void destroy_expired(h2o_socketpool_t *pool)
     }
 }
 
-static void on_timeout(h2o_timeout_timer_t *timeout_entry)
+static void on_timeout(h2o_timer_t *timeout_entry)
 {
     /* FIXME decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well
@@ -111,7 +111,7 @@ static void on_timeout(h2o_timeout_timer_t *timeout_entry)
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 
-    h2o_timeout_add_timer(pool->_interval_cb.loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
+    h2o_timer_add(pool->_interval_cb.loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
@@ -121,7 +121,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     memset(pool, 0, sizeof(*pool));
 
     pool->capacity = capacity;
-    pool->timeout = h2o_timeout_val_from_uint(2000);
+    pool->timeout = h2o_timer_val_from_uint(2000);
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
@@ -317,16 +317,16 @@ void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
         return;
 
     pool->_interval_cb.loop = loop;
-    pool->_interval_cb.timeout = h2o_timeout_val_from_uint(1000);
-    h2o_timeout_init_timer(&pool->_interval_cb.entry, on_timeout);
-    h2o_timeout_add_timer(loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
+    pool->_interval_cb.timeout = h2o_timer_val_from_uint(1000);
+    h2o_timer_init(&pool->_interval_cb.entry, on_timeout);
+    h2o_timer_add(loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
 }
 
 void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
     if (pool->_interval_cb.loop != loop)
         return;
-    h2o_timeout_del_timer(&pool->_interval_cb.entry);
+    h2o_timer_del(&pool->_interval_cb.entry);
     pool->_interval_cb.loop = NULL;
 }
 

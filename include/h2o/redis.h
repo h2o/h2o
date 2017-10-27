@@ -23,7 +23,7 @@
 #define h2o__redis_h
 
 #include "h2o/socket.h"
-#include "h2o/timeout.h"
+#include "h2o/timer.h"
 
 struct redisAsyncContext;
 struct redisReply;
@@ -41,7 +41,7 @@ typedef struct st_h2o_redis_conn_t {
     void (*on_close)(const char *errstr);
 
     struct redisAsyncContext *_redis;
-    h2o_timeout_timer_t _timeout_entry;
+    h2o_timer_t _timeout_entry;
 } h2o_redis_conn_t;
 
 typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data);
@@ -50,7 +50,7 @@ typedef struct st_h2o_redis_command_t {
     h2o_redis_conn_t *conn;
     h2o_redis_command_cb cb;
     void *data;
-    h2o_timeout_timer_t _timeout_entry;
+    h2o_timer_t _timeout_entry;
 } h2o_redis_command_t;
 
 h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz);

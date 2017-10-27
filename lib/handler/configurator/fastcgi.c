@@ -39,7 +39,7 @@ struct fastcgi_configurator_t {
     h2o_fastcgi_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timeout_val_t *timer)
+static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timer_val_t *timer)
 {
     int ret;
     uint64_t timeout;
@@ -47,7 +47,7 @@ static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_ti
     if (ret < 0)
         return ret;
     if (timeout > 0)
-        *timer = h2o_timeout_val_from_uint(timeout);
+        *timer = h2o_timer_val_from_uint(timeout);
     else
         *timer = H2O_TIMEOUT_VAL_UNSET;
 
@@ -385,7 +385,7 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->io_timeout = h2o_timeout_val_from_uint(H2O_DEFAULT_FASTCGI_IO_TIMEOUT);
+    c->vars->io_timeout = h2o_timer_val_from_uint(H2O_DEFAULT_FASTCGI_IO_TIMEOUT);
     c->vars->keepalive_timeout = H2O_TIMEOUT_VAL_UNSET;
 
     /* setup handlers */

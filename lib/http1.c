@@ -38,7 +38,7 @@ struct st_h2o_http1_finalostream_t {
         void *buf;
         h2o_ostream_pull_cb cb;
     } pull;
-    h2o_timeout_val_t zero_timeout;
+    h2o_timer_val_t zero_timeout;
 };
 
 struct st_h2o_http1_conn_t {
@@ -46,8 +46,8 @@ struct st_h2o_http1_conn_t {
     h2o_socket_t *sock;
     /* internal structure */
     h2o_linklist_t _conns;
-    h2o_timeout_val_t *_timeout;
-    h2o_timeout_timer_t _timeout_entry;
+    h2o_timer_val_t *_timeout;
+    h2o_timer_t _timeout_entry;
     uint64_t _req_index;
     size_t _prevreqlen;
     size_t _reqsize;
@@ -112,7 +112,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
-    h2o_timeout_del_timer(&conn->_timeout_entry);
+    h2o_timer_del(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
@@ -120,15 +120,15 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     free(conn);
 }
 
-static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timeout_val_t *timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timer_val_t *timeout, h2o_timer_cb cb)
 {
     if (conn->_timeout != NULL) {
-        h2o_timeout_del_timer(&conn->_timeout_entry);
+        h2o_timer_del(&conn->_timeout_entry);
     }
     conn->_timeout = timeout;
     if (timeout != NULL) {
-        h2o_timeout_init_timer(&conn->_timeout_entry, cb);
-        h2o_timeout_add_timer(conn->super.ctx->loop, &conn->_timeout_entry, *conn->_timeout);
+        h2o_timer_init(&conn->_timeout_entry, cb);
+        h2o_timer_add(conn->super.ctx->loop, &conn->_timeout_entry, *conn->_timeout);
     }
 }
 
@@ -499,7 +499,7 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
-static void reqread_on_timeout(h2o_timeout_timer_t *entry)
+static void reqread_on_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
 

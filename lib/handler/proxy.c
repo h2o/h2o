@@ -59,9 +59,9 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     h2o_socketpool_register_loop(&self->sockpool, ctx->loop);
 
     /* setup a specific client context only if we need to */
-    if (h2o_timeout_val_equal(ctx->globalconf->proxy.io_timeout, self->config.io_timeout) &&
-        h2o_timeout_val_equal(ctx->globalconf->proxy.connect_timeout, self->config.connect_timeout) &&
-        h2o_timeout_val_equal(ctx->globalconf->proxy.first_byte_timeout, self->config.first_byte_timeout) &&
+    if (h2o_timer_val_equal(ctx->globalconf->proxy.io_timeout, self->config.io_timeout) &&
+        h2o_timer_val_equal(ctx->globalconf->proxy.connect_timeout, self->config.connect_timeout) &&
+        h2o_timer_val_equal(ctx->globalconf->proxy.first_byte_timeout, self->config.first_byte_timeout) &&
         !self->config.websocket.enabled)
         return;
 
@@ -101,7 +101,7 @@ static void on_handler_dispose(h2o_handler_t *_self)
 }
 
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      h2o_timeout_val_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config)
+                                      h2o_timer_val_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config)
 {
     assert(num_upstreams != 0);
 

@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__timeout_h
-#define h2o__timeout_h
+#ifndef h2o__timer_h
+#define h2o__timer_h
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,12 +30,12 @@ extern "C" {
 #include <string.h>
 
 #include "h2o/linklist.h"
-#include "h2o/timeout_val.h"
+#include "h2o/timer_val.h"
 #include "h2o/socket.h"
 
 typedef uint64_t wheelmask_t;
-/* link list of h2o_timeout_timer_t */
-typedef h2o_linklist_t h2o_timeout_slot_t;
+/* link list of h2o_timer_t */
+typedef h2o_linklist_t h2o_timer_wheel_slot_t;
 
 #define H2O_TIMERWHEEL_MAX_WHEELS 4
 #define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
@@ -43,46 +43,46 @@ typedef h2o_linklist_t h2o_timeout_slot_t;
 #define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
 #define H2O_TIMERWHEEL_MAX_TIMER ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * H2O_TIMERWHEEL_MAX_WHEELS)) - 1)
 
-typedef struct st_h2o_timeout_t {
-    h2o_timeout_slot_t wheel[H2O_TIMERWHEEL_MAX_WHEELS][H2O_TIMERWHEEL_SLOTS_PER_WHEEL], expired;
-    uint64_t last_run; /* the last time h2o_timeout_run was called */
-} h2o_timeout_t;
+typedef struct st_h2o_timer_wheel_t {
+    h2o_timer_wheel_slot_t wheel[H2O_TIMERWHEEL_MAX_WHEELS][H2O_TIMERWHEEL_SLOTS_PER_WHEEL], expired;
+    uint64_t last_run; /* the last time h2o_timer_wheel_run was called */
+} h2o_timer_wheel_t;
 
-struct st_h2o_timeout_timer_t;
-typedef void (*h2o_timeout_cb)(struct st_h2o_timeout_timer_t *timer);
-typedef struct st_h2o_timeout_timer_t {
+struct st_h2o_timer_t;
+typedef void (*h2o_timer_cb)(struct st_h2o_timer_t *timer);
+typedef struct st_h2o_timer_t {
     h2o_linklist_t _link;
-    h2o_timeout_cb cb;
+    h2o_timer_cb cb;
     uint64_t expire_at; /* absolute expiration time*/
-    struct st_h2o_timeout_backend_properties_t _backend;
-} h2o_timeout_timer_t;
+    struct st_h2o_timer_backend_properties_t _backend;
+} h2o_timer_t;
 
 /**
  * initializes a timerwheel
  */
-void h2o_timeout_init(h2o_timeout_t *wheel);
+void h2o_timer_wheel_init(h2o_timer_wheel_t *wheel);
 /**
  * display the contents of the timerwheel
  */
-void h2o_timeout_show(h2o_timeout_t *wheel);
+void h2o_timer_wheel_show(h2o_timer_wheel_t *wheel);
 /**
  * find out the time ramaining until the next timer triggers
  */
-uint64_t h2o_timeout_get_wake_at(h2o_timeout_t *wheel);
+uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *wheel);
 
 /**
  * creates a timer
  */
-h2o_timeout_timer_t *h2o_timeout_create_timer(h2o_timeout_cb cb);
+h2o_timer_t *h2o_timer_create(h2o_timer_cb cb);
 /**
  * adds a timer to a timerwheel
  */
 
-int h2o_timer_is_linked(h2o_timeout_timer_t *timer);
-void h2o_timeout_del_timer(h2o_timeout_timer_t *timer);
-size_t h2o_timeout__run_(h2o_timeout_t *w, uint64_t now);
+int h2o_timer_is_linked(h2o_timer_t *timer);
+void h2o_timer_del(h2o_timer_t *timer);
+size_t h2o_timer_wheel__run_(h2o_timer_wheel_t *w, uint64_t now);
 
-static inline void h2o_timeout_init_timer(h2o_timeout_timer_t *t, h2o_timeout_cb cb)
+static inline void h2o_timer_init(h2o_timer_t *t, h2o_timer_cb cb)
 {
     memset(t, 0, sizeof(*t));
     t->cb = cb;

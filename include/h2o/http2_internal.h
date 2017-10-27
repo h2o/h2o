@@ -255,13 +255,13 @@ struct st_h2o_http2_conn_t {
     h2o_http2_window_t _input_window;
     h2o_hpack_header_table_t _output_header_table;
     h2o_linklist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
-    h2o_timeout_timer_t _timeout_entry;
+    h2o_timer_t _timeout_entry;
     h2o_buffer_t *_headers_unparsed; /* for temporary storing HEADERS|CONTINUATION frames without END_HEADERS flag set */
     struct {
         h2o_buffer_t *buf;
         h2o_buffer_t *buf_in_flight;
         h2o_linklist_t streams_to_proceed;
-        h2o_timeout_timer_t timeout_entry;
+        h2o_timer_t timeout_entry;
         h2o_http2_window_t window;
     } _write;
     h2o_cache_t *push_memo;
