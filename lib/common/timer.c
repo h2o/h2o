@@ -38,7 +38,7 @@ static void on_timeout(uv_timer_t *uv_timer)
 int h2o_timer_add(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
 {
     uv_timer_init(l, &timer->_backend.timer);
-    uv_timer_start(&timer->_backend.timer, on_timeout, h2o_now(l) + t_rel_expire.val, 0);
+    uv_timer_start(&timer->_backend.timer, on_timeout, h2o_now(l) + t_rel_expire, 0);
     return 1;
 }
 

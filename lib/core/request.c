@@ -72,7 +72,7 @@ static struct st_deferred_request_action_t *create_deferred_action(h2o_req_t *re
     struct st_deferred_request_action_t *action = h2o_mem_alloc_shared(&req->pool, sz, on_deferred_action_dispose);
     action->req = req;
     h2o_timer_init(&action->timeout, cb);
-    h2o_timer_add(req->conn->ctx->loop, &action->timeout, h2o_timer_val_from_uint(0));
+    h2o_timer_add(req->conn->ctx->loop, &action->timeout, 0);
     return action;
 }
 
@@ -491,7 +491,7 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
     } else if (bufcnt == 0) {
-        h2o_timer_add(req->conn->ctx->loop, &req->_timeout_entry, h2o_timer_val_from_uint(0));
+        h2o_timer_add(req->conn->ctx->loop, &req->_timeout_entry, 0);
         return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
@@ -565,7 +565,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
         struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));                                     \
         *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
         h2o_timer_init(&args->_timeout, send_error_deferred_cb_##status_);                                                 \
-        h2o_timer_add(req->conn->ctx->loop, &args->_timeout, h2o_timer_val_from_uint(0));                            \
+        h2o_timer_add(req->conn->ctx->loop, &args->_timeout, 0);                            \
     }
 
 DECL_SEND_ERROR_DEFERRED(502)

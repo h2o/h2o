@@ -49,10 +49,7 @@ static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_ti
     ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
     if (ret < 0)
         return ret;
-    if (timeout > 0)
-        *timer = h2o_timer_val_from_uint(timeout);
-    else
-        *timer = H2O_TIMEOUT_VAL_UNSET;
+    *timer = timeout;
 
     return 0;
 }
@@ -119,10 +116,7 @@ static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_conf
     ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
     if (ret < 0)
         return ret;
-    if (timeout > 0)
-        self->vars->conf.websocket.timeout = h2o_timer_val_from_uint(timeout);
-    else
-        self->vars->conf.websocket.timeout = H2O_TIMEOUT_VAL_UNSET;
+    self->vars->conf.websocket.timeout = timeout;
     return ret;
 }
 
@@ -321,7 +315,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         }
     }
 
-    if (self->vars->keepalive_timeout.val != 0 && self->vars->conf.use_proxy_protocol) {
+    if (self->vars->keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
         h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
                                               "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
@@ -430,11 +424,11 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->conf.io_timeout = h2o_timer_val_from_uint(H2O_DEFAULT_PROXY_IO_TIMEOUT);
-    c->vars->conf.connect_timeout = h2o_timer_val_from_uint(H2O_DEFAULT_PROXY_IO_TIMEOUT);
-    c->vars->conf.first_byte_timeout = h2o_timer_val_from_uint(H2O_DEFAULT_PROXY_IO_TIMEOUT);
+    c->vars->conf.io_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
+    c->vars->conf.connect_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
+    c->vars->conf.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     c->vars->conf.websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
-    c->vars->conf.websocket.timeout = h2o_timer_val_from_uint(H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT);
+    c->vars->conf.websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
     c->vars->conf.max_buffer_size = SIZE_MAX;
     c->vars->keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
 

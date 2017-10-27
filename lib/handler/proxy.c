@@ -59,9 +59,9 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     h2o_socketpool_register_loop(&self->sockpool, ctx->loop);
 
     /* setup a specific client context only if we need to */
-    if (h2o_timer_val_equal(ctx->globalconf->proxy.io_timeout, self->config.io_timeout) &&
-        h2o_timer_val_equal(ctx->globalconf->proxy.connect_timeout, self->config.connect_timeout) &&
-        h2o_timer_val_equal(ctx->globalconf->proxy.first_byte_timeout, self->config.first_byte_timeout) &&
+    if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
+        ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
+        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout &&
         !self->config.websocket.enabled)
         return;
 
@@ -75,7 +75,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     if (self->config.websocket.enabled) {
         client_ctx->websocket_timeout = self->config.websocket.timeout;
     } else {
-        client_ctx->websocket_timeout = H2O_TIMEOUT_VAL_UNSET;
+        client_ctx->websocket_timeout = 0;
     }
 
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);

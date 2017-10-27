@@ -669,7 +669,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req, int keepalive, 
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->src_req = req;
-    if (client_ctx->websocket_timeout.set && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
+    if (client_ctx->websocket_timeout && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
         self->is_websocket_handshake = 1;
     } else {
         self->is_websocket_handshake = 0;

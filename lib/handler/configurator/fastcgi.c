@@ -46,10 +46,7 @@ static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_ti
     ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
     if (ret < 0)
         return ret;
-    if (timeout > 0)
-        *timer = h2o_timer_val_from_uint(timeout);
-    else
-        *timer = H2O_TIMEOUT_VAL_UNSET;
+    *timer = timeout;
 
     return 0;
 }
@@ -385,8 +382,8 @@ void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf)
 
     /* set default vars */
     c->vars = c->_vars_stack;
-    c->vars->io_timeout = h2o_timer_val_from_uint(H2O_DEFAULT_FASTCGI_IO_TIMEOUT);
-    c->vars->keepalive_timeout = H2O_TIMEOUT_VAL_UNSET;
+    c->vars->io_timeout = H2O_DEFAULT_FASTCGI_IO_TIMEOUT;
+    c->vars->keepalive_timeout = 0;
 
     /* setup handlers */
     c->super.enter = on_config_enter;

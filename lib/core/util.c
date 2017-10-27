@@ -270,7 +270,7 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
         // abort resumption
         h2o_timer_del(&accept_data->super.timeout);
         h2o_timer_init(&accept_data->super.timeout, on_redis_resumption_get_failed);
-        h2o_timer_add(accept_data->super.ctx->ctx->loop, &accept_data->super.timeout, h2o_timer_val_from_uint(0));
+        h2o_timer_add(accept_data->super.ctx->ctx->loop, &accept_data->super.timeout, 0);
     }
 }
 

@@ -386,7 +386,7 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     /* first entry is FCGI_BEGIN_REQUEST */
     h2o_vector_reserve(&req->pool, vecs, 5 /* we send at least 5 iovecs */);
     vecs->entries[0] =
-        create_begin_request(&req->pool, request_id, FCGI_RESPONDER, config->keepalive_timeout.val != 0 ? FCGI_KEEP_CONN : 0);
+        create_begin_request(&req->pool, request_id, FCGI_RESPONDER, config->keepalive_timeout != 0 ? FCGI_KEEP_CONN : 0);
     /* second entry is reserved for FCGI_PARAMS header */
     vecs->entries[1] = h2o_iovec_init(NULL, APPEND_BLOCKSIZE); /* dummy value set to prevent params being appended to the entry */
     vecs->size = 2;
@@ -458,7 +458,7 @@ static void do_send(struct st_fcgi_generator_t *generator)
 
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
 {
-    if (generator->ctx->handler->config.keepalive_timeout.val != 0 && can_keepalive)
+    if (generator->ctx->handler->config.keepalive_timeout != 0 && can_keepalive)
         h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock);
     else
         h2o_socket_close(generator->sock);

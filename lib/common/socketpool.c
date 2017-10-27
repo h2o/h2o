@@ -89,7 +89,7 @@ static void destroy_expired(h2o_socketpool_t *pool)
         return;
 
     /* caller should lock the mutex */
-    uint64_t expire_before = h2o_now(pool->_interval_cb.loop) - pool->timeout.val;
+    uint64_t expire_before = h2o_now(pool->_interval_cb.loop) - pool->timeout;
     while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
         if (entry->added_at > expire_before)
@@ -121,7 +121,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     memset(pool, 0, sizeof(*pool));
 
     pool->capacity = capacity;
-    pool->timeout = h2o_timer_val_from_uint(2000);
+    pool->timeout = 2000;
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
@@ -317,7 +317,7 @@ void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
         return;
 
     pool->_interval_cb.loop = loop;
-    pool->_interval_cb.timeout = h2o_timer_val_from_uint(1000);
+    pool->_interval_cb.timeout = 1000;
     h2o_timer_init(&pool->_interval_cb.entry, on_timeout);
     h2o_timer_add(loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
 }
@@ -615,5 +615,5 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
 
 int h2o_socketpool_can_keepalive(h2o_socketpool_t *pool)
 {
-    return pool->timeout.set && pool->timeout.val > 0;
+    return pool->timeout > 0;
 }
