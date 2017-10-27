@@ -93,9 +93,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
-    ctx->http1.req_timeout = config->http1.req_timeout;
     h2o_linklist_init_anchor(&ctx->http1._conns);
-    ctx->http2.idle_timeout = config->http2.idle_timeout;
     h2o_linklist_init_anchor(&ctx->http2._conns);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.getaddr_receiver = &ctx->receivers.hostinfo_getaddr;

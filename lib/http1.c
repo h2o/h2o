@@ -517,7 +517,7 @@ static void reqread_on_timeout(h2o_timeout_timer_t *entry)
 
 static inline void reqread_start(struct st_h2o_http1_conn_t *conn)
 {
-    set_timeout(conn, &conn->super.ctx->http1.req_timeout, reqread_on_timeout);
+    set_timeout(conn, &conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
     if (conn->sock->input->size != 0)
         handle_incoming_request(conn);
