@@ -33,34 +33,20 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
     h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
-    h2o_url_t *upstream_url = &self->sockpool.targets.entries[0]->url;
-    const h2o_url_scheme_t *scheme;
-    h2o_iovec_t *authority;
 
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
     overrides->socketpool = &self->sockpool;
-    overrides->location_rewrite.match = upstream_url;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->max_buffer_size = self->config.max_buffer_size;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
     overrides->headers_cmds = self->config.headers_cmds;
-
-    /* determine the scheme and authority */
-    if (self->config.preserve_host) {
-        scheme = req->scheme;
-        authority = &req->authority;
-        overrides->proxy_preserve_host = 1;
-    } else {
-        scheme = upstream_url->scheme;
-        authority = &upstream_url->authority;
-        overrides->proxy_preserve_host = 0;
-    }
+    overrides->proxy_preserve_host = self->config.preserve_host;
 
     /* request reprocess */
-    h2o_reprocess_request(req, req->method, scheme, *authority,
-                          h2o_build_destination(req, upstream_url->path.base, upstream_url->path.len, 0), overrides, 0);
+    h2o_reprocess_request(req, req->method, req->scheme, req->authority, h2o_build_destination(req, H2O_STRLIT("/"), 0), overrides,
+                          0);
 
     return 0;
 }
@@ -75,8 +61,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
         ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
-        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled &&
-        self->config.ssl_ctx == ctx->globalconf->proxy.ssl_ctx)
+        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled)
         return;
 
     h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
@@ -100,7 +85,6 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     } else {
         client_ctx->websocket_timeout = NULL;
     }
-    client_ctx->ssl_ctx = self->config.ssl_ctx;
 
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);
 }
@@ -135,13 +119,11 @@ static void on_handler_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void *)_self;
 
-    if (self->config.ssl_ctx != NULL)
-        SSL_CTX_free(self->config.ssl_ctx);
     h2o_socketpool_dispose(&self->sockpool);
 }
 
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      h2o_proxy_config_vars_t *config)
+                                      uint64_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config)
 {
     assert(num_upstreams != 0);
 
@@ -155,18 +137,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->config = *config;
 
     /* init socket pool */
-    if (config->registered_as_backends && config->reverse_path.base != NULL) {
-        /* create shallow copy of upstreams so that we can modify them */
-        h2o_url_t *p = alloca(sizeof(*upstreams) * num_upstreams);
-        memcpy(p, upstreams, sizeof(*upstreams) * num_upstreams);
-        upstreams = p;
-        size_t i;
-        for (i = 0; i != num_upstreams; ++i)
-            upstreams[i].path = config->reverse_path;
-    }
     h2o_socketpool_init_specific(&self->sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams);
-    h2o_socketpool_set_timeout(&self->sockpool, config->keepalive_timeout);
-
-    if (self->config.ssl_ctx != NULL)
-        SSL_CTX_up_ref(self->config.ssl_ctx);
+    h2o_socketpool_set_timeout(&self->sockpool, keepalive_timeout);
+    h2o_socketpool_set_ssl_ctx(&self->sockpool, ssl_ctx);
 }

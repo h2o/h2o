@@ -38,6 +38,9 @@ hosts:
         header.add: "set-cookie: c=d"
         header.add: "cache-control: must-revalidate"
         header.add: "cache-control: no-store"
+      /compress:
+        file.dir: @{[ DOC_ROOT ]}
+        compress: [gzip]
     access-log:
       format: "$args->{format}"
 @{[$args->{escape} ? "      escape: $args->{escape}" : ""]}
@@ -250,6 +253,30 @@ subtest "json-null" => sub {
         { format => '\\"%h\\" %l \\"%l\\" \'%l\' \'%l \' \'\\"%l\\"\'', escape => 'json' },
         qr{^"127\.0\.0\.1" null null null 'null ' '"null"'$},
     );
+};
+
+subtest 'compressed-body-size' => sub {
+    my $doit = sub {
+        my ($opts, $expected) = @_;
+        doit(
+            sub {
+                my $server = shift;
+                system("curl $opts --silent http://127.0.0.1:$server->{port}/compress/alice.txt > /dev/null");
+            },
+            '%b',
+            qr{^$expected$},
+        );
+    };
+    subtest 'http1' => sub {
+        $doit->("", 1661);
+        $doit->("-H 'Accept-Encoding: gzip'", 908); # it doesn't contain chunked encoding overhead (12)
+    };
+    subtest 'http2' => sub {
+        plan skip_all => "curl does not support HTTP/2"
+            unless curl_supports_http2();
+        $doit->("--http2", 1661);
+        $doit->("--http2 -H 'Accept-Encoding: gzip'", 908);
+    };
 };
 
 done_testing;

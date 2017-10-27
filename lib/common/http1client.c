@@ -59,8 +59,6 @@ struct st_h2o_http1client_private_t {
 
 static void close_client(struct st_h2o_http1client_private_t *client)
 {
-    if (client->super.ssl.server_name != NULL)
-        free(client->super.ssl.server_name);
     if (client->super.sock != NULL) {
         if (client->super.sockpool.pool != NULL && client->_do_keepalive) {
 
@@ -534,26 +532,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-static void on_handshake_complete(h2o_socket_t *sock, const char *err)
-{
-    struct st_h2o_http1client_private_t *client = sock->data;
-
-    h2o_timeout_unlink(&client->_timeout);
-
-    if (err == NULL) {
-        /* success */
-    } else if (err == h2o_socket_error_ssl_cert_name_mismatch &&
-               (SSL_CTX_get_verify_mode(client->super.ctx->ssl_ctx) & SSL_VERIFY_PEER) == 0) {
-        /* peer verification skipped */
-    } else {
-        on_connect_error(client, err);
-        return;
-    }
-
-    on_connection_ready(client);
-}
-
-static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *url)
+static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin)
 {
     struct st_h2o_http1client_private_t *client = data;
 
@@ -566,20 +545,9 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
         return;
     }
 
-    client->_origin = url;
-    if (sock->ssl != NULL) {
-        client->super.ssl.server_name = h2o_strdup(NULL, url->host.base, url->host.len).base;
-    }
-
     client->super.sock = sock;
     sock->data = client;
-
-    if (client->super.ssl.server_name != NULL && client->super.sock->ssl == NULL) {
-        h2o_socket_ssl_handshake(client->super.sock, client->super.ctx->ssl_ctx, client->super.ssl.server_name,
-                                 on_handshake_complete);
-        return;
-    }
-
+    client->_origin = origin;
     h2o_timeout_unlink(&client->_timeout);
 
     on_connection_ready(client);
@@ -592,14 +560,11 @@ static void on_connect_timeout(h2o_timeout_entry_t *entry)
 }
 
 static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx,
-                                                          h2o_iovec_t ssl_server_name, h2o_http1client_connect_cb cb,
-                                                          int is_chunked)
+                                                          int is_chunked, h2o_http1client_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
 
     *client = (struct st_h2o_http1client_private_t){{ctx}};
-    if (ssl_server_name.base != NULL)
-        client->super.ssl.server_name = h2o_strdup(NULL, ssl_server_name.base, ssl_server_name.len).base;
     client->super.data = data;
     client->_cb.on_connect = cb;
     client->_is_chunked = is_chunked;
@@ -614,19 +579,18 @@ static struct st_h2o_http1client_private_t *create_client(h2o_http1client_t **_c
 const char *const h2o_http1client_error_is_eos = "end of stream";
 
 void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *origin, h2o_http1client_connect_cb cb, int is_chunked)
+                             h2o_url_t *target, h2o_http1client_connect_cb cb, int is_chunked)
 {
     assert(socketpool != NULL);
     struct st_h2o_http1client_private_t *client;
 
     /* setup */
-    client = create_client(_client, data, ctx, origin->scheme->is_ssl ? origin->host : h2o_iovec_init(NULL, 0), cb, is_chunked);
+    client = create_client(_client, data, ctx, is_chunked, cb);
     client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
-    client->_origin = origin;
     client->super.sockpool.pool = socketpool;
 
-    h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, origin, ctx->loop, ctx->getaddr_receiver,
+    h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, target, ctx->loop, ctx->getaddr_receiver,
                            on_pool_connect, client);
 }
 

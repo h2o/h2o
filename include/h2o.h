@@ -405,10 +405,6 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
-         * SSL context for connections initiated by the proxy (optional, governed by the application)
-         */
-        SSL_CTX *ssl_ctx;
-        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -1081,12 +1077,17 @@ struct st_h2o_req_t {
      * whether or not the connection is persistent.
      * Applications should set this flag to zero in case the connection cannot be kept keep-alive (due to an error etc.)
      */
-    char http1_is_persistent;
+    unsigned char http1_is_persistent : 1;
     /**
      * whether if the response has been delegated (i.e. reproxied).
      * For delegated responses, redirect responses would be handled internally.
      */
-    char res_is_delegated;
+    unsigned char res_is_delegated : 1;
+    /**
+     * whether if the bytes sent is counted by ostreams other than final ostream
+     */
+    unsigned char bytes_counted_by_ostream : 1;
+
     /**
      * Whether the producer of the response has explicitely disabled or
      * enabled compression. One of H2O_COMPRESS_HINT_*
@@ -1881,25 +1882,19 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;
         uint64_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
-    h2o_iovec_t reverse_path; /* optional */
-    /* I don't know how to detect if handler registered on same path twice, so temporarily use these switches to do so. */
-    unsigned registered_as_url : 1;
-    unsigned registered_as_backends : 1;
-    SSL_CTX *ssl_ctx; /* optional */
     size_t max_buffer_size;
 } h2o_proxy_config_vars_t;
 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
-                                      h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
+                                      uint64_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */
@@ -2039,7 +2034,6 @@ inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
     h2o_send_state_t send_state;
     assert(req->_generator != NULL);
     send_state = cb(req->_generator, req, buf);
-    req->bytes_sent += buf->len;
     if (!h2o_send_state_is_in_progress(send_state))
         req->_generator = NULL;
     return send_state;

@@ -87,6 +87,7 @@ typedef struct st_h2o_socketpool_t {
         h2o_timeout_t timeout;
         h2o_timeout_entry_t entry;
     } _interval_cb;
+    SSL_CTX *_ssl_ctx;
 
     /* vars that are modified by multiple threads */
     struct {
@@ -126,6 +127,10 @@ static uint64_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool);
  *
  */
 static void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, uint64_t msec);
+/**
+ *
+ */
+void h2o_socketpool_set_ssl_ctx(h2o_socketpool_t *pool, SSL_CTX *ssl_ctx);
 /**
  * associates a loop
  */
