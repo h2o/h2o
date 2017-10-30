@@ -73,9 +73,9 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     if (self->config.websocket.enabled) {
-        client_ctx->websocket_timeout = self->config.websocket.timeout;
+        client_ctx->websocket_timeout = &self->config.websocket.timeout;
     } else {
-        client_ctx->websocket_timeout = 0;
+        client_ctx->websocket_timeout = NULL;
     }
 
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);

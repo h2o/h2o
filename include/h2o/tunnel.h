@@ -28,7 +28,7 @@ extern "C" {
 
 typedef struct st_h2o_tunnel_t h2o_tunnel_t;
 
-h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_socket_t *sock2, h2o_timer_val_t timeout);
+h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_socket_t *sock2, h2o_timer_val_t *timeout);
 void h2o_tunnel_break(h2o_tunnel_t *tunnel);
 
 #ifdef __cplusplus
