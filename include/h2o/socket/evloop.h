@@ -77,6 +77,6 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 }
 
 struct st_h2o_timer_wheel_t;
-int h2o_timer_add_(struct st_h2o_timer_wheel_t *w, struct st_h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
+int h2o_timer_link_(struct st_h2o_timer_wheel_t *w, struct st_h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
 
 #endif

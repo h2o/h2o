@@ -111,7 +111,7 @@ static void on_timeout(h2o_timer_t *timeout_entry)
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 
-    h2o_timer_add(pool->_interval_cb.loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
+    h2o_timer_link(pool->_interval_cb.loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
@@ -319,14 +319,14 @@ void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
     pool->_interval_cb.loop = loop;
     pool->_interval_cb.timeout = 1000;
     h2o_timer_init(&pool->_interval_cb.entry, on_timeout);
-    h2o_timer_add(loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
+    h2o_timer_link(loop, &pool->_interval_cb.entry, pool->_interval_cb.timeout);
 }
 
 void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
     if (pool->_interval_cb.loop != loop)
         return;
-    h2o_timer_del(&pool->_interval_cb.entry);
+    h2o_timer_unlink(&pool->_interval_cb.entry);
     pool->_interval_cb.loop = NULL;
 }
 

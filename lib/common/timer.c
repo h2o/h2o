@@ -35,14 +35,14 @@ static void on_timeout(uv_timer_t *uv_timer)
     timer->cb(timer);
 }
 
-int h2o_timer_add(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
+int h2o_timer_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
 {
     uv_timer_init(l, &timer->_backend.timer);
     uv_timer_start(&timer->_backend.timer, on_timeout, h2o_now(l) + t_rel_expire, 0);
     return 1;
 }
 
-void h2o_timer_del(h2o_timer_t *timer)
+void h2o_timer_unlink(h2o_timer_t *timer)
 {
     uv_timer_stop(&timer->_backend.timer);
 }

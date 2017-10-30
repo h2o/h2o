@@ -114,9 +114,9 @@ static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
     /* After waiting a second, we still had active connections. If configured, wait one
      * final timeout before closing the connections */
     if (do_close_stragglers && ctx->globalconf->http2.graceful_shutdown_timeout) {
-        h2o_timer_del(&ctx->http2._graceful_shutdown_timeout);
+        h2o_timer_unlink(&ctx->http2._graceful_shutdown_timeout);
         h2o_timer_init(&ctx->http2._graceful_shutdown_timeout, graceful_shutdown_close_stragglers);
-        h2o_timer_add(ctx->loop, &ctx->http2._graceful_shutdown_timeout,
+        h2o_timer_link(ctx->loop, &ctx->http2._graceful_shutdown_timeout,
                                   ctx->globalconf->http2.graceful_shutdown_timeout);
     }
 }
@@ -134,7 +134,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
     /* only doit once */
     if (ctx->http2._graceful_shutdown_timeout.cb != NULL)
         return;
-    h2o_timer_del(&ctx->http2._graceful_shutdown_timeout);
+    h2o_timer_unlink(&ctx->http2._graceful_shutdown_timeout);
     h2o_timer_init(&ctx->http2._graceful_shutdown_timeout, graceful_shutdown_resend_goaway);
 
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
@@ -145,7 +145,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
             h2o_http2_conn_request_write(conn);
         }
     }
-    h2o_timer_add(ctx->loop, &ctx->http2._graceful_shutdown_timeout, 1000);
+    h2o_timer_link(ctx->loop, &ctx->http2._graceful_shutdown_timeout, 1000);
 }
 
 static void on_idle_timeout(h2o_timer_t *entry)
@@ -158,11 +158,11 @@ static void on_idle_timeout(h2o_timer_t *entry)
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
-    h2o_timer_del(&conn->_timeout_entry);
+    h2o_timer_unlink(&conn->_timeout_entry);
 
     if (conn->num_streams.blocked_by_server == 0 && conn->_write.buf_in_flight == NULL) {
         h2o_timer_init(&conn->_timeout_entry, on_idle_timeout);
-        h2o_timer_add(conn->super.ctx->loop, &conn->_timeout_entry, conn->super.ctx->globalconf->http2.idle_timeout);
+        h2o_timer_link(conn->super.ctx->loop, &conn->_timeout_entry, conn->super.ctx->globalconf->http2.idle_timeout);
     }
 }
 
@@ -304,7 +304,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_hpack_dispose_header_table(&conn->_input_header_table);
     h2o_hpack_dispose_header_table(&conn->_output_header_table);
     assert(h2o_linklist_is_empty(&conn->_pending_reqs));
-    h2o_timer_del(&conn->_timeout_entry);
+    h2o_timer_unlink(&conn->_timeout_entry);
 
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
@@ -353,7 +353,7 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
     if (conn->sock->_cb.write == NULL && !h2o_timer_is_linked(&conn->_write.timeout_entry)) {
-        h2o_timer_add(conn->super.ctx->loop, &conn->_write.timeout_entry, 0);
+        h2o_timer_link(conn->super.ctx->loop, &conn->_write.timeout_entry, 0);
     }
 }
 
@@ -1013,7 +1013,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
 
     /* write immediately, if there is no write in flight and if pending write exists */
     if (h2o_timer_is_linked(&conn->_write.timeout_entry)) {
-        h2o_timer_del(&conn->_write.timeout_entry);
+        h2o_timer_unlink(&conn->_write.timeout_entry);
         do_emit_writereq(conn);
     }
 }
@@ -1111,7 +1111,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     update_idle_timeout(conn);
 
     /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
-    h2o_timer_del(&conn->_write.timeout_entry);
+    h2o_timer_unlink(&conn->_write.timeout_entry);
 
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {

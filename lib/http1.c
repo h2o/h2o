@@ -112,7 +112,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
-    h2o_timer_del(&conn->_timeout_entry);
+    h2o_timer_unlink(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
@@ -123,12 +123,12 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timer_val_t *timeout, h2o_timer_cb cb)
 {
     if (conn->_timeout != NULL) {
-        h2o_timer_del(&conn->_timeout_entry);
+        h2o_timer_unlink(&conn->_timeout_entry);
     }
     conn->_timeout = timeout;
     if (timeout != NULL) {
         h2o_timer_init(&conn->_timeout_entry, cb);
-        h2o_timer_add(conn->super.ctx->loop, &conn->_timeout_entry, *conn->_timeout);
+        h2o_timer_link(conn->super.ctx->loop, &conn->_timeout_entry, *conn->_timeout);
     }
 }
 
