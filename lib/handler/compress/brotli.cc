@@ -72,7 +72,8 @@ void brotli_context::_emit(bool is_last, bool force_flush)
     uint8_t *output;
     size_t out_size;
     bool ret = brotli_->WriteBrotliData(is_last, force_flush, &out_size, &output);
-    assert(ret);
+    if (!ret)
+        abort();
     if (out_size != 0)
         bufs_.push_back(h2o_strdup(NULL, reinterpret_cast<const char *>(output), out_size));
 }

@@ -55,7 +55,7 @@ void test_add_fixed_timers()
     }
 
     /* run the wheel */
-    ok(h2o_timer_wheel__run_(testwheel, 139) == 132);
+    ok(h2o_timer_wheel_run(testwheel, 139) == 132);
     h2o_timer_wheel_show(testwheel);
 }
 
@@ -80,9 +80,9 @@ void test_del_timers()
     }
 
     /* run the wheel */
-    ok(h2o_timer_wheel__run_(testwheel, N + 6) == 0);
+    ok(h2o_timer_wheel_run(testwheel, N + 6) == 0);
     h2o_timer_wheel_show(testwheel);
-    ok(h2o_timer_wheel__run_(testwheel, N + 7) == 1);
+    ok(h2o_timer_wheel_run(testwheel, N + 7) == 1);
     h2o_timer_wheel_show(testwheel);
 }
 
@@ -103,7 +103,7 @@ void test_add_rand_timers()
 
     int start = invokes;
     /* run the wheel: the timers has a max expiry N-1 + abs_wtime  */
-    ok(h2o_timer_wheel__run_(testwheel, N - 1 + abs_wtime) == N);
+    ok(h2o_timer_wheel_run(testwheel, N - 1 + abs_wtime) == N);
     ok(invokes - start == N);
     h2o_timer_wheel_show(testwheel);
 }
@@ -132,7 +132,7 @@ void test_invalid_timer()
 
     exp = 11;
     for (i = 0; i < NTIMERS; i++) {
-        assert(h2o_timer_wheel__run_(testwheel, exp++) == 1);
+        assert(h2o_timer_wheel_run(testwheel, exp++) == 1);
     }
 }
 

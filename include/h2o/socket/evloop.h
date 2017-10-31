@@ -61,10 +61,9 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
+void h2o_evloop_run_pending(h2o_evloop_t *loop);
 
 /* inline definitions */
-
-size_t h2o_timer_wheel__run(h2o_loop_t *loop, uint64_t now);
 
 static inline uint64_t h2o_now(h2o_evloop_t *loop)
 {
@@ -78,5 +77,7 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 
 struct st_h2o_timer_wheel_t;
 int h2o_timer_link_(struct st_h2o_timer_wheel_t *w, struct st_h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
+size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now);
+int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 
 #endif
