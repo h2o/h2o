@@ -74,7 +74,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 {
     chunked_encoder_t *encoder;
 
-    if (req->is_subrequest)
+    if (h2o_is_subrequst(req))
         goto Next;
 
     /* do nothing if not HTTP/1.1 or content-length is known */

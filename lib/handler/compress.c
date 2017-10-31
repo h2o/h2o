@@ -55,9 +55,6 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     h2o_compress_context_t *compressor;
     ssize_t i;
 
-    if (req->is_subrequest)
-        goto Next;
-
     if (req->version < 0x101)
         goto Next;
     if (req->res.status != 200)

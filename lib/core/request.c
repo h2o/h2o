@@ -308,7 +308,7 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&req->_timeout_entry);
 
-    if (req->pathconf != NULL && !req->is_subrequest) {
+    if (req->pathconf != NULL && !h2o_is_subrequst(req)) {
         h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);
@@ -722,11 +722,9 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
 {
     h2o_iovec_t ret = h2o_iovec_init(value, value_len);
 
-    if (!req->is_subrequest) {
-        h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
-                                               req->input.authority, req->res_is_delegated ? req->scheme : NULL,
-                                               req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
-    }
+    h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
+                                           req->input.authority, req->res_is_delegated ? req->scheme : NULL,
+                                           req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
 
     return ret;
 }

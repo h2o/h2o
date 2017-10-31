@@ -274,6 +274,7 @@ SET(LIB_SOURCE_FILES
     lib/core/logconf.c
     lib/core/proxy.c
     lib/core/request.c
+    lib/core/subrequest.c
     lib/core/token.c
     lib/core/util.c
 

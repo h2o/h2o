@@ -1087,10 +1087,6 @@ struct st_h2o_req_t {
      * whether if the bytes sent is counted by ostreams other than final ostream
      */
     unsigned char bytes_counted_by_ostream : 1;
-    /**
-     * whether if this is subrequest or not
-     */
-    unsigned char is_subrequest : 1;
 
     /**
      * Whether the producer of the response has explicitely disabled or
@@ -1329,6 +1325,10 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
  * binds configurations to the request
  */
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
+
+h2o_req_t *h2o_create_subrequest(h2o_req_t *src);
+int h2o_is_subrequst(h2o_req_t *req);
+void h2o_dispose_subrequest(h2o_req_t *subreq);
 
 /**
  * called by the generators to send output

@@ -66,8 +66,7 @@ static void dispose_subreq_ostream(struct st_subreq_ostream_t *ostream)
         h2o_linklist_unlink(&ostream->link);
     if (h2o_timeout_is_linked(&ostream->defer_dispose_timeout_entry))
         h2o_timeout_unlink(&ostream->defer_dispose_timeout_entry);
-    h2o_dispose_request(subreq);
-    free(subreq);
+    h2o_dispose_subrequest(subreq);
 }
 
 static void on_gc_dispose_subreq_ostream(mrb_state *mrb, void *_ostream)
@@ -1106,35 +1105,10 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
         goto Failed;
     }
 
-    h2o_req_t *subreq = h2o_mem_alloc(sizeof(*subreq));
-    h2o_init_request(subreq, req->conn, NULL);
-    subreq->input = req->input;
-    subreq->hostconf = req->hostconf;
-    subreq->pathconf = req->pathconf;
-    subreq->version = req->version;
+    h2o_req_t *subreq = h2o_create_subrequest(req);
     subreq->entity = req->entity; // TODO
     subreq->content_length = req->content_length; // TODO
-    subreq->http1_is_persistent = req->http1_is_persistent; // TODO
-    subreq->timestamps = req->timestamps;
-    subreq->error_logs = req->error_logs;
-    subreq->is_subrequest = 1;
-    subreq->num_delegated = req->num_delegated;
-    subreq->num_reprocessed = req->num_reprocessed;
-    subreq->processed_at = req->processed_at;
-
-    /* env */
-    mrb_value other_keys = mrb_hash_keys(mrb, env);
-
-    for (i = 0; i != RARRAY_LEN(other_keys); ++i) {
-        mrb_value key = h2o_mruby_to_str(mrb, mrb_ary_entry(other_keys, i));
-        if (memcmp(RSTRING_PTR(key), "HTTP_", 5) == 0)
-            continue;
-        mrb_value val = h2o_mruby_to_str(mrb, mrb_hash_get(mrb, env, key));
-        h2o_vector_reserve(&subreq->pool, &subreq->env, subreq->env.size + 2);
-        subreq->env.entries[subreq->env.size] = h2o_strdup(&subreq->pool, RSTRING_PTR(key), RSTRING_LEN(key));
-        subreq->env.entries[subreq->env.size + 1] = h2o_strdup(&subreq->pool, RSTRING_PTR(val), RSTRING_LEN(val));
-        subreq->env.size += 2;
-    }
+//    subreq->timestamps = req->timestamps; // TODO
 
     subreq->scheme = url_parsed.scheme;
     subreq->method = h2o_strdup(&subreq->pool, RSTRING_PTR(method), RSTRING_LEN(method));
@@ -1144,6 +1118,19 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
     subreq->headers = (h2o_headers_t){NULL};
     if (h2o_mruby_iterate_headers(ctx->shared, env, handle_request_header, subreq) != 0) {
         goto Failed;
+    }
+
+    /* env */
+    mrb_value other_keys = mrb_hash_keys(mrb, env);
+    for (i = 0; i != RARRAY_LEN(other_keys); ++i) {
+        mrb_value key = h2o_mruby_to_str(mrb, mrb_ary_entry(other_keys, i));
+        if (memcmp(RSTRING_PTR(key), "HTTP_", 5) == 0)
+            continue;
+        mrb_value val = h2o_mruby_to_str(mrb, mrb_hash_get(mrb, env, key));
+        h2o_vector_reserve(&subreq->pool, &subreq->env, subreq->env.size + 2);
+        subreq->env.entries[subreq->env.size] = h2o_strdup(&subreq->pool, RSTRING_PTR(key), RSTRING_LEN(key));
+        subreq->env.entries[subreq->env.size + 1] = h2o_strdup(&subreq->pool, RSTRING_PTR(val), RSTRING_LEN(val));
+        subreq->env.size += 2;
     }
 
     return subreq;
