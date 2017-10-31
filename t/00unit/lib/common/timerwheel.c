@@ -45,13 +45,13 @@ void test_add_fixed_timers()
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
     h2o_timer_wheel_init(testwheel);
 
-    uint64_t abs_wtime = 3;
+    uint32_t abs_wtime = 3;
     h2o_timer_t *timers[N];
     /* add timers */
     for (i = 0; i < N; i++) {
-        uint64_t exp = abs_wtime + i + 5;
+        uint32_t expiry = abs_wtime + i + 5;
         timers[i] = h2o_timer_create(my_callback);
-        h2o_timer_link_(testwheel, timers[i], exp);
+        h2o_timer_link_(testwheel, timers[i], expiry);
     }
 
     /* run the wheel */
@@ -65,13 +65,13 @@ void test_del_timers()
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
     h2o_timer_wheel_init(testwheel);
 
-    uint64_t abs_wtime = 3;
+    uint32_t abs_wtime = 3;
     h2o_timer_t *timers[N];
     /* add N timers */
     for (i = 0; i < N; i++) {
-        uint64_t exp = abs_wtime + i + 5;
+        uint32_t expiry = abs_wtime + i + 5;
         timers[i] = h2o_timer_create(my_callback);
-        h2o_timer_link_(testwheel, timers[i], exp);
+        h2o_timer_link_(testwheel, timers[i], expiry);
     }
 
     /* delete N-1 timers, so there should be 1 timer left */
@@ -92,13 +92,13 @@ void test_add_rand_timers()
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
     h2o_timer_wheel_init(testwheel);
 
-    uint64_t abs_wtime = 3;
+    uint32_t abs_wtime = 3;
     h2o_timer_t *timers[N];
     /* add timers */
     for (i = 0; i < N; i++) {
-        uint64_t exp = abs_wtime + lcg_rand() % N;
+        uint32_t expiry = abs_wtime + lcg_rand() % N;
         timers[i] = h2o_timer_create(my_callback);
-        h2o_timer_link_(testwheel, timers[i], exp);
+        h2o_timer_link_(testwheel, timers[i], expiry);
     }
 
     int start = invokes;
@@ -116,23 +116,21 @@ void test_invalid_timer()
     h2o_timer_t timer;
     h2o_timer_init(&timer, my_callback);
     testwheel->last_run = 3;
-    uint64_t exp = 0x100000007LL + testwheel->last_run;
-    ok(h2o_timer_link_(testwheel, &timer, exp) == -1);
 
     /* stress testing with one million outstanding timers */
 #define NTIMERS 1024 * 16
     h2o_timer_t *arr = calloc(NTIMERS, sizeof(h2o_timer_t));
-    exp = 11;
+    uint32_t expiry = 11;
     int i;
     for (i = 0; i < NTIMERS; i++) {
         h2o_timer_init(&arr[i], my_callback);
-        assert(h2o_timer_link_(testwheel, &arr[i], exp) == 0);
-        exp++;
+        h2o_timer_link_(testwheel, &arr[i], expiry);
+        expiry++;
     }
 
-    exp = 11;
+    expiry = 11;
     for (i = 0; i < NTIMERS; i++) {
-        assert(h2o_timer_wheel_run(testwheel, exp++) == 1);
+        assert(h2o_timer_wheel_run(testwheel, expiry++) == 1);
     }
 }
 

@@ -125,7 +125,10 @@ void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t a
     h2o_timer_wheel_slot_t *slot;
     int wid, sid;
 
-    if (abs_expire > w->last_run)
+    if (abs_expire - w->last_run > 0xffffffff)
+        abort();
+
+    if (abs_expire < w->last_run)
         abs_expire = w->last_run;
 
     timer->expire_at = abs_expire;
@@ -255,9 +258,9 @@ static h2o_timer_abs_t h2o_timer_now_plus(h2o_loop_t *loop, h2o_timer_val_t time
     return timeout + h2o_now(loop);
 }
 
-void h2o_timer_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
+void h2o_timer_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t rel_expire)
 {
-    h2o_timer_link_(&l->_timerwheel, timer, h2o_timer_now_plus(l, t_rel_expire));
+    h2o_timer_link_(&l->_timerwheel, timer, h2o_timer_now_plus(l, rel_expire));
 }
 
 #endif /* !H2O_USE_LIBUV */

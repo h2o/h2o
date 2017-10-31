@@ -42,23 +42,11 @@ struct proxy_configurator_t {
     struct proxy_config_wars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int configure_timer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_timer_val_t *timer)
-{
-    int ret;
-    uint64_t timeout;
-    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
-    if (ret < 0)
-        return ret;
-    *timer = timeout;
-
-    return 0;
-}
-
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     int ret;
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    ret = configure_timer(cmd, node, &self->vars->conf.io_timeout);
+    ret = h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.io_timeout);
     if (ret < 0)
         return ret;
     if (!self->connect_timeout_set)
@@ -72,20 +60,20 @@ static int on_config_timeout_connect(h2o_configurator_command_t *cmd, h2o_config
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     self->connect_timeout_set = 1;
-    return configure_timer(cmd, node, &self->vars->conf.connect_timeout);
+    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.connect_timeout);
 }
 
 static int on_config_timeout_first_byte(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     self->first_byte_timeout_set = 1;
-    return configure_timer(cmd, node, &self->vars->conf.first_byte_timeout);
+    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.first_byte_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return configure_timer(cmd, node, &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->keepalive_timeout);
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

@@ -72,7 +72,7 @@ static int check_params(h2o_iovec_t *vecs, size_t *index, uint16_t request_id, c
 static void test_build_request(void)
 {
     h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
-    h2o_fastcgi_config_vars_t config = {{1, 5000}, 0};
+    h2o_fastcgi_config_vars_t config = {5000, 0};
     iovec_vector_t vecs;
     size_t vec_index;
 
