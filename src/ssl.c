@@ -312,14 +312,9 @@ static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned 
 
 #if H2O_USE_PICOTLS
 
-static int encrypt_ticket_key_ptls(ptls_encrypt_ticket_t *self, ptls_t *tls, ptls_buffer_t *dst, ptls_iovec_t src)
+static int encrypt_ticket_key_ptls(ptls_encrypt_ticket_t *self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
 {
-    return ptls_openssl_encrypt_ticket(dst, src, ticket_key_callback);
-}
-
-static int decrypt_ticket_key_ptls(ptls_encrypt_ticket_t *self, ptls_t *tls, ptls_buffer_t *dst, ptls_iovec_t src)
-{
-    return ptls_openssl_decrypt_ticket(dst, src, ticket_key_callback);
+    return (is_encrypt ? ptls_openssl_encrypt_ticket : ptls_openssl_decrypt_ticket)(dst, src, ticket_key_callback);
 }
 
 #endif
@@ -1064,10 +1059,9 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
 #if H2O_USE_PICOTLS
             ptls_context_t *pctx = h2o_socket_ssl_get_picotls_context(ctx);
             if (pctx != NULL) {
-                static ptls_encrypt_ticket_t encryptor = {encrypt_ticket_key_ptls}, decryptor = {decrypt_ticket_key_ptls};
+                static ptls_encrypt_ticket_t encryptor = {encrypt_ticket_key_ptls};
                 pctx->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime;
                 pctx->encrypt_ticket = &encryptor;
-                pctx->decrypt_ticket = &decryptor;
             }
 #endif
         }
