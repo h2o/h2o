@@ -98,16 +98,25 @@ static inline int timer_slot(int wheel, uint64_t expire)
 static h2o_timer_wheel_slot_t *compute_slot(h2o_timer_wheel_t *w, h2o_timer_t *timer)
 {
     h2o_timer_wheel_slot_t *slot;
-    uint64_t diff = timer->expire_at - w->last_run;
-    if (diff < H2O_TIMERWHEEL_SLOTS_PER_WHEEL) {
-        slot = &w->wheel[0][0] + (timer->expire_at & H2O_TIMERWHEEL_SLOTS_MASK);
-    } else if (diff < 1 << (2 * H2O_TIMERWHEEL_BITS_PER_WHEEL)) {
-        slot = &w->wheel[1][0] + ((timer->expire_at >> H2O_TIMERWHEEL_BITS_PER_WHEEL) & H2O_TIMERWHEEL_SLOTS_MASK);
-    } else if (diff < 1 << (3 * H2O_TIMERWHEEL_BITS_PER_WHEEL)) {
-        slot = &w->wheel[2][0] + ((timer->expire_at >> (2 * H2O_TIMERWHEEL_BITS_PER_WHEEL)) & H2O_TIMERWHEEL_SLOTS_MASK);
-    } else {
-        slot = &w->wheel[3][0] + ((timer->expire_at >> (3 * H2O_TIMERWHEEL_BITS_PER_WHEEL)) & H2O_TIMERWHEEL_SLOTS_MASK);
+    uint32_t diff = timer->expire_at - w->last_run;
+
+#define SLOT(idx_) \
+        slot = &w->wheel[(idx_)][0] + ((timer->expire_at >> ((idx_) * H2O_TIMERWHEEL_BITS_PER_WHEEL)) & H2O_TIMERWHEEL_SLOTS_MASK);
+#define IF_SLOT(idx_) \
+    if (diff < 1 << (((idx_) + 1) * H2O_TIMERWHEEL_BITS_PER_WHEEL)) { \
+        SLOT((idx_)) \
     }
+
+    IF_SLOT(0)
+    else IF_SLOT(1)
+    else IF_SLOT(2)
+    else IF_SLOT(3)
+    else IF_SLOT(4)
+    else SLOT(5)
+
+#undef SLOT
+#undef IF_SLOT
+
     return slot;
 }
 
@@ -115,9 +124,6 @@ void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t a
 {
     h2o_timer_wheel_slot_t *slot;
     int wid, sid;
-
-    if (abs_expire - w->last_run > 0xffffffff)
-        abort();
 
     if (abs_expire > w->last_run)
         abs_expire = w->last_run;

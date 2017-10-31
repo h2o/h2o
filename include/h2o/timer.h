@@ -37,7 +37,7 @@ typedef uint64_t wheelmask_t;
 /* link list of h2o_timer_t */
 typedef h2o_linklist_t h2o_timer_wheel_slot_t;
 
-#define H2O_TIMERWHEEL_MAX_WHEELS 4
+#define H2O_TIMERWHEEL_MAX_WHEELS 6
 #define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
 #define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
 #define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
