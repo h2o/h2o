@@ -308,7 +308,7 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timeout_unlink(&req->_timeout_entry);
 
-    if (req->pathconf != NULL) {
+    if (req->pathconf != NULL && !req->is_subrequest) {
         h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);
@@ -478,24 +478,6 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
     return ostr;
 }
 
-void h2o_remove_ostream(h2o_req_t *req, h2o_ostream_t *ostream)
-{
-    /* can't remove final ostream */
-    assert(ostream->next != NULL);
-
-    h2o_ostream_t **slot = &req->_ostr_top;
-    do {
-        if (*slot == ostream) {
-            *slot = ostream->next;
-            ostream->next = NULL;
-            return;
-        }
-        slot = &(*slot)->next;
-    } while (*slot != NULL);
-
-    assert(!"ostream not found");
-}
-
 static void apply_env(h2o_req_t *req, h2o_envconf_t *env)
 {
     size_t i;
@@ -516,13 +498,18 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
         apply_env(req, pathconf->env);
 }
 
+void h2o_proceed_response_deferred(h2o_req_t *req)
+{
+    h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
+}
+
 void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     if (!h2o_send_state_is_in_progress(state)) {
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
     } else if (bufcnt == 0) {
-        h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
+        h2o_proceed_response_deferred(req);
         return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
@@ -735,9 +722,11 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
 {
     h2o_iovec_t ret = h2o_iovec_init(value, value_len);
 
-    h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
-                                           req->input.authority, req->res_is_delegated ? req->scheme : NULL,
-                                           req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
+    if (!req->is_subrequest) {
+        h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
+                                               req->input.authority, req->res_is_delegated ? req->scheme : NULL,
+                                               req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
+    }
 
     return ret;
 }

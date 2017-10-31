@@ -90,6 +90,9 @@ static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ost
     h2o_ostream_t *ostream;
     size_t i;
 
+    if (req->is_subrequest)
+        goto Next;
+
     if (req->res.status >= 400 && !prefilter_is_registered(req)) {
         size_t i;
         for (i = 0; i != self->errordocs.size; ++i) {
@@ -99,6 +102,7 @@ static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ost
         }
     }
 
+Next:
     /* bypass to the next filter */
     h2o_setup_next_ostream(req, slot);
     return;

@@ -1087,6 +1087,10 @@ struct st_h2o_req_t {
      * whether if the bytes sent is counted by ostreams other than final ostream
      */
     unsigned char bytes_counted_by_ostream : 1;
+    /**
+     * whether if this is subrequest or not
+     */
+    unsigned char is_subrequest : 1;
 
     /**
      * Whether the producer of the response has explicitely disabled or
@@ -1318,12 +1322,6 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
  */
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
 /**
- * remove output-stream filter which is already added in ostream chain
- * @param req the request
- * @param ostream output-strema to be removed
- */
-void h2o_remove_ostream(h2o_req_t *req, h2o_ostream_t *ostream);
-/**
  * prepares the request for processing by looking at the method, URI, headers
  */
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
@@ -1372,6 +1370,7 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
  * called by the connection layer to request additional data to the generator
  */
 static void h2o_proceed_response(h2o_req_t *req);
+void h2o_proceed_response_deferred(h2o_req_t *req);
 /**
  * if NULL, supplements h2o_req_t::mime_attr
  */

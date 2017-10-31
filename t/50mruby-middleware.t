@@ -291,22 +291,18 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              begin
-                resp1 = H2O.app.call(env)
-                resp2 = H2O.app.call(env)
-                resp1[2].join
-              rescue => e
-                [503, {}, [e.message]]
-              else
-                [200, {}, []]
-              end
+              resp1 = H2O.app.$mode(env)
+              resp2 = H2O.app.$mode(env)
+              content1 = resp1[2].join
+              content2 = resp2[2].join
+              [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
             }
 EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
-            is $status, 503;
-            is $body, 'this stream is already canceled by following H2O.app.call';
+            is $status, 200;
+            is $body, $files{$file}->{md5} x 2;
             $live_check->($proto, $port, $curl);
         });
     };
@@ -452,6 +448,40 @@ EOT
         };
         is $log[0], 'FOO';
         is $log[1], 'FOO';
+    });
+};
+
+subtest 'set and unset env' => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths: &paths
+      /:
+        - setenv: 
+            foo: FOO
+        - mruby.handler: |
+            proc {|env|
+              env.delete 'foo'
+              env['bar'] = 'BAR'
+              H2O.app.call(env)
+            }
+        - mruby.handler: |
+            proc {|env|
+              [200, {}, [(env.map {|k, v| k + ":" + String(v) + "\\n"}).join]]
+            }
+  "127.0.0.1:$tls_port":
+    paths: *paths
+EOT
+    });
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+
+        my ($status, $headers, $body) = get($proto, $port, $curl, '/');
+        is $status, 200;
+        unlike $body, qr{^foo:FOO$}m;
+        like $body, qr{^bar:BAR$}m;
     });
 };
 

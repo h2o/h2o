@@ -83,17 +83,18 @@
     "    [runner, configurator]\n"                                                                                                 \
     "  end\n"                                                                                                                      \
     "  def sleep(*sec)\n"                                                                                                          \
-    "    _h2o__sleep(*sec) end\n"                                                                                                  \
+    "    _h2o__sleep(*sec)\n"                                                                                                      \
+    "  end\n"                                                                                                                      \
     "end\n"                                                                                                                        \
     "module H2O\n"                                                                                                                 \
     "  class App\n"                                                                                                                \
     "    def call(env)\n"                                                                                                          \
     "      generator = H2O.get_generator(Fiber.current)\n"                                                                         \
-    "      _h2o_invoke_app(env, generator, false)\n"                                                                               \
+    "      _h2o_delegate(env, generator, false)\n"                                                                                 \
     "    end\n"                                                                                                                    \
     "    def reprocess(env)\n"                                                                                                     \
     "      generator = H2O.get_generator(Fiber.current)\n"                                                                         \
-    "      _h2o_invoke_app(env, generator, true)\n"                                                                                \
+    "      _h2o_delegate(env, generator, true)\n"                                                                                  \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  class << self\n"                                                                                                            \
@@ -115,22 +116,18 @@
     "        @@fiber_to_generator[fiber.object_id]\n"                                                                              \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
-    "  class OutputFilterStream\n"                                                                                                 \
+    "  class DelegateInputStream\n"                                                                                                \
     "    def initialize\n"                                                                                                         \
     "      @chunks = []\n"                                                                                                         \
     "      @finished = false\n"                                                                                                    \
-    "      @canceled = false\n"                                                                                                    \
     "    end\n"                                                                                                                    \
     "    def each\n"                                                                                                               \
     "      loop do\n"                                                                                                              \
-    "        if @canceled\n"                                                                                                       \
-    "          raise 'this stream is already canceled by following H2O.app.call'\n"                                                \
-    "        end\n"                                                                                                                \
     "        while c = @chunks.shift\n"                                                                                            \
     "          yield c\n"                                                                                                          \
     "        end\n"                                                                                                                \
     "        break if @finished\n"                                                                                                 \
-    "        _h2o_output_filter_wait_chunk(self)\n"                                                                                \
+    "        _h2o_delegate_wait_chunk(self)\n"                                                                                     \
     "      end\n"                                                                                                                  \
     "    end\n"                                                                                                                    \
     "    def join\n"                                                                                                               \
@@ -190,7 +187,6 @@
     "            _h2o_send_chunk(chunk, generator)\n"                                                                              \
     "          end\n"                                                                                                              \
     "          _h2o_send_chunk_eos(generator)\n"                                                                                   \
-    "          [0]\n"                                                                                                              \
     "        rescue => e\n"                                                                                                        \
     "          Fiber.yield([-1, e, generator])\n"                                                                                  \
     "        end\n"                                                                                                                \

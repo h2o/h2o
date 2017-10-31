@@ -29,7 +29,6 @@ module Kernel
             _h2o_send_chunk(chunk, generator)
           end
           _h2o_send_chunk_eos(generator)
-          [0]
         rescue => e
           Fiber.yield([-1, e, generator])
         end

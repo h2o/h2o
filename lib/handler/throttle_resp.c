@@ -108,6 +108,9 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     h2o_iovec_t traffic_header_value;
     size_t traffic_limit;
 
+    if (req->is_subrequest)
+        goto Next;
+
     if (req->res.status != 200)
         goto Next;
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))

@@ -58,7 +58,7 @@ enum {
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
     H2O_MRUBY_GENERATOR_CLASS,
-    H2O_MRUBY_OUTPUT_FILTER_STREAM_CLASS,
+    H2O_MRUBY_DELEGATE_INPUT_STREAM_CLASS,
 
     /* used by chunked.c */
     H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
@@ -114,24 +114,10 @@ typedef struct st_h2o_mruby_generator_t {
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
     h2o_mruby_chunked_t *chunked;
-    struct {
-        h2o_req_prefilter_t *prefilter;
-        h2o_ostream_t **slot;
-        h2o_ostream_t *ostream;
-        h2o_generator_t *prev;
-        h2o_mruby_generator_t *next;
-        h2o_timeout_entry_t defer_proceed_timeout_entry;
-        h2o_timeout_entry_t defer_close_timeout_entry;
-        struct {
-            h2o_timeout_entry_t timeout_entry;
-            mrb_value receiver;
-            mrb_value args;
-        } defer_invoke;
-    } output_filter;
+    h2o_linklist_t subreqs;
     struct {
         mrb_value generator;
     } refs;
-
 } h2o_mruby_generator_t;
 
 
@@ -142,8 +128,8 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS -4
 #define H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE -5
 #define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -6
-#define H2O_MRUBY_CALLBACK_ID_INVOKE_APP -7
-#define H2O_MRUBY_CALLBACK_ID_OUTPUT_FILTER_WAIT_CHUNK -8
+#define H2O_MRUBY_CALLBACK_ID_DELEGATE -7
+#define H2O_MRUBY_CALLBACK_ID_DELEGATE_WAIT_CHUNK -8
 #define H2O_MRUBY_CALLBACK_ID_SLEEP -999
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
@@ -179,15 +165,13 @@ mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, vo
 void h2o_mruby_setup_globals(mrb_state *mrb);
 struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf);
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *config);
-void h2o_mruby_start_response(h2o_mruby_generator_t *generator);
-void h2o_mruby_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 
 void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *is_delegate);
 mrb_value h2o_mruby_each_to_array(h2o_mruby_shared_context_t *shared_ctx, mrb_value src);
 int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value headers,
                               int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data);
 
-int h2o_mruby_output_filter_set_shortcut(mrb_state *mrb, mrb_value obj);
+int h2o_mruby_delegate_set_shortcut(mrb_state *mrb, mrb_value obj);
 
 /* handler/mruby/chunked.c */
 void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *ctx);

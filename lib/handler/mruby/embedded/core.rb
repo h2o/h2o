@@ -106,7 +106,8 @@ module Kernel
   end
 
   def sleep(*sec)
-    _h2o__sleep(*sec) end
+    _h2o__sleep(*sec)
+  end
 
 end
 
@@ -115,11 +116,11 @@ module H2O
   class App
     def call(env)
       generator = H2O.get_generator(Fiber.current)
-      _h2o_invoke_app(env, generator, false)
+      _h2o_delegate(env, generator, false)
     end
     def reprocess(env)
       generator = H2O.get_generator(Fiber.current)
-      _h2o_invoke_app(env, generator, true)
+      _h2o_delegate(env, generator, true)
     end
   end
 
@@ -144,22 +145,18 @@ module H2O
     end
   end
 
-  class OutputFilterStream
+  class DelegateInputStream
     def initialize
       @chunks = []
       @finished = false
-      @canceled = false
     end
     def each
       loop do
-        if @canceled
-          raise 'this stream is already canceled by following H2O.app.call'
-        end
         while c = @chunks.shift
           yield c
         end
         break if @finished
-        _h2o_output_filter_wait_chunk(self)
+        _h2o_delegate_wait_chunk(self)
       end
     end
     def join

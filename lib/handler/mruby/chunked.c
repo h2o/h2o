@@ -64,7 +64,7 @@ static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int 
         is_final = 0;
     }
 
-    h2o_mruby_send(generator, &buf, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    h2o_send(generator->req, &buf, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
@@ -141,7 +141,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     mrb_state *mrb = generator->ctx->shared->mrb;
 
     /* try output filter shortcut. if succeed, there are no need to setup chunked */
-    int output_filter_shortcutted = h2o_mruby_output_filter_set_shortcut(mrb, body);
+    int output_filter_shortcutted = h2o_mruby_delegate_set_shortcut(mrb, body);
     if (mrb->exc != NULL || output_filter_shortcutted) {
         return mrb_nil_value();
     }
@@ -161,7 +161,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     generator->chunked = chunked;
     mrb_value ret;
 
-    h2o_mruby_start_response(generator);
+    h2o_start_response(generator->req, &generator->super);
 
     if (client != NULL) {
         chunked->type = H2O_MRUBY_CHUNKED_TYPE_SHORTCUT;
@@ -206,9 +206,8 @@ static mrb_value check_precond(mrb_state *mrb, h2o_mruby_generator_t *generator)
 {
     if (generator == NULL || generator->req == NULL)
         return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
-
-    /* NOTE: if mruby handler uses output filter, req->_generator becomes NULL when successor handlers sent H2O_SEND_STATE_FINAL */
-
+    if (generator->req->_generator == NULL)
+        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "cannot send chunk before sending headers");
     return mrb_nil_value();
 }
 
