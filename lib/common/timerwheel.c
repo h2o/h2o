@@ -111,29 +111,26 @@ static h2o_timer_wheel_slot_t *compute_slot(h2o_timer_wheel_t *w, h2o_timer_t *t
     return slot;
 }
 
-int h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
+void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
 {
     h2o_timer_wheel_slot_t *slot;
+    int wid, sid;
 
-    if (abs_expire > w->last_run && (abs_expire - w->last_run) > 0xffffffff) {
-        return -1;
-    }
+    if (abs_expire - w->last_run > 0xffffffff)
+        abort();
+
+    if (abs_expire > w->last_run)
+        abs_expire = w->last_run;
 
     timer->expire_at = abs_expire;
 
-    if (abs_expire <= w->last_run) {
-        slot = &w->expired;
-        WHEEL_DEBUG("timer (expired_at %" PRIu64 ") is added to expired queue\n", abs_expire);
-    } else {
-        int wid = timer_wheel(w->last_run, abs_expire);
-        int sid = timer_slot(wid, abs_expire);
-        slot = &(w->wheel[wid][sid]);
+    wid = timer_wheel(w->last_run, abs_expire);
+    sid = timer_slot(wid, abs_expire);
+    slot = &(w->wheel[wid][sid]);
 
-        WHEEL_DEBUG("timer(expire_at %" PRIu64 ") is added to wheel %d, slot %d\n", abs_expire, wid, sid);
-    }
+    WHEEL_DEBUG("timer(expire_at %" PRIu64 ") is added to wheel %d, slot %d\n", abs_expire, wid, sid);
 
     h2o_linklist_insert(slot, &timer->_link);
-    return 0;
 }
 
 void h2o_timer_unlink(h2o_timer_t *timer)
@@ -163,7 +160,6 @@ void h2o_timer_wheel_init(h2o_timer_wheel_t *w)
             h2o_linklist_init_anchor(&w->wheel[i][j]);
         }
     }
-    h2o_linklist_init_anchor(&w->expired);
 }
 
 /**
@@ -236,9 +232,6 @@ size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
         }
     }
 
-    /* also add all the timers on w->expired slot to the todo list */
-    h2o_linklist_insert_list(&todo, &w->expired);
-
     /* expiration processing */
     while (!h2o_linklist_is_empty(&todo)) {
         h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, todo.next);
@@ -256,9 +249,9 @@ static h2o_timer_abs_t h2o_timer_now_plus(h2o_loop_t *loop, h2o_timer_val_t time
     return timeout + h2o_now(loop);
 }
 
-int h2o_timer_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
+void h2o_timer_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t t_rel_expire)
 {
-    return h2o_timer_link_(&l->_timerwheel, timer, h2o_timer_now_plus(l, t_rel_expire));
+    h2o_timer_link_(&l->_timerwheel, timer, h2o_timer_now_plus(l, t_rel_expire));
 }
 
 #endif /* !H2O_USE_LIBUV */
