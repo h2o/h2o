@@ -60,6 +60,7 @@ static inline int clz(uint64_t n)
 }
 
 /* debug macros and functions */
+#define WANT_DEBUG
 #ifdef WANT_DEBUG
 #define WHEEL_DEBUG(fmt, args...)                                                                                                  \
     do {                                                                                                                           \

@@ -117,8 +117,7 @@ void test_invalid_timer()
     h2o_timer_init(&timer, my_callback);
     testwheel->last_run = 3;
 
-    /* stress testing with one million outstanding timers */
-#define NTIMERS 1024 * 16
+#define NTIMERS 54
     h2o_timer_t *arr = calloc(NTIMERS, sizeof(h2o_timer_t));
     uint32_t expiry = 11;
     int i;
@@ -130,7 +129,12 @@ void test_invalid_timer()
 
     expiry = 11;
     for (i = 0; i < NTIMERS; i++) {
-        assert(h2o_timer_wheel_run(testwheel, expiry++) == 1);
+        int ret = h2o_timer_wheel_run(testwheel, expiry++);
+        if (ret != 1) {
+            h2o_timer_wheel_show(testwheel);
+            fprintf(stderr, "%d %d\n", i, ret);
+            abort();
+        }
     }
 }
 
