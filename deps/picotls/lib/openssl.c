@@ -19,6 +19,12 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+
+#ifdef WIN32
+#include "wincompat.h"
+#else
+#include <unistd.h>
+#endif
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -382,60 +388,77 @@ static void aead_dispose_crypto(ptls_aead_context_t *_ctx)
         EVP_CIPHER_CTX_free(ctx->evp_ctx);
 }
 
-static int aead_do_encrypt(ptls_aead_context_t *_ctx, void *_output, size_t *outlen, const void *input, size_t inlen,
-                           const void *iv, uint8_t enc_content_type)
+static void aead_do_encrypt_init(ptls_aead_context_t *_ctx, const void *iv, const void *aad, size_t aadlen)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
-    uint8_t *output = _output;
-    size_t tag_size = ctx->super.algo->tag_size;
-    int blocklen;
-
-    *outlen = 0;
+    int ret;
 
     /* FIXME for performance, preserve the expanded key instead of the raw key */
-    if (!EVP_EncryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv))
-        return PTLS_ERROR_LIBRARY;
-    if (!EVP_EncryptUpdate(ctx->evp_ctx, output, &blocklen, input, (int)inlen))
-        return PTLS_ERROR_LIBRARY;
-    *outlen += blocklen;
-    if (!EVP_EncryptUpdate(ctx->evp_ctx, output + *outlen, &blocklen, &enc_content_type, 1))
-        return PTLS_ERROR_LIBRARY;
-    *outlen += blocklen;
-    if (!EVP_EncryptFinal_ex(ctx->evp_ctx, output + *outlen, &blocklen))
-        return PTLS_ERROR_LIBRARY;
-    *outlen += blocklen;
-    if (!EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_GET_TAG, (int)tag_size, output + *outlen))
-        return PTLS_ERROR_LIBRARY;
-    *outlen += tag_size;
+    ret = EVP_EncryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv);
+    assert(ret);
 
-    return 0;
+    if (aadlen != 0) {
+        int blocklen;
+        ret = EVP_EncryptUpdate(ctx->evp_ctx, NULL, &blocklen, aad, (int)aadlen);
+        assert(ret);
+    }
 }
 
-static int aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, size_t *outlen, const void *input, size_t inlen,
-                           const void *iv, uint8_t unused)
+static size_t aead_do_encrypt_update(ptls_aead_context_t *_ctx, void *output, const void *input, size_t inlen)
+{
+    struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
+    int blocklen, ret;
+
+    ret = EVP_EncryptUpdate(ctx->evp_ctx, output, &blocklen, input, (int)inlen);
+    assert(ret);
+
+    return blocklen;
+}
+
+static size_t aead_do_encrypt_final(ptls_aead_context_t *_ctx, void *_output)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     uint8_t *output = _output;
-    size_t tag_size = ctx->super.algo->tag_size;
-    int blocklen;
+    size_t off = 0, tag_size = ctx->super.algo->tag_size;
+    int blocklen, ret;
 
-    *outlen = 0;
+    ret = EVP_EncryptFinal_ex(ctx->evp_ctx, output + off, &blocklen);
+    assert(ret);
+    off += blocklen;
+    ret = EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_GET_TAG, (int)tag_size, output + off);
+    assert(ret);
+    off += tag_size;
+
+    return off;
+}
+
+static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *_output, const void *input, size_t inlen, const void *iv,
+                              const void *aad, size_t aadlen)
+{
+    struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
+    uint8_t *output = _output;
+    size_t off = 0, tag_size = ctx->super.algo->tag_size;
+    int blocklen, ret;
 
     if (inlen < tag_size)
-        return PTLS_ALERT_BAD_RECORD_MAC;
+        return SIZE_MAX;
 
-    if (!EVP_DecryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv))
-        return PTLS_ERROR_LIBRARY;
-    if (!EVP_DecryptUpdate(ctx->evp_ctx, output, &blocklen, input, (int)(inlen - tag_size)))
-        return PTLS_ERROR_LIBRARY;
-    *outlen += blocklen;
+    ret = EVP_DecryptInit_ex(ctx->evp_ctx, NULL, NULL, NULL, iv);
+    assert(ret);
+    if (aadlen != 0) {
+        ret = EVP_DecryptUpdate(ctx->evp_ctx, NULL, &blocklen, aad, (int)aadlen);
+        assert(ret);
+    }
+    ret = EVP_DecryptUpdate(ctx->evp_ctx, output + off, &blocklen, input, (int)(inlen - tag_size));
+    assert(ret);
+    off += blocklen;
     if (!EVP_CIPHER_CTX_ctrl(ctx->evp_ctx, EVP_CTRL_GCM_SET_TAG, (int)tag_size, (void *)((uint8_t *)input + inlen - tag_size)))
-        return PTLS_ERROR_LIBRARY;
-    if (!EVP_DecryptFinal_ex(ctx->evp_ctx, output + *outlen, &blocklen))
-        return PTLS_ALERT_BAD_RECORD_MAC;
-    *outlen += blocklen;
+        return SIZE_MAX;
+    if (!EVP_DecryptFinal_ex(ctx->evp_ctx, output + off, &blocklen))
+        return SIZE_MAX;
+    off += blocklen;
 
-    return 0;
+    return off;
 }
 
 static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const EVP_CIPHER *cipher)
@@ -444,7 +467,17 @@ static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *
     int ret;
 
     ctx->super.dispose_crypto = aead_dispose_crypto;
-    ctx->super.do_transform = is_enc ? aead_do_encrypt : aead_do_decrypt;
+    if (is_enc) {
+        ctx->super.do_encrypt_init = aead_do_encrypt_init;
+        ctx->super.do_encrypt_update = aead_do_encrypt_update;
+        ctx->super.do_encrypt_final = aead_do_encrypt_final;
+        ctx->super.do_decrypt = NULL;
+    } else {
+        ctx->super.do_encrypt_init = NULL;
+        ctx->super.do_encrypt_update = NULL;
+        ctx->super.do_encrypt_final = NULL;
+        ctx->super.do_decrypt = aead_do_decrypt;
+    }
     ctx->evp_ctx = NULL;
 
     if ((ctx->evp_ctx = EVP_CIPHER_CTX_new()) == NULL) {
@@ -478,6 +511,13 @@ static int aead_aes128gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, con
 {
     return aead_setup_crypto(ctx, is_enc, key, EVP_aes_128_gcm());
 }
+
+#if defined(PTLS_OPENSSL_HAVE_CHACHA20_POLY1305)
+static int aead_chacha20poly1305_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key)
+{
+    return aead_setup_crypto(ctx, is_enc, key, EVP_chacha20_poly1305());
+}
+#endif
 
 struct sha256_context_t {
     ptls_hash_context_t super;
@@ -620,7 +660,11 @@ int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EV
     *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
     size_t scheme_index = 0;
 
-#define PUSH_SCHEME(id, md) self->schemes[scheme_index++] = (struct st_ptls_openssl_signature_scheme_t){id, md}
+#define PUSH_SCHEME(id, md)                                                                                                        \
+    self->schemes[scheme_index++] = (struct st_ptls_openssl_signature_scheme_t)                                                    \
+    {                                                                                                                              \
+        id, md                                                                                                                     \
+    }
 
     switch (EVP_PKEY_id(key)) {
     case EVP_PKEY_RSA:
@@ -964,4 +1008,14 @@ ptls_aead_algorithm_t ptls_openssl_aes128gcm = {
 ptls_hash_algorithm_t ptls_openssl_sha256 = {64, 32, sha256_create};
 ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_openssl_aes128gcm,
                                                     &ptls_openssl_sha256};
-ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {&ptls_openssl_aes128gcmsha256, NULL};
+#if defined(PTLS_OPENSSL_HAVE_CHACHA20_POLY1305)
+ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {
+    "CHACHA20-POLY1305", 32, 12, 16, sizeof(struct aead_crypto_context_t), aead_chacha20poly1305_setup_crypto};
+ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
+                                                           &ptls_openssl_chacha20poly1305, &ptls_openssl_sha256};
+#endif
+ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {&ptls_openssl_aes128gcmsha256,
+#if defined(PTLS_OPENSSL_HAVE_CHACHA20_POLY1305)
+                                                     &ptls_openssl_chacha20poly1305sha256,
+#endif
+                                                     NULL};

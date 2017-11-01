@@ -11,6 +11,7 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/micro-ecc/uECC.c
     deps/cifra/src/aes.c
     deps/cifra/src/blockwise.c
+    deps/cifra/src/chacha20.c
     deps/cifra/src/chash.c
     deps/cifra/src/curve25519.c
     deps/cifra/src/drbg.c
@@ -18,6 +19,7 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/cifra/src/gcm.c
     deps/cifra/src/gf128.c
     deps/cifra/src/modes.c
+    deps/cifra/src/poly1305.c
     deps/cifra/src/sha256.c)
 
 ADD_LIBRARY(picotls-core lib/picotls.c)
