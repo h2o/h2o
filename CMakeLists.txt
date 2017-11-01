@@ -265,7 +265,6 @@ SET(LIB_SOURCE_FILES
     lib/common/string.c
     lib/common/time.c
     lib/common/timer.c
-    lib/common/timerwheel.c
     lib/common/url.c
 
     lib/core/config.c
