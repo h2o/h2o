@@ -453,7 +453,7 @@ h2o_evloop_t *create_evloop(size_t sz)
 
     update_now(loop);
 
-    h2o_timer_wheel_init(&loop->_timerwheel);
+    h2o_timer_wheel_init(&loop->_timerwheel, loop->_now);
     h2o_timer_wheel_run(&loop->_timerwheel, loop->_now);
     h2o_evloop_run_pending(loop);
 

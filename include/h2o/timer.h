@@ -41,7 +41,6 @@ typedef h2o_linklist_t h2o_timer_wheel_slot_t;
 #define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
 #define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
 #define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
-#define H2O_TIMERWHEEL_MAX_TIMER ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * H2O_TIMERWHEEL_MAX_WHEELS)) - 1)
 
 typedef struct st_h2o_timer_wheel_t {
     h2o_timer_wheel_slot_t wheel[H2O_TIMERWHEEL_MAX_WHEELS][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
@@ -60,7 +59,7 @@ typedef struct st_h2o_timer_t {
 /**
  * initializes a timerwheel
  */
-void h2o_timer_wheel_init(h2o_timer_wheel_t *wheel);
+void h2o_timer_wheel_init(h2o_timer_wheel_t *w, uint64_t now);
 /**
  * display the contents of the timerwheel
  */
