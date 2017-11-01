@@ -136,7 +136,7 @@ void test_invalid_timer()
 
 #endif
 
-void test_lib__common__timeout_c()
+void test_lib__common__timerwheel_c()
 {
 #if !H2O_USE_LIBUV
     subtest("add fixed timers", test_add_fixed_timers);

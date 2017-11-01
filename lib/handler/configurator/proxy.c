@@ -99,13 +99,7 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    int ret;
-    uint64_t timeout;
-    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &timeout);
-    if (ret < 0)
-        return ret;
-    self->vars->conf.websocket.timeout = timeout;
-    return ret;
+    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.websocket.timeout);
 }
 
 static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

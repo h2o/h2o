@@ -386,10 +386,8 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
     }
 
     h2o_socket_read_start(client->super.sock, on_head);
-    if (client->super.ctx->first_byte_timeout) {
-        h2o_timer_init(&client->_timeout, on_head_timeout);
-        h2o_timer_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->first_byte_timeout);
-    }
+    h2o_timer_init(&client->_timeout, on_head_timeout);
+    h2o_timer_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->first_byte_timeout);
 }
 
 static void on_req_body_done(h2o_socket_t *sock, const char *err)
