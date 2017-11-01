@@ -19,6 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#ifdef WIN32
+#include "wincompat.h"
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -168,14 +171,9 @@ int main(int argc, char **argv)
     setup_certificate(&cert);
     setup_sign_certificate(&openssl_sign_certificate);
     ptls_openssl_init_verify_certificate(&openssl_verify_certificate, NULL);
-    ptls_context_t openssl_ctx = {ptls_openssl_random_bytes,
-                                  ptls_openssl_key_exchanges,
-                                  ptls_openssl_cipher_suites,
-                                  {&cert, 1},
-                                  NULL,
-                                  NULL,
-                                  &openssl_sign_certificate.super,
-                                  &openssl_verify_certificate.super};
+    ptls_context_t openssl_ctx = {
+        ptls_openssl_random_bytes,       ptls_openssl_key_exchanges,       ptls_openssl_cipher_suites, {&cert, 1}, NULL, NULL,
+        &openssl_sign_certificate.super, &openssl_verify_certificate.super};
     ctx = ctx_peer = &openssl_ctx;
 
     subtest("ecdh-key-exchange", test_ecdh_key_exchange);

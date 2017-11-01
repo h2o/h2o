@@ -90,6 +90,14 @@
 		10EACB121DCEAF0F00CA0341 /* gf128.h in Headers */ = {isa = PBXBuildFile; fileRef = 105900AB1DC941D700FB4085 /* gf128.h */; };
 		10EACB131DCEAF0F00CA0341 /* curve25519.h in Headers */ = {isa = PBXBuildFile; fileRef = 105900361DC8D44E00FB4085 /* curve25519.h */; };
 		10EACB1A1DCEC2A300CA0341 /* libpicotls-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 106530DA1D9B3E6F005B2C60 /* libpicotls-core.a */; };
+		E9BC76CF1EF3A35E00EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76C61EF3A2F700EB7A09 /* chacha20.c */; };
+		E9BC76D21EF3A36A00EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76C61EF3A2F700EB7A09 /* chacha20.c */; };
+		E9BC76D41EF3A37200EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76C61EF3A2F700EB7A09 /* chacha20.c */; };
+		E9BC76DD1EF3CCD100EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
+		E9BC76DE1EF3CCD100EB7A09 /* poly1305.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76D71EF3C1C200EB7A09 /* poly1305.h */; };
+		E9BC76DF1EF3CCD100EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76CC1EF3A31000EB7A09 /* salsa20.h */; };
+		E9BC76E01EF3CCDD00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
+		E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -188,6 +196,10 @@
 		106530FC1DAD8985005B2C60 /* cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = cli; sourceTree = BUILT_PRODUCTS_DIR; };
 		106530FE1DAD8A3C005B2C60 /* cli.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cli.c; sourceTree = "<group>"; };
 		10EACB171DCEAF0F00CA0341 /* libpicotls-minicrypto.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libpicotls-minicrypto.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E9BC76C61EF3A2F700EB7A09 /* chacha20.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = chacha20.c; path = src/chacha20.c; sourceTree = "<group>"; };
+		E9BC76CC1EF3A31000EB7A09 /* salsa20.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = salsa20.h; path = src/salsa20.h; sourceTree = "<group>"; };
+		E9BC76D61EF3C1C200EB7A09 /* poly1305.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = poly1305.c; path = src/poly1305.c; sourceTree = "<group>"; };
+		E9BC76D71EF3C1C200EB7A09 /* poly1305.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = poly1305.h; path = src/poly1305.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -246,6 +258,7 @@
 				105900281DC8D39800FB4085 /* bitops.h */,
 				1059002A1DC8D39800FB4085 /* blockwise.h */,
 				105900291DC8D39800FB4085 /* blockwise.c */,
+				E9BC76C61EF3A2F700EB7A09 /* chacha20.c */,
 				1059006C1DC8E00400FB4085 /* chash.h */,
 				1059006B1DC8E00400FB4085 /* chash.c */,
 				105900361DC8D44E00FB4085 /* curve25519.h */,
@@ -262,6 +275,9 @@
 				105900AA1DC941D700FB4085 /* gf128.c */,
 				105900B01DC9438200FB4085 /* modes.h */,
 				105900AF1DC9438200FB4085 /* modes.c */,
+				E9BC76D71EF3C1C200EB7A09 /* poly1305.h */,
+				E9BC76D61EF3C1C200EB7A09 /* poly1305.c */,
+				E9BC76CC1EF3A31000EB7A09 /* salsa20.h */,
 				1059005D1DC8DE3800FB4085 /* sha2.h */,
 				1059005F1DC8DE4400FB4085 /* sha256.c */,
 				105900301DC8D3DF00FB4085 /* tassert.h */,
@@ -407,6 +423,7 @@
 				10EACB041DCEAF0F00CA0341 /* types.h in Headers */,
 				10EACB051DCEAF0F00CA0341 /* uECC_vli.h in Headers */,
 				10EACB061DCEAF0F00CA0341 /* modes.h in Headers */,
+				E9BC76DF1EF3CCD100EB7A09 /* salsa20.h in Headers */,
 				10EACB071DCEAF0F00CA0341 /* bitops.h in Headers */,
 				10EACB081DCEAF0F00CA0341 /* cf_config.h in Headers */,
 				10EACB091DCEAF0F00CA0341 /* handy.h in Headers */,
@@ -416,6 +433,7 @@
 				10EACB0D1DCEAF0F00CA0341 /* hmac.h in Headers */,
 				10EACB0E1DCEAF0F00CA0341 /* chash.h in Headers */,
 				10EACB0F1DCEAF0F00CA0341 /* sha2.h in Headers */,
+				E9BC76DE1EF3CCD100EB7A09 /* poly1305.h in Headers */,
 				10EACB101DCEAF0F00CA0341 /* aes.h in Headers */,
 				10EACB111DCEAF0F00CA0341 /* minicrypto.h in Headers */,
 				10EACB121DCEAF0F00CA0341 /* gf128.h in Headers */,
@@ -579,8 +597,10 @@
 				105900C41DC96B2200FB4085 /* uECC.c in Sources */,
 				105900441DC8D57000FB4085 /* picotest.c in Sources */,
 				105900611DC8DF8C00FB4085 /* sha256.c in Sources */,
+				E9BC76D21EF3A36A00EB7A09 /* chacha20.c in Sources */,
 				1059004E1DC8D61800FB4085 /* minicrypto.c in Sources */,
 				10EACAF01DCC843A00CA0341 /* drbg.c in Sources */,
+				E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */,
 				1059006A1DC8DFE300FB4085 /* hmac.c in Sources */,
 				1059006F1DC8E00B00FB4085 /* chash.c in Sources */,
 				105900B41DC943B500FB4085 /* gf128.c in Sources */,
@@ -603,6 +623,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E9BC76E01EF3CCDD00EB7A09 /* poly1305.c in Sources */,
 				105900CF1DCBECFB00FB4085 /* modes.c in Sources */,
 				106530EA1D9B7C13005B2C60 /* picotls.c in Sources */,
 				105900CD1DCBECF400FB4085 /* gcm.c in Sources */,
@@ -617,6 +638,7 @@
 				105900D11DCBED0600FB4085 /* cifra.c in Sources */,
 				105900CE1DCBECF700FB4085 /* gf128.c in Sources */,
 				105900CC1DCBECF100FB4085 /* hmac.c in Sources */,
+				E9BC76D41EF3A37200EB7A09 /* chacha20.c in Sources */,
 				105900CB1DCBECEA00FB4085 /* drbg.c in Sources */,
 				105900CA1DCBECE500FB4085 /* curve25519.c in Sources */,
 			);
@@ -648,7 +670,9 @@
 				10EACAF61DCEAF0F00CA0341 /* gcm.c in Sources */,
 				10EACAF71DCEAF0F00CA0341 /* sha256.c in Sources */,
 				10EACAF81DCEAF0F00CA0341 /* aes.c in Sources */,
+				E9BC76DD1EF3CCD100EB7A09 /* poly1305.c in Sources */,
 				10EACAF91DCEAF0F00CA0341 /* modes.c in Sources */,
+				E9BC76CF1EF3A35E00EB7A09 /* chacha20.c in Sources */,
 				10EACAFB1DCEAF0F00CA0341 /* chash.c in Sources */,
 				10EACAFC1DCEAF0F00CA0341 /* curve25519.c in Sources */,
 				10EACAFD1DCEAF0F00CA0341 /* hmac.c in Sources */,
