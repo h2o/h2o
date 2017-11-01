@@ -122,9 +122,7 @@ uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *w)
 h2o_timer_t *h2o_timer_create(h2o_timer_cb cb)
 {
     h2o_timer_t *t = h2o_mem_alloc(sizeof(h2o_timer_t));
-    memset((void *)t, 0, sizeof(struct st_h2o_timer_t));
-    t->cb = cb;
-
+    *t = (h2o_timer_t){{}, cb};
     return t;
 }
 
