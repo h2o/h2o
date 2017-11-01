@@ -54,7 +54,7 @@ typedef struct st_h2o_http1client_ctx_t {
     h2o_timer_val_t io_timeout;
     h2o_timer_val_t connect_timeout;
     h2o_timer_val_t first_byte_timeout;
-    h2o_timer_val_t *websocket_timeout;
+    h2o_timer_val_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
 } h2o_http1client_ctx_t;
 
 struct st_h2o_http1client_t {
