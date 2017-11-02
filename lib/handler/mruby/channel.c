@@ -122,5 +122,5 @@ void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *shared_ctx)
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHANNEL_CLASS, mrb_obj_value(klass));
     mrb_define_method(mrb, klass, "initialize", channel_initialize_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, klass, "_notify", channel_notify_method, MRB_ARGS_NONE());
-    h2o_mruby_define_callback(mrb, "_h2o__channel_wait", H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT);
+    h2o_mruby_define_callback(mrb, "_h2o__channel_wait", H2O_MRUBY_CALLBACK_ID_CHANNEL_WAIT);
 }

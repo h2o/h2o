@@ -821,7 +821,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             case H2O_MRUBY_CALLBACK_ID_SLEEP:
                 input = h2o_mruby_sleep_callback(ctx, receiver, args, &run_again);
                 break;
-            case H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT:
+            case H2O_MRUBY_CALLBACK_ID_CHANNEL_WAIT:
                 input = h2o_mruby_channel_shift_callback(ctx, receiver, args, &run_again);
                 break;
             case H2O_MRUBY_CALLBACK_ID_RUN_CHILD_FIBER: {
