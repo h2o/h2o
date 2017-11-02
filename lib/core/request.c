@@ -64,15 +64,15 @@ struct st_send_error_deferred_t {
 static void on_deferred_action_dispose(void *_action)
 {
     struct st_deferred_request_action_t *action = _action;
-    h2o_timer_unlink(&action->timeout);
+    h2o_timeout_unlink(&action->timeout);
 }
 
 static struct st_deferred_request_action_t *create_deferred_action(h2o_req_t *req, size_t sz, h2o_timer_cb cb)
 {
     struct st_deferred_request_action_t *action = h2o_mem_alloc_shared(&req->pool, sz, on_deferred_action_dispose);
     action->req = req;
-    h2o_timer_init(&action->timeout, cb);
-    h2o_timer_link(req->conn->ctx->loop, &action->timeout, 0);
+    h2o_timeout_init(&action->timeout, cb);
+    h2o_timeout_link(req->conn->ctx->loop, &action->timeout, 0);
     return action;
 }
 
@@ -293,7 +293,7 @@ void h2o_dispose_request(h2o_req_t *req)
 {
     close_generator_and_filters(req);
 
-    h2o_timer_unlink(&req->_timeout_entry);
+    h2o_timeout_unlink(&req->_timeout_entry);
 
     if (req->pathconf != NULL) {
         h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
@@ -491,7 +491,7 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
     } else if (bufcnt == 0) {
-        h2o_timer_link(req->conn->ctx->loop, &req->_timeout_entry, 0);
+        h2o_timeout_link(req->conn->ctx->loop, &req->_timeout_entry, 0);
         return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
@@ -564,8 +564,8 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     {                                                                                                                              \
         struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));                                     \
         *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
-        h2o_timer_init(&args->_timeout, send_error_deferred_cb_##status_);                                                 \
-        h2o_timer_link(req->conn->ctx->loop, &args->_timeout, 0);                            \
+        h2o_timeout_init(&args->_timeout, send_error_deferred_cb_##status_);                                                 \
+        h2o_timeout_link(req->conn->ctx->loop, &args->_timeout, 0);                            \
     }
 
 DECL_SEND_ERROR_DEFERRED(502)
