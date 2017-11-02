@@ -56,6 +56,36 @@ EOT
     is $stdout, "123456";
 };
 
+subtest "single task with multiple http request bodies" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            ch = H2O::Channel.new
+            req_url = "http://$upstream_hostport/index.txt"
+            req1 = http_request(req_url)
+            req2 = http_request(req_url)
+            task { req1_body = req1.join[2]; ch.push "1"; req1_body.join; ch.push "3"; req2_body = req2.join; ch.push "5"; req2_body.join; ch.push "7";}
+            res = ""
+            res += ch.shift
+            res += "2"
+            res += ch.shift
+            res += "4"
+            res += ch.shift
+            res += "6"
+            res += ch.shift
+            res += "8"
+            [200, {}, [res]]
+          end
+
+EOT
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    is $stdout, "12345678";
+};
+
 subtest "multiple tasks with multiple http requests" => sub {
     my $server = spawn_h2o(<< 'EOT');
 hosts:
