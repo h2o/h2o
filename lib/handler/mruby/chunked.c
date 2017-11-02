@@ -104,9 +104,11 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
     int is_final;
     h2o_buffer_t **input = h2o_mruby_http_peek_content(chunked->shortcut.client, &is_final);
 
-    /* trim data too long */
-    if (chunked->bytes_left != SIZE_MAX && chunked->bytes_left < (*input)->size)
-        (*input)->size = chunked->bytes_left;
+    if (chunked->bytes_left != SIZE_MAX) {
+        if (chunked->bytes_left < (*input)->size)
+            (*input)->size = chunked->bytes_left; /* trim data too long */
+        chunked->bytes_left -= (*input)->size;
+    }
 
     /* if final, steal socket input buffer to shortcut.remaining, and reset pointer to client */
     if (is_final) {
