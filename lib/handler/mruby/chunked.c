@@ -51,20 +51,24 @@ static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int 
 
     h2o_iovec_t buf = h2o_doublebuffer_prepare(&chunked->sending, input, generator->req->preferred_chunk_size);
     size_t bufcnt = 1;
+    h2o_send_state_t send_state;
 
     if (is_final && buf.len == chunked->sending.buf->size && (*input)->size == 0) {
         if (buf.len == 0)
             --bufcnt;
-        /* terminate the H1 connection if the length of content served did not match the value sent in content-length header */
-        if (chunked->bytes_left != SIZE_MAX && chunked->bytes_left != 0)
-            generator->req->http1_is_persistent = 0;
+        /* send error if the length of content served is smaller than content-length header value */
+        if (chunked->bytes_left == 0 || chunked->bytes_left == SIZE_MAX) {
+            send_state = H2O_SEND_STATE_FINAL;
+        } else {
+            send_state = H2O_SEND_STATE_ERROR;
+        }
     } else {
         if (buf.len == 0)
             return;
-        is_final = 0;
+        send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
-    h2o_send(generator->req, &buf, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    h2o_send(generator->req, &buf, bufcnt, send_state);
 }
 
 static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)

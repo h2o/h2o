@@ -257,4 +257,15 @@ builder {
             [],
         ];
     };
+    mount "/content" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        return [
+            200,
+            [
+                ($query->{cl} ? ( 'content-length' => $query->{cl}) : ())
+            ],
+            [ 'a' x ($query->{size} || 0) ],
+        ];
+    };
 };
