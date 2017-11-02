@@ -26,9 +26,6 @@ EOT
     is $stdout, 1;
 };
 
-plan skip_all => 'mruby support is off'
-    unless server_features()->{mruby};
-
 subtest "process string" => sub {
     my $server = spawn_h2o(<< 'EOT');
 hosts:
