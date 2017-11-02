@@ -30,6 +30,7 @@ struct st_h2o_timer_backend_properties_t {
 };
 
 #include "h2o/timer.h"
+#include "h2o/timer_wheel.h"
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2

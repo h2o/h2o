@@ -30,22 +30,7 @@ extern "C" {
 #include <string.h>
 
 #include "h2o/linklist.h"
-#include "h2o/timer_val.h"
 #include "h2o/socket.h"
-
-typedef uint64_t wheelmask_t;
-/* link list of h2o_timer_t */
-typedef h2o_linklist_t h2o_timer_wheel_slot_t;
-
-#define H2O_TIMERWHEEL_MAX_WHEELS 6
-#define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
-#define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
-#define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
-
-typedef struct st_h2o_timer_wheel_t {
-    h2o_timer_wheel_slot_t wheel[H2O_TIMERWHEEL_MAX_WHEELS][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
-    uint64_t last_run; /* the last time h2o_timer_wheel_run was called */
-} h2o_timer_wheel_t;
 
 struct st_h2o_timer_t;
 typedef void (*h2o_timer_cb)(struct st_h2o_timer_t *timer);
@@ -56,18 +41,6 @@ typedef struct st_h2o_timer_t {
     struct st_h2o_timer_backend_properties_t _backend;
 } h2o_timer_t;
 
-/**
- * initializes a timerwheel
- */
-void h2o_timer_wheel_init(h2o_timer_wheel_t *w, uint64_t now);
-/**
- * display the contents of the timerwheel
- */
-void h2o_timer_wheel_show(h2o_timer_wheel_t *wheel);
-/**
- * find out the time ramaining until the next timer triggers
- */
-uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *wheel);
 
 /**
  * creates a timer
@@ -88,10 +61,6 @@ static inline void h2o_timeout_init(h2o_timer_t *t, h2o_timer_cb cb)
 
 typedef uint32_t h2o_timer_tick_t;
 typedef uint64_t h2o_timer_abs_t;
-
-void h2o_timer_link_(h2o_timer_wheel_t *w, struct st_h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
-size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now);
-int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 
 #ifdef __cplusplus
 }
