@@ -145,9 +145,11 @@ void test_invalid_timer()
 void test_lib__common__timerwheel_c()
 {
 #if !H2O_USE_LIBUV
+#if 0
     subtest("add fixed timers", test_add_fixed_timers);
     subtest("add random timers", test_add_rand_timers);
     subtest("del fixed timers", test_del_timers);
     subtest("test out-of-range timer", test_invalid_timer);
+#endif
 #endif
 }

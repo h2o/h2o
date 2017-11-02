@@ -55,7 +55,6 @@ static inline int clz(uint64_t n)
 }
 
 /* debug macros and functions */
-#define WANT_DEBUG
 #ifdef WANT_DEBUG
 #define WHEEL_DEBUG(fmt, args...)                                                                                                  \
     do {                                                                                                                           \
@@ -271,7 +270,6 @@ size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
     } else {
         prev_slot = timer_slot(0, abs_wtime);
         now_slot = timer_slot(0, now);
-        fprintf(stderr, "%s:%d prev_slot:%d, now_slot:%d\n", __func__, __LINE__, prev_slot, now_slot);
         for (i = prev_slot; i <= now_slot; i++) {
             h2o_linklist_insert_list(&todo, &w->wheel[0][i]);
         }
