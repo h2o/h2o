@@ -38,7 +38,7 @@ struct st_h2o_http1_finalostream_t {
         void *buf;
         h2o_ostream_pull_cb cb;
     } pull;
-    h2o_timer_val_t zero_timeout;
+    h2o_timer_tick_t zero_timeout;
 };
 
 struct st_h2o_http1_conn_t {
@@ -46,7 +46,7 @@ struct st_h2o_http1_conn_t {
     h2o_socket_t *sock;
     /* internal structure */
     h2o_linklist_t _conns;
-    h2o_timer_val_t *_timeout;
+    h2o_timer_tick_t *_timeout;
     h2o_timer_t _timeout_entry;
     uint64_t _req_index;
     size_t _prevreqlen;
@@ -120,7 +120,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     free(conn);
 }
 
-static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timer_val_t *timeout, h2o_timer_cb cb)
+static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timer_tick_t *timeout, h2o_timer_cb cb)
 {
     if (conn->_timeout != NULL) {
         h2o_timeout_unlink(&conn->_timeout_entry);

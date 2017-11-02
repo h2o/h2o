@@ -86,6 +86,9 @@ static inline void h2o_timeout_init(h2o_timer_t *t, h2o_timer_cb cb)
     t->cb = cb;
 }
 
+typedef uint32_t h2o_timer_tick_t;
+typedef uint64_t h2o_timer_abs_t;
+
 void h2o_timer_link_(h2o_timer_wheel_t *w, struct st_h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
 size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now);
 int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);

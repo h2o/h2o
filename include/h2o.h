@@ -345,13 +345,13 @@ struct st_h2o_globalconf_t {
     /**
      * SSL handshake timeout
      */
-    h2o_timer_val_t handshake_timeout;
+    h2o_timer_tick_t handshake_timeout;
 
     struct {
         /**
          * request timeout (in milliseconds)
          */
-        h2o_timer_val_t req_timeout;
+        h2o_timer_tick_t req_timeout;
         /**
          * a boolean value indicating whether or not to upgrade to HTTP/2
          */
@@ -366,11 +366,11 @@ struct st_h2o_globalconf_t {
         /**
          * idle timeout (in milliseconds)
          */
-        h2o_timer_val_t idle_timeout;
+        h2o_timer_tick_t idle_timeout;
         /**
          * graceful shutdown timeout (in milliseconds)
          */
-        h2o_timer_val_t graceful_shutdown_timeout;
+        h2o_timer_tick_t graceful_shutdown_timeout;
         /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
          * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value
@@ -395,15 +395,15 @@ struct st_h2o_globalconf_t {
         /**
          * io timeout (in milliseconds)
          */
-        h2o_timer_val_t io_timeout;
+        h2o_timer_tick_t io_timeout;
         /**
          * io timeout (in milliseconds)
          */
-        h2o_timer_val_t connect_timeout;
+        h2o_timer_tick_t connect_timeout;
         /**
          * io timeout (in milliseconds)
          */
-        h2o_timer_val_t first_byte_timeout;
+        h2o_timer_tick_t first_byte_timeout;
         /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
@@ -1724,8 +1724,8 @@ typedef struct st_h2o_fastcgi_handler_t h2o_fastcgi_handler_t;
 #define H2O_DEFAULT_FASTCGI_IO_TIMEOUT 30000
 
 typedef struct st_h2o_fastcgi_config_vars_t {
-    h2o_timer_val_t io_timeout;
-    h2o_timer_val_t keepalive_timeout; /* 0 to disable */
+    h2o_timer_tick_t io_timeout;
+    h2o_timer_tick_t keepalive_timeout; /* 0 to disable */
     h2o_iovec_t document_root;  /* .base=NULL if not set */
     int send_delegated_uri;     /* whether to send the rewritten HTTP_HOST & REQUEST_URI by delegation, or the original */
     struct {
@@ -1826,14 +1826,14 @@ void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 /* lib/proxy.c */
 
 typedef struct st_h2o_proxy_config_vars_t {
-    h2o_timer_val_t io_timeout;
-    h2o_timer_val_t connect_timeout;
-    h2o_timer_val_t first_byte_timeout;
+    h2o_timer_tick_t io_timeout;
+    h2o_timer_tick_t connect_timeout;
+    h2o_timer_tick_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     struct {
         int enabled;
-        h2o_timer_val_t timeout;
+        h2o_timer_tick_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
@@ -1843,7 +1843,7 @@ typedef struct st_h2o_proxy_config_vars_t {
  * registers the reverse proxy handler to the context
  */
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      h2o_timer_val_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config);
+                                      h2o_timer_tick_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config);
 /**
  * registers the configurator
  */

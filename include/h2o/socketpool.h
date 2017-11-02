@@ -82,10 +82,10 @@ typedef struct st_h2o_socketpool_t {
     /* read-only vars */
     h2o_socketpool_target_vector_t targets;
     size_t capacity;
-    h2o_timer_val_t timeout; /* in milliseconds */
+    h2o_timer_tick_t timeout; /* in milliseconds */
     struct {
         h2o_loop_t *loop;
-        h2o_timer_val_t timeout;
+        h2o_timer_tick_t timeout;
         h2o_timer_t entry;
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
@@ -123,11 +123,11 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
  *
  */
-static h2o_timer_val_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool);
+static h2o_timer_tick_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool);
 /**
  *
  */
-static void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_timer_val_t msec);
+static void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_timer_tick_t msec);
 /**
  *
  */
@@ -161,12 +161,12 @@ static int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *
 
 /* inline defs */
 
-inline h2o_timer_val_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool)
+inline h2o_timer_tick_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool)
 {
     return pool->timeout;
 }
 
-inline void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_timer_val_t msec)
+inline void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_timer_tick_t msec)
 {
     pool->timeout = msec;
 }

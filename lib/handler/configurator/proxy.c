@@ -30,7 +30,7 @@
 
 struct proxy_config_wars_t {
     h2o_proxy_config_vars_t conf;
-    h2o_timer_val_t keepalive_timeout; /* in milliseconds */
+    h2o_timer_tick_t keepalive_timeout; /* in milliseconds */
     SSL_CTX *ssl_ctx;
 };
 

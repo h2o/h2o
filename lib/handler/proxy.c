@@ -101,7 +101,7 @@ static void on_handler_dispose(h2o_handler_t *_self)
 }
 
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      h2o_timer_val_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config)
+                                      h2o_timer_tick_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config)
 {
     assert(num_upstreams != 0);
 

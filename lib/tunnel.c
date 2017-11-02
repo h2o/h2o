@@ -28,7 +28,7 @@
 struct st_h2o_tunnel_t {
     h2o_context_t *ctx;
     h2o_timer_t timeout_entry;
-    h2o_timer_val_t *timeout;
+    h2o_timer_tick_t *timeout;
     h2o_socket_t *sock[2];
 };
 
@@ -108,7 +108,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     h2o_socket_read_start(peer, on_read);
 }
 
-h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_socket_t *sock2, h2o_timer_val_t *timeout)
+h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_socket_t *sock2, h2o_timer_tick_t *timeout)
 {
     h2o_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
     tunnel->ctx = ctx;

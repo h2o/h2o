@@ -63,7 +63,7 @@ typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
 
 struct st_fcgi_context_t {
     h2o_fastcgi_handler_t *handler;
-    h2o_timer_val_t io_timeout;
+    h2o_timer_tick_t io_timeout;
 };
 
 struct st_fcgi_generator_t {
@@ -411,7 +411,7 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, 0);
 }
 
-static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timer_val_t timeout, h2o_timer_cb cb)
+static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timer_tick_t timeout, h2o_timer_cb cb)
 {
     h2o_timeout_unlink(&generator->timeout);
     h2o_timeout_init(&generator->timeout, cb);
