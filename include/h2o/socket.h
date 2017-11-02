@@ -33,7 +33,6 @@ extern "C" {
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
-#include "h2o/timer_val.h"
 
 #ifndef H2O_USE_LIBUV
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE
@@ -81,6 +80,9 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 #else
 #include "socket/evloop.h"
 #endif
+
+/* h2o_timer_t in timer.h depends on the loop type */
+#include "h2o/timer.h"
 
 struct st_h2o_socket_peername_t {
     socklen_t len;
