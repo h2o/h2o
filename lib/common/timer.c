@@ -48,6 +48,9 @@ void h2o_timeout_unlink(h2o_timer_t *timer)
 
 #else
 
+#define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
+#define H2O_TIMERWHEEL_MAX_TIMER ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * H2O_TIMERWHEEL_MAX_WHEELS)) - 1)
+
 static inline int clz(uint64_t n)
 {
     H2O_BUILD_ASSERT(sizeof(unsigned long long) == 8);
@@ -55,6 +58,7 @@ static inline int clz(uint64_t n)
 }
 
 /* debug macros and functions */
+#define WANT_DEBUG
 #ifdef WANT_DEBUG
 #define WHEEL_DEBUG(fmt, args...)                                                                                                  \
     do {                                                                                                                           \
@@ -94,6 +98,7 @@ void h2o_timer_wheel_show(h2o_timer_wheel_t *w)
     for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
             h2o_timer_wheel_slot_t *s = &(w->wheel[i][slot]);
+            fprintf(stderr, "[ w: %d, s: %d]\n", i, slot);
             h2o_timer_wheel_slot_show(s, i, slot);
         }
     }
@@ -118,7 +123,8 @@ uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *w)
 /* calculate wheel number base on the absolute expiration time */
 static inline int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
 {
-    uint64_t delta = abs_expire - abs_wtime;
+    uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_SLOTS_MASK;
+    fprintf(stderr, "delta: %"PRIu64", %"PRIu64 " ^ %"PRIu64", mask:%x\n", delta, abs_expire, abs_wtime, H2O_TIMERWHEEL_SLOTS_MASK);
     if (delta == 0)
         return 0;
     return (H2O_TIMERWHEEL_SLOTS_MASK - clz(delta)) / H2O_TIMERWHEEL_BITS_PER_WHEEL;
