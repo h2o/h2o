@@ -15,7 +15,7 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            ch = create_channel
+            ch = H2O::Channel.new
             ch.push 1
             res = ch.shift
             [200, {}, [res]]
@@ -37,7 +37,7 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            ch = create_channel
+            ch = H2O::Channel.new
             ch.push "channel_value"
             res = ch.shift
             [200, {}, [res]]
@@ -56,8 +56,8 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            ch1 = create_channel
-            ch2 = create_channel
+            ch1 = H2O::Channel.new
+            ch2 = H2O::Channel.new
             ch1.push "111"
             ch2.push "222"
             res2 = ch2.shift
@@ -79,7 +79,7 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            ch = create_channel
+            ch = H2O::Channel.new
             res = nil
             task { res = ch.shift }
             ch.push "channel_value"

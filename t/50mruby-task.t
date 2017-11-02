@@ -35,7 +35,7 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            ch = create_channel
+            ch = H2O::Channel.new
             req_url = "http://$upstream_hostport/index.txt"
             req1 = http_request(req_url)
             req2 = http_request(req_url)
@@ -64,7 +64,7 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            ch = create_channel
+            ch = H2O::Channel.new
             req_url = "http://$upstream_hostport/index.txt"
             req1 = http_request(req_url)
             req2 = http_request(req_url)
@@ -95,9 +95,9 @@ hosts:
       /:
         mruby.handler: |
           Proc.new do |env|
-            ch1 = create_channel
-            ch2 = create_channel
-            ch3 = create_channel
+            ch1 = H2O::Channel.new
+            ch2 = H2O::Channel.new
+            ch3 = H2O::Channel.new
             req_url = "http://$upstream_hostport/index.txt"
             req1 = http_request(req_url)
             req2 = http_request(req_url)
