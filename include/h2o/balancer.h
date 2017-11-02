@@ -37,22 +37,14 @@ typedef struct st_h2o_balancer_request_info {
     h2o_iovec_t path;
 } h2o_balancer_request_info;
 
-/* function for configure per-target extra data when parsing configuration. node = NULL for default */
-typedef int (*h2o_balancer_per_target_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
-
-/* function for parsing overall configuration of a load balancer */
-typedef int (*h2o_balancer_overall_conf_parser)(yoml_t *node, void **data, yoml_t **errnode, char **errstr);
-
 typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried,
                                         h2o_balancer_request_info *req_info);
 
-typedef void (*h2o_balancer_constructor)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
+typedef void (*h2o_balancer_constructor)(h2o_socketpool_t *sockpool, void *conf, void **data);
 
 typedef void (*h2o_balancer_finalizer)(void *data);
 
 typedef struct st_h2o_balancer_callbacks_t {
-    h2o_balancer_per_target_conf_parser target_conf_parser;
-    h2o_balancer_overall_conf_parser overall_conf_parser;
     h2o_balancer_constructor construct;
     h2o_balancer_selector selector;
     h2o_balancer_finalizer finalize;
@@ -63,15 +55,6 @@ const h2o_balancer_callbacks_t *h2o_balancer_rr_get_callbacks();
 
 /* least connection */
 const h2o_balancer_callbacks_t *h2o_balancer_lc_get_callbacks();
-
-/* bounded hash */
-const h2o_balancer_callbacks_t *h2o_balancer_hash_get_callbacks();
-
-typedef enum en_h2o_balancer_hash_key_type {
-    H2O_BALANCER_HASH_KEY_TYPE_PATH,
-    H2O_BALANCER_HASH_KEY_TYPE_IP,
-    H2O_BALANCER_HASH_KEY_TYPE_IP_PORT
-} h2o_balancer_hash_key_type;
 
 #ifdef __cplusplus
 }

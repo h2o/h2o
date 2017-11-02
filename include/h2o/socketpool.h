@@ -40,6 +40,14 @@ typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
+typedef struct st_h2o_socketpool_target_conf_t {
+    /* weight for load balancer */
+    size_t weight;
+    
+    /* other per target specific conf for balancer */
+    void *data_for_balancer;
+} h2o_socketpool_target_conf_t;
+
 typedef struct st_h2o_socketpool_target_t {
     /**
      * target URL
@@ -61,7 +69,8 @@ typedef struct st_h2o_socketpool_target_t {
             socklen_t len;
         } sockaddr;
     } peer;
-    void *data_for_balancer;
+    
+    h2o_socketpool_target_conf_t conf;
 
     struct {
         h2o_linklist_t sockets;
@@ -81,7 +90,6 @@ typedef struct st_h2o_socketpool_t {
     h2o_socketpool_target_vector_t targets;
     size_t capacity;
     uint64_t timeout; /* in milliseconds */
-    unsigned is_global : 1;
     struct {
         h2o_loop_t *loop;
         h2o_timeout_t timeout;
@@ -94,6 +102,7 @@ typedef struct st_h2o_socketpool_t {
         size_t count; /* synchronous operations should be used to access the variable */
         pthread_mutex_t mutex;
         h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+        size_t leased_count;
     } _shared;
 
     /* vars used by load balancing, modified by multiple threads */
@@ -110,7 +119,7 @@ typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr
  * initializes a specific socket pool
  */
 void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len,
-                                  const h2o_balancer_callbacks_t *lb_callbacks, void *lb_conf, void **lb_per_target_conf);
+                                  const h2o_balancer_callbacks_t *lb_callbacks, void *lb_conf, h2o_socketpool_target_conf_t *target_conf);
 /**
  * initializes a global socket pool
  */

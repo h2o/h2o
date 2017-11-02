@@ -21,50 +21,30 @@
  */
 #include "h2o/balancer.h"
 
-struct least_conn_t {
-    pthread_mutex_t mutex;
-};
-
-static void construct(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
-{
-    struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
-    pthread_mutex_init(&self->mutex, NULL);
-    *data = self;
-}
+static void construct(h2o_socketpool_t *sockpool, void *unused, void **data) {}
 
 static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, h2o_balancer_request_info *dummy)
 {
     size_t i;
     size_t result = 0;
     size_t least_conn = SIZE_MAX;
-    struct least_conn_t *self = _data;
-
-    pthread_mutex_lock(&self->mutex);
 
     assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
-        if (!tried[i] && targets->entries[i]->_shared.leased_count < least_conn) {
+        if (!tried[i] && targets->entries[i]->_shared.leased_count / targets->entries[i]->conf.weight < least_conn) {
             least_conn = targets->entries[i]->_shared.leased_count;
             result = i;
         }
     }
 
     assert(result < targets->size);
-    pthread_mutex_unlock(&self->mutex);
     return result;
 }
 
-static void finalize(void *data)
-{
-    struct least_conn_t *self = data;
-    pthread_mutex_destroy(&self->mutex);
-    free(data);
-}
+static void finalize(void *data) {}
 
 const h2o_balancer_callbacks_t *h2o_balancer_lc_get_callbacks() {
     static const h2o_balancer_callbacks_t lc_callbacks = {
-        NULL,
-        NULL,
         construct,
         selector,
         finalize

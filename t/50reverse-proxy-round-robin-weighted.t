@@ -55,7 +55,7 @@ sub do_test {
             } else {
                 $unexpected = 1;
             }
-            isnt $unexpected, 1, "no unexpected port"
+            isnt $unexpected, 1;
         });
 }
 
@@ -66,6 +66,6 @@ for my $i (1..30) {
     }
 }
 
-isnt $unexpected, 1, "no unexpected port";
+isnt $unexpected, 1;
 is((2 * $access_count1), $access_count2, "load balanced");
 done_testing();

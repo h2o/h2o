@@ -306,8 +306,6 @@ static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_confi
         self->vars->conf.lb.callbacks = h2o_balancer_rr_get_callbacks();
     } else if (strcmp(lb_type_node->data.scalar, "least-conn") == 0) {
         self->vars->conf.lb.callbacks = h2o_balancer_lc_get_callbacks();
-    } else if (strcmp(lb_type_node->data.scalar, "hash") == 0) {
-        self->vars->conf.lb.callbacks = h2o_balancer_hash_get_callbacks();
     } else {
         h2o_configurator_errprintf(cmd, node,
                                    "specified balancer is currently not supported. supported balancers are: "
@@ -315,14 +313,6 @@ static int on_config_reverse_balancer(h2o_configurator_command_t *cmd, h2o_confi
         return -1;
     }
 
-    if (self->vars->conf.lb.callbacks->overall_conf_parser != NULL && node->type == YOML_TYPE_MAPPING) {
-        yoml_t *errnode;
-        char *errstr;
-        if (self->vars->conf.lb.callbacks->overall_conf_parser(node, &self->vars->conf.lb.lb_conf, &errnode, &errstr) != 0) {
-            h2o_configurator_errprintf(cmd, errnode, "%s\n", errstr);
-            return -1;
-        }
-    }
     return 0;
 }
 
@@ -330,7 +320,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
 
-    void **extra_lb_data = NULL;
+    h2o_socketpool_target_conf_t *lb_per_target_confs;
     yoml_t **inputs;
     size_t num_upstreams, i, j;
 
@@ -349,12 +339,12 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     }
     h2o_url_t *upstreams = alloca(sizeof(*upstreams) * num_upstreams);
-    extra_lb_data = alloca(num_upstreams * sizeof(void *));
+    lb_per_target_confs = alloca(num_upstreams * sizeof(h2o_socketpool_target_conf_t));
     for (i = 0; i != num_upstreams; ++i) {
         yoml_t *url_node = NULL;
         yoml_t *node_for_parsing;
-        yoml_t *errnode;
-        char *errstr;
+        lb_per_target_confs[i].data_for_balancer = NULL; /* currently no balancer needs extra data per target */
+        lb_per_target_confs[i].weight = 1; /* default weight of each target */
         switch (inputs[i]->type) {
         case YOML_TYPE_SCALAR:
             url_node = inputs[i];
@@ -375,7 +365,18 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
                         return -1;
                     }
                     url_node = value;
-                    break;
+                    continue;
+                }
+                if (strcasecmp(key->data.scalar, "weight") == 0) {
+                    if (value->type != YOML_TYPE_SCALAR) {
+                        h2o_configurator_errprintf(cmd, value, "value must be a scalar");
+                        return -1;
+                    }
+                    lb_per_target_confs[i].weight = h2o_strtosize(value->data.scalar, strlen(value->data.scalar));
+                    if (lb_per_target_confs[i].weight == SIZE_MAX || lb_per_target_confs[i].weight == 0) {
+                        h2o_configurator_errprintf(cmd, value, "value of weight must be an unsigned integer greater than 0");
+                        return -1;
+                    }
                 }
             }
 
@@ -396,14 +397,6 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             h2o_configurator_errprintf(cmd, url_node, "failed to parse URL: %s\n", url_node->data.scalar);
             return -1;
         }
-
-        if (self->vars->conf.lb.callbacks->target_conf_parser != NULL) {
-            if (self->vars->conf.lb.callbacks->target_conf_parser(node_for_parsing, &extra_lb_data[i], &errnode, &errstr) != 0) {
-                h2o_configurator_errprintf(cmd, errnode, "%s\n", errstr);
-                return -1;
-            }
-        }
-
     }
 
     if (self->vars->keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
@@ -423,7 +416,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     h2o_socketpool_t *sockpool = malloc(sizeof(*sockpool));
     memset(sockpool, 0, sizeof(*sockpool));
     /* init socket pool */
-    h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams, self->vars->conf.lb.callbacks, self->vars->conf.lb.lb_conf, extra_lb_data);
+    h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams, self->vars->conf.lb.callbacks, self->vars->conf.lb.lb_conf, lb_per_target_confs);
     h2o_socketpool_set_timeout(sockpool, self->vars->keepalive_timeout);
     h2o_socketpool_set_ssl_ctx(sockpool, self->vars->ssl_ctx);
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &self->vars->conf, sockpool);

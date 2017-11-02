@@ -29,75 +29,22 @@ struct round_robin_t {
     pthread_mutex_t mutex;
 };
 
-struct round_robin_target_conf_t {
-    size_t weight;
-};
-
-static void construct(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
+static void construct(h2o_socketpool_t *sockpool, void *unused, void **data)
 {
     size_t i;
-    struct round_robin_target_conf_t *target_conf;
     struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
+    h2o_socketpool_target_vector_t *targets = &sockpool->targets;
     self->next_pos = 0;
     self->next_actual_target = 0;
     pthread_mutex_init(&self->mutex, NULL);
     self->floor_next_target = h2o_mem_alloc(sizeof(*self->floor_next_target) * targets->size);
 
-    target_conf = targets->entries[0]->data_for_balancer;
-    self->floor_next_target[0] = target_conf->weight;
+    self->floor_next_target[0] = targets->entries[0]->conf.weight;
     for (i = 1; i < targets->size; i++) {
-        target_conf = targets->entries[i]->data_for_balancer;
-        self->floor_next_target[i] = self->floor_next_target[i - 1] + target_conf->weight;
+        self->floor_next_target[i] = self->floor_next_target[i - 1] + targets->entries[i]->conf.weight;
     }
     self->pos_less_than = self->floor_next_target[targets->size - 1];
     *data = self;
-}
-
-static int per_target_conf_parser(yoml_t *node, void **data, yoml_t **errnode, char **errstr)
-{
-    struct round_robin_target_conf_t *result;
-    if (node == NULL || node->type == YOML_TYPE_SCALAR) {
-        result = h2o_mem_alloc(sizeof(*result));
-        result->weight = 1;
-        *data = (void *)result;
-        return 0;
-    }
-    if (node != NULL && node->type == YOML_TYPE_MAPPING) {
-        result = h2o_mem_alloc(sizeof(*result));
-        result->weight = 1;
-        size_t i;
-        int scanf_ret;
-        for (i = 0; i < node->data.mapping.size; i++) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t *value = node->data.mapping.elements[i].value;
-            if (key->type != YOML_TYPE_SCALAR) {
-                *errnode = key;
-                *errstr = "key must be a scalar";
-                free(result);
-                return -1;
-            }
-            if (strcasecmp(key->data.scalar, "weight") == 0) {
-                if (value->type != YOML_TYPE_SCALAR) {
-                    *errnode = value;
-                    *errstr = "value must be a scalar";
-                    free(result);
-                    return -1;
-                }
-                scanf_ret = sscanf(value->data.scalar, "%zu", &result->weight);
-                if (scanf_ret != 1) {
-                    *errnode = value;
-                    *errstr = "value must be an unsigned integer";
-                    free(result);
-                    return -1;
-                }
-                *data = (void *)result;
-                return 0;
-            }
-        }
-        *data = (void *)result;
-        return 0;
-    }
-    return -1;
 }
 
 static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, h2o_balancer_request_info *dummy)
@@ -147,8 +94,6 @@ static void finalize(void *data)
 
 const h2o_balancer_callbacks_t *h2o_balancer_rr_get_callbacks() {
     static const h2o_balancer_callbacks_t rr_callbacks = {
-        per_target_conf_parser,
-        NULL,
         construct,
         selector,
         finalize
