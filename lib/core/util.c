@@ -70,6 +70,7 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
     struct st_h2o_accept_data_t *data = h2o_mem_alloc(sz);
     data->ctx = ctx;
     data->sock = sock;
+    data->timeout = h2o_timeout_init(NULL);
     data->connected_at = connected_at;
     return data;
 }
