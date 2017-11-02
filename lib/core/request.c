@@ -72,7 +72,7 @@ static struct st_deferred_request_action_t *create_deferred_action(h2o_req_t *re
     struct st_deferred_request_action_t *action = h2o_mem_alloc_shared(&req->pool, sz, on_deferred_action_dispose);
     action->req = req;
     action->timeout.cb = cb;
-    h2o_timeout_link(req->conn->ctx->loop, &action->timeout, 0);
+    h2o_timeout_link(req->conn->ctx->loop, 0, &action->timeout);
     return action;
 }
 
@@ -491,7 +491,7 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
     } else if (bufcnt == 0) {
-        h2o_timeout_link(req->conn->ctx->loop, &req->_timeout_entry, 0);
+        h2o_timeout_link(req->conn->ctx->loop, 0, &req->_timeout_entry);
         return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
@@ -552,7 +552,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
 }
 
 #define DECL_SEND_ERROR_DEFERRED(status_)                                                                                          \
-    static void send_error_deferred_cb_##status_(h2o_timer_t *entry)                                                       \
+    static void send_error_deferred_cb_##status_(h2o_timer_t *entry)                                                               \
     {                                                                                                                              \
         struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry);          \
         reset_response(args->req);                                                                                                 \
@@ -564,8 +564,8 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     {                                                                                                                              \
         struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));                                     \
         *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
-        args->_timeout.cb = send_error_deferred_cb_##status_;                                                 \
-        h2o_timeout_link(req->conn->ctx->loop, &args->_timeout, 0);                            \
+        args->_timeout.cb = send_error_deferred_cb_##status_;                                                                      \
+        h2o_timeout_link(req->conn->ctx->loop, 0, &args->_timeout);                                                                \
     }
 
 DECL_SEND_ERROR_DEFERRED(502)

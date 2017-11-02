@@ -114,7 +114,7 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
         }
     }
 
-    h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->io_timeout);
+    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
 static void on_body_content_length(h2o_socket_t *sock, const char *err)
@@ -154,7 +154,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
         }
     }
 
-    h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->io_timeout);
+    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
 static void on_req_chunked(h2o_socket_t *sock, const char *err)
@@ -214,7 +214,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
         }
     }
 
-    h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->io_timeout);
+    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
 static void on_error_before_head(struct st_h2o_http1client_private_t *client, const char *errstr)
@@ -259,7 +259,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
             on_error_before_head(client, "failed to parse the response");
             goto Exit;
         case -2: /* incomplete */
-            h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->io_timeout);
+            h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
             goto Exit;
         }
 
@@ -290,7 +290,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
             goto Exit;
         }
         h2o_buffer_consume(&client->super.sock->input, rlen);
-        h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->io_timeout);
+        h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
         goto Exit;
     }
 
@@ -387,7 +387,7 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
 
     h2o_socket_read_start(client->super.sock, on_head);
     client->_timeout.cb = on_head_timeout;
-    h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->first_byte_timeout);
+    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->_timeout);
 }
 
 static void on_req_body_done(h2o_socket_t *sock, const char *err)
@@ -528,7 +528,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
 
     /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
     client->_timeout.cb = on_send_timeout;
-    h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->io_timeout);
+    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
 
@@ -587,7 +587,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     /* setup */
     client = create_client(_client, data, ctx, is_chunked, cb);
     client->_timeout.cb = on_connect_timeout;
-    h2o_timeout_link(ctx->loop, &client->_timeout, ctx->connect_timeout);
+    h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
     client->super.sockpool.pool = socketpool;
 
     h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, target, ctx->loop, ctx->getaddr_receiver,

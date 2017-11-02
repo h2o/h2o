@@ -90,7 +90,7 @@ void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port)
     if (redis->err != REDIS_OK) {
         /* some connection failures can be detected at this time */
         conn->_timeout_entry.cb = on_connect_error_deferred;
-        h2o_timeout_link(conn->loop, &conn->_timeout_entry, 0);
+        h2o_timeout_link(conn->loop, 0, &conn->_timeout_entry);
         return;
     }
 
@@ -134,14 +134,14 @@ h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command
     command->_timeout_entry.cb = on_command_error_deferred;
 
     if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
-        h2o_timeout_link(conn->loop, &conn->_timeout_entry, 0);
+        h2o_timeout_link(conn->loop, 0, &conn->_timeout_entry);
     } else {
         va_list ap;
         va_start(ap, format);
         if (redisvAsyncCommand(conn->_redis, on_command, command, format, ap) != REDIS_OK) {
             /* the case that redisAsyncContext is disconnecting or freeing */
             /* call the callback immediately with NULL reply */
-            h2o_timeout_link(conn->loop, &conn->_timeout_entry, 0);
+            h2o_timeout_link(conn->loop, 0, &conn->_timeout_entry);
         }
         va_end(ap);
     }

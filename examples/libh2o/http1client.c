@@ -169,7 +169,7 @@ static void proceed_request(h2o_http1client_t *client, size_t written, int is_en
         memset(tctx, 0, sizeof(*tctx));
         tctx->sock = client->sock;
         tctx->_timeout.cb = timeout_cb;
-        h2o_timeout_link(client->ctx->loop, &tctx->_timeout, delay_interval_ms);
+        h2o_timeout_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 }
 
@@ -194,7 +194,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         memset(tctx, 0, sizeof(*tctx));
         tctx->sock = client->sock;
         tctx->_timeout.cb = timeout_cb;
-        h2o_timeout_link(client->ctx->loop, &tctx->_timeout, delay_interval_ms);
+        h2o_timeout_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 
     return on_head;

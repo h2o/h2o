@@ -35,7 +35,7 @@ static void on_timeout(uv_timer_t *uv_timer)
     timer->cb(timer);
 }
 
-void h2o_timeout_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_tick_t rel_expire)
+void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, h2o_timer_t *timer)
 {
     uv_timer_init(l, &timer->_backend.timer);
     uv_timer_start(&timer->_backend.timer, on_timeout, h2o_now(l) + rel_expire, 0);
@@ -299,7 +299,7 @@ void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t ab
     h2o_timer_link_(w, timer, abs_expire);
 }
 
-void h2o_timeout_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_tick_t rel_expire)
+void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, h2o_timer_t *timer)
 {
     h2o_timer_link(&l->_timerwheel, timer, h2o_timer_now_plus(l, rel_expire));
 }

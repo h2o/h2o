@@ -79,7 +79,7 @@ static struct st_h2o_accept_data_t *create_default_accept_data(h2o_accept_ctx_t 
 {
     struct st_h2o_accept_data_t *data = create_accept_data(ctx, sock, connected_at, sizeof(struct st_h2o_accept_data_t));
     data->timeout.cb = on_accept_timeout;
-    h2o_timeout_link(ctx->ctx->loop, &data->timeout, ctx->ctx->globalconf->handshake_timeout);
+    h2o_timeout_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->timeout);
     return data;
 }
 
@@ -89,7 +89,7 @@ static struct st_h2o_accept_data_t *create_redis_accept_data(h2o_accept_ctx_t *c
         ctx, sock, connected_at, sizeof(struct st_h2o_redis_resumption_accept_data_t));
     data->get_command = NULL;
     data->super.timeout.cb = on_redis_accept_timeout;
-    h2o_timeout_link(ctx->ctx->loop, &data->super.timeout, ctx->ctx->globalconf->handshake_timeout);
+    h2o_timeout_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->super.timeout);
     return &data->super;
 }
 
@@ -100,7 +100,7 @@ static struct st_h2o_accept_data_t *create_memcached_accept_data(h2o_accept_ctx_
         ctx, sock, connected_at, sizeof(struct st_h2o_memcached_resumption_accept_data_t));
     data->get_req = NULL;
     data->super.timeout.cb = on_memcached_accept_timeout;
-    h2o_timeout_link(ctx->ctx->loop, &data->super.timeout, ctx->ctx->globalconf->handshake_timeout);
+    h2o_timeout_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->super.timeout);
     return &data->super;
 }
 
@@ -270,7 +270,7 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
         // abort resumption
         h2o_timeout_unlink(&accept_data->super.timeout);
         accept_data->super.timeout.cb = on_redis_resumption_get_failed;
-        h2o_timeout_link(accept_data->super.ctx->ctx->loop, &accept_data->super.timeout, 0);
+        h2o_timeout_link(accept_data->super.ctx->ctx->loop, 0, &accept_data->super.timeout);
     }
 }
 

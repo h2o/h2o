@@ -70,7 +70,7 @@ static void add_token(h2o_timer_t *entry)
     throttle_resp_t *self = H2O_STRUCT_FROM_MEMBER(throttle_resp_t, timeout_entry, entry);
 
     h2o_timeout_unlink(&self->timeout_entry);
-    h2o_timeout_link(self->ctx->loop, &self->timeout_entry, 100);
+    h2o_timeout_link(self->ctx->loop, 100, &self->timeout_entry);
     self->tokens += self->token_inc;
 
     if (self->tokens > 0)
@@ -143,7 +143,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     slot = &throttle->super.next;
 
     throttle->timeout_entry.cb = add_token;
-    h2o_timeout_link(throttle->ctx->loop, &throttle->timeout_entry, 100);
+    h2o_timeout_link(throttle->ctx->loop, 100, &throttle->timeout_entry);
 
 Next:
     h2o_setup_next_ostream(req, slot);

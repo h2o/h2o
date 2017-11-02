@@ -415,7 +415,7 @@ static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timer_tick_t 
 {
     h2o_timeout_unlink(&generator->timeout);
     generator->timeout.cb = cb;
-    h2o_timeout_link(generator->req->conn->ctx->loop, &generator->timeout, timeout);
+    h2o_timeout_link(generator->req->conn->ctx->loop, timeout, &generator->timeout);
 }
 
 static void close_generator(struct st_fcgi_generator_t *generator)
@@ -770,7 +770,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
     generator->timeout.cb = on_connect_timeout;
-    h2o_timeout_link(req->conn->ctx->loop, &generator->timeout, generator->ctx->io_timeout);
+    h2o_timeout_link(req->conn->ctx->loop, generator->ctx->io_timeout, &generator->timeout);
 
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
                            req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
