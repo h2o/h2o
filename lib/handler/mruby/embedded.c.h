@@ -160,12 +160,7 @@
     "      if @queue.empty?\n"                                                                                                  \
     "        _h2o__channel_wait(self)\n"                                                                                              \
     "      end\n"                                                                                                                \
-    "      begin\n"                                                                                           \
-    "        ret = @queue.shift\n"                                                                                           \
-    "      rescue => ex\n"                                                                                           \
-    "        raise ex\n"                                                                                           \
-    "      end\n"                                                                                           \
-    "      ret\n"                                                                                           \
+    "      @queue.shift\n"                                                                                           \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"
