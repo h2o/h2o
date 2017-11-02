@@ -305,9 +305,14 @@ static h2o_timer_abs_t h2o_timer_now_plus(h2o_loop_t *loop, h2o_timer_val_t time
     return timeout + h2o_now(loop);
 }
 
+void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
+{
+    h2o_timeout_link_(w, timer, abs_expire);
+}
+
 void h2o_timeout_link(h2o_loop_t *l, h2o_timer_t *timer, h2o_timer_val_t rel_expire)
 {
-    h2o_timeout_link_(&l->_timerwheel, timer, h2o_timer_now_plus(l, rel_expire));
+    h2o_timer_link(&l->_timerwheel, timer, h2o_timer_now_plus(l, rel_expire));
 }
 
 #endif
