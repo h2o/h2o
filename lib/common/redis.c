@@ -89,7 +89,7 @@ void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port)
 
     if (redis->err != REDIS_OK) {
         /* some connection failures can be detected at this time */
-        h2o_timeout_init(&conn->_timeout_entry, on_connect_error_deferred);
+        conn->_timeout_entry.cb = on_connect_error_deferred;
         h2o_timeout_link(conn->loop, &conn->_timeout_entry, 0);
         return;
     }
@@ -131,7 +131,7 @@ h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command
     command->conn = conn;
     command->cb = cb;
     command->data = cb_data;
-    h2o_timeout_init(&command->_timeout_entry, on_command_error_deferred);
+    command->_timeout_entry.cb = on_command_error_deferred;
 
     if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
         h2o_timeout_link(conn->loop, &conn->_timeout_entry, 0);

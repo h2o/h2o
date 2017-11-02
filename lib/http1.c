@@ -127,7 +127,7 @@ static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timer_tick_t *time
     }
     conn->_timeout = timeout;
     if (timeout != NULL) {
-        h2o_timeout_init(&conn->_timeout_entry, cb);
+        conn->_timeout_entry.cb = cb;
         h2o_timeout_link(conn->super.ctx->loop, &conn->_timeout_entry, *conn->_timeout);
     }
 }

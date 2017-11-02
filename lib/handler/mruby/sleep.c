@@ -81,7 +81,7 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
     memset(ctx, 0, sizeof(*ctx));
     ctx->ctx = mctx;
     ctx->receiver = receiver;
-    h2o_timeout_init(&ctx->timeout_entry, on_sleep_timeout);
+    ctx->timeout_entry.cb = on_sleep_timeout;
     h2o_timeout_link(ctx->ctx->shared->ctx->loop, &ctx->timeout_entry, msec);
 
     ctx->started_at = h2o_now(ctx->ctx->shared->ctx->loop);

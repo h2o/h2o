@@ -414,7 +414,7 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
 static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timer_tick_t timeout, h2o_timer_cb cb)
 {
     h2o_timeout_unlink(&generator->timeout);
-    h2o_timeout_init(&generator->timeout, cb);
+    generator->timeout.cb = cb;
     h2o_timeout_link(generator->req->conn->ctx->loop, &generator->timeout, timeout);
 }
 
@@ -769,7 +769,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->sent_headers = 0;
     h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
-    h2o_timeout_init(&generator->timeout, on_connect_timeout);
+    generator->timeout.cb = on_connect_timeout;
     h2o_timeout_link(req->conn->ctx->loop, &generator->timeout, generator->ctx->io_timeout);
 
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,

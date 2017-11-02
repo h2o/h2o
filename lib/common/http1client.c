@@ -386,7 +386,7 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
     }
 
     h2o_socket_read_start(client->super.sock, on_head);
-    h2o_timeout_init(&client->_timeout, on_head_timeout);
+    client->_timeout.cb = on_head_timeout;
     h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->first_byte_timeout);
 }
 
@@ -527,7 +527,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     }
 
     /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
-    h2o_timeout_init(&client->_timeout, on_send_timeout);
+    client->_timeout.cb = on_send_timeout;
     h2o_timeout_link(client->super.ctx->loop, &client->_timeout, client->super.ctx->io_timeout);
 }
 
@@ -586,7 +586,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
 
     /* setup */
     client = create_client(_client, data, ctx, is_chunked, cb);
-    h2o_timeout_init(&client->_timeout, on_connect_timeout);
+    client->_timeout.cb = on_connect_timeout;
     h2o_timeout_link(ctx->loop, &client->_timeout, ctx->connect_timeout);
     client->super.sockpool.pool = socketpool;
 

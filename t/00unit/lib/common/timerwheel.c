@@ -113,8 +113,8 @@ void test_invalid_timer()
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
     h2o_timer_wheel_init(testwheel, 0);
 
-    h2o_timer_t timer;
-    h2o_timeout_init(&timer, my_callback);
+    h2o_timer_t timer = (h2o_timer_t){};
+    timer.cb = my_callback;
     //testwheel->last_run = 3;
 
 #define NTIMERS 54
@@ -122,7 +122,7 @@ void test_invalid_timer()
     uint32_t expiry = 11;
     int i;
     for (i = 0; i < NTIMERS; i++) {
-        h2o_timeout_init(&arr[i], my_callback);
+        arr[i].cb = my_callback;
         h2o_timer_link_(testwheel, &arr[i], expiry);
         expiry++;
     }

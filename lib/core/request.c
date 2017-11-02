@@ -71,7 +71,7 @@ static struct st_deferred_request_action_t *create_deferred_action(h2o_req_t *re
 {
     struct st_deferred_request_action_t *action = h2o_mem_alloc_shared(&req->pool, sz, on_deferred_action_dispose);
     action->req = req;
-    h2o_timeout_init(&action->timeout, cb);
+    action->timeout.cb = cb;
     h2o_timeout_link(req->conn->ctx->loop, &action->timeout, 0);
     return action;
 }
@@ -564,7 +564,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     {                                                                                                                              \
         struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));                                     \
         *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
-        h2o_timeout_init(&args->_timeout, send_error_deferred_cb_##status_);                                                 \
+        args->_timeout.cb = send_error_deferred_cb_##status_;                                                 \
         h2o_timeout_link(req->conn->ctx->loop, &args->_timeout, 0);                            \
     }
 
