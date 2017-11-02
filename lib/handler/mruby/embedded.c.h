@@ -11,22 +11,11 @@
     "end\n"                                                                                                                        \
     "module Kernel\n"                                                                                                              \
     "  def task(&block)\n"                                                                                                         \
-    "    f = Fiber.new do\n"                                                                                                       \
+    "    fiber = Fiber.new do\n"                                                                                                       \
     "      block.call\n"                                                                                                           \
-    "      # For when it's called in h2o_mruby_run_fiber and return output,\n"                                                     \
-    "      # or block doesn't have asynchronous callback\n"                                                                        \
     "      [0, nil, nil]\n"                                                                                           \
     "    end\n"                                                                                                                    \
-    "    fiber_res = f.resume()\n"                                                                                                 \
-    "    # In case having no asynchronous callback function\n"                                                                     \
-    "    if fiber_res[0] == 0\n"                                                                                                   \
-    "      return\n"                                                                                                               \
-    "    end\n"                                                                                                                    \
-    "    receiver = fiber_res[1]\n"                                                                                                \
-    "    klass = fiber_res[2][0]\n"                                                                                                \
-    "    # This should be called only one time.\n"                                                                                 \
-    "    # After that, the fiber is called in mruby_run_fiber and it register receiver in it.\n"                                   \
-    "    klass.register_receiver(receiver)\n"                                                                               \
+    "    Fiber.yield([H2O_CALLBACK_ID_RUN_CHILD_FIBER, proc { fiber.resume }, [_h2o_create_resumer()]])\n"                                                                               \
     "  end\n"                                                                                                                      \
     "  def _h2o_define_callback(name, id)\n"                                                                                       \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
@@ -55,6 +44,7 @@
     "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
     "  H2O_CALLBACK_ID_CONFIGURING_APP = -2\n"                                                                                     \
     "  H2O_CALLBACK_ID_CONFIGURED_APP = -3\n"                                                                                      \
+    "  H2O_CALLBACK_ID_RUN_CHILD_FIBER  = -777\n"                                                                                      \
     "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
     "      [H2O_CALLBACK_ID_CONFIGURING_APP]\n"                                                                                    \

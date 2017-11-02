@@ -128,6 +128,7 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE -5
 #define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -6
 #define H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT -7
+#define H2O_MRUBY_CALLBACK_ID_RUN_CHILD_FIBER -777
 #define H2O_MRUBY_CALLBACK_ID_SLEEP -999
 
 #define h2o_mruby_assert(mrb)                                                                                                      \

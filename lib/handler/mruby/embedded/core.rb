@@ -26,22 +26,13 @@ end
 
 module Kernel
   def task(&block)
-    f = Fiber.new do
+    fiber = Fiber.new do
       block.call
       # For when it's called in h2o_mruby_run_fiber and return output,
       # or block doesn't have asynchronous callback
       [0, nil, nil]
     end
-    fiber_res = f.resume()
-    # In case having no asynchronous callback function
-    if fiber_res[0] == 0
-      return
-    end
-    receiver = fiber_res[1]
-    klass = fiber_res[2][0]
-    # This should be called only one time.
-    # After that, the fiber is called in mruby_run_fiber and it register receiver in it.
-    klass.register_receiver(receiver)
+    Fiber.yield([H2O_CALLBACK_ID_RUN_CHILD_FIBER, proc { fiber.resume }, [_h2o_create_resumer()]])
   end
 
   def _h2o_define_callback(name, id)
@@ -74,6 +65,7 @@ module Kernel
   H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
   H2O_CALLBACK_ID_CONFIGURING_APP = -2
   H2O_CALLBACK_ID_CONFIGURED_APP = -3
+  H2O_CALLBACK_ID_RUN_CHILD_FIBER  = -777
   def _h2o_prepare_app(conf)
     app = Proc.new do |req|
       [H2O_CALLBACK_ID_CONFIGURING_APP]

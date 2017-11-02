@@ -751,6 +751,8 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     mrb_int status;
     h2o_mruby_generator_t *generator = NULL;
 
+    mrb_value resumers = mrb_ary_new(mrb);
+
     while (1) {
         /* send input to fiber */
         output = mrb_funcall_argv(mrb, receiver, ctx->shared->symbols.sym_call, 1, &input);
@@ -822,20 +824,31 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             case H2O_MRUBY_CALLBACK_ID_CHANNEL_SHIFT:
                 input = h2o_mruby_channel_shift_callback(ctx, receiver, args, &run_again);
                 break;
+            case H2O_MRUBY_CALLBACK_ID_RUN_CHILD_FIBER: {
+                mrb_value resumer = mrb_ary_entry(args, 0);
+                mrb_ary_push(mrb, resumers, resumer);
+                input = mrb_nil_value();
+                run_again = 1;
+                break;
+            }
             default:
                 input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
                 run_again = 1;
                 break;
             }
-            if (run_again == 0)
-                goto Exit;
-
+            if (run_again == 0) {
+                if (RARRAY_LEN(resumers) == 0)
+                    goto Exit;
+                input = mrb_nil_value();
+                receiver = mrb_ary_pop(mrb, resumers);
+            }
         } else {
             input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "callback from rack app did not receive an array arg");
         }
 
         mrb_gc_protect(mrb, receiver);
         mrb_gc_protect(mrb, input);
+        mrb_gc_protect(mrb, resumers);
     }
 
     if (status == 0) {
