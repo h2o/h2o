@@ -46,11 +46,6 @@ void h2o_timeout_unlink(h2o_timer_t *timer)
     uv_timer_stop(&timer->_backend.timer);
 }
 
-h2o_timer_t *h2o_timer_create(h2o_timer_cb cb)
-{
-    return calloc(1, sizeof(h2o_timer_t));
-}
-
 #else
 
 static inline int clz(uint64_t n)
@@ -120,12 +115,6 @@ uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *w)
 }
 
 /* timer APIs */
-h2o_timer_t *h2o_timer_create(h2o_timer_cb cb)
-{
-    h2o_timer_t *t = h2o_mem_alloc(sizeof(h2o_timer_t));
-    *t = (h2o_timer_t){{}, cb};
-    return t;
-}
 
 /* calculate wheel number base on the absolute expiration time */
 static inline int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)

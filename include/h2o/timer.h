@@ -42,13 +42,10 @@ typedef struct st_h2o_timer_t {
 } h2o_timer_t;
 
 
-/**
- * creates a timer
- */
-h2o_timer_t *h2o_timer_create(h2o_timer_cb cb);
-/**
- * adds a timer to a timerwheel
- */
+static inline h2o_timer_t h2o_timer_init(h2o_timer_cb cb)
+{
+    return (h2o_timer_t){{}, cb,};
+}
 
 int h2o_timer_is_linked(h2o_timer_t *timer);
 void h2o_timeout_unlink(h2o_timer_t *timer);

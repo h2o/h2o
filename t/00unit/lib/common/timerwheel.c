@@ -46,12 +46,12 @@ void test_add_fixed_timers()
     uint32_t abs_wtime = 3;
 
     h2o_timer_wheel_init(testwheel, abs_wtime);
-    h2o_timer_t *timers[N];
+    h2o_timer_t timers[N];
     /* add timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
-        timers[i] = h2o_timer_create(my_callback);
-        h2o_timer_link_(testwheel, timers[i], expiry);
+        timers[i] = h2o_timer_init(my_callback);
+        h2o_timer_link_(testwheel, &timers[i], expiry);
     }
 
     /* run the wheel */
@@ -65,18 +65,18 @@ void test_del_timers()
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
 
     uint32_t abs_wtime = 3;
-    h2o_timer_t *timers[N];
+    h2o_timer_t timers[N];
     h2o_timer_wheel_init(testwheel, abs_wtime);
     /* add N timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
-        timers[i] = h2o_timer_create(my_callback);
-        h2o_timer_link_(testwheel, timers[i], expiry);
+        timers[i] = h2o_timer_init(my_callback);
+        h2o_timer_link_(testwheel, &timers[i], expiry);
     }
 
     /* delete N-1 timers, so there should be 1 timer left */
     for (i = 0; i < N - 1; i++) {
-        h2o_timeout_unlink(timers[i]);
+        h2o_timeout_unlink(&timers[i]);
     }
 
     /* run the wheel */
@@ -93,12 +93,12 @@ void test_add_rand_timers()
 
     uint32_t abs_wtime = 3;
     h2o_timer_wheel_init(testwheel, abs_wtime);
-    h2o_timer_t *timers[N];
+    h2o_timer_t timers[N];
     /* add timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + lcg_rand() % N;
-        timers[i] = h2o_timer_create(my_callback);
-        h2o_timer_link_(testwheel, timers[i], expiry);
+        timers[i] = h2o_timer_init(my_callback);
+        h2o_timer_link_(testwheel, &timers[i], expiry);
     }
 
     int start = invokes;
@@ -145,9 +145,9 @@ void test_invalid_timer()
 void test_lib__common__timerwheel_c()
 {
 #if !H2O_USE_LIBUV
-    //subtest("add fixed timers", test_add_fixed_timers);
-    //subtest("add random timers", test_add_rand_timers);
-    //subtest("del fixed timers", test_del_timers);
+    subtest("add fixed timers", test_add_fixed_timers);
+    subtest("add random timers", test_add_rand_timers);
+    subtest("del fixed timers", test_del_timers);
     subtest("test out-of-range timer", test_invalid_timer);
 #endif
 }
