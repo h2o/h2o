@@ -53,8 +53,17 @@ static mrb_value detach_receiver(struct st_h2o_mruby_channel_context_t *ctx)
 static void on_gc_dispose_channel(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_channel_context_t *ctx = _ctx;
-    if (ctx != NULL)
+    if (ctx != NULL) {
         ctx->channel = mrb_nil_value();
+        ctx->receiver = mrb_nil_value();
+
+        if (!mrb_nil_p(ctx->channel))
+            DATA_PTR(ctx->channel) = NULL;
+        if (!mrb_nil_p(ctx->receiver))
+            DATA_PTR(ctx->receiver) = NULL;
+
+        free(ctx);
+    }
 }
 
 const static struct mrb_data_type channel_type = {"channel", on_gc_dispose_channel};
