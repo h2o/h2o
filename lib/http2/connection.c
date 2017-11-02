@@ -133,7 +133,6 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
     /* only doit once */
     if (ctx->http2._graceful_shutdown_timeout.cb != NULL)
         return;
-    h2o_timeout_unlink(&ctx->http2._graceful_shutdown_timeout);
     ctx->http2._graceful_shutdown_timeout.cb = graceful_shutdown_resend_goaway;
 
     for (node = ctx->http2._conns.next; node != &ctx->http2._conns; node = node->next) {
@@ -288,7 +287,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
 {
     h2o_http2_stream_t *stream;
 
-    assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
+    assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
 
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
 
@@ -310,7 +309,7 @@ static void close_connection_now(h2o_http2_conn_t *conn)
         h2o_buffer_dispose(&conn->_write.buf_in_flight);
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
-    assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
+    assert(!h2o_timeout_is_linked(&conn->_write.timeout_entry));
     if (conn->_headers_unparsed != NULL)
         h2o_buffer_dispose(&conn->_headers_unparsed);
     if (conn->push_memo != NULL)
@@ -328,7 +327,7 @@ int close_connection(h2o_http2_conn_t *conn)
 {
     conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
 
-    if (conn->_write.buf_in_flight != NULL || h2o_timer_is_linked(&conn->_write.timeout_entry)) {
+    if (conn->_write.buf_in_flight != NULL || h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
         /* there is a pending write, let on_write_complete actually close the connection */
     } else {
         close_connection_now(conn);
@@ -351,7 +350,7 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (conn->sock->_cb.write == NULL && !h2o_timer_is_linked(&conn->_write.timeout_entry)) {
+    if (conn->sock->_cb.write == NULL && !h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
         h2o_timeout_link(conn->super.ctx->loop, 0, &conn->_write.timeout_entry);
     }
 }
@@ -1011,7 +1010,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     update_idle_timeout(conn);
 
     /* write immediately, if there is no write in flight and if pending write exists */
-    if (h2o_timer_is_linked(&conn->_write.timeout_entry)) {
+    if (h2o_timeout_is_linked(&conn->_write.timeout_entry)) {
         h2o_timeout_unlink(&conn->_write.timeout_entry);
         do_emit_writereq(conn);
     }
@@ -1110,7 +1109,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     update_idle_timeout(conn);
 
     /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
-    h2o_timeout_unlink(&conn->_write.timeout_entry);
+    if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
+        h2o_timeout_unlink(&conn->_write.timeout_entry);
 
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {

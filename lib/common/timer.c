@@ -181,7 +181,7 @@ void h2o_timeout_unlink(h2o_timer_t *timer)
     }
 }
 
-inline int h2o_timer_is_linked(h2o_timer_t *entry)
+inline int h2o_timeout_is_linked(h2o_timer_t *entry)
 {
     return h2o_linklist_is_linked(&entry->_link);
 }

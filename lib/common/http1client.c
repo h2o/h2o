@@ -74,7 +74,8 @@ static void close_client(struct st_h2o_http1client_private_t *client)
             client->super.sockpool.connect_req = NULL;
         }
     }
-    h2o_timeout_unlink(&client->_timeout);
+    if (h2o_timeout_is_linked(&client->_timeout))
+        h2o_timeout_unlink(&client->_timeout);
     if (client->_body_buf != NULL)
         h2o_buffer_dispose(&client->_body_buf);
     if (client->_body_buf_in_flight != NULL)

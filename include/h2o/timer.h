@@ -47,7 +47,7 @@ static inline h2o_timer_t h2o_timer_init(h2o_timer_cb cb)
     return (h2o_timer_t){{}, cb,};
 }
 
-int h2o_timer_is_linked(h2o_timer_t *timer);
+int h2o_timeout_is_linked(h2o_timer_t *timer);
 void h2o_timeout_unlink(h2o_timer_t *timer);
 
 typedef uint32_t h2o_timer_tick_t;
