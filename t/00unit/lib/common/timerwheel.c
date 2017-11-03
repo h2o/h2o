@@ -111,11 +111,10 @@ void test_add_rand_timers()
 void test_invalid_timer()
 {
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
-    h2o_timer_wheel_init(testwheel, 0);
+    h2o_timer_wheel_init(testwheel, 3);
 
     h2o_timer_t timer = (h2o_timer_t){};
     timer.cb = my_callback;
-    //testwheel->last_run = 3;
 
 #define NTIMERS 54
     h2o_timer_t *arr = calloc(NTIMERS, sizeof(h2o_timer_t));
@@ -124,16 +123,17 @@ void test_invalid_timer()
     for (i = 0; i < NTIMERS; i++) {
         arr[i].cb = my_callback;
         h2o_timer_link_(testwheel, &arr[i], expiry);
+        h2o_timer_wheel_show(testwheel);
         expiry++;
     }
 
+    h2o_timer_wheel_show(testwheel);
     expiry = 11;
     for (i = 0; i < NTIMERS; i++) {
-        fprintf(stdout, "=================\n");
+        h2o_timer_wheel_show(testwheel);
         int ret = h2o_timer_wheel_run(testwheel, expiry);
         if (ret != 1) {
             h2o_timer_wheel_show(testwheel);
-            fprintf(stderr, "i:%d ret:%d expiry:%u\n", i, ret, expiry);
             abort();
         }
         expiry++;
@@ -145,11 +145,9 @@ void test_invalid_timer()
 void test_lib__common__timerwheel_c()
 {
 #if !H2O_USE_LIBUV
-#if 0
     subtest("add fixed timers", test_add_fixed_timers);
     subtest("add random timers", test_add_rand_timers);
     subtest("del fixed timers", test_del_timers);
     subtest("test out-of-range timer", test_invalid_timer);
-#endif
 #endif
 }

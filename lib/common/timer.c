@@ -58,11 +58,10 @@ static inline int clz(uint64_t n)
 }
 
 /* debug macros and functions */
-#define WANT_DEBUG
 #ifdef WANT_DEBUG
 #define WHEEL_DEBUG(fmt, args...)                                                                                                  \
     do {                                                                                                                           \
-        fprintf(stdout, "[%s:%d %s]:" fmt, __FILE__, __LINE__, __FUNCTION__, ##args);                                              \
+        fprintf(stderr, "[%s:%d %s]:" fmt, __FILE__, __LINE__, __FUNCTION__, ##args);                                              \
     } while (0)
 
 #else
@@ -82,8 +81,6 @@ static void h2o_timer_show(h2o_timer_t *timer, int wid, int sid)
 static void h2o_timer_wheel_slot_show(h2o_timer_wheel_slot_t *slot, int wid, int sid)
 {
     h2o_linklist_t *node;
-    if (h2o_linklist_is_empty(slot))
-        return;
 
     for (node = slot->next; node != slot; node = node->next) {
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, node);
@@ -98,7 +95,6 @@ void h2o_timer_wheel_show(h2o_timer_wheel_t *w)
     for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
             h2o_timer_wheel_slot_t *s = &(w->wheel[i][slot]);
-            fprintf(stderr, "[ w: %d, s: %d]\n", i, slot);
             h2o_timer_wheel_slot_show(s, i, slot);
         }
     }
@@ -123,8 +119,7 @@ uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *w)
 /* calculate wheel number base on the absolute expiration time */
 static inline int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
 {
-    uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_SLOTS_MASK;
-    fprintf(stderr, "delta: %"PRIu64", %"PRIu64 " ^ %"PRIu64", mask:%x\n", delta, abs_expire, abs_wtime, H2O_TIMERWHEEL_SLOTS_MASK);
+    uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_MAX_TIMER;
     if (delta == 0)
         return 0;
     return (H2O_TIMERWHEEL_SLOTS_MASK - clz(delta)) / H2O_TIMERWHEEL_BITS_PER_WHEEL;
@@ -133,7 +128,7 @@ static inline int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
 /* calculate slot number based on the absolute expiration time */
 static inline int timer_slot(int wheel, uint64_t expire)
 {
-    return H2O_TIMERWHEEL_SLOTS_MASK & (expire >> wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL);
+    return H2O_TIMERWHEEL_SLOTS_MASK & ((expire >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL)) - !!wheel);
 }
 
 static h2o_timer_wheel_slot_t *compute_slot(h2o_timer_wheel_t *w, h2o_timer_t *timer)
@@ -175,7 +170,7 @@ void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t a
     sid = timer_slot(wid, abs_expire);
     slot = &(w->wheel[wid][sid]);
 
-    WHEEL_DEBUG("timer(expire_at %"PRIu64") is added to wheel %d, slot %d\n", abs_expire, wid, sid);
+    WHEEL_DEBUG("timer(expire_at %"PRIu64") added: wheel %d, slot %d, now:%"PRIu64"\n", abs_expire, wid, sid, w->last_run);
 
     h2o_linklist_insert(slot, &timer->_link);
 }
@@ -250,6 +245,8 @@ size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
     /* update the timestamp for the timerwheel */
     assert(now >= w->last_run);
 
+    w->last_run = now;
+
     /* how the wheel is run: based on abs_wtime and now, we should be able
      * to figure out the wheel id on which most update happens. Most likely
      * the operating wheel is wheel 0 (wid == 0), since we optimize the case
@@ -263,16 +260,15 @@ size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
         for (j = 0; j <= wid; j++) {
             prev_slot = timer_slot(j, abs_wtime);
             now_slot = timer_slot(j, now);
-            end_slot = j == wid ? now_slot - 1 : H2O_TIMERWHEEL_SLOTS_MASK;
-            /* all slots between prev_slot and end_slot are expired */
-            for (i = prev_slot; i <= end_slot; i++) {
+            end_slot = j == wid ? now_slot : H2O_TIMERWHEEL_SLOTS_MASK;
+            /* all slots between 0 and end_slot are expired */
+            for (i = /*prev_slot*/ 0; i <= end_slot; i++) {
                 h2o_linklist_insert_list(&todo, &w->wheel[j][i]);
             }
         }
 
         /* cascade the timers on wheel[wid][now_slot] */
         cascade(w, wid, now_slot);
-        w->last_run = now;
     } else {
         prev_slot = timer_slot(0, abs_wtime);
         now_slot = timer_slot(0, now);
