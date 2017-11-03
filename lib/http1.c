@@ -38,7 +38,6 @@ struct st_h2o_http1_finalostream_t {
         void *buf;
         h2o_ostream_pull_cb cb;
     } pull;
-    h2o_timer_tick_t zero_timeout;
 };
 
 struct st_h2o_http1_conn_t {
