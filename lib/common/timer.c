@@ -263,6 +263,7 @@ size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
             now_slot = timer_slot(j, now);
             end_slot = j == wid ? now_slot : H2O_TIMERWHEEL_SLOTS_MASK;
             /* all slots between 0 and end_slot are expired */
+            /* FIXME: we could start from prev_slot, but the logic is currently broken */
             for (i = /*prev_slot*/ 0; i <= end_slot; i++) {
                 if (i == end_slot) {
                     h2o_linklist_t *node, *next;

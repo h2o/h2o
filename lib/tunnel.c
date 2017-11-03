@@ -117,7 +117,7 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_
     tunnel->sock[1] = sock2;
     sock1->data = tunnel;
     sock2->data = tunnel;
-    tunnel->timeout_entry.cb = on_timeout;
+    tunnel->timeout_entry = h2o_timeout_init(on_timeout);
     h2o_timeout_link(tunnel->ctx->loop, *timeout, &tunnel->timeout_entry);
 
     /* Bring up the tunnel. Note. Upstream always ready first. */
