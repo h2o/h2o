@@ -58,6 +58,7 @@ static inline int clz(uint64_t n)
 }
 
 /* debug macros and functions */
+//#define WANT_DEBUG
 #ifdef WANT_DEBUG
 #define WHEEL_DEBUG(fmt, args...)                                                                                                  \
     do {                                                                                                                           \
@@ -263,7 +264,20 @@ size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
             end_slot = j == wid ? now_slot : H2O_TIMERWHEEL_SLOTS_MASK;
             /* all slots between 0 and end_slot are expired */
             for (i = /*prev_slot*/ 0; i <= end_slot; i++) {
-                h2o_linklist_insert_list(&todo, &w->wheel[j][i]);
+                if (i == end_slot) {
+                    h2o_linklist_t *node, *next;
+                    h2o_timer_wheel_slot_t *slot = &w->wheel[j][i];
+                    for (node = slot->next; node != slot; node = next) {
+                        next = node->next;
+                        h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, node);
+                        if (entry->expire_at <= now) {
+                            h2o_linklist_unlink(&entry->_link);
+                            h2o_linklist_insert(&todo, node);
+                        }
+                    }
+                } else {
+                    h2o_linklist_insert_list(&todo, &w->wheel[j][i]);
+                }
             }
         }
 
