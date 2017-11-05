@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port check_port);
 use Test::More;
 use t::Util;
@@ -18,6 +19,7 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
 my $upstream_hostport = "127.0.0.1:@{[empty_port()]}";
+my $tempdir = tempdir(CLEANUP => 1);
 
 sub create_upstream {
     my @args = (
@@ -265,5 +267,155 @@ EOT
         };
     });
 };
+
+subtest 'keep-alive (h2o <=> upstream)' => sub {
+    my $upstream = create_upstream(keepalive => 1);
+    my $spawner = sub {
+        my %opts = @_;
+        spawn_h2o(<< "EOT");
+@{[ $opts{keepalive} ? "" : "proxy.timeout.keepalive: 0" ]}
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            q = env['QUERY_STRING']
+            headers = q.empty? ? nil : { 'Connection' => q }
+            resp = http_request("http://$upstream_hostport/echo-remote-port", { :headers => headers }).join
+            resp[1]['upstream-connection'] = resp[1]['connection'] || 'keep-alive'
+            resp
+          }
+EOT
+    };
+    my $curl = 'curl --silent --dump-header /dev/stderr';
+
+    subtest 'on' => sub {
+        subtest "default" => sub {
+            my $server = $spawner->(keepalive => 1);
+            my ($headers, $body);
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/");
+            like $headers, qr{^upstream-connection: keep-alive}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            is $body, $remote_port
+        };
+
+        subtest "keep-alive" => sub {
+            my $server = $spawner->(keepalive => 1);
+            my ($headers, $body);
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
+            like $headers, qr{^upstream-connection: keep-alive}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            is $body, $remote_port
+        };
+
+        subtest "close" => sub {
+            my $server = $spawner->(keepalive => 1);
+            my ($headers, $body);
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            isnt $body, $remote_port
+        };
+    };
+
+    subtest 'off' => sub {
+        my $server = $spawner->(keepalive => 0);
+        my ($headers, $body);
+
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
+        like $headers, qr{^upstream-connection: close}im;
+        my $remote_port = $body;
+
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+        like $headers, qr{^upstream-connection: close}im;
+        isnt $body, $remote_port
+    };
+};
+
+subtest 'keep-alive (client <=> h2o)' => sub {
+    my $doit = sub {
+        my ($path, $chunked) = @_;
+
+        unlink "$tempdir/access_log";
+        my $upstream = create_upstream();
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+access-log:
+  format: "%{remote}p"
+  path: $tempdir/access_log
+hosts:
+  default:
+    paths:
+      /shortcut:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/halfdome.jpg").join
+            headers = {}
+            unless env['QUERY_STRING'] == '?chunked'
+              headers['content-length'] = resp[1]['content-length']
+            end
+            [200, headers, resp[2]]
+          }
+      /no-shortcut:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/halfdome.jpg").join
+            headers = {}
+            unless env['QUERY_STRING'] == '?chunked'
+              headers['content-length'] = resp[1]['content-length']
+            end
+            [200, headers, Class.new do
+              def initialize(body)
+                \@body = body
+              end
+              def each
+                \@body.each {|buf| yield buf }
+              end
+            end.new(resp[2])]
+          }
+EOT
+
+        my $query = $chunked ? '?chunked' : '';
+        my $url = "http://127.0.0.1:$server->{port}$path$query";
+        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr $url $url");
+        my @log = do {
+            open my $fh, "<", "$tempdir/access_log" or die "failed to open access_log:$!";
+            map { my $l = $_; chomp $l; $l } <$fh>;
+        };
+        is $log[0], $log[1];
+    };
+
+    subtest 'no-shortcut' => sub {
+        subtest 'chunked' => sub {
+            $doit->('/no-shortcut', 1);
+        };
+        subtest 'no-chunked' => sub {
+            $doit->('/no-shortcut', 0);
+        };
+    };
+
+    subtest 'shortcut' => sub {
+        subtest 'chunked' => sub {
+            $doit->('/shortcut', 1);
+        };
+        subtest 'no-chunked' => sub {
+            $doit->('/shortcut', 0);
+        };
+    };
+};
+
 
 done_testing();
