@@ -266,6 +266,9 @@ struct st_h2o_http2_conn_t {
     } _write;
     h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
+    struct {
+        h2o_linklist_t blocked_streams;
+    } early_data;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);
@@ -301,6 +304,7 @@ void h2o_http2_conn_request_write(h2o_http2_conn_t *conn);
 void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits);
+void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);

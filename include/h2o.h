@@ -1083,6 +1083,10 @@ struct st_h2o_req_t {
      * whether if the bytes sent is counted by ostreams other than final ostream
      */
     unsigned char bytes_counted_by_ostream : 1;
+    /**
+     * set by the generator if the protocol handler should replay the request upon seeing 425
+     */
+    unsigned char reprocess_if_too_early : 1;
 
     /**
      * Whether the producer of the response has explicitely disabled or

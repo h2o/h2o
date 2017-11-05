@@ -213,6 +213,11 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_timestamp_t ts;
 
+    if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
+        h2o_http2_conn_register_for_replay(conn, stream);
+        return -1;
+    }
+
     h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
     /* cancel push with an error response */
