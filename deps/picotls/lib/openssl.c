@@ -41,7 +41,11 @@
 #include "picotls.h"
 #include "picotls/openssl.h"
 
-#define OPENSSL_1_0_API (OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER))
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER))
+#define OPENSSL_1_0_API 1
+#else
+#define OPENSSL_1_0_API 0
+#endif
 
 #if OPENSSL_1_0_API
 
