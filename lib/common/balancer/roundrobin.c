@@ -29,11 +29,10 @@ struct round_robin_t {
     pthread_mutex_t mutex;
 };
 
-static void construct(h2o_socketpool_t *sockpool, void *unused, void **data)
+static void construct(h2o_socketpool_target_vector_t *targets, void *unused, void **data)
 {
     size_t i;
     struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
-    h2o_socketpool_target_vector_t *targets = &sockpool->targets;
     self->next_pos = 0;
     self->next_actual_target = 0;
     pthread_mutex_init(&self->mutex, NULL);

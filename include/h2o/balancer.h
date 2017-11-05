@@ -40,7 +40,7 @@ typedef struct st_h2o_balancer_request_info {
 typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried,
                                         h2o_balancer_request_info *req_info);
 
-typedef void (*h2o_balancer_constructor)(h2o_socketpool_t *sockpool, void *conf, void **data);
+typedef void (*h2o_balancer_constructor)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
 
 typedef void (*h2o_balancer_finalizer)(void *data);
 

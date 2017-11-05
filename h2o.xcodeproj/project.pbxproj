@@ -259,6 +259,8 @@
 		D01865DE1F121E4300EBA12C /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D01865DD1F121E4300EBA12C /* roundrobin.c */; };
 		D05E37A51F2CC6F200AD23C6 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D05E37A41F2CC6F200AD23C6 /* least_conn.c */; };
 		D05E37A71F2CC78100AD23C6 /* balancer.h in Headers */ = {isa = PBXBuildFile; fileRef = D05E37A61F2CC78100AD23C6 /* balancer.h */; };
+		D0CE00E01FAEB17700E6FF29 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D0CE00DF1FAEB17700E6FF29 /* least_conn.c */; };
+		D0CE00E21FAF244900E6FF29 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D0CE00E11FAF244900E6FF29 /* roundrobin.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
@@ -822,6 +824,8 @@
 		D05E37A41F2CC6F200AD23C6 /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = least_conn.c; path = balancer/least_conn.c; sourceTree = "<group>"; };
 		D05E37A61F2CC78100AD23C6 /* balancer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balancer.h; sourceTree = "<group>"; };
 		D0CCA3871FA18FC2004AA5CC /* 50reverse-proxy-round-robin-weighted.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-round-robin-weighted.t"; sourceTree = "<group>"; };
+		D0CE00DF1FAEB17700E6FF29 /* least_conn.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
+		D0CE00E11FAF244900E6FF29 /* roundrobin.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = roundrobin.c; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
@@ -1066,6 +1070,7 @@
 		104B9A4D1A5FAA7B009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				D0CE00DE1FAEB15D00E6FF29 /* balancer */,
 				10DA969F1CD2BFEE00679165 /* cache.c */,
 				10F9F2661AFC5F550056F26B /* hostinfo.c */,
 				10AA2EAD1A8E22DA004322AC /* multithread.c */,
@@ -1813,6 +1818,15 @@
 			name = balancer;
 			sourceTree = "<group>";
 		};
+		D0CE00DE1FAEB15D00E6FF29 /* balancer */ = {
+			isa = PBXGroup;
+			children = (
+				D0CE00DF1FAEB17700E6FF29 /* least_conn.c */,
+				D0CE00E11FAF244900E6FF29 /* roundrobin.c */,
+			);
+			path = balancer;
+			sourceTree = "<group>";
+		};
 		E9708AD01E499D8B0029E0A5 /* picotls */ = {
 			isa = PBXGroup;
 			children = (
@@ -2226,6 +2240,7 @@
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
 				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
+				D0CE00E01FAEB17700E6FF29 /* least_conn.c in Sources */,
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				1065E6F919BEBAC600686E72 /* timeout.c in Sources */,
 				08790DDA1D80153600A04BC1 /* net.c in Sources */,
@@ -2234,6 +2249,7 @@
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */,
+				D0CE00E21FAF244900E6FF29 /* roundrobin.c in Sources */,
 				10AA2EA51A8D9999004322AC /* redirect.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,

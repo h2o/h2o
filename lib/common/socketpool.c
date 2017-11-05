@@ -123,7 +123,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     memcpy(&pool->targets, &targets, sizeof(targets));
 
     if (lb_callbacks != NULL) {
-        lb_callbacks->construct(pool, lb_conf, &pool->_lb.data);
+        lb_callbacks->construct(&pool->targets, lb_conf, &pool->_lb.data);
         pool->_lb.callbacks = lb_callbacks;
     }
 }
@@ -202,6 +202,10 @@ void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_u
         targets.entries[i] = target;
     }
     targets.size = origin_len;
+    
+    if (lb_callbacks == NULL) {
+        lb_callbacks = h2o_balancer_rr_get_callbacks();
+    }
 
     common_init(pool, targets, capacity, lb_callbacks, lb_conf);
 }
@@ -342,7 +346,6 @@ static void on_connect(h2o_socket_t *sock, const char *err)
 
     if (err != NULL) {
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
-        __sync_sub_and_fetch(&req->pool->_shared.leased_count, 1);
         h2o_socket_close(sock);
         if (req->remaining_try_count == 0) {
             req->sock = NULL;
@@ -370,7 +373,6 @@ static void on_close(void *data)
     __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);
     free(close_data);
     __sync_sub_and_fetch(&pool->_shared.count, 1);
-    __sync_sub_and_fetch(&pool->_shared.leased_count, 1);
 }
 
 static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen)
@@ -380,7 +382,6 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
     req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
     if (req->sock == NULL) {
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        __sync_sub_and_fetch(&req->pool->_shared.leased_count, 1);
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         if (req->remaining_try_count > 0) {
             try_connect(req);
@@ -414,7 +415,6 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
             __sync_add_and_fetch(&pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
-            __sync_add_and_fetch(&pool->_shared.leased_count, 1);
         } else {
             req->selected_target = 0;
         }
@@ -491,7 +491,6 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     if (errstr != NULL) {
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
-        __sync_sub_and_fetch(&req->pool->_shared.leased_count, 1);
 
         if (req->remaining_try_count > 0) {
             try_connect(req);
@@ -593,7 +592,6 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     /* reset the on_close callback */
     assert(close_data->pool == pool);
     __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);
-    __sync_sub_and_fetch(&pool->_shared.leased_count, 1);
     free(close_data);
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;

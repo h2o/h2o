@@ -102,7 +102,6 @@ typedef struct st_h2o_socketpool_t {
         size_t count; /* synchronous operations should be used to access the variable */
         pthread_mutex_t mutex;
         h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
-        size_t leased_count;
     } _shared;
 
     /* vars used by load balancing, modified by multiple threads */

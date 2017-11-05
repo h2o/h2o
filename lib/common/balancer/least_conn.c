@@ -21,19 +21,32 @@
  */
 #include "h2o/balancer.h"
 
-static void construct(h2o_socketpool_t *sockpool, void *unused, void **data) {}
+static void construct(h2o_socketpool_target_vector_t *targets, void *unused, void **data) {}
 
 static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, h2o_balancer_request_info *dummy)
 {
     size_t i;
-    size_t result = 0;
-    size_t least_conn = SIZE_MAX;
+    size_t result = -1;
+    size_t result_weight = 0;
+    uint64_t leftprod, rightprod;
 
     assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
-        if (!tried[i] && targets->entries[i]->_shared.leased_count / targets->entries[i]->conf.weight < least_conn) {
-            least_conn = targets->entries[i]->_shared.leased_count;
+        if (!tried[i]) {
             result = i;
+            result_weight = targets->entries[i]->conf.weight;
+            break;
+        }
+    }
+    /* I'm not sure if we should lock here. Or if difference between unlocked & locked could be acceptable. */
+    for (i += 1; i < targets->size; i++) {
+        leftprod = targets->entries[i]->_shared.leased_count;
+        leftprod *= result_weight;
+        rightprod = targets->entries[result]->_shared.leased_count;
+        rightprod *= targets->entries[i]->conf.weight;
+        if (!tried[i] && leftprod < rightprod) {
+            result = i;
+            result_weight = targets->entries[i]->conf.weight;
         }
     }
 
