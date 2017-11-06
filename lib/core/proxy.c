@@ -584,7 +584,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
     int use_proxy_protocol = 0, reprocess_if_too_early = 0;
-    h2o_socket_t *src_sock;
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -612,9 +611,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
             h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     }
 
-    if ((src_sock = req->conn->callbacks->get_socket(req->conn)) != NULL && src_sock->ssl != NULL &&
-        h2o_socket_ssl_is_early_data(src_sock))
-        reprocess_if_too_early = 1;
+    reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
     self->up_req.bufs[0] = build_request(req, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->sockpool.pool),
                                          self->is_websocket_handshake, use_proxy_protocol, req_is_chunked, &reprocess_if_too_early);
     if (reprocess_if_too_early)

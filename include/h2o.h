@@ -1225,6 +1225,10 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
+ *
+ */
+static int h2o_conn_is_early_data(h2o_conn_t *conn);
+/**
  * setups accept context for memcached SSL resumption
  */
 void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
@@ -1985,6 +1989,12 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->callbacks = callbacks;
 
     return conn;
+}
+
+inline int h2o_conn_is_early_data(h2o_conn_t *conn)
+{
+    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
+    return sock != NULL && sock->ssl != NULL && h2o_socket_ssl_is_early_data(sock);
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)
