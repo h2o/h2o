@@ -366,6 +366,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     req->overrides = overrides;
     req->res_is_delegated |= is_delegated;
+    req->reprocess_if_too_early = 0;
     reset_response(req);
 
     /* check the delegation (or reprocess) counter */
