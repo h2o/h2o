@@ -130,7 +130,8 @@ static int req_requires_content_length(h2o_req_t *req)
     return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
 }
 
-static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake, int use_proxy_protocol, int *te_chunked)
+static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake, int use_proxy_protocol, int *te_chunked,
+                                 int *reprocess_if_too_early)
 {
     h2o_iovec_t buf;
     size_t offset = 0, remote_addr_len = SIZE_MAX;
@@ -235,6 +236,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
 
     {
         const h2o_header_t *h, *h_end;
+        int found_early_data = 0;
         for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
@@ -257,6 +259,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                     }
                     xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
                     continue;
+                } else if (token == H2O_TOKEN_EARLY_DATA) {
+                    found_early_data = 1;
+                    goto AddHeader;
                 }
             }
             if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
@@ -269,6 +274,13 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             APPEND(h->value.base, h->value.len);
             buf.base[offset++] = '\r';
             buf.base[offset++] = '\n';
+        }
+        if (found_early_data) {
+            *reprocess_if_too_early = 0;
+        } else if (*reprocess_if_too_early) {
+            static const h2o_iovec_t h = {H2O_STRLIT("early-data: 1\r\n")};
+            RESERVE(h.len);
+            APPEND(h.base, h.len);
         }
     }
 
@@ -570,9 +582,9 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
                                           h2o_iovec_t *cur_body, int *req_is_chunked, h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
-    int use_proxy_protocol = 0;
-
     h2o_req_t *req = self->src_req;
+    int use_proxy_protocol = 0, reprocess_if_too_early = 0;
+    h2o_socket_t *src_sock;
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -599,8 +611,14 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         req->path_normalized =
             h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     }
+
+    if ((src_sock = req->conn->callbacks->get_socket(req->conn)) != NULL && src_sock->ssl != NULL &&
+        h2o_socket_ssl_is_early_data(src_sock))
+        reprocess_if_too_early = 1;
     self->up_req.bufs[0] = build_request(req, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->sockpool.pool),
-                                         self->is_websocket_handshake, use_proxy_protocol, req_is_chunked);
+                                         self->is_websocket_handshake, use_proxy_protocol, req_is_chunked, &reprocess_if_too_early);
+    if (reprocess_if_too_early)
+        req->reprocess_if_too_early = 1;
 
     *reqbufs = self->up_req.bufs;
     *reqbufcnt = 1;
