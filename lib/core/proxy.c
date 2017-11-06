@@ -570,31 +570,9 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
                                           h2o_iovec_t *cur_body, int *req_is_chunked, h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
+    int use_proxy_protocol = 0;
 
     h2o_req_t *req = self->src_req;
-
-    if (errstr == NULL) {
-        assert(origin != NULL);
-        int use_proxy_protocol = 0;
-        if (req->overrides != NULL) {
-            use_proxy_protocol = req->overrides->use_proxy_protocol;
-            req->overrides->location_rewrite.match = origin;
-            if (!req->overrides->proxy_preserve_host) {
-                req->scheme = origin->scheme;
-                req->authority = origin->authority;
-            }
-            h2o_iovec_t append = req->path;
-            if (origin->path.base[origin->path.len - 1] == '/' && append.base[0] == '/') {
-                append.base += 1;
-                append.len -= 1;
-            }
-            req->path = h2o_concat(&req->pool, origin->path, append);
-            req->path_normalized =
-                h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
-        }
-        self->up_req.bufs[0] = build_request(req, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->sockpool.pool),
-                                             self->is_websocket_handshake, use_proxy_protocol, req_is_chunked);
-    }
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -602,6 +580,27 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
         return NULL;
     }
+
+    assert(origin != NULL);
+
+    if (req->overrides != NULL) {
+        use_proxy_protocol = req->overrides->use_proxy_protocol;
+        req->overrides->location_rewrite.match = origin;
+        if (!req->overrides->proxy_preserve_host) {
+            req->scheme = origin->scheme;
+            req->authority = origin->authority;
+        }
+        h2o_iovec_t append = req->path;
+        if (origin->path.base[origin->path.len - 1] == '/' && append.base[0] == '/') {
+            append.base += 1;
+            append.len -= 1;
+        }
+        req->path = h2o_concat(&req->pool, origin->path, append);
+        req->path_normalized =
+            h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
+    }
+    self->up_req.bufs[0] = build_request(req, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->sockpool.pool),
+                                         self->is_websocket_handshake, use_proxy_protocol, req_is_chunked);
 
     *reqbufs = self->up_req.bufs;
     *reqbufcnt = 1;
