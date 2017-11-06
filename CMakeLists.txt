@@ -553,6 +553,7 @@ IF(EXISTS deps/theft/Makefile)
     TARGET_LINK_LIBRARIES(t-00property-testing.t theft libh2o-evloop ${EXTRA_LIBS})
     SET_TARGET_PROPERTIES(t-00property-testing.t PROPERTIES EXCLUDE_FROM_ALL TRUE)
     SET_TARGET_PROPERTIES(t-00property-testing.t PROPERTIES LINK_FLAGS "-Ldeps/theft/build")
+    SET(OPTIONAL_TEST "t-00property-testing.t")
 ENDIF ()
 
 IF (LIBUV_FOUND)
@@ -595,7 +596,7 @@ ENDIF ()
 
 ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t)
+    DEPENDS h2o t-00unit-evloop.t ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(check t-00unit-libuv.t)
     IF (OPENSSL_FOUND)
