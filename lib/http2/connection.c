@@ -1010,8 +1010,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
                 h2o_http2_stream_t *stream =
                     H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link,conn->early_data.blocked_streams.next);
                 h2o_linklist_unlink(&stream->_refs.link);
-                h2o_reprocess_request(&stream->req, stream->req.method, stream->req.scheme, stream->req.authority, stream->req.path,
-                                      stream->req.overrides, 0);
+                h2o_replay_request(&stream->req);
             }
         }
     }
@@ -1082,7 +1081,7 @@ void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream
     if (conn->sock->ssl != NULL && h2o_socket_ssl_is_early_data(conn->sock)) {
         h2o_linklist_insert(&conn->early_data.blocked_streams, &stream->_refs.link);
     } else {
-        h2o_reprocess_request_deferred(&stream->req, stream->req.method, stream->req.scheme, stream->req.authority, stream->req.path, stream->req.overrides, 0);
+        h2o_replay_request_deferred(&stream->req);
     }
 }
 

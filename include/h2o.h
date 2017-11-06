@@ -972,6 +972,10 @@ struct st_h2o_req_t {
      */
     h2o_pathconf_t *pathconf;
     /**
+     * the handler that has been executed
+     */
+    h2o_handler_t *handler;
+    /**
      * scheme (http, https, etc.)
      */
     const h2o_url_scheme_t *scheme;
@@ -1307,6 +1311,14 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
  */
 void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
                                     h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated);
+/**
+ *
+ */
+void h2o_replay_request(h2o_req_t *req);
+/**
+ *
+ */
+void h2o_replay_request_deferred(h2o_req_t *req);
 /**
  * called by handlers to set the generator
  * @param req the request
