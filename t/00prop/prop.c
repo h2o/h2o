@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <inttypes.h>
 #include "h2o.h"
 #include "h2o/timer_wheel.h"
 #include "theft.h"
