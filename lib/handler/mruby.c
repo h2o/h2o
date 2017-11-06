@@ -506,12 +506,30 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
 
     { /* headers */
-        h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
-        size_t i;
-        for (i = 0; i != generator->req->headers.size; ++i)
-            headers_sorted[i] = generator->req->headers.entries + i;
-        qsort(headers_sorted, generator->req->headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
+        h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * (generator->req->headers.size + 1));
+        size_t i, num_headers_sorted = 0;
+        int early_data_found = 0;
+        /* build list of headers to be set, sorted by their names */
         for (i = 0; i != generator->req->headers.size; ++i) {
+            h2o_header_t *header = generator->req->headers.entries + i;
+            if (h2o_iovec_is_token(header->name)) {
+                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
+                if (token == H2O_TOKEN_TRANSFER_ENCODING) {
+                    continue;
+                } else if (token == H2O_TOKEN_EARLY_DATA) {
+                    early_data_found = 1;
+                }
+            }
+            headers_sorted[num_headers_sorted++] = header;
+        }
+        if (!early_data_found && h2o_conn_is_early_data(generator->req->conn)) {
+            static const h2o_header_t early_data = {&H2O_TOKEN_EARLY_DATA->buf, "early-data", {H2O_STRLIT("1")}};
+            headers_sorted[num_headers_sorted++] = (h2o_header_t *)&early_data;
+            generator->req->reprocess_if_too_early = 1;
+        }
+        qsort(headers_sorted, num_headers_sorted, sizeof(*headers_sorted), build_env_sort_header_cb);
+        /* emit the headers */
+        for (i = 0; i != num_headers_sorted; ++i) {
             const h2o_header_t *header = headers_sorted[i];
             mrb_value n, v;
             if (h2o_iovec_is_token(header->name)) {
@@ -524,7 +542,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                 n = mrb_str_new(mrb, vec.base, vec.len);
             }
             v = mrb_str_new(mrb, header->value.base, header->value.len);
-            while (i < generator->req->headers.size - 1) {
+            while (i < num_headers_sorted - 1) {
                 if (!h2o_memis(headers_sorted[i + 1]->name->base, headers_sorted[i + 1]->name->len, header->name->base,
                                header->name->len))
                     break;
