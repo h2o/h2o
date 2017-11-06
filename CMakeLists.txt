@@ -356,6 +356,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/src/ssl.c
     t/00unit/issues/293.c
     t/00unit/issues/percent-encode-zero-byte.c)
+
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/cache.c
     lib/common/hostinfo.c
@@ -543,6 +544,16 @@ SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${EXTRA_LIBS})
+
+IF(EXISTS deps/theft/Makefile)
+    ADD_EXECUTABLE(t-00property-testing.t t/00prop/prop.c)
+    ADD_CUSTOM_TARGET(build-theft ${CMAKE_MAKE_PROGRAM} WORKING_DIRECTORY deps/theft)
+    ADD_DEPENDENCIES(t-00property-testing.t build-theft)
+    TARGET_INCLUDE_DIRECTORIES(t-00property-testing.t BEFORE PUBLIC deps/theft/inc)
+    TARGET_LINK_LIBRARIES(t-00property-testing.t theft libh2o-evloop ${EXTRA_LIBS})
+    SET_TARGET_PROPERTIES(t-00property-testing.t PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    SET_TARGET_PROPERTIES(t-00property-testing.t PROPERTIES LINK_FLAGS "-Ldeps/theft/build")
+ENDIF ()
 
 IF (LIBUV_FOUND)
     ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})

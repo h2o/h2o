@@ -13,3 +13,6 @@
 [submodule "misc/h2get"]
 	path = misc/h2get
 	url = https://github.com/deweerdt/h2get.git
+[submodule "deps/theft"]
+	path = deps/theft
+	url = https://github.com/silentbicycle/theft
