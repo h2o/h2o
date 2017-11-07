@@ -958,10 +958,9 @@ static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
         if (token == H2O_TOKEN_TRANSFER_ENCODING) {
             /* skip */
+        } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
+            req->content_length = h2o_strtosize(value.base, value.len);
         } else {
-            if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                /* TODO: truncate body? */
-            }
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->headers, token, NULL, value.base, value.len);
         }
@@ -1036,9 +1035,43 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *subreq, h2o_iov
     mrb_gc_arena_restore(mrb, gc_arena);
 }
 
-static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_value env, int reprocess)
+static void prepare_subreq_entity(h2o_req_t *subreq, h2o_mruby_generator_t *generator, mrb_value rack_input)
 {
-    mrb_state *mrb = ctx->shared->mrb;
+    mrb_state *mrb = generator->ctx->shared->mrb;
+
+    if (mrb_nil_p(rack_input)) {
+        subreq->entity = h2o_iovec_init(NULL, 0);
+        subreq->content_length = 0;
+        return;
+    }
+
+    if (mrb_obj_eq(mrb, rack_input, generator->rack_input)) {
+        subreq->entity = generator->req->entity;
+
+        mrb_int pos;
+        mrb_input_stream_get_data(mrb, rack_input, NULL, NULL, &pos, NULL, NULL);
+        if (pos > 0) {
+            assert(pos <= subreq->entity.len);
+            subreq->entity.base += pos;
+            subreq->entity.len -= pos;
+        }
+    } else {
+        assert(mrb_respond_to(mrb, rack_input, mrb_intern_lit(mrb, "read")));
+        mrb_value body = mrb_funcall(mrb, rack_input, "read", 0);
+        subreq->entity = h2o_strdup(&generator->req->pool, RSTRING_PTR(body), RSTRING_LEN(body));
+    }
+
+    if (subreq->content_length != SIZE_MAX) {
+        if (subreq->content_length > subreq->entity.len)
+            subreq->content_length = subreq->entity.len;
+        else if (subreq->content_length < subreq->entity.len)
+            subreq->entity.len = subreq->content_length;
+    }
+}
+
+static h2o_req_t *create_subreq(h2o_mruby_generator_t *generator, h2o_req_t *req, mrb_value env, int reprocess)
+{
+    mrb_state *mrb = generator->ctx->shared->mrb;
     int i;
     int gc_arena = mrb_gc_arena_save(mrb);
     mrb_gc_protect(mrb, env);
@@ -1046,7 +1079,7 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
     env = mrb_funcall(mrb, env, "dup", 0);
 
 #define RETRIEVE_ENV(key, v) do { \
-    v = mrb_hash_delete_key(mrb, env, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_LIT_ ## key)); \
+    v = mrb_hash_delete_key(mrb, env, mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_LIT_ ## key)); \
     if (mrb_nil_p(v)) { \
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: ## key")); \
         goto Failed; \
@@ -1056,7 +1089,7 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
 
     /* retrieve env variables */
     h2o_url_t url_parsed;
-    mrb_value scheme, method, server_addr, server_port, script_name, path_info, query_string;
+    mrb_value scheme, method, server_addr, server_port, script_name, path_info, query_string, rack_input;
     RETRIEVE_ENV(RACK_URL_SCHEME, scheme);
     RETRIEVE_ENV(REQUEST_METHOD, method);
     RETRIEVE_ENV(SERVER_ADDR, server_addr);
@@ -1066,8 +1099,10 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
     RETRIEVE_ENV(QUERY_STRING, query_string);
 #undef RETRIEVE_ENV
 
+    rack_input = mrb_hash_delete_key(mrb, env, mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_LIT_RACK_INPUT));
+
 #define DELETE_KEY(key) do { \
-    mrb_hash_delete_key(mrb, env, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_LIT_ ## key)); \
+    mrb_hash_delete_key(mrb, env, mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_LIT_ ## key)); \
 } while (0)
     DELETE_KEY(SERVER_NAME);
     DELETE_KEY(SERVER_PROTOCOL);
@@ -1078,7 +1113,6 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
     DELETE_KEY(RACK_MULTIPROCESS);
     DELETE_KEY(RACK_RUN_ONCE);
     DELETE_KEY(RACK_HIJACK_);
-    DELETE_KEY(RACK_INPUT);
     DELETE_KEY(RACK_ERRORS);
     DELETE_KEY(SERVER_SOFTWARE);
 #undef DELETE_KEY
@@ -1106,8 +1140,6 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
     }
 
     h2o_req_t *subreq = h2o_create_subrequest(req);
-    subreq->entity = req->entity; // TODO
-    subreq->content_length = req->content_length; // TODO
 //    subreq->timestamps = req->timestamps; // TODO
 
     subreq->scheme = url_parsed.scheme;
@@ -1115,10 +1147,15 @@ static h2o_req_t *create_subreq(h2o_mruby_context_t *ctx, h2o_req_t *req, mrb_va
     subreq->authority = h2o_strdup(&subreq->pool, url_parsed.authority.base, url_parsed.authority.len);
     subreq->path = h2o_strdup(&subreq->pool, url_parsed.path.base, url_parsed.path.len);
     subreq->path_normalized = h2o_url_normalize_path(&subreq->pool, subreq->path.base, subreq->path.len, &subreq->query_at, &subreq->norm_indexes);
+
+    /* headers */
     subreq->headers = (h2o_headers_t){NULL};
-    if (h2o_mruby_iterate_headers(ctx->shared, env, handle_request_header, subreq) != 0) {
+    if (h2o_mruby_iterate_headers(generator->ctx->shared, env, handle_request_header, subreq) != 0) {
         goto Failed;
     }
+
+    /* entity */
+    prepare_subreq_entity(subreq, generator, rack_input);
 
     /* env */
     mrb_value other_keys = mrb_hash_keys(mrb, env);
@@ -1163,7 +1200,7 @@ static mrb_value delegate_callback(h2o_mruby_context_t *ctx, mrb_value receiver,
     mrb_value reprocess = mrb_ary_entry(args, 2);
 
     /* create subreq */
-    h2o_req_t *subreq = create_subreq(ctx, req, env, mrb_bool(reprocess));
+    h2o_req_t *subreq = create_subreq(generator, req, env, mrb_bool(reprocess));
     if (mrb->exc != NULL) {
         *run_again = 1;
         return mrb_obj_value(mrb->exc);

@@ -33,13 +33,14 @@ sub create_upstream {
 };
 
 sub get {
-    my ($proto, $port, $curl, $path, $req_headers) = @_;
+    my ($proto, $port, $curl, $path, $req_headers, $data_file) = @_;
 
     # build curl command
     my @curl_cmd = ($curl);
     push(@curl_cmd, qw(--silent --dump-header /dev/stderr));
     push(@curl_cmd, map { ('-H', "'$_'") } @{ $req_headers || [] });
     push(@curl_cmd, "$proto://127.0.0.1:$port$path");
+    push(@curl_cmd, '--data-binary', "\@$data_file") if $data_file;
     my $curl_cmd = join(' ', @curl_cmd);
 
     local $SIG{ALRM} = sub { die };
@@ -50,6 +51,7 @@ sub get {
     if ($timeout) {
         die "timeout";
     }
+    $hstr =~ s!HTTP/[0-9.]+ 100 Continue\r\n\r\n!!;
     my ($sline, @hlines) = split(/\r\n/, $hstr);
     unless (($sline || '') =~ m{^HTTP/[\d\.]+ (\d+)}) {
         die "failed to get $path: @{[$sline || '']}";
@@ -62,7 +64,12 @@ sub get {
 
 my %files = map { do {
     my $fn = DOC_ROOT . "/$_";
-    +($_ => { size => (stat $fn)[7], md5 => md5_file($fn) });
+    my $content = do {
+         open my $fh, "<", $fn or die "failed to open file:$fn:$!";
+         local $/;
+         join '', <$fh>;
+     };
+    +($_ => { size => (stat $fn)[7], md5 => md5_hex($content), content => $content });
 } } qw(index.txt halfdome.jpg);
 
 sub doit {
@@ -136,9 +143,9 @@ EOT
     subtest 'modify response header' => sub {
         my $server = $spawner->(<< "EOT");
         - mruby.handler: |
-            proc {|env|
-              modify_env(env)
-              resp = H2O.app.$mode(env)
+            proc {|env| 
+              modify_env(env) 
+              resp = H2O.app.$mode(env) 
               resp[1]['foo'] = 'FOO'
               resp
             }
@@ -338,6 +345,136 @@ EOT
             });
         };
     }
+
+    if ($opts->{post}) {
+        subtest 'pass rack.input' => sub {
+            my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              H2O.app.$mode(env)
+            }
+EOT
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                is $status, 200;
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $live_check->($proto, $port, $curl);
+            });
+        };
+
+        subtest 'modify rack.input' => sub {
+            my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              original = env['rack.input']
+              env['rack.input'] = Class.new do
+                def initialize(original, suffix)
+                  \@original = original
+                  \@suffix = suffix
+                  \@eos = false
+                end
+                def read
+                  \@original.read + \@suffix
+                end
+                def gets
+                  return nil if \@eos
+                  if buf = \@original.gets
+                     return buf
+                  end
+                  \@eos = true
+                  \@suffix
+                end
+                def each
+                  while buf = gets
+                    yield buf
+                  end
+                end
+                def rewind
+                  raise 'not implemented'
+                end
+              end.new(original, 'suffix')
+              H2O.app.$mode(env)
+            }
+EOT
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                is $status, 200;
+                is length($body), $files{$file}->{size} + length('suffix');
+                is md5_hex($body), md5_hex($files{$file}->{content} . 'suffix');
+                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $live_check->($proto, $port, $curl);
+            });
+        };
+
+        subtest 'rack.input with smaller content-length' => sub {
+            my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              env['HTTP_CONTENT_LENGTH'] = '3'
+              H2O.app.$mode(env)
+            }
+EOT
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                is $status, 200;
+                is length($body), 3;
+                is $body, substr($files{$file}->{content}, 0, 3);
+                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $live_check->($proto, $port, $curl);
+            });
+        };
+
+        subtest 'rack.input with bigger content-length' => sub {
+            my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              env['HTTP_CONTENT_LENGTH'] = '999999999'
+              H2O.app.$mode(env)
+            }
+EOT
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                is $status, 200;
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $live_check->($proto, $port, $curl);
+            });
+        };
+
+        subtest 'read rack.input partially' => sub {
+            my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              head = env['rack.input'].read(3)
+              status, headers, body = H2O.app.$mode(env)
+              content = body.join
+              [status, headers, [head, content]]
+            }
+EOT
+            run_with_curl($server, sub {
+                my ($proto, $port, $curl) = @_;
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                is $status, 200;
+                is length($body), $files{$file}->{size};
+                is md5_hex($body), $files{$file}->{md5};
+                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $live_check->($proto, $port, $curl);
+            });
+        };
+    }
+    else { pass; } # FIXME
 }
 
 subtest 'file' => sub {
@@ -345,7 +482,7 @@ subtest 'file' => sub {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
-                    doit($mode, $file, "file.dir: @{[ ASSETS_DIR ]}/doc_root");
+                    doit($mode, $file, "file.dir: @{[ ASSETS_DIR ]}/doc_root", {});
                 };
             }
         };
@@ -359,7 +496,7 @@ subtest 'proxy' => sub {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
-                    doit($mode, $file, "proxy.reverse.url: http://127.0.0.1:$port/");
+                    doit($mode, $file, "proxy.reverse.url: http://127.0.0.1:$port/", { post => 1 });
                 };
             }
         };
@@ -373,7 +510,7 @@ subtest 'fastcgi' => sub {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
-                    doit($mode, $file, "fastcgi.connect: $port", +{ remove_script_name => 1 });
+                    doit($mode, $file, "fastcgi.connect: $port", +{ remove_script_name => 1, post => 1 });
                 };
             }
         };
