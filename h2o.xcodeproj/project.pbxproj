@@ -357,6 +357,9 @@
 		E9708B891E52C8560029E0A5 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
 		E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
 		E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22F71C040F6400405689 /* tunnel.c */; };
+		E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76E41F00E70700EB7A09 /* salsa20.h */; };
+		E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
+		E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E91F00E74C00EB7A09 /* poly1305.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -867,6 +870,10 @@
 		E9BC76C31EE4AA4600EB7A09 /* 50reverse-proxy-preserve-case.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-preserve-case.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BC76C41EE4AA9700EB7A09 /* 50reverse-proxy-session-resumption.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-session-resumption.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80graceful-shutdown.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9BC76E21F00E6DA00EB7A09 /* poly1305.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = poly1305.h; sourceTree = "<group>"; };
+		E9BC76E41F00E70700EB7A09 /* salsa20.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = salsa20.h; sourceTree = "<group>"; };
+		E9BC76E61F00E72D00EB7A09 /* chacha20.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chacha20.c; sourceTree = "<group>"; };
+		E9BC76E91F00E74C00EB7A09 /* poly1305.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = poly1305.c; sourceTree = "<group>"; };
 		E9CD04271F8F1D5D00524877 /* Changes */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Changes; sourceTree = "<group>"; };
 		E9CD04281F8F1D7500524877 /* CONTRIBUTING.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = CONTRIBUTING.md; sourceTree = "<group>"; };
 		E9CD04291F8F1D7F00524877 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
@@ -1891,6 +1898,7 @@
 				E9708AF11E49A2B90029E0A5 /* blockwise.c */,
 				E9708AF21E49A2B90029E0A5 /* blockwise.h */,
 				E9708AF61E49A3130029E0A5 /* cf_config.h */,
+				E9BC76E61F00E72D00EB7A09 /* chacha20.c */,
 				E9708AF71E49A3130029E0A5 /* chash.c */,
 				E9708AF81E49A3130029E0A5 /* chash.h */,
 				E9708AF91E49A3130029E0A5 /* curve25519.c */,
@@ -1904,6 +1912,9 @@
 				E9708B021E49A3130029E0A5 /* hmac.h */,
 				E9708B031E49A3130029E0A5 /* modes.c */,
 				E9708B041E49A3130029E0A5 /* modes.h */,
+				E9BC76E21F00E6DA00EB7A09 /* poly1305.h */,
+				E9BC76E91F00E74C00EB7A09 /* poly1305.c */,
+				E9BC76E41F00E70700EB7A09 /* salsa20.h */,
 				E9708B051E49A3130029E0A5 /* sha2.h */,
 				E9708B061E49A3130029E0A5 /* sha256.c */,
 				E9708B071E49A3130029E0A5 /* tassert.h */,
@@ -1980,6 +1991,7 @@
 				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
+				E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */,
 				0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
 				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
@@ -2402,6 +2414,7 @@
 				7D0285C91EF422D40094292B /* sleep.c in Sources */,
 				E9708B7C1E52C83D0029E0A5 /* status.c in Sources */,
 				E9708B7D1E52C8430029E0A5 /* durations.c in Sources */,
+				E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */,
 				E9708B3F1E52C7860029E0A5 /* send_text.c in Sources */,
 				E9708B261E49BADE0029E0A5 /* modes.c in Sources */,
 				E9708B221E49BAD00029E0A5 /* drbg.c in Sources */,
@@ -2475,6 +2488,7 @@
 				107E34041C7EAF9300AEF5F8 /* entropy_encode.cc in Sources */,
 				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
 				E9708B6A1E52C81D0029E0A5 /* access_log.c in Sources */,
+				E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */,
 				107E33F71C7EAF5A00AEF5F8 /* compress_fragment_two_pass.cc in Sources */,
 				107E34081C7EAF9300AEF5F8 /* static_dict.cc in Sources */,
 				107E34091C7EAF9300AEF5F8 /* streams.cc in Sources */,
