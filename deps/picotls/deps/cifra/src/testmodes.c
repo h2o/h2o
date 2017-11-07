@@ -109,7 +109,7 @@ static void test_ctr(void)
   
   cf_ctr_init(&ctr, &cf_aes, &aes, nonce);
   cf_ctr_cipher(&ctr, inp, out, 1); /* incremental */
-  cf_ctr_cipher(&ctr, inp + 1, out + 1, 15);
+  cf_ctr_cipher(&ctr, ((uint8_t *)inp) + 1, out + 1, 15);
   TEST_CHECK(memcmp(expect, out, 16) == 0);
 
   uint8_t decrypt[16];
