@@ -690,10 +690,12 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* return without processing body, if status is fallthru */
     if (generator->req->res.status == STATUS_FALLTHRU) {
-        if (is_delegate != NULL)
+        if (is_delegate != NULL) {
             *is_delegate = 1;
-        else
-            h2o_delegate_request_deferred(generator->req, &generator->ctx->handler->super);
+        } else {
+            assert(generator->req->handler == &generator->ctx->handler->super);
+            h2o_delegate_request_deferred(generator->req);
+        }
         return;
     }
 

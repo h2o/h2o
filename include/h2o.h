@@ -1294,13 +1294,13 @@ void h2o_process_request(h2o_req_t *req);
  */
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req);
 /**
- * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
+ * delegates the request to the next handler
  */
-void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler);
+void h2o_delegate_request(h2o_req_t *req);
 /**
  * calls h2o_delegate_request using zero_timeout callback
  */
-void h2o_delegate_request_deferred(h2o_req_t *req, h2o_handler_t *current_handler);
+void h2o_delegate_request_deferred(h2o_req_t *req);
 /**
  * reprocesses a request once more (used for internal redirection)
  */
