@@ -157,10 +157,21 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
 
-    if (conn->num_streams.blocked_by_server == 0 && conn->_write.buf_in_flight == NULL) {
-        conn->_timeout_entry.cb = on_idle_timeout;
-        h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
-    }
+    /* always set idle timeout if TLS handshake is in progress */
+    if (conn->sock->ssl != NULL && h2o_socket_ssl_is_early_data(conn->sock))
+        goto SetTimeout;
+
+    /* no need to set timeout if pending requests exist */
+    if (conn->num_streams.blocked_by_server != 0)
+        return;
+
+    /* no need to set timeout if write is in flight */
+    if (conn->_write.buf_in_flight != NULL)
+        return;
+
+SetTimeout:
+    conn->_timeout_entry.cb = on_idle_timeout;
+    h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
 }
 
 static int can_run_requests(h2o_http2_conn_t *conn)
