@@ -508,7 +508,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     { /* headers */
         h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * (generator->req->headers.size + 1));
         size_t i, num_headers_sorted = 0;
-        int early_data_found = 0;
+        int found_early_data = 0;
         /* build list of headers to be set, sorted by their names */
         for (i = 0; i != generator->req->headers.size; ++i) {
             h2o_header_t *header = generator->req->headers.entries + i;
@@ -517,12 +517,12 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                 if (token == H2O_TOKEN_TRANSFER_ENCODING) {
                     continue;
                 } else if (token == H2O_TOKEN_EARLY_DATA) {
-                    early_data_found = 1;
+                    found_early_data = 1;
                 }
             }
             headers_sorted[num_headers_sorted++] = header;
         }
-        if (!early_data_found && h2o_conn_is_early_data(generator->req->conn)) {
+        if (!found_early_data && h2o_conn_is_early_data(generator->req->conn)) {
             static const h2o_header_t early_data = {&H2O_TOKEN_EARLY_DATA->buf, "early-data", {H2O_STRLIT("1")}};
             headers_sorted[num_headers_sorted++] = (h2o_header_t *)&early_data;
             generator->req->reprocess_if_too_early = 1;
