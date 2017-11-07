@@ -296,6 +296,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     { /* headers */
         const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
         size_t cookie_length = 0;
+        int found_early_data = 0;
         for (; h != h_end; ++h) {
             if (h->name == &H2O_TOKEN_CONTENT_TYPE->buf) {
                 append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_TYPE"), h->value.base, h->value.len);
@@ -303,6 +304,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 /* accumulate the length of the cookie, together with the separator */
                 cookie_length += h->value.len + 1;
             } else {
+                if (h->name == &H2O_TOKEN_EARLY_DATA->buf)
+                    found_early_data = 1;
                 size_t i;
                 for (i = 0; i != req->env.size; i += 2) {
                     h2o_iovec_t *envname = req->env.entries + i;
@@ -337,6 +340,10 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 }
             }
             memcpy(dst, h->value.base, h->value.len);
+        }
+        if (!found_early_data && h2o_conn_is_early_data(req->conn)) {
+            append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_EARLY_DATA"), H2O_STRLIT("1"));
+            req->reprocess_if_too_early = 1;
         }
     }
 }
