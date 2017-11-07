@@ -59,14 +59,13 @@ struct st_subreq_ostream_t {
 
 static void dispose_subreq_ostream(struct st_subreq_ostream_t *ostream)
 {
-    h2o_req_t *subreq = ostream->req;
     if (! mrb_nil_p(ostream->ref))
         DATA_PTR(ostream->ref) = NULL;
     if (h2o_linklist_is_linked(&ostream->link))
         h2o_linklist_unlink(&ostream->link);
     if (h2o_timeout_is_linked(&ostream->defer_dispose_timeout_entry))
         h2o_timeout_unlink(&ostream->defer_dispose_timeout_entry);
-    h2o_dispose_subrequest(subreq);
+    h2o_dispose_subrequest(ostream->req);
 }
 
 static void on_gc_dispose_subreq_ostream(mrb_state *mrb, void *_ostream)
@@ -674,7 +673,6 @@ static void on_generator_dispose(void *_generator)
 
     while (!h2o_linklist_is_empty(&generator->subreqs)) {
         struct st_subreq_ostream_t *ostream = H2O_STRUCT_FROM_MEMBER(struct st_subreq_ostream_t, link, generator->subreqs.next);
-        h2o_linklist_unlink(&ostream->link);
         dispose_subreq_ostream(ostream);
     }
 
@@ -701,6 +699,7 @@ static void flush_chunks(mrb_state *mrb, struct st_subreq_ostream_t *ostream, h2
 
     int i;
     mrb_value chunks = mrb_iv_get(mrb, ostream->ref, mrb_intern_lit(mrb, "@chunks"));
+    DATA_PTR(ostream->ref) = NULL;
     ostream->ref = mrb_nil_value();
     size_t chunkscnt = RARRAY_LEN(chunks);
     h2o_iovec_t bufs[chunkscnt + inbufcnt];
@@ -1140,7 +1139,6 @@ static h2o_req_t *create_subreq(h2o_mruby_generator_t *generator, h2o_req_t *req
     }
 
     h2o_req_t *subreq = h2o_create_subrequest(req);
-//    subreq->timestamps = req->timestamps; // TODO
 
     subreq->scheme = url_parsed.scheme;
     subreq->method = h2o_strdup(&subreq->pool, RSTRING_PTR(method), RSTRING_LEN(method));
