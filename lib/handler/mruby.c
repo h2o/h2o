@@ -63,7 +63,7 @@ static void dispose_subreq(struct st_mruby_subreq_t *subreq)
         h2o_linklist_unlink(&subreq->link);
     if (h2o_timeout_is_linked(&subreq->defer_dispose_timeout_entry))
         h2o_timeout_unlink(&subreq->defer_dispose_timeout_entry);
-    h2o_dispose_subrequest(&subreq->super);
+    h2o_subrequest_destroy(&subreq->super);
 }
 
 static void on_gc_dispose_delegate_input_stream(mrb_state *mrb, void *_subreq)
@@ -1141,7 +1141,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_generator_t *generator,
         goto Failed;
     }
 
-    struct st_mruby_subreq_t *subreq = (void *)h2o_create_subrequest(req, sizeof(*subreq));
+    struct st_mruby_subreq_t *subreq = (void *)h2o_subrequest_create(req, sizeof(*subreq));
     subreq->parent_generator = generator;
     subreq->receiver = mrb_nil_value();
     subreq->ref = mrb_nil_value();

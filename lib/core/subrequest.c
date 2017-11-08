@@ -102,7 +102,7 @@ static const h2o_conn_callbacks_t *get_subreq_callbacks(h2o_req_t *req)
     return req->version < 0x200 ? &http1_callbacks : &http2_callbacks;
 }
 
-h2o_subreq_t *h2o_create_subrequest(h2o_req_t *parent, size_t sz)
+h2o_subreq_t *h2o_subrequest_create(h2o_req_t *parent, size_t sz)
 {
     struct st_h2o_subreq_t *subreq = h2o_mem_alloc(sz);
     subreq->conn.ctx = parent->conn->ctx;
@@ -125,7 +125,7 @@ h2o_subreq_t *h2o_create_subrequest(h2o_req_t *parent, size_t sz)
     return subreq;
 }
 
-void h2o_dispose_subrequest(h2o_subreq_t *subreq)
+void h2o_subrequest_destroy(h2o_subreq_t *subreq)
 {
     h2o_dispose_request(&subreq->super);
     free(subreq);
