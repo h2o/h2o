@@ -45,14 +45,22 @@ static h2o_socket_t *get_socket(h2o_conn_t *_conn)
 static h2o_http2_debug_state_t *get_debug_state(h2o_req_t *req, int hpack_enabled)
 {
     struct st_h2o_subreq_t *subreq = (void *)req;
-    return subreq->super.parent->conn->callbacks->get_debug_state(subreq->super.parent, hpack_enabled);
+    if (subreq->super.parent->conn->callbacks->get_debug_state != NULL) {
+        return subreq->super.parent->conn->callbacks->get_debug_state(subreq->super.parent, hpack_enabled);
+    } else {
+        return NULL;
+    }
 }
 
 #define DEFINE_LOGGER(category, name)                                                                                              \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
         struct st_h2o_subreq_t *subreq = (void *)req;                                                                              \
-        return subreq->super.parent->conn->callbacks->log_.category.name(subreq->super.parent);                                    \
+        if (subreq->super.parent->conn->callbacks->log_.category.name != NULL) {                                                   \
+            return subreq->super.parent->conn->callbacks->log_.category.name(subreq->super.parent);                                \
+        } else {                                                                                                                   \
+            return h2o_iovec_init(NULL, 0);                                                                                        \
+        }                                                                                                                          \
     }
 
 DEFINE_LOGGER(ssl, protocol_version)
@@ -72,44 +80,27 @@ DEFINE_LOGGER(http2, priority_actual_weight)
 
 #undef DEFINE_LOGGER
 
-static const h2o_conn_callbacks_t http1_callbacks = {
-    get_sockname, /* stringify address */
-    get_peername, /* ditto */
-    NULL,         /* push */
-    get_socket,   /* get underlying socket */
-    NULL,         /* get debug state */
-    {{
-        {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-        {log_request_index},                                                                     /* http1 */
-        {NULL}                                                                                   /* http2 */
-    }}};
-
-static const h2o_conn_callbacks_t http2_callbacks = {
-    get_sockname,    /* stringify address */
-    get_peername,    /* ditto */
-    NULL,            /* push */
-    get_socket,      /* get underlying socket */
-    get_debug_state, /* get debug state */
-    {{
-        {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-        {NULL},                                                                                  /* http1 */
-        {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
-         log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
-    }}};
-
-static const h2o_conn_callbacks_t *get_subreq_callbacks(h2o_req_t *req)
-{
-    return req->version < 0x200 ? &http1_callbacks : &http2_callbacks;
-}
-
 h2o_subreq_t *h2o_subrequest_create(h2o_req_t *parent, size_t sz)
 {
+    static const h2o_conn_callbacks_t callbacks = {
+        get_sockname,    /* stringify address */
+        get_peername,    /* ditto */
+        NULL,            /* push */
+        get_socket,      /* get underlying socket */
+        get_debug_state, /* get debug state */
+        {{
+            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id},                       /* ssl */
+            {log_request_index},                                                                                           /* http1 */
+            {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
+                log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
+        }}};
+
     struct st_h2o_subreq_t *subreq = h2o_mem_alloc(sz);
     subreq->conn.ctx = parent->conn->ctx;
     subreq->conn.hosts = parent->conn->hosts;
     subreq->conn.connected_at = parent->conn->connected_at;
     subreq->conn.id = parent->conn->id;
-    subreq->conn.callbacks = get_subreq_callbacks(parent);
+    subreq->conn.callbacks = &callbacks;
     h2o_init_request(&subreq->super, &subreq->conn, NULL);
 
     subreq->super.parent = parent;
@@ -133,6 +124,5 @@ void h2o_subrequest_destroy(h2o_subreq_t *subreq)
 
 int h2o_is_subrequest(h2o_req_t *req)
 {
-    const h2o_conn_callbacks_t *subreq_callbacks = get_subreq_callbacks(req);
-    return req->conn->callbacks == subreq_callbacks;
+    return req->parent != NULL;
 }

@@ -38,6 +38,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     }
 
     h2o_http2_debug_state_t *debug_state = req->conn->callbacks->get_debug_state(req, self->hpack_enabled);
+    if (debug_state == NULL) {
+        return -1;
+    }
 
     // stringify these variables to embed in Debug Header
     h2o_iovec_t conn_flow_in, conn_flow_out;
