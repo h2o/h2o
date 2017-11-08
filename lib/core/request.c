@@ -224,28 +224,6 @@ static void retain_original_response(h2o_req_t *req)
     req->res.original.headers.size = req->res.headers.size;
 }
 
-static void copy_headers(h2o_mem_pool_t *pool, h2o_headers_t *src, h2o_headers_t *dst)
-{
-    int i;
-
-    h2o_vector_reserve(pool, dst, src->size);
-    dst->size = src->size;
-    for (i = 0; i != src->size; ++i) {
-        h2o_header_t *dst_header = dst->entries + i, *src_header = src->entries + i;
-        if (h2o_iovec_is_token(src_header->name)) {
-            dst_header->name = src_header->name;
-        } else {
-            dst_header->name = h2o_mem_alloc_pool(pool, sizeof(*dst_header->name));
-            *dst_header->name = h2o_strdup(pool, src_header->name->base, src_header->name->len);
-        }
-        dst_header->value = h2o_strdup(pool, src_header->value.base, src_header->value.len);
-        if (!src_header->orig_name)
-            dst_header->orig_name = NULL;
-        else
-            dst_header->orig_name = h2o_strdup(pool, src_header->orig_name, src_header->name->len).base;
-    }
-}
-
 void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
 {
     /* clear all memory (expect memory pool, since it is large) */
@@ -285,14 +263,22 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
             req->upgrade.len = 0;
         }
 #undef COPY
-
-        copy_headers(&req->pool, &src->input.headers, &req->input.headers);
-        if (src->headers.entries == src->input.headers.entries) {
-            req->headers = req->input.headers;
-        } else {
-            copy_headers(&req->pool, &req->input.headers, &req->headers);
+        h2o_vector_reserve(&req->pool, &req->headers, src->headers.size);
+        req->headers.size = src->headers.size;
+        for (i = 0; i != src->headers.size; ++i) {
+            h2o_header_t *dst_header = req->headers.entries + i, *src_header = src->headers.entries + i;
+            if (h2o_iovec_is_token(src_header->name)) {
+                dst_header->name = src_header->name;
+            } else {
+                dst_header->name = h2o_mem_alloc_pool(&req->pool, sizeof(*dst_header->name));
+                *dst_header->name = h2o_strdup(&req->pool, src_header->name->base, src_header->name->len);
+            }
+            dst_header->value = h2o_strdup(&req->pool, src_header->value.base, src_header->value.len);
+            if (!src_header->orig_name)
+                dst_header->orig_name = NULL;
+            else
+                dst_header->orig_name = h2o_strdup(&req->pool, src_header->orig_name, src_header->name->len).base;
         }
-
         if (src->env.size != 0) {
             h2o_vector_reserve(&req->pool, &req->env, src->env.size);
             req->env.size = src->env.size;

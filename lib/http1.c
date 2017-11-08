@@ -333,8 +333,7 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
 
     /* init headers */
     entity_header_index =
-        init_headers(&conn->req.pool, &conn->req.input.headers, headers, num_headers, &connection, &host, &upgrade, expect);
-    conn->req.headers = conn->req.input.headers;
+        init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect);
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
     if (entity_header_index != -1) {

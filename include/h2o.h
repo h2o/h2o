@@ -962,10 +962,6 @@ struct st_h2o_req_t {
          * offset of '?' within path, or SIZE_MAX if not found
          */
         size_t query_at;
-        /*
-         * list of request headers
-         */
-        h2o_headers_t headers;
     } input;
     /**
      * the host context
