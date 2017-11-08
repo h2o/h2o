@@ -854,21 +854,21 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     }
 
     if (mrb_nil_p(body)) {
-        h2o_start_response(generator->req, &generator->super);
-
         /* send the entire response immediately */
+        h2o_iovec_t *bufs;
         if (status == 101 || status == 204 || status == 304 ||
             h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
-            h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_FINAL);
+            bufs = NULL;
         } else {
             if (content.len < generator->req->res.content_length) {
                 generator->req->res.content_length = content.len;
             } else {
                 content.len = generator->req->res.content_length;
             }
-            h2o_send(generator->req, &content, 1, H2O_SEND_STATE_FINAL);
+            bufs = &content;
         }
-
+        h2o_start_response(generator->req, &generator->super);
+        h2o_send(generator->req, bufs, bufs == NULL ? 0 : 1, H2O_SEND_STATE_FINAL);
     } else {
         /* body is each-able ruby object */
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
