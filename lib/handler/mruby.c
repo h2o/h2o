@@ -104,11 +104,11 @@ mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
     return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
 }
 
-void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id)
+void h2o_mruby_define_callback(mrb_state *mrb, const char *name, mrb_sym callback)
 {
     mrb_value args[2];
     args[0] = mrb_str_new_cstr(mrb, name);
-    args[1] = mrb_fixnum_value(id);
+    args[1] = mrb_symbol_value(callback);
     mrb_funcall_argv(mrb, mrb_top_self(mrb), mrb_intern_lit(mrb, "_h2o_define_callback"), 2, args);
 
     if (mrb->exc != NULL) {
@@ -279,12 +279,29 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 
     h2o_mruby_setup_globals(shared_ctx->mrb);
     shared_ctx->constants = build_constants(shared_ctx->mrb, ctx->globalconf->server_name.base, ctx->globalconf->server_name.len);
-    shared_ctx->symbols.sym_call = mrb_intern_lit(shared_ctx->mrb, "call");
-    shared_ctx->symbols.sym_close = mrb_intern_lit(shared_ctx->mrb, "close");
-    shared_ctx->symbols.sym_method = mrb_intern_lit(shared_ctx->mrb, "method");
-    shared_ctx->symbols.sym_headers = mrb_intern_lit(shared_ctx->mrb, "headers");
-    shared_ctx->symbols.sym_body = mrb_intern_lit(shared_ctx->mrb, "body");
-    shared_ctx->symbols.sym_async = mrb_intern_lit(shared_ctx->mrb, "async");
+
+#define SET_SYM(name) \
+    do { \
+        shared_ctx->symbols.sym_ ## name = mrb_intern_lit(shared_ctx->mrb, #name); \
+    } while (0)
+
+    SET_SYM(call);
+    SET_SYM(close);
+    SET_SYM(method);
+    SET_SYM(headers);
+    SET_SYM(body);
+    SET_SYM(async);
+
+    /* symbols for callback */
+    SET_SYM(callback_exception_raised);
+    SET_SYM(callback_configuring_app);
+    SET_SYM(callback_configured_app);
+    SET_SYM(callback_send_chunked_eos);
+    SET_SYM(callback_http_join_response);
+    SET_SYM(callback_http_fetch_chunk);
+    SET_SYM(callback_sleep);
+
+#undef SET_SYM
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
@@ -764,27 +781,27 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto GotException;
         }
         /* fetch status */
-        mrb_value v = mrb_to_int(mrb, mrb_ary_entry(output, 0));
-        if (mrb->exc != NULL)
-            goto GotException;
-        status = mrb_fixnum(v);
-
-        /* if no special actions were necessary, then the output is a rack response */
-        if (status >= 0)
+        mrb_value v = mrb_ary_entry(output, 0);
+        if (!mrb_symbol_p(v)) {
+            status = mrb_fixnum(mrb_to_int(mrb, v));
+            if (mrb->exc != NULL)
+                goto GotException;
             break;
+        }
+        mrb_sym callback = mrb_symbol(v);
 
-        /* take special action depending on the status code */
-        if (status == H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED) {
+        /* take special action depending on callback type */
+        if (callback == ctx->shared->symbols.sym_callback_exception_raised) {
             mrb->exc = mrb_obj_ptr(mrb_ary_entry(output, 1));
             generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 2));
             goto GotException;
-        } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP) {
+        } else if (callback == ctx->shared->symbols.sym_callback_configuring_app) {
             mrb_value pending = mrb_ary_new_capa(mrb, 2);
             mrb_ary_set(mrb, pending, 0, receiver);
             mrb_ary_set(mrb, pending, 1, input);
             mrb_ary_push(mrb, ctx->pendings, pending);
             goto Exit;
-        } else if (status == H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP) {
+        } else if (callback == ctx->shared->symbols.sym_callback_configured_app) {
             mrb_int i;
             mrb_int len = RARRAY_LEN(ctx->pendings);
             for (i = 0; i != len; ++i) {
@@ -809,23 +826,17 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
 
         if (mrb_array_p(args)) {
             int run_again = 0;
-            switch (status) {
-            case H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS:
+            if (callback == ctx->shared->symbols.sym_callback_send_chunked_eos) {
                 input = h2o_mruby_send_chunked_eos_callback(ctx, receiver, args, &run_again);
-                break;
-            case H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE:
+            } else if (callback == ctx->shared->symbols.sym_callback_http_join_response) {
                 input = h2o_mruby_http_join_response_callback(ctx, receiver, args, &run_again);
-                break;
-            case H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK:
+            } else if (callback == ctx->shared->symbols.sym_callback_http_fetch_chunk) {
                 input = h2o_mruby_http_fetch_chunk_callback(ctx, receiver, args, &run_again);
-                break;
-            case H2O_MRUBY_CALLBACK_ID_SLEEP:
+            } else if (callback == ctx->shared->symbols.sym_callback_sleep) {
                 input = h2o_mruby_sleep_callback(ctx, receiver, args, &run_again);
-                break;
-            default:
+            } else {
                 input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
                 run_again = 1;
-                break;
             }
             if (run_again == 0)
                 goto Exit;

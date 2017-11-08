@@ -93,6 +93,14 @@ typedef struct st_h2o_mruby_shared_context_t {
         mrb_sym sym_headers;
         mrb_sym sym_body;
         mrb_sym sym_async;
+
+        mrb_sym sym_callback_exception_raised;
+        mrb_sym sym_callback_configuring_app;
+        mrb_sym sym_callback_configured_app;
+        mrb_sym sym_callback_send_chunked_eos;
+        mrb_sym sym_callback_http_join_response;
+        mrb_sym sym_callback_http_fetch_chunk;
+        mrb_sym sym_callback_sleep;
     } symbols;
 } h2o_mruby_shared_context_t;
 
@@ -116,14 +124,6 @@ typedef struct st_h2o_mruby_generator_t {
         mrb_value generator;
     } refs;
 } h2o_mruby_generator_t;
-
-#define H2O_MRUBY_CALLBACK_ID_EXCEPTION_RAISED -1 /* used to notify exception, does not execution to mruby code */
-#define H2O_MRUBY_CALLBACK_ID_CONFIGURING_APP -2
-#define H2O_MRUBY_CALLBACK_ID_CONFIGURED_APP -3
-#define H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS -4
-#define H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE -5
-#define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -6
-#define H2O_MRUBY_CALLBACK_ID_SLEEP -999
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
     if (mrb->exc != NULL)                                                                                                          \
@@ -153,7 +153,7 @@ typedef struct st_h2o_mruby_generator_t {
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
-void h2o_mruby_define_callback(mrb_state *mrb, const char *name, int id);
+void h2o_mruby_define_callback(mrb_state *mrb, const char *name, mrb_sym callback);
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
 void h2o_mruby_setup_globals(mrb_state *mrb);
 struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf);

@@ -549,6 +549,6 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
     klass = mrb_class_get_under(mrb, klass, "Empty");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS, mrb_obj_value(klass));
 
-    h2o_mruby_define_callback(mrb, "_h2o__http_join_response", H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE);
-    h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK);
+    h2o_mruby_define_callback(mrb, "_h2o__http_join_response", ctx->symbols.sym_callback_http_join_response);
+    h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", ctx->symbols.sym_callback_http_fetch_chunk);
 }

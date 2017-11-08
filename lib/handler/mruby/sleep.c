@@ -100,5 +100,5 @@ void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
 
-    h2o_mruby_define_callback(mrb, "_h2o__sleep", H2O_MRUBY_CALLBACK_ID_SLEEP);
+    h2o_mruby_define_callback(mrb, "_h2o__sleep", ctx->symbols.sym_callback_sleep);
 }

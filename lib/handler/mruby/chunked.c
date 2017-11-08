@@ -282,7 +282,7 @@ void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *shared_ctx)
     h2o_mruby_assert(mrb);
 
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));
-    h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS);
+    h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", shared_ctx->symbols.sym_callback_send_chunked_eos);
 
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
                 mrb_funcall(mrb, mrb_top_self(mrb), "_h2o_chunked_proc_each_to_fiber", 0));
