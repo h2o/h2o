@@ -21,44 +21,38 @@
  */
 #include "h2o.h"
 
-struct st_h2o_subreq_t {
-    h2o_req_t super;
-    h2o_req_t *src;
-    h2o_conn_t conn;
-};
-
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_subreq_t *subreq = H2O_STRUCT_FROM_MEMBER(struct st_h2o_subreq_t, conn, _conn);
-    h2o_conn_t *conn = subreq->src->conn;
+    h2o_conn_t *conn = subreq->super.parent->conn;
     return conn->callbacks->get_sockname(conn, sa);
 }
 
 static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_subreq_t *subreq = H2O_STRUCT_FROM_MEMBER(struct st_h2o_subreq_t, conn, _conn);
-    h2o_conn_t *conn = subreq->src->conn;
+    h2o_conn_t *conn = subreq->super.parent->conn;
     return conn->callbacks->get_peername(conn, sa);
 }
 
 static h2o_socket_t *get_socket(h2o_conn_t *_conn)
 {
     struct st_h2o_subreq_t *subreq = H2O_STRUCT_FROM_MEMBER(struct st_h2o_subreq_t, conn, _conn);
-    h2o_conn_t *conn = subreq->src->conn;
+    h2o_conn_t *conn = subreq->super.parent->conn;
     return conn->callbacks->get_socket(conn);
 }
 
 static h2o_http2_debug_state_t *get_debug_state(h2o_req_t *req, int hpack_enabled)
 {
     struct st_h2o_subreq_t *subreq = (void *)req;
-    return subreq->src->conn->callbacks->get_debug_state(subreq->src, hpack_enabled);
+    return subreq->super.parent->conn->callbacks->get_debug_state(subreq->super.parent, hpack_enabled);
 }
 
 #define DEFINE_LOGGER(category, name)                                                                                              \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
         struct st_h2o_subreq_t *subreq = (void *)req;                                                                              \
-        return subreq->src->conn->callbacks->log_.category.name(subreq->src);                                                      \
+        return subreq->super.parent->conn->callbacks->log_.category.name(subreq->super.parent);                                    \
     }
 
 DEFINE_LOGGER(ssl, protocol_version)
@@ -108,37 +102,36 @@ static const h2o_conn_callbacks_t *get_subreq_callbacks(h2o_req_t *req)
     return req->version < 0x200 ? &http1_callbacks : &http2_callbacks;
 }
 
-h2o_req_t *h2o_create_subrequest(h2o_req_t *src)
+h2o_subreq_t *h2o_create_subrequest(h2o_req_t *parent, size_t sz)
 {
-    struct st_h2o_subreq_t *subreq = h2o_mem_alloc(sizeof(*subreq));
-    subreq->conn.ctx = src->conn->ctx;
-    subreq->conn.hosts = src->conn->hosts;
-    subreq->conn.connected_at = src->conn->connected_at;
-    subreq->conn.id = src->conn->id;
-    subreq->conn.callbacks = get_subreq_callbacks(src);
+    struct st_h2o_subreq_t *subreq = h2o_mem_alloc(sz);
+    subreq->conn.ctx = parent->conn->ctx;
+    subreq->conn.hosts = parent->conn->hosts;
+    subreq->conn.connected_at = parent->conn->connected_at;
+    subreq->conn.id = parent->conn->id;
+    subreq->conn.callbacks = get_subreq_callbacks(parent);
     h2o_init_request(&subreq->super, &subreq->conn, NULL);
 
-    subreq->src = src;
-    subreq->super.input = src->input;
-    subreq->super.hostconf = src->hostconf;
-    subreq->super.pathconf = src->pathconf;
-    subreq->super.version = src->version;
-    subreq->super.error_logs = src->error_logs;
-    subreq->super.num_delegated = src->num_delegated;
-    subreq->super.num_reprocessed = src->num_reprocessed;
-    subreq->super.processed_at = src->processed_at;
+    subreq->super.parent = parent;
+    subreq->super.input = parent->input;
+    subreq->super.hostconf = parent->hostconf;
+    subreq->super.pathconf = parent->pathconf;
+    subreq->super.version = parent->version;
+    subreq->super.error_logs = parent->error_logs;
+    subreq->super.num_delegated = parent->num_delegated;
+    subreq->super.num_reprocessed = parent->num_reprocessed;
+    subreq->super.processed_at = parent->processed_at;
 
-    return &subreq->super;
+    return subreq;
 }
 
-void h2o_dispose_subrequest(h2o_req_t *subreq)
+void h2o_dispose_subrequest(h2o_subreq_t *subreq)
 {
-    assert(h2o_is_subrequst(subreq));
-    h2o_dispose_request(subreq);
+    h2o_dispose_request(&subreq->super);
     free(subreq);
 }
 
-int h2o_is_subrequst(h2o_req_t *req)
+int h2o_is_subrequest(h2o_req_t *req)
 {
     const h2o_conn_callbacks_t *subreq_callbacks = get_subreq_callbacks(req);
     return req->conn->callbacks == subreq_callbacks;

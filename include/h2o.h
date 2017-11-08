@@ -1117,6 +1117,11 @@ struct st_h2o_req_t {
      */
     h2o_proceed_req_cb proceed_req;
 
+    /**
+     * parent request (not NULL when this is a subrequest)
+     */
+    h2o_req_t *parent;
+
     /* internal structure */
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
@@ -1126,6 +1131,11 @@ struct st_h2o_req_t {
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
 };
+
+typedef struct st_h2o_subreq_t {
+    h2o_req_t super;
+    h2o_conn_t conn;
+} h2o_subreq_t;
 
 typedef struct st_h2o_accept_ctx_t {
     h2o_context_t *ctx;
@@ -1326,9 +1336,9 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
  */
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
 
-h2o_req_t *h2o_create_subrequest(h2o_req_t *src);
-int h2o_is_subrequst(h2o_req_t *req);
-void h2o_dispose_subrequest(h2o_req_t *subreq);
+h2o_subreq_t *h2o_create_subrequest(h2o_req_t *parent, size_t sz);
+int h2o_is_subrequest(h2o_req_t *req);
+void h2o_dispose_subrequest(h2o_subreq_t *subreq);
 
 /**
  * called by the generators to send output
