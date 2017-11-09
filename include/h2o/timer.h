@@ -35,17 +35,30 @@ extern "C" {
 struct st_h2o_timer_t;
 typedef void (*h2o_timer_cb)(struct st_h2o_timer_t *timer);
 typedef struct st_h2o_timer_t {
+#if H2O_USE_LIBUV
+    uv_timer_t uv_timer;
+    int is_linked;
+#else
     h2o_linklist_t _link;
-    h2o_timer_cb cb;
     uint64_t expire_at; /* absolute expiration time*/
-    struct st_h2o_timer_backend_properties_t _backend;
+#endif
+    h2o_timer_cb cb;
 } h2o_timer_t;
 
 
+#if H2O_USE_LIBUV
 static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
 {
-    return (h2o_timer_t){{}, cb,};
+    h2o_timer_t ret = {};
+    ret.cb = cb;
+    return ret;
 }
+#else
+static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
+{
+    return (h2o_timer_t){{}, 0, cb,};
+}
+#endif
 
 int h2o_timeout_is_linked(h2o_timer_t *timer);
 void h2o_timeout_unlink(h2o_timer_t *timer);

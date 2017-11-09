@@ -325,5 +325,5 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 
 inline int h2o_timeout_is_linked(h2o_timer_t *entry)
 {
-    return h2o_linklist_is_linked(&entry->_link);
+    return entry->is_linked;
 }

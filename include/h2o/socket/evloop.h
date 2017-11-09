@@ -23,13 +23,6 @@
 #define h2o__evloop_h
 
 #include "h2o/linklist.h"
-
-/* needs to be defined for timer.h */
-struct st_h2o_timer_backend_properties_t {
-    char _dummy; /* sizeof(empty_struct) differs bet. C (GCC extension) and C++ */
-};
-
-#include "h2o/timer.h"
 #include "h2o/timer_wheel.h"
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1

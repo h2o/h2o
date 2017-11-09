@@ -30,10 +30,6 @@
 
 typedef uv_loop_t h2o_loop_t;
 
-struct st_h2o_timer_backend_properties_t {
-    uv_timer_t timer;
-};
-
 h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb);
 h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb);
 

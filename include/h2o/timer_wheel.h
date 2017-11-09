@@ -22,6 +22,8 @@
 #ifndef h2o__timer_wheel_h
 #define h2o__timer_wheel_h
 
+#include "h2o/timer.h"
+
 typedef uint64_t wheelmask_t;
 /* link list of h2o_timer_t */
 typedef h2o_linklist_t h2o_timer_wheel_slot_t;
