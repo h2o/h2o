@@ -669,6 +669,9 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         assert(mrb->exc != NULL);
         goto GotException;
     }
+    /* add date: if it's missing from the response */
+    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, 0) < 0)
+        h2o_resp_add_date_header(generator->req);
 
     /* return without processing body, if status is fallthru */
     if (generator->req->res.status == STATUS_FALLTHRU) {

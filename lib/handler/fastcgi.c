@@ -548,6 +548,10 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
         }
     }
 
+    /* add date: if it's missing from the response */
+    if (h2o_find_header(&req->res.headers, H2O_TOKEN_DATE, 0) < 0)
+        h2o_resp_add_date_header(req);
+
     return 0;
 }
 

@@ -752,6 +752,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     memcpy(rpath + rpath_len, req->path_normalized.base + req_path_prefix, req->path_normalized.len - req_path_prefix);
     rpath_len += req->path_normalized.len - req_path_prefix;
 
+    h2o_resp_add_date_header(req);
+
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
         h2o_iovec_t *index_file;
