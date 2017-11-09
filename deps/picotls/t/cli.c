@@ -228,39 +228,42 @@ static struct {
     ptls_iovec_t data;
 } session_cache = {{0}};
 
-static int encrypt_ticket_cb(ptls_encrypt_ticket_t *self, ptls_t *tls, ptls_buffer_t *dst, ptls_iovec_t src)
+static int encrypt_ticket_cb(ptls_encrypt_ticket_t *self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
 {
     int ret;
 
-    free(session_cache.data.base);
-    if ((session_cache.data.base = malloc(src.len)) == NULL)
-        return PTLS_ERROR_NO_MEMORY;
+    if (is_encrypt) {
 
-    ptls_get_context(tls)->random_bytes(session_cache.id, sizeof(session_cache.id));
-    memcpy(session_cache.data.base, src.base, src.len);
-    session_cache.data.len = src.len;
+        /* replace the cached entry along with a newly generated session id */
+        free(session_cache.data.base);
+        if ((session_cache.data.base = malloc(src.len)) == NULL)
+            return PTLS_ERROR_NO_MEMORY;
 
-    if ((ret = ptls_buffer_reserve(dst, sizeof(session_cache.id))) != 0)
-        return ret;
-    memcpy(dst->base + dst->off, session_cache.id, sizeof(session_cache.id));
-    dst->off += sizeof(session_cache.id);
+        ptls_get_context(tls)->random_bytes(session_cache.id, sizeof(session_cache.id));
+        memcpy(session_cache.data.base, src.base, src.len);
+        session_cache.data.len = src.len;
 
-    return 0;
-}
+        /* store the session id in buffer */
+        if ((ret = ptls_buffer_reserve(dst, sizeof(session_cache.id))) != 0)
+            return ret;
+        memcpy(dst->base + dst->off, session_cache.id, sizeof(session_cache.id));
+        dst->off += sizeof(session_cache.id);
 
-static int decrypt_ticket_cb(ptls_encrypt_ticket_t *self, ptls_t *tls, ptls_buffer_t *dst, ptls_iovec_t src)
-{
-    int ret;
+    } else {
 
-    if (src.len != sizeof(session_cache.id))
-        return PTLS_ERROR_SESSION_NOT_FOUND;
-    if (memcmp(session_cache.id, src.base, sizeof(session_cache.id)) != 0)
-        return PTLS_ERROR_SESSION_NOT_FOUND;
+        /* check if session id is the one stored in cache */
+        if (src.len != sizeof(session_cache.id))
+            return PTLS_ERROR_SESSION_NOT_FOUND;
+        if (memcmp(session_cache.id, src.base, sizeof(session_cache.id)) != 0)
+            return PTLS_ERROR_SESSION_NOT_FOUND;
 
-    if ((ret = ptls_buffer_reserve(dst, session_cache.data.len)) != 0)
-        return ret;
-    memcpy(dst->base + dst->off, session_cache.data.base, session_cache.data.len);
-    dst->off += session_cache.data.len;
+        /* return the cached value */
+        if ((ret = ptls_buffer_reserve(dst, session_cache.data.len)) != 0)
+            return ret;
+        memcpy(dst->base + dst->off, session_cache.data.base, session_cache.data.len);
+        dst->off += session_cache.data.len;
+    }
+
     return 0;
 }
 
@@ -423,7 +426,7 @@ int main(int argc, char **argv)
 
     ptls_iovec_t _certs[16] = {{NULL}};
     ptls_openssl_sign_certificate_t sign_certificate = {{NULL}};
-    ptls_encrypt_ticket_t encrypt_ticket = {encrypt_ticket_cb}, decrypt_ticket = {decrypt_ticket_cb};
+    ptls_encrypt_ticket_t encrypt_ticket = {encrypt_ticket_cb};
     ptls_save_ticket_t save_ticket = {save_ticket_cb};
     ptls_log_secret_t log_secret = {log_secret_cb};
     ptls_context_t ctx = {ptls_openssl_random_bytes,
@@ -437,11 +440,11 @@ int main(int argc, char **argv)
                           86400,
                           8192,
                           0,
+                          0,
                           &encrypt_ticket,
-                          &decrypt_ticket,
                           &save_ticket};
     ptls_openssl_verify_certificate_t verify_certificate = {{NULL}};
-    ptls_handshake_properties_t hsprop = {{{NULL}}};
+    ptls_handshake_properties_t hsprop = {{{{NULL}}}};
     const char *host, *port;
     int use_early_data = 0, ch;
     struct sockaddr_storage sa;

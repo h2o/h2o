@@ -28,7 +28,7 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-struct proxy_config_wars_t {
+struct proxy_config_vars_t {
     h2o_proxy_config_vars_t conf;
     h2o_timer_tick_t keepalive_timeout; /* in milliseconds */
     SSL_CTX *ssl_ctx;
@@ -38,8 +38,8 @@ struct proxy_configurator_t {
     h2o_configurator_t super;
     unsigned connect_timeout_set : 1;
     unsigned first_byte_timeout_set : 1;
-    struct proxy_config_wars_t *vars;
-    struct proxy_config_wars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
+    struct proxy_config_vars_t *vars;
+    struct proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

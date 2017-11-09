@@ -41,7 +41,7 @@ static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, h2o_url_t *origin);
+                                          h2o_iovec_t *cur_body, int *body_is_chunked, h2o_url_t *origin);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
 
@@ -81,7 +81,7 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_http1client_connect(NULL, req, ctx, sockpool, &url_parsed, on_connect, 0);
+    h2o_http1client_connect(NULL, req, ctx, sockpool, &url_parsed, on_connect);
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
@@ -173,9 +173,9 @@ static void proceed_request(h2o_http1client_t *client, size_t written, int is_en
     }
 }
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, h2o_url_t *dummy)
+h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
+                                   int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb, h2o_iovec_t *cur_body,
+                                   int *body_is_chunked, h2o_url_t *dummy)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
