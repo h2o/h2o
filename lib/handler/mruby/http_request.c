@@ -443,7 +443,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     return ctx->refs.request;
 }
 
-mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value http_join_response_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -462,7 +462,7 @@ static mrb_value create_already_consumed_error(mrb_state *mrb)
     return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
 }
 
-mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -549,6 +549,6 @@ void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)
     klass = mrb_class_get_under(mrb, klass, "Empty");
     mrb_ary_set(mrb, ctx->constants, H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS, mrb_obj_value(klass));
 
-    h2o_mruby_define_callback(mrb, "_h2o__http_join_response", ctx->symbols.sym_callback_http_join_response);
-    h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", ctx->symbols.sym_callback_http_fetch_chunk);
+    h2o_mruby_define_callback(mrb, "_h2o__http_join_response", http_join_response_callback);
+    h2o_mruby_define_callback(mrb, "_h2o__http_fetch_chunk", http_fetch_chunk_callback);
 }

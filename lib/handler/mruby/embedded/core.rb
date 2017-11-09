@@ -26,9 +26,9 @@ end
 
 module Kernel
 
-  def _h2o_define_callback(name, callback)
+  def _h2o_define_callback(name, callback_id)
     Kernel.define_method(name) do |*args|
-      ret = Fiber.yield([ callback, _h2o_create_resumer(), args ])
+      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])
       if ret.kind_of? Exception
         raise ret
       end
@@ -39,7 +39,7 @@ module Kernel
   def _h2o_create_resumer()
     me = Fiber.current
     Proc.new do |v|
-    me.resume(v)
+      me.resume(v)
     end
   end
 
@@ -55,7 +55,7 @@ module Kernel
 
   def _h2o_prepare_app(conf)
     app = Proc.new do |req|
-      [:callback_configuring_app]
+      _h2o__pend_request(req)
     end
 
     cached = nil
@@ -71,7 +71,7 @@ module Kernel
             end
           rescue => e
             cached = self_fiber
-            (req, generator) = Fiber.yield([:callback_exception_raised, e, generator])
+            (req, generator) = _h2o__send_error(e, generator)
           end
         end
       end
@@ -85,12 +85,12 @@ module Kernel
           H2O::ConfigurationContext.reset
           app = _h2o_eval_conf(conf)
           H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)
-          [:callback_configured_app]
+          _h2o__process_pending_requests()
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          [:callback_configured_app, e]
+          _h2o__process_pending_requests(e)
         end
       end
       fiber.resume

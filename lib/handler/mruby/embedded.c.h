@@ -10,9 +10,9 @@
     "  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                         \
     "end\n"                                                                                                                        \
     "module Kernel\n"                                                                                                              \
-    "  def _h2o_define_callback(name, callback)\n"                                                                                 \
+    "  def _h2o_define_callback(name, callback_id)\n"                                                                              \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
-    "      ret = Fiber.yield([ callback, _h2o_create_resumer(), args ])\n"                                                         \
+    "      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])\n"                                                      \
     "      if ret.kind_of? Exception\n"                                                                                            \
     "        raise ret\n"                                                                                                          \
     "      end\n"                                                                                                                  \
@@ -22,7 +22,7 @@
     "  def _h2o_create_resumer()\n"                                                                                                \
     "    me = Fiber.current\n"                                                                                                     \
     "    Proc.new do |v|\n"                                                                                                        \
-    "    me.resume(v)\n"                                                                                                           \
+    "      me.resume(v)\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  def _h2o_proc_each_to_array()\n"                                                                                            \
@@ -36,7 +36,7 @@
     "  end\n"                                                                                                                      \
     "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
-    "      [:callback_configuring_app]\n"                                                                                          \
+    "      _h2o__pend_request(req)\n"                                                                                              \
     "    end\n"                                                                                                                    \
     "    cached = nil\n"                                                                                                           \
     "    runner = Proc.new do |args|\n"                                                                                            \
@@ -51,7 +51,7 @@
     "            end\n"                                                                                                            \
     "          rescue => e\n"                                                                                                      \
     "            cached = self_fiber\n"                                                                                            \
-    "            (req, generator) = Fiber.yield([:callback_exception_raised, e, generator])\n"                                     \
+    "            (req, generator) = _h2o__send_error(e, generator)\n"                                                              \
     "          end\n"                                                                                                              \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
@@ -64,12 +64,12 @@
     "          H2O::ConfigurationContext.reset\n"                                                                                  \
     "          app = _h2o_eval_conf(conf)\n"                                                                                       \
     "          H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)\n"                                       \
-    "          [:callback_configured_app]\n"                                                                                       \
+    "          _h2o__process_pending_requests()\n"                                                                                 \
     "        rescue => e\n"                                                                                                        \
     "          app = Proc.new do |req|\n"                                                                                          \
     "            [500, {}, ['Internal Server Error']]\n"                                                                           \
     "          end\n"                                                                                                              \
-    "          [:callback_configured_app, e]\n"                                                                                    \
+    "          _h2o__process_pending_requests(e)\n"                                                                                \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \
@@ -129,7 +129,7 @@
     "          end\n"                                                                                                              \
     "          _h2o_send_chunk_eos(generator)\n"                                                                                   \
     "        rescue => e\n"                                                                                                        \
-    "          Fiber.yield([:callback_exception_raised, e, generator])\n"                                                          \
+    "          _h2o__send_error(e, generator)\n"                                                                                   \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \

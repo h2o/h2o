@@ -81,6 +81,10 @@ typedef struct st_h2o_mruby_handler_t {
     h2o_mruby_config_vars_t config;
 } h2o_mruby_handler_t;
 
+typedef struct st_h2o_mruby_context_t h2o_mruby_context_t;
+typedef mrb_value (*h2o_mruby_callback)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again);
+typedef H2O_VECTOR(h2o_mruby_callback) h2o_mruby_callbacks;
+
 typedef struct st_h2o_mruby_shared_context_t {
     h2o_context_t *ctx;
     mrb_state *mrb;
@@ -93,23 +97,16 @@ typedef struct st_h2o_mruby_shared_context_t {
         mrb_sym sym_headers;
         mrb_sym sym_body;
         mrb_sym sym_async;
-
-        mrb_sym sym_callback_exception_raised;
-        mrb_sym sym_callback_configuring_app;
-        mrb_sym sym_callback_configured_app;
-        mrb_sym sym_callback_send_chunked_eos;
-        mrb_sym sym_callback_http_join_response;
-        mrb_sym sym_callback_http_fetch_chunk;
-        mrb_sym sym_callback_sleep;
     } symbols;
+    h2o_mruby_callbacks callbacks;
 } h2o_mruby_shared_context_t;
 
-typedef struct st_h2o_mruby_context_t {
+struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
     mrb_value pendings;
-} h2o_mruby_context_t;
+};
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
 typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;
@@ -153,7 +150,7 @@ typedef struct st_h2o_mruby_generator_t {
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
-void h2o_mruby_define_callback(mrb_state *mrb, const char *name, mrb_sym callback);
+void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback callback);
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
 void h2o_mruby_setup_globals(mrb_state *mrb);
 struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf);
@@ -170,13 +167,8 @@ void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator);
 mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_value body);
 void h2o_mruby_send_chunked_dispose(h2o_mruby_generator_t *generator);
 
-mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *next_action);
-
 /* handler/mruby/http_request.c */
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx);
-
-mrb_value h2o_mruby_http_join_response_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value args, int *next_action);
-mrb_value h2o_mruby_http_fetch_chunk_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *next_action);
 
 h2o_mruby_http_request_context_t *h2o_mruby_http_set_shortcut(mrb_state *mrb, mrb_value obj, void (*cb)(h2o_mruby_generator_t *),
                                                               h2o_mruby_generator_t *generator);
@@ -185,7 +177,6 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
 
 /* handler/mruby/sleep.c */
 void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
-mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
