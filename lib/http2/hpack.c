@@ -878,14 +878,13 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
 }
 
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name,
+                                size_t max_frame_size, h2o_res_t *res, const h2o_iovec_t *server_name,
                                 size_t content_length)
 {
     size_t capacity = calc_headers_capacity(res->headers.entries, res->headers.size);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
     capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
 #ifndef H2O_UNITTEST
-    capacity += 2 + H2O_TIMESTR_RFC1123_LEN; /* for Date: */
     if (server_name->len) {
         capacity += 5 + server_name->len; /* for Server: */
     }
@@ -903,8 +902,6 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     if (server_name->len) {
         dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
     }
-    h2o_iovec_t date_value = {ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN};
-    dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
 #endif
     size_t i;
     for (i = 0; i != res->headers.size; ++i)
