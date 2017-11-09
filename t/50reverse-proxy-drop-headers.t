@@ -51,7 +51,7 @@ EOT
 
     my $curl = 'curl --silent --dump-header /dev/stderr';
     my ($headers, $body) = run_prog("$curl http://127.0.0.1:@{[$server->{port}]}/fixed-date-header");
-    unlike $headers, qr/Thu, 01 Jan 1970 00:00:00 GMT/, "date response header from upstream should be dropped and replaced";
+    like $headers, qr/Thu, 01 Jan 1970 00:00:00 GMT/, "date response header from upstream has been preserved";
 };
 
 done_testing();
