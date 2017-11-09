@@ -1510,6 +1510,10 @@ enum {
 };
 
 /**
+ * Add a `date:` header to the response
+ */
+void h2o_resp_add_date_header(h2o_req_t *req);
+/**
  * sends the given string as the response
  */
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
