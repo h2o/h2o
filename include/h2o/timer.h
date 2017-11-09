@@ -45,7 +45,6 @@ typedef struct st_h2o_timer_t {
     h2o_timer_cb cb;
 } h2o_timer_t;
 
-
 #if H2O_USE_LIBUV
 static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
 {
@@ -56,7 +55,11 @@ static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
 #else
 static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
 {
-    return (h2o_timer_t){{}, 0, cb,};
+    return (h2o_timer_t){
+        {},
+        0,
+        cb,
+    };
 }
 #endif
 

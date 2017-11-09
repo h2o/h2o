@@ -531,7 +531,6 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
 }
 
-
 static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin)
 {
     struct st_h2o_http1client_private_t *client = data;

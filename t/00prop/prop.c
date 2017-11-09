@@ -126,7 +126,7 @@ static void free_cb(void *instance, void *env)
 static void print_cb(FILE *f, const void *instance, void *env)
 {
     const uint64_t *input = instance;
-    fprintf(f, "expire: %"PRIu64", now:%"PRIu64"\n", input[0], input[1]);
+    fprintf(f, "expire: %" PRIu64 ", now:%" PRIu64 "\n", input[0], input[1]);
 }
 
 static struct theft_type_info random_buffer_info = {
@@ -136,26 +136,25 @@ static struct theft_type_info random_buffer_info = {
     .print = print_cb,
 };
 
-#define TEST(name_, fn_) \
-bool name_(void) \
-{ \
-    theft_seed seed = theft_seed_of_time(); \
-\
-    struct theft_run_config config = { \
-        .name = __func__, \
-        .prop1 = fn_, \
-        .type_info = {&random_buffer_info}, \
-        .seed = seed, \
-        .trials = 100000, \
-    }; \
- \
-    enum theft_run_res res = theft_run(&config); \
-    return res == THEFT_RUN_PASS; \
-}
+#define TEST(name_, fn_)                                                                                                           \
+    bool name_(void)                                                                                                               \
+    {                                                                                                                              \
+        theft_seed seed = theft_seed_of_time();                                                                                    \
+                                                                                                                                   \
+        struct theft_run_config config = {                                                                                         \
+            .name = __func__,                                                                                                      \
+            .prop1 = fn_,                                                                                                          \
+            .type_info = {&random_buffer_info},                                                                                    \
+            .seed = seed,                                                                                                          \
+            .trials = 100000,                                                                                                      \
+        };                                                                                                                         \
+                                                                                                                                   \
+        enum theft_run_res res = theft_run(&config);                                                                               \
+        return res == THEFT_RUN_PASS;                                                                                              \
+    }
 TEST(timers_should_run, prop_inserted_timer_should_run_at_expiry);
 TEST(timers_should_not_run, prop_inserted_timer_should_not_run_before_expiry);
 TEST(timers_should_not_run_before_expiry, prop_inserted_timer_should_not_run_before_reaching_expiry);
-
 
 int main(void)
 {

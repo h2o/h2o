@@ -588,7 +588,6 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
     h2o_timer_wheel_run(&loop->_timerwheel, loop->_now);
     h2o_evloop_run_pending(loop);
 
-
     /* assert h2o_timer_wheel_run has called run_pending */
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
