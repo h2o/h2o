@@ -317,7 +317,7 @@ mrb_value process_pending_requests_callback(h2o_mruby_context_t *ctx, mrb_value 
         mrb_value pending_input = mrb_ary_entry(pending, 1);
         h2o_mruby_run_fiber(ctx, pending_resumer, pending_input, NULL);
     }
-    ctx->pendings = mrb_nil_value();
+    mrb_ary_clear(mrb, ctx->pendings);
 
     mrb_value exc = mrb_ary_entry(args, 0);
     if (! mrb_nil_p(exc)) {
