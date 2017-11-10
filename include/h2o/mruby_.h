@@ -82,8 +82,8 @@ typedef struct st_h2o_mruby_handler_t {
 } h2o_mruby_handler_t;
 
 typedef struct st_h2o_mruby_context_t h2o_mruby_context_t;
-typedef mrb_value (*h2o_mruby_callback)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again);
-typedef H2O_VECTOR(h2o_mruby_callback) h2o_mruby_callbacks;
+typedef mrb_value (*h2o_mruby_callback_t)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again);
+typedef H2O_VECTOR(h2o_mruby_callback_t) h2o_mruby_callbacks_t;
 
 typedef struct st_h2o_mruby_shared_context_t {
     h2o_context_t *ctx;
@@ -98,14 +98,14 @@ typedef struct st_h2o_mruby_shared_context_t {
         mrb_sym sym_body;
         mrb_sym sym_async;
     } symbols;
-    h2o_mruby_callbacks callbacks;
+    h2o_mruby_callbacks_t callbacks;
 } h2o_mruby_shared_context_t;
 
 struct st_h2o_mruby_context_t {
     h2o_mruby_handler_t *handler;
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
-    mrb_value pendings;
+    mrb_value blocking_reqs;
 };
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
@@ -150,7 +150,7 @@ typedef struct st_h2o_mruby_generator_t {
 void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
-void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback callback);
+void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback);
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
 void h2o_mruby_setup_globals(mrb_state *mrb);
 struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *config, char *errbuf);

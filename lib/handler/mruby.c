@@ -104,11 +104,11 @@ mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
     return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
 }
 
-void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback callback)
+void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback)
 {
     h2o_mruby_shared_context_t *shared_ctx = mrb->ud;
-    h2o_vector_reserve(NULL, &shared_ctx->callbacks, ++shared_ctx->callbacks.size);
-    shared_ctx->callbacks.entries[shared_ctx->callbacks.size - 1] = callback;
+    h2o_vector_reserve(NULL, &shared_ctx->callbacks, shared_ctx->callbacks.size + 1);
+    shared_ctx->callbacks.entries[shared_ctx->callbacks.size++] = callback;
 
     mrb_value args[2];
     args[0] = mrb_str_new_cstr(mrb, name);
@@ -296,28 +296,28 @@ mrb_value send_error_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_val
     return mrb_nil_value();
 }
 
-mrb_value pend_request_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
+mrb_value block_request_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
-    mrb_value pending = mrb_ary_new_capa(mrb, 2);
-    mrb_ary_set(mrb, pending, 0, ctx->proc);
-    mrb_ary_set(mrb, pending, 1, input);
-    mrb_ary_push(mrb, ctx->pendings, pending);
+    mrb_value blocking_req = mrb_ary_new_capa(mrb, 2);
+    mrb_ary_set(mrb, blocking_req, 0, ctx->proc);
+    mrb_ary_set(mrb, blocking_req, 1, input);
+    mrb_ary_push(mrb, ctx->blocking_reqs, blocking_req);
     return mrb_nil_value();
 }
 
-mrb_value process_pending_requests_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
+mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
     mrb_int i;
-    mrb_int len = RARRAY_LEN(ctx->pendings);
+    mrb_int len = RARRAY_LEN(ctx->blocking_reqs);
     for (i = 0; i != len; ++i) {
-        mrb_value pending = mrb_ary_entry(ctx->pendings, i);
-        mrb_value pending_resumer = mrb_ary_entry(pending, 0);
-        mrb_value pending_input = mrb_ary_entry(pending, 1);
-        h2o_mruby_run_fiber(ctx, pending_resumer, pending_input, NULL);
+        mrb_value blocking_req = mrb_ary_entry(ctx->blocking_reqs, i);
+        mrb_value blocking_req_resumer = mrb_ary_entry(blocking_req, 0);
+        mrb_value blocking_req_input = mrb_ary_entry(blocking_req, 1);
+        h2o_mruby_run_fiber(ctx, blocking_req_resumer, blocking_req_input, NULL);
     }
-    mrb_ary_clear(mrb, ctx->pendings);
+    mrb_ary_clear(mrb, ctx->blocking_reqs);
 
     mrb_value exc = mrb_ary_entry(args, 0);
     if (! mrb_nil_p(exc)) {
@@ -337,7 +337,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     shared_ctx->mrb->ud = shared_ctx;
     shared_ctx->ctx = ctx;
     shared_ctx->current_context = NULL;
-    shared_ctx->callbacks = (h2o_mruby_callbacks){NULL};
+    shared_ctx->callbacks = (h2o_mruby_callbacks_t){NULL};
 
     h2o_mruby_setup_globals(shared_ctx->mrb);
     shared_ctx->constants = build_constants(shared_ctx->mrb, ctx->globalconf->server_name.base, ctx->globalconf->server_name.len);
@@ -350,8 +350,8 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     shared_ctx->symbols.sym_async = mrb_intern_lit(shared_ctx->mrb, "async");
 
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__send_error", send_error_callback);
-    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__pend_request", pend_request_callback);
-    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__process_pending_requests", process_pending_requests_callback);
+    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__block_request", block_request_callback);
+    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_blocking_requests", run_blocking_requests_callback);
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
@@ -411,7 +411,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 
     mrb_state *mrb = handler_ctx->shared->mrb;
 
-    handler_ctx->pendings = mrb_ary_new(mrb);
+    handler_ctx->blocking_reqs = mrb_ary_new(mrb);
 
     /* compile code (must be done for each thread) */
     int arena = mrb_gc_arena_save(mrb);
@@ -838,7 +838,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             input = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpected callback id sent from rack app");
             run_again = 1;
         } else {
-            h2o_mruby_callback callback = ctx->shared->callbacks.entries[callback_index];
+            h2o_mruby_callback_t callback = ctx->shared->callbacks.entries[callback_index];
             input = callback(ctx, input, receiver, args, &run_again);
         }
         if (mrb->exc != NULL)

@@ -36,7 +36,7 @@
     "  end\n"                                                                                                                      \
     "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
-    "      _h2o__pend_request(req)\n"                                                                                              \
+    "      _h2o__block_request(req)\n"                                                                                             \
     "    end\n"                                                                                                                    \
     "    cached = nil\n"                                                                                                           \
     "    runner = Proc.new do |args|\n"                                                                                            \
@@ -64,12 +64,12 @@
     "          H2O::ConfigurationContext.reset\n"                                                                                  \
     "          app = _h2o_eval_conf(conf)\n"                                                                                       \
     "          H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)\n"                                       \
-    "          _h2o__process_pending_requests()\n"                                                                                 \
+    "          _h2o__run_blocking_requests()\n"                                                                                    \
     "        rescue => e\n"                                                                                                        \
     "          app = Proc.new do |req|\n"                                                                                          \
     "            [500, {}, ['Internal Server Error']]\n"                                                                           \
     "          end\n"                                                                                                              \
-    "          _h2o__process_pending_requests(e)\n"                                                                                \
+    "          _h2o__run_blocking_requests(e)\n"                                                                                   \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \

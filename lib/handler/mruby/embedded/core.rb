@@ -55,7 +55,7 @@ module Kernel
 
   def _h2o_prepare_app(conf)
     app = Proc.new do |req|
-      _h2o__pend_request(req)
+      _h2o__block_request(req)
     end
 
     cached = nil
@@ -85,12 +85,12 @@ module Kernel
           H2O::ConfigurationContext.reset
           app = _h2o_eval_conf(conf)
           H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)
-          _h2o__process_pending_requests()
+          _h2o__run_blocking_requests()
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          _h2o__process_pending_requests(e)
+          _h2o__run_blocking_requests(e)
         end
       end
       fiber.resume
