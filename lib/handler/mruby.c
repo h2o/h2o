@@ -309,6 +309,13 @@ mrb_value block_request_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_
 mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
+
+    mrb_value exc = mrb_ary_entry(args, 0);
+    if (! mrb_nil_p(exc)) {
+        mrb->exc = mrb_obj_ptr(exc);
+        handle_exception(ctx, NULL);
+    }
+
     mrb_int i;
     mrb_int len = RARRAY_LEN(ctx->blocking_reqs);
     for (i = 0; i != len; ++i) {
@@ -319,10 +326,6 @@ mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value inp
     }
     mrb_ary_clear(mrb, ctx->blocking_reqs);
 
-    mrb_value exc = mrb_ary_entry(args, 0);
-    if (! mrb_nil_p(exc)) {
-        mrb->exc = mrb_obj_ptr(exc);
-    }
     return mrb_nil_value();
 }
 
