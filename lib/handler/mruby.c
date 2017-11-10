@@ -322,7 +322,6 @@ mrb_value process_pending_requests_callback(h2o_mruby_context_t *ctx, mrb_value 
     mrb_value exc = mrb_ary_entry(args, 0);
     if (! mrb_nil_p(exc)) {
         mrb->exc = mrb_obj_ptr(exc);
-        handle_exception(ctx, NULL);
     }
     return mrb_nil_value();
 }
