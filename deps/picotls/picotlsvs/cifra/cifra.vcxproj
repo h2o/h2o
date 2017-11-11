@@ -135,8 +135,6 @@
   <ItemGroup>
     <ClCompile Include="..\..\deps\cifra\src\aes.c" />
     <ClCompile Include="..\..\deps\cifra\src\blockwise.c" />
-    <ClCompile Include="..\..\deps\cifra\src\cbcmac.c" />
-    <ClCompile Include="..\..\deps\cifra\src\ccm.c" />
     <ClCompile Include="..\..\deps\cifra\src\chacha20.c" />
     <ClCompile Include="..\..\deps\cifra\src\chacha20poly1305.c" />
     <ClCompile Include="..\..\deps\cifra\src\chash.c" />
@@ -155,7 +153,6 @@
     <ClCompile Include="..\..\deps\cifra\src\salsa20.c" />
     <ClCompile Include="..\..\deps\cifra\src\sha1.c" />
     <ClCompile Include="..\..\deps\cifra\src\sha256.c" />
-    <ClCompile Include="..\..\deps\cifra\src\sha3.c" />
     <ClCompile Include="..\..\deps\cifra\src\sha512.c" />
   </ItemGroup>
   <ItemGroup>

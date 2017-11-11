@@ -90,7 +90,7 @@ static void test_hrr(void)
     cbuf.off = 0;
 
     ok(sbuf.off > 5 + 4);
-    ok(sbuf.base[5] == 6 /* PTLS_HANDSHAKE_TYPE_HELLO_RETRY_REQUEST */);
+    ok(sbuf.base[5] == 2 /* PTLS_HANDSHAKE_TYPE_SERVER_HELLO (RETRY_REQUEST) */);
 
     consumed = sbuf.off;
     ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);

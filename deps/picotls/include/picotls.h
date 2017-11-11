@@ -22,6 +22,10 @@
 #ifndef picotls_h
 #define picotls_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include <inttypes.h>
 #include <sys/types.h>
@@ -64,7 +68,6 @@
 #define PTLS_ALERT_LEVEL_FATAL 2
 
 #define PTLS_ALERT_CLOSE_NOTIFY 0
-#define PTLS_ALERT_END_OF_EARLY_DATA 1
 #define PTLS_ALERT_UNEXPECTED_MESSAGE 10
 #define PTLS_ALERT_BAD_RECORD_MAC 20
 #define PTLS_ALERT_HANDSHAKE_FAILURE 40
@@ -88,6 +91,29 @@
 #define PTLS_ERROR_LIBRARY (PTLS_ERROR_CLASS_INTERNAL + 3)
 #define PTLS_ERROR_INCOMPATIBLE_KEY (PTLS_ERROR_CLASS_INTERNAL + 4)
 #define PTLS_ERROR_SESSION_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 5)
+#define PTLS_ERROR_STATELESS_RETRY (PTLS_ERROR_CLASS_INTERNAL + 6)
+
+#define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
+#define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
+#define PTLS_ERROR_BER_INCORRECT_ENCODING (PTLS_ERROR_CLASS_INTERNAL + 52)
+#define PTLS_ERROR_BER_MALFORMED_TYPE (PTLS_ERROR_CLASS_INTERNAL + 53)
+#define PTLS_ERROR_BER_MALFORMED_LENGTH (PTLS_ERROR_CLASS_INTERNAL + 54)
+#define PTLS_ERROR_BER_EXCESSIVE_LENGTH (PTLS_ERROR_CLASS_INTERNAL + 55)
+#define PTLS_ERROR_BER_ELEMENT_TOO_SHORT (PTLS_ERROR_CLASS_INTERNAL + 56)
+#define PTLS_ERROR_BER_UNEXPECTED_EOC (PTLS_ERROR_CLASS_INTERNAL + 57)
+#define PTLS_ERROR_DER_INDEFINITE_LENGTH (PTLS_ERROR_CLASS_INTERNAL + 58)
+#define PTLS_ERROR_INCORRECT_ASN1_SYNTAX (PTLS_ERROR_CLASS_INTERNAL + 59)
+#define PTLS_ERROR_INCORRECT_PEM_KEY_VERSION (PTLS_ERROR_CLASS_INTERNAL + 60)
+#define PTLS_ERROR_INCORRECT_PEM_ECDSA_KEY_VERSION (PTLS_ERROR_CLASS_INTERNAL + 61)
+#define PTLS_ERROR_INCORRECT_PEM_ECDSA_CURVE (PTLS_ERROR_CLASS_INTERNAL + 62)
+#define PTLS_ERROR_INCORRECT_PEM_ECDSA_KEYSIZE (PTLS_ERROR_CLASS_INTERNAL + 63)
+#define PTLS_ERROR_INCORRECT_ASN1_ECDSA_KEY_SYNTAX (PTLS_ERROR_CLASS_INTERNAL + 64)
+
+#define PTLS_ZERO_DIGEST_SHA256                                                                                                    \
+    {                                                                                                                              \
+        0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4,    \
+            0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55                                                 \
+    }
 
 typedef struct st_ptls_t ptls_t;
 
@@ -238,6 +264,10 @@ typedef const struct st_ptls_hash_algorithm_t {
      * constructor that creates the hash context
      */
     ptls_hash_context_t *(*create)(void);
+    /**
+     * digest of zero-length octets
+     */
+    uint8_t empty_digest[PTLS_MAX_DIGEST_SIZE];
 } ptls_hash_algorithm_t;
 
 typedef const struct st_ptls_cipher_suite_t {
@@ -409,6 +439,24 @@ typedef struct st_ptls_handshake_properties_t {
                 uint8_t base[PTLS_MAX_DIGEST_SIZE];
                 size_t len;
             } selected_psk_binder;
+            /**
+             * parameters related to use of the Cookie extension
+             */
+            struct {
+                /**
+                 * if the server should enforce the use of cookie
+                 */
+                unsigned enforce_use : 1;
+                /**
+                 * HMAC key to protect the integrity of the cookie. The key should be as long as the digest size of the first
+                 * ciphersuite specified in ptls_context_t (i.e. the hash algorithm of the best ciphersuite that can be chosen).
+                 */
+                const void *key;
+                /**
+                 * additional data to be used for verifying the cookie
+                 */
+                ptls_iovec_t additional_data;
+            } cookie;
         } server;
     };
     /**
@@ -544,7 +592,7 @@ int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
             goto Exit;                                                                                                             \
         }                                                                                                                          \
         do {                                                                                                                       \
-            const uint8_t *end = (src) + _block_size;                                                                              \
+            const uint8_t *const end = (src) + _block_size;                                                                        \
             do {                                                                                                                   \
                 block                                                                                                              \
             } while (0);                                                                                                           \
@@ -662,6 +710,11 @@ int ptls_hkdf_extract(ptls_hash_algorithm_t *hash, void *output, ptls_iovec_t sa
  */
 int ptls_hkdf_expand(ptls_hash_algorithm_t *hash, void *output, size_t outlen, ptls_iovec_t prk, ptls_iovec_t info);
 /**
+ *
+ */
+int ptls_hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
+                           ptls_iovec_t hash_value);
+/**
  * instantiates an AEAD cipher given a secret, which is expanded using hkdf to a set of key and iv
  * @param aead
  * @param hash
@@ -722,7 +775,7 @@ inline ptls_iovec_t ptls_iovec_init(const void *p, size_t len)
 inline void ptls_buffer_init(ptls_buffer_t *buf, void *smallbuf, size_t smallbuf_size)
 {
     assert(smallbuf != NULL);
-    buf->base = smallbuf;
+    buf->base = (uint8_t *)smallbuf;
     buf->off = 0;
     buf->capacity = smallbuf_size;
     buf->is_allocated = 0;
@@ -760,5 +813,11 @@ inline size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const vo
     ptls_aead__build_iv(ctx, iv, seq);
     return ctx->do_decrypt(ctx, output, input, inlen, iv, aad, aadlen);
 }
+
+int ptls_load_certificates(ptls_context_t *ctx, char *cert_pem_file);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -24,6 +24,7 @@
 #endif
 #include <assert.h>
 #include <string.h>
+#include <stdio.h>
 #include "picotls.h"
 #include "../deps/picotest/picotest.h"
 #include "../lib/picotls.c"
@@ -38,6 +39,16 @@ static ptls_cipher_suite_t *find_cipher(ptls_context_t *ctx, uint16_t id)
         if ((*cs)->id == id)
             return *cs;
     return NULL;
+}
+
+static void test_sha256(void)
+{
+    ptls_hash_algorithm_t *algo = find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)->hash;
+    ptls_hash_context_t *hctx = find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)->hash->create();
+
+    uint8_t digest[PTLS_MAX_DIGEST_SIZE];
+    hctx->final(hctx, digest, PTLS_HASH_FINAL_MODE_FREE);
+    ok(memcmp(digest, algo->empty_digest, algo->digest_size) == 0);
 }
 
 static void test_hmac_sha256(void)
@@ -509,8 +520,138 @@ static void test_resumption(void)
     ctx->save_ticket = NULL;
 }
 
+static void test_stateless_hrr(void)
+{
+    ptls_t *client, *server;
+    ptls_handshake_properties_t server_hs_prop = {{{{NULL}}}};
+    ptls_buffer_t cbuf, sbuf, decbuf;
+    size_t consumed;
+    int ret;
+
+    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+    server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
+    server_hs_prop.server.cookie.enforce_use = 1;
+
+    ptls_buffer_init(&cbuf, "", 0);
+    ptls_buffer_init(&sbuf, "", 0);
+    ptls_buffer_init(&decbuf, "", 0);
+
+    client = ptls_new(ctx, 0);
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(cbuf.off != 0);
+
+    server = ptls_new(ctx, 1);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, &server_hs_prop);
+    ok(ret == PTLS_ERROR_STATELESS_RETRY);
+    cbuf.off = 0;
+
+    ptls_free(server);
+    server = ptls_new(ctx, 1);
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(sbuf.off == consumed);
+    sbuf.off = 0;
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, &server_hs_prop);
+    ok(ret == 0);
+    ok(cbuf.off == consumed);
+    cbuf.off = 0;
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(sbuf.off == consumed);
+    sbuf.off = 0;
+
+    ret = ptls_send(client, &cbuf, "hello world", 11);
+    ok(ret == 0);
+
+    consumed = cbuf.off;
+    ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+    ok(ret == 0);
+    ok(cbuf.off == consumed);
+    cbuf.off = 0;
+
+    ok(decbuf.off == 11);
+    ok(memcmp(decbuf.base, "hello world", 11) == 0);
+    decbuf.off = 0;
+
+    ptls_free(client);
+    ptls_free(server);
+
+    ptls_buffer_dispose(&cbuf);
+    ptls_buffer_dispose(&sbuf);
+    ptls_buffer_dispose(&decbuf);
+}
+
+static ptls_t *stateless_hrr_prepare(ptls_buffer_t *sbuf, ptls_handshake_properties_t *server_hs_prop)
+{
+    ptls_t *client = ptls_new(ctx, 0), *server = ptls_new(ctx_peer, 1);
+    ptls_buffer_t cbuf;
+    size_t consumed;
+    int ret;
+
+    ptls_buffer_init(&cbuf, "", 0);
+    ptls_buffer_init(sbuf, "", 0);
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, sbuf, cbuf.base, &consumed, server_hs_prop);
+    ok(ret == PTLS_ERROR_STATELESS_RETRY);
+
+    ptls_buffer_dispose(&cbuf);
+    ptls_free(server);
+
+    return client;
+}
+
+static void test_stateless_hrr_aad_change(void)
+{
+    ptls_t *client, *server;
+    ptls_handshake_properties_t server_hs_prop = {{{{NULL}}}};
+    ptls_buffer_t cbuf, sbuf;
+    size_t consumed;
+    int ret;
+
+    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+    server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
+    server_hs_prop.server.cookie.enforce_use = 1;
+
+    client = stateless_hrr_prepare(&sbuf, &server_hs_prop);
+    ptls_buffer_init(&cbuf, "", 0);
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(sbuf.off == consumed);
+    sbuf.off = 0;
+
+    server = ptls_new(ctx_peer, 1);
+    server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:4321", 12);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, &server_hs_prop);
+    ok(ret == PTLS_ALERT_HANDSHAKE_FAILURE);
+
+    ptls_free(client);
+    ptls_free(server);
+
+    ptls_buffer_dispose(&cbuf);
+    ptls_buffer_dispose(&sbuf);
+}
+
 void test_picotls(void)
 {
+    subtest("sha256", test_sha256);
     subtest("hmac-sha256", test_hmac_sha256);
     subtest("hkdf", test_hkdf);
     subtest("aes128gcm", test_aes128gcm);
@@ -525,6 +666,9 @@ void test_picotls(void)
     subtest("full-handshake", test_full_handshake);
     subtest("hrr-handshake", test_hrr_handshake);
     subtest("resumption", test_resumption);
+
+    subtest("stateless-hrr", test_stateless_hrr);
+    subtest("stateless-hrr-aad-change", test_stateless_hrr_aad_change);
 
     ctx_peer->sign_certificate = sc_orig;
 }

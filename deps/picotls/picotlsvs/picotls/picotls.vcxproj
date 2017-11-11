@@ -151,10 +151,15 @@
     <ClInclude Include="..\..\deps\cifra\src\sha2.h" />
     <ClInclude Include="..\..\deps\cifra\src\sha3.h" />
     <ClInclude Include="..\..\deps\cifra\src\tassert.h" />
+    <ClInclude Include="..\..\include\picotls\asn1.h" />
+    <ClInclude Include="..\..\include\picotls\minicrypto.h" />
+    <ClInclude Include="..\..\include\picotls\pembase64.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="wincompat.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\lib\asn1.c" />
+    <ClCompile Include="..\..\lib\pembase64.c" />
     <ClCompile Include="..\..\lib\cifra.c" />
     <ClCompile Include="..\..\lib\openssl.c" />
     <ClCompile Include="..\..\lib\picotls.c" />

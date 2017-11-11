@@ -34,6 +34,7 @@ typedef struct st_ptls_minicrypto_secp256r1sha256_sign_certificate_t {
 } ptls_minicrypto_secp256r1sha256_sign_certificate_t;
 
 void ptls_minicrypto_random_bytes(void *buf, size_t len);
+
 int ptls_minicrypto_init_secp256r1sha256_sign_certificate(ptls_minicrypto_secp256r1sha256_sign_certificate_t *self,
                                                           ptls_iovec_t key);
 
@@ -43,5 +44,17 @@ extern ptls_aead_algorithm_t ptls_minicrypto_aes128gcm;
 extern ptls_hash_algorithm_t ptls_minicrypto_sha256;
 extern ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256;
 extern ptls_cipher_suite_t *ptls_minicrypto_cipher_suites[];
+
+typedef struct st_ptls_asn1_pkcs8_private_key_t {
+    ptls_iovec_t vec;
+    size_t algorithm_index;
+    uint32_t algorithm_length;
+    size_t parameters_index;
+    uint32_t parameters_length;
+    size_t key_data_index;
+    uint32_t key_data_length;
+} ptls_asn1_pkcs8_private_key_t;
+
+int ptls_minicrypto_load_private_key(ptls_context_t *ctx, char const *pem_fname);
 
 #endif
