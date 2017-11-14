@@ -526,9 +526,10 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                                header->name->len))
                     break;
                 header = headers_sorted[++i];
-                v = mrb_str_append(mrb, v, mrb_ary_entry(shared->constants,
-                                                         header->name == &H2O_TOKEN_COOKIE->buf ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON
-                                                                                                : H2O_MRUBY_LIT_SEPARATOR_COMMA));
+                v = mrb_str_append(mrb, v,
+                                   mrb_ary_entry(shared->constants, header->name == &H2O_TOKEN_COOKIE->buf
+                                                                        ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON
+                                                                        : H2O_MRUBY_LIT_SEPARATOR_COMMA));
                 v = mrb_str_append(mrb, v, mrb_str_new(mrb, header->value.base, header->value.len));
             }
             mrb_hash_set(mrb, env, n, v);

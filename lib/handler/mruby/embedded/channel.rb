@@ -28,12 +28,7 @@ module H2O
       if @queue.empty?
         _h2o__channel_wait(self)
       end
-      begin
-        ret = @queue.shift
-      rescue => ex
-        raise ex
-      end
-      ret
+      @queue.shift
     end
   end
 end

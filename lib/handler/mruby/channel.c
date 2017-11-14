@@ -103,8 +103,7 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args,
-                                                int *run_again)
+mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
 

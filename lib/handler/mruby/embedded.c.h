@@ -11,11 +11,11 @@
     "end\n"                                                                                                                        \
     "module Kernel\n"                                                                                                              \
     "  def task(&block)\n"                                                                                                         \
-    "    fiber = Fiber.new do\n"                                                                                                       \
+    "    fiber = Fiber.new do\n"                                                                                                   \
     "      block.call\n"                                                                                                           \
-    "      [0, nil, nil]\n"                                                                                           \
+    "      [0, nil, nil]\n"                                                                                                        \
     "    end\n"                                                                                                                    \
-    "    Fiber.yield([H2O_CALLBACK_ID_RUN_CHILD_FIBER, proc { fiber.resume }, [_h2o_create_resumer()]])\n"                                                                               \
+    "    Fiber.yield([H2O_CALLBACK_ID_RUN_CHILD_FIBER, proc { fiber.resume }, [_h2o_create_resumer()]])\n"                         \
     "  end\n"                                                                                                                      \
     "  def _h2o_define_callback(name, id)\n"                                                                                       \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
@@ -44,7 +44,7 @@
     "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
     "  H2O_CALLBACK_ID_CONFIGURING_APP = -2\n"                                                                                     \
     "  H2O_CALLBACK_ID_CONFIGURED_APP = -3\n"                                                                                      \
-    "  H2O_CALLBACK_ID_RUN_CHILD_FIBER  = -777\n"                                                                                      \
+    "  H2O_CALLBACK_ID_RUN_CHILD_FIBER  = -777\n"                                                                                  \
     "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
     "      [H2O_CALLBACK_ID_CONFIGURING_APP]\n"                                                                                    \
@@ -157,10 +157,10 @@
     "      self._notify\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "    def shift\n"                                                                                                              \
-    "      if @queue.empty?\n"                                                                                                  \
-    "        _h2o__channel_wait(self)\n"                                                                                              \
-    "      end\n"                                                                                                                \
-    "      @queue.shift\n"                                                                                           \
+    "      if @queue.empty?\n"                                                                                                     \
+    "        _h2o__channel_wait(self)\n"                                                                                           \
+    "      end\n"                                                                                                                  \
+    "      @queue.shift\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"
