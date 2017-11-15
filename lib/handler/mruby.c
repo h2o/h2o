@@ -657,15 +657,6 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
-static void close_response(h2o_mruby_generator_t *generator)
-{
-    if (generator->req->_generator != NULL) {
-        h2o_mruby_send_chunked_close(generator);
-    } else {
-        h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
-    }
-}
-
 static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->shared->mrb;
@@ -720,44 +711,40 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         body = mrb_nil_value();
     }
 
-    if (mrb_nil_p(body)) {
-        /* send the entire response immediately */
-        h2o_iovec_t *bufs;
-        if (status == 101 || status == 204 || status == 304 ||
-            h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
-            bufs = NULL;
-        } else {
-            if (content.len < generator->req->res.content_length) {
-                generator->req->res.content_length = content.len;
-            } else {
-                content.len = generator->req->res.content_length;
-            }
-            bufs = &content;
-        }
-        h2o_start_response(generator->req, &generator->super);
-        h2o_send(generator->req, bufs, bufs == NULL ? 0 : 1, H2O_SEND_STATE_FINAL);
-    } else {
-        /* body is each-able ruby object */
+    /* use fiber in case we need to call #each */
+    if (!mrb_nil_p(body)) {
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
         if (mrb->exc) {
             goto GotException;
         }
-
         if (!mrb_nil_p(receiver)) {
-            /* use fiber in case we need to call #each */
             mrb_value input = mrb_ary_new_capa(mrb, 2);
             mrb_ary_set(mrb, input, 0, body);
             mrb_ary_set(mrb, input, 1, generator->refs.generator);
             h2o_mruby_run_fiber(generator->ctx, receiver, input, 0);
         }
+        return;
     }
 
+    /* send the entire response immediately */
+    if (status == 101 || status == 204 || status == 304 ||
+        h2o_memis(generator->req->input.method.base, generator->req->input.method.len, H2O_STRLIT("HEAD"))) {
+        h2o_start_response(generator->req, &generator->super);
+        h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_FINAL);
+    } else {
+        if (content.len < generator->req->res.content_length) {
+            generator->req->res.content_length = content.len;
+        } else {
+            content.len = generator->req->res.content_length;
+        }
+        h2o_start_response(generator->req, &generator->super);
+        h2o_send(generator->req, &content, 1, H2O_SEND_STATE_FINAL);
+    }
     return;
 
 GotException:
     report_exception(generator->req, mrb);
-    close_response(generator);
-    mrb->exc = NULL;
+    h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
 }
 
 void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *is_delegate)
@@ -885,7 +872,11 @@ GotException:
     } else {
         assert(generator->req != NULL);
         report_exception(generator->req, mrb);
-        close_response(generator);
+        if (generator->req->_generator == NULL) {
+            h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
+        } else {
+            h2o_mruby_send_chunked_close(generator);
+        }
     }
     mrb->exc = NULL;
 
