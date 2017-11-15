@@ -67,7 +67,6 @@
 		105534EB1A42A87E00627ECB /* _templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EA1A42A87E00627ECB /* _templates.c.h */; };
 		105534ED1A42AD5E00627ECB /* templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EC1A42AD5E00627ECB /* templates.c.h */; };
 		105534EF1A440FC800627ECB /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534EE1A440FC800627ECB /* config.c */; };
-		10583BF11AE5A37B004A3AD6 /* Makefile in Sources */ = {isa = PBXBuildFile; fileRef = 10583BED1AE5A37B004A3AD6 /* Makefile */; };
 		10583C001AEF368A004A3AD6 /* 293.c in Sources */ = {isa = PBXBuildFile; fileRef = 10583BFF1AEF368A004A3AD6 /* 293.c */; };
 		1058C87D1AA41789008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 1058C87C1AA41789008D6180 /* headers.c */; };
 		1058C87E1AA41A1F008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBD1AA019D8004322AC /* headers.c */; };
@@ -2204,7 +2203,6 @@
 				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				106C22F81C040F6400405689 /* tunnel.c in Sources */,
-				10583BF11AE5A37B004A3AD6 /* Makefile in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
 				10C45D561CFE9B300096DB06 /* requests.c in Sources */,

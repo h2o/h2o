@@ -487,7 +487,7 @@ Failed:
     return NULL;
 }
 
-mrb_value h2o_mruby_middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
@@ -523,7 +523,7 @@ mrb_value h2o_mruby_middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_mruby_subreq_t *subreq;
@@ -551,8 +551,8 @@ void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *shared_ctx)
 
     struct RClass *module = mrb_define_module(mrb, "H2O");
 
-    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o_middleware_call", H2O_MRUBY_CALLBACK_ID_MIDDLEWARE_CALL);
-    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o_middleware_wait_chunk", H2O_MRUBY_CALLBACK_ID_MIDDLEWARE_WAIT_CHUNK);
+    h2o_mruby_define_callback(mrb, "_h2o_middleware_call", middleware_call_callback);
+    h2o_mruby_define_callback(mrb, "_h2o_middleware_wait_chunk", middleware_wait_chunk_callback);
     struct RClass *klass = mrb_class_get_under(shared_ctx->mrb, module, "AppInputStream");
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_APP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
     h2o_mruby_assert(mrb);

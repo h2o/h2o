@@ -444,20 +444,22 @@ static void do_send(struct st_fcgi_generator_t *generator)
 {
     h2o_iovec_t vecs[1];
     size_t veccnt;
-    int is_final;
+    h2o_send_state_t send_state;
 
     vecs[0] = h2o_doublebuffer_prepare(&generator->resp.sending, &generator->resp.receiving, generator->req->preferred_chunk_size);
     veccnt = vecs[0].len != 0 ? 1 : 0;
     if (generator->sock == NULL && vecs[0].len == generator->resp.sending.buf->size && generator->resp.receiving->size == 0) {
-        is_final = 1;
-        if (!(generator->leftsize == 0 || generator->leftsize == SIZE_MAX))
-            generator->req->http1_is_persistent = 0;
+        if (generator->leftsize == 0 || generator->leftsize == SIZE_MAX) {
+            send_state = H2O_SEND_STATE_FINAL;
+        } else {
+            send_state = H2O_SEND_STATE_ERROR;
+        }
     } else {
         if (veccnt == 0)
             return;
-        is_final = 0;
+        send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
-    h2o_send(generator->req, vecs, veccnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    h2o_send(generator->req, vecs, veccnt, send_state);
 }
 
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
