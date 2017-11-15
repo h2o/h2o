@@ -247,7 +247,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
@@ -286,7 +286,7 @@ void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *shared_ctx)
     h2o_mruby_assert(mrb);
 
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));
-    h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS);
+    h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", send_chunked_eos_callback);
 
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
                 mrb_funcall(mrb, mrb_top_self(mrb), "_h2o_chunked_proc_each_to_fiber", 0));
