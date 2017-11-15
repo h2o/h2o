@@ -77,7 +77,7 @@ sub doit {
     $opts ||= +{};
 
     my ($spawner, $path);
-    if ($mode eq 'call') {
+    if ($mode eq 'next') {
         $path = '';
         $spawner = sub {
             my $conf = shift;
@@ -145,7 +145,7 @@ EOT
         - mruby.handler: |
             proc {|env| 
               modify_env(env) 
-              resp = H2O.app.$mode(env) 
+              resp = H2O.$mode.call(env) 
               resp[1]['foo'] = 'FOO'
               resp
             }
@@ -167,7 +167,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              resp = H2O.app.$mode(env)
+              resp = H2O.$mode.call(env)
               resp
             }
 EOT
@@ -188,7 +188,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              resp = H2O.app.$mode(env)
+              resp = H2O.$mode.call(env)
               resp[2] = [resp[2].join]
               resp
             }
@@ -210,7 +210,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              resp = H2O.app.$mode(env)
+              resp = H2O.$mode.call(env)
               [200, {}, ['mruby']]
             }
 EOT
@@ -228,7 +228,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              status, headers, body = H2O.app.$mode(env)
+              status, headers, body = H2O.$mode.call(env)
               [status, headers, Class.new do
                 def each
                   yield 'mruby'
@@ -250,7 +250,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              status, headers, body = H2O.app.$mode(env)
+              status, headers, body = H2O.$mode.call(env)
               [status, headers, Class.new do
                 def initialize(body)
                   \@body = body
@@ -277,9 +277,9 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              resp1 = H2O.app.$mode(env)
+              resp1 = H2O.$mode.call(env)
               content1 = resp1[2].join
-              resp2 = H2O.app.$mode(env)
+              resp2 = H2O.$mode.call(env)
               content2 = resp2[2].join
               [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
             }
@@ -298,8 +298,8 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              resp1 = H2O.app.$mode(env)
-              resp2 = H2O.app.$mode(env)
+              resp1 = H2O.$mode.call(env)
+              resp2 = H2O.$mode.call(env)
               content1 = resp1[2].join
               content2 = resp2[2].join
               [200, {}, [Digest::MD5.hexdigest(content1), Digest::MD5.hexdigest(content2)]]
@@ -320,7 +320,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              resp = H2O.app.$mode(env);
+              resp = H2O.$mode.call(env);
               resp[1]['x-middleware-order'] ||= ''
               resp[1]['x-middleware-order'] += '1'
               resp
@@ -328,7 +328,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              resp = H2O.app.$mode(env);
+              resp = H2O.$mode.call(env);
               resp[1]['x-middleware-order'] ||= ''
               resp[1]['x-middleware-order'] += '2'
               resp
@@ -352,7 +352,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              H2O.app.$mode(env)
+              H2O.$mode.call(env)
             }
 EOT
             run_with_curl($server, sub {
@@ -398,7 +398,7 @@ EOT
                   raise 'not implemented'
                 end
               end.new(original, 'suffix')
-              H2O.app.$mode(env)
+              H2O.$mode.call(env)
             }
 EOT
             run_with_curl($server, sub {
@@ -418,7 +418,7 @@ EOT
             proc {|env|
               modify_env(env)
               env['HTTP_CONTENT_LENGTH'] = '3'
-              H2O.app.$mode(env)
+              H2O.$mode.call(env)
             }
 EOT
             run_with_curl($server, sub {
@@ -438,7 +438,7 @@ EOT
             proc {|env|
               modify_env(env)
               env['HTTP_CONTENT_LENGTH'] = '999999999'
-              H2O.app.$mode(env)
+              H2O.$mode.call(env)
             }
 EOT
             run_with_curl($server, sub {
@@ -458,7 +458,7 @@ EOT
             proc {|env|
               modify_env(env)
               head = env['rack.input'].read(3)
-              status, headers, body = H2O.app.$mode(env)
+              status, headers, body = H2O.$mode.call(env)
               content = body.join
               [status, headers, [head, content]]
             }
@@ -478,7 +478,7 @@ EOT
 }
 
 subtest 'file' => sub {
-    for my $mode (qw/call reprocess/) {
+    for my $mode (qw/next reprocess/) {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
@@ -492,7 +492,7 @@ subtest 'file' => sub {
 subtest 'proxy' => sub {
     my $port = empty_port();
     my $guard = create_upstream($port, 'proxy');
-    for my $mode (qw/call reprocess/) {
+    for my $mode (qw/next reprocess/) {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
@@ -506,7 +506,7 @@ subtest 'proxy' => sub {
 subtest 'fastcgi' => sub {
     my $port = empty_port();
     my $guard = create_upstream($port, 'fastcgi');
-    for my $mode (qw/call reprocess/) {
+    for my $mode (qw/next reprocess/) {
         subtest $mode => sub {
             for my $file (keys %files) {
                 subtest $file => sub {
@@ -527,7 +527,7 @@ subtest 'fastcgi' => sub {
 #       /:
 #         - mruby.handler: |
 #             proc {|env|
-#               H2O.app.reprocess(env)
+#               H2O.reprocess.call(env)
 #             }
 #   "127.0.0.1:$tls_port":
 #     paths: *paths
@@ -554,7 +554,7 @@ hosts:
         - mruby.handler: |
             proc {|env|
               env['HTTP_X_FOO'] = env['QUERY_STRING'] unless env['QUERY_STRING'].empty?
-              H2O.app.call(env)
+              H2O.next.call(env)
             }
         - mruby.handler: |
             proc {|env|
@@ -602,7 +602,7 @@ hosts:
             proc {|env|
               env.delete 'foo'
               env['bar'] = 'BAR'
-              H2O.app.call(env)
+              H2O.next.call(env)
             }
         - mruby.handler: |
             proc {|env|

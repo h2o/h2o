@@ -58,7 +58,7 @@ enum {
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
     H2O_MRUBY_GENERATOR_CLASS,
-    H2O_MRUBY_DELEGATE_INPUT_STREAM_CLASS,
+    H2O_MRUBY_APP_INPUT_STREAM_CLASS,
 
     /* used by chunked.c */
     H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
@@ -128,8 +128,8 @@ typedef struct st_h2o_mruby_generator_t {
 #define H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS -4
 #define H2O_MRUBY_CALLBACK_ID_HTTP_JOIN_RESPONSE -5
 #define H2O_MRUBY_CALLBACK_ID_HTTP_FETCH_CHUNK -6
-#define H2O_MRUBY_CALLBACK_ID_DELEGATE -7
-#define H2O_MRUBY_CALLBACK_ID_DELEGATE_WAIT_CHUNK -8
+#define H2O_MRUBY_CALLBACK_ID_MIDDLEWARE_CALL -7
+#define H2O_MRUBY_CALLBACK_ID_MIDDLEWARE_WAIT_CHUNK -8
 #define H2O_MRUBY_CALLBACK_ID_SLEEP -999
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
@@ -195,6 +195,11 @@ h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx
 /* handler/mruby/sleep.c */
 void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
 mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again);
+
+/* handler/mruby/middleware.c */
+void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *ctx);
+mrb_value h2o_mruby_middleware_call_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again);
+mrb_value h2o_mruby_middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);

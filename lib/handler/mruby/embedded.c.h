@@ -82,44 +82,6 @@
     "  def sleep(*sec)\n"                                                                                                          \
     "    _h2o__sleep(*sec)\n"                                                                                                      \
     "  end\n"                                                                                                                      \
-    "end\n"                                                                                                                        \
-    "module H2O\n"                                                                                                                 \
-    "  class App\n"                                                                                                                \
-    "    def call(env)\n"                                                                                                          \
-    "      _h2o_delegate(env, false)\n"                                                                                            \
-    "    end\n"                                                                                                                    \
-    "    def reprocess(env)\n"                                                                                                     \
-    "      _h2o_delegate(env, true)\n"                                                                                             \
-    "    end\n"                                                                                                                    \
-    "  end\n"                                                                                                                      \
-    "  class << self\n"                                                                                                            \
-    "    @@app = App.new\n"                                                                                                        \
-    "    def app\n"                                                                                                                \
-    "      @@app\n"                                                                                                                \
-    "    end\n"                                                                                                                    \
-    "  end\n"                                                                                                                      \
-    "  class DelegateInputStream\n"                                                                                                \
-    "    def initialize\n"                                                                                                         \
-    "      @chunks = []\n"                                                                                                         \
-    "      @finished = false\n"                                                                                                    \
-    "    end\n"                                                                                                                    \
-    "    def each\n"                                                                                                               \
-    "      loop do\n"                                                                                                              \
-    "        while c = @chunks.shift\n"                                                                                            \
-    "          yield c\n"                                                                                                          \
-    "        end\n"                                                                                                                \
-    "        break if @finished\n"                                                                                                 \
-    "        _h2o_delegate_wait_chunk(self)\n"                                                                                     \
-    "      end\n"                                                                                                                  \
-    "    end\n"                                                                                                                    \
-    "    def join\n"                                                                                                               \
-    "      s = \"\"\n"                                                                                                             \
-    "      each do |c|\n"                                                                                                          \
-    "        s << c\n"                                                                                                             \
-    "      end\n"                                                                                                                  \
-    "      s\n"                                                                                                                    \
-    "    end\n"                                                                                                                    \
-    "  end\n"                                                                                                                      \
     "end\n"
 
 /* lib/handler/mruby/embedded/http_request.rb */
@@ -174,6 +136,47 @@
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "end\n"
+
+/* lib/handler/mruby/embedded/middleware.rb */
+#define H2O_MRUBY_CODE_MIDDLEWARE                                                                                                  \
+    "module H2O\n"                                                                                                                 \
+    "  class App\n"                                                                                                                \
+    "    def initialize(reprocess)\n"                                                                                              \
+    "      @reprocess = reprocess\n"                                                                                               \
+    "    end\n"                                                                                                                    \
+    "    def call(env)\n"                                                                                                          \
+    "      _h2o_middleware_call(env, @reprocess)\n"                                                                                \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "  def self.next\n"                                                                                                            \
+    "    @@next ||= App.new(false)\n"                                                                                              \
+    "  end\n"                                                                                                                      \
+    "  def self.reprocess\n"                                                                                                       \
+    "    @@next ||= App.new(true)\n"                                                                                               \
+    "  end\n"                                                                                                                      \
+    "  class AppInputStream\n"                                                                                                     \
+    "    def initialize\n"                                                                                                         \
+    "      @chunks = []\n"                                                                                                         \
+    "      @finished = false\n"                                                                                                    \
+    "    end\n"                                                                                                                    \
+    "    def each\n"                                                                                                               \
+    "      loop do\n"                                                                                                              \
+    "        while c = @chunks.shift\n"                                                                                            \
+    "          yield c\n"                                                                                                          \
+    "        end\n"                                                                                                                \
+    "        break if @finished\n"                                                                                                 \
+    "        _h2o_middleware_wait_chunk(self)\n"                                                                                   \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "    def join\n"                                                                                                               \
+    "      s = \"\"\n"                                                                                                             \
+    "      each do |c|\n"                                                                                                          \
+    "        s << c\n"                                                                                                             \
+    "      end\n"                                                                                                                  \
+    "      s\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"
