@@ -370,7 +370,9 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     }
 
     /* handle the response using the handlers, if hostconf exists */
-    if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority, req->scheme->default_port)) != NULL) {
+    h2o_hostconf_t **hosts = is_delegated ? req->conn->ctx->globalconf->hosts : req->conn->hosts;
+    if (req->overrides == NULL && (hostconf = find_hostconf(hosts, req->authority, req->scheme->default_port)) != NULL) {
+        req->pathconf = NULL;
         process_hosted_request(req, hostconf);
         return;
     }
