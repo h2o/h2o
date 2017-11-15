@@ -272,6 +272,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
 static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *generator)
 {
     mrb_state *mrb = ctx->shared->mrb;
+    assert(mrb->exc != NULL);
 
     if (generator == NULL) {
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
@@ -719,7 +720,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
-static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate)
+static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->shared->mrb;
     mrb_value body;
@@ -730,8 +731,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
 
     /* set headers */
     if (h2o_mruby_iterate_headers(generator->ctx->shared, mrb_ary_entry(resp, 1), handle_response_header, generator->req) != 0) {
-        assert(mrb->exc != NULL);
-        return;
+        return -1;
     }
 
     /* return without processing body, if status is fallthru */
@@ -740,7 +740,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
             *is_delegate = 1;
         else
             h2o_delegate_request_deferred(generator->req, &generator->ctx->handler->super);
-        return;
+        return 0;
     }
 
     /* obtain body */
@@ -756,7 +756,7 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
             if (!mrb_string_p(e)) {
                 e = h2o_mruby_to_str(mrb, e);
                 if (mrb->exc != NULL)
-                    return;
+                    return -1;
                 mrb_ary_set(mrb, body, i, e);
             }
             content.len += RSTRING_LEN(e);
@@ -776,15 +776,15 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
         mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
-        if (mrb->exc)
-            return;
+        if (mrb->exc != NULL)
+            return -1;
         if (!mrb_nil_p(receiver)) {
             mrb_value input = mrb_ary_new_capa(mrb, 2);
             mrb_ary_set(mrb, input, 0, body);
             mrb_ary_set(mrb, input, 1, generator->refs.generator);
             h2o_mruby_run_fiber(generator->ctx, receiver, input, 0);
         }
-        return;
+        return 0;
     }
 
     /* send the entire response immediately */
@@ -801,6 +801,8 @@ static void send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_
         h2o_start_response(generator->req, &generator->super);
         h2o_send(generator->req, &content, 1, H2O_SEND_STATE_FINAL);
     }
+
+    return 0;
 }
 
 void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *is_delegate)
@@ -870,8 +872,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         goto GotException;
     }
 
-    send_response(generator, status, output, is_delegate);
-    if (mrb->exc != NULL)
+    if (send_response(generator, status, output, is_delegate) != 0)
         goto GotException;
 
     goto Exit;
