@@ -102,6 +102,7 @@ typedef struct st_h2o_mruby_context_t {
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
     mrb_value pendings;
+    h2o_pathconf_t *pathconf;
 } h2o_mruby_context_t;
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
@@ -114,7 +115,6 @@ typedef struct st_h2o_mruby_generator_t {
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
     h2o_mruby_chunked_t *chunked;
-    h2o_linklist_t subreqs;
     struct {
         mrb_value generator;
     } refs;

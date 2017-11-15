@@ -743,7 +743,7 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         return -1;
     }
     clone_mimemap_if_clean(ctx);
-    type = h2o_mimemap_define_dynamic(*ctx->mimemap, exts, ctx->globalconf);
+    type = h2o_mimemap_define_dynamic(*ctx->mimemap, exts, ctx->globalconf, ctx->hostconf);
 
     /* apply the configuration commands */
     h2o_configurator_context_t *ext_ctx = create_context(ctx, 1);

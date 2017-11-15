@@ -48,14 +48,11 @@
     "        while 1\n"                                                                                                            \
     "          begin\n"                                                                                                            \
     "            while 1\n"                                                                                                        \
-    "              H2O.set_generator(self_fiber, generator)\n"                                                                     \
     "              resp = app.call(req)\n"                                                                                         \
-    "              H2O.set_generator(self_fiber, nil)\n"                                                                           \
     "              cached = self_fiber\n"                                                                                          \
     "              (req, generator) = Fiber.yield(*resp, generator)\n"                                                             \
     "            end\n"                                                                                                            \
     "          rescue => e\n"                                                                                                      \
-    "            H2O.set_generator(self_fiber, nil)\n"                                                                             \
     "            cached = self_fiber\n"                                                                                            \
     "            (req, generator) = Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e, generator])\n"                               \
     "          end\n"                                                                                                              \
@@ -89,31 +86,16 @@
     "module H2O\n"                                                                                                                 \
     "  class App\n"                                                                                                                \
     "    def call(env)\n"                                                                                                          \
-    "      generator = H2O.get_generator(Fiber.current)\n"                                                                         \
-    "      _h2o_delegate(env, generator, false)\n"                                                                                 \
+    "      _h2o_delegate(env, false)\n"                                                                                            \
     "    end\n"                                                                                                                    \
     "    def reprocess(env)\n"                                                                                                     \
-    "      generator = H2O.get_generator(Fiber.current)\n"                                                                         \
-    "      _h2o_delegate(env, generator, true)\n"                                                                                  \
+    "      _h2o_delegate(env, true)\n"                                                                                             \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  class << self\n"                                                                                                            \
     "    @@app = App.new\n"                                                                                                        \
     "    def app\n"                                                                                                                \
     "      @@app\n"                                                                                                                \
-    "    end\n"                                                                                                                    \
-    "    # mruby doesn't allow built-in object (i.e Fiber) to have instance variable\n"                                            \
-    "    # so manage it with hash table here\n"                                                                                    \
-    "    @@fiber_to_generator = {}\n"                                                                                              \
-    "    def set_generator(fiber, generator)\n"                                                                                    \
-    "        if generator.nil?\n"                                                                                                  \
-    "          @@fiber_to_generator.delete(fiber.object_id)\n"                                                                     \
-    "        else\n"                                                                                                               \
-    "          @@fiber_to_generator[fiber.object_id] = generator\n"                                                                \
-    "        end\n"                                                                                                                \
-    "    end\n"                                                                                                                    \
-    "    def get_generator(fiber)\n"                                                                                               \
-    "        @@fiber_to_generator[fiber.object_id]\n"                                                                              \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  class DelegateInputStream\n"                                                                                                \

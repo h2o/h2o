@@ -147,13 +147,13 @@ static void dispose_dynamic_type(h2o_mimemap_type_t *type)
     h2o_config_dispose_pathconf(&type->data.dynamic.pathconf);
 }
 
-static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf, h2o_mimemap_t *mimemap)
+static h2o_mimemap_type_t *create_dynamic_type(h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, h2o_mimemap_t *mimemap)
 {
     h2o_mimemap_type_t *type = h2o_mem_alloc_shared(NULL, sizeof(*type), (void (*)(void *))dispose_dynamic_type);
 
     type->type = H2O_MIMEMAP_TYPE_DYNAMIC;
     memset(&type->data.dynamic, 0, sizeof(type->data.dynamic));
-    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, NULL, mimemap);
+    h2o_config_init_pathconf(&type->data.dynamic.pathconf, globalconf, hostconf, NULL, mimemap);
 
     return type;
 }
@@ -313,12 +313,12 @@ void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const 
     h2o_mem_release_shared(new_type);
 }
 
-h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf)
+h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf)
 {
     /* FIXME: fix memory leak introduced by this a cyclic link (mimemap -> new_type -> mimemap)
      * note also that we may want to update the reference from the dynamic type to the mimemap as we clone the mimemap,
      * but doing so naively would cause unnecessary copies of fastcgi.spawns... */
-    h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf, mimemap);
+    h2o_mimemap_type_t *new_type = create_dynamic_type(globalconf, hostconf, mimemap);
     size_t i;
 
     for (i = 0; exts[i] != NULL; ++i) {

@@ -119,13 +119,15 @@ typedef struct st_h2o_token_t {
 
 #include "h2o/token.h"
 
+typedef struct st_h2o_pathconf_t h2o_pathconf_t;
+
 /**
  * basic structure of a handler (an object that MAY generate a response)
  * The handlers should register themselves to h2o_context_t::handlers.
  */
 typedef struct st_h2o_handler_t {
     size_t _config_slot;
-    void (*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
+    void (*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx, h2o_pathconf_t *pathconf);
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
@@ -147,7 +149,7 @@ typedef struct st_h2o_handler_t {
  */
 typedef struct st_h2o_filter_t {
     size_t _config_slot;
-    void (*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
+    void (*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx, h2o_pathconf_t *pathconf);
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
@@ -159,7 +161,7 @@ typedef struct st_h2o_filter_t {
  */
 typedef struct st_h2o_logger_t {
     size_t _config_slot;
-    void (*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
+    void (*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx, h2o_pathconf_t *pathconf);
     void (*on_context_dispose)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_logger_t *self);
     void (*log_access)(struct st_h2o_logger_t *self, h2o_req_t *req);
@@ -213,6 +215,10 @@ typedef struct st_h2o_pathconf_t {
      * globalconf to which the pathconf belongs
      */
     h2o_globalconf_t *global;
+    /**
+     * hostconf to which the pathconf belongs (may be NULL if file.custom-handler is used)
+     */
+    h2o_hostconf_t *host;
     /**
      * pathname in lower case, may or may not have "/" at last, NULL terminated, or is {NULL,0} if is fallback or extension-level
      */
@@ -1084,6 +1090,8 @@ struct st_h2o_req_t {
      */
     unsigned char bytes_counted_by_ostream : 1;
 
+    unsigned char is_subrequest : 1;
+
     /**
      * Whether the producer of the response has explicitely disabled or
      * enabled compression. One of H2O_COMPRESS_HINT_*
@@ -1112,11 +1120,6 @@ struct st_h2o_req_t {
      * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
      */
     h2o_proceed_req_cb proceed_req;
-
-    /**
-     * parent request (not NULL when this is a subrequest)
-     */
-    h2o_req_t *parent;
 
     /* internal structure */
     h2o_generator_t *_generator;
@@ -1243,6 +1246,7 @@ void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsi
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);
+int h2o_parse_protocol_version_string(h2o_iovec_t str);
 /**
  * builds the proxy header defined by the PROXY PROTOCOL
  */
@@ -1332,10 +1336,6 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
  */
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
 
-h2o_subreq_t *h2o_subrequest_create(h2o_req_t *parent, size_t sz);
-int h2o_is_subrequest(h2o_req_t *req);
-void h2o_subrequest_destroy(h2o_subreq_t *subreq);
-
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
@@ -1401,7 +1401,7 @@ void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name);
  * @param path path to serve, or NULL if fallback or extension-level
  * @param mimemap mimemap to use, or NULL if fallback or extension-level
  */
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap);
+void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, const char *path, h2o_mimemap_t *mimemap);
 /**
  *
  */
@@ -1632,7 +1632,7 @@ void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const 
 /**
  * adds a mime-type mapping
  */
-h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf);
+h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf);
 /**
  * removes a mime-type mapping
  */

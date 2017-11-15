@@ -51,7 +51,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
-static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
+static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
     struct rp_handler_t *self = (void *)_self;
 

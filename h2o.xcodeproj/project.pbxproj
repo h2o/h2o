@@ -256,9 +256,6 @@
 		10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */ = {isa = PBXBuildFile; fileRef = 10FEF24D1D6FC8E200E11B1D /* gkc.h */; };
 		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
 		7D0285C91EF422D40094292B /* sleep.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0285C81EF422D40094292B /* sleep.c */; };
-		7D042C051FA8779600AB5FAF /* subrequest.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D042C031FA8779600AB5FAF /* subrequest.c */; };
-		7D042C061FA877A600AB5FAF /* subrequest.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D042C031FA8779600AB5FAF /* subrequest.c */; };
-		7D042C071FA88B4100AB5FAF /* subrequest.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D042C031FA8779600AB5FAF /* subrequest.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
@@ -821,7 +818,6 @@
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
-		7D042C031FA8779600AB5FAF /* subrequest.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = subrequest.c; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
@@ -1062,7 +1058,6 @@
 				107923BF19A3217300C52AD6 /* token.c */,
 				1079245319A32C0800C52AD6 /* token_table.h */,
 				107923C019A3217300C52AD6 /* util.c */,
-				7D042C031FA8779600AB5FAF /* subrequest.c */,
 			);
 			path = core;
 			sourceTree = "<group>";
@@ -2186,7 +2181,6 @@
 				1024A3FC1D22315000EB13F1 /* cache_digests.c in Sources */,
 				E90A95F51E30797D00483D6C /* headers_util.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
-				7D042C061FA877A600AB5FAF /* subrequest.c in Sources */,
 				10DA969E1CD2BFAC00679165 /* cache.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
 				10C45D551CFE9B300096DB06 /* events.c in Sources */,
@@ -2289,7 +2283,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7D042C071FA88B4100AB5FAF /* subrequest.c in Sources */,
 				107E34211C7FEE1000AEF5F8 /* utf8_util.cc in Sources */,
 				107D4D441B588021004A9B21 /* ssl.c in Sources */,
 				1079244A19A3266700C52AD6 /* frame.c in Sources */,
@@ -2462,7 +2455,6 @@
 				107E34081C7EAF9300AEF5F8 /* static_dict.cc in Sources */,
 				107E34091C7EAF9300AEF5F8 /* streams.cc in Sources */,
 				E9708AE81E49A2420029E0A5 /* picotls.c in Sources */,
-				7D042C051FA8779600AB5FAF /* subrequest.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
 				E9708B851E52C8560029E0A5 /* connection.c in Sources */,
 				E9708B601E52C80F0029E0A5 /* fastcgi.c in Sources */,

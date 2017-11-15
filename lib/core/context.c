@@ -41,7 +41,7 @@ void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathc
         for (i = 0; i != pathconf->list.size; ++i) {                                                                               \
             type *o = pathconf->list.entries[i];                                                                                   \
             if (o->on_context_init != NULL)                                                                                        \
-                o->on_context_init(o, ctx);                                                                                        \
+                o->on_context_init(o, ctx, pathconf);                                                                              \
         }                                                                                                                          \
     } while (0)
 

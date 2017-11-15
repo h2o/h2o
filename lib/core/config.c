@@ -35,7 +35,7 @@ static h2o_hostconf_t *create_hostconf(h2o_globalconf_t *globalconf)
     h2o_hostconf_t *hostconf = h2o_mem_alloc(sizeof(*hostconf));
     *hostconf = (h2o_hostconf_t){globalconf};
     hostconf->http2.push_preload = 1; /* enabled by default */
-    h2o_config_init_pathconf(&hostconf->fallback_path, globalconf, NULL, globalconf->mimemap);
+    h2o_config_init_pathconf(&hostconf->fallback_path, globalconf, hostconf, NULL, globalconf->mimemap);
     hostconf->mimemap = globalconf->mimemap;
     h2o_mem_addref_shared(hostconf->mimemap);
     return hostconf;
@@ -129,10 +129,11 @@ void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name)
     envconf->unsets.entries[envconf->unsets.size++] = h2o_strdup_shared(NULL, name, name_len);
 }
 
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap)
+void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, const char *path, h2o_mimemap_t *mimemap)
 {
     memset(pathconf, 0, sizeof(*pathconf));
     pathconf->global = globalconf;
+    pathconf->host = hostconf;
     h2o_chunked_register(pathconf);
     if (path != NULL)
         pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
@@ -205,7 +206,7 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
     pathconf = hostconf->paths.entries + hostconf->paths.size++;
 
-    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
+    h2o_config_init_pathconf(pathconf, hostconf->global, hostconf, path, hostconf->mimemap);
 
     return pathconf;
 }

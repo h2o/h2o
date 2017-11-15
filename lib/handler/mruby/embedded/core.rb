@@ -68,14 +68,11 @@ module Kernel
         while 1
           begin
             while 1
-              H2O.set_generator(self_fiber, generator)
               resp = app.call(req)
-              H2O.set_generator(self_fiber, nil)
               cached = self_fiber
               (req, generator) = Fiber.yield(*resp, generator)
             end
           rescue => e
-            H2O.set_generator(self_fiber, nil)
             cached = self_fiber
             (req, generator) = Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e, generator])
           end
@@ -115,12 +112,10 @@ module H2O
 
   class App
     def call(env)
-      generator = H2O.get_generator(Fiber.current)
-      _h2o_delegate(env, generator, false)
+      _h2o_delegate(env, false)
     end
     def reprocess(env)
-      generator = H2O.get_generator(Fiber.current)
-      _h2o_delegate(env, generator, true)
+      _h2o_delegate(env, true)
     end
   end
 
@@ -128,20 +123,6 @@ module H2O
     @@app = App.new
     def app
       @@app
-    end
-
-    # mruby doesn't allow built-in object (i.e Fiber) to have instance variable
-    # so manage it with hash table here
-    @@fiber_to_generator = {}
-    def set_generator(fiber, generator)
-        if generator.nil?
-          @@fiber_to_generator.delete(fiber.object_id)
-        else
-          @@fiber_to_generator[fiber.object_id] = generator
-        end
-    end
-    def get_generator(fiber)
-        @@fiber_to_generator[fiber.object_id]
     end
   end
 
