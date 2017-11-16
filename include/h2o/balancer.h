@@ -37,24 +37,27 @@ typedef struct st_h2o_balancer_request_info {
     h2o_iovec_t path;
 } h2o_balancer_request_info;
 
-typedef size_t (*h2o_balancer_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried,
+typedef struct st_h2o_balancer_t h2o_balancer_t;
+
+typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, int *tried,
                                         h2o_balancer_request_info *req_info);
 
-typedef void (*h2o_balancer_constructor)(h2o_socketpool_target_vector_t *targets, void *conf, void **data);
-
-typedef void (*h2o_balancer_finalizer)(void *data);
+typedef void (*h2o_balancer_destroyer)(h2o_balancer_t *balancer);
 
 typedef struct st_h2o_balancer_callbacks_t {
-    h2o_balancer_constructor construct;
     h2o_balancer_selector selector;
-    h2o_balancer_finalizer finalize;
+    h2o_balancer_destroyer destroy;
 } h2o_balancer_callbacks_t;
 
+struct st_h2o_balancer_t {
+    const h2o_balancer_callbacks_t *callbacks;
+};
+
 /* round robin */
-const h2o_balancer_callbacks_t *h2o_balancer_rr_get_callbacks();
+h2o_balancer_t *h2o_balancer_rr_creator(h2o_socketpool_target_t **targets, size_t target_len);
 
 /* least connection */
-const h2o_balancer_callbacks_t *h2o_balancer_lc_get_callbacks();
+h2o_balancer_t *h2o_balancer_lc_creator(void);
 
 #ifdef __cplusplus
 }

@@ -36,7 +36,7 @@ static void test_when_backend_down(void)
     size_t selected;
     
     for (i = 0; i < 10; i++) {
-        selected = selector(&targets, NULL, tried, NULL);
+        selected = selector(NULL, &targets, tried, NULL);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
@@ -73,7 +73,7 @@ static void test_least_conn(void)
     int check_result = 1;
     
     for (i = 0; i < 10000; i++) {
-        selected = selector(&targets, NULL, tried, NULL);
+        selected = selector(NULL, &targets, tried, NULL);
         if (selected > 10) {
             ok(selected >= 0 && selected < 10);
             goto Done;
@@ -102,7 +102,7 @@ static void test_least_conn_weighted(void)
         targets.entries[i]->conf.weight = i % 3 + 1;
     
     for (i = 0; i < 10000; i++) {
-        selected = selector(&targets, NULL, tried, NULL);
+        selected = selector(NULL, &targets, tried, NULL);
         if (selected > 10) {
             ok(selected >= 0 && selected < 10);
             goto Done;

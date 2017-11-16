@@ -22,6 +22,7 @@
 #include "h2o/balancer.h"
 
 struct round_robin_t {
+    h2o_balancer_t super;
     size_t next_pos;           /* counting next logic index */
     size_t next_actual_target; /* indicate next actual target index */
     size_t *floor_next_target; /* caching logic indices indicating next target should be used */
@@ -46,11 +47,11 @@ static void construct(h2o_socketpool_target_vector_t *targets, void *unused, voi
     *data = self;
 }
 
-static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, h2o_balancer_request_info *dummy)
+static size_t selector(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, int *tried, h2o_balancer_request_info *dummy)
 {
     size_t i;
     size_t result = 0;
-    struct round_robin_t *self = _data;
+    struct round_robin_t *self = (void *)balancer;
 
     pthread_mutex_lock(&self->mutex);
 
@@ -83,19 +84,33 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int
     return result;
 }
 
-static void finalize(void *data)
+static void destroy(h2o_balancer_t *balancer)
 {
-    struct round_robin_t *self = data;
+    struct round_robin_t *self = (void *)balancer;
     pthread_mutex_destroy(&self->mutex);
     free(self->floor_next_target);
-    free(data);
+    free(self);
 }
 
-const h2o_balancer_callbacks_t *h2o_balancer_rr_get_callbacks() {
+h2o_balancer_t *h2o_balancer_rr_creator(h2o_socketpool_target_t **targets, size_t target_len) {
     static const h2o_balancer_callbacks_t rr_callbacks = {
-        construct,
         selector,
-        finalize
+        destroy
     };
-    return &rr_callbacks;
+    
+    size_t i;
+    struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
+    self->next_pos = 0;
+    self->next_actual_target = 0;
+    pthread_mutex_init(&self->mutex, NULL);
+    self->floor_next_target = h2o_mem_alloc(sizeof(*self->floor_next_target) * target_len);
+    
+    self->floor_next_target[0] = targets[0]->conf.weight;
+    for (i = 1; i < target_len; i++) {
+        self->floor_next_target[i] = self->floor_next_target[i - 1] + targets[i]->conf.weight;
+    }
+    self->pos_less_than = self->floor_next_target[target_len - 1];
+    self->super.callbacks = &rr_callbacks;
+    
+    return &self->super;
 }

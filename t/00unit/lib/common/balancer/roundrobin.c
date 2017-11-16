@@ -34,18 +34,18 @@ static void test_when_backend_down(void)
     int tried[10] = {};
     size_t i;
     size_t selected;
-    void *balancer;
+    h2o_balancer_t *balancer;
     
-    construct(&targets, NULL, &balancer);
+    balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
     
     for (i = 0; i < 10; i++) {
-        selected = selector(&targets, balancer, tried, NULL);
+        selected = selector(balancer, &targets, tried, NULL);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
     }
     
-    finalize(balancer);
+    destroy(balancer);
     
     free_targets(&targets);
 }
@@ -77,12 +77,12 @@ static void test_round_robin(void)
     size_t i, selected;
     int tried[10] = {};
     int check_result = 1;
-    void *balancer;
+    h2o_balancer_t *balancer;
     
-    construct(&targets, NULL, &balancer);
+    balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
     
     for (i = 0; i < 10000; i++) {
-        selected = selector(&targets, balancer, tried, NULL);
+        selected = selector(balancer, &targets, tried, NULL);
         if (selected > 10) {
             ok(selected >= 0 && selected < 10);
             goto Done;
@@ -97,7 +97,7 @@ static void test_round_robin(void)
     ok(!check_result);
     
 Done:
-    finalize(balancer);
+    destroy(balancer);
     free_targets(&targets);
 }
 
@@ -107,15 +107,15 @@ static void test_round_robin_weighted(void)
     size_t i, selected;
     int tried[10] = {};
     int check_result = 1;
-    void *balancer;
+    h2o_balancer_t *balancer;
     
     for (i = 0; i < 10; i++)
         targets.entries[i]->conf.weight = i % 3 + 1;
     
-    construct(&targets, NULL, &balancer);
+    balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
     
     for (i = 0; i < 10000; i++) {
-        selected = selector(&targets, balancer, tried, NULL);
+        selected = selector(balancer, &targets, tried, NULL);
         if (selected > 10) {
             ok(selected >= 0 && selected < 10);
             goto Done;
@@ -130,7 +130,7 @@ static void test_round_robin_weighted(void)
     ok(!check_result);
     
 Done:
-    finalize(balancer);
+    destroy(balancer);
     free_targets(&targets);
 }
 

@@ -359,7 +359,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         register_handler(hostconf, "/chunked-test", chunked_test);
         h2o_url_parse(unix_listener, strlen(unix_listener), &upstream);
         h2o_socketpool_t *sockpool = new h2o_socketpool_t();
-        h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, &upstream, 1, h2o_balancer_rr_get_callbacks(), NULL, NULL);
+        h2o_socketpool_target_t *target = h2o_socketpool_target_create(&upstream, NULL);
+        h2o_socketpool_target_t **targets = &target;
+        h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, 2000);
         h2o_socketpool_set_ssl_ctx(sockpool, NULL);
         h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &proxy_config, sockpool);

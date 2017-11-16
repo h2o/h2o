@@ -37,7 +37,7 @@ sub run_test {
     subtest "keepalive-on", sub {
         $server = spawn_h2o(<< "EOT");
 $conf
-        proxy.reverse.balancer: $balancer
+          balancer: $balancer
 EOT
         $use_keepalive = 1;
         $test->();
@@ -46,7 +46,7 @@ EOT
     subtest "keepalive-off", sub {
         $server = spawn_h2o(<< "EOT");
 $conf
-        proxy.reverse.balancer: $balancer
+          balancer: $balancer
 proxy.timeout.keepalive: 0
 EOT
         $use_keepalive = 0;
@@ -84,8 +84,9 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$upstream_port1/echo-server-port
-          - http://127.0.0.1.XIP.IO:$upstream_port2/echo-server-port
+          backends:
+            - http://127.0.0.1.XIP.IO:$upstream_port1/echo-server-port
+            - http://127.0.0.1.XIP.IO:$upstream_port2/echo-server-port
 EOT
 };
 
@@ -113,8 +114,9 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://[unix:$upstream_file1]/echo-server-port
-          - http://[unix:$upstream_file2]/echo-server-port
+          backends:
+            - http://[unix:$upstream_file1]/echo-server-port
+            - http://[unix:$upstream_file2]/echo-server-port
 EOT
 };
 
@@ -142,8 +144,9 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
-          - http://[unix:$upstream_file]/echo-server-port
+          backends:
+            - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
+            - http://[unix:$upstream_file]/echo-server-port
 EOT
 };
 

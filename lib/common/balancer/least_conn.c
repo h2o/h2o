@@ -21,9 +21,7 @@
  */
 #include "h2o/balancer.h"
 
-static void construct(h2o_socketpool_target_vector_t *targets, void *unused, void **data) {}
-
-static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried, h2o_balancer_request_info *dummy)
+static size_t selector(h2o_balancer_t *ignored, h2o_socketpool_target_vector_t *targets, int *tried, h2o_balancer_request_info *dummy)
 {
     size_t i;
     size_t result = -1;
@@ -54,13 +52,14 @@ static size_t selector(h2o_socketpool_target_vector_t *targets, void *_data, int
     return result;
 }
 
-static void finalize(void *data) {}
+static void destroy(h2o_balancer_t *ignored) {}
 
-const h2o_balancer_callbacks_t *h2o_balancer_lc_get_callbacks() {
+h2o_balancer_t *h2o_balancer_lc_creator(void)
+{
     static const h2o_balancer_callbacks_t lc_callbacks = {
-        construct,
         selector,
-        finalize
+        destroy
     };
-    return &lc_callbacks;
+    static h2o_balancer_t lc_balancer = {&lc_callbacks};
+    return &lc_balancer;
 }

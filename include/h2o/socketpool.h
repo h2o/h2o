@@ -80,7 +80,7 @@ typedef struct st_h2o_socketpool_target_t {
 
 typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
 
-typedef struct st_h2o_balancer_callbacks_t h2o_balancer_callbacks_t;
+typedef struct st_h2o_balancer_t h2o_balancer_t;
 
 typedef struct st_h2o_balancer_request_info h2o_balancer_request_info;
 
@@ -104,11 +104,8 @@ typedef struct st_h2o_socketpool_t {
         h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
     } _shared;
 
-    /* vars used by load balancing, modified by multiple threads */
-    struct {
-        const h2o_balancer_callbacks_t *callbacks;
-        void *data;
-    } _lb;
+    /* load balancer */
+    h2o_balancer_t *balancer;
 } h2o_socketpool_t;
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
@@ -117,8 +114,8 @@ typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr
 /**
  * initializes a specific socket pool
  */
-void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len,
-                                  const h2o_balancer_callbacks_t *lb_callbacks, void *lb_conf, h2o_socketpool_target_conf_t *target_conf);
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t target_len,
+                                  h2o_balancer_t *balancer);
 /**
  * initializes a global socket pool
  */
@@ -127,6 +124,14 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
  * disposes of a socket loop
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
+/**
+ * create a target
+ */
+h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+/**
+ * destroy a target
+ */
+void h2o_socketpool_target_destroy(h2o_socketpool_target_t *target);
 /**
  *
  */

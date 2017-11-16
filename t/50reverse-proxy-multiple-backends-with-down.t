@@ -29,9 +29,10 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$unused_port/echo-server-port
-          - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
-        proxy.reverse.balancer: $balancer
+          backends:
+            - http://127.0.0.1.XIP.IO:$unused_port/echo-server-port
+            - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
+          balancer: $balancer
 EOT
     
     for my $i (1..50) {

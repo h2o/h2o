@@ -111,7 +111,7 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
-                        const h2o_balancer_callbacks_t *lb_callbacks, void *lb_conf)
+                        h2o_balancer_t *balancer)
 {
     memset(pool, 0, sizeof(*pool));
 
@@ -122,10 +122,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
     h2o_linklist_init_anchor(&pool->_shared.sockets);
     memcpy(&pool->targets, &targets, sizeof(targets));
 
-    if (lb_callbacks != NULL) {
-        lb_callbacks->construct(&pool->targets, lb_conf, &pool->_lb.data);
-        pool->_lb.callbacks = lb_callbacks;
-    }
+    pool->balancer = balancer;
 }
 
 h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_storage *sa, socklen_t *salen)
@@ -151,11 +148,12 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
     }
 }
 
-static void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
+h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
 {
     struct sockaddr_storage sa;
     socklen_t salen;
 
+    h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
     h2o_url_copy(NULL, &target->url, origin);
     assert(target->url.host.base[target->url.host.len] == '\0'); /* needs to be null-terminated in order to be used in SNI */
     target->type = detect_target_type(origin, &sa, &salen);
@@ -184,53 +182,45 @@ static void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin, h2o_
     }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
+    return target;
 }
 
-void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len,
-                                  const h2o_balancer_callbacks_t *lb_callbacks, void *lb_conf, h2o_socketpool_target_conf_t *lb_per_target_conf)
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t target_len,
+                                  h2o_balancer_t *balancer)
 {
-    int i;
-    h2o_socketpool_target_vector_t targets = {};
-
-    h2o_vector_reserve(NULL, &targets, origin_len);
-    for (i = 0; i != origin_len; ++i) {
-        h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-        h2o_socketpool_target_conf_t *per_target_conf = NULL;
-        if (lb_per_target_conf != NULL)
-            per_target_conf = &lb_per_target_conf[i];
-        init_target(target, &origins[i], per_target_conf);
-        targets.entries[i] = target;
-    }
-    targets.size = origin_len;
-    
-    if (lb_callbacks == NULL) {
-        lb_callbacks = h2o_balancer_rr_get_callbacks();
+    size_t i;
+    h2o_socketpool_target_vector_t target_vector = {};
+    h2o_vector_reserve(NULL, &target_vector, target_len);
+    for (i = 0; i < target_len; i++)
+        target_vector.entries[i] = targets[i];
+    target_vector.size = target_len;
+    if (balancer == NULL) {
+        balancer = h2o_balancer_rr_creator(targets, target_len);
     }
 
-    common_init(pool, targets, capacity, lb_callbacks, lb_conf);
+    common_init(pool, target_vector, capacity, balancer);
 }
 
 static inline int is_global_pool(h2o_socketpool_t *pool)
 {
-    return pool->_lb.callbacks == NULL;
+    return pool->balancer == NULL;
 }
 
 static size_t add_target(h2o_socketpool_t *pool, h2o_url_t *origin)
 {
     assert(is_global_pool(pool));
     h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
-    h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-    init_target(target, origin, NULL);
+    h2o_socketpool_target_t *target = h2o_socketpool_target_create(origin, NULL);
     pool->targets.entries[pool->targets.size++] = target;
     return pool->targets.size - 1;
 }
 
 void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity)
 {
-    common_init(pool, (h2o_socketpool_target_vector_t){}, capacity, NULL, NULL);
+    common_init(pool, (h2o_socketpool_target_vector_t){}, capacity, NULL);
 }
 
-void dispose_target(h2o_socketpool_target_t *target)
+void h2o_socketpool_target_destroy(h2o_socketpool_target_t *target)
 {
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
@@ -242,10 +232,8 @@ void dispose_target(h2o_socketpool_target_t *target)
     free(target->url.authority.base);
     free(target->url.host.base);
     free(target->url.path.base);
+    free(target->conf.data_for_balancer);
     free(target);
-    if (target->conf.data_for_balancer != NULL) {
-        free(target->conf.data_for_balancer);
-    }
 }
 
 void h2o_socketpool_dispose(h2o_socketpool_t *pool)
@@ -261,8 +249,8 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
     pthread_mutex_unlock(&pool->_shared.mutex);
     pthread_mutex_destroy(&pool->_shared.mutex);
 
-    if (pool->_lb.callbacks != NULL) {
-        pool->_lb.callbacks->finalize(pool->_lb.data);
+    if (pool->balancer != NULL) {
+        pool->balancer->callbacks->destroy(pool->balancer);
     }
 
     if (pool->_ssl_ctx != NULL)
@@ -272,7 +260,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_socketpool_unregister_loop(pool, pool->_interval_cb.loop);
 
     for (i = 0; i < pool->targets.size; i++) {
-        dispose_target(pool->targets.entries[i]);
+        h2o_socketpool_target_destroy(pool->targets.entries[i]);
     }
     free(pool->targets.entries);
 }
@@ -410,7 +398,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
 
     if (req->lb.tried != NULL) {
         if (req->pool->targets.size > 1) {
-            req->selected_target = req->pool->_lb.callbacks->selector(&req->pool->targets, req->pool->_lb.data,
+            req->selected_target = req->pool->balancer->callbacks->selector(req->pool->balancer, &req->pool->targets,
                                                                       req->lb.tried, req->lb.req_info);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
