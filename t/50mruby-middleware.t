@@ -139,6 +139,11 @@ EOT
             is $status, 200, 'live status check';
         }, 'live check';
     };
+    my $reprocess_check = sub {
+        my ($headers) = @_;
+        return unless $mode eq 'reprocess';
+        is $headers->{'x-reprocessed'}, 'true', 'reprocess check';
+    };
 
     subtest 'modify response header' => sub {
         my $server = $spawner->(<< "EOT");
@@ -157,7 +162,7 @@ EOT
             is $headers->{'foo'}, 'FOO';
             is length($body), $files{$file}->{size};
             is md5_hex($body), $files{$file}->{md5};
-            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $reprocess_check->($headers);
             $live_check->($proto, $port, $curl);
         });
     };
@@ -178,7 +183,7 @@ EOT
             is $headers->{'content-length'} || '', '';
             is length($body), $files{$file}->{size};
             is md5_hex($body), $files{$file}->{md5};
-            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $reprocess_check->($headers);
             $live_check->($proto, $port, $curl);
         });
     };
@@ -200,7 +205,7 @@ EOT
             is $headers->{'content-length'}, length($body);
             is length($body), $files{$file}->{size};
             is md5_hex($body), $files{$file}->{md5};
-            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $reprocess_check->($headers);
             $live_check->($proto, $port, $curl);
         });
     };
@@ -241,6 +246,7 @@ EOT
             my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
             is $status, 200;
             is $body, 'mruby';
+            $reprocess_check->($headers);
             $live_check->($proto, $port, $curl);
         });
     };
@@ -267,7 +273,7 @@ EOT
             is $status, 200;
             is length($body), $files{$file}->{size};
             is md5_hex($body), $files{$file}->{md5};
-            is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+            $reprocess_check->($headers);
             $live_check->($proto, $port, $curl);
         });
     };
@@ -361,7 +367,7 @@ EOT
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
-                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $reprocess_check->($headers);
                 $live_check->($proto, $port, $curl);
             });
         };
@@ -407,7 +413,7 @@ EOT
                 is $status, 200;
                 is length($body), $files{$file}->{size} + length('suffix');
                 is md5_hex($body), md5_hex($files{$file}->{content} . 'suffix');
-                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $reprocess_check->($headers);
                 $live_check->($proto, $port, $curl);
             });
         };
@@ -427,7 +433,7 @@ EOT
                 is $status, 200;
                 is length($body), 3;
                 is $body, substr($files{$file}->{content}, 0, 3);
-                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $reprocess_check->($headers);
                 $live_check->($proto, $port, $curl);
             });
         };
@@ -447,7 +453,7 @@ EOT
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
-                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $reprocess_check->($headers);
                 $live_check->($proto, $port, $curl);
             });
         };
@@ -469,7 +475,7 @@ EOT
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
-                is $headers->{'x-reprocessed'}, 'true' if $mode eq 'reprocess';
+                $reprocess_check->($headers);
                 $live_check->($proto, $port, $curl);
             });
         };
