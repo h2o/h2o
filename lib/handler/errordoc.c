@@ -23,7 +23,7 @@
 
 /* used to rewrite status code to the original code */
 struct st_errordoc_prefilter_t {
-    h2o_req_prefilter_t super;
+    h2o_req_filter_t super;
     h2o_headers_t req_headers;
     int status;
     const char *reason;
@@ -42,7 +42,7 @@ static void add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_h
     headers->entries[headers->size++] = *header;
 }
 
-static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
+static void on_prefilter_setup_stream(h2o_req_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
     struct st_errordoc_prefilter_t *self = (void *)_self;
     h2o_headers_t headers_merged = {NULL};
@@ -64,7 +64,7 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     }
     req->res.headers = headers_merged;
 
-    h2o_setup_next_prefilter(&self->super, req, slot);
+    h2o_setup_next_req_filter(&self->super, req, slot);
 }
 
 static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
@@ -74,7 +74,7 @@ static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *in
 
 static int prefilter_is_registered(h2o_req_t *req)
 {
-    h2o_req_prefilter_t *prefilter;
+    h2o_req_filter_t *prefilter;
     for (prefilter = req->prefilters; prefilter != NULL; prefilter = prefilter->next)
         if (prefilter->on_setup_ostream == on_prefilter_setup_stream)
             return 1;
@@ -105,7 +105,7 @@ static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ost
 
 Found:
     /* register prefilter that rewrites the status code after the internal redirect is processed */
-    prefilter = (void *)h2o_add_prefilter(req, sizeof(*prefilter));
+    prefilter = (void *)h2o_add_req_filter(req, sizeof(*prefilter), 0);
     prefilter->super.on_setup_ostream = on_prefilter_setup_stream;
     prefilter->req_headers = req->headers;
     prefilter->status = req->res.status;

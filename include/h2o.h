@@ -868,10 +868,11 @@ struct st_h2o_conn_t {
 /**
  * filter used for capturing a response (can be used to implement subreq)
  */
-typedef struct st_h2o_req_prefilter_t {
-    struct st_h2o_req_prefilter_t *next;
-    void (*on_setup_ostream)(struct st_h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
-} h2o_req_prefilter_t;
+typedef struct st_h2o_req_filter_t {
+    struct st_h2o_req_filter_t *next;
+    void (*on_setup_ostream)(struct st_h2o_req_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
+    unsigned char is_post : 1;
+} h2o_req_filter_t;
 
 typedef struct st_h2o_req_overrides_t {
     /**
@@ -1008,7 +1009,8 @@ struct st_h2o_req_t {
     /**
      * filters assigned per request
      */
-    h2o_req_prefilter_t *prefilters;
+    h2o_req_filter_t *prefilters;
+    h2o_req_filter_t *postfilters;
     /**
      * additional information (becomes available for extension-based dynamic content)
      */
@@ -1350,13 +1352,13 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
  */
 static h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
 /**
- * creates an uninitialized prefilter and returns pointer to it
+ * creates an uninitialized req filter and returns pointer to it
  */
-h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz);
+h2o_req_filter_t *h2o_add_req_filter(h2o_req_t *req, size_t sz, int is_post);
 /**
- * requests the next prefilter or filter (if any) to setup the ostream if necessary
+ * requests the next req filter or filter (if any) to setup the ostream if necessary
  */
-static void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
+static void h2o_setup_next_req_filter(h2o_req_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
 /**
  * requests the next filter (if any) to setup the ostream if necessary
  */
@@ -2051,16 +2053,18 @@ inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
     if (req->_next_filter_index < req->pathconf->filters.size) {
         next = req->pathconf->filters.entries[req->_next_filter_index++];
         next->on_setup_ostream(next, req, slot);
+    } else if (req->postfilters != NULL) {
+        req->postfilters->on_setup_ostream(req->postfilters, req, &req->_ostr_top);
     }
 }
 
-inline void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
+inline void h2o_setup_next_req_filter(h2o_req_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
 {
-    h2o_req_prefilter_t *next = self->next;
+    h2o_req_filter_t *next = self->next;
 
     if (next != NULL)
         next->on_setup_ostream(next, req, slot);
-    else
+    else if (! self->is_post)
         h2o_setup_next_ostream(req, slot);
 }
 
