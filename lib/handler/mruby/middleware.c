@@ -46,16 +46,34 @@ struct st_mruby_subreq_t {
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
     mrb_value ref;
-    h2o_timeout_entry_t defer_dispose_timeout_entry;
-    int shortcutted : 1;
+    mrb_value chunks;
+    h2o_mruby_generator_t *shortcut;
+    unsigned char final_received : 1;
+    unsigned char chain_proceed : 1;
+};
+
+struct st_h2o_mruby_middleware_chunked_t {
+    h2o_mruby_chunked_t super;
+    struct st_mruby_subreq_t *subreq;
+    struct {
+        h2o_iovec_t *bufs;
+        size_t bufcnt;
+    } blocking;
 };
 
 static void dispose_subreq(struct st_mruby_subreq_t *subreq)
 {
+    /* suqbre must be alive until generator gets disposed when shortcut used */
+    assert(subreq->shortcut == NULL);
+
+    if (!mrb_nil_p(subreq->chunks)) {
+        mrb_gc_unregister(subreq->ctx->shared->mrb, subreq->chunks);
+        subreq->chunks = mrb_nil_value();
+    }
+
     if (! mrb_nil_p(subreq->ref))
         DATA_PTR(subreq->ref) = NULL;
-    if (h2o_timeout_is_linked(&subreq->defer_dispose_timeout_entry))
-        h2o_timeout_unlink(&subreq->defer_dispose_timeout_entry);
+    h2o_dispose_request(&subreq->super);
     free(subreq);
 }
 
@@ -63,12 +81,6 @@ static void on_gc_dispose_app_input_stream(mrb_state *mrb, void *_subreq)
 {
     struct st_mruby_subreq_t *subreq = _subreq;
     if (subreq == NULL) return;
-    dispose_subreq(subreq);
-}
-
-static void on_subreq_defer_dispose_timeout(h2o_timeout_entry_t *entry)
-{
-    struct st_mruby_subreq_t *subreq = H2O_STRUCT_FROM_MEMBER(struct st_mruby_subreq_t, defer_dispose_timeout_entry, entry);
     dispose_subreq(subreq);
 }
 
@@ -148,56 +160,66 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     return resp;
 }
 
+static void push_chunks(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, size_t inbufcnt)
+{
+    mrb_state *mrb = subreq->ctx->shared->mrb;
+    assert(! mrb_nil_p(subreq->chunks));
+
+    int gc_arena = mrb_gc_arena_save(mrb);
+
+    int i;
+    for (i = 0; i < inbufcnt; ++i) {
+        mrb_value chunk = mrb_str_new(mrb, inbufs[i].base, inbufs[i].len);
+        mrb_ary_push(mrb, subreq->chunks, chunk);
+    }
+
+    mrb_gc_arena_restore(mrb, gc_arena);
+}
+
 static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     struct st_mruby_subreq_t *subreq = (void *)_subreq;
     mrb_state *mrb = subreq->ctx->shared->mrb;
 
-    // FIXME
-    //    if (subreq->shortcutted) {
-    //        flush_chunks(mrb, subreq, inbufs, inbufcnt, state);
-    //        return;
-    //    }
-
-    mrb_value input = mrb_nil_value();
-
-    int gc_arena = mrb_gc_arena_save(mrb);
-
-    if (mrb_nil_p(subreq->ref)) {
-        assert(! mrb_nil_p(subreq->receiver)); /* at first call, mruby is blocking by H2O.app.call */
-        mrb_value resp = build_app_response(subreq);
-        subreq->ref = mrb_ary_entry(resp, 2);
-        input = resp;
-    }
-
-    if (inbufcnt > 0) {
-        /* push incoming chunks to input stream object */
-        mrb_value chunks = mrb_iv_get(mrb, subreq->ref, mrb_intern_lit(mrb, "@chunks"));
-        int i;
-        for (i = 0; i < inbufcnt; ++i) {
-            mrb_value chunk = mrb_str_new(mrb, inbufs[i].base, inbufs[i].len);
-            mrb_ary_push(mrb, chunks, chunk);
+    if (subreq->shortcut != NULL) {
+        subreq->chain_proceed = 1;
+        if (mrb_nil_p(subreq->chunks)) {
+            /* flushing chunks has been finished, so send directly */
+            h2o_send(subreq->shortcut->req, inbufs, inbufcnt, state);
+        } else {
+            /* flushing, buffer chunks again */
+            push_chunks(subreq, inbufs, inbufcnt);
         }
-        h2o_mruby_assert(mrb);
+        return;
     }
+
+    push_chunks(subreq, inbufs, inbufcnt);
 
     if (h2o_send_state_is_in_progress(state)) {
         h2o_proceed_response_deferred(&subreq->super);
-    } else if (! mrb_nil_p(subreq->ref)) {
-        mrb_iv_set(mrb, subreq->ref, mrb_intern_lit(mrb, "@finished"), mrb_true_value());
-        h2o_context_t *ctx = subreq->ctx->shared->ctx;
-        h2o_timeout_link(ctx->loop, &ctx->zero_timeout, &subreq->defer_dispose_timeout_entry);
+    } else {
+        subreq->final_received = 1;
+    }
+
+    int gc_arena = mrb_gc_arena_save(mrb);
+
+    mrb_value input = mrb_nil_value();
+    if (mrb_nil_p(subreq->ref)) {
+        /* at first call, mruby is blocking by H2O.next.call */
+        assert(! mrb_nil_p(subreq->receiver));
+        mrb_value resp = build_app_response(subreq);
+        subreq->ref = mrb_ary_entry(resp, 2);
+        input = resp;
+    } else if (! mrb_nil_p(subreq->receiver)) {
+        input = mrb_ary_shift(mrb, subreq->chunks);
     }
 
     /* detach receiver */
-    mrb_value receiver = mrb_nil_value();
     if (! mrb_nil_p(subreq->receiver)) {
-        receiver = subreq->receiver;
+        mrb_value receiver = subreq->receiver;
         mrb_gc_unregister(mrb, receiver);
         mrb_gc_protect(mrb, receiver);
         subreq->receiver = mrb_nil_value();
-
-        /* resume _h2o_delegate_wait_chunk (which expects no arguments) */
         h2o_mruby_run_fiber(subreq->ctx, receiver, input, NULL);
     }
 
@@ -452,8 +474,11 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->ctx = ctx;
     subreq->receiver = mrb_nil_value();
     subreq->ref = mrb_nil_value();
-    subreq->defer_dispose_timeout_entry = (h2o_timeout_entry_t){0, on_subreq_defer_dispose_timeout};
-    subreq->shortcutted = 0;
+    subreq->chunks = mrb_ary_new(mrb);
+    mrb_gc_register(mrb, subreq->chunks);
+    subreq->shortcut = NULL;
+    subreq->final_received = 0;
+    subreq->chain_proceed = 0;
 
     /* headers */
     super->headers = (h2o_headers_t){NULL};
@@ -536,10 +561,19 @@ static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_v
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "AppInputStream#each wrong self");
     }
 
-    assert(mrb_nil_p(subreq->receiver));
-    subreq->receiver = receiver;
-    mrb_gc_register(mrb, receiver);
-    return mrb_nil_value();
+    if (RARRAY_LEN(subreq->chunks) > 0) {
+        *run_again = 1;
+        mrb_value chunk = mrb_ary_shift(mrb, subreq->chunks);
+        return chunk;
+    } else if (subreq->final_received) {
+        *run_again = 1;
+        return mrb_nil_value();
+    } else {
+        assert(mrb_nil_p(subreq->receiver));
+        subreq->receiver = receiver;
+        mrb_gc_register(mrb, receiver);
+        return mrb_nil_value();
+    }
 }
 
 void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *shared_ctx)
@@ -558,78 +592,86 @@ void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *shared_ctx)
     h2o_mruby_assert(mrb);
 }
 
-// FIXME
-/* TODO moved to somewhere */
-//static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
-//{
-//    h2o_mruby_generator_t *generator = (void *)_generator;
-//    assert(!h2o_linklist_is_empty(&generator->subreqs));
-//    struct st_mruby_subreq_t *subreq = H2O_STRUCT_FROM_MEMBER(struct st_mruby_subreq_t, link, generator->subreqs.next);
-//    h2o_proceed_response(&subreq->super.super);
-//}
-
-// FIXME
-///* TODO rename */
-//static void flush_chunks(mrb_state *mrb, struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
-//{
-//    h2o_mruby_generator_t *generator = subreq->parent_generator;
-//    if (mrb_nil_p(subreq->ref)) {
-//        h2o_send(generator->req, inbufs, inbufcnt, state);
-//        return;
-//    }
-//
-//    int i;
-//    mrb_value chunks = mrb_iv_get(mrb, subreq->ref, mrb_intern_lit(mrb, "@chunks"));
-//    DATA_PTR(subreq->ref) = NULL;
-//    subreq->ref = mrb_nil_value();
-//    size_t chunkscnt = RARRAY_LEN(chunks);
-//    h2o_iovec_t bufs[chunkscnt + inbufcnt];
-//
-//    for (i = 0; i != chunkscnt; ++i) {
-//        mrb_value chunk = mrb_ary_entry(chunks, i);
-//        bufs[i].base = RSTRING_PTR(chunk);
-//        bufs[i].len = RSTRING_LEN(chunk);
-//    }
-//
-//    for (i = 0; i != inbufcnt; ++i)
-//        bufs[i + chunkscnt] = inbufs[i];
-//
-//    h2o_send(generator->req, bufs, chunkscnt + inbufcnt, state);
-//}
-
-// FIXME
-int h2o_mruby_delegate_set_shortcut(mrb_state *mrb, mrb_value obj)
+static void flush_chunks(struct st_mruby_subreq_t *subreq)
 {
-    return 0;
+    h2o_mruby_generator_t *generator = subreq->shortcut;
+    mrb_state *mrb = generator->ctx->shared->mrb;
+    assert(!mrb_nil_p(subreq->ref));
+
+    size_t bufcnt = RARRAY_LEN(subreq->chunks);
+    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * bufcnt);
+
+    if (bufcnt > 0) {
+        int i;
+        for (i = 0; i != bufcnt; ++i) {
+            mrb_value chunk = mrb_ary_entry(subreq->chunks, i);
+            bufs[i].base = RSTRING_PTR(chunk);
+            bufs[i].len = RSTRING_LEN(chunk);
+        }
+        mrb_ary_clear(mrb, subreq->chunks);
+    }
+
+    h2o_send(generator->req, bufs, bufcnt, subreq->final_received ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+}
+
+void do_chunked_start(h2o_mruby_generator_t *generator)
+{
+    struct st_h2o_mruby_middleware_chunked_t *chunked = (void *)generator->chunked;
+    struct st_mruby_subreq_t *subreq = chunked->subreq;
+    flush_chunks(subreq);
+}
+
+void do_chunked_proceed(h2o_generator_t *_generator, h2o_req_t *req)
+{
+    h2o_mruby_generator_t *generator = (void *)_generator;
+    mrb_state *mrb = generator->ctx->shared->mrb;
+    struct st_h2o_mruby_middleware_chunked_t *chunked = (void *)generator->chunked;
+
+    if (!mrb_nil_p(chunked->subreq->chunks)) {
+        if (RARRAY_LEN(chunked->subreq->chunks) > 0) {
+            flush_chunks(chunked->subreq);
+            return;
+        } else {
+            mrb_gc_unregister(mrb, chunked->subreq->chunks);
+            chunked->subreq->chunks = mrb_nil_value();
+        }
+    }
+
+    if (chunked->subreq->chain_proceed)
+        h2o_proceed_response(&chunked->subreq->super);
+}
+
+void do_chunked_dispose(h2o_mruby_generator_t *generator)
+{
+    struct st_h2o_mruby_middleware_chunked_t *chunked = (void *)generator->chunked;
+
+    assert(chunked->subreq->shortcut == generator);
+    chunked->subreq->shortcut = NULL;
+    dispose_subreq(chunked->subreq);
+    chunked->subreq = NULL;
+
+    h2o_mruby_chunked_close(generator);
+}
+
+h2o_mruby_chunked_t *h2o_mruby_middleware_chunked_create(h2o_mruby_generator_t *generator, mrb_value body)
+{
+    mrb_state *mrb = generator->ctx->shared->mrb;
+    struct st_mruby_subreq_t *subreq;
 
     assert(mrb->exc == NULL);
 
-    //    struct st_mruby_subreq_t *subreq;
-    //    if ((subreq = mrb_data_check_get_ptr(mrb, obj, &delegate_input_stream_type)) == NULL)
-    //        return 0;
-    //    assert(! mrb_nil_p(subreq->ref));
-    //
-    //    h2o_mruby_generator_t *generator = subreq->parent_generator;
-    //
-    //    generator->super.proceed = do_proceed;
-    //    subreq->shortcutted = 1;
-    //    h2o_start_response(generator->req, &generator->super);
-    //
-    //    /* dispose other subreqs */
-    //    h2o_linklist_t *cur = generator->subreqs.next;
-    //    while (cur != &generator->subreqs) {
-    //        h2o_linklist_t *next = cur->next;
-    //        if (cur != &subreq->link) {
-    //            struct st_mruby_subreq_t *other = H2O_STRUCT_FROM_MEMBER(struct st_mruby_subreq_t, link, cur);
-    //            dispose_subreq(other);
-    //        }
-    //        cur = next;
-    //    }
-    //
-    //    /* flush chunks */
-    //    int final_received = mrb_bool(mrb_iv_get(mrb, subreq->ref, mrb_intern_lit(mrb, "@finished")));
-    //    if (final_received)
-    //        flush_chunks(mrb, subreq, NULL, 0, H2O_SEND_STATE_FINAL);
-    //
-    //    return 1;
+    if ((subreq = mrb_data_check_get_ptr(mrb, body, &app_input_stream_type)) == NULL)
+        return NULL;
+
+    struct st_h2o_mruby_middleware_chunked_t *chunked = (void *)h2o_mruby_chunked_create(generator, body, sizeof(*chunked));
+    chunked->subreq = subreq;
+
+    chunked->super.start = do_chunked_start;
+    chunked->super.proceed = do_chunked_proceed;
+    chunked->super.close = NULL; /* never be called */
+    chunked->super.dispose = do_chunked_dispose;
+
+    subreq->shortcut = generator;
+
+    return &chunked->super;
 }

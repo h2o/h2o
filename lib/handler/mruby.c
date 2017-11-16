@@ -282,7 +282,8 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
         if (generator->req->_generator == NULL) {
             h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         } else {
-            h2o_mruby_send_chunked_close(generator);
+            assert(generator->chunked->close != NULL);
+            generator->chunked->close(generator);
         }
     }
     mrb->exc = NULL;
@@ -357,7 +358,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__block_request", block_request_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_blocking_requests", run_blocking_requests_callback);
 
-    h2o_mruby_send_chunked_init_context(shared_ctx);
+    h2o_mruby_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
     h2o_mruby_sleep_init_context(shared_ctx);
     h2o_mruby_middleware_init_context(shared_ctx);
@@ -684,7 +685,7 @@ static void on_generator_dispose(void *_generator)
         DATA_PTR(generator->refs.generator) = NULL;
 
     if (generator->chunked != NULL)
-        h2o_mruby_send_chunked_dispose(generator);
+        generator->chunked->dispose(generator);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -777,15 +778,10 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
 
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
-        mrb_value receiver = h2o_mruby_send_chunked_init(generator, body);
-        if (mrb->exc != NULL)
+        if (h2o_mruby_chunked_init(generator, body) != 0)
             return -1;
-        if (!mrb_nil_p(receiver)) {
-            mrb_value input = mrb_ary_new_capa(mrb, 2);
-            mrb_ary_set(mrb, input, 0, body);
-            mrb_ary_set(mrb, input, 1, generator->refs.generator);
-            h2o_mruby_run_fiber(generator->ctx, receiver, input, 0);
-        }
+        h2o_start_response(generator->req, &generator->super);
+        generator->chunked->start(generator);
         return 0;
     }
 

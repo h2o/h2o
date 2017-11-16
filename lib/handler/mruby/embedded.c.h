@@ -155,17 +155,9 @@
     "    @@next ||= App.new(true)\n"                                                                                               \
     "  end\n"                                                                                                                      \
     "  class AppInputStream\n"                                                                                                     \
-    "    def initialize\n"                                                                                                         \
-    "      @chunks = []\n"                                                                                                         \
-    "      @finished = false\n"                                                                                                    \
-    "    end\n"                                                                                                                    \
-    "    def each\n"                                                                                                               \
-    "      loop do\n"                                                                                                              \
-    "        while c = @chunks.shift\n"                                                                                            \
-    "          yield c\n"                                                                                                          \
-    "        end\n"                                                                                                                \
-    "        break if @finished\n"                                                                                                 \
-    "        _h2o_middleware_wait_chunk(self)\n"                                                                                   \
+    "    def each(&block)\n"                                                                                                       \
+    "      while chunk = _h2o_middleware_wait_chunk(self)\n"                                                                       \
+    "        yield chunk\n"                                                                                                        \
     "      end\n"                                                                                                                  \
     "    end\n"                                                                                                                    \
     "    def join\n"                                                                                                               \

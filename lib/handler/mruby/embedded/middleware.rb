@@ -37,17 +37,9 @@ module H2O
   end
 
   class AppInputStream
-    def initialize
-      @chunks = []
-      @finished = false
-    end
-    def each
-      loop do
-        while c = @chunks.shift
-          yield c
-        end
-        break if @finished
-        _h2o_middleware_wait_chunk(self)
+    def each(&block)
+      while chunk = _h2o_middleware_wait_chunk(self)
+        yield chunk
       end
     end
     def join
