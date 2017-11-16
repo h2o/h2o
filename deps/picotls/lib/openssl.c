@@ -35,7 +35,11 @@
 #include "picotls.h"
 #include "picotls/openssl.h"
 
-#define OPENSSL_1_0_API (OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER))
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER))
+#define OPENSSL_1_0_API 1
+#else
+#define OPENSSL_1_0_API 0
+#endif
 
 #if OPENSSL_1_0_API
 
@@ -857,7 +861,7 @@ int ptls_openssl_encrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
         goto Exit;
     }
     dst += clen;
-    if (!EVP_EncryptFinal(cctx, dst, &clen)) {
+    if (!EVP_EncryptFinal_ex(cctx, dst, &clen)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -936,7 +940,7 @@ int ptls_openssl_decrypt_ticket(ptls_buffer_t *buf, ptls_iovec_t src,
         goto Exit;
     }
     buf->off += clen;
-    if (!EVP_DecryptFinal(cctx, buf->base + buf->off, &clen)) {
+    if (!EVP_DecryptFinal_ex(cctx, buf->base + buf->off, &clen)) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
