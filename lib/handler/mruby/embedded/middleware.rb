@@ -33,7 +33,7 @@ module H2O
     @@next ||= App.new(false)
   end
   def self.reprocess
-    @@next ||= App.new(true)
+    @@reprocess ||= App.new(true)
   end
 
   class AppInputStream

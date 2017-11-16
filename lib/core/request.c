@@ -239,6 +239,8 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->res.content_length = SIZE_MAX;
     req->preferred_chunk_size = SIZE_MAX;
     req->content_length = SIZE_MAX;
+    req->remaining_delegations = conn->ctx->globalconf->max_delegations;
+    req->remaining_reprocesses = 5;
 
     if (src != NULL) {
         size_t i;
@@ -370,19 +372,19 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 
     /* check the delegation (or reprocess) counter */
     if (req->res_is_delegated) {
-        if (req->num_delegated == req->conn->ctx->globalconf->max_delegations) {
+        if (req->remaining_delegations == 0) {
             /* TODO log */
             h2o_send_error_502(req, "Gateway Error", "too many internal delegations", 0);
             return;
         }
-        ++req->num_delegated;
+        --req->remaining_delegations;
     } else {
-        if (req->num_reprocessed >= 5) {
+        if (req->remaining_reprocesses == 0) {
             /* TODO log */
             h2o_send_error_502(req, "Gateway Error", "too many internal reprocesses", 0);
             return;
         }
-        ++req->num_reprocessed;
+        --req->remaining_reprocesses;
     }
 
     /* handle the response using the handlers, if hostconf exists */

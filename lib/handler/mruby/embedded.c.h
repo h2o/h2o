@@ -152,7 +152,7 @@
     "    @@next ||= App.new(false)\n"                                                                                              \
     "  end\n"                                                                                                                      \
     "  def self.reprocess\n"                                                                                                       \
-    "    @@next ||= App.new(true)\n"                                                                                               \
+    "    @@reprocess ||= App.new(true)\n"                                                                                          \
     "  end\n"                                                                                                                      \
     "  class AppInputStream\n"                                                                                                     \
     "    def each(&block)\n"                                                                                                       \

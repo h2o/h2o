@@ -542,29 +542,29 @@ subtest 'fastcgi' => sub {
     }
 };
 
-# subtest 'infinite reprocess' => sub {
-#     my $server = spawn_h2o(sub {
-#         my ($port, $tls_port) = @_;
-#         << "EOT";
-# hosts:
-#   "127.0.0.1:$port":
-#     paths: &paths
-#       /:
-#         - mruby.handler: |
-#             proc {|env|
-#               H2O.reprocess.call(env)
-#             }
-#   "127.0.0.1:$tls_port":
-#     paths: *paths
-# EOT
-#     });
-#     run_with_curl($server, sub {
-#         my ($proto, $port, $curl) = @_;
-#         my ($status, $headers, $body) = get($proto, $port, $curl, '/');
-#         is $status, 502;
-#         is $body, "too many internal reprocesses";
-#     });
-# };
+subtest 'infinite reprocess' => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths: &paths
+      /:
+        - mruby.handler: |
+            proc {|env|
+              H2O.reprocess.call(env)
+            }
+  "127.0.0.1:$tls_port":
+    paths: *paths
+EOT
+    });
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($status, $headers, $body) = get($proto, $port, $curl, '/');
+        is $status, 502;
+        is $body, "too many internal delegations";
+    });
+};
 
 subtest 'preserve original request headers' => sub {
     my $tempdir = tempdir(CLEANUP => 1);

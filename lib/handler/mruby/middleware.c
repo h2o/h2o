@@ -383,7 +383,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 } while (0)
 
     /* retrieve env variables */
-    mrb_value scheme, method, script_name, path_info, query_string, rack_input, server_addr, server_port, remote_addr, remote_port, server_protocol, _dummy;
+    mrb_value scheme, method, script_name, path_info, query_string, rack_input, server_addr, server_port, remote_addr, remote_port, server_protocol, remaining_delegations, remaining_reprocesses, _dummy;
     RETRIEVE_ENV(RACK_URL_SCHEME, scheme, 1, 1);
     RETRIEVE_ENV(REQUEST_METHOD, method, 1, 1);
     RETRIEVE_ENV(SERVER_ADDR, server_addr, 0, 1);
@@ -403,6 +403,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     RETRIEVE_ENV(RACK_HIJACK_, _dummy, 0, 0);
     RETRIEVE_ENV(RACK_ERRORS, _dummy, 0, 0);
     RETRIEVE_ENV(SERVER_SOFTWARE, _dummy, 0, 0);
+    RETRIEVE_ENV(H2O_REMAINING_DELEGATIONS, remaining_delegations, 0, 0);
+    RETRIEVE_ENV(H2O_REMAINING_REPROCESSES, remaining_reprocesses, 0, 0);
 #undef RETRIEVE_ENV
 
     /* construct url and parse */
@@ -427,10 +429,10 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     }
 
     struct st_mruby_subreq_t *subreq = h2o_mem_alloc(sizeof(*subreq));
+    subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
 
     /* setup conn */
-    subreq->conn.super.ctx = ctx->shared->ctx;
     if (ctx->pathconf->host) {
         subreq->conn.super.hosts = h2o_mem_alloc_pool(&subreq->super.pool, sizeof(subreq->conn.super.hosts[0]) * 2);
         subreq->conn.super.hosts[0] = ctx->pathconf->host;
@@ -442,7 +444,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->conn.remote.len = parse_hostport(mrb, remote_addr, remote_port, &subreq->conn.remote.addr);
 
     subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
-    subreq->conn.super.id = 0; // TODO
+    subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
 
     static const h2o_conn_callbacks_t callbacks = {
         get_sockname,    /* stringify address */
@@ -464,9 +466,17 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     super->hostconf = hostconf;
     super->pathconf = ctx->pathconf;
     super->version = h2o_parse_protocol_version_string(h2o_iovec_init(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol)));
+
+    if (! mrb_nil_p(remaining_delegations)) {
+        mrb_int v = mrb_int(mrb, remaining_delegations);
+        super->remaining_delegations = (unsigned)(v < 0 ? 0 : v);
+    }
+    if (! mrb_nil_p(remaining_reprocesses)) {
+        mrb_int v = mrb_int(mrb, remaining_reprocesses);
+        super->remaining_reprocesses = (unsigned)(v < 0 ? 0 : v);
+    }
+
     //    subreq->super.error_logs = parent->error_logs; // TODO
-    //    super->num_delegated = 0; // TODO
-    //    super->num_reprocessed = 0; // TODO
     super->is_subrequest = 1;
 
     subreq->ctx = ctx;

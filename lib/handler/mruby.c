@@ -251,6 +251,8 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_RACK_INPUT, "rack.input");
     SET_LITERAL(H2O_MRUBY_LIT_RACK_ERRORS, "rack.errors");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
+    SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS, "h2o.remaining_delegations");
+    SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_REPROCESSES, "h2o.remaining_reprocesses");
     SET_STRING(H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE, mrb_str_new(mrb, server_name, server_name_len));
     SET_LITERAL(H2O_MRUBY_LIT_SEPARATOR_COMMA, ", ");
     SET_LITERAL(H2O_MRUBY_LIT_SEPARATOR_SEMICOLON, "; ");
@@ -621,6 +623,10 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     /* server name */
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_SOFTWARE),
                  mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE));
+
+    /* h2o specific */
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS), mrb_fixnum_value(generator->req->remaining_delegations));
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_H2O_REMAINING_REPROCESSES), mrb_fixnum_value(generator->req->remaining_reprocesses));
 
     return env;
 }
