@@ -203,24 +203,15 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
 
     int gc_arena = mrb_gc_arena_save(mrb);
 
-    mrb_value input = mrb_nil_value();
-    if (mrb_nil_p(subreq->ref)) {
-        /* at first call, mruby is blocking by H2O.next.call */
-        assert(! mrb_nil_p(subreq->receiver));
-        mrb_value resp = build_app_response(subreq);
-        subreq->ref = mrb_ary_entry(resp, 2);
-        input = resp;
-    } else if (! mrb_nil_p(subreq->receiver)) {
-        input = mrb_ary_shift(mrb, subreq->chunks);
-    }
-
     /* detach receiver */
     if (! mrb_nil_p(subreq->receiver)) {
         mrb_value receiver = subreq->receiver;
         mrb_gc_unregister(mrb, receiver);
         mrb_gc_protect(mrb, receiver);
         subreq->receiver = mrb_nil_value();
-        h2o_mruby_run_fiber(subreq->ctx, receiver, input, NULL);
+
+        mrb_value chunk = mrb_ary_shift(mrb, subreq->chunks);
+        h2o_mruby_run_fiber(subreq->ctx, receiver, chunk, NULL);
     }
 
     mrb_gc_arena_restore(mrb, gc_arena);
@@ -512,6 +503,34 @@ Failed:
     return NULL;
 }
 
+static void on_postfilter_setup_stream(h2o_req_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
+{
+    struct st_mruby_subreq_t *subreq = (void *)req;
+    mrb_state *mrb = subreq->ctx->shared->mrb;
+
+    assert(mrb_nil_p(subreq->ref));
+    assert(! mrb_nil_p(subreq->receiver));
+
+    /* at first call, mruby is blocking by H2O.next.call */
+
+    int gc_arena = mrb_gc_arena_save(mrb);
+
+    mrb_value resp = build_app_response(subreq);
+    subreq->ref = mrb_ary_entry(resp, 2);
+
+    /* detach receiver */
+    mrb_value receiver = subreq->receiver;
+    mrb_gc_unregister(mrb, receiver);
+    mrb_gc_protect(mrb, receiver);
+    subreq->receiver = mrb_nil_value();
+    h2o_mruby_run_fiber(subreq->ctx, receiver, resp, NULL);
+
+    mrb_gc_arena_restore(mrb, gc_arena);
+
+
+    h2o_setup_next_req_filter(self, req, slot);
+}
+
 static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
@@ -535,7 +554,9 @@ static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value in
 
     h2o_req_t *super = &subreq->super;
 
-    /* create final ostream for subreq */
+    /* create postfilter and final ostream for subreq */
+    h2o_req_filter_t *postfilter = (void *)h2o_add_req_filter(super, sizeof(*postfilter), 1);
+    postfilter->on_setup_ostream = on_postfilter_setup_stream;
     h2o_ostream_t *ostream = h2o_add_ostream(super, sizeof(*ostream), &super->_ostr_top);
     ostream->do_send = subreq_ostream_send;
 
