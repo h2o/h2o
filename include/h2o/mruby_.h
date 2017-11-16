@@ -177,6 +177,7 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
 void h2o_mruby_chunked_init_context(h2o_mruby_shared_context_t *ctx);
 int h2o_mruby_chunked_init(h2o_mruby_generator_t *generator, mrb_value body);
 h2o_mruby_chunked_t *h2o_mruby_chunked_create(h2o_mruby_generator_t *generator, mrb_value body, size_t sz);
+void h2o_mruby_chunked_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 void h2o_mruby_chunked_send_buffer(h2o_mruby_generator_t *generator, h2o_doublebuffer_t *db, h2o_buffer_t **input, int is_final);
 void h2o_mruby_chunked_close(h2o_mruby_generator_t *generator);
 

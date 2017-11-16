@@ -147,6 +147,13 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
             }
             mrb_hash_set(mrb, headers_hash, n, v);
         }
+        if (req->res.content_length != SIZE_MAX) {
+            h2o_token_t *token = H2O_TOKEN_CONTENT_LENGTH;
+            mrb_value n = mrb_str_new(mrb, token->buf.base, token->buf.len);
+            mrb_value v = h2o_mruby_to_str(mrb, mrb_fixnum_value(req->res.content_length));
+            mrb_hash_set(mrb, headers_hash, n, v);
+        }
+
         mrb_ary_set(mrb, resp, 1, headers_hash);
     }
 
@@ -185,7 +192,7 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
         subreq->chain_proceed = 1;
         if (mrb_nil_p(subreq->chunks)) {
             /* flushing chunks has been finished, so send directly */
-            h2o_send(subreq->shortcut->req, inbufs, inbufcnt, state);
+            h2o_mruby_chunked_send(subreq->shortcut, inbufs, inbufcnt, state);
         } else {
             /* flushing, buffer chunks again */
             push_chunks(subreq, inbufs, inbufcnt);
@@ -632,7 +639,7 @@ static void flush_chunks(struct st_mruby_subreq_t *subreq)
         mrb_ary_clear(mrb, subreq->chunks);
     }
 
-    h2o_send(generator->req, bufs, bufcnt, subreq->final_received ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    h2o_mruby_chunked_send(generator, bufs, bufcnt, subreq->final_received ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
 }
 
 void do_chunked_start(h2o_mruby_generator_t *generator)

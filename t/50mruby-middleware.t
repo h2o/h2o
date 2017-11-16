@@ -167,12 +167,34 @@ EOT
         });
     };
 
+    subtest 'content-length response body' => sub {
+        my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              resp = H2O.$mode.call(env)
+              resp
+            }
+EOT
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $headers->{'content-length'} || '', $files{$file}->{size};
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            $reprocess_check->($headers);
+            $live_check->($proto, $port, $curl);
+        });
+    };
+
     subtest 'stream response body' => sub {
         my $server = $spawner->(<< "EOT");
         - mruby.handler: |
             proc {|env|
               modify_env(env)
               resp = H2O.$mode.call(env)
+              resp[1].delete 'content-length'
               resp
             }
 EOT
@@ -464,23 +486,20 @@ EOT
             proc {|env|
               modify_env(env)
               head = env['rack.input'].read(3)
-              status, headers, body = H2O.$mode.call(env)
-              content = body.join
-              [status, headers, [head, content]]
+              H2O.$mode.call(env)
             }
 EOT
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
                 my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
                 is $status, 200;
-                is length($body), $files{$file}->{size};
-                is md5_hex($body), $files{$file}->{md5};
+                is length($body), $files{$file}->{size} - 3;
+                is md5_hex($body), md5_hex(substr($files{$file}->{content}, 3));
                 $reprocess_check->($headers);
                 $live_check->($proto, $port, $curl);
             });
         };
     }
-    else { pass; } # FIXME
 }
 
 subtest 'file' => sub {

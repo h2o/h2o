@@ -33,18 +33,33 @@ struct st_h2o_mruby_callback_chunked_t {
     h2o_buffer_t *receiving;
 };
 
-void h2o_mruby_chunked_send_buffer(h2o_mruby_generator_t *generator, h2o_doublebuffer_t *db, h2o_buffer_t **input, int is_final)
+void h2o_mruby_chunked_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
 
-    assert(db->bytes_inflight == 0);
-
     if (chunked->bytes_left != SIZE_MAX) {
-        if (chunked->bytes_left < (*input)->size) {
-            (*input)->size = chunked->bytes_left;
+        int i = 0;
+        for (i = 0; i != bufcnt && chunked->bytes_left > 0; ++i) {
+            if (chunked->bytes_left < bufs[i].len)
+                bufs[i].len = chunked->bytes_left;
+            chunked->bytes_left -= bufs[i].len;
         }
-        chunked->bytes_left -= (*input)->size;
+        bufcnt = i;
     }
+
+    if (state == H2O_SEND_STATE_FINAL) {
+        if (!(chunked->bytes_left == 0 || chunked->bytes_left == SIZE_MAX)) {
+            /* send error if the length of content served is smaller than content-length header value */
+            state = H2O_SEND_STATE_ERROR;
+        }
+    }
+
+    h2o_send(generator->req, bufs, bufcnt, state);
+}
+
+void h2o_mruby_chunked_send_buffer(h2o_mruby_generator_t *generator, h2o_doublebuffer_t *db, h2o_buffer_t **input, int is_final)
+{
+    assert(db->bytes_inflight == 0);
 
     h2o_iovec_t buf = h2o_doublebuffer_prepare(db, input, generator->req->preferred_chunk_size);
     size_t bufcnt = 1;
@@ -53,19 +68,14 @@ void h2o_mruby_chunked_send_buffer(h2o_mruby_generator_t *generator, h2o_doubleb
     if (is_final && buf.len == db->buf->size && (*input)->size == 0) {
         if (buf.len == 0)
             --bufcnt;
-        /* send error if the length of content served is smaller than content-length header value */
-        if (chunked->bytes_left == 0 || chunked->bytes_left == SIZE_MAX) {
-            send_state = H2O_SEND_STATE_FINAL;
-        } else {
-            send_state = H2O_SEND_STATE_ERROR;
-        }
+        send_state = H2O_SEND_STATE_FINAL;
     } else {
         if (buf.len == 0)
             return;
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
-    h2o_send(generator->req, &buf, bufcnt, send_state);
+    h2o_mruby_chunked_send(generator, &buf, bufcnt, send_state);
 }
 
 void h2o_mruby_chunked_close(h2o_mruby_generator_t *generator)
