@@ -113,6 +113,16 @@ EOT
 ?>
 
 <?
+$ctx->{directive}->(
+    name    => "proxy.emit-missing-date-header",
+    levels  => [ qw(global) ],
+    since   => "2.3",
+    default => q{proxy.emit-missing-date-header: ON},
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should add a <code>date</date> header to the response, if that header is missing from the upstream response.",
+)->(sub {})
+?>
+
+<?
 for my $action (qw(add append merge set setifempty unset)) {
     $ctx->{directive}->(
         name    => "proxy.header.$action",

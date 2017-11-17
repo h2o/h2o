@@ -421,6 +421,10 @@ struct st_h2o_globalconf_t {
          */
         unsigned emit_via_header : 1;
         /**
+         * a boolean flag if set to true, instructs the proxy to emit a date header, if it's missing from the upstream response
+         */
+        unsigned emit_missing_date_header : 1;
+        /**
          * global socketpool
          */
         h2o_socketpool_t global_socketpool;
