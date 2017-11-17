@@ -60,6 +60,7 @@ enum {
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
     H2O_MRUBY_GENERATOR_CLASS,
+    H2O_MRUBY_ERROR_STREAM_CLASS,
     H2O_MRUBY_APP_INPUT_STREAM_CLASS,
 
     /* used by chunked.c */
@@ -125,14 +126,22 @@ struct st_h2o_mruby_chunked_t {
     void (*dispose)(h2o_mruby_generator_t *generator);
 };
 
+typedef struct st_h2o_mruby_error_stream_t {
+    h2o_mruby_context_t *ctx;
+    h2o_mruby_generator_t *generator;
+    h2o_iovec_t path;
+} h2o_mruby_error_stream_t;
+
 typedef struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
     mrb_value rack_input;
     h2o_mruby_chunked_t *chunked;
+    h2o_mruby_error_stream_t *error_stream;
     struct {
         mrb_value generator;
+        mrb_value error_stream;
     } refs;
 } h2o_mruby_generator_t;
 
@@ -198,5 +207,6 @@ h2o_mruby_chunked_t *h2o_mruby_middleware_chunked_create(h2o_mruby_generator_t *
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
 
 h2o_mruby_generator_t *h2o_mruby_get_generator(mrb_state *mrb, mrb_value obj);
+h2o_mruby_error_stream_t *h2o_mruby_get_error_stream(mrb_state *mrb, mrb_value obj);
 
 #endif

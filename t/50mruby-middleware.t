@@ -137,7 +137,7 @@ EOT
         lives_ok {
             my ($status, $headers, $body) = get($proto, $port, $curl, '/live-check');
             is $status, 200, 'live status check';
-        }, 'live check';
+        } 'live check';
     };
     my $reprocess_check = sub {
         my ($headers) = @_;

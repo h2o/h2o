@@ -104,3 +104,24 @@ module Kernel
   end
 
 end
+
+module H2O
+
+  class ErrorStream
+
+    def write(msg)
+      write_with_context(msg, nil)
+    end
+
+    def puts(*msgs)
+      msgs.each {|msg| write msg }
+      nil
+    end
+
+    def flush
+      self
+    end
+
+  end
+
+end

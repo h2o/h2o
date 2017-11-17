@@ -60,12 +60,29 @@ static void on_gc_dispose_generator(mrb_state *mrb, void *_generator)
     generator->refs.generator = mrb_nil_value();
 }
 
+static void on_gc_dispose_error_stream(mrb_state *mrb, void *_error_stream)
+{
+    h2o_mruby_error_stream_t *error_stream = _error_stream;
+    if (error_stream == NULL)
+        return;
+    if (error_stream->generator != NULL)
+        error_stream->generator->refs.error_stream = mrb_nil_value();
+    free(error_stream);
+}
+
 const static struct mrb_data_type generator_type = {"generator", on_gc_dispose_generator};
+const static struct mrb_data_type error_stream_type = {"error_stream", on_gc_dispose_error_stream};
 
 h2o_mruby_generator_t *h2o_mruby_get_generator(mrb_state *mrb, mrb_value obj)
 {
     h2o_mruby_generator_t *generator = mrb_data_check_get_ptr(mrb, obj, &generator_type);
     return generator;
+}
+
+h2o_mruby_error_stream_t *h2o_mruby_get_error_stream(mrb_state *mrb, mrb_value obj)
+{
+    h2o_mruby_error_stream_t *error_stream = mrb_data_check_get_ptr(mrb, obj, &error_stream_type);
+    return error_stream;
 }
 
 void h2o_mruby_setup_globals(mrb_state *mrb)
@@ -333,6 +350,41 @@ mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value inp
     return mrb_nil_value();
 }
 
+static mrb_value error_stream_write_with_context_method(mrb_state *mrb, mrb_value self)
+{
+    mrb_value msg;
+    mrb_value context;
+
+    /* parse args */
+    mrb_get_args(mrb, "oH!", &msg, &context);
+    msg = h2o_mruby_to_str(mrb, msg);
+
+    mrb_value module = mrb_nil_p(context) ? mrb_nil_value() : mrb_hash_get(mrb, context, mrb_symbol_value(mrb_intern_lit(mrb, "module")));
+    mrb_value path = mrb_nil_p(context) ? mrb_nil_value() : mrb_hash_get(mrb, context, mrb_symbol_value(mrb_intern_lit(mrb, "path")));
+
+    h2o_mruby_error_stream_t *error_stream;
+    if ((error_stream = h2o_mruby_get_error_stream(mrb, self)) == NULL) {
+        mrb_raise(mrb, E_ARGUMENT_ERROR, "ErrorStream#write wrong self");
+    }
+
+    h2o_req_error_log_t error_log;
+    error_log.msg = h2o_iovec_init(RSTRING_PTR(msg), RSTRING_LEN(msg));
+    error_log.module = mrb_nil_p(module) ? H2O_MRUBY_MODULE_NAME : mrb_str_to_cstr(mrb, module);
+    error_log.path = mrb_nil_p(module) ? error_stream->path : h2o_iovec_init(RSTRING_PTR(path), RSTRING_LEN(path));
+
+    if (error_stream->generator != NULL) {
+        h2o_req_t *req = error_stream->generator->req;
+        h2o_vector_reserve(&req->pool, &req->error.logs, req->error.logs.size + 1);
+        req->error.logs.entries[req->error.logs.size++] = error_log;
+    }
+
+    if (error_stream->ctx->pathconf->error_log.emit_request_errors) {
+        h2o_req_emit_error_log(error_log);
+    }
+
+    return mrb_fixnum_value(RSTRING_LEN(msg));
+}
+
 static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 {
     /* init mruby in every thread */
@@ -368,6 +420,10 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     struct RClass *module = mrb_define_module(shared_ctx->mrb, "H2O");
     struct RClass *generator_klass = mrb_define_class_under(shared_ctx->mrb, module, "Generator", shared_ctx->mrb->object_class);
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_GENERATOR_CLASS, mrb_obj_value(generator_klass));
+
+    struct RClass *error_stream_class = mrb_class_get_under(shared_ctx->mrb, module, "ErrorStream");
+    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_ERROR_STREAM_CLASS, mrb_obj_value(error_stream_class));
+    mrb_define_method(shared_ctx->mrb, error_stream_class, "write_with_context", error_stream_write_with_context_method, MRB_ARGS_REQ(2));
 
     return shared_ctx;
 }
@@ -617,8 +673,10 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_MULTIPROCESS), mrb_true_value());
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_RUN_ONCE), mrb_false_value());
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_HIJACK_), mrb_false_value());
-    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_ERRORS),
-                 mrb_gv_get(mrb, mrb_intern_lit(mrb, "$stderr")));
+
+    mrb_value error_stream = h2o_mruby_create_data_instance(shared->mrb, mrb_ary_entry(shared->constants, H2O_MRUBY_ERROR_STREAM_CLASS), generator->error_stream, &error_stream_type);
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_ERRORS), error_stream);
+    generator->refs.error_stream = error_stream;
 
     /* server name */
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_SOFTWARE),
@@ -690,6 +748,8 @@ static void on_generator_dispose(void *_generator)
     if (!mrb_nil_p(generator->refs.generator))
         DATA_PTR(generator->refs.generator) = NULL;
 
+    generator->error_stream->generator = NULL;
+
     if (generator->chunked != NULL)
         generator->chunked->dispose(generator);
 }
@@ -709,6 +769,11 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->ctx = ctx;
     generator->rack_input = mrb_nil_value();
     generator->chunked = NULL;
+
+    generator->error_stream = h2o_mem_alloc(sizeof(*generator->error_stream));
+    generator->error_stream->ctx = ctx;
+    generator->error_stream->generator = generator;
+    generator->error_stream->path = req->path;
 
     mrb_value env = build_env(generator);
 
