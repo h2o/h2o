@@ -32,7 +32,6 @@
 struct st_h2o_mruby_channel_context_t {
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
-    mrb_value channel;
 };
 
 static void attach_receiver(struct st_h2o_mruby_channel_context_t *ctx, mrb_value receiver)
@@ -55,17 +54,8 @@ static mrb_value detach_receiver(struct st_h2o_mruby_channel_context_t *ctx)
 static void on_gc_dispose_channel(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_channel_context_t *ctx = _ctx;
-    if (ctx != NULL) {
-        ctx->channel = mrb_nil_value();
-        ctx->receiver = mrb_nil_value();
-
-        if (!mrb_nil_p(ctx->channel))
-            DATA_PTR(ctx->channel) = NULL;
-        if (!mrb_nil_p(ctx->receiver))
-            DATA_PTR(ctx->receiver) = NULL;
-
-        free(ctx);
-    }
+    assert(ctx != NULL); /* ctx can only be disposed by gc, so data binding has been never removed */
+    free(ctx);
 }
 
 const static struct mrb_data_type channel_type = {"channel", on_gc_dispose_channel};
@@ -84,8 +74,7 @@ static mrb_value channel_initialize_method(mrb_state *mrb, mrb_value self)
 
     mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@queue"), mrb_ary_new(mrb));
 
-    DATA_PTR(self) = ctx;
-    DATA_TYPE(self) = &channel_type;
+    mrb_data_init(self, ctx, &channel_type);
 
     return self;
 }
