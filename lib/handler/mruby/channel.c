@@ -78,6 +78,7 @@ static mrb_value channel_initialize_method(mrb_state *mrb, mrb_value self)
     ctx = h2o_mem_alloc(sizeof(*ctx));
 
     memset(ctx, 0, sizeof(*ctx));
+    assert(shared_ctx->current_context != NULL);
     ctx->ctx = shared_ctx->current_context;
     ctx->receiver = mrb_nil_value();
 
@@ -96,9 +97,6 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
 
     if (!mrb_nil_p(ctx->receiver)) {
         h2o_mruby_run_fiber(ctx->ctx, detach_receiver(ctx), mrb_nil_value(), NULL);
-        h2o_mruby_shared_context_t *shared_ctx = mrb->ud;
-        /* When it's called in task, retrieve current_context for next action in task */
-        shared_ctx->current_context = ctx->ctx;
     }
 
     return mrb_nil_value();

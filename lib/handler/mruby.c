@@ -835,6 +835,7 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
 
 void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value input, int *is_delegate)
 {
+    h2o_mruby_context_t *old_ctx = ctx->shared->current_context;
     ctx->shared->current_context = ctx;
 
     mrb_state *mrb = ctx->shared->mrb;
@@ -916,7 +917,7 @@ GotException:
     handle_exception(ctx, generator);
 
 Exit:
-    ctx->shared->current_context = NULL;
+    ctx->shared->current_context = old_ctx;
 }
 
 h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_config_vars_t *vars)
