@@ -1133,11 +1133,6 @@ struct st_h2o_req_t {
     h2o_mem_pool_t pool;
 };
 
-typedef struct st_h2o_subreq_t {
-    h2o_req_t super;
-    h2o_conn_t conn;
-} h2o_subreq_t;
-
 typedef struct st_h2o_accept_ctx_t {
     h2o_context_t *ctx;
     h2o_hostconf_t **hosts;
