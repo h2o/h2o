@@ -336,6 +336,10 @@ mrb_value run_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mr
 
     mrb_value resumer = mrb_ary_entry(args, 0);
 
+    /*
+     * swap receiver to run child fiber immediately, while storing main fiber resumer
+     * which will be called after the child fiber is yielded
+     */
     mrb_ary_push(mrb, ctx->resumers, *receiver);
     *receiver = resumer;
     *run_again = 1;
@@ -369,7 +373,6 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__send_error", send_error_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__block_request", block_request_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_blocking_requests", run_blocking_requests_callback);
-
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_child_fiber", run_child_fiber_callback);
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
