@@ -30,7 +30,7 @@ module Kernel
           end
           _h2o_send_chunk_eos(generator)
         rescue => e
-          Fiber.yield([-1, e, generator])
+          _h2o__send_error(e, generator)
         end
       end
       fiber.resume

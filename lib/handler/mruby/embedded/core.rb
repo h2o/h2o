@@ -32,12 +32,12 @@ module Kernel
       # or block doesn't have asynchronous callback
       [0, nil, nil]
     end
-    Fiber.yield([H2O_CALLBACK_ID_RUN_CHILD_FIBER, proc { fiber.resume }, [_h2o_create_resumer()]])
+    _h2o__run_child_fiber(proc { fiber.resume })
   end
 
-  def _h2o_define_callback(name, id)
+  def _h2o_define_callback(name, callback_id)
     Kernel.define_method(name) do |*args|
-      ret = Fiber.yield([ id, _h2o_create_resumer(), args ])
+      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])
       if ret.kind_of? Exception
         raise ret
       end
@@ -48,7 +48,7 @@ module Kernel
   def _h2o_create_resumer()
     me = Fiber.current
     Proc.new do |v|
-    me.resume(v)
+      me.resume(v)
     end
   end
 
@@ -62,13 +62,9 @@ module Kernel
     end
   end
 
-  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1
-  H2O_CALLBACK_ID_CONFIGURING_APP = -2
-  H2O_CALLBACK_ID_CONFIGURED_APP = -3
-  H2O_CALLBACK_ID_RUN_CHILD_FIBER  = -777
   def _h2o_prepare_app(conf)
     app = Proc.new do |req|
-      [H2O_CALLBACK_ID_CONFIGURING_APP]
+      _h2o__block_request(req)
     end
 
     cached = nil
@@ -84,7 +80,7 @@ module Kernel
             end
           rescue => e
             cached = self_fiber
-            (req, generator) = Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e, generator])
+            (req, generator) = _h2o__send_error(e, generator)
           end
         end
       end
@@ -98,12 +94,12 @@ module Kernel
           H2O::ConfigurationContext.reset
           app = _h2o_eval_conf(conf)
           H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)
-          [H2O_CALLBACK_ID_CONFIGURED_APP]
+          _h2o__run_blocking_requests()
         rescue => e
           app = Proc.new do |req|
             [500, {}, ['Internal Server Error']]
           end
-          [H2O_CALLBACK_ID_CONFIGURED_APP, e]
+          _h2o__run_blocking_requests(e)
         end
       end
       fiber.resume

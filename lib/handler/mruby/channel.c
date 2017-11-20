@@ -25,6 +25,7 @@
 #include <mruby/hash.h>
 #include <mruby/string.h>
 #include <mruby/class.h>
+#include <mruby/variable.h>
 #include "h2o/mruby_.h"
 #include "embedded.c.h"
 
@@ -103,7 +104,7 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value wait_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
 
@@ -112,7 +113,7 @@ mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *mctx, mrb_value 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &channel_type)) == NULL)
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Channel#shift wrong self");
 
-    attach_receiver(ctx, receiver);
+    attach_receiver(ctx, *receiver);
 
     return mrb_nil_value();
 }
@@ -132,5 +133,5 @@ void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *shared_ctx)
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHANNEL_CLASS, mrb_obj_value(klass));
     mrb_define_method(mrb, klass, "initialize", channel_initialize_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, klass, "_notify", channel_notify_method, MRB_ARGS_NONE());
-    h2o_mruby_define_callback(mrb, "_h2o__channel_wait", H2O_MRUBY_CALLBACK_ID_CHANNEL_WAIT);
+    h2o_mruby_define_callback(mrb, "_h2o__channel_wait", wait_callback);
 }
