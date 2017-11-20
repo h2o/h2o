@@ -10,13 +10,6 @@
     "  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                         \
     "end\n"                                                                                                                        \
     "module Kernel\n"                                                                                                              \
-    "  def task(&block)\n"                                                                                                         \
-    "    fiber = Fiber.new do\n"                                                                                                   \
-    "      block.call\n"                                                                                                           \
-    "      _h2o__finish_child_fiber()\n"                                                                                           \
-    "    end\n"                                                                                                                    \
-    "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
-    "  end\n"                                                                                                                      \
     "  def _h2o_define_callback(name, callback_id)\n"                                                                              \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
     "      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])\n"                                                      \
@@ -85,6 +78,13 @@
     "  end\n"                                                                                                                      \
     "  def sleep(*sec)\n"                                                                                                          \
     "    _h2o__sleep(*sec)\n"                                                                                                      \
+    "  end\n"                                                                                                                      \
+    "  def task(&block)\n"                                                                                                         \
+    "    fiber = Fiber.new do\n"                                                                                                   \
+    "      block.call\n"                                                                                                           \
+    "      _h2o__finish_child_fiber()\n"                                                                                           \
+    "    end\n"                                                                                                                    \
+    "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
     "  end\n"                                                                                                                      \
     "end\n"
 

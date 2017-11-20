@@ -25,13 +25,6 @@ def _h2o_eval_conf(__h2o_conf)
 end
 
 module Kernel
-  def task(&block)
-    fiber = Fiber.new do
-      block.call
-      _h2o__finish_child_fiber()
-    end
-    _h2o__run_child_fiber(proc { fiber.resume })
-  end
 
   def _h2o_define_callback(name, callback_id)
     Kernel.define_method(name) do |*args|
@@ -108,6 +101,14 @@ module Kernel
 
   def sleep(*sec)
     _h2o__sleep(*sec)
+  end
+
+  def task(&block)
+    fiber = Fiber.new do
+      block.call
+      _h2o__finish_child_fiber()
+    end
+    _h2o__run_child_fiber(proc { fiber.resume })
   end
 
 end
