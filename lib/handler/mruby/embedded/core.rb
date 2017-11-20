@@ -28,9 +28,7 @@ module Kernel
   def task(&block)
     fiber = Fiber.new do
       block.call
-      # For when it's called in h2o_mruby_run_fiber and return output,
-      # or block doesn't have asynchronous callback
-      [0, nil, nil]
+      _h2o__finish_child_fiber()
     end
     _h2o__run_child_fiber(proc { fiber.resume })
   end

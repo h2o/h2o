@@ -347,6 +347,12 @@ mrb_value run_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mr
     return mrb_nil_value();
 }
 
+mrb_value finish_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+{
+    /* do nothing */
+    return mrb_nil_value();
+}
+
 static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 {
     /* init mruby in every thread */
@@ -374,6 +380,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__block_request", block_request_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_blocking_requests", run_blocking_requests_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_child_fiber", run_child_fiber_callback);
+    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__finish_child_fiber", finish_child_fiber_callback);
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);

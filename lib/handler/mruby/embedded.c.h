@@ -13,9 +13,7 @@
     "  def task(&block)\n"                                                                                                         \
     "    fiber = Fiber.new do\n"                                                                                                   \
     "      block.call\n"                                                                                                           \
-    "      # For when it's called in h2o_mruby_run_fiber and return output,\n"                                                     \
-    "      # or block doesn't have asynchronous callback\n"                                                                        \
-    "      [0, nil, nil]\n"                                                                                                        \
+    "      _h2o__finish_child_fiber()\n"                                                                                           \
     "    end\n"                                                                                                                    \
     "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
     "  end\n"                                                                                                                      \
