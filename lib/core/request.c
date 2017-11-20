@@ -239,7 +239,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->res.content_length = SIZE_MAX;
     req->preferred_chunk_size = SIZE_MAX;
     req->content_length = SIZE_MAX;
-    req->remaining_delegations = conn->ctx->globalconf->max_delegations;
+    req->remaining_delegations = conn == NULL ? 0 : conn->ctx->globalconf->max_delegations;
     req->remaining_reprocesses = 5;
 
     if (src != NULL) {
