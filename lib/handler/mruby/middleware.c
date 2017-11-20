@@ -293,7 +293,7 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
     switch(res->ai_family) {
         case AF_INET:
         case AF_INET6:
-            *ss = *((struct sockaddr_storage *)res->ai_addr);
+            memcpy(ss, res->ai_addr, res->ai_addrlen);
             break;
         default:
             goto Error;
@@ -429,6 +429,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     }
 
     struct st_mruby_subreq_t *subreq = h2o_mem_alloc(sizeof(*subreq));
+    memset(&subreq->conn, 0, sizeof(subreq->conn));
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
 
