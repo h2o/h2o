@@ -85,7 +85,9 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
     ctx = mrb_data_check_get_ptr(mrb, self, &channel_type);
 
     if (!mrb_nil_p(ctx->receiver)) {
+        int gc_arena = mrb_gc_arena_save(mrb);
         h2o_mruby_run_fiber(ctx->ctx, detach_receiver(ctx), mrb_nil_value(), NULL);
+        mrb_gc_arena_restore(mrb, gc_arena);
     }
 
     return mrb_nil_value();
