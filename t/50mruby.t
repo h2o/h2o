@@ -586,7 +586,7 @@ EOT
     is $body, 'handler2, /abc, /def/../ghi', 'no leading slash 3';
 
     (undef, $body) = $nc->('xyz');
-    is $body, 'handler1, , /xyz', 'no leading slash 4';
+    is $body, 'handler1, , xyz', 'no leading slash 4';
 
     (undef, $body) = $nc->('');
     is $body, 'handler1, , ', 'empty path';

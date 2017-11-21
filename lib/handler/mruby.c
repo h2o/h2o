@@ -511,24 +511,17 @@ static mrb_value build_path_info(mrb_state *mrb, h2o_req_t *req, size_t confpath
     assert(req->path_normalized.len > confpath_len_wo_slash);
 
     size_t path_info_start, path_info_end = req->query_at != SIZE_MAX ? req->query_at : req->path.len;
-    int add_leading_slash = 0;
 
     if (req->norm_indexes == NULL) {
         path_info_start = confpath_len_wo_slash;
     } else if (req->norm_indexes[0] == 0 && confpath_len_wo_slash == 0) {
         /* path without leading slash */
         path_info_start = 0;
-        add_leading_slash = 1;
     } else {
         path_info_start = req->norm_indexes[confpath_len_wo_slash] - 1;
     }
 
-    mrb_value path_info = mrb_str_new(mrb, req->path.base + path_info_start, path_info_end - path_info_start);
-    if (add_leading_slash) {
-        path_info = mrb_str_cat_str(mrb, mrb_str_new_lit(mrb, "/"), path_info);
-    }
-
-    return path_info;
+    return mrb_str_new(mrb, req->path.base + path_info_start, path_info_end - path_info_start);
 }
 
 static mrb_value build_env(h2o_mruby_generator_t *generator)
