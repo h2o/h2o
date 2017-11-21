@@ -887,10 +887,6 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         mrb_gc_protect(mrb, input);
     }
 
-    if (status == 0) {
-        goto Exit;
-    }
-
     if (!(100 <= status && status <= 999)) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "status returned from rack app is out of range"));
         goto GotException;
