@@ -320,6 +320,10 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "key (representing the virtual path) must be a string");
             return -1;
         }
+        if (strlen(key->data.scalar) == 0) {
+            h2o_configurator_errprintf(cmd, key, "key (representing the virtual path) must not be an empty string");
+            return -1;
+        }
     }
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
           (int (*)(const void *, const void *))sort_from_longer_paths);
