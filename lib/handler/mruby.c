@@ -544,7 +544,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                  mrb_str_new(mrb, generator->req->method.base, generator->req->method.len));
 
     size_t confpath_len_wo_slash = generator->req->pathconf->path.len;
-    if (generator->req->pathconf->path.len != 0 && generator->req->pathconf->path.base[generator->req->pathconf->path.len - 1] == '/')
+    if (generator->req->pathconf->path.base[generator->req->pathconf->path.len - 1] == '/')
         --confpath_len_wo_slash;
     assert(confpath_len_wo_slash <= generator->req->path_normalized.len);
 
