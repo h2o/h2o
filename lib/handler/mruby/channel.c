@@ -25,13 +25,13 @@
 #include <mruby/hash.h>
 #include <mruby/string.h>
 #include <mruby/class.h>
+#include <mruby/variable.h>
 #include "h2o/mruby_.h"
 #include "embedded.c.h"
 
 struct st_h2o_mruby_channel_context_t {
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
-    mrb_value channel;
 };
 
 static void attach_receiver(struct st_h2o_mruby_channel_context_t *ctx, mrb_value receiver)
@@ -54,17 +54,8 @@ static mrb_value detach_receiver(struct st_h2o_mruby_channel_context_t *ctx)
 static void on_gc_dispose_channel(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_channel_context_t *ctx = _ctx;
-    if (ctx != NULL) {
-        ctx->channel = mrb_nil_value();
-        ctx->receiver = mrb_nil_value();
-
-        if (!mrb_nil_p(ctx->channel))
-            DATA_PTR(ctx->channel) = NULL;
-        if (!mrb_nil_p(ctx->receiver))
-            DATA_PTR(ctx->receiver) = NULL;
-
-        free(ctx);
-    }
+    assert(ctx != NULL); /* ctx can only be disposed by gc, so data binding has been never removed */
+    free(ctx);
 }
 
 const static struct mrb_data_type channel_type = {"channel", on_gc_dispose_channel};
@@ -77,13 +68,13 @@ static mrb_value channel_initialize_method(mrb_state *mrb, mrb_value self)
     ctx = h2o_mem_alloc(sizeof(*ctx));
 
     memset(ctx, 0, sizeof(*ctx));
+    assert(shared_ctx->current_context != NULL);
     ctx->ctx = shared_ctx->current_context;
     ctx->receiver = mrb_nil_value();
 
     mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@queue"), mrb_ary_new(mrb));
 
-    DATA_PTR(self) = ctx;
-    DATA_TYPE(self) = &channel_type;
+    mrb_data_init(self, ctx, &channel_type);
 
     return self;
 }
@@ -94,16 +85,15 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
     ctx = mrb_data_check_get_ptr(mrb, self, &channel_type);
 
     if (!mrb_nil_p(ctx->receiver)) {
+        int gc_arena = mrb_gc_arena_save(mrb);
         h2o_mruby_run_fiber(ctx->ctx, detach_receiver(ctx), mrb_nil_value(), NULL);
-        h2o_mruby_shared_context_t *shared_ctx = mrb->ud;
-        /* When it's called in task, retrieve current_context for next action in task */
-        shared_ctx->current_context = ctx->ctx;
+        mrb_gc_arena_restore(mrb, gc_arena);
     }
 
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value wait_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
 
@@ -112,7 +102,7 @@ mrb_value h2o_mruby_channel_shift_callback(h2o_mruby_context_t *mctx, mrb_value 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &channel_type)) == NULL)
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Channel#shift wrong self");
 
-    attach_receiver(ctx, receiver);
+    attach_receiver(ctx, *receiver);
 
     return mrb_nil_value();
 }
@@ -132,5 +122,5 @@ void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *shared_ctx)
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHANNEL_CLASS, mrb_obj_value(klass));
     mrb_define_method(mrb, klass, "initialize", channel_initialize_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, klass, "_notify", channel_notify_method, MRB_ARGS_NONE());
-    h2o_mruby_define_callback(mrb, "_h2o__channel_wait", H2O_MRUBY_CALLBACK_ID_CHANNEL_WAIT);
+    h2o_mruby_define_callback(mrb, "_h2o__channel_wait", wait_callback);
 }

@@ -150,4 +150,72 @@ EOT
     is $stdout, "123456";
 };
 
+subtest 'nested task' => sub {
+    subtest 'serial' => sub {
+        my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            ch = H2O::Channel.new
+            task {
+              ch.push '1'
+              task {
+                ch.push '2'
+                ch.push '3'
+              }
+              ch.push '4'
+              task {
+                ch.push '5'
+                ch.push '6'
+              }
+              ch.push '7'
+            }
+            res = ''
+            7.times { res << ch.shift }
+            [200, {}, [res]]
+          }
+EOT
+        (undef, my $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $stdout, "1234567";
+    };
+
+    subtest 'parallel' => sub {
+        my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            ch = H2O::Channel.new
+            task {
+              ch.push '1'
+              task {
+                sleep 0.2
+                ch.push '2'
+                sleep 0.2
+                ch.push '3'
+              }
+              ch.push '4'
+              task {
+                sleep 0.1
+                ch.push '5'
+                sleep 0.2
+                ch.push '6'
+              }
+              ch.push '7'
+            }
+            res = ''
+            7.times { res << ch.shift }
+            [200, {}, [res]]
+          }
+EOT
+        (undef, my $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        is $stdout, "1475263";
+    };
+};
+
 done_testing();

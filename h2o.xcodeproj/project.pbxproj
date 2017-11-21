@@ -67,7 +67,6 @@
 		105534EB1A42A87E00627ECB /* _templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EA1A42A87E00627ECB /* _templates.c.h */; };
 		105534ED1A42AD5E00627ECB /* templates.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 105534EC1A42AD5E00627ECB /* templates.c.h */; };
 		105534EF1A440FC800627ECB /* config.c in Sources */ = {isa = PBXBuildFile; fileRef = 105534EE1A440FC800627ECB /* config.c */; };
-		10583BF11AE5A37B004A3AD6 /* Makefile in Sources */ = {isa = PBXBuildFile; fileRef = 10583BED1AE5A37B004A3AD6 /* Makefile */; };
 		10583C001AEF368A004A3AD6 /* 293.c in Sources */ = {isa = PBXBuildFile; fileRef = 10583BFF1AEF368A004A3AD6 /* 293.c */; };
 		1058C87D1AA41789008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 1058C87C1AA41789008D6180 /* headers.c */; };
 		1058C87E1AA41A1F008D6180 /* headers.c in Sources */ = {isa = PBXBuildFile; fileRef = 10AA2EBD1AA019D8004322AC /* headers.c */; };
@@ -256,6 +255,7 @@
 		10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */ = {isa = PBXBuildFile; fileRef = 10FEF24D1D6FC8E200E11B1D /* gkc.h */; };
 		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
 		7D0285C91EF422D40094292B /* sleep.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0285C81EF422D40094292B /* sleep.c */; };
+		7D9FA53A1FC323B200189F88 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FA5381FC323AC00189F88 /* channel.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
@@ -818,6 +818,7 @@
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
+		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
@@ -967,6 +968,7 @@
 				100A55141C30C5BC00C4E3E0 /* chunked.c */,
 				100A550E1C2BB15100C4E3E0 /* http_request.c */,
 				7D0285C81EF422D40094292B /* sleep.c */,
+				7D9FA5381FC323AC00189F88 /* channel.c */,
 			);
 			path = mruby;
 			sourceTree = "<group>";
@@ -2201,7 +2203,6 @@
 				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
 				106C22F81C040F6400405689 /* tunnel.c in Sources */,
-				10583BF11AE5A37B004A3AD6 /* Makefile in Sources */,
 				107923CD19A3217300C52AD6 /* memory.c in Sources */,
 				107923CC19A3217300C52AD6 /* context.c in Sources */,
 				10C45D561CFE9B300096DB06 /* requests.c in Sources */,
@@ -2424,6 +2425,7 @@
 				107E33F81C7EAF5A00AEF5F8 /* compress_fragment.cc in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
 				E9708B721E52C82A0029E0A5 /* errordoc.c in Sources */,
+				7D9FA53A1FC323B200189F88 /* channel.c in Sources */,
 				107E33F51C7EAF5A00AEF5F8 /* block_splitter.cc in Sources */,
 				107E34031C7EAF9300AEF5F8 /* encode.cc in Sources */,
 				E9708B4B1E52C7DF0029E0A5 /* multithread.c in Sources */,
