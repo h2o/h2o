@@ -433,6 +433,27 @@ static int build_env_sort_header_cb(const void *_x, const void *_y)
     return x < y ? -1 : 1;
 }
 
+static mrb_value build_path_info(mrb_state *mrb, h2o_req_t *req, size_t confpath_len_wo_slash)
+{
+    if (req->path_normalized.len == confpath_len_wo_slash)
+        return mrb_str_new_lit(mrb, "");
+
+    assert(req->path_normalized.len > confpath_len_wo_slash);
+
+    size_t path_info_start, path_info_end = req->query_at != SIZE_MAX ? req->query_at : req->path.len;
+
+    if (req->norm_indexes == NULL) {
+        path_info_start = confpath_len_wo_slash;
+    } else if (req->norm_indexes[0] == 0 && confpath_len_wo_slash == 0) {
+        /* path without leading slash */
+        path_info_start = 0;
+    } else {
+        path_info_start = req->norm_indexes[confpath_len_wo_slash] - 1;
+    }
+
+    return mrb_str_new(mrb, req->path.base + path_info_start, path_info_end - path_info_start);
+}
+
 static mrb_value build_env(h2o_mruby_generator_t *generator)
 {
     h2o_mruby_shared_context_t *shared = generator->ctx->shared;
@@ -444,18 +465,15 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     /* environment */
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_REQUEST_METHOD),
                  mrb_str_new(mrb, generator->req->method.base, generator->req->method.len));
+
     size_t confpath_len_wo_slash = generator->req->pathconf->path.len;
     if (generator->req->pathconf->path.base[generator->req->pathconf->path.len - 1] == '/')
         --confpath_len_wo_slash;
-
     assert(confpath_len_wo_slash <= generator->req->path_normalized.len);
-    size_t path_info_offset = generator->req->norm_indexes != NULL ? generator->req->norm_indexes[confpath_len_wo_slash - 1] : confpath_len_wo_slash;
-    size_t path_info_length = (generator->req->query_at != SIZE_MAX ? generator->req->query_at : generator->req->path.len) - path_info_offset;
 
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SCRIPT_NAME),
                  mrb_str_new(mrb, generator->req->pathconf->path.base, confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_PATH_INFO),
-                 mrb_str_new(mrb, generator->req->path.base + path_info_offset, path_info_length));
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_PATH_INFO), build_path_info(mrb, generator->req, confpath_len_wo_slash));
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_QUERY_STRING),
                  generator->req->query_at != SIZE_MAX ? mrb_str_new(mrb, generator->req->path.base + generator->req->query_at + 1,
                                                                     generator->req->path.len - (generator->req->query_at + 1))
