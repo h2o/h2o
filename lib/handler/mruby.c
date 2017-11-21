@@ -503,7 +503,7 @@ static int build_env_sort_header_cb(const void *_x, const void *_y)
     return x < y ? -1 : 1;
 }
 
-static mrb_value construct_path_info(mrb_state *mrb, h2o_req_t *req, size_t confpath_len_wo_slash)
+static mrb_value build_path_info(mrb_state *mrb, h2o_req_t *req, size_t confpath_len_wo_slash)
 {
     if (req->path_normalized.len == confpath_len_wo_slash)
         return mrb_str_new_lit(mrb, "");
@@ -511,25 +511,24 @@ static mrb_value construct_path_info(mrb_state *mrb, h2o_req_t *req, size_t conf
     assert(req->path_normalized.len > confpath_len_wo_slash);
 
     size_t path_info_start, path_info_end = req->query_at != SIZE_MAX ? req->query_at : req->path.len;
+    int add_leading_slash = 0;
 
     if (req->norm_indexes == NULL) {
         path_info_start = confpath_len_wo_slash;
-    } else if (confpath_len_wo_slash > 0) {
-        assert(req->norm_indexes[confpath_len_wo_slash] > 0);
-        path_info_start = req->norm_indexes[confpath_len_wo_slash] - 1;
-    } else if (req->norm_indexes[0] == 0) {
+    } else if (req->norm_indexes[0] == 0 && confpath_len_wo_slash == 0) {
         /* path without leading slash */
-        return mrb_str_cat(mrb, mrb_str_new_lit(mrb, "/"), req->path.base, path_info_end);
+        path_info_start = 0;
+        add_leading_slash = 1;
     } else {
-        /*
-         * leading slash in confpath is mapped to the first character of path
-         * but we want to remove something like `/xxx/../` from PATH_INFO, so see the second character's association.
-         */
-        assert(req->norm_indexes[1] > 1); /* this case only happens when the path doesn't have a leading slash */
-        path_info_start = req->norm_indexes[1] - 2;
+        path_info_start = req->norm_indexes[confpath_len_wo_slash] - 1;
     }
 
-    return mrb_str_new(mrb, req->path.base + path_info_start, path_info_end - path_info_start);
+    mrb_value path_info = mrb_str_new(mrb, req->path.base + path_info_start, path_info_end - path_info_start);
+    if (add_leading_slash) {
+        path_info = mrb_str_cat_str(mrb, mrb_str_new_lit(mrb, "/"), path_info);
+    }
+
+    return path_info;
 }
 
 static mrb_value build_env(h2o_mruby_generator_t *generator)
@@ -551,7 +550,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
 
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SCRIPT_NAME),
                  mrb_str_new(mrb, generator->req->pathconf->path.base, confpath_len_wo_slash));
-    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_PATH_INFO), construct_path_info(mrb, generator->req, confpath_len_wo_slash));
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_PATH_INFO), build_path_info(mrb, generator->req, confpath_len_wo_slash));
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_QUERY_STRING),
                  generator->req->query_at != SIZE_MAX ? mrb_str_new(mrb, generator->req->path.base + generator->req->query_at + 1,
                                                                     generator->req->path.len - (generator->req->query_at + 1))

@@ -571,7 +571,7 @@ EOT
     is $body, 'handler3, /foo bar, /baz', 'paths should be decoded';
 
     (undef, $body) = $nc->('/xxx/../hoge');
-    is $body, 'handler1, , /hoge', 'string size is too big issue 1';
+    is $body, 'handler1, , /xxx/../hoge', 'string size is too big issue 1';
 
     (undef, $body) = $nc->('/../abc');
     is $body, 'handler2, /abc, ', 'string size is too big issue 2';
