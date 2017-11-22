@@ -700,6 +700,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->ctx = ctx;
     generator->rack_input = mrb_nil_value();
     generator->chunked = NULL;
+    generator->sending_headers = 0;
 
     mrb_value env = build_env(generator);
 

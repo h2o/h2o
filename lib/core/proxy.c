@@ -41,6 +41,7 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
+    int sending_headers;
     void (*await_send)(h2o_http1client_t *);
 };
 
@@ -362,7 +363,12 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 {
     struct rp_generator_t *self = (void *)generator;
 
-    h2o_doublebuffer_consume(&self->sending);
+    if (self->sending_headers) {
+        self->sending_headers = 0;
+    } else {
+        h2o_doublebuffer_consume(&self->sending);
+    }
+
     do_send(self);
     if (self->await_send) {
         self->await_send(self->client);
@@ -416,7 +422,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
             self->had_body_error = 1;
         }
     }
-    if (self->sending.bytes_inflight == 0)
+    if (!self->sending_headers && self->sending.bytes_inflight == 0)
         do_send(self);
 
     if (self->client && self->client->sock && overrides && self->client->sock->input->size > overrides->max_buffer_size) {
@@ -529,6 +535,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         self->client = NULL;
         h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
         return NULL;
+    } else {
+        self->sending_headers = 1;
+        h2o_send(req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
     }
 
     return on_body;
@@ -646,6 +655,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
         self->is_websocket_handshake = 0;
     }
     self->had_body_error = 0;
+    self->sending_headers = 0;
     self->await_send = NULL;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);

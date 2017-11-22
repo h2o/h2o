@@ -78,7 +78,11 @@ static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     h2o_buffer_t **input;
     int is_final;
 
-    h2o_doublebuffer_consume(&chunked->sending);
+    if (generator->sending_headers) {
+        generator->sending_headers = 0;
+    } else {
+        h2o_doublebuffer_consume(&chunked->sending);
+    }
 
     switch (chunked->type) {
     case H2O_MRUBY_CHUNKED_TYPE_CALLBACK:
@@ -123,7 +127,7 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
         chunked->shortcut.client = NULL;
     }
 
-    if (chunked->sending.bytes_inflight == 0)
+    if (!generator->sending_headers && chunked->sending.bytes_inflight == 0)
         do_send(generator, input, is_final);
 }
 
@@ -172,6 +176,11 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
         chunked->type = H2O_MRUBY_CHUNKED_TYPE_CALLBACK;
         h2o_buffer_init(&chunked->callback.receiving, &h2o_socket_buffer_prototype);
         ret = mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER);
+    }
+
+    if (generator->req != NULL && generator->req->_generator != NULL && chunked->sending.bytes_inflight == 0) {
+        generator->sending_headers = 1;
+        h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
     }
 
     mrb_gc_register(generator->ctx->shared->mrb, body);
@@ -239,7 +248,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
             h2o_buffer_reserve(&chunked->callback.receiving, len);
             memcpy(chunked->callback.receiving->bytes + chunked->callback.receiving->size, s, len);
             chunked->callback.receiving->size += len;
-            if (chunked->sending.bytes_inflight == 0)
+            if (!generator->sending_headers && chunked->sending.bytes_inflight == 0)
                 do_send(generator, &chunked->callback.receiving, 0);
         }
     }
@@ -274,7 +283,7 @@ void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator)
 
     close_body_obj(generator);
 
-    if (chunked->sending.bytes_inflight == 0)
+    if (!generator->sending_headers && chunked->sending.bytes_inflight == 0)
         do_send(generator, &chunked->callback.receiving, 1);
 }
 

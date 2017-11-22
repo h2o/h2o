@@ -120,6 +120,7 @@ typedef struct st_h2o_mruby_generator_t {
     struct {
         mrb_value generator;
     } refs;
+    unsigned char sending_headers : 1;
 } h2o_mruby_generator_t;
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
