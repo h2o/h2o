@@ -12,7 +12,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl run_with_h2get run_with_h2get_simple);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl run_with_h2get run_with_h2get_simple one_shot_http_upstream);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -316,5 +316,16 @@ EOS
     run_with_h2get($server, $settings."\n".$script);
 }
 
+sub one_shot_http_upstream {
+    my ($response, $port) = @_;
+    my $guard = spawn_server(
+        argv     => [ "sh -c 'printf \"$response\" | nc -w 1 -l $port > /dev/null 2>&1'" ],
+        is_ready =>  sub {
+            sleep(1);
+            return 1;
+        },
+    );
+    return ($port, $guard);
+}
 
 1;

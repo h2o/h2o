@@ -444,6 +444,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
     size_t i;
+    int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
+    int seen_date_header = 0;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -499,6 +501,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
             } else if (token == H2O_TOKEN_X_COMPRESS_HINT) {
                 req->compress_hint = compress_hint_to_enum(headers[i].value.base, headers[i].value.len);
                 goto Skip;
+            } else if (token == H2O_TOKEN_DATE) {
+                seen_date_header = 1;
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
@@ -513,6 +517,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
                                   value.len);
         }
     }
+
+    if (!seen_date_header && emit_missing_date_header)
+        h2o_resp_add_date_header(req);
 
     if (self->is_websocket_handshake && req->res.status == 101) {
         h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
