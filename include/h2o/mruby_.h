@@ -123,8 +123,12 @@ typedef struct st_h2o_mruby_generator_t {
 } h2o_mruby_generator_t;
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
-    if (mrb->exc != NULL)                                                                                                          \
-    h2o_mruby__assert_failed(mrb, __FILE__, __LINE__)
+    do {                                                                                                                           \
+        if (mrb->exc != NULL)                                                                                                      \
+            h2o_mruby__abort_exc(mrb, "unexpected ruby error", __FILE__, __LINE__);                                                \
+    } while (0)
+
+#define h2o_mruby_new_str(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), __FILE__, __LINE__)
 
 /* source files using this macro should include mruby/throw.h */
 #define H2O_MRUBY_EXEC_GUARD(block)                                                                                                \
@@ -147,7 +151,8 @@ typedef struct st_h2o_mruby_generator_t {
     } while (0)
 
 /* handler/mruby.c */
-void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
+void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, int line);
+mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback);
