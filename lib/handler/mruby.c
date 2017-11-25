@@ -260,8 +260,6 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_RACK_ERRORS, "rack.errors");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
     SET_STRING(H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE, h2o_mruby_new_str(mrb, server_name, server_name_len));
-    SET_LITERAL(H2O_MRUBY_LIT_SEPARATOR_COMMA, ", ");
-    SET_LITERAL(H2O_MRUBY_LIT_SEPARATOR_SEMICOLON, "; ");
 
 #undef SET_LITERAL
 #undef SET_STRING
@@ -602,33 +600,33 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
 
     { /* headers */
-        h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * generator->req->headers.size);
-        size_t i;
-        for (i = 0; i != generator->req->headers.size; ++i)
-            headers_sorted[i] = generator->req->headers.entries + i;
-        qsort(headers_sorted, generator->req->headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
+        h2o_header_t **sorted = alloca(sizeof(*sorted) * generator->req->headers.size);
+        size_t i, num_sorted = 0;
         for (i = 0; i != generator->req->headers.size; ++i) {
-            const h2o_header_t *header = headers_sorted[i];
-            mrb_value n, v;
-            if (h2o_iovec_is_token(header->name)) {
-                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
-                if (token == H2O_TOKEN_TRANSFER_ENCODING)
-                    continue;
+            if (generator->req->headers.entries[i].name == &H2O_TOKEN_TRANSFER_ENCODING->buf)
+                continue;
+            sorted[num_sorted++] = generator->req->headers.entries + i;
+        }
+        qsort(sorted, num_sorted, sizeof(*sorted), build_env_sort_header_cb);
+        h2o_iovec_t *values = alloca(sizeof(*values) * (num_sorted * 2 - 1));
+        for (i = 0; i != num_sorted; ++i) {
+            /* build flattened value of the header field values that have the same name as sorted[i] */
+            size_t num_values = 0;
+            values[num_values++] = sorted[i]->value;
+            while (i < num_sorted - 1 && h2o_header_name_is_equal(sorted[i], sorted[i + 1])) {
+                ++i;
+                values[num_values++] = h2o_iovec_init(sorted[i]->name == &H2O_TOKEN_COOKIE->buf ? "; " : ", ", 2);
+                values[num_values++] = sorted[i]->value;
+            }
+            h2o_iovec_t flattened_values = num_values == 1 ? values[0] : h2o_concat_list(&generator->req->pool, values, num_values);
+            /* build mrb_values for name, header, and set them to the hash */
+            mrb_value n, v = h2o_mruby_new_str(mrb, flattened_values.base, flattened_values.len);
+            if (h2o_iovec_is_token(sorted[i]->name)) {
+                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, sorted[i]->name);
                 n = mrb_ary_entry(shared->constants, (mrb_int)(token - h2o__tokens));
             } else {
-                h2o_iovec_t vec = convert_header_name_to_env(&generator->req->pool, header->name->base, header->name->len);
+                h2o_iovec_t vec = convert_header_name_to_env(&generator->req->pool, sorted[i]->name->base, sorted[i]->name->len);
                 n = h2o_mruby_new_str(mrb, vec.base, vec.len);
-            }
-            v = h2o_mruby_new_str(mrb, header->value.base, header->value.len);
-            while (i < generator->req->headers.size - 1) {
-                if (!h2o_memis(headers_sorted[i + 1]->name->base, headers_sorted[i + 1]->name->len, header->name->base,
-                               header->name->len))
-                    break;
-                header = headers_sorted[++i];
-                v = mrb_str_append(mrb, v, mrb_ary_entry(shared->constants,
-                                                         header->name == &H2O_TOKEN_COOKIE->buf ? H2O_MRUBY_LIT_SEPARATOR_SEMICOLON
-                                                                                                : H2O_MRUBY_LIT_SEPARATOR_COMMA));
-                v = mrb_str_append(mrb, v, h2o_mruby_new_str(mrb, header->value.base, header->value.len));
             }
             mrb_hash_set(mrb, env, n, v);
         }

@@ -1161,6 +1161,7 @@ int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 /* headers */
 
+static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
@@ -1970,6 +1971,15 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 #ifdef H2O_NO_64BIT_ATOMICS
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
+
+inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y)
+{
+    if (x->name == y->name) {
+        return 1;
+    } else {
+        return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
+    }
+}
 
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
