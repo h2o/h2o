@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <alloca.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,24 +84,6 @@ NoRewrite:
     return (h2o_iovec_t){NULL};
 }
 
-static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t merged, h2o_iovec_t added, int seperator)
-{
-    if (added.len == 0)
-        return merged;
-    if (merged.len == 0)
-        return added;
-
-    size_t newlen = merged.len + 2 + added.len;
-    char *buf = h2o_mem_alloc_pool(pool, newlen);
-    memcpy(buf, merged.base, merged.len);
-    buf[merged.len] = seperator;
-    buf[merged.len + 1] = ' ';
-    memcpy(buf + merged.len + 2, added.base, added.len);
-    merged.base = buf;
-    merged.len = newlen;
-    return merged;
-}
-
 /*
  * A request without neither Content-Length or Transfer-Encoding header implies a zero-length request body (see 6th rule of RFC 7230
  * 3.3.3).
@@ -137,10 +120,17 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     char remote_addr[NI_MAXHOST];
     struct sockaddr_storage ss;
     socklen_t sslen;
-    h2o_iovec_t cookie_buf = {NULL}, xff_buf = {NULL}, via_buf = {NULL};
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
     int emit_via_header = req->conn->ctx->globalconf->proxy.emit_via_header;
+
+    struct st_header_element_t {
+        h2o_iovec_t value;
+        struct st_header_element_t *next;
+    };
+    struct st_header_list_t {
+        struct st_header_element_t **tail_ref, *first;
+    } cookie_list = {&cookie_list.first}, xff_list = {&xff_list.first}, via_list = {&via_list.first};
 
     /* for x-f-f */
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
@@ -171,15 +161,30 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
 #define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
 #define FLATTEN_PREFIXED_VALUE(prefix, value, add_size)                                                                            \
     do {                                                                                                                           \
-        RESERVE(sizeof(prefix) - 1 + value.len + 2 + add_size);                                                                    \
+        RESERVE(sizeof(prefix) - 1 + value.len + 2 + (add_size));                                                                  \
         APPEND_STRLIT(prefix);                                                                                                     \
         if (value.len != 0) {                                                                                                      \
             APPEND(value.base, value.len);                                                                                         \
-            if (add_size != 0) {                                                                                                   \
+            if ((add_size) != 0) {                                                                                                 \
                 buf.base[offset++] = ',';                                                                                          \
                 buf.base[offset++] = ' ';                                                                                          \
             }                                                                                                                      \
         }                                                                                                                          \
+    } while (0)
+#define HEADER_LIST_APPEND(l, v)                                                                                                   \
+    do {                                                                                                                           \
+        struct st_header_element_t *e = alloca(sizeof(*e));                                                                        \
+        e->value = (v);                                                                                                            \
+        e->next = NULL;                                                                                                            \
+        *(l).tail_ref = e;                                                                                                         \
+        (l).tail_ref = &e->next;                                                                                                   \
+    } while (0)
+#define HEADER_LIST_FLATTEN(prefix, sep, l, add_size)                                                                              \
+    do {                                                                                                                           \
+        struct st_header_element_t *e = (l).first;                                                                                 \
+        FLATTEN_PREFIXED_VALUE(prefix, e->value, 0);                                                                               \
+        while ((e = e->next) != NULL)                                                                                              \
+            FLATTEN_PREFIXED_VALUE(sep, e->value, e->next != NULL ? 0 : (add_size));                                               \
     } while (0)
 
     if (use_proxy_protocol)
@@ -242,20 +247,19 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                     continue;
                 } else if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
-                    /* FIXME current algorithm is O(n^2) against the number of cookie headers */
-                    cookie_buf = build_request_merge_headers(&req->pool, cookie_buf, h->value, ';');
+                    HEADER_LIST_APPEND(cookie_list, h->value);
                     continue;
                 } else if (token == H2O_TOKEN_VIA) {
                     if (!emit_via_header) {
                         goto AddHeader;
                     }
-                    via_buf = build_request_merge_headers(&req->pool, via_buf, h->value, ',');
+                    HEADER_LIST_APPEND(via_list, h->value);
                     continue;
                 } else if (token == H2O_TOKEN_X_FORWARDED_FOR) {
                     if (!emit_x_forwarded_headers) {
                         goto AddHeader;
                     }
-                    xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
+                    HEADER_LIST_APPEND(xff_list, h->value);
                     continue;
                 }
             }
@@ -272,8 +276,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         }
     }
 
-    if (cookie_buf.len != 0) {
-        FLATTEN_PREFIXED_VALUE("cookie: ", cookie_buf, 0);
+    if (cookie_list.first != NULL) {
+        HEADER_LIST_FLATTEN("cookie: ", "; ", cookie_list, 0);
         buf.base[offset++] = '\r';
         buf.base[offset++] = '\n';
     }
@@ -284,16 +288,25 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             buf.base[offset++] = '\n';
         }
         if (remote_addr_len != SIZE_MAX) {
-            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, remote_addr_len);
-            APPEND(remote_addr, remote_addr_len);
-        } else {
-            FLATTEN_PREFIXED_VALUE("x-forwarded-for: ", xff_buf, 0);
+            h2o_iovec_t v = h2o_iovec_init(remote_addr, remote_addr_len);
+            HEADER_LIST_APPEND(xff_list, v);
         }
-        buf.base[offset++] = '\r';
-        buf.base[offset++] = '\n';
+        if (xff_list.first != NULL) {
+            HEADER_LIST_FLATTEN("x-forwarded-for: ", ", ", xff_list, 0);
+            buf.base[offset++] = '\r';
+            buf.base[offset++] = '\n';
+        }
     }
     if (emit_via_header) {
-        FLATTEN_PREFIXED_VALUE("via: ", via_buf, sizeof("1.1 ") - 1 + req->input.authority.len);
+        size_t add_len = sizeof("1.1 ") - 1 + req->input.authority.len;
+        if (via_list.first != NULL) {
+            HEADER_LIST_FLATTEN("via: ", ", ", via_list, add_len + 2);
+            buf.base[offset++] = ',';
+            buf.base[offset++] = ' ';
+        } else {
+            RESERVE(sizeof("via: ") - 1 + add_len);
+            APPEND_STRLIT("via: ");
+        }
         if (req->version < 0x200) {
             buf.base[offset++] = '1';
             buf.base[offset++] = '.';
@@ -312,6 +325,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
 #undef APPEND
 #undef APPEND_STRLIT
 #undef FLATTEN_PREFIXED_VALUE
+#undef HEADER_LIST_APPEND
+#undef HEADER_LIST_FLATTEN
 
     /* set the length */
     assert(offset <= buf.len);
