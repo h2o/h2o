@@ -50,51 +50,51 @@ static void test_when_backend_down(void)
     free_targets(&targets);
 }
 
-static int check_if_acceptable(h2o_socketpool_target_vector_t *targets, size_t selected, size_t seqnum)
+static int check_weight_distribution(h2o_socketpool_target_vector_t *targets)
 {
-    size_t total_weight = 0;
-    size_t min_seqnum = 0;
-    size_t max_seqnum;
-    size_t i;
+    size_t i, j;
     
-    for (i = 0; i < targets->size; i++)
-        total_weight += targets->entries[i]->conf.weight;
-    
-    for (i = 0; i < selected; i++)
-        min_seqnum += targets->entries[i]->conf.weight;
-    max_seqnum = min_seqnum + targets->entries[selected]->conf.weight;
-    
-    seqnum %= total_weight;
-    if (seqnum < min_seqnum || seqnum >= max_seqnum) {
-        return -1;
+    for (i = 0; i < targets->size; i++) {
+        for (j = i + 1; j < targets->size; j++) {
+            if (targets->entries[i]->_shared.leased_count * targets->entries[j]->conf.weight !=
+                targets->entries[j]->_shared.leased_count * targets->entries[i]->conf.weight)
+                return 0;
+        }
     }
-    return 0;
+    return 1;
 }
 
 static void test_round_robin(void)
 {
     h2o_socketpool_target_vector_t targets = gen_targets(10);
     size_t i, selected;
+    size_t last_selected = 0;
+    size_t total_count = 0;
     int tried[10] = {};
     int check_result = 1;
     h2o_balancer_t *balancer;
     
     balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
     
-    for (i = 0; i < 10000; i++) {
+    for (i = 0; i < targets.size; i++)
+        total_count += targets.entries[i]->conf.weight;
+    total_count *= 1000;
+    
+    for (i = 0; i < total_count; i++) {
         selected = selector(balancer, &targets, tried, NULL);
-        if (selected > 10) {
-            ok(selected >= 0 && selected < 10);
+        if (selected > targets.size) {
+            ok(selected >= 0 && selected < targets.size);
             goto Done;
         }
-        check_result = check_if_acceptable(&targets, selected, i);
-        if (check_result == -1) {
-            ok(!check_result);
+        check_result = selected >= last_selected || (last_selected == targets.size - 1 && selected == 0);
+        if (!check_result) {
+            ok(check_result);
             goto Done;
         }
         targets.entries[selected]->_shared.leased_count++;
+        last_selected = selected;
     }
-    ok(!check_result);
+    ok(check_weight_distribution(&targets));
     
 Done:
     destroy(balancer);
@@ -105,29 +105,35 @@ static void test_round_robin_weighted(void)
 {
     h2o_socketpool_target_vector_t targets = gen_targets(10);
     size_t i, selected;
+    size_t last_selected = 0;
+    size_t total_count = 0;
     int tried[10] = {};
     int check_result = 1;
     h2o_balancer_t *balancer;
     
     for (i = 0; i < 10; i++)
         targets.entries[i]->conf.weight = i % 3 + 1;
-    
     balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
     
-    for (i = 0; i < 10000; i++) {
+    for (i = 0; i < targets.size; i++)
+        total_count += targets.entries[i]->conf.weight;
+    total_count *= 1000;
+    
+    for (i = 0; i < total_count; i++) {
         selected = selector(balancer, &targets, tried, NULL);
-        if (selected > 10) {
-            ok(selected >= 0 && selected < 10);
+        if (selected > targets.size) {
+            ok(selected >= 0 && selected < targets.size);
             goto Done;
         }
-        check_result = check_if_acceptable(&targets, selected, i);
-        if (check_result == -1) {
-            ok(!check_result);
+        check_result = selected >= last_selected || (last_selected == targets.size - 1 && selected == 0);
+        if (!check_result) {
+            ok(check_result);
             goto Done;
         }
         targets.entries[selected]->_shared.leased_count++;
+        last_selected = selected;
     }
-    ok(!check_result);
+    ok(check_weight_distribution(&targets));
     
 Done:
     destroy(balancer);

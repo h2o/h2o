@@ -75,7 +75,7 @@ static void test_least_conn(void)
     for (i = 0; i < 10000; i++) {
         selected = selector(NULL, &targets, tried, NULL);
         if (selected > 10) {
-            ok(selected >= 0 && selected < 10);
+            ok(selected >= 0 && selected < targets.size);
             goto Done;
         }
         check_result = check_if_acceptable(&targets, selected);
@@ -104,7 +104,7 @@ static void test_least_conn_weighted(void)
     for (i = 0; i < 10000; i++) {
         selected = selector(NULL, &targets, tried, NULL);
         if (selected > 10) {
-            ok(selected >= 0 && selected < 10);
+            ok(selected >= 0 && selected < targets.size);
             goto Done;
         }
         check_result = check_if_acceptable(&targets, selected);
