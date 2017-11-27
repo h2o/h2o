@@ -1133,12 +1133,14 @@ typedef struct st_h2o_accept_ctx_t {
 
 typedef struct st_h2o_doublebuffer_t {
     h2o_buffer_t *buf;
+    unsigned char inflight : 1;
     size_t bytes_inflight;
 } h2o_doublebuffer_t;
 
 static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
 static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
 static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
+static void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db);
 static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* token */
@@ -2115,6 +2117,7 @@ static inline void h2o_context_set_logger_context(h2o_context_t *ctx, h2o_logger
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
 {
     h2o_buffer_init(&db->buf, prototype);
+    db->inflight = 0;
     db->bytes_inflight = 0;
 }
 
@@ -2125,7 +2128,7 @@ static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
 
 static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
 {
-    assert(db->bytes_inflight == 0);
+    assert(db->inflight == 0);
 
     if (db->buf->size == 0) {
         if ((*receiving)->size == 0)
@@ -2137,14 +2140,26 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
     }
     if ((db->bytes_inflight = db->buf->size) > max_bytes)
         db->bytes_inflight = max_bytes;
+    if (db->bytes_inflight > 0)
+        db->inflight = 1;
     return h2o_iovec_init(db->buf->bytes, db->bytes_inflight);
+}
+
+static inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
+{
+    assert(db->inflight == 0);
+    db->inflight = 1;
 }
 
 static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
 {
-    assert(db->bytes_inflight != 0);
-    h2o_buffer_consume(&db->buf, db->bytes_inflight);
-    db->bytes_inflight = 0;
+    assert(db->inflight != 0);
+    db->inflight = 0;
+
+    if (db->bytes_inflight > 0) {
+        h2o_buffer_consume(&db->buf, db->bytes_inflight);
+        db->bytes_inflight = 0;
+    }
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \
