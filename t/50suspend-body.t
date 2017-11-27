@@ -74,6 +74,7 @@ EOT
 };
 
 subtest 'mruby-http-chunked' => sub {
+    plan skip_all => 'TBD';
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -89,6 +90,7 @@ EOT
 };
 
 subtest 'mruby-callback-chunked' => sub {
+    plan skip_all => 'TBD';
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
