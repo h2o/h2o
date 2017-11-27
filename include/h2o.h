@@ -1134,7 +1134,7 @@ typedef struct st_h2o_accept_ctx_t {
 typedef struct st_h2o_doublebuffer_t {
     h2o_buffer_t *buf;
     unsigned char inflight : 1;
-    size_t bytes_inflight;
+    size_t _bytes_inflight;
 } h2o_doublebuffer_t;
 
 static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
@@ -2118,7 +2118,7 @@ static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prot
 {
     h2o_buffer_init(&db->buf, prototype);
     db->inflight = 0;
-    db->bytes_inflight = 0;
+    db->_bytes_inflight = 0;
 }
 
 static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
@@ -2138,11 +2138,11 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
         db->buf = *receiving;
         *receiving = t;
     }
-    if ((db->bytes_inflight = db->buf->size) > max_bytes)
-        db->bytes_inflight = max_bytes;
-    if (db->bytes_inflight > 0)
+    if ((db->_bytes_inflight = db->buf->size) > max_bytes)
+        db->_bytes_inflight = max_bytes;
+    if (db->_bytes_inflight > 0)
         db->inflight = 1;
-    return h2o_iovec_init(db->buf->bytes, db->bytes_inflight);
+    return h2o_iovec_init(db->buf->bytes, db->_bytes_inflight);
 }
 
 static inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
@@ -2156,9 +2156,9 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     assert(db->inflight != 0);
     db->inflight = 0;
 
-    if (db->bytes_inflight > 0) {
-        h2o_buffer_consume(&db->buf, db->bytes_inflight);
-        db->bytes_inflight = 0;
+    if (db->_bytes_inflight > 0) {
+        h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+        db->_bytes_inflight = 0;
     }
 }
 
