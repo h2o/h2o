@@ -2129,6 +2129,7 @@ static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
 static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
 {
     assert(!db->inflight);
+    assert(max_bytes != 0);
 
     if (db->buf->size == 0) {
         if ((*receiving)->size == 0)
@@ -2140,8 +2141,7 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
     }
     if ((db->_bytes_inflight = db->buf->size) > max_bytes)
         db->_bytes_inflight = max_bytes;
-    if (db->_bytes_inflight > 0)
-        db->inflight = 1;
+    db->inflight = 1;
     return h2o_iovec_init(db->buf->bytes, db->_bytes_inflight);
 }
 
