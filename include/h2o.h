@@ -2128,7 +2128,7 @@ static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
 
 static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
 {
-    assert(db->inflight == 0);
+    assert(!db->inflight);
 
     if (db->buf->size == 0) {
         if ((*receiving)->size == 0)
@@ -2147,19 +2147,17 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
 
 static inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
 {
-    assert(db->inflight == 0);
+    assert(!db->inflight);
     db->inflight = 1;
 }
 
 static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
 {
-    assert(db->inflight != 0);
+    assert(db->inflight);
     db->inflight = 0;
 
-    if (db->_bytes_inflight > 0) {
-        h2o_buffer_consume(&db->buf, db->_bytes_inflight);
-        db->_bytes_inflight = 0;
-    }
+    h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    db->_bytes_inflight = 0;
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \
