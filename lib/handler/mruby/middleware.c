@@ -264,6 +264,11 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return conn->remote.len;
 }
 
+static h2o_socket_t *get_socket(h2o_conn_t *conn)
+{
+    return NULL;
+}
+
 static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, struct sockaddr_storage *ss)
 {
     const char *hostname, *servname;
@@ -451,7 +456,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         get_sockname,    /* stringify address */
         get_peername,    /* ditto */
         NULL,            /* push (no push in subrequest) */
-        NULL,            /* get underlying socket (not used at all?) */
+        get_socket,      /* get underlying socket */
         NULL,            /* get debug state */
         {{{NULL}}}};
 
