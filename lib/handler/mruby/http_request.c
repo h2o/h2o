@@ -198,7 +198,7 @@ static void do_chunked_dispose(h2o_mruby_generator_t *generator)
         chunked->client->shortcut = NULL;
     }
 
-    h2o_mruby_chunked_close(generator);
+    h2o_mruby_chunked_close_body(generator);
 }
 
 h2o_mruby_chunked_t *h2o_mruby_http_chunked_create(h2o_mruby_generator_t *generator, mrb_value body)
@@ -225,7 +225,7 @@ h2o_mruby_chunked_t *h2o_mruby_http_chunked_create(h2o_mruby_generator_t *genera
 
     chunked->super.start = on_shortcut_notify;
     chunked->super.proceed = do_chunked_proceed;
-    chunked->super.close = NULL; /* never be called */
+    chunked->super.stop = NULL; /* never be called */
     chunked->super.dispose = do_chunked_dispose;
 
     ctx->shortcut = generator;

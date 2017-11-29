@@ -301,8 +301,8 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
         if (generator->req->_generator == NULL) {
             h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         } else {
-            assert(generator->chunked->close != NULL);
-            generator->chunked->close(generator);
+            assert(generator->chunked->stop != NULL);
+            generator->chunked->stop(generator);
         }
     }
     mrb->exc = NULL;

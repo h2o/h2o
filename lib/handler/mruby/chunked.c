@@ -78,7 +78,7 @@ void h2o_mruby_chunked_send_buffer(h2o_mruby_generator_t *generator, h2o_doubleb
     h2o_mruby_chunked_send(generator, &buf, bufcnt, send_state);
 }
 
-void h2o_mruby_chunked_close(h2o_mruby_generator_t *generator)
+void h2o_mruby_chunked_close_body(h2o_mruby_generator_t *generator)
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
     mrb_state *mrb = generator->ctx->shared->mrb;
@@ -130,11 +130,11 @@ static void do_callback_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     h2o_mruby_chunked_send_buffer(generator, &chunked->sending, input, is_final);
 }
 
-static void do_callback_chunked_close(h2o_mruby_generator_t *generator)
+static void do_callback_chunked_stop(h2o_mruby_generator_t *generator)
 {
     struct st_h2o_mruby_callback_chunked_t *chunked = (void *)generator->chunked;
 
-    h2o_mruby_chunked_close(generator);
+    h2o_mruby_chunked_close_body(generator);
 
     if (chunked->sending.bytes_inflight == 0)
         h2o_mruby_chunked_send_buffer(generator, &chunked->sending, &chunked->receiving, 1);
@@ -145,7 +145,7 @@ static void do_callback_chunked_dispose(h2o_mruby_generator_t *generator)
     struct st_h2o_mruby_callback_chunked_t *chunked = (void *)generator->chunked;
     h2o_doublebuffer_dispose(&chunked->sending);
     h2o_buffer_dispose(&chunked->receiving);
-    h2o_mruby_chunked_close(generator);
+    h2o_mruby_chunked_close_body(generator);
 }
 
 h2o_mruby_chunked_t *callback_chunked_create(h2o_mruby_generator_t *generator, mrb_value body)
@@ -156,7 +156,7 @@ h2o_mruby_chunked_t *callback_chunked_create(h2o_mruby_generator_t *generator, m
 
     chunked->super.start = do_callback_chunked_start;
     chunked->super.proceed = do_callback_proceed;
-    chunked->super.close = do_callback_chunked_close;
+    chunked->super.stop = do_callback_chunked_stop;
     chunked->super.dispose = do_callback_chunked_dispose;
 
     return &chunked->super;
@@ -247,9 +247,8 @@ static mrb_value send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value 
     }
 
     /* run_fiber will never be called once we enter the fast path, and therefore the close callback will never get called in that case */
-    assert(generator->chunked->close != NULL);
-
-    generator->chunked->close(generator);
+    assert(generator->chunked->stop != NULL);
+    generator->chunked->stop(generator);
 
     return mrb_nil_value();
 }

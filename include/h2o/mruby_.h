@@ -120,9 +120,17 @@ typedef struct st_h2o_mruby_generator_t h2o_mruby_generator_t;
 struct st_h2o_mruby_chunked_t {
     mrb_value body_obj; /* becomes nil on eos */
     size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
+
+    /* do initialization for each chunked object. called immediately after h2o_start_response is called */
     void (*start)(h2o_mruby_generator_t *generator);
+
+    /* called by protocol handler, same as generators */
     void (*proceed)(h2o_generator_t *generator, h2o_req_t *req);
-    void (*close)(h2o_mruby_generator_t *generator);
+
+    /* called when an exception are thrown in mruby. NOT NULL only for callback chunked */
+    void (*stop)(h2o_mruby_generator_t *generator);
+
+    /* called when the generator is disposed */
     void (*dispose)(h2o_mruby_generator_t *generator);
 };
 
@@ -186,11 +194,26 @@ int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value 
 
 /* handler/mruby/chunked.c */
 void h2o_mruby_chunked_init_context(h2o_mruby_shared_context_t *ctx);
+/*
+ * create and set new chunked object corresponding the body argument. called only from send_response in mruby.c
+ */
 int h2o_mruby_chunked_init(h2o_mruby_generator_t *generator, mrb_value body);
+/*
+ * create base chunked object, called by subclasses (http_request, middleware, etc)
+ */
 h2o_mruby_chunked_t *h2o_mruby_chunked_create(h2o_mruby_generator_t *generator, mrb_value body, size_t sz);
+/*
+ * a wrapper of h2o_send with counting and checking content-length
+ */
 void h2o_mruby_chunked_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+/*
+ * utility function used by chunked implementations that needs buffering
+ */
 void h2o_mruby_chunked_send_buffer(h2o_mruby_generator_t *generator, h2o_doublebuffer_t *db, h2o_buffer_t **input, int is_final);
-void h2o_mruby_chunked_close(h2o_mruby_generator_t *generator);
+/*
+ * close body object, called when responding is stopped or finally disposed
+ */
+void h2o_mruby_chunked_close_body(h2o_mruby_generator_t *generator);
 
 /* handler/mruby/http_request.c */
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx);

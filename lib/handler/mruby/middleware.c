@@ -725,7 +725,7 @@ void do_chunked_dispose(h2o_mruby_generator_t *generator)
     dispose_subreq(chunked->subreq);
     chunked->subreq = NULL;
 
-    h2o_mruby_chunked_close(generator);
+    h2o_mruby_chunked_close_body(generator);
 }
 
 h2o_mruby_chunked_t *h2o_mruby_middleware_chunked_create(h2o_mruby_generator_t *generator, mrb_value body)
@@ -743,7 +743,7 @@ h2o_mruby_chunked_t *h2o_mruby_middleware_chunked_create(h2o_mruby_generator_t *
 
     chunked->super.start = do_chunked_start;
     chunked->super.proceed = do_chunked_proceed;
-    chunked->super.close = NULL; /* never be called */
+    chunked->super.stop = NULL; /* never be called */
     chunked->super.dispose = do_chunked_dispose;
 
     subreq->shortcut = generator;
