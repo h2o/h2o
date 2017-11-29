@@ -71,7 +71,7 @@ hosts:
     paths: *paths
 access-log:
   path: $access_log_file
-  format: "error:%{error}x"
+  format: "%{error}x"
 error-log: $error_log_file
 EOT
             });
@@ -86,7 +86,7 @@ EOT
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
-            is $access_logs->[0], 'error:[lib/core/proxy.c] connection failed', 'access log';
+            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failed', 'access log';
             is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failed', 'error log';
         });
     };
@@ -106,9 +106,9 @@ hosts:
                 \@orig = orig
                 \@buf = []
               end
-              def write_with_context(msg, context)
-                \@orig.write_with_context(msg, context)
-                \@buf.push([context[:module], context[:path], msg].join(', '))
+              def write(msg)
+                \@orig.write(msg)
+                \@buf.push(msg)
               end
               def buf
                 \@buf
@@ -125,7 +125,7 @@ hosts:
     paths: *paths
 access-log:
   path: $access_log_file
-  format: "error:%{error}x"
+  format: "%{error}x"
 error-log: $error_log_file
 EOT
             });
@@ -140,9 +140,9 @@ EOT
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
-            is $access_logs->[0], 'error:[lib/core/proxy.c] connection failed', 'access log';
+            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failed', 'access log';
             is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failed', 'error log';
-            is $body, 'lib/core/proxy.c, /, connection failed', 'wrapped buffer';
+            is $body, '[lib/core/proxy.c] in request:/:connection failed', 'wrapped buffer';
         });
     };
 
@@ -190,7 +190,7 @@ hosts:
     paths: *paths
 access-log:
   path: $access_log_file
-  format: "error:%{error}x"
+  format: "%{error}x"
 error-log: $error_log_file
 EOT
             });
@@ -214,7 +214,7 @@ EOT
 
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
-            is $access_logs->[0], 'error:', 'access log';
+            is $access_logs->[0], '', 'access log';
             is $error_logs->[-1], '[lib/core/proxy.c] in request:/:failed to parse the response (chunked)', 'error log';
 
             live_check($proto, $port, $curl);

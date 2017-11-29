@@ -742,16 +742,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         case ELEMENT_TYPE_ERROR: {
-            size_t i;
-            for (i = 0; i != req->error.logs.size; ++i) {
-                h2o_req_error_log_t *log = req->error.logs.entries + i;
-                size_t module_len = strlen(log->module);
-                RESERVE(sizeof("[] ") - 1 + module_len + log->msg.len * unsafe_factor);
-                *pos++ = '[';
-                pos = append_safe_string(pos, log->module, module_len);
-                *pos++ = ']';
-                *pos++ = ' ';
-                pos = append_unsafe_string(pos, log->msg.base, log->msg.len);
+            if (req->error.buf != NULL) {
+                pos = append_unsafe_string(pos, req->error.buf->bytes, req->error.buf->size);
             }
         } break;
 

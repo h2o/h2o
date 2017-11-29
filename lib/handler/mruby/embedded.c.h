@@ -82,9 +82,6 @@
     "end\n"                                                                                                                        \
     "module H2O\n"                                                                                                                 \
     "  class ErrorStream\n"                                                                                                        \
-    "    def write(msg)\n"                                                                                                         \
-    "      write_with_context(msg, nil)\n"                                                                                         \
-    "    end\n"                                                                                                                    \
     "    def puts(*msgs)\n"                                                                                                        \
     "      msgs.each {|msg| write msg }\n"                                                                                         \
     "      nil\n"                                                                                                                  \

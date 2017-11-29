@@ -372,24 +372,15 @@ static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
     return 0;
 }
 
-static void on_subreq_error_callback(h2o_req_t *req, void *_data, h2o_req_error_log_t error_log)
+static void on_subreq_error_callback(h2o_req_t *req, void *_data, h2o_iovec_t error)
 {
     struct st_mruby_subreq_t *subreq = (void *)_data;
     mrb_state *mrb = subreq->ctx->shared->mrb;
 
     assert(!mrb_nil_p(subreq->error_stream));
 
-    mrb_value msg = mrb_str_new(mrb, error_log.msg.base, error_log.msg.len);
-    if (mrb_respond_to(mrb, subreq->error_stream, mrb_intern_lit(mrb, "write_with_context"))) {
-        mrb_value module = mrb_str_new(mrb, error_log.module, strlen(error_log.module));
-        mrb_value path = mrb_str_new(mrb, error_log.path.base, error_log.path.len);
-        mrb_value context = mrb_hash_new_capa(mrb, 2);
-        mrb_hash_set(mrb, context, mrb_symbol_value(mrb_intern_lit(mrb, "module")), module);
-        mrb_hash_set(mrb, context, mrb_symbol_value(mrb_intern_lit(mrb, "path")), path);
-        mrb_funcall(mrb, subreq->error_stream, "write_with_context", 2, msg, context);
-    } else {
-        mrb_funcall(mrb, subreq->error_stream, "write", 1, msg);
-    }
+    mrb_value msg = mrb_str_new(mrb, error.base, error.len);
+    mrb_funcall(mrb, subreq->error_stream, "write", 1, msg);
 }
 
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env)

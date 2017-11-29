@@ -926,15 +926,6 @@ typedef struct st_h2o_filereq_t {
     h2o_iovec_t local_path;
 } h2o_filereq_t;
 
-/**
- * error message associated to a request
- */
-typedef struct st_h2o_req_error_log_t {
-    const char *module;
-    h2o_iovec_t msg;
-    h2o_iovec_t path;
-} h2o_req_error_log_t;
-
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 
@@ -1075,8 +1066,8 @@ struct st_h2o_req_t {
      * error logging
      */
     struct {
-        H2O_VECTOR(h2o_req_error_log_t) logs;
-        void (*cb)(h2o_req_t *req, void *data, h2o_req_error_log_t error_log);
+        h2o_buffer_t *buf;
+        void (*cb)(h2o_req_t *req, void *data, h2o_iovec_t error);
         void *data;
     } error;
 
@@ -1576,7 +1567,7 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
-void h2o_req_emit_error_log(h2o_req_error_log_t error_log);
+void h2o_write_error_log(h2o_iovec_t error);
 
 /* log */
 
