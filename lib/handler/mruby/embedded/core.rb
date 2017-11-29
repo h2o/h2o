@@ -105,7 +105,11 @@ module Kernel
 
   def task(&block)
     fiber = Fiber.new do
-      block.call
+      begin
+        block.call
+      rescue => e
+        _h2o__send_error(e)
+      end
       _h2o__finish_child_fiber()
     end
     _h2o__run_child_fiber(proc { fiber.resume })

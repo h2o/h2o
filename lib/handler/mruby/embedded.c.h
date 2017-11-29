@@ -81,7 +81,11 @@
     "  end\n"                                                                                                                      \
     "  def task(&block)\n"                                                                                                         \
     "    fiber = Fiber.new do\n"                                                                                                   \
-    "      block.call\n"                                                                                                           \
+    "      begin\n"                                                                                                                \
+    "        block.call\n"                                                                                                         \
+    "      rescue => e\n"                                                                                                          \
+    "        _h2o__send_error(e)\n"                                                                                                \
+    "      end\n"                                                                                                                  \
     "      _h2o__finish_child_fiber()\n"                                                                                           \
     "    end\n"                                                                                                                    \
     "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
