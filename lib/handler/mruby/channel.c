@@ -103,6 +103,10 @@ static mrb_value wait_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_v
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &channel_type)) == NULL)
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Channel#shift wrong self");
 
+    if (!mrb_nil_p(ctx->receiver)) {
+        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "This channel has already been waiting. It can't be called multiple times for same channel object concurrently");
+    }
+
     attach_receiver(ctx, *receiver);
 
     return mrb_nil_value();
