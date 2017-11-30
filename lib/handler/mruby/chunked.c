@@ -47,24 +47,28 @@ static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int 
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
 
-    assert(chunked->sending.bytes_inflight == 0);
+    assert(!chunked->sending.inflight);
 
     h2o_iovec_t buf = h2o_doublebuffer_prepare(&chunked->sending, input, generator->req->preferred_chunk_size);
     size_t bufcnt = 1;
+    h2o_send_state_t send_state;
 
     if (is_final && buf.len == chunked->sending.buf->size && (*input)->size == 0) {
         if (buf.len == 0)
             --bufcnt;
-        /* terminate the H1 connection if the length of content served did not match the value sent in content-length header */
-        if (chunked->bytes_left != SIZE_MAX && chunked->bytes_left != 0)
-            generator->req->http1_is_persistent = 0;
+        /* send error if the length of content served is smaller than content-length header value */
+        if (chunked->bytes_left == 0 || chunked->bytes_left == SIZE_MAX) {
+            send_state = H2O_SEND_STATE_FINAL;
+        } else {
+            send_state = H2O_SEND_STATE_ERROR;
+        }
     } else {
         if (buf.len == 0)
             return;
-        is_final = 0;
+        send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
-    h2o_send(generator->req, &buf, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    h2o_send(generator->req, &buf, bufcnt, send_state);
 }
 
 static void do_proceed(h2o_generator_t *_generator, h2o_req_t *req)
@@ -119,7 +123,7 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
         chunked->shortcut.client = NULL;
     }
 
-    if (chunked->sending.bytes_inflight == 0)
+    if (!chunked->sending.inflight)
         do_send(generator, input, is_final);
 }
 
@@ -235,7 +239,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
             h2o_buffer_reserve(&chunked->callback.receiving, len);
             memcpy(chunked->callback.receiving->bytes + chunked->callback.receiving->size, s, len);
             chunked->callback.receiving->size += len;
-            if (chunked->sending.bytes_inflight == 0)
+            if (!chunked->sending.inflight)
                 do_send(generator, &chunked->callback.receiving, 0);
         }
     }
@@ -243,7 +247,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-mrb_value h2o_mruby_send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
@@ -270,7 +274,7 @@ void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator)
 
     close_body_obj(generator);
 
-    if (chunked->sending.bytes_inflight == 0)
+    if (!chunked->sending.inflight)
         do_send(generator, &chunked->callback.receiving, 1);
 }
 
@@ -282,7 +286,7 @@ void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *shared_ctx)
     h2o_mruby_assert(mrb);
 
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));
-    h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", H2O_MRUBY_CALLBACK_ID_SEND_CHUNKED_EOS);
+    h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", send_chunked_eos_callback);
 
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER,
                 mrb_funcall(mrb, mrb_top_self(mrb), "_h2o_chunked_proc_each_to_fiber", 0));

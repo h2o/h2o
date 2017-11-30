@@ -36,6 +36,8 @@ SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 
 INCLUDE(GNUInstallDirs)
+INCLUDE(CheckCSourceCompiles)
+INCLUDE(CMakePushCheckState)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -49,7 +51,6 @@ FIND_PACKAGE(Threads REQUIRED)
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(ZLIB REQUIRED)
 
-INCLUDE(CheckCSourceCompiles)
 CHECK_C_SOURCE_COMPILES("
 #include <stdint.h>
 int main(void) {
@@ -57,6 +58,32 @@ uint64_t a;
 __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
+
+
+
+# Find out if libc provices backtrace()
+CMAKE_PUSH_CHECK_STATE()
+FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
+IF (LIBC_BACKTRACE_LIB)
+    SET(CMAKE_REQUIRED_LIBRARIES ${LIBC_BACKTRACE_LIB})
+ENDIF()
+CHECK_C_SOURCE_COMPILES("
+#include <execinfo.h>
+int main(void) {
+void *p[10];
+int ret = backtrace(p, 10);
+backtrace_symbols_fd(p, ret, 2);
+return 0;
+}" LIBC_HAS_BACKTRACE)
+
+CMAKE_POP_CHECK_STATE()
+
+IF (LIBC_HAS_BACKTRACE)
+    ADD_DEFINITIONS("-DLIBC_HAS_BACKTRACE")
+    IF (LIBC_BACKTRACE_LIB)
+        LIST(APPEND EXTRA_LIBS ${LIBC_BACKTRACE_LIB})
+    ENDIF ()
+ENDIF ()
 
 SET(WITH_BUNDLED_SSL_DEFAULT "ON")
 IF ((NOT UNIX) OR CYGWIN)
@@ -490,6 +517,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
         lib/handler/mruby/sleep.c
+        lib/handler/mruby/channel.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
