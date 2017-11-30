@@ -339,16 +339,12 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     header_exists_map = 0;
     if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, &header_exists_map,
                                        &stream->_expected_content_length, &stream->cache_digests, err_desc)) != 0) {
-        if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
-            /* fast forward the stream's state so that we can start sending the response */
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
-            h2o_send_error_400(&stream->req, "Invalid Headers", *err_desc, 0);
-            return 0;
-        }
-        return ret;
+        /* all errors except invalid-header-char are connection errors */
+        if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+            return ret;
     }
 
+    /* handle stream-level errors */
 #define EXPECTED_MAP                                                                                                               \
     (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS)
     if ((header_exists_map & EXPECTED_MAP) != EXPECTED_MAP) {
@@ -356,11 +352,19 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 #undef EXPECTED_MAP
-
-    /* handle the request */
     if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
+    }
+
+    /* handle request to send response */
+    if (ret != 0) {
+        assert(ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
+        /* fast forward the stream's state so that we can start sending the response */
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+        h2o_send_error_400(&stream->req, "Invalid Headers", *err_desc, 0);
+        return 0;
     }
 
     if (stream->_req_body == NULL) {
