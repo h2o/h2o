@@ -138,6 +138,16 @@ builder {
         my $env = shift;
         [200, [], [$env->{"psgix.io"}->get_servername]];
     };
+    mount "/suspend-body" => sub {
+        my $env = shift;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain', 'content-length' => 1 ] ]);
+            sleep 1;
+            $writer->write('x');
+            $writer->close;
+        };
+    };
     mount "/streaming-body" => sub {
         my $env = shift;
         return sub {

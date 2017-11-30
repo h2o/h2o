@@ -47,7 +47,7 @@ static void do_send(h2o_mruby_generator_t *generator, h2o_buffer_t **input, int 
 {
     h2o_mruby_chunked_t *chunked = generator->chunked;
 
-    assert(chunked->sending.bytes_inflight == 0);
+    assert(!chunked->sending.inflight);
 
     h2o_iovec_t buf = h2o_doublebuffer_prepare(&chunked->sending, input, generator->req->preferred_chunk_size);
     size_t bufcnt = 1;
@@ -123,7 +123,7 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
         chunked->shortcut.client = NULL;
     }
 
-    if (chunked->sending.bytes_inflight == 0)
+    if (!chunked->sending.inflight)
         do_send(generator, input, is_final);
 }
 
@@ -239,7 +239,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
             h2o_buffer_reserve(&chunked->callback.receiving, len);
             memcpy(chunked->callback.receiving->bytes + chunked->callback.receiving->size, s, len);
             chunked->callback.receiving->size += len;
-            if (chunked->sending.bytes_inflight == 0)
+            if (!chunked->sending.inflight)
                 do_send(generator, &chunked->callback.receiving, 0);
         }
     }
@@ -274,7 +274,7 @@ void h2o_mruby_send_chunked_close(h2o_mruby_generator_t *generator)
 
     close_body_obj(generator);
 
-    if (chunked->sending.bytes_inflight == 0)
+    if (!chunked->sending.inflight)
         do_send(generator, &chunked->callback.receiving, 1);
 }
 
