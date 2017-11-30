@@ -72,6 +72,7 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
     if (RARRAY_LEN(ctx->receivers) != 0) {
         int gc_arena = mrb_gc_arena_save(mrb);
         mrb_value receiver = mrb_ary_shift(mrb, ctx->receivers);
+        mrb_gc_protect(mrb, receiver);
         h2o_mruby_run_fiber(ctx->ctx, receiver, mrb_nil_value(), NULL);
         mrb_gc_arena_restore(mrb, gc_arena);
     }
