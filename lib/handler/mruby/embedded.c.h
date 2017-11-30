@@ -79,6 +79,17 @@
     "  def sleep(*sec)\n"                                                                                                          \
     "    _h2o__sleep(*sec)\n"                                                                                                      \
     "  end\n"                                                                                                                      \
+    "  def task(&block)\n"                                                                                                         \
+    "    fiber = Fiber.new do\n"                                                                                                   \
+    "      begin\n"                                                                                                                \
+    "        block.call\n"                                                                                                         \
+    "      rescue => e\n"                                                                                                          \
+    "        _h2o__send_error(e)\n"                                                                                                \
+    "      end\n"                                                                                                                  \
+    "      _h2o__finish_child_fiber()\n"                                                                                           \
+    "    end\n"                                                                                                                    \
+    "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
+    "  end\n"                                                                                                                      \
     "end\n"
 
 /* lib/handler/mruby/embedded/http_request.rb */
@@ -133,6 +144,23 @@
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "end\n"
+
+/* lib/handler/mruby/embedded/channel.rb */
+#define H2O_MRUBY_CODE_CHANNEL                                                                                                     \
+    "module H2O\n"                                                                                                                 \
+    "  class Channel\n"                                                                                                            \
+    "    def push(o)\n"                                                                                                            \
+    "      @queue << o\n"                                                                                                          \
+    "      self._notify\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "    def shift\n"                                                                                                              \
+    "      if @queue.empty?\n"                                                                                                     \
+    "        _h2o__channel_wait(self)\n"                                                                                           \
+    "      end\n"                                                                                                                  \
+    "      @queue.shift\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"
