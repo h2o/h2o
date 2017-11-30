@@ -599,9 +599,10 @@ The file can contain multiple entries of the form:
   not_after: 18446744073709551615</code>
 EOT
 ?>
-<code>name</code> should be a 96 bytes (192 char HEX string) if aes-256-cbc with sha265 is used <code>key</code> 
+<code>name</code>  should be 32 char HEX string
+<code>key</code> should be 96 bytes (192 char HEX string) if aes-256-cbc with sha265 is used <code>key</code> 
 
-whenever you rotate keys you should set <code>not_before</code> to the same value in the future on all servers. This enables you to gradually restart your servers and they will switch automatically keys at the same time. 
+whenever you rotate keys you should set <code>not_before</code> to the same value in the future on all servers. This enables you to gradually restart your servers and they will  automatically switch keys at the same time. 
 
 <dt>ticket-memcached-key:</dt>
 <dd>
