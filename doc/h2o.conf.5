@@ -2617,6 +2617,16 @@ proxy.emit-x-forwarded-headers
 .RE
 
 
+.SS proxy.emit-missing-date-header
+(since v2.3)
+A boolean flag (ON or OFF) indicating if H2O should add a date header to the response, if that header is missing from the upstream response.
+
+.PP
+
+.RE
+.RE
+
+
 .SS proxy.header.add
 (since v2.2)
 Modifies the request headers sent to the application server.
@@ -3113,7 +3123,8 @@ file.custom-handler:
 .PP
 
 
-The gateway also provides options to for tuning the behavior.  A full list of options can be obtained by running the gateway directly with --help option.
+The gateway also provides options to for tuning the behavior.
+A full list of options can be obtained by running the gateway directly with --help option.
 
 .PP
 .BR Example:\ 
@@ -3133,6 +3144,7 @@ Options:
                      connections.
   --max-workers=nnn  maximum number of CGI processes (default: unlimited)
   --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+  --verbose          verbose mode
 
 .RE
 .fi
