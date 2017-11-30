@@ -529,6 +529,11 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         return NULL;
     }
 
+    /* We currently fail to notify the protocol handler that the headers are complete (by invoking h2o_send(NULL, 0)) if the body
+     * received from upstream is using chunked encoding and if only an incomplete chunk header (i.e. chunk-size CR LF CR LF) was
+     * received along with the HTTP headers. However it is not a big deal; we are only failing to "optimize" for a theoretical
+     * corner case.
+     */
     if (self->client->sock->input->size == rlen) {
         h2o_doublebuffer_prepare_empty(&self->sending);
         h2o_send(req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
