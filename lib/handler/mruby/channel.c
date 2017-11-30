@@ -57,6 +57,7 @@ static mrb_value channel_initialize_method(mrb_state *mrb, mrb_value self)
     assert(shared_ctx->current_context != NULL);
     ctx->ctx = shared_ctx->current_context;
     ctx->receivers = mrb_ary_new(mrb);
+    mrb_gc_register(mrb, ctx->receivers);
 
     mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@queue"), mrb_ary_new(mrb));
 
