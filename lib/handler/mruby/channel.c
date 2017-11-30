@@ -31,32 +31,15 @@
 
 struct st_h2o_mruby_channel_context_t {
     h2o_mruby_context_t *ctx;
-    mrb_value receiver;
+    mrb_value receivers;
 };
-
-static void attach_receiver(struct st_h2o_mruby_channel_context_t *ctx, mrb_value receiver)
-{
-    assert(mrb_nil_p(ctx->receiver));
-    ctx->receiver = receiver;
-    mrb_gc_register(ctx->ctx->shared->mrb, receiver);
-}
-
-static mrb_value detach_receiver(struct st_h2o_mruby_channel_context_t *ctx)
-{
-    mrb_value ret = ctx->receiver;
-    assert(!mrb_nil_p(ret));
-    ctx->receiver = mrb_nil_value();
-    mrb_gc_unregister(ctx->ctx->shared->mrb, ret);
-    mrb_gc_protect(ctx->ctx->shared->mrb, ret);
-    return ret;
-}
 
 static void on_gc_dispose_channel(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_channel_context_t *ctx = _ctx;
     assert(ctx != NULL); /* ctx can only be disposed by gc, so data binding has been never removed */
-    if (!mrb_nil_p(ctx->receiver)) {
-        mrb_gc_unregister(mrb, ctx->receiver);
+    if (!mrb_nil_p(ctx->receivers)) {
+        mrb_gc_unregister(mrb, ctx->receivers);
     }
     free(ctx);
 }
@@ -73,7 +56,7 @@ static mrb_value channel_initialize_method(mrb_state *mrb, mrb_value self)
     memset(ctx, 0, sizeof(*ctx));
     assert(shared_ctx->current_context != NULL);
     ctx->ctx = shared_ctx->current_context;
-    ctx->receiver = mrb_nil_value();
+    ctx->receivers = mrb_ary_new(mrb);
 
     mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@queue"), mrb_ary_new(mrb));
 
@@ -87,9 +70,10 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
     struct st_h2o_mruby_channel_context_t *ctx;
     ctx = mrb_data_check_get_ptr(mrb, self, &channel_type);
 
-    if (!mrb_nil_p(ctx->receiver)) {
+    if (RARRAY_LEN(ctx->receivers) != 0) {
         int gc_arena = mrb_gc_arena_save(mrb);
-        h2o_mruby_run_fiber(ctx->ctx, detach_receiver(ctx), mrb_nil_value(), NULL);
+        mrb_value receiver = mrb_ary_shift(mrb, ctx->receivers);
+        h2o_mruby_run_fiber(ctx->ctx, receiver, mrb_nil_value(), NULL);
         mrb_gc_arena_restore(mrb, gc_arena);
     }
 
@@ -105,11 +89,7 @@ static mrb_value wait_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_v
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &channel_type)) == NULL)
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Channel#shift wrong self");
 
-    if (!mrb_nil_p(ctx->receiver)) {
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "This channel has already been waiting. It can't be called multiple times for same channel object concurrently");
-    }
-
-    attach_receiver(ctx, *receiver);
+    mrb_ary_push(mrb, ctx->receivers, *receiver);
 
     return mrb_nil_value();
 }

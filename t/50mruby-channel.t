@@ -89,4 +89,31 @@ EOT
 
 };
 
+subtest "multipel shift for one channel" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            ch = H2O::Channel.new
+            res1 = nil
+            res2 = nil
+            res3 = nil
+            task { res1 = ch.shift }
+            task { res2 = ch.shift }
+            task { res3 = ch.shift }
+            ch.push "c1"
+            ch.push "c2"
+            ch.push "c3"
+            [200, {}, [res1, res2, res3]]
+          end
+
+EOT
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    is $stdout, "c1c2c3", "channel";
+
+};
+
 done_testing();
