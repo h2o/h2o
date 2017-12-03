@@ -36,10 +36,10 @@ static void test_when_backend_down(void)
     size_t selected;
     h2o_balancer_t *balancer;
     
-    balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
+    balancer = h2o_balancer_create_rr(targets.entries, targets.size);
     
     for (i = 0; i < 10; i++) {
-        selected = selector(balancer, &targets, tried, NULL);
+        selected = selector(balancer, &targets, tried);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
@@ -74,14 +74,14 @@ static void test_round_robin(void)
     int check_result = 1;
     h2o_balancer_t *balancer;
     
-    balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
+    balancer = h2o_balancer_create_rr(targets.entries, targets.size);
     
     for (i = 0; i < targets.size; i++)
         total_count += targets.entries[i]->conf.weight;
     total_count *= 1000;
     
     for (i = 0; i < total_count; i++) {
-        selected = selector(balancer, &targets, tried, NULL);
+        selected = selector(balancer, &targets, tried);
         if (selected > targets.size) {
             ok(selected >= 0 && selected < targets.size);
             goto Done;
@@ -113,14 +113,14 @@ static void test_round_robin_weighted(void)
     
     for (i = 0; i < 10; i++)
         targets.entries[i]->conf.weight = i % 3 + 1;
-    balancer = h2o_balancer_rr_creator(targets.entries, targets.size);
+    balancer = h2o_balancer_create_rr(targets.entries, targets.size);
     
     for (i = 0; i < targets.size; i++)
         total_count += targets.entries[i]->conf.weight;
     total_count *= 1000;
     
     for (i = 0; i < total_count; i++) {
-        selected = selector(balancer, &targets, tried, NULL);
+        selected = selector(balancer, &targets, tried);
         if (selected > targets.size) {
             ok(selected >= 0 && selected < targets.size);
             goto Done;

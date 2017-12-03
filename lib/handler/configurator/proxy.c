@@ -303,9 +303,9 @@ static int parse_balancer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_soc
     }
 
     if (strcmp(lb_type_node->data.scalar, "round-robin") == 0) {
-        self->vars->conf.balancer = h2o_balancer_rr_creator(targets, target_len);
+        self->vars->conf.balancer = h2o_balancer_create_rr(targets, target_len);
     } else if (strcmp(lb_type_node->data.scalar, "least-conn") == 0) {
-        self->vars->conf.balancer = h2o_balancer_lc_creator();
+        self->vars->conf.balancer = h2o_balancer_create_lc();
     } else {
         h2o_configurator_errprintf(cmd, node,
                                    "specified balancer is currently not supported. supported balancers are: "
@@ -451,7 +451,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             return -1;
         }
     } else {
-        self->vars->conf.balancer = h2o_balancer_rr_creator(targets, upstream_len);
+        self->vars->conf.balancer = h2o_balancer_create_rr(targets, upstream_len);
     }
     if (self->vars->keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
         h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "

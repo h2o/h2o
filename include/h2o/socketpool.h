@@ -156,8 +156,7 @@ void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
  * connects to the peer (or returns a pooled connection)
  */
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data,
-                            h2o_balancer_request_info *req_info);
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
 /**
  * cancels a connect request
  */

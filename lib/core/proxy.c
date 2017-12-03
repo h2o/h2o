@@ -42,7 +42,6 @@ struct rp_generator_t {
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
     void (*await_send)(h2o_http1client_t *);
-    h2o_balancer_request_info lb_req_info;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -675,12 +674,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
     h2o_req_overrides_t *overrides = req->overrides;
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
     h2o_url_t target_buf, *target = &target_buf;
-    size_t remote_addr_len = SIZE_MAX;
-    char remote_addr[NI_MAXHOST];
-    struct sockaddr_storage ss;
-    socklen_t sslen;
-    int32_t port = 0;
-
+    
     h2o_socketpool_t *socketpool = &req->conn->ctx->globalconf->proxy.global_socketpool;
     if (overrides != NULL && overrides->socketpool != NULL) {
         socketpool = overrides->socketpool;
@@ -689,37 +683,18 @@ void h2o__proxy_process_request(h2o_req_t *req)
     }
     if (target == &target_buf)
         h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
-
-    struct rp_generator_t *self = proxy_send_prepare(req);
-
-    if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0) {
-        remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
-        port = h2o_socket_getport((void *)&ss);
-    }
     
-    /* if remote addr cannot be fetched, use a default one */
-    if (remote_addr_len == SIZE_MAX) {
-        strcpy(remote_addr, "169.254.0.1");
-        remote_addr_len = strlen(remote_addr);
-        port = 1000;
-    }
-
-    self->lb_req_info.path = req->path;
-    self->lb_req_info.port = port;
-    memcpy(self->lb_req_info.remote_addr, remote_addr, remote_addr_len);
-    self->lb_req_info.remote_addr_len = remote_addr_len;
+    struct rp_generator_t *self = proxy_send_prepare(req);
+    
     /*
-      When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
+     When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
      connection even when there is a pooled connection to the peer, since the header (as defined in
      https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) needs to be sent at the beginning of the connection.
-
      However, currently h2o_http1client_connect doesn't provide an interface to enforce estabilishing a new connection. In other
      words, there is a chance that we would use a pool connection here.
-
      OTOH, the probability of seeing such issue is rare; it would only happen if the same destination identified by its host:port is
      accessed in both ways (i.e. in one path with use_proxy_protocol set and in the other path without).
-
      So I leave this as it is for the time being.
      */
-    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect, &self->lb_req_info);
+    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect);
 }

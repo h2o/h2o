@@ -30,17 +30,9 @@ extern "C" {
 #include "h2o/socketpool.h"
 #include "yoml.h"
 
-typedef struct st_h2o_balancer_request_info {
-    char remote_addr[NI_MAXHOST];
-    size_t remote_addr_len;
-    int32_t port;
-    h2o_iovec_t path;
-} h2o_balancer_request_info;
-
 typedef struct st_h2o_balancer_t h2o_balancer_t;
 
-typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, int *tried,
-                                        h2o_balancer_request_info *req_info);
+typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, int *tried);
 
 typedef void (*h2o_balancer_destroyer)(h2o_balancer_t *balancer);
 
@@ -54,10 +46,10 @@ struct st_h2o_balancer_t {
 };
 
 /* round robin */
-h2o_balancer_t *h2o_balancer_rr_creator(h2o_socketpool_target_t **targets, size_t target_len);
+h2o_balancer_t *h2o_balancer_create_rr(h2o_socketpool_target_t **targets, size_t target_len);
 
 /* least connection */
-h2o_balancer_t *h2o_balancer_lc_creator(void);
+h2o_balancer_t *h2o_balancer_create_lc(void);
 
 #ifdef __cplusplus
 }

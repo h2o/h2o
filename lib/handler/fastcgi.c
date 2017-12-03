@@ -794,7 +794,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     set_timeout(generator, &generator->ctx->io_timeout, on_connect_timeout);
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
-                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator, NULL);
+                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
 
     return 0;
 }
