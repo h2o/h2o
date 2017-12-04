@@ -78,7 +78,7 @@ struct st_fcgi_generator_t {
         h2o_doublebuffer_t sending;
         h2o_buffer_t *receiving;
     } resp;
-    h2o_timer_t timeout;
+    h2o_timeout_t timeout;
 };
 
 struct st_h2o_fastcgi_handler_t {
@@ -627,7 +627,7 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     return 0;
 }
 
-static void on_rw_timeout(h2o_timer_t *entry)
+static void on_rw_timeout(h2o_timeout_t *entry)
 {
     struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
 
@@ -752,7 +752,7 @@ static void do_stop(h2o_generator_t *_generator, h2o_req_t *req)
     close_generator(generator);
 }
 
-static void on_connect_timeout(h2o_timer_t *entry)
+static void on_connect_timeout(h2o_timeout_t *entry)
 {
     struct st_fcgi_generator_t *generator = H2O_STRUCT_FROM_MEMBER(struct st_fcgi_generator_t, timeout, entry);
 

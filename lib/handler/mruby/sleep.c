@@ -27,18 +27,18 @@
 struct st_h2o_mruby_sleep_context_t {
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
-    h2o_timer_t timeout_entry;
+    h2o_timeout_t timeout_entry;
     uint64_t started_at;
 };
 
-static void on_deferred_timeout(h2o_timer_t *entry)
+static void on_deferred_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
     h2o_timeout_unlink(entry);
     free(ctx);
 }
 
-static void on_sleep_timeout(h2o_timer_t *entry)
+static void on_sleep_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
     assert(!mrb_nil_p(ctx->receiver));

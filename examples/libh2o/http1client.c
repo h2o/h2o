@@ -146,9 +146,9 @@ int fill_body(h2o_iovec_t *reqbuf)
 
 struct st_timeout_ctx {
     h2o_socket_t *sock;
-    h2o_timer_t _timeout;
+    h2o_timeout_t _timeout;
 };
-static void timeout_cb(h2o_timer_t *entry)
+static void timeout_cb(h2o_timeout_t *entry)
 {
     static h2o_iovec_t reqbuf;
     struct st_timeout_ctx *tctx = H2O_STRUCT_FROM_MEMBER(struct st_timeout_ctx, _timeout, entry);

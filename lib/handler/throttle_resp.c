@@ -34,7 +34,7 @@ typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
 
 typedef struct st_throttle_resp_t {
     h2o_ostream_t super;
-    h2o_timer_t timeout_entry;
+    h2o_timeout_t timeout_entry;
     int64_t tokens;
     size_t token_inc;
     h2o_context_t *ctx;
@@ -64,7 +64,7 @@ static void real_send(throttle_resp_t *self)
         h2o_timeout_unlink(&self->timeout_entry);
 }
 
-static void add_token(h2o_timer_t *entry)
+static void add_token(h2o_timeout_t *entry)
 {
     throttle_resp_t *self = H2O_STRUCT_FROM_MEMBER(throttle_resp_t, timeout_entry, entry);
 

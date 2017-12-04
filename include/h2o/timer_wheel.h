@@ -25,7 +25,7 @@
 #include "h2o/timer.h"
 
 typedef uint64_t wheelmask_t;
-/* link list of h2o_timer_t */
+/* link list of h2o_timeout_t */
 typedef h2o_linklist_t h2o_timer_wheel_slot_t;
 
 #define H2O_TIMERWHEEL_MAX_WHEELS 6
@@ -50,7 +50,7 @@ void h2o_timer_wheel_show(h2o_timer_wheel_t *wheel);
  */
 uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *wheel);
 
-void h2o_timer_link_(h2o_timer_wheel_t *w, struct st_h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
+void h2o_timer_link_(h2o_timer_wheel_t *w, struct st_h2o_timeout_t *timer, h2o_timer_abs_t abs_expire);
 size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now);
 int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 

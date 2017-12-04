@@ -64,7 +64,7 @@ h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz)
     return conn;
 }
 
-static void on_connect_error_deferred(h2o_timer_t *timeout_entry)
+static void on_connect_error_deferred(h2o_timeout_t *timeout_entry)
 {
     h2o_redis_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_redis_conn_t, _timeout_entry, timeout_entry);
     on_redis_disconnect(conn->_redis, REDIS_ERR);
@@ -117,7 +117,7 @@ static void on_command(redisAsyncContext *redis, void *reply, void *privdata)
     free(command);
 }
 
-static void on_command_error_deferred(h2o_timer_t *entry)
+static void on_command_error_deferred(h2o_timeout_t *entry)
 {
     struct st_h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(struct st_h2o_redis_command_t, _timeout_entry, entry);
     h2o_timeout_unlink(entry);

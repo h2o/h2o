@@ -46,7 +46,7 @@ struct st_h2o_http1_conn_t {
     /* internal structure */
     h2o_linklist_t _conns;
     h2o_timer_tick_t *_timeout;
-    h2o_timer_t _timeout_entry;
+    h2o_timeout_t _timeout_entry;
     uint64_t _req_index;
     size_t _prevreqlen;
     size_t _reqsize;
@@ -498,7 +498,7 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
-static void reqread_on_timeout(h2o_timer_t *entry)
+static void reqread_on_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
 

@@ -81,7 +81,7 @@ typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 #include "socket/evloop.h"
 #endif
 
-/* h2o_timer_t in timer.h depends on the loop type */
+/* h2o_timeout_t in timer.h depends on the loop type */
 #include "h2o/timer.h"
 
 struct st_h2o_socket_peername_t {
@@ -398,8 +398,8 @@ inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t n
     counter->cur.start_at = now;
 }
 
-struct st_h2o_timer_t;
-void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, struct st_h2o_timer_t *timer);
+struct st_h2o_timeout_t;
+void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, struct st_h2o_timeout_t *timer);
 
 #ifdef __cplusplus
 }

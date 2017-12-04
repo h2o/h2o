@@ -579,7 +579,7 @@ struct st_h2o_context_t {
         /**
          * timeout entry used for graceful shutdown
          */
-        h2o_timer_t _graceful_shutdown_timeout;
+        h2o_timeout_t _graceful_shutdown_timeout;
         struct {
             /**
              * counter for http2 errors internally emitted by h2o
@@ -1076,7 +1076,7 @@ struct st_h2o_req_t {
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
-    h2o_timer_t _timeout_entry;
+    h2o_timeout_t _timeout_entry;
 
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;

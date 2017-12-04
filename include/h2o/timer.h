@@ -32,9 +32,9 @@ extern "C" {
 #include "h2o/linklist.h"
 #include "h2o/socket.h"
 
-struct st_h2o_timer_t;
-typedef void (*h2o_timer_cb)(struct st_h2o_timer_t *timer);
-typedef struct st_h2o_timer_t {
+struct st_h2o_timeout_t;
+typedef void (*h2o_timer_cb)(struct st_h2o_timeout_t *timer);
+typedef struct st_h2o_timeout_t {
 #if H2O_USE_LIBUV
     uv_timer_t uv_timer;
     int is_linked;
@@ -43,19 +43,19 @@ typedef struct st_h2o_timer_t {
     uint64_t expire_at; /* absolute expiration time*/
 #endif
     h2o_timer_cb cb;
-} h2o_timer_t;
+} h2o_timeout_t;
 
 #if H2O_USE_LIBUV
-static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
+static inline h2o_timeout_t h2o_timeout_init(h2o_timer_cb cb)
 {
-    h2o_timer_t ret = {};
+    h2o_timeout_t ret = {};
     ret.cb = cb;
     return ret;
 }
 #else
-static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
+static inline h2o_timeout_t h2o_timeout_init(h2o_timer_cb cb)
 {
-    return (h2o_timer_t){
+    return (h2o_timeout_t){
         {},
         0,
         cb,
@@ -63,8 +63,8 @@ static inline h2o_timer_t h2o_timeout_init(h2o_timer_cb cb)
 }
 #endif
 
-int h2o_timeout_is_linked(h2o_timer_t *timer);
-void h2o_timeout_unlink(h2o_timer_t *timer);
+int h2o_timeout_is_linked(h2o_timeout_t *timer);
+void h2o_timeout_unlink(h2o_timeout_t *timer);
 
 typedef uint32_t h2o_timer_tick_t;
 typedef uint64_t h2o_timer_abs_t;

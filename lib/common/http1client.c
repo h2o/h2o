@@ -36,7 +36,7 @@ struct st_h2o_http1client_private_t {
         h2o_http1client_body_cb on_body;
     } _cb;
     h2o_url_t *_origin;
-    h2o_timer_t _timeout;
+    h2o_timeout_t _timeout;
     int _method_is_head;
     int _do_keepalive;
     union {
@@ -90,7 +90,7 @@ static void on_body_error(struct st_h2o_http1client_private_t *client, const cha
     close_client(client);
 }
 
-static void on_body_timeout(h2o_timer_t *entry)
+static void on_body_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_http1client_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_private_t, _timeout, entry);
     on_body_error(client, "I/O timeout");
@@ -362,7 +362,7 @@ Exit:
 #undef MAX_HEADERS
 }
 
-static void on_head_timeout(h2o_timer_t *entry)
+static void on_head_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_http1client_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_private_t, _timeout, entry);
     on_error_before_head(client, "I/O timeout");
@@ -481,7 +481,7 @@ int h2o_http1client_write_req(void *priv, h2o_iovec_t chunk, int is_end_stream)
     return 0;
 }
 
-static void on_send_timeout(h2o_timer_t *entry)
+static void on_send_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_http1client_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_private_t, _timeout, entry);
     on_error_before_head(client, "I/O timeout");
@@ -552,7 +552,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     on_connection_ready(client);
 }
 
-static void on_connect_timeout(h2o_timer_t *entry)
+static void on_connect_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_http1client_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_private_t, _timeout, entry);
     on_connect_error(client, "connection timeout");

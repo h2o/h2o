@@ -84,7 +84,7 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
     }
 }
 
-static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
+static void graceful_shutdown_close_stragglers(h2o_timeout_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
     h2o_linklist_t *node, *next;
@@ -97,7 +97,7 @@ static void graceful_shutdown_close_stragglers(h2o_timer_t *entry)
     }
 }
 
-static void graceful_shutdown_resend_goaway(h2o_timer_t *entry)
+static void graceful_shutdown_resend_goaway(h2o_timeout_t *entry)
 {
     h2o_context_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_context_t, http2._graceful_shutdown_timeout, entry);
     h2o_linklist_t *node;
@@ -146,7 +146,7 @@ static void initiate_graceful_shutdown(h2o_context_t *ctx)
     h2o_timeout_link(ctx->loop, 1000, &ctx->http2._graceful_shutdown_timeout);
 }
 
-static void on_idle_timeout(h2o_timer_t *entry)
+static void on_idle_timeout(h2o_timeout_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
 
@@ -1179,7 +1179,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
     }
 }
 
-static void emit_writereq(h2o_timer_t *entry)
+static void emit_writereq(h2o_timeout_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _write.timeout_entry, entry);
 

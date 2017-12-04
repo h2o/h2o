@@ -34,7 +34,7 @@
 struct st_h2o_accept_data_t {
     h2o_accept_ctx_t *ctx;
     h2o_socket_t *sock;
-    h2o_timer_t timeout;
+    h2o_timeout_t timeout;
     struct timeval connected_at;
 };
 
@@ -48,9 +48,9 @@ struct st_h2o_redis_resumption_accept_data_t {
     h2o_redis_command_t *get_command;
 };
 
-static void on_accept_timeout(h2o_timer_t *entry);
-static void on_redis_accept_timeout(h2o_timer_t *entry);
-static void on_memcached_accept_timeout(h2o_timer_t *entry);
+static void on_accept_timeout(h2o_timeout_t *entry);
+static void on_redis_accept_timeout(h2o_timeout_t *entry);
+static void on_memcached_accept_timeout(h2o_timeout_t *entry);
 
 static struct {
     struct {
@@ -245,7 +245,7 @@ static void redis_resumption_on_get(redisReply *reply, void *_accept_data)
         free(session_data.base);
 }
 
-static void on_redis_resumption_get_failed(h2o_timer_t *timeout_entry)
+static void on_redis_resumption_get_failed(h2o_timeout_t *timeout_entry)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_redis_resumption_accept_data_t, super.timeout, timeout_entry);
@@ -313,13 +313,13 @@ static void accept_timeout(struct st_h2o_accept_data_t *data)
     h2o_socket_close(sock);
 }
 
-static void on_accept_timeout(h2o_timer_t *entry)
+static void on_accept_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_accept_data_t *data = H2O_STRUCT_FROM_MEMBER(struct st_h2o_accept_data_t, timeout, entry);
     accept_timeout(data);
 }
 
-static void on_redis_accept_timeout(h2o_timer_t *entry)
+static void on_redis_accept_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_redis_resumption_accept_data_t *data =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_redis_resumption_accept_data_t, super.timeout, entry);
@@ -330,7 +330,7 @@ static void on_redis_accept_timeout(h2o_timer_t *entry)
     accept_timeout(&data->super);
 }
 
-static void on_memcached_accept_timeout(h2o_timer_t *entry)
+static void on_memcached_accept_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_memcached_resumption_accept_data_t *data =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_memcached_resumption_accept_data_t, super.timeout, entry);

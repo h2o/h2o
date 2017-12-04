@@ -5,10 +5,10 @@
 #include "theft.h"
 
 struct test_timer {
-    h2o_timer_t t;
+    h2o_timeout_t t;
     int called;
 };
-static void timer_cb(h2o_timer_t *t_)
+static void timer_cb(h2o_timeout_t *t_)
 {
     struct test_timer *t = H2O_STRUCT_FROM_MEMBER(struct test_timer, t, t_);
     t->called++;

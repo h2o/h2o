@@ -33,7 +33,7 @@
 #define INITIAL_INBUFSZ 8192
 
 struct st_deferred_request_action_t {
-    h2o_timer_t timeout;
+    h2o_timeout_t timeout;
     h2o_req_t *req;
 };
 
@@ -58,7 +58,7 @@ struct st_send_error_deferred_t {
     const char *reason;
     const char *body;
     int flags;
-    h2o_timer_t _timeout;
+    h2o_timeout_t _timeout;
 };
 
 static void on_deferred_action_dispose(void *_action)
@@ -182,7 +182,7 @@ static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
     call_handlers(req, req->pathconf->handlers.entries);
 }
 
-static void deferred_proceed_cb(h2o_timer_t *entry)
+static void deferred_proceed_cb(h2o_timeout_t *entry)
 {
     h2o_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_req_t, _timeout_entry, entry);
     h2o_proceed_response(req);
@@ -335,7 +335,7 @@ void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler)
     call_handlers(req, handler);
 }
 
-static void on_delegate_request_cb(h2o_timer_t *entry)
+static void on_delegate_request_cb(h2o_timeout_t *entry)
 {
     struct st_delegate_request_deferred_t *args =
         H2O_STRUCT_FROM_MEMBER(struct st_delegate_request_deferred_t, super.timeout, entry);
@@ -397,7 +397,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     h2o__proxy_process_request(req);
 }
 
-static void on_reprocess_request_cb(h2o_timer_t *entry)
+static void on_reprocess_request_cb(h2o_timeout_t *entry)
 {
     struct st_reprocess_request_deferred_t *args =
         H2O_STRUCT_FROM_MEMBER(struct st_reprocess_request_deferred_t, super.timeout, entry);
@@ -552,7 +552,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
 }
 
 #define DECL_SEND_ERROR_DEFERRED(status_)                                                                                          \
-    static void send_error_deferred_cb_##status_(h2o_timer_t *entry)                                                               \
+    static void send_error_deferred_cb_##status_(h2o_timeout_t *entry)                                                               \
     {                                                                                                                              \
         struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry);          \
         reset_response(args->req);                                                                                                 \

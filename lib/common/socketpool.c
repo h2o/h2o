@@ -99,7 +99,7 @@ static void destroy_expired(h2o_socketpool_t *pool)
     }
 }
 
-static void on_timeout(h2o_timer_t *timeout_entry)
+static void on_timeout(h2o_timeout_t *timeout_entry)
 {
     /* FIXME decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well

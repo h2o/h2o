@@ -27,7 +27,7 @@
 
 struct st_h2o_tunnel_t {
     h2o_context_t *ctx;
-    h2o_timer_t timeout_entry;
+    h2o_timeout_t timeout_entry;
     h2o_timer_tick_t *timeout;
     h2o_socket_t *sock[2];
 };
@@ -44,7 +44,7 @@ static void close_connection(struct st_h2o_tunnel_t *tunnel)
     free(tunnel);
 }
 
-static void on_timeout(h2o_timer_t *entry)
+static void on_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_tunnel_t, timeout_entry, entry);
     close_connection(tunnel);
