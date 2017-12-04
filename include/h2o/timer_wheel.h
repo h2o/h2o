@@ -22,8 +22,6 @@
 #ifndef h2o__timer_wheel_h
 #define h2o__timer_wheel_h
 
-#include "h2o/timer.h"
-
 typedef uint64_t wheelmask_t;
 /* link list of h2o_timeout_t */
 typedef h2o_linklist_t h2o_timer_wheel_slot_t;
@@ -37,6 +35,13 @@ typedef struct st_h2o_timer_wheel_t {
     uint64_t last_run; /* the last time h2o_timer_wheel_run was called */
 } h2o_timer_wheel_t;
 
+struct st_h2o_timer_t;
+typedef void (*h2o_timer_cb)(struct st_h2o_timer_t *timer);
+typedef struct st_h2o_timer_t {
+    h2o_linklist_t _link;
+    uint64_t expire_at; /* absolute expiration time*/
+    h2o_timer_cb cb;
+} h2o_timer_t;
 /**
  * initializes a timerwheel
  */
@@ -50,7 +55,8 @@ void h2o_timer_wheel_show(h2o_timer_wheel_t *wheel);
  */
 uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *wheel);
 
-void h2o_timer_link_(h2o_timer_wheel_t *w, struct st_h2o_timeout_t *timer, h2o_timer_abs_t abs_expire);
+typedef uint64_t h2o_timer_abs_t;
+void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
 size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now);
 int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 

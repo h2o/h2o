@@ -31,29 +31,30 @@ extern "C" {
 
 #include "h2o/linklist.h"
 #include "h2o/socket.h"
+#include "h2o/timer_wheel.h"
 
-struct st_h2o_timeout_t;
-typedef void (*h2o_timer_cb)(struct st_h2o_timeout_t *timer);
-typedef struct st_h2o_timeout_t {
 #if H2O_USE_LIBUV
+struct st_h2o_timeout_t;
+typedef void (*h2o_timeout_cb)(struct st_h2o_timeout_t *timer);
+typedef struct st_h2o_timeout_t {
     uv_timer_t uv_timer;
     int is_linked;
-#else
-    h2o_linklist_t _link;
-    uint64_t expire_at; /* absolute expiration time*/
-#endif
-    h2o_timer_cb cb;
+    h2o_timeout_cb cb;
 } h2o_timeout_t;
+#else
+typedef h2o_timer_t h2o_timeout_t;
+typedef h2o_timer_cb h2o_timeout_cb;
+#endif
 
 #if H2O_USE_LIBUV
-static inline h2o_timeout_t h2o_timeout_init(h2o_timer_cb cb)
+static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
 {
     h2o_timeout_t ret = {};
     ret.cb = cb;
     return ret;
 }
 #else
-static inline h2o_timeout_t h2o_timeout_init(h2o_timer_cb cb)
+static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
 {
     return (h2o_timeout_t){
         {},

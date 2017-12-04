@@ -398,8 +398,7 @@ inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t n
     counter->cur.start_at = now;
 }
 
-struct st_h2o_timeout_t;
-void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, struct st_h2o_timeout_t *timer);
+void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, h2o_timeout_t *timer);
 
 #ifdef __cplusplus
 }
