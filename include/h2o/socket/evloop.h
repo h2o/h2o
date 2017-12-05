@@ -71,13 +71,14 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 
 typedef h2o_timer_t h2o_timeout_t;
 typedef h2o_timer_cb h2o_timeout_cb;
-static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
+static inline h2o_timer_t h2o_timer_init(h2o_timer_cb cb)
 {
-    return (h2o_timeout_t){
+    return (h2o_timer_t){
         {},
         0,
         cb,
     };
 }
+#define h2o_timeout_init(cb_) h2o_timer_init(cb_)
 
 #endif
