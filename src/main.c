@@ -1394,12 +1394,51 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
     return loaded;
 }
 
+static yoml_t *resolve_env_tag(yoml_t *node, resolve_tag_arg_t *arg)
+{
+
+    const char * env_var = node->data.scalar;
+    if (node->type != YOML_TYPE_SCALAR) {
+        fprintf(stderr, "value of the !env node must be a scalar");
+        return NULL;
+    }
+
+    const char *env_var_content;
+    if ((env_var_content = getenv(env_var)) == NULL)
+        env_var_content = "";
+
+    yaml_parser_t parser;
+    yoml_t *yoml;
+    yaml_parser_initialize(&parser);
+    yaml_parser_set_input_string(&parser, (const unsigned char *) env_var_content, strlen(env_var_content));
+
+    yoml_parse_args_t parse_args = {
+        env_var_content,          /* filename */
+        NULL,              /* mem_set */
+        {resolve_tag, arg} /* resolve_tag */
+    };
+    yoml = yoml_parse_document(&parser, NULL, &parse_args);
+
+    if (yoml == NULL) {
+        fprintf(stderr, "failed to parse environment variable %s.  line %d", env_var, (int)parser.problem_mark.line + 1);
+        fprintf(stderr, ": %s\n", parser.problem);
+    }
+
+    yaml_parser_delete(&parser);
+
+    return yoml;
+}
+
 static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg)
 {
     resolve_tag_arg_t *arg = (resolve_tag_arg_t *)cb_arg;
 
     if (strcmp(tag, "!file") == 0) {
         return resolve_file_tag(node, arg);
+    }
+
+    if (strcmp(tag, "!env") == 0) {
+        return resolve_env_tag(node, arg);
     }
 
     /* otherwise, return the node itself */
