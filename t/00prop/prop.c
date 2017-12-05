@@ -1,7 +1,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include "h2o.h"
-#include "h2o/timer_wheel.h"
+#include "h2o/timer.h"
 #include "theft.h"
 
 struct test_timer {

@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__timer_wheel_h
-#define h2o__timer_wheel_h
+#ifndef h2o__timer_h
+#define h2o__timer_h
 
 typedef uint64_t wheelmask_t;
 /* link list of h2o_timeout_t */
