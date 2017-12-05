@@ -586,8 +586,8 @@ static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
 
 static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_and_connection_len)
 {
-    size_t len = sizeof("HTTP/1.1  \r\ndate: \r\nserver: \r\nconnection: \r\ncontent-length: \r\n\r\n") + 3 +
-                 strlen(req->res.reason) + H2O_TIMESTR_RFC1123_LEN + server_name_and_connection_len +
+    size_t len = sizeof("HTTP/1.1  \r\nserver: \r\nconnection: \r\ncontent-length: \r\n\r\n") + 3 +
+                 strlen(req->res.reason) + server_name_and_connection_len +
                  sizeof(H2O_UINT64_LONGEST_STR) - 1 + sizeof("cache-control: private") - 1;
     const h2o_header_t *header, *end;
 
@@ -600,20 +600,16 @@ static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_a
 static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
 {
     h2o_context_t *ctx = req->conn->ctx;
-    h2o_timestamp_t ts;
     char *dst = buf;
-
-    h2o_get_timestamp(ctx, &req->pool, &ts);
 
     assert(req->res.status <= 999);
 
     /* send essential headers with the first chars uppercased for max. interoperability (#72) */
     if (req->res.content_length != SIZE_MAX) {
-        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\nContent-Length: %zu\r\n", req->res.status,
-                       req->res.reason, ts.str->rfc1123, connection, req->res.content_length);
+        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nConnection: %s\r\nContent-Length: %zu\r\n", req->res.status, req->res.reason,
+                       connection, req->res.content_length);
     } else {
-        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nDate: %s\r\nConnection: %s\r\n", req->res.status, req->res.reason, ts.str->rfc1123,
-                       connection);
+        dst += sprintf(dst, "HTTP/1.1 %d %s\r\nConnection: %s\r\n", req->res.status, req->res.reason, connection);
     }
     if (ctx->globalconf->server_name.len) {
         dst += sprintf(dst, "Server: %s\r\n", ctx->globalconf->server_name.base);

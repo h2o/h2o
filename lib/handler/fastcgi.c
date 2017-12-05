@@ -469,7 +469,7 @@ static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_ke
     generator->sock = NULL;
     if (h2o_timeout_is_linked(&generator->timeout))
         h2o_timeout_unlink(&generator->timeout);
-    if (generator->resp.sending.bytes_inflight == 0)
+    if (!generator->resp.sending.inflight)
         do_send(generator);
 }
 
@@ -543,6 +543,10 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
                                   value_duped.len);
         }
     }
+
+    /* add date: if it's missing from the response */
+    if (h2o_find_header(&req->res.headers, H2O_TOKEN_DATE, 0) == -1)
+        h2o_resp_add_date_header(req);
 
     return 0;
 }
@@ -639,6 +643,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
 {
     struct st_fcgi_generator_t *generator = sock->data;
     int can_keepalive = 0;
+    int sent_headers_before = generator->sent_headers;
 
     if (err != NULL) {
         /* note: FastCGI server is allowed to close the connection any time after sending an empty FCGI_STDOUT record */
@@ -689,8 +694,15 @@ static void on_read(h2o_socket_t *sock, const char *err)
     }
 
     /* send data if necessary */
-    if (generator->sent_headers && generator->resp.sending.bytes_inflight == 0)
-        do_send(generator);
+    if (generator->sent_headers) {
+        if (!sent_headers_before && generator->resp.receiving->size == 0) {
+            /* send headers immediately */
+            h2o_doublebuffer_prepare_empty(&generator->resp.sending);
+            h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+        } else if (!generator->resp.sending.inflight) {
+            do_send(generator);
+        }
+    }
 
     set_timeout(generator, generator->ctx->io_timeout, on_rw_timeout);
     return;

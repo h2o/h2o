@@ -420,6 +420,10 @@ struct st_h2o_globalconf_t {
          */
         unsigned emit_via_header : 1;
         /**
+         * a boolean flag if set to true, instructs the proxy to emit a date header, if it's missing from the upstream response
+         */
+        unsigned emit_missing_date_header : 1;
+        /**
          * global socketpool
          */
         h2o_socketpool_t global_socketpool;
@@ -1091,12 +1095,14 @@ typedef struct st_h2o_accept_ctx_t {
 
 typedef struct st_h2o_doublebuffer_t {
     h2o_buffer_t *buf;
-    size_t bytes_inflight;
+    unsigned char inflight : 1;
+    size_t _bytes_inflight;
 } h2o_doublebuffer_t;
 
 static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
 static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
 static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
+static void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db);
 static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* token */
@@ -1115,6 +1121,7 @@ int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 /* headers */
 
+static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
@@ -1467,6 +1474,10 @@ enum {
     H2O_SEND_ERROR_KEEP_HEADERS = 0x2
 };
 
+/**
+ * Add a `date:` header to the response
+ */
+void h2o_resp_add_date_header(h2o_req_t *req);
 /**
  * sends the given string as the response
  */
@@ -1921,6 +1932,15 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
 
+inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y)
+{
+    if (x->name == y->name) {
+        return 1;
+    } else {
+        return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
+    }
+}
+
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
@@ -2073,7 +2093,8 @@ static inline void h2o_context_set_logger_context(h2o_context_t *ctx, h2o_logger
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
 {
     h2o_buffer_init(&db->buf, prototype);
-    db->bytes_inflight = 0;
+    db->inflight = 0;
+    db->_bytes_inflight = 0;
 }
 
 static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
@@ -2083,7 +2104,8 @@ static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
 
 static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
 {
-    assert(db->bytes_inflight == 0);
+    assert(!db->inflight);
+    assert(max_bytes != 0);
 
     if (db->buf->size == 0) {
         if ((*receiving)->size == 0)
@@ -2093,16 +2115,25 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
         db->buf = *receiving;
         *receiving = t;
     }
-    if ((db->bytes_inflight = db->buf->size) > max_bytes)
-        db->bytes_inflight = max_bytes;
-    return h2o_iovec_init(db->buf->bytes, db->bytes_inflight);
+    if ((db->_bytes_inflight = db->buf->size) > max_bytes)
+        db->_bytes_inflight = max_bytes;
+    db->inflight = 1;
+    return h2o_iovec_init(db->buf->bytes, db->_bytes_inflight);
+}
+
+static inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
+{
+    assert(!db->inflight);
+    db->inflight = 1;
 }
 
 static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
 {
-    assert(db->bytes_inflight != 0);
-    h2o_buffer_consume(&db->buf, db->bytes_inflight);
-    db->bytes_inflight = 0;
+    assert(db->inflight);
+    db->inflight = 0;
+
+    h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    db->_bytes_inflight = 0;
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \

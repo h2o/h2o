@@ -53,7 +53,7 @@ static void on_sleep_timeout(h2o_timeout_t *entry)
     on_deferred_timeout(entry);
 }
 
-mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value sleep_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
 
@@ -80,13 +80,14 @@ mrb_value h2o_mruby_sleep_callback(h2o_mruby_context_t *mctx, mrb_value receiver
     struct st_h2o_mruby_sleep_context_t *ctx = h2o_mem_alloc(sizeof(*ctx));
     memset(ctx, 0, sizeof(*ctx));
     ctx->ctx = mctx;
-    ctx->receiver = receiver;
+    ctx->receiver = *receiver;
+    h2o_timeout_init(ctx->ctx->shared->ctx->loop, &ctx->timeout, msec);
     ctx->timeout_entry.cb = on_sleep_timeout;
     h2o_timeout_link(ctx->ctx->shared->ctx->loop, msec, &ctx->timeout_entry);
 
     ctx->started_at = h2o_now(ctx->ctx->shared->ctx->loop);
 
-    mrb_gc_register(mrb, receiver);
+    mrb_gc_register(mrb, *receiver);
 
     return mrb_nil_value();
 }
@@ -95,5 +96,5 @@ void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
 
-    h2o_mruby_define_callback(mrb, "_h2o__sleep", H2O_MRUBY_CALLBACK_ID_SLEEP);
+    h2o_mruby_define_callback(mrb, "_h2o__sleep", sleep_callback);
 }

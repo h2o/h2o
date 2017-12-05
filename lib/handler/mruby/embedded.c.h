@@ -10,9 +10,9 @@
     "  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                         \
     "end\n"                                                                                                                        \
     "module Kernel\n"                                                                                                              \
-    "  def _h2o_define_callback(name, id)\n"                                                                                       \
+    "  def _h2o_define_callback(name, callback_id)\n"                                                                              \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
-    "      ret = Fiber.yield([ id, _h2o_create_resumer(), args ])\n"                                                               \
+    "      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])\n"                                                      \
     "      if ret.kind_of? Exception\n"                                                                                            \
     "        raise ret\n"                                                                                                          \
     "      end\n"                                                                                                                  \
@@ -22,7 +22,7 @@
     "  def _h2o_create_resumer()\n"                                                                                                \
     "    me = Fiber.current\n"                                                                                                     \
     "    Proc.new do |v|\n"                                                                                                        \
-    "    me.resume(v)\n"                                                                                                           \
+    "      me.resume(v)\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "  def _h2o_proc_each_to_array()\n"                                                                                            \
@@ -34,12 +34,9 @@
     "      a\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
-    "  H2O_CALLBACK_ID_EXCEPTION_RAISED = -1\n"                                                                                    \
-    "  H2O_CALLBACK_ID_CONFIGURING_APP = -2\n"                                                                                     \
-    "  H2O_CALLBACK_ID_CONFIGURED_APP = -3\n"                                                                                      \
     "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
-    "      [H2O_CALLBACK_ID_CONFIGURING_APP]\n"                                                                                    \
+    "      _h2o__block_request(req)\n"                                                                                             \
     "    end\n"                                                                                                                    \
     "    cached = nil\n"                                                                                                           \
     "    runner = Proc.new do |args|\n"                                                                                            \
@@ -54,7 +51,7 @@
     "            end\n"                                                                                                            \
     "          rescue => e\n"                                                                                                      \
     "            cached = self_fiber\n"                                                                                            \
-    "            (req, generator) = Fiber.yield([H2O_CALLBACK_ID_EXCEPTION_RAISED, e, generator])\n"                               \
+    "            (req, generator) = _h2o__send_error(e, generator)\n"                                                              \
     "          end\n"                                                                                                              \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
@@ -67,12 +64,12 @@
     "          H2O::ConfigurationContext.reset\n"                                                                                  \
     "          app = _h2o_eval_conf(conf)\n"                                                                                       \
     "          H2O::ConfigurationContext.instance.call_post_handler_generation_hooks(app)\n"                                       \
-    "          [H2O_CALLBACK_ID_CONFIGURED_APP]\n"                                                                                 \
+    "          _h2o__run_blocking_requests()\n"                                                                                    \
     "        rescue => e\n"                                                                                                        \
     "          app = Proc.new do |req|\n"                                                                                          \
     "            [500, {}, ['Internal Server Error']]\n"                                                                           \
     "          end\n"                                                                                                              \
-    "          [H2O_CALLBACK_ID_CONFIGURED_APP, e]\n"                                                                              \
+    "          _h2o__run_blocking_requests(e)\n"                                                                                   \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \
@@ -81,6 +78,17 @@
     "  end\n"                                                                                                                      \
     "  def sleep(*sec)\n"                                                                                                          \
     "    _h2o__sleep(*sec)\n"                                                                                                      \
+    "  end\n"                                                                                                                      \
+    "  def task(&block)\n"                                                                                                         \
+    "    fiber = Fiber.new do\n"                                                                                                   \
+    "      begin\n"                                                                                                                \
+    "        block.call\n"                                                                                                         \
+    "      rescue => e\n"                                                                                                          \
+    "        _h2o__send_error(e)\n"                                                                                                \
+    "      end\n"                                                                                                                  \
+    "      _h2o__finish_child_fiber()\n"                                                                                           \
+    "    end\n"                                                                                                                    \
+    "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
     "  end\n"                                                                                                                      \
     "end\n"
 
@@ -132,10 +140,27 @@
     "          end\n"                                                                                                              \
     "          _h2o_send_chunk_eos(generator)\n"                                                                                   \
     "        rescue => e\n"                                                                                                        \
-    "          Fiber.yield([-1, e, generator])\n"                                                                                  \
+    "          _h2o__send_error(e, generator)\n"                                                                                   \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "end\n"
+
+/* lib/handler/mruby/embedded/channel.rb */
+#define H2O_MRUBY_CODE_CHANNEL                                                                                                     \
+    "module H2O\n"                                                                                                                 \
+    "  class Channel\n"                                                                                                            \
+    "    def push(o)\n"                                                                                                            \
+    "      @queue << o\n"                                                                                                          \
+    "      self._notify\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "    def shift\n"                                                                                                              \
+    "      if @queue.empty?\n"                                                                                                     \
+    "        _h2o__channel_wait(self)\n"                                                                                           \
+    "      end\n"                                                                                                                  \
+    "      @queue.shift\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "end\n"

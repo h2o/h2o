@@ -1,4 +1,4 @@
-# Copyright (c) 2014 DeNA Co., Ltd.
+# Copyright (c) 2017 Ritta Narita
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -18,23 +18,17 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-module Kernel
-
-  def _h2o_chunked_proc_each_to_fiber()
-    Proc.new do |args|
-      src, generator = *args
-      fiber = Fiber.new do
-        begin
-          src.each do |chunk|
-            _h2o_send_chunk(chunk, generator)
-          end
-          _h2o_send_chunk_eos(generator)
-        rescue => e
-          _h2o__send_error(e, generator)
-        end
+module H2O
+  class Channel
+    def push(o)
+      @queue << o
+      self._notify
+    end
+    def shift
+      if @queue.empty?
+        _h2o__channel_wait(self)
       end
-      fiber.resume
+      @queue.shift
     end
   end
-
 end
