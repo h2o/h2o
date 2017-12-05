@@ -29,7 +29,6 @@ extern "C" {
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
-#include "h2o/timer.h"
 #include "h2o/cache.h"
 
 typedef struct st_h2o_http1client_t h2o_http1client_t;

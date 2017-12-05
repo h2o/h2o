@@ -38,4 +38,19 @@ static inline uint64_t h2o_now(h2o_loop_t *loop)
     return uv_now(loop);
 }
 
+struct st_h2o_timeout_t;
+typedef void (*h2o_timeout_cb)(struct st_h2o_timeout_t *timer);
+typedef struct st_h2o_timeout_t {
+    uv_timer_t uv_timer;
+    int is_linked;
+    h2o_timeout_cb cb;
+} h2o_timeout_t;
+
+static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
+{
+    h2o_timeout_t ret = {};
+    ret.cb = cb;
+    return ret;
+}
+
 #endif

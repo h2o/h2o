@@ -22,7 +22,7 @@ static enum theft_trial_res prop_inserted_timer_should_run_at_expiry(struct thef
     uint64_t now;
     size_t events_run;
     h2o_timer_wheel_t w;
-    h2o_timer_wheel_init(&w, 0);
+    h2o_timer_init_wheel(&w, 0);
 
     struct test_timer t;
     t.t = h2o_timeout_init(timer_cb);
@@ -33,7 +33,7 @@ static enum theft_trial_res prop_inserted_timer_should_run_at_expiry(struct thef
         now = input[1] + input[0];
     assert(now >= input[0]);
     h2o_timer_link_(&w, &t.t, input[0]);
-    events_run = h2o_timer_wheel_run(&w, now);
+    events_run = h2o_timer_run_wheel(&w, now);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;
@@ -50,7 +50,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_expiry(str
     uint64_t expire;
     size_t events_run;
     h2o_timer_wheel_t w;
-    h2o_timer_wheel_init(&w, 0);
+    h2o_timer_init_wheel(&w, 0);
 
     struct test_timer t;
     t.t = h2o_timeout_init(timer_cb);
@@ -61,7 +61,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_expiry(str
         expire = input[1] + input[0];
     assert(expire > input[0]);
     h2o_timer_link_(&w, &t.t, expire);
-    events_run = h2o_timer_wheel_run(&w, input[0]);
+    events_run = h2o_timer_run_wheel(&w, input[0]);
 
     if (events_run != 0)
         return THEFT_TRIAL_FAIL;
@@ -78,7 +78,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
     uint64_t i;
     size_t events_run;
     h2o_timer_wheel_t w;
-    h2o_timer_wheel_init(&w, 0);
+    h2o_timer_init_wheel(&w, 0);
     size_t slices = 1;
 
     struct test_timer t;
@@ -88,7 +88,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
 
     slices = input[0] / 100;
     for (i = 0; i < input[0]; i += theft_random_choice(theft, slices)) {
-        events_run = h2o_timer_wheel_run(&w, i);
+        events_run = h2o_timer_run_wheel(&w, i);
         if (events_run != 0)
             return THEFT_TRIAL_FAIL;
         if (t.called != 0)
@@ -97,7 +97,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
             return THEFT_TRIAL_FAIL;
     }
 
-    events_run = h2o_timer_wheel_run(&w, i);
+    events_run = h2o_timer_run_wheel(&w, i);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;

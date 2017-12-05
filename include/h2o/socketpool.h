@@ -33,7 +33,6 @@ extern "C" {
 #include "h2o/linklist.h"
 #include "h2o/multithread.h"
 #include "h2o/socket.h"
-#include "h2o/timer.h"
 #include "h2o/url.h"
 
 typedef enum en_h2o_socketpool_target_type_t {

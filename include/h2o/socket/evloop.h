@@ -23,7 +23,7 @@
 #define h2o__evloop_h
 
 #include "h2o/linklist.h"
-#include "h2o/timer_wheel.h"
+#include "h2o/timer.h"
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
@@ -67,6 +67,17 @@ static inline uint64_t h2o_now(h2o_evloop_t *loop)
 static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 {
     return loop->exec_time_counter.average;
+}
+
+typedef h2o_timer_t h2o_timeout_t;
+typedef h2o_timer_cb h2o_timeout_cb;
+static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
+{
+    return (h2o_timeout_t){
+        {},
+        0,
+        cb,
+    };
 }
 
 #endif

@@ -23,7 +23,6 @@
 #define h2o__redis_h
 
 #include "h2o/socket.h"
-#include "h2o/timer.h"
 
 struct redisAsyncContext;
 struct redisReply;

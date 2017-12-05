@@ -25,7 +25,6 @@
 #include <sys/time.h>
 #include "h2o/memory.h"
 #include "h2o/socket.h"
-#include "h2o/timer.h"
 
 #if H2O_USE_LIBUV
 
@@ -81,7 +80,7 @@ static void h2o_timer_show(h2o_timeout_t *timer, int wid, int sid)
 #endif
 }
 
-static void h2o_timer_wheel_slot_show(h2o_timer_wheel_slot_t *slot, int wid, int sid)
+static void h2o_timer_slot_show_wheel(h2o_timer_wheel_slot_t *slot, int wid, int sid)
 {
     h2o_linklist_t *node;
 
@@ -91,19 +90,19 @@ static void h2o_timer_wheel_slot_show(h2o_timer_wheel_slot_t *slot, int wid, int
     }
 }
 
-void h2o_timer_wheel_show(h2o_timer_wheel_t *w)
+void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
 {
     int i, slot;
 
     for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
             h2o_timer_wheel_slot_t *s = &(w->wheel[i][slot]);
-            h2o_timer_wheel_slot_show(s, i, slot);
+            h2o_timer_slot_show_wheel(s, i, slot);
         }
     }
 }
 
-uint64_t h2o_timer_wheel_get_wake_at(h2o_timer_wheel_t *w)
+uint64_t h2o_timer_get_wake_at_wheel(h2o_timer_wheel_t *w)
 {
     int i = 0;
 
@@ -191,7 +190,7 @@ inline int h2o_timeout_is_linked(h2o_timeout_t *entry)
 /**
  * initializes a timerwheel
  */
-void h2o_timer_wheel_init(h2o_timer_wheel_t *w, uint64_t now)
+void h2o_timer_init_wheel(h2o_timer_wheel_t *w, uint64_t now)
 {
     int i, j;
     memset(w, 0, sizeof(h2o_timer_wheel_t));
@@ -222,7 +221,7 @@ static void cascade(h2o_timer_wheel_t *w, int wheel, int slot)
     }
 }
 
-int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
+int h2o_timer_is_empty_wheel(h2o_timer_wheel_t *w)
 {
     int i, slot;
 
@@ -234,7 +233,7 @@ int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
     return 1;
 }
 
-size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
+size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
 {
     int i, j, now_slot, prev_slot, end_slot;
     uint64_t abs_wtime = w->last_run;
@@ -249,7 +248,7 @@ size_t h2o_timer_wheel_run(h2o_timer_wheel_t *w, uint64_t now)
     /* how the wheel is run: based on abs_wtime and now, we should be able
      * to figure out the wheel id on which most update happens. Most likely
      * the operating wheel is wheel 0 (wid == 0), since we optimize the case
-     * where h2o_timer_wheel_run() is called very frequently, i.e the gap
+     * where h2o_timer_run_wheel() is called very frequently, i.e the gap
      * between abs_wtime and now is normally small. */
     int wid = timer_wheel(abs_wtime, now);
     WHEEL_DEBUG(" wtime %" PRIu64 ", now %" PRIu64 " wid %d\n", abs_wtime, now, wid);

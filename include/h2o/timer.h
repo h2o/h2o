@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2017 Fastly Inc., Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,59 +19,45 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__timer_h
-#define h2o__timer_h
+#ifndef h2o__timer_wheel_h
+#define h2o__timer_wheel_h
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+typedef uint64_t wheelmask_t;
+/* link list of h2o_timeout_t */
+typedef h2o_linklist_t h2o_timer_wheel_slot_t;
 
-#include <stdint.h>
-#include <string.h>
+#define H2O_TIMERWHEEL_MAX_WHEELS 6
+#define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
+#define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
 
-#include "h2o/linklist.h"
-#include "h2o/socket.h"
-#include "h2o/timer_wheel.h"
+typedef struct st_h2o_timer_wheel_t {
+    h2o_timer_wheel_slot_t wheel[H2O_TIMERWHEEL_MAX_WHEELS][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
+    uint64_t last_run; /* the last time h2o_timer_run_wheel was called */
+} h2o_timer_wheel_t;
 
-#if H2O_USE_LIBUV
-struct st_h2o_timeout_t;
-typedef void (*h2o_timeout_cb)(struct st_h2o_timeout_t *timer);
-typedef struct st_h2o_timeout_t {
-    uv_timer_t uv_timer;
-    int is_linked;
-    h2o_timeout_cb cb;
-} h2o_timeout_t;
-#else
-typedef h2o_timer_t h2o_timeout_t;
-typedef h2o_timer_cb h2o_timeout_cb;
-#endif
+struct st_h2o_timer_t;
+typedef void (*h2o_timer_cb)(struct st_h2o_timer_t *timer);
+typedef struct st_h2o_timer_t {
+    h2o_linklist_t _link;
+    uint64_t expire_at; /* absolute expiration time*/
+    h2o_timer_cb cb;
+} h2o_timer_t;
+/**
+ * initializes a timerwheel
+ */
+void h2o_timer_init_wheel(h2o_timer_wheel_t *w, uint64_t now);
+/**
+ * display the contents of the timerwheel
+ */
+void h2o_timer_show_wheel(h2o_timer_wheel_t *wheel);
+/**
+ * find out the time ramaining until the next timer triggers
+ */
+uint64_t h2o_timer_get_wake_at_wheel(h2o_timer_wheel_t *wheel);
 
-#if H2O_USE_LIBUV
-static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
-{
-    h2o_timeout_t ret = {};
-    ret.cb = cb;
-    return ret;
-}
-#else
-static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
-{
-    return (h2o_timeout_t){
-        {},
-        0,
-        cb,
-    };
-}
-#endif
-
-int h2o_timeout_is_linked(h2o_timeout_t *timer);
-void h2o_timeout_unlink(h2o_timeout_t *timer);
-
-typedef uint32_t h2o_timer_tick_t;
 typedef uint64_t h2o_timer_abs_t;
-
-#ifdef __cplusplus
-}
-#endif
+void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
+size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now);
+int h2o_timer_is_empty_wheel(h2o_timer_wheel_t *w);
 
 #endif

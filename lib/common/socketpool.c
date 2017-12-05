@@ -31,7 +31,6 @@
 #include "h2o/linklist.h"
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
-#include "h2o/timer.h"
 #include "h2o/socket.h"
 
 struct pool_entry_t {
