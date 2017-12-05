@@ -83,6 +83,7 @@ typedef struct st_h2o_mruby_config_vars_t {
 typedef struct st_h2o_mruby_handler_t {
     h2o_handler_t super;
     h2o_mruby_config_vars_t config;
+    h2o_pathconf_t *pathconf;
 } h2o_mruby_handler_t;
 
 typedef struct st_h2o_mruby_context_t h2o_mruby_context_t;
@@ -110,7 +111,6 @@ struct st_h2o_mruby_context_t {
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
     mrb_value blocking_reqs;
-    h2o_pathconf_t *pathconf;
 };
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;

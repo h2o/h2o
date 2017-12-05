@@ -127,7 +127,7 @@ typedef struct st_h2o_pathconf_t h2o_pathconf_t;
  */
 typedef struct st_h2o_handler_t {
     size_t _config_slot;
-    void (*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+    void (*on_context_init)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
@@ -149,7 +149,7 @@ typedef struct st_h2o_handler_t {
  */
 typedef struct st_h2o_filter_t {
     size_t _config_slot;
-    void (*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+    void (*on_context_init)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
@@ -161,7 +161,7 @@ typedef struct st_h2o_filter_t {
  */
 typedef struct st_h2o_logger_t {
     size_t _config_slot;
-    void (*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+    void (*on_context_init)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
     void (*on_context_dispose)(struct st_h2o_logger_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_logger_t *self);
     void (*log_access)(struct st_h2o_logger_t *self, h2o_req_t *req);

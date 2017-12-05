@@ -366,7 +366,7 @@ static mrb_value error_stream_write(mrb_state *mrb, mrb_value self)
     if (error_stream->generator != NULL) {
         h2o_req_t *req = error_stream->generator->req;
         req->error.cb(req, req->error.data, error);
-    } else if (error_stream->ctx->pathconf->error_log.emit_request_errors) {
+    } else if (error_stream->ctx->handler->pathconf->error_log.emit_request_errors) {
         h2o_write_error_log(error);
     }
 
@@ -453,14 +453,13 @@ mrb_value prepare_fibers(h2o_mruby_context_t *ctx)
     return result;
 }
 
-static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx, h2o_pathconf_t *pathconf)
+static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
     h2o_mruby_handler_t *handler = (void *)_handler;
     h2o_mruby_context_t *handler_ctx = h2o_mem_alloc(sizeof(*handler_ctx));
 
     handler_ctx->handler = handler;
     handler_ctx->shared = get_shared_context(ctx);
-    handler_ctx->pathconf = pathconf;
 
     mrb_state *mrb = handler_ctx->shared->mrb;
 
@@ -953,6 +952,7 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
     if (vars->path != NULL)
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
     handler->config.lineno = vars->lineno;
+    handler->pathconf = pathconf;
 
     return handler;
 }

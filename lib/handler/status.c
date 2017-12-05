@@ -226,7 +226,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return -1;
 }
 
-static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx, h2o_pathconf_t *pathconf)
+static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct st_h2o_root_status_handler_t *self = (void *)_self;
     struct st_h2o_status_context_t *status_ctx = h2o_mem_alloc(sizeof(*status_ctx));

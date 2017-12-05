@@ -787,7 +787,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
-static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx, h2o_pathconf_t *pathconf)
+static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
     h2o_fastcgi_handler_t *handler = (void *)_handler;
     struct st_fcgi_context_t *handler_ctx = h2o_mem_alloc(sizeof(*handler_ctx));

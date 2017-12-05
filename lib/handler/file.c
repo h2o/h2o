@@ -822,7 +822,7 @@ Opened:
                                 h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len)));
 }
 
-static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx, h2o_pathconf_t *pathconf)
+static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     h2o_file_handler_t *self = (void *)_self;
 
@@ -893,7 +893,7 @@ h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler)
     return handler->mimemap;
 }
 
-static void specific_handler_on_context_init(h2o_handler_t *_self, h2o_context_t *ctx, h2o_pathconf_t *pathconf)
+static void specific_handler_on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct st_h2o_specific_file_handler_t *self = (void *)_self;
 

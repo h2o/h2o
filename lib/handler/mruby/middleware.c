@@ -455,12 +455,12 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
 
     /* setup conn */
-    if (ctx->pathconf->host) {
+    if (ctx->handler->pathconf->host) {
         subreq->conn.super.hosts = h2o_mem_alloc_pool(&subreq->super.pool, sizeof(subreq->conn.super.hosts[0]) * 2);
-        subreq->conn.super.hosts[0] = ctx->pathconf->host;
+        subreq->conn.super.hosts[0] = ctx->handler->pathconf->host;
         subreq->conn.super.hosts[1] = NULL;
     } else {
-        subreq->conn.super.hosts = ctx->pathconf->global->hosts;
+        subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
     }
     subreq->conn.server.len = parse_hostport(mrb, server_addr, server_port, &subreq->conn.server.addr);
     subreq->conn.remote.len = parse_hostport(mrb, remote_addr, remote_port, &subreq->conn.remote.addr);
@@ -495,7 +495,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     super->input.path = h2o_strdup(&super->pool, url_parsed.path.base, url_parsed.path.len);
     h2o_hostconf_t *hostconf = h2o_req_setup(super);
     super->hostconf = hostconf;
-    super->pathconf = ctx->pathconf;
+    super->pathconf = ctx->handler->pathconf;
     super->version = h2o_parse_protocol_version_string(h2o_iovec_init(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol)));
     if (super->version == -1)
         super->version = 0x101;
