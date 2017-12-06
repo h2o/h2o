@@ -131,7 +131,7 @@ ENDIF (WITH_BUNDLED_SSL)
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
-    deps/brotli/enc
+    deps/brotli/c/include
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -220,21 +220,25 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/writer.c)
 
 SET(BROTLI_SOURCE_FILES
-    deps/brotli/enc/backward_references.cc
-    deps/brotli/enc/block_splitter.cc
-    deps/brotli/enc/brotli_bit_stream.cc
-    deps/brotli/enc/compress_fragment.cc
-    deps/brotli/enc/compress_fragment_two_pass.cc
-    deps/brotli/enc/dictionary.cc
-    deps/brotli/enc/encode.cc
-    deps/brotli/enc/entropy_encode.cc
-    deps/brotli/enc/histogram.cc
-    deps/brotli/enc/literal_cost.cc
-    deps/brotli/enc/metablock.cc
-    deps/brotli/enc/static_dict.cc
-    deps/brotli/enc/streams.cc
-    deps/brotli/enc/utf8_util.cc
-    lib/handler/compress/brotli.cc)
+    deps/brotli/c/common/dictionary.c
+    deps/brotli/c/enc/backward_references.c
+    deps/brotli/c/enc/backward_references_hq.c
+    deps/brotli/c/enc/bit_cost.c
+    deps/brotli/c/enc/block_splitter.c
+    deps/brotli/c/enc/brotli_bit_stream.c
+    deps/brotli/c/enc/cluster.c
+    deps/brotli/c/enc/compress_fragment.c
+    deps/brotli/c/enc/compress_fragment_two_pass.c
+    deps/brotli/c/enc/dictionary_hash.c
+    deps/brotli/c/enc/encode.c
+    deps/brotli/c/enc/entropy_encode.c
+    deps/brotli/c/enc/histogram.c
+    deps/brotli/c/enc/literal_cost.c
+    deps/brotli/c/enc/memory.c
+    deps/brotli/c/enc/metablock.c
+    deps/brotli/c/enc/static_dict.c
+    deps/brotli/c/enc/utf8_util.c
+    lib/handler/compress/brotli.c)
 
 SET(PICOTLS_INCLUDE_DIRECTORIES
     deps/picotls/deps/cifra/src/ext
