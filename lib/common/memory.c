@@ -32,7 +32,11 @@
 #include "h2o/memory.h"
 
 #if defined(__linux__)
+#if defined(__ANDROID__) && (__ANDROID_API__ < 21)
+#define USE_POSIX_FALLOCATE 0
+#else
 #define USE_POSIX_FALLOCATE 1
+#endif
 #elif __FreeBSD__ >= 9
 #define USE_POSIX_FALLOCATE 1
 #elif __NetBSD__ >= 7
