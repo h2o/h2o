@@ -124,7 +124,7 @@ static inline double FastLog2(size_t v) {
   if (v < sizeof(kLog2Table) / sizeof(kLog2Table[0])) {
     return kLog2Table[v];
   }
-#if defined(_MSC_VER) && _MSC_VER <= 1600
+#if (defined(_MSC_VER) && _MSC_VER <= 1600) || (defined(__ANDROID__) && __ANDROID_API__ < 21)
   // Visual Studio 2010 does not have the log2() function defined, so we use
   // log() and a multiplication instead.
   static const double kLog2Inv = 1.4426950408889634f;
