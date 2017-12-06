@@ -37,24 +37,27 @@ static void expand_buf(struct st_brotli_context_t *self)
     self->bufs.entries[self->bufs.size++] = h2o_iovec_init(h2o_mem_alloc(self->buf_capacity), 0);
 }
 
-static void compress_core(struct st_brotli_context_t *self, BrotliEncoderOperation op, const uint8_t **src, size_t *srclen,
-                          size_t *bufindex)
+static void shrink_buf(struct st_brotli_context_t *self, size_t new_size)
 {
-    if (self->bufs.entries[*bufindex].len == self->buf_capacity) {
-        ++*bufindex;
-        if (*bufindex == self->bufs.size) {
-            expand_buf(self);
-        } else {
-            self->bufs.entries[*bufindex].len = 0;
-        }
+    while (new_size < self->bufs.size)
+        free(self->bufs.entries[--self->bufs.size].base);
+}
+
+static void compress_core(struct st_brotli_context_t *self, BrotliEncoderOperation op, const uint8_t **src, size_t *srclen)
+{
+    size_t bufindex = self->bufs.size - 1;
+
+    if (self->bufs.entries[bufindex].len == self->buf_capacity) {
+        expand_buf(self);
+        ++bufindex;
     }
-    uint8_t *dst = (uint8_t *)self->bufs.entries[*bufindex].base + self->bufs.entries[*bufindex].len;
-    size_t dstlen = self->buf_capacity - self->bufs.entries[*bufindex].len;
+    uint8_t *dst = (uint8_t *)self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len;
+    size_t dstlen = self->buf_capacity - self->bufs.entries[bufindex].len;
 
     if (!BrotliEncoderCompressStream(self->state, op, srclen, src, &dstlen, &dst, NULL))
         h2o_fatal("BrotliEncoderCompressStream");
 
-    self->bufs.entries[*bufindex].len = self->buf_capacity - dstlen;
+    self->bufs.entries[bufindex].len = self->buf_capacity - dstlen;
 }
 
 static void compress_(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
@@ -63,9 +66,9 @@ static void compress_(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t
     struct st_brotli_context_t *self = (void *)_self;
     BrotliEncoderOperation final_op = h2o_send_state_is_in_progress(state) ? BROTLI_OPERATION_FLUSH : BROTLI_OPERATION_FINISH;
     const uint8_t *src;
-    size_t srclen;
-    size_t i, bufindex = 0;
+    size_t i, srclen;
 
+    shrink_buf(self, 1);
     self->bufs.entries[0].len = 0;
 
     /* encode chunks and flush */
@@ -75,33 +78,31 @@ static void compress_(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t
             srclen = inbufs[i].len;
             BrotliEncoderOperation op = i + 1 == inbufcnt ? final_op : BROTLI_OPERATION_PROCESS;
             while (srclen != 0)
-                compress_core(self, op, &src, &srclen, &bufindex);
+                compress_core(self, op, &src, &srclen);
         }
     } else {
         src = NULL;
         srclen = 0;
-        compress_core(self, final_op, &src, &srclen, &bufindex);
+        compress_core(self, final_op, &src, &srclen);
     }
 
     /* emit pending output, if any */
     while (BrotliEncoderHasMoreOutput(self->state)) {
         src = NULL;
         srclen = 0;
-        compress_core(self, final_op, &src, &srclen, &bufindex);
+        compress_core(self, final_op, &src, &srclen);
     }
 
     *outbufs = self->bufs.entries;
-    *outbufcnt = bufindex + (self->bufs.entries[bufindex].len != 0);
+    *outbufcnt = self->bufs.size - (self->bufs.entries[self->bufs.size - 1].len == 0);
 }
 
 static void on_dispose(void *_self)
 {
     struct st_brotli_context_t *self = _self;
-    size_t i;
 
     BrotliEncoderDestroyInstance(self->state);
-    for (i = 0; i != self->bufs.size; ++i)
-        free(self->bufs.entries[i].base);
+    shrink_buf(self, 0);
     free(self->bufs.entries);
 }
 
