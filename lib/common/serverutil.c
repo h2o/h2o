@@ -25,7 +25,7 @@
 #include <pthread.h>
 #include <pwd.h>
 #include <signal.h>
-#ifndef __ANDROID__
+#ifndef __linux__
 #include <spawn.h>
 #endif
 #include <stdint.h>

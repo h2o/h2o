@@ -24,9 +24,6 @@
 #include <inttypes.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#ifndef __ANDROID__
-#include <spawn.h>
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>

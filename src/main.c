@@ -35,9 +35,6 @@
 #include <pthread.h>
 #include <pwd.h>
 #include <signal.h>
-#ifndef __ANDROID__
-#include <spawn.h>
-#endif
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>
