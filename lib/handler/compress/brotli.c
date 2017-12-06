@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 DeNA Co., Ltd., Kazuho Oku
+ * Copyright (c) 2017 Fastly, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
