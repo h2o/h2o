@@ -83,7 +83,8 @@ typedef struct st_h2o_mruby_handler_t {
 } h2o_mruby_handler_t;
 
 typedef struct st_h2o_mruby_context_t h2o_mruby_context_t;
-typedef mrb_value (*h2o_mruby_callback_t)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again);
+typedef mrb_value (*h2o_mruby_callback_t)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                          int *run_again);
 typedef H2O_VECTOR(h2o_mruby_callback_t) h2o_mruby_callbacks_t;
 
 typedef struct st_h2o_mruby_shared_context_t {

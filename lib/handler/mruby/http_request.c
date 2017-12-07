@@ -443,7 +443,8 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     return ctx->refs.request;
 }
 
-static mrb_value http_join_response_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+static mrb_value http_join_response_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                             int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -462,7 +463,8 @@ static mrb_value create_already_consumed_error(mrb_state *mrb)
     return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
 }
 
-static mrb_value http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+static mrb_value http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                           int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;

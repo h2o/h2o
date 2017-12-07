@@ -284,7 +284,8 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
     } else {
         assert(generator->req != NULL);
-        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n",
+                          RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         if (generator->req->_generator == NULL) {
             h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         } else {
@@ -313,12 +314,13 @@ mrb_value block_request_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_
     return mrb_nil_value();
 }
 
-mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                         int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
     mrb_value exc = mrb_ary_entry(args, 0);
-    if (! mrb_nil_p(exc)) {
+    if (!mrb_nil_p(exc)) {
         mrb->exc = mrb_obj_ptr(exc);
         handle_exception(ctx, NULL);
     }
@@ -353,7 +355,8 @@ mrb_value run_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mr
     return mrb_nil_value();
 }
 
-mrb_value finish_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+mrb_value finish_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                      int *run_again)
 {
     /* do nothing */
     return mrb_nil_value();
