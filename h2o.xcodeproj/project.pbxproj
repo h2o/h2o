@@ -342,6 +342,24 @@
 		E987E5DE1FD7BEB500DE4346 /* entropy_encode.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5661FD7BE1E00DE4346 /* entropy_encode.c */; };
 		E987E5E91FD7EBC700DE4346 /* cluster.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58B1FD7BE2300DE4346 /* cluster.c */; };
 		E987E5EA1FD7EBD100DE4346 /* dictionary.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5E31FD7EB7E00DE4346 /* dictionary.c */; };
+		E987E5EB1FD8C01E00DE4346 /* dictionary.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5E31FD7EB7E00DE4346 /* dictionary.c */; };
+		E987E5EC1FD8C04D00DE4346 /* backward_references_hq.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E57A1FD7BE2000DE4346 /* backward_references_hq.c */; };
+		E987E5ED1FD8C04D00DE4346 /* backward_references.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E56F1FD7BE1F00DE4346 /* backward_references.c */; };
+		E987E5EE1FD8C04D00DE4346 /* bit_cost.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5551FD7BE1D00DE4346 /* bit_cost.c */; };
+		E987E5EF1FD8C04D00DE4346 /* block_splitter.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5731FD7BE2000DE4346 /* block_splitter.c */; };
+		E987E5F01FD8C04D00DE4346 /* brotli_bit_stream.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5871FD7BE2200DE4346 /* brotli_bit_stream.c */; };
+		E987E5F11FD8C04D00DE4346 /* cluster.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58B1FD7BE2300DE4346 /* cluster.c */; };
+		E987E5F21FD8C04D00DE4346 /* compress_fragment_two_pass.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5651FD7BE1E00DE4346 /* compress_fragment_two_pass.c */; };
+		E987E5F31FD8C04D00DE4346 /* compress_fragment.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E57D1FD7BE2100DE4346 /* compress_fragment.c */; };
+		E987E5F41FD8C04D00DE4346 /* dictionary_hash.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E55A1FD7BE1D00DE4346 /* dictionary_hash.c */; };
+		E987E5F51FD8C04D00DE4346 /* encode.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E57E1FD7BE2100DE4346 /* encode.c */; };
+		E987E5F61FD8C04D00DE4346 /* entropy_encode.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5661FD7BE1E00DE4346 /* entropy_encode.c */; };
+		E987E5F71FD8C04D00DE4346 /* histogram.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5741FD7BE2000DE4346 /* histogram.c */; };
+		E987E5F81FD8C04D00DE4346 /* literal_cost.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5631FD7BE1E00DE4346 /* literal_cost.c */; };
+		E987E5F91FD8C04D00DE4346 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E56C1FD7BE1F00DE4346 /* memory.c */; };
+		E987E5FA1FD8C04D00DE4346 /* metablock.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5801FD7BE2100DE4346 /* metablock.c */; };
+		E987E5FB1FD8C04D00DE4346 /* static_dict.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58C1FD7BE2300DE4346 /* static_dict.c */; };
+		E987E5FC1FD8C04D00DE4346 /* utf8_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5861FD7BE2200DE4346 /* utf8_util.c */; };
 		E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76E41F00E70700EB7A09 /* salsa20.h */; };
 		E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
 		E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E91F00E74C00EB7A09 /* poly1305.c */; };
@@ -2407,14 +2425,20 @@
 				107D4D441B588021004A9B21 /* ssl.c in Sources */,
 				1079244A19A3266700C52AD6 /* frame.c in Sources */,
 				1079244B19A3266700C52AD6 /* context.c in Sources */,
+				E987E5EE1FD8C04D00DE4346 /* bit_cost.c in Sources */,
+				E987E5FA1FD8C04D00DE4346 /* metablock.c in Sources */,
+				E987E5FB1FD8C04D00DE4346 /* static_dict.c in Sources */,
 				1079244C19A3266700C52AD6 /* memory.c in Sources */,
 				10FCC1401B2E59E600F13674 /* cloexec.c in Sources */,
 				105534C71A3BB29100627ECB /* string.c in Sources */,
+				E987E5ED1FD8C04D00DE4346 /* backward_references.c in Sources */,
 				107D4D4B1B5880BC004A9B21 /* scanner.c in Sources */,
 				1079244E19A3266700C52AD6 /* request.c in Sources */,
 				10D0907019F494CC0043D458 /* test.c in Sources */,
 				107D4D481B5880BC004A9B21 /* loader.c in Sources */,
 				105534C11A3B911300627ECB /* hpack.c in Sources */,
+				E987E5EB1FD8C01E00DE4346 /* dictionary.c in Sources */,
+				E987E5F01FD8C04D00DE4346 /* brotli_bit_stream.c in Sources */,
 				107E34221C7FEE2200AEF5F8 /* brotli.c in Sources */,
 				105534C31A3B917000627ECB /* mimemap.c in Sources */,
 				10AA2E991A81F68A004322AC /* time.c in Sources */,
@@ -2422,25 +2446,37 @@
 				107D4D471B5880BC004A9B21 /* emitter.c in Sources */,
 				10BCF3011B214C460076939D /* fastcgi.c in Sources */,
 				104B9A281A4A5139009EEE64 /* serverutil.c in Sources */,
+				E987E5F91FD8C04D00DE4346 /* memory.c in Sources */,
 				10AA2EA31A88090B004322AC /* url.c in Sources */,
 				1024A4001D23606300EB13F1 /* cache_digests.c in Sources */,
+				E987E5F61FD8C04D00DE4346 /* entropy_encode.c in Sources */,
 				105534C91A3BB41C00627ECB /* proxy.c in Sources */,
 				107D4D461B5880BC004A9B21 /* dumper.c in Sources */,
 				107D4D451B5880BC004A9B21 /* api.c in Sources */,
+				E987E5F31FD8C04D00DE4346 /* compress_fragment.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				1079244419A3265C00C52AD6 /* chunked.c in Sources */,
 				1070866A1B70A00F002B8F18 /* casper.c in Sources */,
+				E987E5F51FD8C04D00DE4346 /* encode.c in Sources */,
+				E987E5FC1FD8C04D00DE4346 /* utf8_util.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
+				E987E5F11FD8C04D00DE4346 /* cluster.c in Sources */,
+				E987E5F81FD8C04D00DE4346 /* literal_cost.c in Sources */,
+				E987E5F71FD8C04D00DE4346 /* histogram.c in Sources */,
 				107086701B7925D5002B8F18 /* compress.c in Sources */,
+				E987E5F41FD8C04D00DE4346 /* dictionary_hash.c in Sources */,
 				107D4D4C1B5880BC004A9B21 /* writer.c in Sources */,
+				E987E5EC1FD8C04D00DE4346 /* backward_references_hq.c in Sources */,
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
 				103BAB361B130666000694F4 /* socket.c in Sources */,
 				10583C001AEF368A004A3AD6 /* 293.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
+				E987E5EF1FD8C04D00DE4346 /* block_splitter.c in Sources */,
 				10F9F2671AFC5F550056F26B /* hostinfo.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				10F9F2651AF4795D0056F26B /* redirect.c in Sources */,
+				E987E5F21FD8C04D00DE4346 /* compress_fragment_two_pass.c in Sources */,
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
