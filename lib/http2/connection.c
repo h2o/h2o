@@ -630,8 +630,6 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
         return 0;
 
-    update_input_window(conn, 0, &conn->_input_window, payload.length);
-
     /* save the input in the request body buffer, or send error (and close the stream) */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL) {
         if (frame->stream_id <= conn->pull_stream_ids.max_open) {
@@ -642,6 +640,10 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     }
+	
+    update_input_window(conn, 0, &conn->_input_window, frame->length);
+    update_input_window(conn, stream->stream_id, &stream->input_window, frame->length);
+	
     if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
