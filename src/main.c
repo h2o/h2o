@@ -1393,12 +1393,37 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
     return loaded;
 }
 
+static yoml_t *resolve_env_tag(yoml_t *node, resolve_tag_arg_t *arg)
+{
+
+    const char * env_var = node->data.scalar;
+    if (node->type != YOML_TYPE_SCALAR) {
+        fprintf(stderr, "value of !env must be a scalar");
+        return NULL;
+    }
+
+    const char *env_var_content;
+    if ((env_var_content = getenv(env_var)) == NULL)
+        env_var_content = "";
+
+    free(node->data.scalar);
+    node->data.scalar = h2o_strdup(NULL, env_var_content, SIZE_MAX).base;
+    ++node->_refcnt;
+
+    return node;
+}
+
+
 static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg)
 {
     resolve_tag_arg_t *arg = (resolve_tag_arg_t *)cb_arg;
 
     if (strcmp(tag, "!file") == 0) {
         return resolve_file_tag(node, arg);
+    }
+
+    if (strcmp(tag, "!env") == 0) {
+        return resolve_env_tag(node, arg);
     }
 
     /* otherwise, return the node itself */
