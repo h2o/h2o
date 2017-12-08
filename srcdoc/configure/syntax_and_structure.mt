@@ -214,3 +214,20 @@ EOT
 ?>
 
 ? })
+
+<p>
+Starting from version 2.3, it is possible to include an environment variable from the configuration file as a scalar using <code>!env</code> custom YAML tag.
+</p>
+
+<?= $ctx->{example}->('h2o.conf', << 'EOT')
+hosts:
+  "example.com":
+    listen:
+      port: !env H2O_PORT
+    paths:
+      ...
+EOT
+?>
+
+? })
+
