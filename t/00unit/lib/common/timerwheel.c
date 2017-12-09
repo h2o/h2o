@@ -50,7 +50,7 @@ void test_add_fixed_timers()
     /* add timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
-        timers[i] = h2o_timeout_init(my_callback);
+        h2o_timeout_init(&timers[i], my_callback);
         h2o_timer_link_(testwheel, &timers[i], expiry);
     }
 
@@ -70,7 +70,7 @@ void test_del_timers()
     /* add N timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
-        timers[i] = h2o_timeout_init(my_callback);
+        h2o_timeout_init(&timers[i], my_callback);
         h2o_timer_link_(testwheel, &timers[i], expiry);
     }
 
@@ -97,7 +97,7 @@ void test_add_rand_timers()
     /* add timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + lcg_rand() % N;
-        timers[i] = h2o_timeout_init(my_callback);
+        h2o_timeout_init(&timers[i], my_callback);
         h2o_timer_link_(testwheel, &timers[i], expiry);
     }
 

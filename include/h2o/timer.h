@@ -61,4 +61,12 @@ void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t a
 size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now);
 int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 
+static inline void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb)
+{
+    *timer = (h2o_timer_t){
+        {0},
+        0,
+        cb,
+    };
+}
 #endif

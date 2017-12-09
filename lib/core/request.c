@@ -71,7 +71,7 @@ static struct st_deferred_request_action_t *create_deferred_action(h2o_req_t *re
 {
     struct st_deferred_request_action_t *action = h2o_mem_alloc_shared(&req->pool, sz, on_deferred_action_dispose);
     action->req = req;
-    action->timeout = h2o_timeout_init(cb);
+    h2o_timeout_init(&action->timeout, cb);
     h2o_timeout_link(req->conn->ctx->loop, 0, &action->timeout);
     return action;
 }
