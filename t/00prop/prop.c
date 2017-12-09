@@ -49,7 +49,7 @@ static enum theft_trial_res prop_inserted_timer_should_run_at_expiry(struct thef
         return THEFT_TRIAL_FAIL;
     if (t.called != 1)
         return THEFT_TRIAL_FAIL;
-    if (!h2o_timer_is_empty_wheel(&w))
+    if (!h2o_timer_wheel_is_empty(&w))
         return THEFT_TRIAL_FAIL;
     return THEFT_TRIAL_PASS;
 }
@@ -77,7 +77,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_expiry(str
         return THEFT_TRIAL_FAIL;
     if (t.called != 0)
         return THEFT_TRIAL_FAIL;
-    if (h2o_timer_is_empty_wheel(&w))
+    if (h2o_timer_wheel_is_empty(&w))
         return THEFT_TRIAL_FAIL;
     return THEFT_TRIAL_PASS;
 }
@@ -103,7 +103,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
             return THEFT_TRIAL_FAIL;
         if (t.called != 0)
             return THEFT_TRIAL_FAIL;
-        if (h2o_timer_is_empty_wheel(&w))
+        if (h2o_timer_wheel_is_empty(&w))
             return THEFT_TRIAL_FAIL;
     }
 
@@ -113,7 +113,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
         return THEFT_TRIAL_FAIL;
     if (t.called != 1)
         return THEFT_TRIAL_FAIL;
-    if (!h2o_timer_is_empty_wheel(&w))
+    if (!h2o_timer_wheel_is_empty(&w))
         return THEFT_TRIAL_FAIL;
     return THEFT_TRIAL_PASS;
 }

@@ -469,7 +469,7 @@ void update_now(h2o_evloop_t *loop)
 
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 {
-    uint64_t wake_at = h2o_timer_get_wake_at_wheel(&loop->_timerwheel);
+    uint64_t wake_at = h2o_timer_get_wake_at(&loop->_timerwheel);
 
     update_now(loop);
 
@@ -551,7 +551,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     struct st_h2o_evloop_socket_t *sock;
 
     /* timeouts are governed by the application and MUST be destroyed prior to destroying the loop */
-    assert(h2o_timer_is_empty_wheel(&loop->_timerwheel));
+    assert(h2o_timer_wheel_is_empty(&loop->_timerwheel));
 
     /* dispose all socket */
     while ((sock = loop->_pending_as_client) != NULL) {

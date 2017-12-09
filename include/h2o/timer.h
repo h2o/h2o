@@ -52,13 +52,13 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *wheel);
 /**
  * find out the time ramaining until the next timer triggers
  */
-uint64_t h2o_timer_get_wake_at_wheel(h2o_timer_wheel_t *wheel);
+uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *wheel);
 
 typedef uint32_t h2o_timer_tick_t;
 typedef uint64_t h2o_timer_abs_t;
 
 void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
 size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now);
-int h2o_timer_is_empty_wheel(h2o_timer_wheel_t *w);
+int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 
 #endif

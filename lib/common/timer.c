@@ -102,7 +102,7 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
     }
 }
 
-uint64_t h2o_timer_get_wake_at_wheel(h2o_timer_wheel_t *w)
+uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
 {
     int i = 0;
 
@@ -209,7 +209,7 @@ static void cascade(h2o_timer_wheel_t *w, int wheel, int slot)
     }
 }
 
-int h2o_timer_is_empty_wheel(h2o_timer_wheel_t *w)
+int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
 {
     int i, slot;
 
