@@ -29,6 +29,13 @@ struct st_h2o_multithread_queue_t {
 #if H2O_USE_LIBUV
     uv_async_t async;
 #else
+#if defined(__linux__) && LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
+/**
+ * The kernel overhead of an eventfd file descriptor is
+ * much lower than that of a pipe, and only one file descriptor is required
+ */
+#define H2O_ASYNC_NOTIFY_USING_EVENTFD
+#endif
     struct {
         int write;
         h2o_socket_t *read;
@@ -90,6 +97,17 @@ static void on_read(h2o_socket_t *sock, const char *err)
 
 static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 {
+#ifdef H2O_ASYNC_NOTIFY_USING_EVENTFD
+    int fd;
+
+    fd = cloexec_nblock_eventfd();
+    if (fd == -1) {
+        perror("eventfd");
+        abort();
+    }
+    queue->async.write = fd;
+    queue->async.read = h2o_evloop_socket_create(loop, fd, 0);
+#else
     int fds[2];
 
     if (cloexec_pipe(fds) != 0) {
@@ -99,6 +117,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
     queue->async.write = fds[1];
     queue->async.read = h2o_evloop_socket_create(loop, fds[0], 0);
+#endif
     queue->async.read->data = queue;
     h2o_socket_read_start(queue->async.read, on_read);
 }
@@ -131,7 +150,10 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 #else
     h2o_socket_read_stop(queue->async.read);
     h2o_socket_close(queue->async.read);
+#ifndef H2O_ASYNC_NOTIFY_USING_EVENTFD
+    /* only one file descriptor is required for eventfd and already closed by h2o_socket_close() */
     close(queue->async.write);
+#endif
 #endif
     pthread_mutex_destroy(&queue->mutex);
 }
@@ -181,7 +203,12 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 #if H2O_USE_LIBUV
         uv_async_send(&receiver->queue->async);
 #else
+#ifdef H2O_ASYNC_NOTIFY_USING_EVENTFD
+        uint64_t tmp = 1;
+        while (write(receiver->queue->async.write, &tmp, sizeof(tmp)) == -1 && errno == EINTR)
+#else
         while (write(receiver->queue->async.write, "", 1) == -1 && errno == EINTR)
+#endif
             ;
 #endif
     }
