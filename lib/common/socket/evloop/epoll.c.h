@@ -190,6 +190,13 @@ h2o_evloop_t *h2o_evloop_create(void)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
 
     pthread_mutex_lock(&cloexec_mutex);
+#ifdef EPOLL_CLOEXEC
+    loop->ep = epoll_create1(EPOLL_CLOEXEC);
+    if (loop->ep == -1) {
+        fprintf(stderr, "h2o_evloop_create: failed to create the epoll fd (errno=%d)\n", errno);
+        abort();
+    }
+#else
     loop->ep = epoll_create(10);
     while (fcntl(loop->ep, F_SETFD, FD_CLOEXEC) == -1) {
         if (errno != EAGAIN) {
@@ -197,6 +204,7 @@ h2o_evloop_t *h2o_evloop_create(void)
             abort();
         }
     }
+#endif
     pthread_mutex_unlock(&cloexec_mutex);
 
     return &loop->super;
