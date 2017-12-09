@@ -48,7 +48,7 @@ typedef struct st_h2o_timeout_t {
 
 static inline h2o_timeout_t h2o_timeout_init(h2o_timeout_cb cb)
 {
-    h2o_timeout_t ret = {};
+    h2o_timeout_t ret = {0};
     ret.cb = cb;
     return ret;
 }

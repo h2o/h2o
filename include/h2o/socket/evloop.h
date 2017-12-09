@@ -74,7 +74,7 @@ typedef h2o_timer_cb h2o_timeout_cb;
 static inline h2o_timer_t h2o_timer_init(h2o_timer_cb cb)
 {
     return (h2o_timer_t){
-        {},
+        {0},
         0,
         cb,
     };

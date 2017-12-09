@@ -48,6 +48,7 @@ extern "C" {
 #include "h2o/socket.h"
 #include "h2o/string_.h"
 #include "h2o/time_.h"
+#include "h2o/timer.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
 

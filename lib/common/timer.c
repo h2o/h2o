@@ -52,7 +52,7 @@ void h2o_timeout_unlink(h2o_timeout_t *timer)
 #define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
 #define H2O_TIMERWHEEL_MAX_TIMER ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * H2O_TIMERWHEEL_MAX_WHEELS)) - 1)
 
-static inline int clz(uint64_t n)
+static int clz(uint64_t n)
 {
     H2O_BUILD_ASSERT(sizeof(unsigned long long) == 8);
     return __builtin_clzll(n);
@@ -119,7 +119,16 @@ uint64_t h2o_timer_get_wake_at_wheel(h2o_timer_wheel_t *w)
 /* timer APIs */
 
 /* calculate wheel number base on the absolute expiration time */
-static inline int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
+static int timer_wheel_insert(uint64_t abs_wtime, uint64_t abs_expire)
+{
+    uint64_t diff = abs_expire - abs_wtime;
+    int w = 0;
+    while (diff >>= H2O_TIMERWHEEL_BITS_PER_WHEEL)
+        w++;
+    return w;
+}
+
+static int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
 {
     uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_MAX_TIMER;
     if (delta == 0)
@@ -128,30 +137,9 @@ static inline int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
 }
 
 /* calculate slot number based on the absolute expiration time */
-static inline int timer_slot(int wheel, uint64_t expire)
+static int timer_slot(int wheel, uint64_t expire)
 {
-    return H2O_TIMERWHEEL_SLOTS_MASK & ((expire >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL)) - !!wheel);
-}
-
-static h2o_timer_wheel_slot_t *compute_slot(h2o_timer_wheel_t *w, h2o_timeout_t *timer)
-{
-    h2o_timer_wheel_slot_t *slot;
-    uint64_t diff = timer->expire_at - w->last_run;
-
-#define SLOT(idx_)                                                                                                                 \
-    slot = &w->wheel[(idx_)][0] + ((timer->expire_at >> ((idx_)*H2O_TIMERWHEEL_BITS_PER_WHEEL)) & H2O_TIMERWHEEL_SLOTS_MASK);
-#define IF_SLOT(idx_)                                                                                                              \
-    if (diff < 1 << (((idx_) + 1) * H2O_TIMERWHEEL_BITS_PER_WHEEL)) {                                                              \
-        SLOT((idx_))                                                                                                               \
-    }
-
-    IF_SLOT(0)
-    else IF_SLOT(1) else IF_SLOT(2) else IF_SLOT(3) else IF_SLOT(4) else SLOT(5)
-
-#undef SLOT
-#undef IF_SLOT
-
-        return slot;
+    return H2O_TIMERWHEEL_SLOTS_MASK & (expire >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL));
 }
 
 void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timeout_t *timer, h2o_timer_abs_t abs_expire)
@@ -164,7 +152,7 @@ void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timeout_t *timer, h2o_timer_abs_t
 
     timer->expire_at = abs_expire;
 
-    wid = timer_wheel(w->last_run, abs_expire);
+    wid = timer_wheel_insert(w->last_run, abs_expire);
     sid = timer_slot(wid, abs_expire);
     slot = &(w->wheel[wid][sid]);
 
