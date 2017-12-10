@@ -190,7 +190,7 @@ h2o_evloop_t *h2o_evloop_create(void)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
 
     pthread_mutex_lock(&cloexec_mutex);
-#ifdef EPOLL_CLOEXEC
+#if defined(EPOLL_CLOEXEC) && (!defined(__ANDROID__) || (defined(__ANDROID__) && __ANDROID_API__ >= 21))
     loop->ep = epoll_create1(EPOLL_CLOEXEC);
     if (loop->ep == -1) {
         fprintf(stderr, "h2o_evloop_create: failed to create the epoll fd (errno=%d)\n", errno);
