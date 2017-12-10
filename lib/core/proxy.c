@@ -414,14 +414,14 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
             self->had_body_error = 1;
         }
     }
-    if (!self->sending.inflight)
-        do_send(self);
-
     if (self->client && self->client->sock && overrides && self->client->sock->input->size > overrides->max_buffer_size) {
         self->await_send = await_send;
         h2o_http1client_body_read_stop(self->client);
     }
 
+    if (!self->sending.inflight)
+        do_send(self);
+    
     return 0;
 }
 
