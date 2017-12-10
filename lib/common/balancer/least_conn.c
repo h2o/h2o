@@ -61,7 +61,6 @@ h2o_balancer_t *h2o_balancer_create_lc(void)
         selector,
         destroy
     };
-    static const size_t target_conf_len = sizeof(h2o_socketpool_target_conf_t);
-    static h2o_balancer_t lc_balancer = {&lc_callbacks, target_conf_len};
+    static h2o_balancer_t lc_balancer = {&lc_callbacks, sizeof(h2o_socketpool_target_conf_t)};
     return &lc_balancer;
 }
