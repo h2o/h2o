@@ -75,25 +75,37 @@ static void destroy(h2o_balancer_t *balancer)
     free(self);
 }
 
-h2o_balancer_t *h2o_balancer_create_rr(h2o_socketpool_target_t **targets, size_t target_len) {
+static void set_targets(h2o_balancer_t *balancer, h2o_socketpool_target_t **targets, size_t target_len) {
+    struct round_robin_t *self = (void *)balancer;
+    size_t i;
+
+    pthread_mutex_lock(&self->mutex);
+    self->next_pos = 0;
+    self->next_actual_target = 0;
+    free(self->floor_next_target);
+    self->floor_next_target = h2o_mem_alloc(sizeof(*self->floor_next_target) * target_len);
+
+    self->floor_next_target[0] = targets[0]->conf->weight;
+    for (i = 1; i < target_len; i++) {
+        self->floor_next_target[i] = self->floor_next_target[i - 1] + targets[i]->conf->weight;
+    }
+    self->pos_less_than = self->floor_next_target[target_len - 1];
+    pthread_mutex_unlock(&self->mutex);
+}
+
+h2o_balancer_t *h2o_balancer_create_rr() {
     static const h2o_balancer_callbacks_t rr_callbacks = {
+        set_targets,
         selector,
         destroy
     };
-    
-    size_t i;
+    static const size_t target_conf_len = sizeof(h2o_socketpool_target_conf_t);
+
     struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
-    self->next_pos = 0;
-    self->next_actual_target = 0;
+    memset(self, 0, sizeof(*self));
     pthread_mutex_init(&self->mutex, NULL);
-    self->floor_next_target = h2o_mem_alloc(sizeof(*self->floor_next_target) * target_len);
-    
-    self->floor_next_target[0] = targets[0]->conf.weight;
-    for (i = 1; i < target_len; i++) {
-        self->floor_next_target[i] = self->floor_next_target[i - 1] + targets[i]->conf.weight;
-    }
-    self->pos_less_than = self->floor_next_target[target_len - 1];
     self->super.callbacks = &rr_callbacks;
-    
+    self->super.target_conf_len = target_conf_len;
+
     return &self->super;
 }

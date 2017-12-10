@@ -147,12 +147,15 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
     }
 }
 
-h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
+h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf, size_t conf_len)
 {
     struct sockaddr_storage sa;
     socklen_t salen;
 
     h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
+    if (lb_target_conf == NULL)
+        conf_len = sizeof(*lb_target_conf);
+    h2o_socketpool_target_conf_t *conf = h2o_mem_alloc(conf_len);
     h2o_url_copy(NULL, &target->url, origin);
     assert(target->url.host.base[target->url.host.len] == '\0'); /* needs to be null-terminated in order to be used in SNI */
     target->type = detect_target_type(origin, &sa, &salen);
@@ -173,11 +176,11 @@ h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_soc
         break;
     }
     target->_shared.leased_count = 0;
+    target->conf = conf;
     if (lb_target_conf != NULL)
-        target->conf = *lb_target_conf;
+        memcpy(conf, lb_target_conf, conf_len);
     else {
-        target->conf.weight = 1;
-        target->conf.data_for_balancer = NULL;
+        conf->weight = 1;
     }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
@@ -194,7 +197,10 @@ void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_s
         target_vector.entries[i] = targets[i];
     target_vector.size = target_len;
     if (balancer == NULL) {
-        balancer = h2o_balancer_create_rr(targets, target_len);
+        balancer = h2o_balancer_create_rr();
+    }
+    if (balancer->callbacks->set_targets != NULL) {
+        balancer->callbacks->set_targets(balancer, targets, target_len);
     }
 
     common_init(pool, target_vector, capacity, balancer);
@@ -209,7 +215,7 @@ static size_t add_target(h2o_socketpool_t *pool, h2o_url_t *origin)
 {
     assert(is_global_pool(pool));
     h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
-    h2o_socketpool_target_t *target = h2o_socketpool_target_create(origin, NULL);
+    h2o_socketpool_target_t *target = h2o_socketpool_target_create(origin, NULL, 0);
     pool->targets.entries[pool->targets.size++] = target;
     return pool->targets.size - 1;
 }
@@ -231,7 +237,7 @@ void h2o_socketpool_target_destroy(h2o_socketpool_target_t *target)
     free(target->url.authority.base);
     free(target->url.host.base);
     free(target->url.path.base);
-    free(target->conf.data_for_balancer);
+    free(target->conf);
     free(target);
 }
 
@@ -390,12 +396,12 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     h2o_socketpool_target_t *target;
     h2o_socketpool_t *pool = req->pool;
     h2o_linklist_t *sockets = NULL;
-    
+
     req->remaining_try_count--;
 
     if (req->lb.tried != NULL) {
         if (req->pool->targets.size > 1) {
-            req->selected_target = req->pool->balancer->callbacks->selector(req->pool->balancer, &req->pool->targets,
+            req->selected_target = req->pool->balancer->callbacks->select(req->pool->balancer, &req->pool->targets,
                                                                       req->lb.tried);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
@@ -406,7 +412,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     }
     target = req->pool->targets.entries[req->selected_target];
     sockets = &pool->targets.entries[req->selected_target]->_shared.sockets;
-    
+
     /* FIXME repsect `capacity` */
     __sync_add_and_fetch(&pool->_shared.count, 1);
     
@@ -468,17 +474,17 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 {
     struct pool_entry_t *entry = NULL;
     struct on_close_data_t *close_data;
-    
+
     if (_req != NULL)
         *_req = NULL;
-    
+
     size_t target = SIZE_MAX;
     h2o_linklist_t *sockets = NULL;
-    
+
     /* fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);
-    
+
     /* TODO lookup outside this critical section */
     if (is_global_pool(pool)) {
         target = lookup_target(pool, url);
@@ -490,7 +496,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         sockets = &pool->_shared.sockets;
     }
     assert(pool->targets.size != 0);
-    
+
     while (!h2o_linklist_is_empty(sockets)) {
         if (is_global_pool(pool)) {
             entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, target_link, sockets->next);
@@ -500,7 +506,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         h2o_linklist_unlink(&entry->all_link);
         h2o_linklist_unlink(&entry->target_link);
         pthread_mutex_unlock(&pool->_shared.mutex);
-        
+
         /* test if the connection is still alive */
         char buf[1];
         ssize_t rret = recv(entry->sockinfo.fd, buf, 1, MSG_PEEK);
@@ -517,7 +523,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             cb(sock, NULL, data, &pool->targets.entries[entry_target]->url);
             return;
         }
-        
+
         /* connection is dead, report, close, and retry */
         if (rret <= 0) {
             static long counter = 0;
@@ -532,18 +538,18 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         pthread_mutex_lock(&pool->_shared.mutex);
     }
     pthread_mutex_unlock(&pool->_shared.mutex);
-    
+
     /* FIXME repsect `capacity` */
     __sync_add_and_fetch(&pool->_shared.count, 1);
-    
+
     /* prepare request object */
     h2o_socketpool_connect_request_t *req = h2o_mem_alloc(sizeof(*req));
     *req = (h2o_socketpool_connect_request_t){data, cb, pool, loop};
-    
+
     if (_req != NULL)
         *_req = req;
     req->getaddr_receiver = getaddr_receiver;
-    
+
     req->selected_target = target;
     if (target == SIZE_MAX) {
         req->lb.tried = h2o_mem_alloc(sizeof(int) * pool->targets.size);

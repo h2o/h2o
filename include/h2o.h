@@ -313,7 +313,7 @@ typedef struct st_h2o_status_handler_t {
     h2o_iovec_t name;
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
-    h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
+    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
 } h2o_status_handler_t;
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
@@ -1877,6 +1877,7 @@ int h2o_headers_is_prohibited_name(const h2o_token_t *token);
 void h2o_headers_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/proxy.c */
+
 typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
     uint64_t connect_timeout;

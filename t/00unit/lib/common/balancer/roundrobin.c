@@ -9,7 +9,9 @@ static h2o_socketpool_target_vector_t gen_targets(size_t size) {
     for (i = 0; i < size; i++) {
         h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
         target->_shared.leased_count = 0;
-        target->conf.weight = 1;
+        h2o_socketpool_target_conf_t *conf = h2o_mem_alloc(sizeof(*conf));
+        target->conf = conf;
+        target->conf->weight = 1;
         targets.entries[i] = target;
     }
     targets.size = size;
@@ -22,6 +24,7 @@ static void free_targets(h2o_socketpool_target_vector_t *targets)
     size_t i;
     
     for (i = 0; i < targets->size; i++) {
+        free(targets->entries[i]->conf);
         free(targets->entries[i]);
     }
     
@@ -36,7 +39,8 @@ static void test_when_backend_down(void)
     size_t selected;
     h2o_balancer_t *balancer;
     
-    balancer = h2o_balancer_create_rr(targets.entries, targets.size);
+    balancer = h2o_balancer_create_rr();
+    balancer->callbacks->set_targets(balancer, targets.entries, targets.size);
     
     for (i = 0; i < 10; i++) {
         selected = selector(balancer, &targets, tried);
@@ -56,8 +60,8 @@ static int check_weight_distribution(h2o_socketpool_target_vector_t *targets)
     
     for (i = 0; i < targets->size; i++) {
         for (j = i + 1; j < targets->size; j++) {
-            if (targets->entries[i]->_shared.leased_count * targets->entries[j]->conf.weight !=
-                targets->entries[j]->_shared.leased_count * targets->entries[i]->conf.weight)
+            if (targets->entries[i]->_shared.leased_count * targets->entries[j]->conf->weight !=
+                targets->entries[j]->_shared.leased_count * targets->entries[i]->conf->weight)
                 return 0;
         }
     }
@@ -74,10 +78,11 @@ static void test_round_robin(void)
     int check_result = 1;
     h2o_balancer_t *balancer;
     
-    balancer = h2o_balancer_create_rr(targets.entries, targets.size);
+    balancer = h2o_balancer_create_rr();
+    balancer->callbacks->set_targets(balancer, targets.entries, targets.size);
     
     for (i = 0; i < targets.size; i++)
-        total_count += targets.entries[i]->conf.weight;
+        total_count += targets.entries[i]->conf->weight;
     total_count *= 1000;
     
     for (i = 0; i < total_count; i++) {
@@ -112,11 +117,12 @@ static void test_round_robin_weighted(void)
     h2o_balancer_t *balancer;
     
     for (i = 0; i < 10; i++)
-        targets.entries[i]->conf.weight = i % 3 + 1;
-    balancer = h2o_balancer_create_rr(targets.entries, targets.size);
+        targets.entries[i]->conf->weight = i % 3 + 1;
+    balancer = h2o_balancer_create_rr();
+    balancer->callbacks->set_targets(balancer, targets.entries, targets.size);
     
     for (i = 0; i < targets.size; i++)
-        total_count += targets.entries[i]->conf.weight;
+        total_count += targets.entries[i]->conf->weight;
     total_count *= 1000;
     
     for (i = 0; i < total_count; i++) {

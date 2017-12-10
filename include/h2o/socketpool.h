@@ -40,12 +40,10 @@ typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
+/* if there's any other conf for specific balancer, create a subclass */
 typedef struct st_h2o_socketpool_target_conf_t {
     /* weight for load balancer */
     size_t weight;
-    
-    /* other per target specific conf for balancer */
-    void *data_for_balancer;
 } h2o_socketpool_target_conf_t;
 
 typedef struct st_h2o_socketpool_target_t {
@@ -70,7 +68,7 @@ typedef struct st_h2o_socketpool_target_t {
         } sockaddr;
     } peer;
     
-    h2o_socketpool_target_conf_t conf;
+    h2o_socketpool_target_conf_t *conf;
 
     struct {
         h2o_linklist_t sockets;
@@ -125,9 +123,9 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
- * create a target
+ * create a target, where conf_len is the size of lb_target_conf. If lb_target_conf is NULL, a default target conf would be created.
  */
-h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf, size_t conf_len);
 /**
  * destroy a target
  */

@@ -32,7 +32,7 @@ static size_t selector(h2o_balancer_t *ignored, h2o_socketpool_target_vector_t *
     for (i = 0; i < targets->size; i++) {
         if (!tried[i]) {
             result = i;
-            result_weight = targets->entries[i]->conf.weight;
+            result_weight = targets->entries[i]->conf->weight;
             break;
         }
     }
@@ -41,10 +41,10 @@ static size_t selector(h2o_balancer_t *ignored, h2o_socketpool_target_vector_t *
         leftprod = targets->entries[i]->_shared.leased_count;
         leftprod *= result_weight;
         rightprod = targets->entries[result]->_shared.leased_count;
-        rightprod *= targets->entries[i]->conf.weight;
+        rightprod *= targets->entries[i]->conf->weight;
         if (!tried[i] && leftprod < rightprod) {
             result = i;
-            result_weight = targets->entries[i]->conf.weight;
+            result_weight = targets->entries[i]->conf->weight;
         }
     }
 
@@ -57,9 +57,11 @@ static void destroy(h2o_balancer_t *ignored) {}
 h2o_balancer_t *h2o_balancer_create_lc(void)
 {
     static const h2o_balancer_callbacks_t lc_callbacks = {
+        NULL,
         selector,
         destroy
     };
-    static h2o_balancer_t lc_balancer = {&lc_callbacks};
+    static const size_t target_conf_len = sizeof(h2o_socketpool_target_conf_t);
+    static h2o_balancer_t lc_balancer = {&lc_callbacks, target_conf_len};
     return &lc_balancer;
 }

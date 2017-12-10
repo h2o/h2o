@@ -674,7 +674,7 @@ void h2o__proxy_process_request(h2o_req_t *req)
     h2o_req_overrides_t *overrides = req->overrides;
     h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
     h2o_url_t target_buf, *target = &target_buf;
-    
+
     h2o_socketpool_t *socketpool = &req->conn->ctx->globalconf->proxy.global_socketpool;
     if (overrides != NULL && overrides->socketpool != NULL) {
         socketpool = overrides->socketpool;
@@ -683,11 +683,11 @@ void h2o__proxy_process_request(h2o_req_t *req)
     }
     if (target == &target_buf)
         h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
-    
+
     struct rp_generator_t *self = proxy_send_prepare(req);
-    
+
     /*
-     When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
+      When the PROXY protocol is being used (i.e. when overrides->use_proxy_protocol is set), the client needs to establish a new
      connection even when there is a pooled connection to the peer, since the header (as defined in
      https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) needs to be sent at the beginning of the connection.
      However, currently h2o_http1client_connect doesn't provide an interface to enforce estabilishing a new connection. In other

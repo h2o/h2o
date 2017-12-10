@@ -9,7 +9,9 @@ static h2o_socketpool_target_vector_t gen_targets(size_t size) {
     for (i = 0; i < size; i++) {
         h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
         target->_shared.leased_count = 0;
-        target->conf.weight = 1;
+        h2o_socketpool_target_conf_t *conf = h2o_mem_alloc(sizeof(*conf));
+        target->conf = conf;
+        target->conf->weight = 1;
         targets.entries[i] = target;
     }
     targets.size = size;
@@ -22,6 +24,7 @@ static void free_targets(h2o_socketpool_target_vector_t *targets)
     size_t i;
     
     for (i = 0; i < targets->size; i++) {
+        free(targets->entries[i]->conf);
         free(targets->entries[i]);
     }
     
@@ -50,13 +53,13 @@ static int check_if_acceptable(h2o_socketpool_target_vector_t *targets, size_t s
     double conn_weight_quotient;
     size_t i;
     double selected_conn_weight_quotient = targets->entries[selected]->_shared.leased_count;
-    selected_conn_weight_quotient /= targets->entries[selected]->conf.weight;
+    selected_conn_weight_quotient /= targets->entries[selected]->conf->weight;
     
     for (i = 0; i < targets->size; i++) {
         if (i == selected)
             continue;
         conn_weight_quotient = targets->entries[i]->_shared.leased_count;
-        conn_weight_quotient /= targets->entries[i]->conf.weight;
+        conn_weight_quotient /= targets->entries[i]->conf->weight;
         if (conn_weight_quotient < selected_conn_weight_quotient) {
             return -1;
         }
@@ -99,7 +102,7 @@ static void test_least_conn_weighted(void)
     int check_result = 1;
     
     for (i = 0; i < 10; i++)
-        targets.entries[i]->conf.weight = i % 3 + 1;
+        targets.entries[i]->conf->weight = i % 3 + 1;
     
     for (i = 0; i < 10000; i++) {
         selected = selector(NULL, &targets, tried);
