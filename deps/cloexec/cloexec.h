@@ -26,15 +26,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#ifdef __linux__
-#include <linux/version.h>
-#endif
 
 extern pthread_mutex_t cloexec_mutex;
 
 int cloexec_accept(int socket, struct sockaddr *addr, socklen_t *addrlen);
 int cloexec_pipe(int fds[2]);
 int cloexec_socket(int domain, int type, int protocol);
-int cloexec_nblock_eventfd(void);
 
 #endif

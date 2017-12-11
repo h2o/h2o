@@ -20,9 +20,6 @@
  * IN THE SOFTWARE.
  */
 #include <fcntl.h>
-#ifdef __linux__
-#include <sys/eventfd.h>
-#endif
 #include "cloexec.h"
 
 pthread_mutex_t cloexec_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -55,8 +52,7 @@ Exit:
 
 int cloexec_pipe(int fds[2])
 {
-#if defined(__linux__) && LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
-    /* pipe2() was added to Linux in version 2.6.27 */
+#ifdef __linux__
     return pipe2(fds, O_CLOEXEC);
 #else
     int ret = -1;
@@ -74,22 +70,9 @@ Exit:
 #endif
 }
 
-int cloexec_nblock_eventfd(void)
-{
-#if defined(__linux__) && LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
-    /**
-     * eventfd() is available on Linux since kernel 2.6.22.
-     * In Linux up to version 2.6.26, the flags argument is unused, and must be specified as zero
-     */
-    return eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-#else
-    return -1;
-#endif
-}
-
 int cloexec_socket(int domain, int type, int protocol)
 {
-#if defined(__linux__) && LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
+#ifdef __linux__
     return socket(domain, type | SOCK_CLOEXEC, protocol);
 #else
     int fd = -1;

@@ -22,6 +22,9 @@
  */
 #include <assert.h>
 #include <pthread.h>
+#ifdef __linux__
+#include <sys/eventfd.h>
+#endif
 #include "cloexec.h"
 #include "h2o/multithread.h"
 
@@ -29,13 +32,6 @@ struct st_h2o_multithread_queue_t {
 #if H2O_USE_LIBUV
     uv_async_t async;
 #else
-#if defined(__linux__) && LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)
-/**
- * The kernel overhead of an eventfd file descriptor is
- * much lower than that of a pipe, and only one file descriptor is required
- */
-#define H2O_ASYNC_NOTIFY_USING_EVENTFD
-#endif
     struct {
         int write;
         h2o_socket_t *read;
@@ -97,10 +93,14 @@ static void on_read(h2o_socket_t *sock, const char *err)
 
 static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 {
-#ifdef H2O_ASYNC_NOTIFY_USING_EVENTFD
+#if defined(__linux__)
+    /**
+     * The kernel overhead of an eventfd file descriptor is
+     * much lower than that of a pipe, and only one file descriptor is required
+     */
     int fd;
 
-    fd = cloexec_nblock_eventfd();
+    fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (fd == -1) {
         perror("eventfd");
         abort();
@@ -150,7 +150,7 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 #else
     h2o_socket_read_stop(queue->async.read);
     h2o_socket_close(queue->async.read);
-#ifndef H2O_ASYNC_NOTIFY_USING_EVENTFD
+#ifndef __linux__
     /* only one file descriptor is required for eventfd and already closed by h2o_socket_close() */
     close(queue->async.write);
 #endif
@@ -203,7 +203,7 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 #if H2O_USE_LIBUV
         uv_async_send(&receiver->queue->async);
 #else
-#ifdef H2O_ASYNC_NOTIFY_USING_EVENTFD
+#ifdef __linux__
         uint64_t tmp = 1;
         while (write(receiver->queue->async.write, &tmp, sizeof(tmp)) == -1 && errno == EINTR)
 #else
