@@ -270,7 +270,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
 #undef SET_LITERAL
 #undef SET_STRING
 
-    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CORE);
+    h2o_mruby_eval_expr_location(mrb, H2O_MRUBY_CODE_CORE, "(h2o)lib/handler/mruby/embedded/core.rb", 1);
     h2o_mruby_assert(mrb);
 
     mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY,
