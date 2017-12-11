@@ -409,7 +409,6 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    fcntl(fd, F_SETFL, O_NONBLOCK);
     return &create_socket(loop, fd, flags)->super;
 }
 
