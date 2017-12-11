@@ -112,6 +112,12 @@ mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
     return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
 }
 
+mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno)
+{
+    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 4, mrb_str_new_cstr(mrb, expr),
+                       mrb_nil_value(), mrb_str_new_cstr(mrb, path), mrb_fixnum_value(lineno));
+}
+
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback)
 {
     h2o_mruby_shared_context_t *shared_ctx = mrb->ud;
