@@ -37,9 +37,6 @@ EOF
 for my $path (map { path($_) } grep { $_ =~ /\.rb$/ } @mruby_files) {
     my @lines = $path->lines({ chomp => 1 });
 
-    my $in_license = 1;
-    @lines = grep { $in_license = 0 if $_ !~ /^#/; ! $in_license } @lines;
-    @lines = grep { $_ =~ /\S/ } @lines;
     @lines = map {
         s/\x5c/\\\\/g;
         s/\x22/\\"/g;
