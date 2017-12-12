@@ -283,7 +283,7 @@ void h2o_mruby_send_chunked_init_context(h2o_mruby_shared_context_t *shared_ctx)
 {
     mrb_state *mrb = shared_ctx->mrb;
 
-    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CHUNKED);
+    h2o_mruby_eval_expr_location(mrb, H2O_MRUBY_CODE_CHUNKED, "(h2o)lib/handler/mruby/embedded/chunked.rb", 1);
     h2o_mruby_assert(mrb);
 
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));

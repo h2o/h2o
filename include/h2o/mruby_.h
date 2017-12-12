@@ -159,6 +159,7 @@ void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, in
 mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
+mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno);
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback);
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
 void h2o_mruby_setup_globals(mrb_state *mrb);
