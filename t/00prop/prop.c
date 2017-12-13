@@ -1,8 +1,7 @@
 #include <assert.h>
 #include <inttypes.h>
-#include "h2o.h"
-#include "h2o/socket.h"
 #include "h2o/timer.h"
+#include "h2o/socket.h"
 #include "theft.h"
 
 struct test_timer {
@@ -10,15 +9,7 @@ struct test_timer {
     int called;
 };
 
-static inline h2o_timer_t h2o_timer_init(h2o_timer_cb cb)
-{
-    return (h2o_timer_t){
-        {},
-        0,
-        cb,
-    };
-}
-static void timer_cb(h2o_timeout_t *t_)
+static void timer_cb(h2o_timer_t *t_)
 {
     struct test_timer *t = H2O_STRUCT_FROM_MEMBER(struct test_timer, t, t_);
     t->called++;
@@ -35,7 +26,7 @@ static enum theft_trial_res prop_inserted_timer_should_run_at_expiry(struct thef
     h2o_timer_init_wheel(&w, 0);
 
     struct test_timer t;
-    t.t = h2o_timer_init(timer_cb);
+    h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
     if (input[0] > TIMER_MAX - input[1])
         now = TIMER_MAX;
@@ -63,7 +54,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_expiry(str
     h2o_timer_init_wheel(&w, 0);
 
     struct test_timer t;
-    t.t = h2o_timer_init(timer_cb);
+    h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
     if (input[0] > TIMER_MAX - input[1])
         expire = TIMER_MAX;
@@ -92,7 +83,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
     size_t slices = 1;
 
     struct test_timer t;
-    t.t = h2o_timer_init(timer_cb);
+    h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
     h2o_timer_link_(&w, &t.t, input[0]);
 

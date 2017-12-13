@@ -22,6 +22,8 @@
 #ifndef h2o__timer_h
 #define h2o__timer_h
 
+#include "h2o/linklist.h"
+
 /* link list of h2o_timeout_t */
 typedef h2o_linklist_t h2o_timer_wheel_slot_t;
 

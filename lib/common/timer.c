@@ -118,16 +118,6 @@ uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
 
 /* timer APIs */
 
-/* calculate wheel number base on the absolute expiration time */
-static int timer_wheel_insert(uint64_t abs_wtime, uint64_t abs_expire)
-{
-    uint64_t diff = abs_expire - abs_wtime;
-    int w = 0;
-    while (diff >>= H2O_TIMERWHEEL_BITS_PER_WHEEL)
-        w++;
-    return w;
-}
-
 static int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
 {
     uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_MAX_TIMER;
@@ -152,7 +142,7 @@ void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timeout_t *timer, h2o_timer_abs_t
 
     timer->expire_at = abs_expire;
 
-    wid = timer_wheel_insert(w->last_run, abs_expire);
+    wid = timer_wheel(w->last_run, abs_expire);
     sid = timer_slot(wid, abs_expire);
     slot = &(w->wheel[wid][sid]);
 
