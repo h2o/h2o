@@ -104,16 +104,25 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
 
 uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
 {
-    int i = 0;
+    int i, j;
 
-    for (; i < 64; i++) {
+    for (i = 0; i < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; i++) {
         int real_slot = (w->last_run + i) & H2O_TIMERWHEEL_SLOTS_MASK;
         h2o_timer_wheel_slot_t *slot = &w->wheel[0][real_slot];
         if (!h2o_linklist_is_empty(slot)) {
             return w->last_run + i;
         }
     }
-    return w->last_run + H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
+    for (i = 1; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
+        for (j = 0; i < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; i++) {
+            h2o_timer_wheel_slot_t *slot = &w->wheel[i][j];
+            if (!h2o_linklist_is_empty(slot)) {
+                /* return an approximation for the expiry */
+                return w->last_run + (1 << (j * H2O_TIMERWHEEL_BITS_PER_WHEEL));
+            }
+        }
+    }
+    return UINT64_MAX;
 }
 
 /* timer APIs */
