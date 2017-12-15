@@ -52,6 +52,10 @@ extern "C" {
 #include "h2o/url.h"
 #include "h2o/version.h"
 
+#ifdef WITH_RDKAFKA
+#include "rdkafka.h"
+#endif
+
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
 #define H2O_USE_BROTLI 0
@@ -1664,6 +1668,31 @@ int h2o_access_log_open_log(const char *path);
 h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt, int escape);
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/kafka_log.c */
+/* RD_KAFKA Plugin */
+#ifdef WITH_RDKAFKA
+
+
+typedef struct st_h2o_kafka_msg_opaque_t {
+    int32_t hash;
+    int32_t use_hash;
+} h2o_kafka_msg_opaque_t;
+
+typedef struct st_h2o_kafka_log_handle_t h2o_kafka_log_handle_t;
+
+// int h2o_kafka_log_open_log(const char *path);
+h2o_kafka_log_handle_t *h2o_kafka_log_open_handle(rd_kafka_conf_t* rk_conf,
+    rd_kafka_topic_conf_t* rkt_conf,
+    const char *topic,
+    int32_t partition,
+    const char *fmt_messages,
+    const char *fmt_key,
+    const char *fmt_hash);
+h2o_logger_t *h2o_kafka_log_register(h2o_pathconf_t *pathconf, h2o_kafka_log_handle_t *handle);
+void h2o_kafka_log_register_configurator(h2o_globalconf_t *conf);
+
+#endif  // WITH_RDKAFKA
 
 /* lib/chunked.c */
 
