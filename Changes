@@ -1,5 +1,20 @@
 Revision history for H2O.
 
+2.2.4 TBD
+	- [security fix][access-log][ssl] fix crash when logging TLS 1.3 properties CVE-2017-10872 #1543 (MITSUNARI Shigeo)
+	- [security fix][http2] fix crash when handling malformed HTTP/2 request CVE-2017-10908 #1544 (Kazuho Oku)
+	- [access-log][compress] `%b` should log the amount of data sent after compression #1478 (Ichito Nagata)
+	- [fastcgi][misc] respect H2O_PERL environment variable in share/h2o/setuidgid #1518 (Kazuho Oku)
+	- [mime] fix Opus mimetype #1522 (Alex)
+	- [mruby] fix runtime issue that prevents a closed variable from getting updated #1464 (Tatsushi Demachi)
+	- [mruby] keep PATH_INFO undecoded #1480 (Ichito Nagata)
+	- [mruby] fix keepalive not being used when the response to http_request is directly returned #1489 (Ichito Nagata)
+	- [mruby] fix offset overflow of SCRIPT_INFO and PATH_INFO #1502 (Ichito Nagata)
+	- [proxy][ssl] fix pointer corruption when connecting to origin via https (big-endian only) #1475 (Kazuho Oku)
+	- [proxy] omit network I/O when handling internal redirect between hosts mapped to different ports #1498 (Ichito Nagata)
+	- [ssl] fix crash on s390 (and possibly on other big-endian machines) #1474 (Apollon Oikonomopoulos)
+	- [websocket] do not send `upgrade` header twice #1463 (Yamagishi Kazutoshi)
+
 2.2.3 2017-10-19 06:00:00+0000
 	- [security fix][http1] fix crash when receiving request with invalid framing CVE-2017-10868 #1459 (Frederik Deweerdt)
 	- [security fix][proxy] fix stack overflow when sending huge request body to upstream CVE-2017-10869 #1460 (Frederik Deweerdt)
