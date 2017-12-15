@@ -33,7 +33,7 @@ matrix:
         - (cd openssl-1.1.0g && ./config --prefix=/usr/local && make && sudo make install)
         # install libuv >= 1.0.0 (optionally required for building / testing libh2o)
         - curl -L https://github.com/libuv/libuv/archive/v1.0.0.tar.gz | tar xzf -
-        - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr && make && sudo make install)
+        - (cd libuv-1.0.0 && ./autogen.sh && ./configure --prefix=/usr/local && make && sudo make install)
           # install perl modules (mandatory for testing)
         - misc/install-perl-module.pl Net::EmptyPort
         - misc/install-perl-module.pl Scope::Guard
@@ -50,9 +50,9 @@ matrix:
           # install nghttp2 with `--enable-app` (optionally required for running HTTP/2 tests)
         - sudo apt-get install -qq libev-dev
         - curl -L https://github.com/tatsuhiro-t/nghttp2/releases/download/v1.4.0/nghttp2-1.4.0.tar.gz | tar xzf -
-        - (cd nghttp2-1.4.0 && ./configure --prefix=/usr --disable-threads --enable-app && make && sudo make install)
+        - (cd nghttp2-1.4.0 && ./configure --prefix=/usr/local --disable-threads --enable-app && make && sudo make install)
         - curl -L https://curl.haxx.se/download/curl-7.50.0.tar.gz | tar xzf -
-        - (cd curl-7.50.0 && ./configure --prefix=/usr --with-nghttp2 --disable-shared && make && sudo make install)
+        - (cd curl-7.50.0 && ./configure --prefix=/usr/local --with-nghttp2 --disable-shared && make && sudo make install)
       script: &s
         - cmake -DWITH_MRUBY=ON .
         - make all
