@@ -102,28 +102,7 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
     }
 }
 
-uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
-{
-    int i, j;
 
-    for (i = 0; i < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; i++) {
-        int real_slot = (w->last_run + i) & H2O_TIMERWHEEL_SLOTS_MASK;
-        h2o_timer_wheel_slot_t *slot = &w->wheel[0][real_slot];
-        if (!h2o_linklist_is_empty(slot)) {
-            return w->last_run + i;
-        }
-    }
-    for (i = 1; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
-        for (j = 0; i < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; i++) {
-            h2o_timer_wheel_slot_t *slot = &w->wheel[i][j];
-            if (!h2o_linklist_is_empty(slot)) {
-                /* return an approximation for the expiry */
-                return w->last_run + (1 << (j * H2O_TIMERWHEEL_BITS_PER_WHEEL));
-            }
-        }
-    }
-    return UINT64_MAX;
-}
 
 /* timer APIs */
 
@@ -139,6 +118,36 @@ static int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
 static int timer_slot(int wheel, uint64_t expire)
 {
     return H2O_TIMERWHEEL_SLOTS_MASK & (expire >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL));
+}
+
+uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
+{
+    int i, j;
+    uint64_t ret;
+
+    for (i = 0; i < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; i++) {
+        int real_slot = (w->last_run + i) & H2O_TIMERWHEEL_SLOTS_MASK;
+        h2o_timer_wheel_slot_t *slot = &w->wheel[0][real_slot];
+        if (!h2o_linklist_is_empty(slot)) {
+            return w->last_run + i;
+        }
+    }
+    ret = w->last_run;
+    for (i = 1; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
+        for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++) {
+            h2o_timer_wheel_slot_t *slot = &w->wheel[i][j];
+            if (!h2o_linklist_is_empty(slot)) {
+                h2o_timeout_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _link, slot->next);
+                /* return an approximation for the expiry */
+                ret = (1 << ((i - 1) * H2O_TIMERWHEEL_BITS_PER_WHEEL));
+                while (--i > 0) {
+                    ret -= (1 << ((i - 1) * H2O_TIMERWHEEL_BITS_PER_WHEEL));
+                }
+                return ret;
+            }
+        }
+    }
+    return UINT64_MAX;
 }
 
 void h2o_timer_link_(h2o_timer_wheel_t *w, h2o_timeout_t *timer, h2o_timer_abs_t abs_expire)
