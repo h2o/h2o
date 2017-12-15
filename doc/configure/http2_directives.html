@@ -91,7 +91,7 @@ H2O recognizes <code>link</code> headers with <a href="https://w3c.github.io/pre
 </p>
 <div class="example">
 <div class="caption">Example. A link response header triggering HTTP/2 push</div>
-<pre><code>link: &lt;/assets/jquery.js&gt;; rel=preload
+<pre><code>link: &lt;/assets/jquery.js&gt;; rel=preload; as=script
 </code></pre>
 </div>
 
@@ -121,8 +121,8 @@ The following example shows how such responses would look like.
 <div class="example">
 <div class="caption">Example. 100 response with link headers</div>
 <pre><code>HTTP/1.1 100 Continue
-Link: &lt;/assets/style.css&gt;; rel=preload
-Link: &lt;/assets/jquery.js&gt;; rel=preload
+Link: &lt;/assets/style.css&gt;; rel=preload; as=style
+Link: &lt;/assets/jquery.js&gt;; rel=preload; as=script
 
 HTTP/1.1 200 OK
 Content-Type: text/html; charset=utf-8
@@ -215,7 +215,7 @@ If the value is mapping, the feature is enabled, recognizing the following attri
 <dt>capacity-bits:
 <dd>number of bits used for the fingerprinting.
 Roughly speaking, the number of bits should be <code>log2(1/P * number-of-assets-to-track)</code> where P being the probability of false positives.
-Default is <code>13</code>, enough for tracking about 100 asset files with 1/100 chance of false positives (i.e. <code>log2(100 * 100) =~ 2<sup>13</code>).
+Default is <code>13</code>, enough for tracking about 100 asset files with 1/100 chance of false positives (i.e. <code>log2(100 * 100) =~ 13</code>).
 <dt>tracking-types:
 <dd>specifies the types of the content tracked by casper.
 If omitted or set to <code>blocking-assets</code>, maintains fingerprint (and cancels server push) for resources with mime-type of <a href="configure/file_directives.html#file.mime.addtypes"><code>highest</code></a> priority.
