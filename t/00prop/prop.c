@@ -16,7 +16,6 @@ static void timer_cb(h2o_timer_t *t_)
     return;
 }
 
-
 struct test_input {
     uint64_t init_time;
     uint64_t first_time;
@@ -38,8 +37,6 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
     h2o_timer_run_wheel(&w, input->init_time);
     wake_time = h2o_timer_get_wake_at(&w);
     if (wake_time != UINT64_MAX) {
-        fprintf(stderr, "%s:%d %"PRIu64"\n", __func__, __LINE__, wake_time);
-        abort();
         return THEFT_TRIAL_FAIL;
     }
 
@@ -48,8 +45,6 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
     h2o_timer_link_(&w, &t.t, input->first_time);
     wake_time = h2o_timer_get_wake_at(&w);
     if (wake_time > input->first_time) {
-        fprintf(stderr, "%s:%d\n", __func__, __LINE__);
-        abort();
         return THEFT_TRIAL_FAIL;
     }
 
@@ -65,8 +60,6 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
 
         wake_time = h2o_timer_get_wake_at(&w);
         if (wake_time > input->first_time) {
-            fprintf(stderr, "%s:%d\n", __func__, __LINE__);
-            abort();
             return THEFT_TRIAL_FAIL;
         }
     }
@@ -82,8 +75,6 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
     return THEFT_TRIAL_PASS;
     wake_time = h2o_timer_get_wake_at(&w);
     if (wake_time != UINT64_MAX) {
-        fprintf(stderr, "%s:%d\n", __func__, __LINE__);
-        abort();
         return THEFT_TRIAL_FAIL;
     }
 }
@@ -195,7 +186,8 @@ static void free_cb(void *instance, void *env)
 static void print_cb(FILE *f, const void *instance, void *env)
 {
     const struct test_input *input = instance;
-    fprintf(f, "init: %" PRIu64 ", first:%" PRIu64 ", second: %"PRIu64"\n", input->init_time, input->first_time, input->second_time);
+    fprintf(f, "init: %" PRIu64 ", first:%" PRIu64 ", second: %" PRIu64 "\n", input->init_time, input->first_time,
+            input->second_time);
 }
 
 static struct theft_type_info random_buffer_info = {
