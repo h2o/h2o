@@ -31,8 +31,32 @@ $ctx->{directive}->(
 proxy.reverse.url: "http://127.0.0.1:8080/"
 EOT
 ?>
+<?= $ctx->{example}->(q{Forwarding the requests to multiple application server with different weight}, <<'EOT')
+proxy.reverse.url:
+  - http://10.0.0.1:8080/
+  - url: http://10.0.0.2:8080/different-path
+    weight: 2
+EOT
+?>
+<?= $ctx->{example}->(q{Forwarding the requests to multiple application server with least connection}, <<'EOT')
+proxy.reverse.url:
+  backends:
+    - http://10.0.0.1:8080/
+    - http://10.0.0.2:8080/
+  balancer: least-conn
+EOT
+?>
 <p>
-If you want load balancing multiple backends, replace 127.0.0.1 with hostname which returns IP addresses via DNS or /etc/hosts.
+Load balancing between different backends with different path is supported. Currently we support <code>round-robin</code> and <code>least-conn</code> as balancer. <b>Load balancing strategies would only be applied when no pooled connections between h2o and upstream exist.</b> Failover would also be applied when some backends go down.
+</p>
+<p>
+Integer <code>weight</code> could be assigned on each backend, with default value <code>1</code>.
+</p>
+<p>
+For <code>round-robin</code> balancer, <code>weight</code> is respected in this way: each backend would be selected exactly <code>weight</code> times before next backend would be selected, except when the backend is not accessable.
+</p>
+<p>
+For <code>least-conn</code> balancer, <code>weight</code> is respected in this way: the selected backend should have the minimum value of (request count) / (<code>weight</code>).
 </p>
 <p>
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
