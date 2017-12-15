@@ -5,6 +5,8 @@
 This document describes the configuration directives of the headers handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "header.add",
@@ -79,6 +81,8 @@ $ctx->{directive}->(
 header.unset: "X-Powered-By"
 EOT
 ?>
+? })
+
 ? })
 
 ? })

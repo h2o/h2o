@@ -1,4 +1,6 @@
-BINARY_DIR=..
+ifndef BINARY_DIR
+	BINARY_DIR:=..
+endif
 VPATH=../srcdoc
 OUTPUT=\
     index.html \
@@ -86,6 +88,6 @@ publish: all
 	tar cf - `git ls-files` | (cd $$PUBLISH && tar xf -)
 
 clean:
-	rm -f $(OUTPUT) search/searchindex.js
+	rm -f $(OUTPUT) $(MAN) search/searchindex.js
 
 .PHONY: mkdir html publish publish-check do-publish manpage
