@@ -1,6 +1,4 @@
-ifndef BINARY_DIR
-	BINARY_DIR:=..
-endif
+BINARY_DIR=..
 VPATH=../srcdoc
 OUTPUT=\
     index.html \
