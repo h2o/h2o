@@ -392,7 +392,7 @@ static void test_hpack_push(void)
     h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_ACCEPT_ENCODING, NULL, accept_encoding.base, accept_encoding.len);
 
     /* serialize, deserialize, and compare */
-    h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
+    h2o_hpack_flatten_push_promise(&buf, &encode_table, 0, 16384, &req, 0);
     parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
                               h2o_iovec_init(H2O_STRLIT("/")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
                               accept_root, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
@@ -409,7 +409,7 @@ static void test_hpack_push(void)
     h2o_add_header(&req.pool, &req.headers, H2O_TOKEN_REFERER, NULL, referer.base, referer.len);
 
     /* serialize, deserialize, and compare */
-    h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
+    h2o_hpack_flatten_push_promise(&buf, &encode_table, 0, 16384, &req, 0);
     parse_and_compare_request(
         &decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority, h2o_iovec_init(H2O_STRLIT("/banner.jpg")),
         H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf, accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf,
@@ -420,7 +420,7 @@ static void test_hpack_push(void)
     req.input.path = h2o_iovec_init(H2O_STRLIT("/icon.png"));
 
     /* serialize, deserialize, and compare */
-    h2o_hpack_flatten_request(&buf, &encode_table, 0, 16384, &req, 0);
+    h2o_hpack_flatten_push_promise(&buf, &encode_table, 0, 16384, &req, 0);
     parse_and_compare_request(&decode_table, buf->bytes, buf->size, method, &H2O_URL_SCHEME_HTTPS, authority,
                               h2o_iovec_init(H2O_STRLIT("/icon.png")), H2O_TOKEN_USER_AGENT->buf, user_agent, H2O_TOKEN_ACCEPT->buf,
                               accept_images, H2O_TOKEN_ACCEPT_LANGUAGE->buf, accept_language, H2O_TOKEN_ACCEPT_ENCODING->buf,
