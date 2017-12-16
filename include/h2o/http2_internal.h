@@ -66,10 +66,14 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
                             const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
-void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id);
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                 size_t max_frame_size, h2o_res_t *res, const h2o_iovec_t *server_name, size_t content_length);
+void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                               size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_headers_t *headers, int is_end_stream);
+int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, h2o_res_t *res, h2o_hpack_header_table_t *header_table,
+                                     const uint8_t *src, size_t len, const char **err_desc);
 static h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *table, size_t index);
 
 /* frames */
@@ -506,8 +510,8 @@ inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
 inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(!stream->push.promise_sent);
-    h2o_hpack_flatten_request(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              &stream->req, stream->push.parent_stream_id);
+    h2o_hpack_flatten_push_promise(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size,
+                                   &stream->req, stream->push.parent_stream_id);
     stream->push.promise_sent = 1;
 }
 

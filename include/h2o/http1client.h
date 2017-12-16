@@ -48,16 +48,26 @@ typedef h2o_http1client_head_cb (*h2o_http1client_connect_cb)(h2o_http1client_t 
 typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 struct st_h2o_header_t *headers, size_t num_headers);
 
-typedef struct st_h2o_http1client_ctx_t {
+typedef struct st_h2o_http2client_origin_t h2o_http2client_origin_t;
+
+typedef struct st_h2o_http1client_ctx_t { // TODO: rename to st_h2o_httpclient_ctx_t
     h2o_loop_t *loop;
     h2o_multithread_receiver_t *getaddr_receiver;
     h2o_timeout_t *io_timeout;
     h2o_timeout_t *connect_timeout;
     h2o_timeout_t *first_byte_timeout;
     h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
+    h2o_timeout_t *zero_timeout;
+
+    struct {
+        h2o_socket_latency_optimization_conditions_t latency_optimization;
+        H2O_VECTOR(h2o_http2client_origin_t *) _origins;
+        h2o_timeout_t *keepalive_timeout;
+    } http2;
+
 } h2o_http1client_ctx_t;
 
-struct st_h2o_http1client_t {
+struct st_h2o_http1client_t {  // TODO: rename to st_h2o_httpclient_t
     h2o_http1client_ctx_t *ctx;
     struct {
         h2o_socketpool_t *pool;

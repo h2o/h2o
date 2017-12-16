@@ -42,6 +42,7 @@ extern "C" {
 #include "h2o/redis.h"
 #include "h2o/linklist.h"
 #include "h2o/http1client.h"
+#include "h2o/http2client.h"
 #include "h2o/memory.h"
 #include "h2o/multithread.h"
 #include "h2o/rand.h"
@@ -646,6 +647,8 @@ struct st_h2o_context_t {
          * timeout handler used by the default client context
          */
         h2o_timeout_t first_byte_timeout;
+
+        h2o_timeout_t http2_keepalive_timeout; // TODO
     } proxy;
 
     /**

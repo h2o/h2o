@@ -579,6 +579,75 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
     return 0;
 }
 
+int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, h2o_res_t *res, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
+                            const char **err_desc)
+{
+    assert(res->status == 0);
+    assert(res->content_length == SIZE_MAX);
+
+    const uint8_t *src_end = src + len;
+
+    while (src != src_end) {
+        struct st_h2o_decode_header_result_t r;
+        const char *decode_err = NULL;
+        int ret = decode_header(pool, &r, header_table, &src, src_end, &decode_err);
+        if (ret != 0) {
+            if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+                /* this is a soft error, we continue parsing, but register only the first error */
+                if (*err_desc == NULL) {
+                    *err_desc = decode_err;
+                }
+            } else {
+                *err_desc = decode_err;
+                return ret;
+            }
+        }
+        if (r.name->base[0] == ':') {
+            if (r.name != &H2O_TOKEN_STATUS->buf)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            if (res->status != 0)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            /* parse status */
+            if (r.value->len != 3)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            char *c = r.value->base;
+#define PARSE_DIGIT(mul) \
+    do { \
+        if (*c < '0' || '9' < *c) \
+            return H2O_HTTP2_ERROR_PROTOCOL; \
+        res->status += (*c - '0') * mul; \
+        ++c; \
+    } while (0)
+            PARSE_DIGIT(100);
+            PARSE_DIGIT(10);
+            PARSE_DIGIT(1);
+#undef PARSE_DIGIT
+        } else {
+            if (res->status == 0)
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            if (h2o_iovec_is_token(r.name)) {
+                h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name);
+                if (token == H2O_TOKEN_CONTENT_LENGTH) {
+                    if ((res->content_length = h2o_strtosize(r.value->base, r.value->len)) == SIZE_MAX)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                } else {
+                    /* reject headers as defined in draft-16 8.1.2.2 */
+                    if (token->http2_should_reject)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    h2o_add_header(pool, &res->headers, token, NULL, r.value->base, r.value->len);
+                }
+            } else {
+                h2o_add_header_by_str(pool, &res->headers, r.name->base, r.name->len, 0, NULL, r.value->base, r.value->len);
+            }
+        }
+    }
+
+    if (*err_desc) {
+        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+    }
+    return 0;
+}
+
 static inline int encode_int_is_onebyte(uint32_t value, size_t prefix_bits)
 {
     return value < (1 << prefix_bits) - 1;
@@ -810,19 +879,21 @@ static size_t calc_headers_capacity(const h2o_header_t *headers, size_t num_head
     return capacity;
 }
 
-static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t type, uint32_t stream_id, size_t max_frame_size)
+static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t type, uint32_t stream_id, size_t max_frame_size, int is_end_stream)
 {
+    int flags = is_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0;
+
     /* try to fit all data into single frame, using the preallocated space for the frame header */
     size_t payload_size = (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
     if (payload_size <= max_frame_size) {
-        h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), payload_size, type, H2O_HTTP2_FRAME_FLAG_END_HEADERS,
+        h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), payload_size, type, H2O_HTTP2_FRAME_FLAG_END_HEADERS | flags,
                                       stream_id);
         return;
     }
 
     /* need to setup continuation frames */
     size_t off;
-    h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), max_frame_size, type, 0, stream_id);
+    h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), max_frame_size, type, flags, stream_id);
     off = start_at + H2O_HTTP2_FRAME_HEADER_SIZE + max_frame_size;
     while (1) {
         size_t left = (*buf)->size - off;
@@ -842,6 +913,40 @@ static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t typ
 }
 
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                               size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_headers_t *headers, int is_end_stream)
+{
+    size_t capacity = calc_headers_capacity(headers->entries, headers->size);
+    capacity += H2O_HTTP2_FRAME_HEADER_SIZE;
+    capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, method.len);
+    capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, url->scheme->name.len);
+    capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, url->authority.len);
+    capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, url->path.len);
+
+    size_t start_at = (*buf)->size;
+    uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE);
+
+    /* encode */
+    dst = encode_method(header_table, dst, method);
+    dst = encode_scheme(header_table, dst, url->scheme);
+    dst = encode_header(header_table, dst, &H2O_TOKEN_AUTHORITY->buf, &url->authority);
+    dst = encode_path(header_table, dst, url->path);
+    size_t i;
+    for (i = 0; i != headers->size; ++i) {
+        const h2o_header_t *header = headers->entries + i;
+        if (header->name == &H2O_TOKEN_ACCEPT_ENCODING->buf &&
+            h2o_memis(header->value.base, header->value.len, H2O_STRLIT("gzip, deflate"))) {
+            *dst++ = 0x90;
+        } else {
+            dst = encode_header(header_table, dst, header->name, &header->value);
+        }
+    }
+    (*buf)->size = (char *)dst - (*buf)->bytes;
+
+    /* setup the frame headers */
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, is_end_stream);
+}
+
+void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id)
 {
     size_t capacity = calc_headers_capacity(req->headers.entries, req->headers.size);
@@ -874,7 +979,7 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */
-    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_PUSH_PROMISE, parent_stream_id, max_frame_size);
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_PUSH_PROMISE, parent_stream_id, max_frame_size, 0);
 }
 
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
@@ -910,5 +1015,5 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */
-    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size);
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, 0);
 }
