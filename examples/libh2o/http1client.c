@@ -92,8 +92,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
         return -1;
     }
 
-    fwrite(client->sock->input->bytes, 1, client->sock->input->size, stdout);
-    h2o_buffer_consume(&client->sock->input, client->sock->input->size);
+    fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
+    h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_http1client_error_is_eos) {
         if (--cnt_left != 0) {
@@ -147,7 +147,7 @@ int fill_body(h2o_iovec_t *reqbuf)
 static h2o_timeout_t post_body_timeout;
 
 struct st_timeout_ctx {
-    h2o_socket_t *sock;
+    h2o_http1client_t *client;
     h2o_timeout_entry_t _timeout;
 };
 static void timeout_cb(h2o_timeout_entry_t *entry)
@@ -157,7 +157,7 @@ static void timeout_cb(h2o_timeout_entry_t *entry)
 
     fill_body(&reqbuf);
     h2o_timeout_unlink(&tctx->_timeout);
-    h2o_http1client_write_req(tctx->sock, reqbuf, cur_body_size <= 0);
+    h2o_http1client_write_req(tctx->client, reqbuf, cur_body_size <= 0);
     free(tctx);
 
     return;
@@ -169,7 +169,7 @@ static void proceed_request(h2o_http1client_t *client, size_t written, int is_en
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
-        tctx->sock = client->sock;
+        tctx->client = client;
         tctx->_timeout.cb = timeout_cb;
         h2o_timeout_link(client->ctx->loop, &post_body_timeout, &tctx->_timeout);
     }
@@ -194,7 +194,7 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
-        tctx->sock = client->sock;
+        tctx->client = client;
         tctx->_timeout.cb = timeout_cb;
         h2o_timeout_link(client->ctx->loop, &post_body_timeout, &tctx->_timeout);
     }

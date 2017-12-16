@@ -205,9 +205,9 @@ static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
     assert(ctx->resp.has_content);
 
     if (ctx->client != NULL) {
-        assert(ctx->client->sock->input->size != 0);
-        chunk = h2o_mruby_new_str(ctx->ctx->shared->mrb, ctx->client->sock->input->bytes, ctx->client->sock->input->size);
-        h2o_buffer_consume(&ctx->client->sock->input, ctx->client->sock->input->size);
+        assert((*ctx->client->buf)->size != 0);
+        chunk = h2o_mruby_new_str(ctx->ctx->shared->mrb, (*ctx->client->buf)->bytes, (*ctx->client->buf)->size);
+        h2o_buffer_consume(&(*ctx->client->buf), (*ctx->client->buf)->size);
         ctx->resp.has_content = 0;
     } else {
         if (ctx->resp.after_closed->size == 0) {
@@ -228,11 +228,11 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
     if (errstr != NULL) {
         h2o_buffer_t *tmp = ctx->resp.after_closed;
-        ctx->resp.after_closed = client->sock->input;
-        client->sock->input = tmp;
+        ctx->resp.after_closed = *client->buf;
+        *client->buf = tmp;
         ctx->client = NULL;
         ctx->resp.has_content = 1;
-    } else if (client->sock->input->size != 0) {
+    } else if ((*client->buf)->size != 0) {
         ctx->resp.has_content = 1;
     }
 
@@ -527,7 +527,7 @@ void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_contex
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)
 {
     *is_final = ctx->client == NULL;
-    return ctx->client != NULL && ctx->resp.has_content ? &ctx->client->sock->input : &ctx->resp.after_closed;
+    return ctx->client != NULL && ctx->resp.has_content ? &(*ctx->client->buf) : &ctx->resp.after_closed;
 }
 
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)

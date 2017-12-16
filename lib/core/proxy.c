@@ -337,7 +337,7 @@ static void do_send(struct rp_generator_t *self)
     h2o_send_state_t ststate;
 
     vecs[0] = h2o_doublebuffer_prepare(&self->sending,
-                                       self->client != NULL ? &self->client->sock->input : &self->last_content_before_send,
+                                       self->client != NULL ? self->client->buf : &self->last_content_before_send,
                                        self->src_req->preferred_chunk_size);
 
     if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
@@ -406,8 +406,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
 
     if (errstr != NULL) {
         /* detach the content */
-        self->last_content_before_send = self->client->sock->input;
-        h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
+        self->last_content_before_send = *self->client->buf;
+        h2o_buffer_init(self->client->buf, &h2o_socket_buffer_prototype);
         self->client = NULL;
         if (errstr != h2o_http1client_error_is_eos) {
             h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
@@ -417,7 +417,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     if (!self->sending.inflight)
         do_send(self);
 
-    if (self->client && self->client->sock && overrides && self->client->sock->input->size > overrides->max_buffer_size) {
+    if (self->client && *self->client->buf && overrides && (*self->client->buf)->size > overrides->max_buffer_size) {
         self->await_send = await_send;
         h2o_http1client_body_read_stop(self->client);
     }
@@ -541,7 +541,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
      * received along with the HTTP headers. However it is not a big deal; we are only failing to "optimize" for a theoretical
      * corner case.
      */
-    if (self->client->sock->input->size == rlen) {
+    if ((*self->client->buf)->size == rlen) {
         h2o_doublebuffer_prepare_empty(&self->sending);
         h2o_send(req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
     }
@@ -577,7 +577,7 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
     if (is_end_stream) {
         self->src_req->write_req.cb = NULL;
     }
-    return h2o_http1client_write_req(self->client->sock, chunk, is_end_stream);
+    return h2o_http1client_write_req(self->client, chunk, is_end_stream);
 }
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
