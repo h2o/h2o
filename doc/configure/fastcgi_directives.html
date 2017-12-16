@@ -68,6 +68,25 @@ The configuration directives of the FastCGI handler can be categorized into two 
 Other directives customize how the connections to the FastCGI processes should be maintained.
 </p>
 
+<ul>
+<li><a href="configure/fastcgi_directives.html#fastcgi.connect">
+<code>fastcgi.connect</code>
+</a></li>
+<li><a href="configure/fastcgi_directives.html#fastcgi.spawn">
+<code>fastcgi.spawn</code>
+</a></li>
+<li><a href="configure/fastcgi_directives.html#fastcgi.timeout.io">
+<code>fastcgi.timeout.io</code>
+</a></li>
+<li><a href="configure/fastcgi_directives.html#fastcgi.timeout.keepalive">
+<code>fastcgi.timeout.keepalive</code>
+</a></li>
+<li><a href="configure/fastcgi_directives.html#fastcgi.send-delegated-uri">
+<code>fastcgi.send-delegated-uri</code>
+</a></li>
+</ul>
+
+
 <div id="fastcgi.connect" class="directive-head">
 <h3><a href="configure/fastcgi_directives.html#fastcgi.connect"><code>"fastcgi.connect"</code></a></h3>
 </div>
@@ -218,6 +237,8 @@ The directive specifies whether to send the original values to the FastCGI proce
 <dt>Default:</dt>
 <dd><code><pre>fastcgi.send-delegated-uri: OFF</pre></code>
 </dl>
+
+
 
 
 
