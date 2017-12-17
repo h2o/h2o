@@ -8,7 +8,7 @@ RUN apt-get install --yes bison ruby-dev
 RUN apt-get install --yes php-cgi
 
 # tools for building and testing
-RUN apt-get install --yes apache2-utils cmake cmake-data git memcached netcat-traditional nghttp2-client redis-server wget
+RUN apt-get install --yes apache2-utils cmake cmake-data git memcached netcat-openbsd nghttp2-client redis-server wget
 RUN apt-get install --yes libev-dev libc-ares-dev libnghttp2-dev libssl-dev libuv1-dev zlib1g-dev
 
 # cpan modules
