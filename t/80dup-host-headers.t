@@ -18,11 +18,6 @@ my $socket = new IO::Socket::INET (
 );
 die "cannot create socket $!\n" unless $socket;
 
-check_port($upstream_port) or die "can't connect to server socket";
-# accent and close check_port's connection
-my $client_socket = $socket->accept();
-close($client_socket);
-
 my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
@@ -33,9 +28,8 @@ EOT
 
 system("nghttp http://127.0.0.1:$server->{'port'}/ -H 'host: host.example.com' &");
 
-my $req;
-$client_socket = $socket->accept();
-$client_socket->recv($req, 1024);
+my $client_socket = $socket->accept();
+$client_socket->recv(my $req, 1024);
 $client_socket->send("HTTP/1.1 200 Ok\r\nConnection:close\r\n\r\nBody\r\n");
 close($client_socket);
 $socket->close();
@@ -47,5 +41,5 @@ foreach (split(/\r\n/, $req)) {
     }
 }
 
-ok($host_headers == 1, "Only saw one host: header");
+is $host_headers, 1, "Only saw one host: header";
 done_testing();
