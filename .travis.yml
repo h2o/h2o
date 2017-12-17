@@ -3,7 +3,7 @@ language: c
 services:
   - docker
 before_install:
-  - docker build -t h2o-ci -f misc/docker-ci/Dockerfile .
+  - docker build -t h2o-ci-base -f misc/docker-ci/base.dockerfile .
+  - docker build -t h2o-ci -f misc/docker-ci/source.dockerfile .
 script:
-  - docker run h2o-ci make check
-  - docker run h2o-ci sudo make check-as-root
+  - docker run h2o-ci make -f misc/docker-ci/check.mk

@@ -25,15 +25,3 @@ USER ci
 # custom builds
 RUN wget --no-verbose -O - https://curl.haxx.se/download/curl-7.57.0.tar.gz | tar xzf -
 RUN (cd curl-7.57.0 && ./configure --prefix=/usr/local --with-nghttp2 --disable-shared && make && sudo make install)
-
-# copy files
-COPY . h2o
-RUN sudo chown -R ci:ci h2o
-WORKDIR h2o
-
-# build
-RUN cmake .
-RUN make all t-00unit-evloop.t t-00unit-libuv.t lib-examples h2get
-
-# the commands
-CMD ["make", "check"]
