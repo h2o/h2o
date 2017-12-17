@@ -320,7 +320,7 @@ EOS
 sub one_shot_http_upstream {
     my ($response, $port) = @_;
     my $listen = IO::Socket::INET->new(
-        LocalHost => '127.0.0.1',
+        LocalHost => '0.0.0.0',
         LocalPort => $port,
         Proto     => 'tcp',
         Listen    => 1,
