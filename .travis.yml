@@ -3,15 +3,7 @@ language: c
 services:
   - docker
 before_install:
-  - test -e $HOME/docker-cache/h2o-ci-base.tar.gz && zcat < $HOME/docker-cache/h2o-ci-base.tar.gz | docker load
   - docker build -t h2o-ci-base -f misc/docker-ci/base.dockerfile misc/docker-ci
   - docker build -t h2o-ci -f misc/docker-ci/source.dockerfile .
 script:
   - docker run h2o-ci make -f misc/docker-ci/check.mk
-
-cache:
-  directories:
-    - $HOME/docker-cache
-before_cache:
-  - mkdir -p $HOME/docker-cache
-  - docker save h2o-ci-base:latest | gzip -2 > $HOME/docker-cache/h2o-ci-base.tar.gz
