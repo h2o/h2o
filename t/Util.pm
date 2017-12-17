@@ -331,7 +331,11 @@ sub one_shot_http_upstream {
     die "fork failed" unless defined $pid;
     if ($pid != 0) {
         close $listen;
-        return ($port, scope_guard(sub { kill 'KILL', $pid; }));
+        my $guard = scope_guard(sub {
+            kill 'KILL', $pid;
+            while (waitpid($pid, WNOHANG) != $pid) {}
+        });
+        return ($port, $guard);
     }
 
     while (my $sock = $listen->accept) {
