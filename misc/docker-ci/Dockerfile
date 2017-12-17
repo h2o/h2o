@@ -1,6 +1,7 @@
 FROM ubuntu:16.04
 
 RUN apt-get --yes update
+RUN apt-get install --yes libterm-readline-perl-perl # suppress bogus warnings on travis
 
 # huge packages go first (for better cacheability)
 RUN apt-get install --yes bison ruby-dev
