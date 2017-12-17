@@ -112,6 +112,12 @@ mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
     return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
 }
 
+mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno)
+{
+    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 4, mrb_str_new_cstr(mrb, expr),
+                       mrb_nil_value(), mrb_str_new_cstr(mrb, path), mrb_fixnum_value(lineno));
+}
+
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback)
 {
     h2o_mruby_shared_context_t *shared_ctx = mrb->ud;
@@ -264,7 +270,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
 #undef SET_LITERAL
 #undef SET_STRING
 
-    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CORE);
+    h2o_mruby_eval_expr_location(mrb, H2O_MRUBY_CODE_CORE, "(h2o)lib/handler/mruby/embedded/core.rb", 1);
     h2o_mruby_assert(mrb);
 
     mrb_ary_set(mrb, ary, H2O_MRUBY_PROC_EACH_TO_ARRAY,
@@ -284,7 +290,8 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
     } else {
         assert(generator->req != NULL);
-        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n",
+                          RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         if (generator->req->_generator == NULL) {
             h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         } else {
@@ -313,12 +320,13 @@ mrb_value block_request_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_
     return mrb_nil_value();
 }
 
-mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+mrb_value run_blocking_requests_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                         int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
     mrb_value exc = mrb_ary_entry(args, 0);
-    if (! mrb_nil_p(exc)) {
+    if (!mrb_nil_p(exc)) {
         mrb->exc = mrb_obj_ptr(exc);
         handle_exception(ctx, NULL);
     }
@@ -353,7 +361,8 @@ mrb_value run_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mr
     return mrb_nil_value();
 }
 
-mrb_value finish_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+mrb_value finish_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                      int *run_again)
 {
     /* do nothing */
     return mrb_nil_value();

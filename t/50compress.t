@@ -74,11 +74,11 @@ run_with_curl($server, sub {
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "image compressed using gzip";
 
     subtest "brotli-decompress" => sub {
-        plan skip_all => "bro not found"
-            unless prog_exists("bro");
-        $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/on/alice.txt | bro --decompress");
+        plan skip_all => "brotli not found"
+            unless prog_exists("brotli");
+        $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/on/alice.txt | brotli --decompress");
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt"), "alice.txt";
-        $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/compress-jpg/halfdome.jpg | bro --decompress");
+        $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/compress-jpg/halfdome.jpg | brotli --decompress");
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "halfdome.jpg";
     };
 });

@@ -83,7 +83,8 @@ typedef struct st_h2o_mruby_handler_t {
 } h2o_mruby_handler_t;
 
 typedef struct st_h2o_mruby_context_t h2o_mruby_context_t;
-typedef mrb_value (*h2o_mruby_callback_t)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again);
+typedef mrb_value (*h2o_mruby_callback_t)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                          int *run_again);
 typedef H2O_VECTOR(h2o_mruby_callback_t) h2o_mruby_callbacks_t;
 
 typedef struct st_h2o_mruby_shared_context_t {
@@ -158,6 +159,7 @@ void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, in
 mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
+mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno);
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback);
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
 void h2o_mruby_setup_globals(mrb_state *mrb);

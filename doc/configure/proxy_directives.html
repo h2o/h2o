@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -77,6 +77,79 @@ Support for HTTPS has been introduced in version 2.0.
 <p>
 Following sections describe the configuration directives defined for the module.
 </p>
+
+<ul>
+<li><a href="configure/proxy_directives.html#proxy.reverse.url">
+<code>proxy.reverse.url</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.preserve-host">
+<code>proxy.preserve-host</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.preserve-x-forwarded-proto">
+<code>proxy.preserve-x-forwarded-proto</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.proxy-protocol">
+<code>proxy.proxy-protocol</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers">
+<code>proxy.emit-x-forwarded-headers</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.emit-via-header">
+<code>proxy.emit-via-header</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.emit-missing-date-header">
+<code>proxy.emit-missing-date-header</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.add">
+<code>proxy.header.add</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.append">
+<code>proxy.header.append</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.merge">
+<code>proxy.header.merge</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.set">
+<code>proxy.header.set</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.setifempty">
+<code>proxy.header.setifempty</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.unset">
+<code>proxy.header.unset</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.ssl.cafile">
+<code>proxy.ssl.cafile</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.ssl.session-cache">
+<code>proxy.ssl.session-cache</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.ssl.verify-peer">
+<code>proxy.ssl.verify-peer</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.io">
+<code>proxy.timeout.io</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.connect">
+<code>proxy.timeout.connect</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.first_byte">
+<code>proxy.timeout.first_byte</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.io">
+<code>proxy.timeout.io</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.keepalive">
+<code>proxy.timeout.keepalive</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.websocket">
+<code>proxy.websocket</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.websocket.timeout">
+<code>proxy.websocket.timeout</code>
+</a></li>
+</ul>
+
 
 <div id="proxy.reverse.url" class="directive-head">
 <h3><a href="configure/proxy_directives.html#proxy.reverse.url"><code>"proxy.reverse.url"</code></a></h3>
@@ -631,6 +704,8 @@ Sets idle timeout of a WebSocket connection being proxied.
 <dt>Default:</dt>
 <dd><code><pre>proxy.websocket.timeout: 300000</pre></code>
 </dl>
+
+
 
 
 

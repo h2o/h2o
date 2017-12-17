@@ -20,6 +20,8 @@ Support for HTTPS has been introduced in version 2.0.
 Following sections describe the configuration directives defined for the module.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "proxy.reverse.url",
@@ -302,5 +304,7 @@ $ctx->{directive}->(
     desc    => q{Sets idle timeout of a WebSocket connection being proxied.},
 )->(sub {})
 ?>
+
+? })
 
 ? })
