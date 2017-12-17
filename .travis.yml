@@ -14,4 +14,4 @@ cache:
     - $HOME/docker-cache
 before_cache:
   - mkdir -p $HOME/docker-cache
-  - test -e $HOME/docker-cache/h2o-ci-base.tar.gz || docker save h2o-ci-base:latest | gzip -2 > $HOME/docker-cache/h2o-ci-base.tar.gz
+  - docker save h2o-ci-base:latest | gzip -2 > $HOME/docker-cache/h2o-ci-base.tar.gz
