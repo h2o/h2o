@@ -5,17 +5,19 @@ matrix:
       sudo: required
       services:
         - docker
+      env:
+        - label=default
       before_install: &bs
-        - docker build -t h2o-ci-base -f misc/docker-ci/base.dockerfile misc/docker-ci
-        - docker build -t h2o-ci -f misc/docker-ci/source.dockerfile .
+        - docker pull kazuho/h2o-ci:latest
+        - docker build -t ci -f misc/docker-ci/Dockerfile .
       script:
-        - docker run h2o-ci make -f misc/docker-ci/check.mk
+        - docker run ci
     - os: linux
       sudo: required
       services:
         - docker
       env:
-        - label=Fuzz
+        - label=fuzz
       before_install: *bs
       script:
-        - docker run h2o-ci make -f misc/docker-ci/check.mk fuzz
+        - docker run ci make -f misc/docker-ci/check.mk fuzz
