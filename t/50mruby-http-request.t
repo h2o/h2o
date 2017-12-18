@@ -510,6 +510,7 @@ EOT
         my $query = $chunked ? '?chunked' : '';
         my $url = "http://127.0.0.1:$server->{port}$path$query";
         my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr $url $url");
+        undef $server->{guard}; # wait until the log gets emitted
         my @log = do {
             open my $fh, "<", "$tempdir/access_log" or die "failed to open access_log:$!";
             map { my $l = $_; chomp $l; $l } <$fh>;
