@@ -17,6 +17,9 @@ RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-pe
 # clang-4.0 for fuzzing
 RUN apt-get install -y clang-4.0
 
+# configuration
+RUN echo '127.0.0.1 127.0.0.1.xip.io' >> /etc/hosts
+
 # create user
 RUN useradd --create-home ci
 RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
