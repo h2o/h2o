@@ -1,9 +1,21 @@
-sudo: required
 language: c
-services:
-  - docker
-before_install:
-  - docker build -t h2o-ci-base -f misc/docker-ci/base.dockerfile misc/docker-ci
-  - docker build -t h2o-ci -f misc/docker-ci/source.dockerfile .
-script:
-  - docker run h2o-ci make -f misc/docker-ci/check.mk
+matrix:
+  include:
+    - os: linux
+      sudo: required
+      services:
+        - docker
+      before_install: &bs
+        - docker build -t h2o-ci-base -f misc/docker-ci/base.dockerfile misc/docker-ci
+        - docker build -t h2o-ci -f misc/docker-ci/source.dockerfile .
+      script:
+        - docker run h2o-ci make -f misc/docker-ci/check.mk
+    - os: linux
+      sudo: required
+      services:
+        - docker
+      env:
+        - label=Fuzz
+      before_install: *bs
+      script:
+        - docker run h2o-ci make -f misc/docker-ci/check.mk fuzz
