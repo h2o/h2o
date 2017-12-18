@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
+use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -318,14 +319,29 @@ EOS
 
 sub one_shot_http_upstream {
     my ($response, $port) = @_;
-    my $guard = spawn_server(
-        argv     => [ "sh -c 'printf \"$response\" | nc -w 1 -l $port > /dev/null 2>&1'" ],
-        is_ready =>  sub {
-            sleep(1);
-            return 1;
-        },
-    );
-    return ($port, $guard);
+    my $listen = IO::Socket::INET->new(
+        LocalHost => '0.0.0.0',
+        LocalPort => $port,
+        Proto     => 'tcp',
+        Listen    => 1,
+        Reuse     => 1,
+    ) or die "failed to listen to 127.0.0.1:$port:$!";
+
+    my $pid = fork;
+    die "fork failed" unless defined $pid;
+    if ($pid != 0) {
+        close $listen;
+        my $guard = scope_guard(sub {
+            kill 'KILL', $pid;
+            while (waitpid($pid, WNOHANG) != $pid) {}
+        });
+        return ($port, $guard);
+    }
+
+    while (my $sock = $listen->accept) {
+        $sock->print($response);
+        close $sock;
+    }
 }
 
 1;
