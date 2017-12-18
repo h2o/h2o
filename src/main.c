@@ -35,7 +35,6 @@
 #include <pthread.h>
 #include <pwd.h>
 #include <signal.h>
-#include <spawn.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/resource.h>

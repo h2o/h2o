@@ -5,11 +5,34 @@
 
 /* lib/handler/mruby/embedded/core.rb */
 #define H2O_MRUBY_CODE_CORE                                                                                                        \
+    "# Copyright (c) 2014-2016 DeNA Co., Ltd., Kazuho Oku, Ryosuke Matsumoto,\n"                                                   \
+    "#                         Masayoshi Takahashi\n"                                                                              \
+    "# \n"                                                                                                                         \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "# \n"                                                                                                                         \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "# \n"                                                                                                                         \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
     "$__TOP_SELF__ = self\n"                                                                                                       \
     "def _h2o_eval_conf(__h2o_conf)\n"                                                                                             \
     "  $__TOP_SELF__.eval(__h2o_conf[:code], nil, __h2o_conf[:file], __h2o_conf[:line])\n"                                         \
     "end\n"                                                                                                                        \
+    "\n"                                                                                                                           \
     "module Kernel\n"                                                                                                              \
+    "\n"                                                                                                                           \
     "  def _h2o_define_callback(name, callback_id)\n"                                                                              \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
     "      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])\n"                                                      \
@@ -19,12 +42,14 @@
     "      ret\n"                                                                                                                  \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "  def _h2o_create_resumer()\n"                                                                                                \
     "    me = Fiber.current\n"                                                                                                     \
     "    Proc.new do |v|\n"                                                                                                        \
     "      me.resume(v)\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "  def _h2o_proc_each_to_array()\n"                                                                                            \
     "    Proc.new do |o|\n"                                                                                                        \
     "      a = []\n"                                                                                                               \
@@ -34,10 +59,12 @@
     "      a\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "  def _h2o_prepare_app(conf)\n"                                                                                               \
     "    app = Proc.new do |req|\n"                                                                                                \
     "      _h2o__block_request(req)\n"                                                                                             \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
     "    cached = nil\n"                                                                                                           \
     "    runner = Proc.new do |args|\n"                                                                                            \
     "      fiber = cached || Fiber.new do |req, generator|\n"                                                                      \
@@ -58,6 +85,7 @@
     "      cached = nil\n"                                                                                                         \
     "      fiber.resume(*args)\n"                                                                                                  \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
     "    configurator = Proc.new do\n"                                                                                             \
     "      fiber = Fiber.new do\n"                                                                                                 \
     "        begin\n"                                                                                                              \
@@ -74,11 +102,14 @@
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
     "    [runner, configurator]\n"                                                                                                 \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "  def sleep(*sec)\n"                                                                                                          \
     "    _h2o__sleep(*sec)\n"                                                                                                      \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "  def task(&block)\n"                                                                                                         \
     "    fiber = Fiber.new do\n"                                                                                                   \
     "      begin\n"                                                                                                                \
@@ -90,11 +121,33 @@
     "    end\n"                                                                                                                    \
     "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "end\n"
 
 /* lib/handler/mruby/embedded/http_request.rb */
 #define H2O_MRUBY_CODE_HTTP_REQUEST                                                                                                \
+    "# Copyright (c) 2015-2016 DeNA Co., Ltd., Kazuho Oku\n"                                                                       \
+    "# \n"                                                                                                                         \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "# \n"                                                                                                                         \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "# \n"                                                                                                                         \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
     "module H2O\n"                                                                                                                 \
+    "\n"                                                                                                                           \
     "  class HttpRequest\n"                                                                                                        \
     "    def join\n"                                                                                                               \
     "      if !@resp\n"                                                                                                            \
@@ -106,6 +159,7 @@
     "      @resp = resp\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "  class HttpInputStream\n"                                                                                                    \
     "    def each\n"                                                                                                               \
     "      first = true\n"                                                                                                         \
@@ -121,15 +175,38 @@
     "      end\n"                                                                                                                  \
     "      s\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
     "    class Empty < HttpInputStream\n"                                                                                          \
     "      def each; end\n"                                                                                                        \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "end\n"
 
 /* lib/handler/mruby/embedded/chunked.rb */
 #define H2O_MRUBY_CODE_CHUNKED                                                                                                     \
+    "# Copyright (c) 2014 DeNA Co., Ltd.\n"                                                                                        \
+    "#\n"                                                                                                                          \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "#\n"                                                                                                                          \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "#\n"                                                                                                                          \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
     "module Kernel\n"                                                                                                              \
+    "\n"                                                                                                                           \
     "  def _h2o_chunked_proc_each_to_fiber()\n"                                                                                    \
     "    Proc.new do |args|\n"                                                                                                     \
     "      src, generator = *args\n"                                                                                               \
@@ -146,10 +223,31 @@
     "      fiber.resume\n"                                                                                                         \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "end\n"
 
 /* lib/handler/mruby/embedded/channel.rb */
 #define H2O_MRUBY_CODE_CHANNEL                                                                                                     \
+    "# Copyright (c) 2017 Ritta Narita\n"                                                                                          \
+    "#\n"                                                                                                                          \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "#\n"                                                                                                                          \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "#\n"                                                                                                                          \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
     "module H2O\n"                                                                                                                 \
     "  class Channel\n"                                                                                                            \
     "    def push(o)\n"                                                                                                            \
