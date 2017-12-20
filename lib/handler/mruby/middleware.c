@@ -205,13 +205,15 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
         return;
     }
 
-    push_chunks(subreq, inbufs, inbufcnt);
-
     if (h2o_send_state_is_in_progress(state)) {
         h2o_proceed_response_deferred(&subreq->super);
+        if (inbufcnt == 0)
+            return;
     } else {
         subreq->final_received = 1;
     }
+
+    push_chunks(subreq, inbufs, inbufcnt);
 
     int gc_arena = mrb_gc_arena_save(mrb);
 
@@ -576,7 +578,7 @@ static void on_postfilter_setup_stream(h2o_req_filter_t *self, h2o_req_t *req, h
     h2o_setup_next_req_filter(self, req, slot);
 }
 
-static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = ctx->shared->mrb;
 
@@ -594,8 +596,8 @@ static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value in
         *run_again = 1;
         return mrb_obj_value(mrb->exc);
     }
-    subreq->receiver = receiver;
-    mrb_gc_register(mrb, receiver);
+    subreq->receiver = *receiver;
+    mrb_gc_register(mrb, *receiver);
 
     h2o_req_t *super = &subreq->super;
 
@@ -614,7 +616,7 @@ static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value in
     return mrb_nil_value();
 }
 
-static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_mruby_subreq_t *subreq;
@@ -636,8 +638,8 @@ static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_v
         return mrb_nil_value();
     } else {
         assert(mrb_nil_p(subreq->receiver));
-        subreq->receiver = receiver;
-        mrb_gc_register(mrb, receiver);
+        subreq->receiver = *receiver;
+        mrb_gc_register(mrb, *receiver);
         return mrb_nil_value();
     }
 }

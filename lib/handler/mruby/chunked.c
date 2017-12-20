@@ -59,7 +59,7 @@ void h2o_mruby_chunked_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs,
 
 void h2o_mruby_chunked_send_buffer(h2o_mruby_generator_t *generator, h2o_doublebuffer_t *db, h2o_buffer_t **input, int is_final)
 {
-    assert(db->bytes_inflight == 0);
+    assert(!db->inflight);
 
     h2o_iovec_t buf = h2o_doublebuffer_prepare(db, input, generator->req->preferred_chunk_size);
     size_t bufcnt = 1;
@@ -127,7 +127,8 @@ static void do_callback_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     input = &chunked->receiving;
     is_final = mrb_nil_p(chunked->super.body_obj);
 
-    h2o_mruby_chunked_send_buffer(generator, &chunked->sending, input, is_final);
+    if (!chunked->sending.inflight)
+        h2o_mruby_chunked_send_buffer(generator, &chunked->sending, input, is_final);
 }
 
 static void do_callback_chunked_stop(h2o_mruby_generator_t *generator)
@@ -136,7 +137,7 @@ static void do_callback_chunked_stop(h2o_mruby_generator_t *generator)
 
     h2o_mruby_chunked_close_body(generator);
 
-    if (chunked->sending.bytes_inflight == 0)
+    if (!chunked->sending.inflight)
         h2o_mruby_chunked_send_buffer(generator, &chunked->sending, &chunked->receiving, 1);
 }
 
@@ -225,7 +226,7 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
             h2o_buffer_reserve(&chunked->receiving, len);
             memcpy(chunked->receiving->bytes + chunked->receiving->size, s, len);
             chunked->receiving->size += len;
-            if (chunked->sending.bytes_inflight == 0)
+            if (!chunked->sending.inflight)
                 h2o_mruby_chunked_send_buffer(generator, &chunked->sending, &chunked->receiving, 0);
         }
     }
@@ -233,7 +234,8 @@ static mrb_value send_chunked_method(mrb_state *mrb, mrb_value self)
     return mrb_nil_value();
 }
 
-static mrb_value send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again)
+static mrb_value send_chunked_eos_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                           int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
@@ -257,7 +259,7 @@ void h2o_mruby_chunked_init_context(h2o_mruby_shared_context_t *shared_ctx)
 {
     mrb_state *mrb = shared_ctx->mrb;
 
-    h2o_mruby_eval_expr(mrb, H2O_MRUBY_CODE_CHUNKED);
+    h2o_mruby_eval_expr_location(mrb, H2O_MRUBY_CODE_CHUNKED, "(h2o)lib/handler/mruby/embedded/chunked.rb", 1);
     h2o_mruby_assert(mrb);
 
     mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunked_method, MRB_ARGS_ARG(1, 0));

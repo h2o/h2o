@@ -128,6 +128,8 @@ See also:
 The following describes the configuration directives for controlling the HTTP/2 protocol handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "http2-casper",
@@ -352,5 +354,7 @@ A timeout in seconds. How long to wait before closing the connection on graceful
 EOT
 )->(sub {});
 ?>
+
+? })
 
 ? })

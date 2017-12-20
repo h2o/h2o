@@ -341,6 +341,7 @@ hosts:
 This document describes the configuration directives common to all the protocols and handlers.
 
 
+
 .SS hosts
 Maps host:port to the mappings of per-host configs.
 
@@ -1106,6 +1107,7 @@ process.
 
 
 
+
 .SH COMPRESS DIRECTIVES
 
 
@@ -1120,6 +1122,7 @@ If the value of the response header is set to off, then the response never gets 
 
 
 The following are the  configuration directives recognized by the handler.
+
 
 
 .SS compress
@@ -1195,11 +1198,13 @@ compress
 
 
 
+
 .SH HTTP/1 DIRECTIVES
 
 
 
 This document describes the configuration directives for controlling the HTTP/1 protocol handler.
+
 
 
 .SS http1-request-timeout
@@ -1216,6 +1221,7 @@ Boolean flag (ON or OFF) indicating whether or not to allow upgrade to HTTP/2.
 
 .RE
 .RE
+
 
 
 
@@ -1365,6 +1371,7 @@ Reorganizing Website Architecture for HTTP/2 and Beyond pp.14-21
 
 
 The following describes the configuration directives for controlling the HTTP/2 protocol handler.
+
 
 
 .SS http2-casper
@@ -1588,11 +1595,13 @@ A timeout in seconds. How long to wait before closing the connection on graceful
 
 
 
+
 .SH ACCESS LOG DIRECTIVES
 
 
 
 This document describes the configuration directives of the access_log handler.
+
 
 
 .SS access-log
@@ -1748,6 +1757,7 @@ error-log.emit-request-errors
 
 
 
+
 .SS Notes:
 .PP
 [1]A single SSL connection may transfer more than one HTTP request.
@@ -1757,6 +1767,7 @@ error-log.emit-request-errors
 
 
 This document describes the configuration directives of the errordoc handler.
+
 
 
 .SS error-doc
@@ -1829,11 +1840,13 @@ error-doc:
 
 
 
+
 .SH EXPIRES DIRECTIVES
 
 
 
 This document describes the configuration directives of the expires handler.
+
 
 
 .SS expires
@@ -1870,6 +1883,7 @@ You can also find an example that conditionally sets the header depending on the
 
 
 
+
 .SH FASTCGI DIRECTIVES
 
 
@@ -1880,6 +1894,7 @@ This document describes the configuration directives of the FastCGI handler.
 The configuration directives of the FastCGI handler can be categorized into two groups.
 Fastcgi.connect and fastcgi.spawn define the address (or the process) to which the requests should be sent.
 Other directives customize how the connections to the FastCGI processes should be maintained.
+
 
 
 .SS fastcgi.connect
@@ -2008,6 +2023,7 @@ The directive specifies whether to send the original values to the FastCGI proce
 
 
 
+
 .SH FILE DIRECTIVES
 
 
@@ -2017,6 +2033,7 @@ This document describes the configuration directives of the file handler - a han
 
 Two directives: file.dir and file.file are used to define the mapping.
 Other directives modify the behavior of the mappings defined by the two.
+
 
 
 .SS file.custom-handler
@@ -2311,11 +2328,13 @@ Synonym of file.send-compressed.
 
 
 
+
 .SH HEADERS DIRECTIVES
 
 
 
 This document describes the configuration directives of the headers handler.
+
 
 
 .SS header.add
@@ -2419,12 +2438,14 @@ header.unset: "X-Powered-By"
 
 
 
+
 .SH MRUBY DIRECTIVES
 
 
 
 The following are the configuration directives of the mruby handler.
 Please refer to Using mruby to find out how to write handlers using mruby.
+
 
 
 .SS mruby.handler
@@ -2495,6 +2516,7 @@ mruby.handler
 
 
 
+
 .SH PROXY DIRECTIVES
 
 
@@ -2515,6 +2537,7 @@ Support for HTTPS has been introduced in version 2.0.
 
 
 Following sections describe the configuration directives defined for the module.
+
 
 
 .SS proxy.reverse.url
@@ -2612,6 +2635,16 @@ A boolean flag (ON or OFF) indicating if the server adds or appends an entry to 
 .PP
 .BR See\ also:
 proxy.emit-x-forwarded-headers
+
+.RE
+.RE
+
+
+.SS proxy.emit-missing-date-header
+(since v2.3)
+A boolean flag (ON or OFF) indicating if H2O should add a date header to the response, if that header is missing from the upstream response.
+
+.PP
 
 .RE
 .RE
@@ -2834,11 +2867,13 @@ Sets idle timeout of a WebSocket connection being proxied.
 
 
 
+
 .SH REDIRECT DIRECTIVES
 
 
 
 This document describes the configuration directives of the redirect handler.
+
 
 
 .SS redirect
@@ -2891,11 +2926,13 @@ hosts:
 
 
 
+
 .SH REPROXY DIRECTIVES
 
 
 
 This document describes the configuration directives of the reproxy handler.
+
 
 
 .SS reproxy
@@ -2920,12 +2957,14 @@ Doing so would reduce the load on the application server.
 
 
 
+
 .SH STATUS DIRECTIVES
 
 
 
 The status handler exposes the current states of the HTTP server.
 This document describes the configuration directives of the handler.
+
 
 
 .SS status
@@ -2991,6 +3030,7 @@ Note that the time spent while processing a request in a blocking manner (such a
 
 
 
+
 .SH THROTTLE RESPONSE DIRECTIVES
 
 
@@ -3002,6 +3042,7 @@ The value of X-Traffic header should be an integer that represents the speed you
 
 
 The following are the configuration directives recognized by the handler.
+
 
 
 .SS throttle-response
@@ -3039,6 +3080,7 @@ hosts:
 
 .RE
 .RE
+
 
 
 
@@ -3113,7 +3155,8 @@ file.custom-handler:
 .PP
 
 
-The gateway also provides options to for tuning the behavior.  A full list of options can be obtained by running the gateway directly with --help option.
+The gateway also provides options to for tuning the behavior.
+A full list of options can be obtained by running the gateway directly with --help option.
 
 .PP
 .BR Example:\ 
@@ -3133,6 +3176,7 @@ Options:
                      connections.
   --max-workers=nnn  maximum number of CGI processes (default: unlimited)
   --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+  --verbose          verbose mode
 
 .RE
 .fi

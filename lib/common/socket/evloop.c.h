@@ -31,7 +31,11 @@
 
 #if !defined(H2O_USE_ACCEPT4)
 #ifdef __linux__
+#if defined(__ANDROID__) && __ANDROID_API__ < 21
+#define H2O_USE_ACCEPT4 0
+#else
 #define H2O_USE_ACCEPT4 1
+#endif
 #elif __FreeBSD__ >= 10
 #define H2O_USE_ACCEPT4 1
 #else

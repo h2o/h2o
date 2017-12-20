@@ -36,6 +36,8 @@ SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 
 INCLUDE(GNUInstallDirs)
+INCLUDE(CheckCSourceCompiles)
+INCLUDE(CMakePushCheckState)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -49,7 +51,6 @@ FIND_PACKAGE(Threads REQUIRED)
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(ZLIB REQUIRED)
 
-INCLUDE(CheckCSourceCompiles)
 CHECK_C_SOURCE_COMPILES("
 #include <stdint.h>
 int main(void) {
@@ -57,6 +58,32 @@ uint64_t a;
 __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
+
+
+
+# Find out if libc provices backtrace()
+CMAKE_PUSH_CHECK_STATE()
+FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
+IF (LIBC_BACKTRACE_LIB)
+    SET(CMAKE_REQUIRED_LIBRARIES ${LIBC_BACKTRACE_LIB})
+ENDIF()
+CHECK_C_SOURCE_COMPILES("
+#include <execinfo.h>
+int main(void) {
+void *p[10];
+int ret = backtrace(p, 10);
+backtrace_symbols_fd(p, ret, 2);
+return 0;
+}" LIBC_HAS_BACKTRACE)
+
+CMAKE_POP_CHECK_STATE()
+
+IF (LIBC_HAS_BACKTRACE)
+    ADD_DEFINITIONS("-DLIBC_HAS_BACKTRACE")
+    IF (LIBC_BACKTRACE_LIB)
+        LIST(APPEND EXTRA_LIBS ${LIBC_BACKTRACE_LIB})
+    ENDIF ()
+ENDIF ()
 
 SET(WITH_BUNDLED_SSL_DEFAULT "ON")
 IF ((NOT UNIX) OR CYGWIN)
@@ -104,7 +131,7 @@ ENDIF (WITH_BUNDLED_SSL)
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
-    deps/brotli/enc
+    deps/brotli/c/include
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -193,21 +220,25 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/writer.c)
 
 SET(BROTLI_SOURCE_FILES
-    deps/brotli/enc/backward_references.cc
-    deps/brotli/enc/block_splitter.cc
-    deps/brotli/enc/brotli_bit_stream.cc
-    deps/brotli/enc/compress_fragment.cc
-    deps/brotli/enc/compress_fragment_two_pass.cc
-    deps/brotli/enc/dictionary.cc
-    deps/brotli/enc/encode.cc
-    deps/brotli/enc/entropy_encode.cc
-    deps/brotli/enc/histogram.cc
-    deps/brotli/enc/literal_cost.cc
-    deps/brotli/enc/metablock.cc
-    deps/brotli/enc/static_dict.cc
-    deps/brotli/enc/streams.cc
-    deps/brotli/enc/utf8_util.cc
-    lib/handler/compress/brotli.cc)
+    deps/brotli/c/common/dictionary.c
+    deps/brotli/c/enc/backward_references.c
+    deps/brotli/c/enc/backward_references_hq.c
+    deps/brotli/c/enc/bit_cost.c
+    deps/brotli/c/enc/block_splitter.c
+    deps/brotli/c/enc/brotli_bit_stream.c
+    deps/brotli/c/enc/cluster.c
+    deps/brotli/c/enc/compress_fragment.c
+    deps/brotli/c/enc/compress_fragment_two_pass.c
+    deps/brotli/c/enc/dictionary_hash.c
+    deps/brotli/c/enc/encode.c
+    deps/brotli/c/enc/entropy_encode.c
+    deps/brotli/c/enc/histogram.c
+    deps/brotli/c/enc/literal_cost.c
+    deps/brotli/c/enc/memory.c
+    deps/brotli/c/enc/metablock.c
+    deps/brotli/c/enc/static_dict.c
+    deps/brotli/c/enc/utf8_util.c
+    lib/handler/compress/brotli.c)
 
 SET(PICOTLS_INCLUDE_DIRECTORIES
     deps/picotls/deps/cifra/src/ext
@@ -385,7 +416,8 @@ SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
     ${BROTLI_SOURCE_FILES})
-SET(EXTRA_LIBS ${EXTRA_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+
+SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
@@ -485,6 +517,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/http_request.c
         lib/handler/mruby/sleep.c
         lib/handler/mruby/middleware.c
+        lib/handler/mruby/channel.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)

@@ -54,8 +54,6 @@ enum {
     H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE,
     H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS,
     H2O_MRUBY_LIT_H2O_REMAINING_REPROCESSES,
-    H2O_MRUBY_LIT_SEPARATOR_COMMA,
-    H2O_MRUBY_LIT_SEPARATOR_SEMICOLON,
     H2O_MRUBY_PROC_EACH_TO_ARRAY,
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
@@ -70,6 +68,9 @@ enum {
     H2O_MRUBY_HTTP_REQUEST_CLASS,
     H2O_MRUBY_HTTP_INPUT_STREAM_CLASS,
     H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS,
+
+    /* used by channel.c */
+    H2O_MRUBY_CHANNEL_CLASS,
 
     H2O_MRUBY_NUM_CONSTANTS
 };
@@ -87,7 +88,8 @@ typedef struct st_h2o_mruby_handler_t {
 } h2o_mruby_handler_t;
 
 typedef struct st_h2o_mruby_context_t h2o_mruby_context_t;
-typedef mrb_value (*h2o_mruby_callback_t)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value receiver, mrb_value args, int *run_again);
+typedef mrb_value (*h2o_mruby_callback_t)(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                          int *run_again);
 typedef H2O_VECTOR(h2o_mruby_callback_t) h2o_mruby_callbacks_t;
 
 typedef struct st_h2o_mruby_shared_context_t {
@@ -111,10 +113,12 @@ struct st_h2o_mruby_context_t {
     mrb_value proc;
     h2o_mruby_shared_context_t *shared;
     mrb_value blocking_reqs;
+    mrb_value resumers;
 };
 
 typedef struct st_h2o_mruby_chunked_t h2o_mruby_chunked_t;
 typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;
+typedef struct st_h2o_mruby_channel_context_t h2o_mruby_channel_context_t;
 typedef struct st_h2o_mruby_generator_t h2o_mruby_generator_t;
 
 struct st_h2o_mruby_chunked_t {
@@ -154,8 +158,12 @@ typedef struct st_h2o_mruby_generator_t {
 } h2o_mruby_generator_t;
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
-    if (mrb->exc != NULL)                                                                                                          \
-    h2o_mruby__assert_failed(mrb, __FILE__, __LINE__)
+    do {                                                                                                                           \
+        if (mrb->exc != NULL)                                                                                                      \
+            h2o_mruby__abort_exc(mrb, "unexpected ruby error", __FILE__, __LINE__);                                                \
+    } while (0)
+
+#define h2o_mruby_new_str(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), __FILE__, __LINE__)
 
 /* source files using this macro should include mruby/throw.h */
 #define H2O_MRUBY_EXEC_GUARD(block)                                                                                                \
@@ -178,9 +186,11 @@ typedef struct st_h2o_mruby_generator_t {
     } while (0)
 
 /* handler/mruby.c */
-void h2o_mruby__assert_failed(mrb_state *mrb, const char *file, int line);
+void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, int line);
+mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
+mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno);
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback);
 mrb_value h2o_mruby_create_data_instance(mrb_state *mrb, mrb_value class_obj, void *ptr, const mrb_data_type *type);
 void h2o_mruby_setup_globals(mrb_state *mrb);
@@ -225,6 +235,9 @@ void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
 /* handler/mruby/middleware.c */
 void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *ctx);
 h2o_mruby_chunked_t *h2o_mruby_middleware_chunked_create(h2o_mruby_generator_t *generator, mrb_value body);
+
+/* handler/mruby/channel.c */
+void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *ctx);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);

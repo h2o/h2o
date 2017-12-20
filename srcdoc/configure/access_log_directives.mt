@@ -5,6 +5,8 @@
 This document describes the configuration directives of the access_log handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "access-log",
@@ -129,6 +131,8 @@ The default format is <code>%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i
 <p>
 Note that you may need to quote (and escape) the format string as required by YAML (see <a href="http://www.yaml.org/YAML_for_ruby.html#single-quoted_strings">Yaml Cookbook</a>).
 </p>
+? })
+
 ? })
 
 ? })
