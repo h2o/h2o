@@ -716,7 +716,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
          * even if we already sent GOAWAY, HEADERS, PUSH_PROMISE, and CONTINUATION frames MUST be minimally processed
          * to ensure the state maintained for header compression is consistent (RFC 7540 6.8)
          */
-        if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL)
+        if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL)
             stream = h2o_http2_stream_open(conn, frame->stream_id, NULL, &payload.priority);
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
         if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
