@@ -9,6 +9,7 @@ matrix:
         - label=default
       before_install: &bi
         - docker pull kazuho/h2o-ci:latest
+        - chmod -R ugo+w .
       script:
         - make -f misc/docker-ci/check.mk
     - os: linux
