@@ -1,0 +1,5 @@
+.DS_Store
+build
+doc/workdir
+h2o.xcodeproj
+tmp
