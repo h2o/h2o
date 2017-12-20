@@ -23,9 +23,6 @@ RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-pe
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
 RUN sudo cpanm --notest Starlet Test::TCP
 
-# configuration
-RUN echo '127.0.0.1 127.0.0.1.xip.io' >> /etc/hosts
-
 # create user
 RUN useradd --create-home ci
 RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
