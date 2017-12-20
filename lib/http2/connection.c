@@ -701,8 +701,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
             if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0)
                 goto PREPARE_FOR_CONTINUATION;
             return handle_trailing_headers(conn, stream, payload.headers, payload.headers_len, err_desc);
-        } else if (!stream || stream->state != H2O_HTTP2_STREAM_STATE_IDLE) {
-            /* it's legit that stream exists and is IDLE if a PRIORITY frame was received earlier */
+        } else {
             *err_desc = "invalid stream id in HEADERS frame";
             return H2O_HTTP2_ERROR_STREAM_CLOSED;
         }
