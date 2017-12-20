@@ -16,7 +16,7 @@ _check:
 	$(MAKE) -f $(CHECK_MK) -C build _do-check CMAKE_ARGS=$(CMAKE_ARGS)
 
 _do-check:
-	cmake $(CMAKE_ARGS) $(SRC_DIR)
+	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	make all
 	make check
 	sudo make check-as-root
