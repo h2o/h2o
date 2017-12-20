@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -62,6 +62,16 @@ HTTP/1 Directives
 <p>
 This document describes the configuration directives for controlling the HTTP/1 protocol handler.
 </p>
+
+<ul>
+<li><a href="configure/http1_directives.html#http1-request-timeout">
+<code>http1-request-timeout</code>
+</a></li>
+<li><a href="configure/http1_directives.html#http1-upgrade-to-http2">
+<code>http1-upgrade-to-http2</code>
+</a></li>
+</ul>
+
 
 <div id="http1-request-timeout" class="directive-head">
 <h3><a href="configure/http1_directives.html#http1-request-timeout"><code>"http1-request-timeout"</code></a></h3>
@@ -97,6 +107,8 @@ Boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to 
 <dt>Default:</dt>
 <dd><code><pre>http1-upgrade-to-http2: ON</pre></code>
 </dl>
+
+
 
 
 

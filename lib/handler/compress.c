@@ -101,7 +101,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 /* open the compressor */
 #if H2O_USE_BROTLI
     if (self->args.brotli.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
-        compressor = h2o_compress_brotli_open(&req->pool, self->args.brotli.quality, req->res.content_length);
+        compressor =
+            h2o_compress_brotli_open(&req->pool, self->args.brotli.quality, req->res.content_length, req->preferred_chunk_size);
     } else
 #endif
         if (self->args.gzip.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {

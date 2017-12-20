@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -189,6 +189,40 @@ See also:
 <p>
 The following describes the configuration directives for controlling the HTTP/2 protocol handler.
 </p>
+
+<ul>
+<li><a href="configure/http2_directives.html#http2-casper">
+<code>http2-casper</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-debug-state">
+<code>http2-debug-state</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-idle-timeout">
+<code>http2-idle-timeout</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection">
+<code>http2-max-concurrent-requests-per-connection</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt">
+<code>http2-latency-optimization-min-rtt</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-max-additional-delay">
+<code>http2-latency-optimization-max-additional-delay</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-latency-optimization-max-cwnd">
+<code>http2-latency-optimization-max-cwnd</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-push-preload">
+<code>http2-push-preload</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-reprioritize-blocking-assets">
+<code>http2-reprioritize-blocking-assets</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-graceful-shutdown-timeout">
+<code>http2-graceful-shutdown-timeout</code>
+</a></li>
+</ul>
+
 
 <div id="http2-casper" class="directive-head">
 <h3><a href="configure/http2_directives.html#http2-casper"><code>"http2-casper"</code></a></h3>
@@ -495,6 +529,8 @@ A timeout in seconds. How long to wait before closing the connection on graceful
 <dt>Default:</dt>
 <dd><code><pre>http2-graceful-shutdown-timeout: 0</pre></code>
 </dl>
+
+
 
 
 

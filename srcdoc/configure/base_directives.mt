@@ -5,6 +5,8 @@
 This document describes the configuration directives common to all the protocols and handlers.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name   => "hosts",
@@ -685,6 +687,8 @@ $ctx->{directive}->(
 for the pipe to the crash handler to be closed before exiting.
 This can be useful if you use a custom handler that inspects the dying
 process.</p>
+? })
+
 ? })
 
 ? })

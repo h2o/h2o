@@ -103,4 +103,16 @@ module Kernel
     _h2o__sleep(*sec)
   end
 
+  def task(&block)
+    fiber = Fiber.new do
+      begin
+        block.call
+      rescue => e
+        _h2o__send_error(e)
+      end
+      _h2o__finish_child_fiber()
+    end
+    _h2o__run_child_fiber(proc { fiber.resume })
+  end
+
 end

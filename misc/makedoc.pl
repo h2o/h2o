@@ -31,9 +31,15 @@ $main::context = {
 </div>
 EOT
     ),
+    directives => [],
     directive => sub {
         my %args = @_;
+        push(@{ $main::context->{directives} }, $args{name});
         $mt->wrapper_file("directive.mt", \%args);
+    },
+    directive_list => sub {
+        my %args = @_;
+        $mt->wrapper_file("directive_list.mt", { path => $dst_file, directives => $main::context->{directives} });
     },
     mruby_method => sub {
         my %args = @_;

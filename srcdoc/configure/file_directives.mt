@@ -9,6 +9,8 @@ Two directives: <a href="configure/file_directives.html#file.dir"><code>file.dir
 Other directives modify the behavior of the mappings defined by the two.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "file.custom-handler",
@@ -240,5 +242,7 @@ Synonym of <a href="configure/file_directives.html#file.send-compressed"><code>f
 EOT
 )->(sub {})
 ?>
+
+? })
 
 ? })

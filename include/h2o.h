@@ -421,6 +421,10 @@ struct st_h2o_globalconf_t {
          */
         unsigned emit_via_header : 1;
         /**
+         * a boolean flag if set to true, instructs the proxy to emit a date header, if it's missing from the upstream response
+         */
+        unsigned emit_missing_date_header : 1;
+        /**
          * global socketpool
          */
         h2o_socketpool_t global_socketpool;
@@ -1159,6 +1163,7 @@ int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 /* headers */
 
+static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
@@ -1512,6 +1517,10 @@ enum {
 };
 
 /**
+ * Add a `date:` header to the response
+ */
+void h2o_resp_add_date_header(h2o_req_t *req);
+/**
  * sends the given string as the response
  */
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
@@ -1707,7 +1716,8 @@ h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool);
 /**
  * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
  */
-h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length);
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length,
+                                                 size_t preferred_chunk_size);
 /**
  * registers the configurator for the gzip/brotli output filter
  */
@@ -1964,6 +1974,15 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 #ifdef H2O_NO_64BIT_ATOMICS
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
+
+inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y)
+{
+    if (x->name == y->name) {
+        return 1;
+    } else {
+        return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
+    }
+}
 
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
