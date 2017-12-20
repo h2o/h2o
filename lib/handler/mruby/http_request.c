@@ -163,6 +163,18 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
         h2o_mruby_chunked_send_buffer(generator, &chunked->sending, input, is_final);
 }
 
+static void do_chunked_start(h2o_mruby_generator_t *generator)
+{
+    struct st_h2o_mruby_http_chunked_t *chunked = (void *)generator->chunked;
+
+    on_shortcut_notify(generator);
+
+    if (!chunked->sending.inflight) {
+        h2o_doublebuffer_prepare_empty(&chunked->sending);
+        h2o_mruby_chunked_send(generator, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+    }
+}
+
 static void do_chunked_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 {
     h2o_mruby_generator_t *generator = (void *)_generator;
@@ -224,7 +236,7 @@ h2o_mruby_chunked_t *h2o_mruby_http_chunked_create(h2o_mruby_generator_t *genera
     chunked->client = ctx;
     chunked->remaining = NULL;
 
-    chunked->super.start = on_shortcut_notify;
+    chunked->super.start = do_chunked_start;
     chunked->super.proceed = do_chunked_proceed;
     chunked->super.stop = NULL; /* never be called */
     chunked->super.dispose = do_chunked_dispose;

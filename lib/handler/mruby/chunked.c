@@ -113,6 +113,11 @@ static void do_callback_chunked_start(h2o_mruby_generator_t *generator)
     mrb_ary_set(mrb, input, 0, chunked->super.body_obj);
     mrb_ary_set(mrb, input, 1, generator->refs.generator);
     h2o_mruby_run_fiber(generator->ctx, proc, input, 0);
+
+    if (!chunked->sending.inflight) {
+        h2o_doublebuffer_prepare_empty(&chunked->sending);
+        h2o_mruby_chunked_send(generator, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+    }
 }
 
 static void do_callback_proceed(h2o_generator_t *_generator, h2o_req_t *req)
