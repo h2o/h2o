@@ -867,7 +867,9 @@ static int handle_goaway_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame,
     if ((ret = h2o_http2_decode_goaway_payload(&payload, frame, err_desc)) != 0)
         return ret;
 
-    /* nothing to do, since we do not open new streams by ourselves */
+    /* stop opening new push streams hereafter */
+    conn->push_stream_ids.max_open = INT32_MAX;
+
     return 0;
 }
 
