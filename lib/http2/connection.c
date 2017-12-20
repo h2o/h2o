@@ -711,21 +711,6 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    if (conn->state == H2O_HTTP2_CONN_STATE_HALF_CLOSED && frame->stream_id > conn->pull_stream_ids.max_open) {
-        /*
-         * even if we already sent GOAWAY, HEADERS, PUSH_PROMISE, and CONTINUATION frames MUST be minimally processed
-         * to ensure the state maintained for header compression is consistent (RFC 7540 6.8)
-         */
-        if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL)
-            stream = h2o_http2_stream_open(conn, frame->stream_id, NULL, &payload.priority);
-        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
-        if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
-            return handle_incoming_request(conn, stream, payload.headers, payload.headers_len, err_desc);
-        } else {
-            goto PREPARE_FOR_CONTINUATION;
-        }
-    }
-
     /* open or determine the stream and prepare */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL) {
         if ((frame->flags & H2O_HTTP2_FRAME_FLAG_PRIORITY) != 0) {
@@ -1383,6 +1368,9 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
 {
     h2o_http2_conn_t *conn = (void *)src_req->conn;
     h2o_http2_stream_t *src_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, src_req);
+
+    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        return;
 
     /* RFC 7540 8.2.1: PUSH_PROMISE frames can be sent by the server in response to any client-initiated stream */
     if (h2o_http2_stream_is_push(src_stream->stream_id))
