@@ -210,6 +210,12 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
 static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    if (stream->stream_id > conn->pull_stream_ids.max_open) {
+        /* this stream is opend after sending GOAWAY, so ignore it */
+        h2o_http2_stream_reset(conn, stream);
+        return;
+    }
+
     /* TODO schedule the pending reqs using the scheduler */
     h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);
 
@@ -416,11 +422,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return ret;
     }
 
-    if (conn->state == H2O_HTTP2_CONN_STATE_HALF_CLOSED && stream->stream_id > conn->pull_stream_ids.max_open) {
-        h2o_http2_stream_reset(conn, stream);
-        return 0;
-    }
-
     /* handle stream-level errors */
 #define EXPECTED_MAP                                                                                                               \
     (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS)
@@ -466,12 +467,6 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, NULL, &dummy_content_length, NULL,
                                        err_desc)) != 0)
         return ret;
-
-    if (conn->state == H2O_HTTP2_CONN_STATE_HALF_CLOSED && stream->stream_id > conn->pull_stream_ids.max_open) {
-        h2o_http2_stream_reset(conn, stream);
-        return 0;
-    }
-
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
 }
@@ -483,15 +478,15 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
     h2o_http2_stream_t *stream;
     int hret;
 
+    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        return 0;
+
     if ((ret = h2o_http2_decode_frame(&frame, src, len, &H2O_HTTP2_SETTINGS_HOST, err_desc)) < 0)
         return ret;
     if (frame.type != H2O_HTTP2_FRAME_TYPE_CONTINUATION) {
         *err_desc = "expected CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
-
-    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
-        return 0;
 
     if ((stream = h2o_http2_conn_get_stream(conn, frame.stream_id)) == NULL ||
         !(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY)) {
@@ -648,10 +643,6 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
 
     update_input_window(conn, 0, &conn->_input_window, payload.length);
 
-    /* even if we already sent GOAWAY, DATA frames MUST be counted toward the connection flow-control window (RFC 7540 6.8) */
-    if (conn->state == H2O_HTTP2_CONN_STATE_HALF_CLOSED && frame->stream_id > conn->pull_stream_ids.max_open)
-        return 0;
-
     /* save the input in the request body buffer, or send error (and close the stream) */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL) {
         if (frame->stream_id <= conn->pull_stream_ids.max_open) {
@@ -678,6 +669,9 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     h2o_http2_stream_t *stream;
     int ret;
 
+    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        return 0;
+
     /* decode */
     if ((ret = h2o_http2_decode_headers_payload(&payload, frame, err_desc)) != 0)
         return ret;
@@ -685,10 +679,6 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         *err_desc = "invalid stream id in HEADERS frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
-
-    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
-        return 0;
-
     if (!(conn->pull_stream_ids.max_open < frame->stream_id)) {
         if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL &&
             stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY) {
