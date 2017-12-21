@@ -73,8 +73,10 @@ static void on_gc_dispose_error_stream(mrb_state *mrb, void *_error_stream)
     h2o_mruby_error_stream_t *error_stream = _error_stream;
     if (error_stream == NULL)
         return;
-    if (error_stream->generator != NULL)
+    if (error_stream->generator != NULL) {
+        error_stream->generator->error_stream = NULL;
         error_stream->generator->refs.error_stream = mrb_nil_value();
+    }
     free(error_stream);
 }
 
@@ -796,7 +798,12 @@ static void on_generator_dispose(void *_generator)
     if (!mrb_nil_p(generator->refs.generator))
         DATA_PTR(generator->refs.generator) = NULL;
 
-    generator->error_stream->generator = NULL;
+    if (generator->error_stream != NULL)
+        generator->error_stream->generator = NULL;
+
+    if (!mrb_nil_p(generator->refs.error_stream)) {
+        DATA_PTR(generator->refs.error_stream) = NULL;
+    }
 
     if (generator->sender != NULL)
         generator->sender->dispose(generator);
