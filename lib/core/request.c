@@ -224,22 +224,22 @@ static void retain_original_response(h2o_req_t *req)
     req->res.original.headers.size = req->res.headers.size;
 }
 
-void h2o_write_error_log(h2o_iovec_t error)
+void h2o_write_error_log(h2o_iovec_t msg)
 {
     /* use writev(2) to emit error atomically */
-    struct iovec vecs[] = {{error.base, error.len}, {"\n", 1}};
+    struct iovec vecs[] = {{msg.base, msg.len}, {"\n", 1}};
     H2O_BUILD_ASSERT(sizeof(vecs) / sizeof(vecs[0]) < IOV_MAX);
     writev(2, vecs, sizeof(vecs) / sizeof(vecs[0]));
 }
 
-static void on_default_error_callback(h2o_req_t *req, void *data, h2o_iovec_t error)
+static void on_default_error_callback(h2o_req_t *req, void *data, h2o_iovec_t msg)
 {
-    if (req->error.buf == NULL)
-        h2o_buffer_init(&req->error.buf, &h2o_socket_buffer_prototype);
-    h2o_buffer_append(&req->error.buf, error.base, error.len);
+    if (req->error_logger.buf == NULL)
+        h2o_buffer_init(&req->error_logger.buf, &h2o_socket_buffer_prototype);
+    h2o_buffer_append(&req->error_logger.buf, msg.base, msg.len);
 
     if (req->pathconf->error_log.emit_request_errors) {
-        h2o_write_error_log(error);
+        h2o_write_error_log(msg);
     }
 }
 
@@ -260,7 +260,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
     req->content_length = SIZE_MAX;
     req->remaining_delegations = conn == NULL ? 0 : conn->ctx->globalconf->max_delegations;
     req->remaining_reprocesses = 5;
-    req->error.cb = on_default_error_callback;
+    req->error_logger.cb = on_default_error_callback;
 
     if (src != NULL) {
         size_t i;
@@ -323,8 +323,8 @@ void h2o_dispose_request(h2o_req_t *req)
         }
     }
 
-    if (req->error.buf != NULL)
-        h2o_buffer_dispose(&req->error.buf);
+    if (req->error_logger.buf != NULL)
+        h2o_buffer_dispose(&req->error_logger.buf);
 
     h2o_mem_clear_pool(&req->pool);
 }
@@ -639,10 +639,10 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
     memcpy(p, errbuf, errlen);
     p += errlen;
 
-    h2o_iovec_t error = h2o_iovec_init(prefix, p - prefix);
+    h2o_iovec_t msg = h2o_iovec_init(prefix, p - prefix);
 
     /* run error callback (save and emit the log if needed) */
-    req->error.cb(req, req->error.data, error);
+    req->error_logger.cb(req, req->error_logger.data, msg);
 }
 
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len)

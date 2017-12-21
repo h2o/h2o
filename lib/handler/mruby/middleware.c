@@ -382,15 +382,15 @@ static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
     return 0;
 }
 
-static void on_subreq_error_callback(h2o_req_t *req, void *_data, h2o_iovec_t error)
+static void on_subreq_error_callback(h2o_req_t *req, void *_data, h2o_iovec_t msg)
 {
     struct st_mruby_subreq_t *subreq = (void *)_data;
     mrb_state *mrb = subreq->ctx->shared->mrb;
 
     assert(!mrb_nil_p(subreq->error_stream));
 
-    mrb_value msg = mrb_str_new(mrb, error.base, error.len);
-    mrb_funcall(mrb, subreq->error_stream, "write", 1, msg);
+    mrb_value msgstr = mrb_str_new(mrb, msg.base, msg.len);
+    mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
 }
 
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env)
@@ -522,8 +522,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     if (! mrb_nil_p(rack_errors)) {
         subreq->error_stream = rack_errors;
         mrb_gc_register(mrb, rack_errors);
-        super->error.cb = on_subreq_error_callback;
-        super->error.data = subreq;
+        super->error_logger.cb = on_subreq_error_callback;
+        super->error_logger.data = subreq;
     }
 
     /* headers */

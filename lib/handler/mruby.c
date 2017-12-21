@@ -391,20 +391,20 @@ static mrb_value error_stream_write(mrb_state *mrb, mrb_value self)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "ErrorStream#write wrong self");
     }
 
-    mrb_value msg;
-    mrb_get_args(mrb, "o", &msg);
-    msg = h2o_mruby_to_str(mrb, msg);
+    mrb_value msgstr;
+    mrb_get_args(mrb, "o", &msgstr);
+    msgstr = h2o_mruby_to_str(mrb, msgstr);
 
-    h2o_iovec_t error = h2o_iovec_init(RSTRING_PTR(msg), RSTRING_LEN(msg));
+    h2o_iovec_t msg = h2o_iovec_init(RSTRING_PTR(msgstr), RSTRING_LEN(msgstr));
 
     if (error_stream->generator != NULL) {
         h2o_req_t *req = error_stream->generator->req;
-        req->error.cb(req, req->error.data, error);
+        req->error_logger.cb(req, req->error_logger.data, msg);
     } else if (error_stream->ctx->handler->pathconf->error_log.emit_request_errors) {
-        h2o_write_error_log(error);
+        h2o_write_error_log(msg);
     }
 
-    return mrb_fixnum_value(RSTRING_LEN(msg));
+    return mrb_fixnum_value(msg.len);
 }
 
 static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
