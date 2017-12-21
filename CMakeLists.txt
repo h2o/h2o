@@ -513,7 +513,7 @@ IF (WITH_MRUBY)
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby)
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
-        lib/handler/mruby/chunked.c
+        lib/handler/mruby/sender.c
         lib/handler/mruby/http_request.c
         lib/handler/mruby/sleep.c
         lib/handler/mruby/middleware.c

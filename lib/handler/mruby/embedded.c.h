@@ -200,8 +200,8 @@
     "\n"                                                                                                                           \
     "end\n"
 
-/* lib/handler/mruby/embedded/chunked.rb */
-#define H2O_MRUBY_CODE_CHUNKED                                                                                                     \
+/* lib/handler/mruby/embedded/sender.rb */
+#define H2O_MRUBY_CODE_SENDER                                                                                                      \
     "# Copyright (c) 2014 DeNA Co., Ltd.\n"                                                                                        \
     "#\n"                                                                                                                          \
     "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
@@ -224,7 +224,7 @@
     "\n"                                                                                                                           \
     "module Kernel\n"                                                                                                              \
     "\n"                                                                                                                           \
-    "  def _h2o_chunked_proc_each_to_fiber()\n"                                                                                    \
+    "  def _h2o_sender_proc_each_to_fiber()\n"                                                                                     \
     "    Proc.new do |args|\n"                                                                                                     \
     "      src, generator = *args\n"                                                                                               \
     "      fiber = Fiber.new do\n"                                                                                                 \

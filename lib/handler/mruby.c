@@ -314,8 +314,8 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
         if (generator->req->_generator == NULL) {
             h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
         } else {
-            assert(generator->chunked->stop != NULL);
-            generator->chunked->stop(generator);
+            assert(generator->sender->stop != NULL);
+            generator->sender->stop(generator);
         }
     }
     mrb->exc = NULL;
@@ -440,7 +440,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_child_fiber", run_child_fiber_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__finish_child_fiber", finish_child_fiber_callback);
 
-    h2o_mruby_chunked_init_context(shared_ctx);
+    h2o_mruby_sender_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
     h2o_mruby_sleep_init_context(shared_ctx);
     h2o_mruby_middleware_init_context(shared_ctx);
@@ -802,8 +802,8 @@ static void on_generator_dispose(void *_generator)
 
     generator->error_stream->generator = NULL;
 
-    if (generator->chunked != NULL)
-        generator->chunked->dispose(generator);
+    if (generator->sender != NULL)
+        generator->sender->dispose(generator);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -820,7 +820,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->req = req;
     generator->ctx = ctx;
     generator->rack_input = mrb_nil_value();
-    generator->chunked = NULL;
+    generator->sender = NULL;
 
     generator->error_stream = h2o_mem_alloc(sizeof(*generator->error_stream));
     generator->error_stream->ctx = ctx;
@@ -904,10 +904,10 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
 
     /* use fiber in case we need to call #each */
     if (!mrb_nil_p(body)) {
-        if (h2o_mruby_chunked_init(generator, body) != 0)
+        if (h2o_mruby_init_sender(generator, body) != 0)
             return -1;
         h2o_start_response(generator->req, &generator->super);
-        generator->chunked->start(generator);
+        generator->sender->start(generator);
         return 0;
     }
 

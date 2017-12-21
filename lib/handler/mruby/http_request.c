@@ -52,8 +52,8 @@ struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_generator_t *shortcut;
 };
 
-struct st_h2o_mruby_http_chunked_t {
-    h2o_mruby_chunked_t super;
+struct st_h2o_mruby_http_sender_t {
+    h2o_mruby_sender_t super;
     h2o_mruby_http_request_context_t *client;
     h2o_doublebuffer_t sending;
     h2o_buffer_t *remaining;
@@ -141,80 +141,80 @@ static h2o_buffer_t **peek_content(h2o_mruby_http_request_context_t *ctx, int *i
 
 static void on_shortcut_notify(h2o_mruby_generator_t *generator)
 {
-    struct st_h2o_mruby_http_chunked_t *chunked = (void *)generator->chunked;
-    assert(chunked->client->shortcut == generator);
+    struct st_h2o_mruby_http_sender_t *sender = (void *)generator->sender;
+    assert(sender->client->shortcut == generator);
 
     int is_final;
-    h2o_buffer_t **input = peek_content(chunked->client, &is_final);
+    h2o_buffer_t **input = peek_content(sender->client, &is_final);
 
-    if (chunked->super.bytes_left != SIZE_MAX && chunked->super.bytes_left < (*input)->size)
-        (*input)->size = chunked->super.bytes_left; /* trim data too long */
+    if (sender->super.bytes_left != SIZE_MAX && sender->super.bytes_left < (*input)->size)
+        (*input)->size = sender->super.bytes_left; /* trim data too long */
 
     /* if final, steal socket input buffer to shortcut.remaining, and reset pointer to client */
     if (is_final) {
-        chunked->remaining = *input;
+        sender->remaining = *input;
         h2o_buffer_init(input, &h2o_socket_buffer_prototype);
-        input = &chunked->remaining;
-        chunked->client->shortcut = NULL;
-        chunked->client = NULL;
+        input = &sender->remaining;
+        sender->client->shortcut = NULL;
+        sender->client = NULL;
     }
 
-    if (!chunked->sending.inflight)
-        h2o_mruby_chunked_send_buffer(generator, &chunked->sending, input, is_final);
+    if (!sender->sending.inflight)
+        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, input, is_final);
 }
 
-static void do_chunked_start(h2o_mruby_generator_t *generator)
+static void do_sender_start(h2o_mruby_generator_t *generator)
 {
-    struct st_h2o_mruby_http_chunked_t *chunked = (void *)generator->chunked;
+    struct st_h2o_mruby_http_sender_t *sender = (void *)generator->sender;
 
     on_shortcut_notify(generator);
 
-    if (!chunked->sending.inflight) {
-        h2o_doublebuffer_prepare_empty(&chunked->sending);
-        h2o_mruby_chunked_send(generator, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+    if (!sender->sending.inflight) {
+        h2o_doublebuffer_prepare_empty(&sender->sending);
+        h2o_mruby_sender_do_send(generator, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
     }
 }
 
-static void do_chunked_proceed(h2o_generator_t *_generator, h2o_req_t *req)
+static void do_sender_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 {
     h2o_mruby_generator_t *generator = (void *)_generator;
-    struct st_h2o_mruby_http_chunked_t *chunked = (void *)generator->chunked;
+    struct st_h2o_mruby_http_sender_t *sender = (void *)generator->sender;
     h2o_buffer_t **input;
     int is_final;
 
-    h2o_doublebuffer_consume(&chunked->sending);
+    h2o_doublebuffer_consume(&sender->sending);
 
-    if (chunked->client != NULL) {
-        input = peek_content(chunked->client, &is_final);
+    if (sender->client != NULL) {
+        input = peek_content(sender->client, &is_final);
         assert(!is_final);
     } else {
-        input = &chunked->remaining;
+        input = &sender->remaining;
         is_final = 1;
     }
 
-    if (!chunked->sending.inflight)
-        h2o_mruby_chunked_send_buffer(generator, &chunked->sending, input, is_final);
+    if (!sender->sending.inflight)
+        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, input, is_final);
 }
 
-static void do_chunked_dispose(h2o_mruby_generator_t *generator)
+static void do_sender_dispose(h2o_mruby_generator_t *generator)
 {
-    struct st_h2o_mruby_http_chunked_t *chunked = (void *)generator->chunked;
+    struct st_h2o_mruby_http_sender_t *sender = (void *)generator->sender;
 
-    h2o_doublebuffer_dispose(&chunked->sending);
+    h2o_doublebuffer_dispose(&sender->sending);
 
-    /* note: no need to free reference from chunked->client, since it is disposed at the same moment */
-    if (chunked->remaining != NULL)
-        h2o_buffer_dispose(&chunked->remaining);
+    /* note: no need to free reference from sender->client, since it is disposed at the same moment */
+    if (sender->remaining != NULL)
+        h2o_buffer_dispose(&sender->remaining);
 
-    if (chunked->client != NULL) {
-        assert(chunked->client->shortcut == generator);
-        chunked->client->shortcut = NULL;
+    if (sender->client != NULL) {
+        assert(sender->client->shortcut == generator);
+        sender->client->shortcut = NULL;
     }
 
-    h2o_mruby_chunked_close_body(generator);
+    h2o_mruby_sender_close_body(generator);
 }
 
-h2o_mruby_chunked_t *h2o_mruby_http_chunked_create(h2o_mruby_generator_t *generator, mrb_value body)
+h2o_mruby_sender_t *h2o_mruby_http_sender_create(h2o_mruby_generator_t *generator, mrb_value body)
 {
     mrb_state *mrb = generator->ctx->shared->mrb;
     struct st_h2o_mruby_http_request_context_t *ctx;
@@ -231,19 +231,19 @@ h2o_mruby_chunked_t *h2o_mruby_http_chunked_create(h2o_mruby_generator_t *genera
     }
     ctx->consumed = 1;
 
-    struct st_h2o_mruby_http_chunked_t *chunked = (void *)h2o_mruby_chunked_create(generator, body, sizeof(*chunked));
-    h2o_doublebuffer_init(&chunked->sending, &h2o_socket_buffer_prototype);
-    chunked->client = ctx;
-    chunked->remaining = NULL;
+    struct st_h2o_mruby_http_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, sizeof(*sender));
+    h2o_doublebuffer_init(&sender->sending, &h2o_socket_buffer_prototype);
+    sender->client = ctx;
+    sender->remaining = NULL;
 
-    chunked->super.start = do_chunked_start;
-    chunked->super.proceed = do_chunked_proceed;
-    chunked->super.stop = NULL; /* never be called */
-    chunked->super.dispose = do_chunked_dispose;
+    sender->super.start = do_sender_start;
+    sender->super.proceed = do_sender_proceed;
+    sender->super.stop = NULL; /* never be called */
+    sender->super.dispose = do_sender_dispose;
 
     ctx->shortcut = generator;
 
-    return &chunked->super;
+    return &sender->super;
 }
 
 static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status, const h2o_header_t *headers_sorted,

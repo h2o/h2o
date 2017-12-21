@@ -20,7 +20,7 @@
 
 module Kernel
 
-  def _h2o_chunked_proc_each_to_fiber()
+  def _h2o_sender_proc_each_to_fiber()
     Proc.new do |args|
       src, generator = *args
       fiber = Fiber.new do
