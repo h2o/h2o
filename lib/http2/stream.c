@@ -42,8 +42,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
-    h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
-    h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
+    h2o_http2_window_init(&stream->output_window, conn->peer_settings.initial_window_size);
+    h2o_http2_window_init(&stream->input_window, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
     stream->received_priority = *received_priority;
 
     /* init request */
