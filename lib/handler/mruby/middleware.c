@@ -382,14 +382,15 @@ static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
     return 0;
 }
 
-static void on_subreq_error_callback(h2o_req_t *req, void *_data, h2o_iovec_t msg)
+static void on_subreq_error_callback(h2o_req_t *req, void *_data, h2o_iovec_t prefix, h2o_iovec_t msg)
 {
     struct st_mruby_subreq_t *subreq = (void *)_data;
     mrb_state *mrb = subreq->ctx->shared->mrb;
 
     assert(!mrb_nil_p(subreq->error_stream));
 
-    mrb_value msgstr = mrb_str_new(mrb, msg.base, msg.len);
+    mrb_value msgstr = mrb_str_new(mrb, prefix.base, prefix.len);
+    msgstr = mrb_str_cat(mrb, msgstr, msg.base, msg.len);
     mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
 }
 

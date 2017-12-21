@@ -1069,7 +1069,7 @@ struct st_h2o_req_t {
      */
     struct {
         h2o_buffer_t *buf;
-        void (*cb)(h2o_req_t *req, void *data, h2o_iovec_t msg);
+        void (*cb)(h2o_req_t *req, void *data, h2o_iovec_t prefix, h2o_iovec_t msg);
         void *data;
     } error_logger;
 
@@ -1576,7 +1576,7 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
-void h2o_write_error_log(h2o_iovec_t msg);
+void h2o_write_error_log(h2o_iovec_t prefix, h2o_iovec_t msg);
 
 /* log */
 

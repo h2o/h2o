@@ -166,6 +166,7 @@ EOT
                     last if $req =~ /\r\n\r\n$/;
                 }
                 $client->send("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n");
+                $client->send("1\r\nX\r\n");
                 Time::HiRes::sleep 0.5;
                 $client->send("X"); # this causes an invalid chunk error in proxy handler
                 $client->close;
