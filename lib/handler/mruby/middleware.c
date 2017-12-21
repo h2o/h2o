@@ -410,6 +410,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     } \
     if (stringify) { \
         v = h2o_mruby_to_str(mrb, v); \
+        if (mrb->exc != NULL) \
+            goto Failed; \
     } \
 } while (0)
 
