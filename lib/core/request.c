@@ -469,14 +469,12 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, state);
 }
 
-h2o_req_filter_t *h2o_add_req_filter(h2o_req_t *req, size_t sz, int is_post)
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz)
 {
-    h2o_req_filter_t *req_filter = h2o_mem_alloc_pool(&req->pool, sz);
-    req_filter->is_post = is_post;
-    h2o_req_filter_t **target = is_post ? &req->postfilters : &req->prefilters;
-    req_filter->next = *target;
-    *target = req_filter;
-    return req_filter;
+    h2o_req_prefilter_t *prefilter = h2o_mem_alloc_pool(&req->pool, sz);
+    prefilter->next = req->prefilters;
+    req->prefilters = prefilter;
+    return prefilter;
 }
 
 h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
