@@ -309,14 +309,10 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
     } else {
         assert(generator->req != NULL);
+        assert(generator->req->_generator == NULL);
         h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n",
                           RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
-        if (generator->req->_generator == NULL) {
-            h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
-        } else {
-            assert(generator->sender->stop != NULL);
-            generator->sender->stop(generator);
-        }
+        h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
     }
     mrb->exc = NULL;
 }

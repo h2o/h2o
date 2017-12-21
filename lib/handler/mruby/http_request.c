@@ -238,7 +238,6 @@ h2o_mruby_sender_t *h2o_mruby_http_sender_create(h2o_mruby_generator_t *generato
 
     sender->super.start = do_sender_start;
     sender->super.proceed = do_sender_proceed;
-    sender->super.stop = NULL; /* never be called */
     sender->super.dispose = do_sender_dispose;
 
     ctx->shortcut = generator;

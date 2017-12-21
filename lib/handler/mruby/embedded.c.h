@@ -230,11 +230,11 @@
     "      fiber = Fiber.new do\n"                                                                                                 \
     "        begin\n"                                                                                                              \
     "          src.each do |chunk|\n"                                                                                              \
-    "            _h2o_send_chunk(chunk, generator)\n"                                                                              \
+    "            _h2o_sender_send_chunk(chunk, generator)\n"                                                                       \
     "          end\n"                                                                                                              \
-    "          _h2o_send_chunk_eos(generator)\n"                                                                                   \
+    "          _h2o_sender_send_chunk_eos(generator)\n"                                                                            \
     "        rescue => e\n"                                                                                                        \
-    "          _h2o__send_error(e, generator)\n"                                                                                   \
+    "          _h2o_sender_handle_error(e, generator)\n"                                                                           \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \

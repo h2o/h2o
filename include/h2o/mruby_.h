@@ -125,16 +125,19 @@ struct st_h2o_mruby_sender_t {
     mrb_value body_obj; /* becomes nil on eos */
     size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
 
-    /* do initialization for each sender. called immediately after h2o_start_response is called */
+    /**
+     * do initialization for each sender. called immediately after h2o_start_response is called
+     */
     void (*start)(h2o_mruby_generator_t *generator);
 
-    /* called by protocol handler, same as generators */
+    /**
+     * called directly by protocol handler
+     */
     void (*proceed)(h2o_generator_t *generator, h2o_req_t *req);
 
-    /* called when an exception are thrown in mruby. NOT NULL only for callback sender */
-    void (*stop)(h2o_mruby_generator_t *generator);
-
-    /* called when the generator is disposed */
+    /**
+     * called when the generator is disposed
+     */
     void (*dispose)(h2o_mruby_generator_t *generator);
 };
 

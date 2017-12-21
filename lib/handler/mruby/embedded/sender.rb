@@ -26,11 +26,11 @@ module Kernel
       fiber = Fiber.new do
         begin
           src.each do |chunk|
-            _h2o_send_chunk(chunk, generator)
+            _h2o_sender_send_chunk(chunk, generator)
           end
-          _h2o_send_chunk_eos(generator)
+          _h2o_sender_send_chunk_eos(generator)
         rescue => e
-          _h2o__send_error(e, generator)
+          _h2o_sender_handle_error(e, generator)
         end
       end
       fiber.resume

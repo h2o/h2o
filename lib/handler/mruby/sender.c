@@ -136,16 +136,6 @@ static void do_callback_proceed(h2o_generator_t *_generator, h2o_req_t *req)
         h2o_mruby_sender_do_send_buffer(generator, &sender->sending, input, is_final);
 }
 
-static void do_callback_sender_stop(h2o_mruby_generator_t *generator)
-{
-    struct st_h2o_mruby_callback_sender_t *sender = (void *)generator->sender;
-
-    h2o_mruby_sender_close_body(generator);
-
-    if (!sender->sending.inflight)
-        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &sender->receiving, 1);
-}
-
 static void do_callback_sender_dispose(h2o_mruby_generator_t *generator)
 {
     struct st_h2o_mruby_callback_sender_t *sender = (void *)generator->sender;
@@ -162,7 +152,6 @@ h2o_mruby_sender_t *callback_sender_create(h2o_mruby_generator_t *generator, mrb
 
     sender->super.start = do_callback_sender_start;
     sender->super.proceed = do_callback_proceed;
-    sender->super.stop = do_callback_sender_stop;
     sender->super.dispose = do_callback_sender_dispose;
 
     return &sender->super;
@@ -253,9 +242,36 @@ static mrb_value send_chunk_eos_callback(h2o_mruby_context_t *mctx, mrb_value in
         }
     }
 
-    /* run_fiber will never be called once we enter the fast path, and therefore the close callback will never get called in that case */
-    assert(generator->sender->stop != NULL);
-    generator->sender->stop(generator);
+    struct st_h2o_mruby_callback_sender_t *sender = (void *)generator->sender;
+    if (!sender->sending.inflight)
+        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &sender->receiving, 1);
+    h2o_mruby_sender_close_body(generator);
+
+    return mrb_nil_value();
+}
+
+static mrb_value handle_error_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                         int *run_again)
+{
+    mrb_state *mrb = mctx->shared->mrb;
+    mrb_value err = mrb_ary_entry(args, 0);
+    mrb_value gen = mrb_ary_entry(args, 1);
+    h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, gen);
+
+    { /* precond check */
+        mrb_value exc = check_precond(mrb, generator);
+        if (!mrb_nil_p(exc)) {
+            *run_again = 1;
+            return exc;
+        }
+    }
+
+    h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, err)));
+
+    struct st_h2o_mruby_callback_sender_t *sender = (void *)generator->sender;
+    if (!sender->sending.inflight)
+        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &sender->receiving, 1);
+    h2o_mruby_sender_close_body(generator);
 
     return mrb_nil_value();
 }
@@ -267,8 +283,9 @@ void h2o_mruby_sender_init_context(h2o_mruby_shared_context_t *shared_ctx)
     h2o_mruby_eval_expr_location(mrb, H2O_MRUBY_CODE_SENDER, "(h2o)lib/handler/mruby/embedded/sender.rb", 1);
     h2o_mruby_assert(mrb);
 
-    mrb_define_method(mrb, mrb->kernel_module, "_h2o_send_chunk", send_chunk_method, MRB_ARGS_ARG(1, 0));
-    h2o_mruby_define_callback(mrb, "_h2o_send_chunk_eos", send_chunk_eos_callback);
+    mrb_define_method(mrb, mrb->kernel_module, "_h2o_sender_send_chunk", send_chunk_method, MRB_ARGS_ARG(1, 0));
+    h2o_mruby_define_callback(mrb, "_h2o_sender_send_chunk_eos", send_chunk_eos_callback);
+    h2o_mruby_define_callback(mrb, "_h2o_sender_handle_error", handle_error_callback);
 
     mrb_ary_set(mrb, shared_ctx->constants, H2O_MRUBY_SENDER_PROC_EACH_TO_FIBER,
                 mrb_funcall(mrb, mrb_top_self(mrb), "_h2o_sender_proc_each_to_fiber", 0));
