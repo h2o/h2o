@@ -537,5 +537,45 @@ EOT
     };
 };
 
+subtest 'timeout' => sub {
+    subtest 'connect timeout' => sub {
+        my $server = spawn_h2o(<< "EOT");
+proxy.timeout.connect: 100
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            http_request("http://192.0.2.0/").join
+          }
+EOT
+
+        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        like $headers, qr{\nclient-warning: connection timeout\r\n}si;
+        is $body, 'connection timeout';
+    };
+
+    subtest 'first byte timeout' => sub {
+        my $upstream = create_upstream();
+        my $server = spawn_h2o(<< "EOT");
+proxy.timeout.first_byte: 100
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            http_request("http://$upstream_hostport/sleep-and-respond?sleep=1").join
+          }
+EOT
+
+        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        like $headers, qr{\nclient-warning: I/O timeout\r\n}si;
+        is $body, 'I/O timeout';
+    };
+};
 
 done_testing();
