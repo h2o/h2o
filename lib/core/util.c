@@ -534,7 +534,7 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-int h2o_parse_protocol_version_string(h2o_iovec_t str)
+int h2o_parse_protocol_version(h2o_iovec_t str)
 {
     if (str.len < 6)
         return -1;

@@ -1244,7 +1244,7 @@ void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsi
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);
-int h2o_parse_protocol_version_string(h2o_iovec_t str);
+int h2o_parse_protocol_version(h2o_iovec_t str);
 /**
  * builds the proxy header defined by the PROXY PROTOCOL
  */

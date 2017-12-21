@@ -508,7 +508,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     h2o_hostconf_t *hostconf = h2o_req_setup(super);
     super->hostconf = hostconf;
     super->pathconf = ctx->handler->pathconf;
-    super->version = h2o_parse_protocol_version_string(h2o_iovec_init(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol)));
+    super->version = h2o_parse_protocol_version(h2o_iovec_init(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol)));
     if (super->version == -1)
         super->version = 0x101;
 
