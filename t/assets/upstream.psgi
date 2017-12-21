@@ -103,6 +103,15 @@ builder {
             200, @resph, [ "Ok" ]
         ];
     };
+    mount "/echo-request-uri" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REQUEST_URI"} || ''],
+        ];
+    };
     mount "/streaming-body" => sub {
         my $env = shift;
         return sub {

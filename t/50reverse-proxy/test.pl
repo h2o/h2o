@@ -84,6 +84,12 @@ hosts:
       /gzip:
         proxy.reverse.url: http://$upstream
         gzip: ON
+      /test-request-uri0:
+        proxy.reverse.url: http://$upstream/echo-request-uri
+        gzip: ON
+      /test-request-uri1:
+        proxy.reverse.url: http://$upstream/echo-request-uri/
+        gzip: ON
       /files:
         file.dir: @{[ DOC_ROOT ]}
 @{[ $h2o_keepalive ? "" : "        proxy.timeout.keepalive: 0" ]}
@@ -173,6 +179,12 @@ run_with_curl($server, sub {
             if $curl =~ /--http2/;
         my $resp = `$curl --silent -H Accept-Encoding:gzip $proto://127.0.0.1:$port/gzip/alice.txt | gzip -cd`;
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt");
+    };
+    subtest 'request uri' => sub {
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri0`;
+        like $resp, qr/^\/echo-request-uri$/mi, "request path";
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri1`;
+        like $resp, qr/^\/echo-request-uri\/$/mi, "request path";
     };
 });
 
