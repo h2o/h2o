@@ -210,7 +210,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
 static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    if (stream->stream_id > conn->pull_stream_ids.max_open) {
+    if (!h2o_http2_stream_is_push(stream->stream_id) && stream->stream_id > conn->pull_stream_ids.max_open) {
         /* this stream is opend after sending GOAWAY, so ignore it */
         h2o_http2_stream_reset(conn, stream);
         return;
