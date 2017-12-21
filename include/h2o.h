@@ -1069,7 +1069,7 @@ struct st_h2o_req_t {
      */
     struct {
         h2o_buffer_t *buf;
-        void (*cb)(h2o_req_t *req, void *data, h2o_iovec_t prefix, h2o_iovec_t msg);
+        void (*cb)(void *data, h2o_iovec_t prefix, h2o_iovec_t msg);
         void *data;
     } error_logger;
 
