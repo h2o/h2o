@@ -868,7 +868,7 @@ static int handle_goaway_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame,
         return ret;
 
     /* stop opening new push streams hereafter */
-    conn->push_stream_ids.max_open = INT32_MAX;
+    conn->push_stream_ids.max_open = 0x7ffffffe;
 
     return 0;
 }
