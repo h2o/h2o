@@ -134,6 +134,11 @@ typedef struct st_h2o_http2_window_t {
     ssize_t _avail;
 } h2o_http2_window_t;
 
+typedef struct st_h2o_http2_input_window_t {
+    h2o_http2_window_t super;
+    uint32_t window_size;
+} h2o_http2_input_window_t;
+
 typedef enum enum_h2o_http2_stream_state_t {
     /**
      * stream in idle state (but registered; i.e. priority stream)
@@ -180,7 +185,7 @@ struct st_h2o_http2_stream_t {
     h2o_ostream_t _ostr_final;
     h2o_http2_stream_state_t state;
     h2o_http2_window_t output_window;
-    h2o_http2_window_t input_window;
+    h2o_http2_input_window_t input_window;
     h2o_http2_priority_t received_priority;
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
@@ -251,7 +256,7 @@ struct st_h2o_http2_conn_t {
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
     h2o_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
     h2o_hpack_header_table_t _input_header_table;
-    h2o_http2_window_t _input_window;
+    h2o_http2_input_window_t _input_window;
     h2o_hpack_header_table_t _output_header_table;
     h2o_linklist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
     h2o_timeout_entry_t _timeout_entry;
@@ -318,8 +323,9 @@ static void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2
 /* misc */
 static void h2o_http2_window_init(h2o_http2_window_t *window, uint32_t initial_window_size);
 static int h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta);
-static ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window);
+static ssize_t h2o_http2_window_get_avail(h2o_http2_window_t *window);
 static void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes);
+static void h2o_http2_input_window_init(h2o_http2_input_window_t *window, uint32_t initial_window_size);
 
 static uint16_t h2o_http2_decode16u(const uint8_t *src);
 static uint32_t h2o_http2_decode24u(const uint8_t *src);
@@ -345,7 +351,7 @@ inline int h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta)
     return 0;
 }
 
-inline ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window)
+inline ssize_t h2o_http2_window_get_avail(h2o_http2_window_t *window)
 {
     return window->_avail;
 }
@@ -353,6 +359,12 @@ inline ssize_t h2o_http2_window_get_window(h2o_http2_window_t *window)
 inline void h2o_http2_window_consume_window(h2o_http2_window_t *window, size_t bytes)
 {
     window->_avail -= bytes;
+}
+
+inline void h2o_http2_input_window_init(h2o_http2_input_window_t *window, uint32_t initial_window_size)
+{
+    h2o_http2_window_init(&window->super, initial_window_size);
+    window->window_size = initial_window_size;
 }
 
 inline h2o_http2_stream_t *h2o_http2_conn_get_stream(h2o_http2_conn_t *conn, uint32_t stream_id)
@@ -385,7 +397,7 @@ inline ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn)
     if (ret < H2O_HTTP2_FRAME_HEADER_SIZE)
         return 0;
     ret -= H2O_HTTP2_FRAME_HEADER_SIZE;
-    winsz = h2o_http2_window_get_window(&conn->_write.window);
+    winsz = h2o_http2_window_get_avail(&conn->_write.window);
     if (winsz < ret)
         ret = winsz;
     return ret;

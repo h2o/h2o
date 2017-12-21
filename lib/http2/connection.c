@@ -350,10 +350,10 @@ static void request_gathered_write(h2o_http2_conn_t *conn)
 
 static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
 {
-    ssize_t cur = h2o_http2_window_get_window(&stream->output_window);
+    ssize_t cur = h2o_http2_window_get_avail(&stream->output_window);
     if (h2o_http2_window_update(&stream->output_window, delta) != 0)
         return -1;
-    if (cur <= 0 && h2o_http2_window_get_window(&stream->output_window) > 0 &&
+    if (cur <= 0 && h2o_http2_window_get_avail(&stream->output_window) > 0 &&
         (h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL)) {
         assert(!h2o_linklist_is_linked(&stream->_refs.link));
         h2o_http2_scheduler_activate(&stream->_refs.scheduler);
@@ -511,17 +511,14 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
     return ret;
 }
 
-static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_window_t *window, size_t consumed)
+static void update_input_window(h2o_http2_conn_t *conn, uint32_t stream_id, h2o_http2_input_window_t *window, size_t consumed)
 {
-    uint32_t initial_window_size = stream_id == 0 ? H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE
-                                                  : H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE;
-
-    h2o_http2_window_consume_window(window, consumed);
-    if (h2o_http2_window_get_window(window) * 2 < initial_window_size) {
-        int32_t delta = (int32_t)(initial_window_size - h2o_http2_window_get_window(window));
+    h2o_http2_window_consume_window(&window->super, consumed);
+    if (h2o_http2_window_get_avail(&window->super) * 2 < window->window_size) {
+        int32_t delta = (int32_t)(window->window_size - h2o_http2_window_get_avail(&window->super));
         h2o_http2_encode_window_update_frame(&conn->_write.buf, stream_id, delta);
         h2o_http2_conn_request_write(conn);
-        h2o_http2_window_update(window, delta);
+        h2o_http2_window_update(&window->super, delta);
     }
 }
 
@@ -1057,7 +1054,7 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
     h2o_http2_conn_request_write(conn);
 
     if (h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL) {
-        if (h2o_http2_window_get_window(&stream->output_window) > 0) {
+        if (h2o_http2_window_get_avail(&stream->output_window) > 0) {
             assert(!h2o_linklist_is_linked(&stream->_refs.link));
             h2o_http2_scheduler_activate(&stream->_refs.scheduler);
         }
@@ -1135,7 +1132,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
 
     h2o_http2_stream_send_pending_data(conn, stream);
     if (h2o_http2_stream_has_pending_data(stream)) {
-        if (h2o_http2_window_get_window(&stream->output_window) <= 0) {
+        if (h2o_http2_window_get_avail(&stream->output_window) <= 0) {
             /* is blocked */
         } else {
             *still_is_active = 1;
@@ -1323,7 +1320,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
-    h2o_http2_window_init(&conn->_input_window, H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE);
+    h2o_http2_input_window_init(&conn->_input_window, H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
     h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
