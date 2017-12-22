@@ -1,7 +1,8 @@
 
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif
+#define YAML_VERSION_MAJOR 0
+#define YAML_VERSION_MINOR 1
+#define YAML_VERSION_PATCH 7
+#define YAML_VERSION_STRING "0.1.7"
 
 #include <yaml.h>
 
