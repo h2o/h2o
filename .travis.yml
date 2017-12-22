@@ -7,17 +7,17 @@ matrix:
         - docker
       env:
         - label=default
-      before_install: &bs
+      before_install: &bi
         - docker pull kazuho/h2o-ci:latest
-        - docker build -t ci -f misc/docker-ci/Dockerfile .
+        - chmod -R ugo+w .
       script:
-        - docker run ci
+        - make -f misc/docker-ci/check.mk
     - os: linux
       sudo: required
       services:
         - docker
       env:
         - label=fuzz
-      before_install: *bs
+      before_install: *bi
       script:
-        - docker run ci make -f misc/docker-ci/check.mk fuzz
+        - make -f misc/docker-ci/check.mk fuzz

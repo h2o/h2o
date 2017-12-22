@@ -44,9 +44,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
 
-    /* request reprocess */
-    h2o_reprocess_request(req, req->method, req->scheme, req->authority, h2o_build_destination(req, H2O_STRLIT("/"), 0), overrides,
-                          0);
+    /* request reprocess (note: path may become an empty string, to which one of the target URL within the socketpool will be
+     * right-padded when lib/core/proxy connects to upstream; see #1563) */
+    h2o_iovec_t path = h2o_build_destination(req, NULL, 0, 0);
+    h2o_reprocess_request(req, req->method, req->scheme, req->authority, path, overrides, 0);
 
     return 0;
 }
