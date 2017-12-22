@@ -817,10 +817,6 @@ static void on_generator_dispose(void *_generator)
     if (generator->error_stream != NULL)
         generator->error_stream->generator = NULL;
 
-    if (!mrb_nil_p(generator->refs.error_stream)) {
-        DATA_PTR(generator->refs.error_stream) = NULL;
-    }
-
     if (generator->sender != NULL)
         generator->sender->dispose(generator);
 }

@@ -366,6 +366,10 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
     h2o_iovec_t concat = h2o_concat_list(&subreq->super.pool, list, 2);
     mrb_value msgstr = h2o_mruby_new_str(mrb, concat.base, concat.len);
     mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
+    if (mrb->exc != NULL) {
+        fprintf(stderr, "%s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        mrb->exc = NULL;
+    }
 }
 
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env)
@@ -396,9 +400,9 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->chain_proceed = 0;
 
     /* initialize super and conn */
-    super->is_subrequest = 1;
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
+    super->is_subrequest = 1;
     h2o_ostream_t *ostream = h2o_add_ostream(super, sizeof(*ostream), &super->_ostr_top);
     ostream->do_send = subreq_ostream_send;
     if (ctx->handler->pathconf->host) {
