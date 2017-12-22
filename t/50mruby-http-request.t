@@ -552,13 +552,18 @@ hosts:
       /:
         mruby.handler: |
           proc {|env|
-            http_request("http://192.0.2.0/").join
+            resp = http_request("http://192.0.2.0/").join
+            if warn = resp[1].delete('client-warning')
+              [504, resp[1], ["client warning: #{warn}"]]
+            else
+              resp
+            end
           }
 EOT
 
         my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-        like $headers, qr{\nclient-warning: connection timeout\r\n}si;
-        is $body, 'connection timeout';
+        like $headers, qr{HTTP/[^ ]+ 504\s}is;
+        is $body, 'client warning: connection timeout';
     };
 
     subtest 'first byte timeout' => sub {
@@ -572,13 +577,18 @@ hosts:
       /:
         mruby.handler: |
           proc {|env|
-            http_request("http://$upstream_hostport/sleep-and-respond?sleep=1").join
+            resp = http_request("http://$upstream_hostport/sleep-and-respond?sleep=1").join
+            if warn = resp[1].delete('client-warning')
+              [504, resp[1], ["client warning: #{warn}"]]
+            else
+              resp
+            end
           }
 EOT
 
         my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-        like $headers, qr{\nclient-warning: I/O timeout\r\n}si;
-        is $body, 'I/O timeout';
+        like $headers, qr{HTTP/[^ ]+ 504\s}is;
+        is $body, 'client warning: I/O timeout';
     };
 };
 
