@@ -411,7 +411,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 {
     int ret, header_exists_map;
 
-    assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     header_exists_map = 0;
@@ -477,9 +476,6 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
     ssize_t ret;
     h2o_http2_stream_t *stream;
     int hret;
-
-    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
-        return 0;
 
     if ((ret = h2o_http2_decode_frame(&frame, src, len, &H2O_HTTP2_SETTINGS_HOST, err_desc)) < 0)
         return ret;
@@ -635,9 +631,6 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     h2o_http2_stream_t *stream;
     int ret;
 
-    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
-        return 0;
-
     if ((ret = h2o_http2_decode_data_payload(&payload, frame, err_desc)) != 0)
         return ret;
 
@@ -668,9 +661,6 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     h2o_http2_headers_payload_t payload;
     h2o_http2_stream_t *stream;
     int ret;
-
-    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
-        return 0;
 
     /* decode */
     if ((ret = h2o_http2_decode_headers_payload(&payload, frame, err_desc)) != 0)
@@ -1358,9 +1348,6 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
 {
     h2o_http2_conn_t *conn = (void *)src_req->conn;
     h2o_http2_stream_t *src_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, src_req);
-
-    if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
-        return;
 
     /* RFC 7540 8.2.1: PUSH_PROMISE frames can be sent by the server in response to any client-initiated stream */
     if (h2o_http2_stream_is_push(src_stream->stream_id))
