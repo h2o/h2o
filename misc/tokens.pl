@@ -232,4 +232,3 @@ __DATA__
 0 0 0 0 0 0 0 x-traffic
 0 0 0 0 0 0 0 cache-digest
 0 0 0 0 0 0 0 x-compress-hint
-0 0 0 0 0 0 0 client-warning

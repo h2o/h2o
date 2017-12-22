@@ -37,7 +37,6 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("authorization")}, 23, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("cache-control")}, 24, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("cache-digest")}, 0, 0, 0, 0, 0, 0, 0},
-                             {{H2O_STRLIT("client-warning")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("connection")}, 0, 1, 1, 0, 1, 0, 0},
                              {{H2O_STRLIT("content-disposition")}, 25, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("content-encoding")}, 26, 0, 0, 0, 0, 0, 0},
@@ -84,7 +83,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-forwarded-for")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-traffic")}, 0, 0, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 63;
+size_t h2o__num_tokens = 62;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -301,10 +300,6 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         break;
     case 14:
         switch (name[13]) {
-        case 'g':
-            if (memcmp(name, "client-warnin", 13) == 0)
-                return H2O_TOKEN_CLIENT_WARNING;
-            break;
         case 'h':
             if (memcmp(name, "content-lengt", 13) == 0)
                 return H2O_TOKEN_CONTENT_LENGTH;
