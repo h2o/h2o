@@ -196,8 +196,6 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
 
     if (h2o_send_state_is_in_progress(state)) {
         h2o_proceed_response_deferred(&subreq->super);
-        if (inbufcnt == 0)
-            return;
     } else {
         subreq->final_received = 1;
     }
