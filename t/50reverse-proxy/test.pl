@@ -84,10 +84,10 @@ hosts:
       /gzip:
         proxy.reverse.url: http://$upstream
         gzip: ON
-      /test-request-uri0:
+      /test-request-uri-noslash:
         proxy.reverse.url: http://$upstream/echo-request-uri
         gzip: ON
-      /test-request-uri1:
+      /test-request-uri-withslash:
         proxy.reverse.url: http://$upstream/echo-request-uri/
         gzip: ON
       /files:
@@ -198,10 +198,18 @@ run_with_curl($server, sub {
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt");
     };
     subtest 'request uri' => sub {
-        my $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri0`;
-        like $resp, qr/^\/echo-request-uri$/mi, "request path";
-        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri1`;
-        like $resp, qr/^\/echo-request-uri\/$/mi, "request path";
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-noslash`;
+        like $resp, qr{^/echo-request-uri$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-withslash`;
+        like $resp, qr{^/echo-request-uri/$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-noslash?abc=def`;
+        like $resp, qr{^/echo-request-uri\?abc=def$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-withslash?abc=def`;
+        like $resp, qr{^/echo-request-uri/\?abc=def$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-noslash/abc`;
+        like $resp, qr{^/echo-request-uri/abc$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-withslash/abc`;
+        like $resp, qr{^/echo-request-uri/abc$}mi;
     };
 });
 
