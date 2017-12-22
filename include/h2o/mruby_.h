@@ -204,6 +204,8 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
 mrb_value h2o_mruby_each_to_array(h2o_mruby_shared_context_t *shared_ctx, mrb_value src);
 int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value headers,
                               int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data);
+int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_value name, mrb_value value,
+                                int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data);
 
 /* handler/mruby/sender.c */
 void h2o_mruby_sender_init_context(h2o_mruby_shared_context_t *ctx);

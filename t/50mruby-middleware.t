@@ -399,6 +399,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
+              env.delete('CONTENT_LENGTH')
               original = env['rack.input']
               env['rack.input'] = Class.new do
                 def initialize(original, suffix)
@@ -445,7 +446,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              env['HTTP_CONTENT_LENGTH'] = '3'
+              env['CONTENT_LENGTH'] = '3'
               H2O.$mode.call(env)
             }
 EOT
@@ -465,7 +466,7 @@ EOT
         - mruby.handler: |
             proc {|env|
               modify_env(env)
-              env['HTTP_CONTENT_LENGTH'] = '999999999'
+              env['CONTENT_LENGTH'] = '999999999'
               H2O.$mode.call(env)
             }
 EOT

@@ -255,9 +255,17 @@ static void prepare_subreq_entity(h2o_req_t *subreq, h2o_mruby_context_t *ctx, m
         return;
     }
     mrb_value body = mrb_funcall(mrb, rack_input, "read", 0);
+    if (mrb->exc != NULL)
+        return;
+    if (!mrb_string_p(body)) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "return value of `read` must be a string"));
+        return;
+    }
     subreq->entity = h2o_strdup(&subreq->pool, RSTRING_PTR(body), RSTRING_LEN(body));
 
-    if (subreq->content_length != SIZE_MAX) {
+    if (subreq->content_length == SIZE_MAX) {
+        subreq->content_length = subreq->entity.len;
+    } else {
         if (subreq->content_length > subreq->entity.len)
             subreq->content_length = subreq->entity.len;
         else if (subreq->content_length < subreq->entity.len)
@@ -292,7 +300,7 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
     assert(mrb->exc == NULL);
 
     if (mrb_nil_p(host) || mrb_nil_p(port))
-        goto Error;
+        goto Error; // FIXME
 
     hostname = mrb_string_value_cstr(mrb, &host);
     if (mrb->exc != NULL)
@@ -307,8 +315,10 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV;
-    if (getaddrinfo(hostname, servname, &hints, &res) != 0)
+    if (getaddrinfo(hostname, servname, &hints, &res) != 0) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "getaddrinfo failed"));
         goto Error;
+    }
 
     switch(res->ai_family) {
         case AF_INET:
@@ -316,6 +326,7 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
             memcpy(ss, res->ai_addr, res->ai_addrlen);
             break;
         default:
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unknown address family"));
             goto Error;
     }
 
@@ -324,9 +335,9 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
     return len;
 
 Error:
+    assert(mrb->exc != NULL);
     if (res != NULL)
         freeaddrinfo(res);
-    mrb->exc = NULL;
     return 0;
 }
 
@@ -366,10 +377,8 @@ static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
         return 0;
 
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        if (token == H2O_TOKEN_TRANSFER_ENCODING) {
-            /* skip */
-        } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
-            req->content_length = h2o_strtosize(value.base, value.len);
+        if (token == H2O_TOKEN_CONTENT_LENGTH) {
+            /* skip. use CONTENT_LENGTH instead of HTTP_CONTENT_LENGTH */
         } else {
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->headers, token, NULL, value.base, value.len);
@@ -396,50 +405,144 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
 
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env)
 {
+    static const h2o_conn_callbacks_t callbacks = {
+        get_sockname,    /* stringify address */
+        get_peername,    /* ditto */
+        NULL,            /* push (no push in subrequest) */
+        get_socket,      /* get underlying socket */
+        NULL,            /* get debug state */
+        {{{NULL}}}};
+
     mrb_state *mrb = ctx->shared->mrb;
-    int i;
     int gc_arena = mrb_gc_arena_save(mrb);
     mrb_gc_protect(mrb, env);
 
-    mrb_value dupenv = mrb_funcall(mrb, env, "dup", 0);
+    /* create subreq */
+    struct st_mruby_subreq_t *subreq = h2o_mem_alloc(sizeof(*subreq));
+    h2o_req_t *super = &subreq->super;
+    memset(&subreq->conn, 0, sizeof(subreq->conn));
+    subreq->ctx = ctx;
+    subreq->receiver = mrb_nil_value();
+    subreq->ref = mrb_nil_value();
+    subreq->chunks = mrb_ary_new(mrb);
+    mrb_gc_register(mrb, subreq->chunks);
+    subreq->shortcut = NULL;
+    subreq->final_received = 0;
+    subreq->chain_proceed = 0;
 
-#define RETRIEVE_ENV(key, v, required, stringify) do { \
-    v = mrb_hash_delete_key(mrb, dupenv, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_LIT_ ## key)); \
-    if (required && mrb_nil_p(v)) { \
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: ## key")); \
-        goto Failed; \
-    } \
-    if (stringify) { \
-        v = h2o_mruby_to_str(mrb, v); \
+    /* initialize super and conn */
+    super->is_subrequest = 1;
+    subreq->conn.super.ctx = ctx->shared->ctx;
+    h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
+    h2o_ostream_t *ostream = h2o_add_ostream(super, sizeof(*ostream), &super->_ostr_top);
+    ostream->do_send = subreq_ostream_send;
+    if (ctx->handler->pathconf->host) {
+        subreq->conn.super.hosts = h2o_mem_alloc_pool(&subreq->super.pool, sizeof(subreq->conn.super.hosts[0]) * 2);
+        subreq->conn.super.hosts[0] = ctx->handler->pathconf->host;
+        subreq->conn.super.hosts[1] = NULL;
+    } else {
+        subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
+    }
+    subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
+    subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
+    subreq->conn.super.callbacks = &callbacks;
+
+
+    /* retrieve env variables */
+    mrb_value scheme = mrb_nil_value();
+    mrb_value method = mrb_nil_value();
+    mrb_value script_name = mrb_nil_value();
+    mrb_value path_info = mrb_nil_value();
+    mrb_value query_string = mrb_nil_value();
+    mrb_value rack_input = mrb_nil_value();
+    mrb_value server_addr = mrb_nil_value();
+    mrb_value server_port = mrb_nil_value();
+    mrb_value remote_addr = mrb_nil_value();
+    mrb_value remote_port = mrb_nil_value();
+    mrb_value server_protocol = mrb_nil_value();
+    mrb_value remaining_delegations = mrb_nil_value();
+    mrb_value remaining_reprocesses = mrb_nil_value();
+    mrb_value rack_errors = mrb_nil_value();
+
+#define RETRIEVE_ENV(val, stringify) do { \
+    val = kh_value(h, k).v; \
+    if (!mrb_nil_p(val) && stringify) { \
+        val = h2o_mruby_to_str(mrb, val); \
         if (mrb->exc != NULL) \
             goto Failed; \
     } \
 } while (0)
+#define CALC_HASH(str, strlen) ((strlen) ^ str[0])
+#define CHECK_KEY(lit) (CALC_HASH(lit, sizeof(lit) - 1) == CALC_HASH(RSTRING_PTR(key), RSTRING_LEN(key)) && memcmp(RSTRING_PTR(key), lit, RSTRING_LEN(key)) == 0)
 
-    /* retrieve env variables */
-    mrb_value scheme, method, script_name, path_info, query_string, rack_input, server_addr, server_port, remote_addr, remote_port, server_protocol, remaining_delegations, remaining_reprocesses, rack_errors, _dummy;
-    RETRIEVE_ENV(RACK_URL_SCHEME, scheme, 1, 1);
-    RETRIEVE_ENV(REQUEST_METHOD, method, 1, 1);
-    RETRIEVE_ENV(SERVER_ADDR, server_addr, 0, 1);
-    RETRIEVE_ENV(SERVER_PORT, server_port, 0, 1);
-    RETRIEVE_ENV(REMOTE_ADDR, remote_addr, 0, 1);
-    RETRIEVE_ENV(REMOTE_PORT, remote_port, 0, 1);
-    RETRIEVE_ENV(SCRIPT_NAME, script_name, 1, 1);
-    RETRIEVE_ENV(PATH_INFO, path_info, 1, 1);
-    RETRIEVE_ENV(QUERY_STRING, query_string, 1, 1);
-    RETRIEVE_ENV(RACK_INPUT, rack_input, 0, 0);
-    RETRIEVE_ENV(SERVER_NAME, _dummy, 0, 0);
-    RETRIEVE_ENV(SERVER_PROTOCOL, server_protocol, 1, 1);
-    RETRIEVE_ENV(CONTENT_LENGTH, _dummy, 0, 0);
-    RETRIEVE_ENV(RACK_MULTITHREAD, _dummy, 0, 0);
-    RETRIEVE_ENV(RACK_MULTIPROCESS, _dummy, 0, 0);
-    RETRIEVE_ENV(RACK_RUN_ONCE, _dummy, 0, 0);
-    RETRIEVE_ENV(RACK_HIJACK_, _dummy, 0, 0);
-    RETRIEVE_ENV(RACK_ERRORS, rack_errors, 0, 0);
-    RETRIEVE_ENV(SERVER_SOFTWARE, _dummy, 0, 0);
-    RETRIEVE_ENV(H2O_REMAINING_DELEGATIONS, remaining_delegations, 0, 0);
-    RETRIEVE_ENV(H2O_REMAINING_REPROCESSES, remaining_reprocesses, 0, 0);
+    khiter_t k;
+    khash_t(ht) *h = mrb_hash_tbl(mrb, env);
+    for (k = kh_begin(h); k != kh_end(h); ++k) {
+        if (!kh_exist(h, k))
+            continue;
+        mrb_value key = h2o_mruby_to_str(mrb, kh_key(h, k));
+        if (mrb->exc != NULL)
+            goto Failed;
+        mrb_value value = h2o_mruby_to_str(mrb, kh_value(h, k).v);
+        if (mrb->exc != NULL)
+            goto Failed;
+
+        if (CHECK_KEY("CONTENT_LENGTH")) {
+            super->content_length = h2o_strtosize(RSTRING_PTR(value), RSTRING_LEN(value));
+        } else if (CHECK_KEY("PATH_INFO")) {
+            RETRIEVE_ENV(path_info, 1);
+        } else if (CHECK_KEY("QUERY_STRING")) {
+            RETRIEVE_ENV(query_string, 1);
+        } else if (CHECK_KEY("REMOTE_ADDR")) {
+            RETRIEVE_ENV(remote_addr, 1);
+        } else if (CHECK_KEY("REMOTE_PORT")) {
+            RETRIEVE_ENV(remote_port, 1);
+        } else if (CHECK_KEY("REQUEST_METHOD")) {
+            RETRIEVE_ENV(method, 1);
+        } else if (CHECK_KEY("SCRIPT_NAME")) {
+            RETRIEVE_ENV(script_name, 1);
+        } else if (CHECK_KEY("SERVER_ADDR")) {
+            RETRIEVE_ENV(server_addr, 1);
+        } else if (CHECK_KEY("SERVER_PORT")) {
+            RETRIEVE_ENV(server_port, 1);
+        } else if (CHECK_KEY("SERVER_PROTOCOL")) {
+            RETRIEVE_ENV(server_protocol, 1);
+        } else if (CHECK_KEY("h2o.remaining_delegations")) {
+            RETRIEVE_ENV(remaining_delegations, 0);
+        } else if (CHECK_KEY("h2o.remaining_reprocesses")) {
+            RETRIEVE_ENV(remaining_reprocesses, 0);
+        } else if (CHECK_KEY("rack.errors")) {
+            RETRIEVE_ENV(rack_errors, 0);
+        } else if (CHECK_KEY("rack.input")) {
+            RETRIEVE_ENV(rack_input, 0);
+        } else if (CHECK_KEY("rack.url_scheme")) {
+            RETRIEVE_ENV(scheme, 1);
+        } else if (RSTRING_LEN(key) >= 5 && memcmp(RSTRING_PTR(key), "HTTP_", 5) == 0) {
+            h2o_mruby_split_header_pair(ctx->shared, key, value, handle_request_header, &subreq->super);
+        } else {
+            /* set to req->env */
+            h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
+            super->env.entries[super->env.size] = h2o_strdup(&super->pool, RSTRING_PTR(key), RSTRING_LEN(key));
+            super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(value), RSTRING_LEN(value));
+            super->env.size += 2;
+        }
+    }
 #undef RETRIEVE_ENV
+#undef CALC_HASH
+#undef CHECK_KEY
+
+#define CHECK_REQUIRED(key, val) do { \
+    if (mrb_nil_p(val)) { \
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: ## key")); \
+        goto Failed; \
+    } \
+} while (0)
+    CHECK_REQUIRED("REQUEST_METHOD", method);
+    CHECK_REQUIRED("rack.url_scheme", scheme);
+    CHECK_REQUIRED("SCRIPT_NAME", script_name);
+    CHECK_REQUIRED("PATH_INFO", path_info);
+    CHECK_REQUIRED("QUERY_STRING", query_string);
+#undef CHECK_REQUIRED
 
     /* construct url and parse */
     mrb_value url = mrb_obj_dup(mrb, scheme);
@@ -462,46 +565,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         goto Failed;
     }
 
-    struct st_mruby_subreq_t *subreq = h2o_mem_alloc(sizeof(*subreq));
-    memset(&subreq->conn, 0, sizeof(subreq->conn));
-    subreq->conn.super.ctx = ctx->shared->ctx;
-    h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
-
-    /* setup conn */
-    if (ctx->handler->pathconf->host) {
-        subreq->conn.super.hosts = h2o_mem_alloc_pool(&subreq->super.pool, sizeof(subreq->conn.super.hosts[0]) * 2);
-        subreq->conn.super.hosts[0] = ctx->handler->pathconf->host;
-        subreq->conn.super.hosts[1] = NULL;
-    } else {
-        subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
-    }
-    subreq->conn.server.len = parse_hostport(mrb, server_addr, server_port, &subreq->conn.server.addr);
-    subreq->conn.remote.len = parse_hostport(mrb, remote_addr, remote_port, &subreq->conn.remote.addr);
-
-    subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
-    subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
-
-    static const h2o_conn_callbacks_t callbacks = {
-        get_sockname,    /* stringify address */
-        get_peername,    /* ditto */
-        NULL,            /* push (no push in subrequest) */
-        get_socket,      /* get underlying socket */
-        NULL,            /* get debug state */
-        {{{NULL}}}};
-
-    subreq->conn.super.callbacks = &callbacks;
-
-    subreq->ctx = ctx;
-    subreq->receiver = mrb_nil_value();
-    subreq->ref = mrb_nil_value();
-    subreq->chunks = mrb_ary_new(mrb);
-    mrb_gc_register(mrb, subreq->chunks);
-    subreq->shortcut = NULL;
-    subreq->final_received = 0;
-    subreq->chain_proceed = 0;
-
-    h2o_req_t *super = &subreq->super;
-    super->is_subrequest = 1;
+    /* setup req and conn using retrieved values */
     super->input.scheme = url_parsed.scheme;
     super->input.method = h2o_strdup(&super->pool, RSTRING_PTR(method), RSTRING_LEN(method));
     super->input.authority = h2o_strdup(&super->pool, url_parsed.authority.base, url_parsed.authority.len);
@@ -512,6 +576,14 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     super->version = h2o_parse_protocol_version(h2o_iovec_init(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol)));
     if (super->version == -1)
         super->version = 0x101;
+
+    // TODO how about unix socket?
+    subreq->conn.server.len = parse_hostport(mrb, server_addr, server_port, &subreq->conn.server.addr);
+    if (mrb->exc != NULL)
+        goto Failed;
+    subreq->conn.remote.len = parse_hostport(mrb, remote_addr, remote_port, &subreq->conn.remote.addr);
+    if (mrb->exc != NULL)
+        goto Failed;
 
     if (! mrb_nil_p(remaining_delegations)) {
         mrb_int v = mrb_int(mrb, remaining_delegations);
@@ -529,34 +601,15 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         super->error_logger.data = subreq;
     }
 
-    /* headers */
-    super->headers = (h2o_headers_t){NULL};
-    if (h2o_mruby_iterate_headers(ctx->shared, dupenv, handle_request_header, subreq) != 0) {
-        goto Failed;
-    }
-
-    /* entity */
     prepare_subreq_entity(super, ctx, rack_input);
     if (mrb->exc != NULL)
         goto Failed;
-
-    /* env */
-    mrb_value other_keys = mrb_hash_keys(mrb, dupenv);
-    for (i = 0; i != RARRAY_LEN(other_keys); ++i) {
-        mrb_value key = h2o_mruby_to_str(mrb, mrb_ary_entry(other_keys, i));
-        if (memcmp(RSTRING_PTR(key), "HTTP_", 5) == 0)
-            continue;
-        mrb_value val = h2o_mruby_to_str(mrb, mrb_hash_get(mrb, dupenv, key));
-        h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
-        super->env.entries[super->env.size] = h2o_strdup(&super->pool, RSTRING_PTR(key), RSTRING_LEN(key));
-        super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(val), RSTRING_LEN(val));
-        super->env.size += 2;
-    }
 
     return subreq;
 
 Failed:
     assert(mrb->exc != NULL);
+    dispose_subreq(subreq);
     mrb_gc_arena_restore(mrb, gc_arena);
     return NULL;
 }
@@ -576,17 +629,15 @@ static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value in
     /* create subreq */
     struct st_mruby_subreq_t *subreq = create_subreq(ctx, env);
     if (mrb->exc != NULL) {
+        mrb_value exc = mrb_obj_value(mrb->exc);
+        mrb->exc = NULL;
         *run_again = 1;
-        return mrb_obj_value(mrb->exc);
+        return exc;
     }
     subreq->receiver = *receiver;
     mrb_gc_register(mrb, *receiver);
 
     h2o_req_t *super = &subreq->super;
-
-    /* create postfilter and final ostream for subreq */
-    h2o_ostream_t *ostream = h2o_add_ostream(super, sizeof(*ostream), &super->_ostr_top);
-    ostream->do_send = subreq_ostream_send;
 
     if (mrb_bool(reprocess)) {
         h2o_reprocess_request_deferred(super, super->method, super->scheme, super->authority, super->path, super->overrides, 1);
