@@ -251,7 +251,7 @@ main(int argc, char *argv[])
         yaml_parser_t parser;
         yaml_emitter_t emitter;
         yaml_event_t event;
-        unsigned char buffer[BUFFER_SIZE];
+        unsigned char buffer[BUFFER_SIZE+1];
         size_t written = 0;
         yaml_event_t events[MAX_EVENTS];
         size_t event_number = 0;
@@ -259,7 +259,7 @@ main(int argc, char *argv[])
         int count = 0;
         int error = 0;
         int k;
-        memset(buffer, 0, BUFFER_SIZE);
+        memset(buffer, 0, BUFFER_SIZE+1);
         memset(events, 0, MAX_EVENTS*sizeof(yaml_event_t));
 
         printf("[%d] Parsing, emitting, and parsing again '%s': ", number, argv[number]);
@@ -290,7 +290,7 @@ main(int argc, char *argv[])
             assert(event_number < MAX_EVENTS);
             assert(copy_event(&(events[event_number++]), &event));
             assert(yaml_emitter_emit(&emitter, &event) || 
-                    (yaml_emitter_flush(&emitter) && print_output(argv[number], buffer, written, count)));
+                    print_output(argv[number], buffer, written, count));
             count ++;
         }
 

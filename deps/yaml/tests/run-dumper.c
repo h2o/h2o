@@ -77,8 +77,9 @@ error:
 }
 
 int compare_nodes(yaml_document_t *document1, int index1,
-        yaml_document_t *document2, int index2)
+        yaml_document_t *document2, int index2, int level)
 {
+    if (level++ > 1000) return 0;
     yaml_node_t *node1 = yaml_document_get_node(document1, index1);
     yaml_node_t *node2 = yaml_document_get_node(document2, index2);
     int k;
@@ -104,7 +105,7 @@ int compare_nodes(yaml_document_t *document1, int index1,
                 return 0;
             for (k = 0; k < (node1->data.sequence.items.top - node1->data.sequence.items.start); k ++) {
                 if (!compare_nodes(document1, node1->data.sequence.items.start[k],
-                            document2, node2->data.sequence.items.start[k])) return 0;
+                            document2, node2->data.sequence.items.start[k], level)) return 0;
             }
             break;
         case YAML_MAPPING_NODE:
@@ -113,9 +114,9 @@ int compare_nodes(yaml_document_t *document1, int index1,
                 return 0;
             for (k = 0; k < (node1->data.mapping.pairs.top - node1->data.mapping.pairs.start); k ++) {
                 if (!compare_nodes(document1, node1->data.mapping.pairs.start[k].key,
-                            document2, node2->data.mapping.pairs.start[k].key)) return 0;
+                            document2, node2->data.mapping.pairs.start[k].key, level)) return 0;
                 if (!compare_nodes(document1, node1->data.mapping.pairs.start[k].value,
-                            document2, node2->data.mapping.pairs.start[k].value)) return 0;
+                            document2, node2->data.mapping.pairs.start[k].value, level)) return 0;
             }
             break;
         default:
@@ -152,7 +153,7 @@ int compare_documents(yaml_document_t *document1, yaml_document_t *document2)
         return 0;
 
     if (document1->nodes.top != document1->nodes.start) {
-        if (!compare_nodes(document1, 1, document2, 1))
+        if (!compare_nodes(document1, 1, document2, 1, 0))
             return 0;
     }
 
@@ -226,7 +227,7 @@ main(int argc, char *argv[])
         yaml_emitter_t emitter;
 
         yaml_document_t document;
-        unsigned char buffer[BUFFER_SIZE];
+        unsigned char buffer[BUFFER_SIZE+1];
         size_t written = 0;
         yaml_document_t documents[MAX_DOCUMENTS];
         size_t document_number = 0;
@@ -234,7 +235,7 @@ main(int argc, char *argv[])
         int count = 0;
         int error = 0;
         int k;
-        memset(buffer, 0, BUFFER_SIZE);
+        memset(buffer, 0, BUFFER_SIZE+1);
         memset(documents, 0, MAX_DOCUMENTS*sizeof(yaml_document_t));
 
         printf("[%d] Loading, dumping, and loading again '%s': ", number, argv[number]);
