@@ -56,7 +56,8 @@ mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const ch
     if (mrb->exc != NULL)
         h2o_mruby__abort_exc(mrb, "h2o_mruby_new_str:precondition failure", file, line);
     mrb_value ret = mrb_str_new(mrb, s, len);
-    h2o_mruby_assert(mrb);
+    if (mrb->exc != NULL)
+        h2o_mruby__abort_exc(mrb, "h2o_mruby_new_str:failed to create string", file, line);
     return ret;
 }
 
