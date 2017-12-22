@@ -523,9 +523,6 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
     if (!h2o_send_state_is_in_progress(state)) {
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
-    } else if (bufcnt == 0) {
-        h2o_proceed_response_deferred(req);
-        return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
 }

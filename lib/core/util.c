@@ -733,11 +733,15 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
 {
     h2o_iovec_t parts[4];
     size_t num_parts = 0;
-    int conf_ends_with_slash = req->pathconf->path.base[req->pathconf->path.len - 1] == '/';
-    int prefix_ends_with_slash = prefix[prefix_len - 1] == '/';
+    int conf_ends_with_slash = req->pathconf->path.base[req->pathconf->path.len - 1] == '/', prefix_ends_with_slash;
 
-    /* destination starts with given prefix */
-    parts[num_parts++] = h2o_iovec_init(prefix, prefix_len);
+    /* destination starts with given prefix, if any */
+    if (prefix_len != 0) {
+        parts[num_parts++] = h2o_iovec_init(prefix, prefix_len);
+        prefix_ends_with_slash = prefix[prefix_len - 1] == '/';
+    } else {
+        prefix_ends_with_slash = 0;
+    }
 
     /* make adjustments depending on the trailing slashes */
     if (conf_ends_with_slash != prefix_ends_with_slash) {
