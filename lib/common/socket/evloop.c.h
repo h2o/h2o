@@ -409,7 +409,6 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    fcntl(fd, F_SETFL, O_NONBLOCK);
     return &create_socket(loop, fd, flags)->super;
 }
 
@@ -424,7 +423,6 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 #else
     if ((fd = cloexec_accept(listener->fd, NULL, NULL)) == -1)
         return NULL;
-    fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
 
     return &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
