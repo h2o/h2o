@@ -151,7 +151,7 @@ builder {
         my $env = shift;
         return sub {
             my $responder = shift;
-            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain', 'content-length' => 1 ] ]);
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
             sleep 1;
             $writer->write('x');
             $writer->close;
