@@ -566,7 +566,7 @@ static void proceed_request(h2o_req_t *req, size_t written, int is_end_stream)
 
     /* raise the input window size for the stream that has been selected to stream input */
     if (stream->input_window.window_size == H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)
-        stream->input_window.window_size = H2O_HTTP2_SETTINGS_HOST_STREAM_STREAMING_WINDOW_SIZE; /* this should be configurable */
+        stream->input_window.window_size = conn->super.ctx->globalconf->http2.active_stream_window_size;
 
     update_input_window(conn, stream->stream_id, &stream->input_window, written);
 }

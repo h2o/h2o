@@ -189,6 +189,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.emit_missing_date_header = 1;
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
     config->http2.max_streams_for_priority = 16;
+    config->http2.active_stream_window_size = H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE;
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;

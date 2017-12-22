@@ -84,6 +84,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS 0 /* no timeout */
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT (H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE 16777216
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
@@ -381,6 +382,10 @@ struct st_h2o_globalconf_t {
          * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
          */
         size_t max_streams_for_priority;
+        /**
+         * size of the stream-level flow control window (once it becomes active)
+         */
+        uint32_t active_stream_window_size;
         /**
          * conditions for latency optimization
          */
