@@ -9,6 +9,7 @@ RUN apt-get install --yes php-cgi
 # tools for building and testing
 RUN apt-get install --yes apache2-utils cmake cmake-data git memcached netcat-openbsd nghttp2-client redis-server wget sudo
 RUN apt-get install --yes libev-dev libc-ares-dev libnghttp2-dev libssl-dev libuv1-dev zlib1g-dev
+RUN apt-get install --yes libc6-dbg
 
 # clang-4.0 for fuzzing
 RUN apt-get install -y clang-4.0
