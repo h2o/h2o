@@ -10,6 +10,7 @@
 #define NR_WHEELS 4
 #define BITS_PER_WHEEL 4
 #define NR_SLOTS (1 << BITS_PER_WHEEL)
+#define WHEEL_MASK ((1 << BITS_PER_WHEEL) - 1)
 
 struct timer;
 typedef void (*timer_cb)(struct timer *);
@@ -27,8 +28,7 @@ void timer_init(struct timer *t, timer_cb cb)
 
 struct tw {
     h2o_linklist_t wheels[NR_WHEELS][NR_SLOTS];
-    uint64_t base[NR_WHEELS];
-    uint8_t idx[NR_WHEELS];
+    uint64_t last_run;
 };
 
 void tw_init(struct tw *w, uint64_t now)
@@ -38,8 +38,7 @@ void tw_init(struct tw *w, uint64_t now)
         for (j = 0; j < NR_SLOTS; j++) {
             h2o_linklist_init_anchor(&w->wheels[i][j]);
         }
-        w->base[i] = now + (1 << (i * BITS_PER_WHEEL)) - !i;
-        w->idx[i] = 0;
+        w->last_run = now;
     }
 }
 
@@ -55,95 +54,106 @@ int tw_is_empty(struct tw *w)
     return 1;
 }
 
-static uint64_t wheel_upper_bound(struct tw *w, int wid)
+void get_wid_and_slot(struct tw *w, uint64_t time, int *wid, int *slot)
 {
-    return w->base[wid] + (1 << ((wid + 1) * BITS_PER_WHEEL));
-}
-
-static void tw_find_slot(struct tw *w, uint64_t expiry, int *wid, int *slot)
-{
-    int i;
-    for (i = 0; i < NR_WHEELS; i++) {
-        uint64_t wup = wheel_upper_bound(w, i);
-        if (expiry < wup || (i + 1 == NR_WHEELS)) {
-            uint64_t delta;
-            *wid = i;
-            *slot = (expiry - w->base[i]) / (1 << i * BITS_PER_WHEEL);
-            return;
-        }
+    uint64_t delta;
+    delta = time - (w->last_run & ~WHEEL_MASK);
+    *wid = 0;
+    while (1) {
+        *slot = delta & WHEEL_MASK;
+        delta = delta >> BITS_PER_WHEEL;
+        if (delta == 0)
+            break;
+        *wid += 1;
     }
-    assert(0 && "expiry doesn't fit in timerwheel");
+    assert(*wid < NR_WHEELS);
+    assert(*slot < NR_SLOTS);
 }
-
 void tw_insert(struct tw *w, struct timer *timer)
 {
     int wid, slot;
-    uint64_t delta;
-    if (timer->expiry < w->base[0])
-        timer->expiry = w->base[0];
-    tw_find_slot(w, timer->expiry, &wid, &slot);
-    assert(wid < NR_WHEELS);
-    assert(slot < NR_SLOTS);
-    fprintf(stderr, "inserted %p at [%d:%d]\n", timer, wid, slot);
+
+    if (timer->expiry < w->last_run)
+        timer->expiry = w->last_run;
+    get_wid_and_slot(w, timer->expiry, &wid, &slot);
+    fprintf(stderr, "%s:%d insert: %p(%"PRIu64") at [%d:%d], wt:%"PRIu64"\n", __func__, __LINE__, timer, timer->expiry, wid, slot, w->last_run);
     h2o_linklist_insert(&w->wheels[wid][slot], &timer->next);
+}
+
+void tw_check(struct tw *w, uint64_t now)
+{
+    int i, j;
+    for (i = 0; i < NR_WHEELS; i++) {
+        for (j = 0; j < NR_SLOTS; j++) {
+                h2o_linklist_t *node;
+                for (node = w->wheels[i][j].next; node != &w->wheels[i][j]; node = node->next) {
+                    struct timer *timer = H2O_STRUCT_FROM_MEMBER(struct timer, next, node);
+                    if (timer->expiry <= now) {
+                        fprintf(stderr, "Should have run timer %p (now: %"PRIu64", expiry: %"PRIu64") [%d:%d]\n", timer, now, timer->expiry, i, j);
+                        abort();
+                    }
+                }
+        }
+    }
+}
+void cascade(struct tw *w, int wid, int slot)
+{
+    h2o_linklist_t *node, *next;
+    for (node = w->wheels[wid][slot].next; node != &w->wheels[wid][slot]; node = next) {
+        struct timer *timer = H2O_STRUCT_FROM_MEMBER(struct timer, next, node);
+        next = node->next;
+        h2o_linklist_unlink(&timer->next);
+        tw_insert(w, timer);
+    }
 }
 
 int tw_run(struct tw *w, uint64_t now)
 {
-    int i, j, cascade = 0;
-    int events_run;
+    int events_run, slot, wid, j, end_slot, end_wid;
     h2o_linklist_t todo;
-    h2o_linklist_init_anchor(&todo);
+    int should_cascade_next = 0;
 
-    fprintf(stderr, "%s:%d\n", __func__, __LINE__);
-    for (i = 0; i < NR_WHEELS; i++) {
-        int idx_icn = 0, slot;
-        if (now < w->base[i]) {
-            fprintf(stderr, "ran up to wheel [%d:0[\n", i);
-            break;
-        }
-        for (j = 0; j < NR_SLOTS; j++) {
-            slot = (j + w->idx[i]) % (1 << BITS_PER_WHEEL);
-            fprintf(stderr, "slot: [%d:%d(%d)], now: %llu, base: %llu, end_base: %llu\n",
-                    i, j, slot, now, w->base[i], w->base[i] + (j * (1 << (i * BITS_PER_WHEEL))));
-            if (now < w->base[i] + (j * (1 << (i * BITS_PER_WHEEL)))) {
-                fprintf(stderr, "ran up to slot [%d:%d(%d)[\n", i, j, slot);
-                break;
-            }
-            if (now > (w->base[i] + ((j + 1) * (1 << (i * BITS_PER_WHEEL))) - 1)) {
-                idx_icn++;
-                h2o_linklist_t *node;
-                for (node = w->wheels[i][slot].next; node != &w->wheels[i][slot]; node = node->next) {
-                    struct timer *timer = H2O_STRUCT_FROM_MEMBER(struct timer, next, node);
-                    assert(timer->expiry <= now);
-                }
-                h2o_linklist_insert_list(&todo, &w->wheels[i][slot]);
-            } else {
-                h2o_linklist_t *node, *next;
-                for (node = w->wheels[i][slot].next; node != &w->wheels[i][slot]; node = next) {
-                    struct timer *timer = H2O_STRUCT_FROM_MEMBER(struct timer, next, node);
-                    next = node->next;
-                    if (timer->expiry <= now) {
-                        h2o_linklist_unlink(&timer->next);
-                        h2o_linklist_insert(&todo, &timer->next);
-                    } else {
-                        cascade = 1;
-                    }
-                }
-            }
-        }
-        w->base[i] = now;
-        w->idx[i] = (w->idx[i] + idx_icn) % NR_SLOTS;
-        if (cascade) {
+    h2o_linklist_init_anchor(&todo);
+    assert(now >= w->last_run);
+
+    fprintf(stderr, "%s:%d now:%"PRIu64", lr: %"PRIu64"\n", __func__, __LINE__, now, w->last_run);
+    get_wid_and_slot(w, now, &end_wid, &end_slot);
+    fprintf(stderr, "now is [%d:%d]\n", end_wid, end_slot);
+
+    for (wid = 0; wid <= end_wid; wid++) {
+        int cur_end_slot = ((wid == end_wid) ? end_slot : NR_SLOTS);
+        for (j = 0; j <= cur_end_slot; j++) {
             h2o_linklist_t *node, *next;
-            for (node = w->wheels[i][slot].next; node != &w->wheels[i][slot]; node = next) {
+            slot = ((w->last_run >> (wid * BITS_PER_WHEEL)) + j) & WHEEL_MASK;
+            if (wid == end_wid && j > 0 && slot == 0) {
+                should_cascade_next = 1;
+            }
+            //fprintf(stderr, "%s:%d [%d:%d(%d)]\n", __func__, __LINE__, wid, j, slot);
+            for (node = w->wheels[wid][slot].next; node != &w->wheels[wid][slot]; node = next) {
                 struct timer *timer = H2O_STRUCT_FROM_MEMBER(struct timer, next, node);
                 next = node->next;
-                h2o_linklist_unlink(&timer->next);
-                tw_insert(w, timer);
+                if (timer->expiry < now) {
+                    h2o_linklist_unlink(&timer->next);
+                    h2o_linklist_insert(&todo, &timer->next);
+                }
             }
         }
     }
+    if (wid > 0) {
+        slot = ((w->last_run >> (wid * BITS_PER_WHEEL)) + j) & WHEEL_MASK;
+        w->last_run = now;
+        cascade(w, wid - 1, slot);
+    }
+    if (should_cascade_next && wid != NR_WHEELS) {
+        slot = ((w->last_run >> (wid * BITS_PER_WHEEL)) + j) & WHEEL_MASK;
+        w->last_run = now;
+        if (slot == 0) {
+            wid++;
+        }
+        cascade(w, wid, slot);
+    }
+    w->last_run = now;
+
     events_run = 0;
     while (!h2o_linklist_is_empty(&todo)) {
         events_run++;
@@ -154,20 +164,8 @@ int tw_run(struct tw *w, uint64_t now)
         }
         timer->cb(timer);
     }
-    fprintf(stderr, "%s:%d\n", __func__, __LINE__);
-    for (i = 0; i < NR_WHEELS; i++) {
-        for (j = 0; j < NR_SLOTS; j++) {
-                h2o_linklist_t *node;
-                int slot = (j + w->idx[i]) % (1 << BITS_PER_WHEEL);
-                for (node = w->wheels[i][slot].next; node != &w->wheels[i][slot]; node = node->next) {
-                    struct timer *timer = H2O_STRUCT_FROM_MEMBER(struct timer, next, node);
-                    if (timer->expiry <= now) {
-                        fprintf(stderr, "Should have run timer %p (now: %llu, expiry: %llu) [%d:%d(%d)]\n", timer, now, timer->expiry, i, j, slot);
-                        abort();
-                    }
-                }
-        }
-    }
+
+    tw_check(w, now);
     return events_run;
 }
 
@@ -214,7 +212,7 @@ struct test_timer {
 static void test_timer_cb(struct timer *t_)
 {
     struct test_timer *t = H2O_STRUCT_FROM_MEMBER(struct test_timer, t, t_);
-    fprintf(stderr, "timer %p ran, expiry: %d\n", t->t.expiry);
+    fprintf(stderr, "timer %p ran, expiry: %"PRIu64"\n", t, t->t.expiry);
     t->called++;
     return;
 }
