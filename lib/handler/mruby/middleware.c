@@ -91,22 +91,36 @@ static void on_gc_dispose_app_input_stream(mrb_state *mrb, void *_subreq)
 
 const static struct mrb_data_type app_input_stream_type = {"app_input_stream", on_gc_dispose_app_input_stream};
 
-/* TODO: remove */
-static int build_env_sort_header_cb(const void *_x, const void *_y)
+static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *name, size_t len)
 {
-    const h2o_header_t *x = *(const h2o_header_t **)_x, *y = *(const h2o_header_t **)_y;
-    if (x->name->len < y->name->len)
-        return -1;
-    if (x->name->len > y->name->len)
-        return 1;
-    if (x->name->base != y->name->base) {
-        int r = memcmp(x->name->base, y->name->base, x->name->len);
-        if (r != 0)
-            return r;
+#define KEY_PREFIX "HTTP_"
+#define KEY_PREFIX_LEN (sizeof(KEY_PREFIX) - 1)
+    if (len < KEY_PREFIX_LEN || ! h2o_memis(name, KEY_PREFIX_LEN, KEY_PREFIX, KEY_PREFIX_LEN)) {
+        return h2o_iovec_init(NULL, 0);
     }
-    assert(x != y);
-    /* the order of the headers having the same name needs to be retained */
-    return x < y ? -1 : 1;
+
+    h2o_iovec_t ret;
+
+    ret.len = len - KEY_PREFIX_LEN;
+    ret.base = h2o_mem_alloc_pool(pool, ret.len);
+
+    name += KEY_PREFIX_LEN;
+    char *d = ret.base;
+    for (; len != 0; ++name, --len)
+        *d++ = *name == '_' ? '-' : h2o_tolower(*name);
+
+    return ret;
+#undef KEY_PREFIX
+#undef KEY_PREFIX_LEN
+}
+
+static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_iovec_t *name, h2o_iovec_t value, void *cb_data)
+{
+    mrb_value result_hash = mrb_obj_value(cb_data);
+    mrb_value n = h2o_mruby_new_str(shared_ctx->mrb, name->base, name->len); /* TODO: use prepared constant */
+    mrb_value v = h2o_mruby_new_str(shared_ctx->mrb, value.base, value.len);
+    mrb_hash_set(shared_ctx->mrb, result_hash, n, v);
+    return 0;
 }
 
 static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
@@ -114,7 +128,6 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     h2o_req_t *req = &subreq->super;
     h2o_mruby_context_t *ctx = subreq->ctx;
     mrb_state *mrb = ctx->shared->mrb;
-    size_t i;
 
     /* build response array */
     mrb_value resp = mrb_ary_new_capa(mrb, 3);
@@ -125,40 +138,13 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     /* headers */
     {
         mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)req->res.headers.size);
-        h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * req->res.headers.size);
-        for (i = 0; i != req->res.headers.size; ++i)
-            headers_sorted[i] = req->res.headers.entries + i;
-        qsort(headers_sorted, req->res.headers.size, sizeof(*headers_sorted), build_env_sort_header_cb);
-        for (i = 0; i != req->res.headers.size; ++i) {
-            const h2o_header_t *header = headers_sorted[i];
-            mrb_value n, v;
-            if (h2o_iovec_is_token(header->name)) {
-                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
-                if (token == H2O_TOKEN_TRANSFER_ENCODING)
-                    continue;
-                n = mrb_str_new(mrb, token->buf.base, token->buf.len);
-            } else {
-                n = mrb_str_new(mrb, header->name->base, header->name->len);
-            }
-            v = mrb_str_new(mrb, header->value.base, header->value.len);
-            while (i + 1 < req->res.headers.size) {
-
-                if (!h2o_memis(headers_sorted[i]->name->base, headers_sorted[i]->name->len, headers_sorted[i + 1]->name->base,
-                               headers_sorted[i + 1]->name->len))
-                    break;
-                ++i;
-                v = mrb_str_cat_lit(mrb, v, "\n");
-                v = mrb_str_cat(mrb, v, headers_sorted[i]->value.base, headers_sorted[i]->value.len);
-            }
-            mrb_hash_set(mrb, headers_hash, n, v);
-        }
+        h2o_mruby_iterate_headers(ctx->shared, &req->pool, &req->res.headers, iterate_headers_callback, mrb_obj_ptr(headers_hash));
         if (req->res.content_length != SIZE_MAX) {
             h2o_token_t *token = H2O_TOKEN_CONTENT_LENGTH;
-            mrb_value n = mrb_str_new(mrb, token->buf.base, token->buf.len);
+            mrb_value n = h2o_mruby_new_str(mrb, token->buf.base, token->buf.len);
             mrb_value v = h2o_mruby_to_str(mrb, mrb_fixnum_value(req->res.content_length));
             mrb_hash_set(mrb, headers_hash, n, v);
         }
-
         mrb_ary_set(mrb, resp, 1, headers_hash);
     }
 
@@ -181,7 +167,7 @@ static void push_chunks(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, s
 
     int i;
     for (i = 0; i < inbufcnt; ++i) {
-        mrb_value chunk = mrb_str_new(mrb, inbufs[i].base, inbufs[i].len);
+        mrb_value chunk = h2o_mruby_new_str(mrb, inbufs[i].base, inbufs[i].len);
         mrb_ary_push(mrb, subreq->chunks, chunk);
     }
 
@@ -341,31 +327,6 @@ Error:
     return 0;
 }
 
-#define KEY_PREFIX "HTTP_"
-#define KEY_PREFIX_LEN (sizeof(KEY_PREFIX) - 1)
-
-static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *name, size_t len)
-{
-    if (len < KEY_PREFIX_LEN || ! h2o_memis(name, KEY_PREFIX_LEN, KEY_PREFIX, KEY_PREFIX_LEN)) {
-        return h2o_iovec_init(NULL, 0);
-    }
-
-    h2o_iovec_t ret;
-
-    ret.len = len - KEY_PREFIX_LEN;
-    ret.base = h2o_mem_alloc_pool(pool, ret.len);
-
-    name += KEY_PREFIX_LEN;
-    char *d = ret.base;
-    for (; len != 0; ++name, --len)
-        *d++ = *name == '_' ? '-' : h2o_tolower(*name);
-
-    return ret;
-}
-
-#undef KEY_PREFIX
-#undef KEY_PREFIX_LEN
-
 static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
@@ -398,8 +359,9 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
 
     assert(!mrb_nil_p(subreq->error_stream));
 
-    mrb_value msgstr = mrb_str_new(mrb, prefix.base, prefix.len);
-    msgstr = mrb_str_cat(mrb, msgstr, msg.base, msg.len);
+    h2o_iovec_t list[] = {prefix, msg};
+    h2o_iovec_t concat = h2o_concat_list(&subreq->super.pool, list, 2);
+    mrb_value msgstr = h2o_mruby_new_str(mrb, concat.base, concat.len);
     mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
 }
 
@@ -544,22 +506,25 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     CHECK_REQUIRED("QUERY_STRING", query_string);
 #undef CHECK_REQUIRED
 
-    /* construct url and parse */
-    mrb_value url = mrb_obj_dup(mrb, scheme);
-    mrb_str_concat(mrb, url, mrb_str_new_lit(mrb, "://"));
-    mrb_str_concat(mrb, url, server_addr);
-    mrb_str_concat(mrb, url, mrb_str_new_lit(mrb, ":"));
-    mrb_str_concat(mrb, url, server_port);
-    // TODO: what happens if the user modifies SCRIPT_NAME and PATH_INFO?
-    mrb_str_concat(mrb, url, script_name);
-    mrb_str_concat(mrb, url, path_info);
-    if (RSTRING_LEN(query_string) != 0) {
-        mrb_str_concat(mrb, url, mrb_str_new_lit(mrb, "?"));
-        mrb_str_concat(mrb, url, query_string);
-    }
+#define STR_TO_IOVEC(val) h2o_iovec_init(RSTRING_PTR(val), RSTRING_LEN(val))
 
+    /* construct url and parse */
+    h2o_iovec_t *url_comps = alloca(sizeof(*url_comps) * 9);
+    int num_comps = 0;
+    url_comps[num_comps++] = STR_TO_IOVEC(scheme);
+    url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT("://"));
+    url_comps[num_comps++] = STR_TO_IOVEC(server_addr);
+    url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT(":"));
+    url_comps[num_comps++] = STR_TO_IOVEC(server_port);
+    url_comps[num_comps++] = STR_TO_IOVEC(script_name);
+    url_comps[num_comps++] = STR_TO_IOVEC(path_info);
+    if (RSTRING_LEN(query_string) != 0) {
+        url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT("?"));
+        url_comps[num_comps++] = STR_TO_IOVEC(query_string);
+    }
+    h2o_iovec_t url_str = h2o_concat_list(&super->pool, url_comps, num_comps);
     h2o_url_t url_parsed;
-    if (h2o_url_parse(RSTRING_PTR(url), RSTRING_LEN(url), &url_parsed) != 0) {
+    if (h2o_url_parse(url_str.base, url_str.len, &url_parsed) != 0) {
         /* TODO is there any other way to show better error message? */
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "env variable contains invalid values"));
         goto Failed;
@@ -573,7 +538,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     h2o_hostconf_t *hostconf = h2o_req_setup(super);
     super->hostconf = hostconf;
     super->pathconf = ctx->handler->pathconf;
-    super->version = h2o_parse_protocol_version(h2o_iovec_init(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol)));
+    super->version = h2o_parse_protocol_version(STR_TO_IOVEC(server_protocol));
     if (super->version == -1)
         super->version = 0x101;
 
@@ -612,6 +577,7 @@ Failed:
     dispose_subreq(subreq);
     mrb_gc_arena_restore(mrb, gc_arena);
     return NULL;
+#undef STR_TO_IOVEC
 }
 
 static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)

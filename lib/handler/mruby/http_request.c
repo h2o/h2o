@@ -523,7 +523,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     if (mrb_hash_p(arg_hash)) {
         mrb_value headers = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(ctx->ctx->shared->symbols.sym_headers));
         if (!mrb_nil_p(headers)) {
-            if (h2o_mruby_iterate_headers(ctx->ctx->shared, headers, flatten_request_header, ctx) != 0) {
+            if (h2o_mruby_iterate_headers_obj(ctx->ctx->shared, headers, flatten_request_header, ctx) != 0) {
                 mrb_value exc = mrb_obj_value(mrb->exc);
                 mrb->exc = NULL;
                 mrb_exc_raise(mrb, exc);
