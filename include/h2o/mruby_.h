@@ -139,6 +139,8 @@ struct st_h2o_mruby_sender_t {
      * called when the generator is disposed
      */
     void (*dispose)(h2o_mruby_generator_t *generator);
+
+    unsigned char final_sent : 1;
 };
 
 typedef struct st_h2o_mruby_error_stream_t {

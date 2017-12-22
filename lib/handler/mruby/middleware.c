@@ -180,6 +180,9 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
     mrb_state *mrb = subreq->ctx->shared->mrb;
 
     if (subreq->shortcut != NULL) {
+        if (subreq->shortcut->sender->final_sent)
+            return; /* TODO: close subreq ASAP */
+
         subreq->chain_proceed = 1;
         if (mrb_nil_p(subreq->chunks)) {
             /* flushing chunks has been finished, so send directly */
@@ -692,6 +695,9 @@ void do_sender_proceed(h2o_generator_t *_generator, h2o_req_t *req)
     h2o_mruby_generator_t *generator = (void *)_generator;
     mrb_state *mrb = generator->ctx->shared->mrb;
     struct st_h2o_mruby_middleware_sender_t *sender = (void *)generator->sender;
+
+    if (generator->sender->final_sent)
+        return; /* TODO: close subreq ASAP */
 
     if (!mrb_nil_p(sender->subreq->chunks)) {
         if (RARRAY_LEN(sender->subreq->chunks) > 0) {

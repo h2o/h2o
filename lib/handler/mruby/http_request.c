@@ -159,7 +159,7 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
         sender->client = NULL;
     }
 
-    if (!sender->sending.inflight)
+    if (!sender->super.final_sent && !sender->sending.inflight)
         h2o_mruby_sender_do_send_buffer(generator, &sender->sending, input, is_final);
 }
 
@@ -169,7 +169,7 @@ static void do_sender_start(h2o_mruby_generator_t *generator)
 
     on_shortcut_notify(generator);
 
-    if (!sender->sending.inflight) {
+    if (!sender->super.final_sent && !sender->sending.inflight) {
         h2o_doublebuffer_prepare_empty(&sender->sending);
         h2o_mruby_sender_do_send(generator, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
     }
@@ -192,7 +192,7 @@ static void do_sender_proceed(h2o_generator_t *_generator, h2o_req_t *req)
         is_final = 1;
     }
 
-    if (!sender->sending.inflight)
+    if (!sender->super.final_sent && !sender->sending.inflight)
         h2o_mruby_sender_do_send_buffer(generator, &sender->sending, input, is_final);
 }
 
