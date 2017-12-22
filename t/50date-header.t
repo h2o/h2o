@@ -37,12 +37,12 @@ hosts:
       /mruby-date:
         mruby.handler: |
           Proc.new do |env|
-            [200, [["content-type", "text/plain"], ["date", "Fri, 19 Feb 1473 00:00 +0000"]], []]
+            [200, [["date", "Fri, 19 Feb 1473 00:00 +0000"]], []]
           end
       /mruby-no-date:
         mruby.handler: |
           Proc.new do |env|
-            [200, [["content-type", "text/plain"]], []]
+            [200, [], []]
           end
       /file:
         file.dir: @{[DOC_ROOT]}
@@ -80,10 +80,12 @@ subtest 'proxy emit missing date' => sub {
     my ($headers, $body) = run_prog("$curl http://127.0.0.1:@{[$server->{port}]}/proxy-no-date 2>&1");
     like $headers, qr/^HTTP\/1\.1 200 Ok/mi, 'succesful request';
     like $headers, qr/^date:/mi, 'date request header is set';
+    is scalar(@{[ $headers =~ m/^date:/mig ]}), 1, 'exact one date header';
 
     ($headers, $body) = run_prog("$curl -Hdate:now http://127.0.0.1:@{[$server->{port}]}/proxy-date");
     like $headers, qr/^HTTP\/1\.1 200 Ok/mi, 'succesful request';
     like $headers, qr/^date:/mi, 'date request header found when set by upstream';
+    is scalar(@{[ $headers =~ m/^date:/mig ]}), 1, 'exact one date header';
 
 };
 
@@ -98,6 +100,7 @@ subtest 'proxy no emit missing date' => sub {
     ($headers, $body) = run_prog("$curl -Hdate:now http://127.0.0.1:@{[$server_no_missing_date->{port}]}/proxy-date");
     like $headers, qr/^HTTP\/1\.1 200 Ok/mi, 'succesful request';
     like $headers, qr/^date:/mi, 'date request header found when set by upstream';
+    is scalar(@{[ $headers =~ m/^date:/mig ]}), 1, 'exact one date header';
 
 };
 
@@ -107,16 +110,19 @@ subtest 'mruby' => sub {
     my ($headers, $body) = run_prog("$curl http://127.0.0.1:@{[$server->{port}]}/mruby-date");
     like $headers, qr/^HTTP\/1\.1 200 Ok/mi, 'succesful request';
     like $headers, qr/^date: Fri, 19 Feb 1473 00:00 \+0000/mi, 'date request header is set by mruby';
+    is scalar(@{[ $headers =~ m/^date:/mig ]}), 1, 'exact one date header';
 
     ($headers, $body) = run_prog("$curl http://127.0.0.1:@{[$server->{port}]}/mruby-no-date");
     like $headers, qr/^HTTP\/1\.1 200 Ok/mi, 'succesful request';
     like $headers, qr/^date:/mi, 'date request header is set';
+    is scalar(@{[ $headers =~ m/^date:/mig ]}), 1, 'exact one date header';
 };
 
 subtest 'file' => sub {
     my ($headers, $body) = run_prog("$curl http://127.0.0.1:@{[$server->{port}]}/file/");
     like $headers, qr/^HTTP\/1\.1 200 Ok/mi, 'succesful request';
     like $headers, qr/^date:/mi, 'date request header is set';
+    is scalar(@{[ $headers =~ m/^date:/mig ]}), 1, 'exact one date header';
 };
 
 
