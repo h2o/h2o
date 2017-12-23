@@ -877,11 +877,19 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
     }
 
     /* add new listener */
-    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 || bind(fd, (void *)sa, sizeof(*sa)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
+    if (
+#if defined(__linux__)
+        (fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)) == -1
+#else
+        (fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1
+#endif
+        || bind(fd, (void *)sa, sizeof(*sa)) != 0 || listen(fd, H2O_SOMAXCONN) != 0) {
         h2o_configurator_errprintf(NULL, node, "failed to listen to socket:%s: %s", sa->sun_path, strerror(errno));
         goto ErrorExit;
     }
+#if !defined(__linux__)
     set_cloexec(fd);
+#endif
 
     /* set file owner and permission */
     if (owner != NULL && chown(sa->sun_path, owner->pw_uid, owner->pw_gid) != 0) {
@@ -907,7 +915,7 @@ static int create_socket_bind_addr_start_listen(int domain, int type, int protoc
     int fd;
 
 #if defined(__linux__)
-    if ((fd = socket(domain, type | SOCK_CLOEXEC, protocol)) == -1)
+    if ((fd = socket(domain, type | SOCK_NONBLOCK | SOCK_CLOEXEC, protocol)) == -1)
         goto Error;
 #else
     if ((fd = socket(domain, type, protocol)) == -1)
@@ -1600,14 +1608,15 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             if ((listener_config->domain != AF_UNIX) && (fd = create_socket_bind_addr_start_listen(listener_config->domain, listener_config->type,
                                                            listener_config->protocol, (struct sockaddr *)&listener_config->addr,
                                                            listener_config->addrlen)) != -1) {
-                fprintf(stderr, "[INFO] create listening socket %d with SO_REUSEPORT ok\n", fd);
+                /* fprintf(stderr, "[INFO] create listening socket %d with SO_REUSEPORT ok\n", fd); */
             } else
 #endif
-                if ((fd = dup(listener_config->fd)) == -1) {
+            if ((fd = dup(listener_config->fd)) != -1) {
+                set_cloexec(fd);
+            } else {
                 perror("failed to dup listening socket");
                 abort();
             }
-            set_cloexec(fd);
         }
         memset(listeners + i, 0, sizeof(listeners[i]));
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
