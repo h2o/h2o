@@ -19,8 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#define H2O_USE_LIBUV 0
-
 #include <errno.h>
 #include <limits.h>
 #include <netinet/in.h>
