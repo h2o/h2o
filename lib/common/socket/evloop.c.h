@@ -425,7 +425,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
 
-    {
+    if (0) { /* not apply to AF_UNIX sockets */
         int flag = 0;
         socklen_t len = sizeof(flag);
         assert(0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len) && flag == 1);
