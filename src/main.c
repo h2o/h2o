@@ -1597,25 +1597,17 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             fd = listener_config->fd;
         } else {
 #if defined(__linux__) && defined(SO_REUSEPORT)
-            if (listener_config->domain == AF_UNIX) {
-                if ((fd = dup(listener_config->fd)) == -1) {
-                    perror("failed to dup listening socket");
-                    abort();
-                }
-                set_cloexec(fd);
-            } else if ((fd = create_socket_bind_addr_start_listen(listener_config->domain, listener_config->type,
+            if ((listener_config->domain != AF_UNIX) && (fd = create_socket_bind_addr_start_listen(listener_config->domain, listener_config->type,
                                                            listener_config->protocol, (struct sockaddr *)&listener_config->addr,
-                                                           listener_config->addrlen)) == -1) {
-                perror("failed to create listening socket");
-                abort();
-            }
-#else
-            if ((fd = dup(listener_config->fd)) == -1) {
+                                                           listener_config->addrlen)) != -1) {
+                fprintf(stderr, "[INFO] create listening socket %d with SO_REUSEPORT ok\n", fd);
+            } else
+#endif
+                if ((fd = dup(listener_config->fd)) == -1) {
                 perror("failed to dup listening socket");
                 abort();
             }
             set_cloexec(fd);
-#endif
         }
         memset(listeners + i, 0, sizeof(listeners[i]));
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
