@@ -425,7 +425,12 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
 
-    return &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
+    {
+        int flag = 0;
+        socklen_t len = sizeof(flag);
+        assert(0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len) && flag == 1);
+    }
+    return &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 }
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)

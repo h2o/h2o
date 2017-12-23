@@ -19,9 +19,12 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#define H2O_USE_LIBUV 0
+
 #include <errno.h>
 #include <limits.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -157,7 +160,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 static int create_listener(void)
 {
     struct sockaddr_in addr;
-    int fd, reuseaddr_flag = 1;
+    int fd, reuseaddr_flag = 1, tcp_nodelay_flag = 1;
     h2o_socket_t *sock;
 
     memset(&addr, 0, sizeof(addr));
@@ -167,6 +170,7 @@ static int create_listener(void)
 
     if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &tcp_nodelay_flag, sizeof(tcp_nodelay_flag)) != 0 ||
         bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, SOMAXCONN) != 0) {
         return -1;
     }

@@ -24,6 +24,7 @@
 #include <inttypes.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -353,9 +354,10 @@ int main(int argc, char **argv)
     }
 
     if (mode_listen) {
-        int fd, reuseaddr_flag = 1;
+        int fd, reuseaddr_flag = 1, tcp_nodelay_flag = 1;
         if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
             setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
+            setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &tcp_nodelay_flag, sizeof(tcp_nodelay_flag)) != 0 ||
             bind(fd, res->ai_addr, res->ai_addrlen) != 0 || listen(fd, SOMAXCONN) != 0) {
             fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
             exit(1);

@@ -974,6 +974,11 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
             goto Error;
     }
 #endif
+    { /* set TCP_NODELAY, ignore error */
+        int flag = 1;
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+    }
+
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
     if (listen(fd, H2O_SOMAXCONN) != 0)
@@ -1133,11 +1138,14 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 switch (conf.run_mode) {
                 case RUN_MODE_WORKER:
                     if (conf.server_starter.fds != NULL) {
+                        int tcp_nodelay_flag = 1;
                         if ((fd = find_listener_from_server_starter(ai->ai_addr)) == -1) {
                             h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname,
                                                        servname);
                             freeaddrinfo(res);
                             return -1;
+                        } else if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &tcp_nodelay_flag, sizeof(tcp_nodelay_flag)) != 0) {
+                            /* ignore error */
                         }
                     } else {
                         if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
