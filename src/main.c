@@ -139,7 +139,6 @@ static struct {
         int *fds;
         char *bound_fd_map; /* has `num_fds` elements, set to 1 if fd[index] was bound to one of the listeners */
         size_t num_fds;
-        char *env_var;
     } server_starter;
     struct listener_config_t **listeners;
     size_t num_listeners;
@@ -869,7 +868,7 @@ static int find_listener_from_server_starter(struct sockaddr *addr)
         struct sockaddr_storage sa;
         socklen_t salen = sizeof(sa);
         if (getsockname(conf.server_starter.fds[i], (void *)&sa, &salen) != 0) {
-            fprintf(stderr, "could not get the socket address of fd %d given as $SERVER_STARTER_PORT\n",
+            fprintf(stderr, "could not get the socket address of fd %d given as $" SERVER_STARTER_ENV_NAME "\n",
                     conf.server_starter.fds[i]);
             exit(EX_CONFIG);
         }
@@ -1991,8 +1990,8 @@ int main(int argc, char **argv)
                 switch (conf.run_mode) {
                 case RUN_MODE_MASTER:
                 case RUN_MODE_DAEMON:
-                    if (getenv("SERVER_STARTER_PORT") != NULL) {
-                        fprintf(stderr, "refusing to start in `%s` mode, environment variable SERVER_STARTER_PORT is already set\n",
+                    if (getenv(SERVER_STARTER_ENV_NAME) != NULL) {
+                        fprintf(stderr, "refusing to start in `%s` mode, environment variable " SERVER_STARTER_ENV_NAME " is already set\n",
                                 optarg);
                         exit(EX_SOFTWARE);
                     }
@@ -2064,9 +2063,7 @@ int main(int argc, char **argv)
             set_cloexec(conf.server_starter.fds[i]);
         conf.server_starter.bound_fd_map = alloca(conf.server_starter.num_fds);
         memset(conf.server_starter.bound_fd_map, 0, conf.server_starter.num_fds);
-        conf.server_starter.env_var = getenv("SERVER_STARTER_PORT");
     }
-    unsetenv("SERVER_STARTER_PORT");
 
     { /* configure */
         yoml_t *yoml;
@@ -2093,15 +2090,17 @@ int main(int argc, char **argv)
         int all_were_bound = 1;
         for (i = 0; i != conf.server_starter.num_fds; ++i) {
             if (!conf.server_starter.bound_fd_map[i]) {
-                fprintf(stderr, "no configuration found for fd:%d passed in by $SERVER_STARTER_PORT\n", conf.server_starter.fds[i]);
+                fprintf(stderr, "no configuration found for fd:%d passed in by $" SERVER_STARTER_ENV_NAME "\n", conf.server_starter.fds[i]);
                 all_were_bound = 0;
+                break;
             }
         }
         if (!all_were_bound) {
-            fprintf(stderr, "note: $SERVER_STARTER_PORT was \"%s\"\n", conf.server_starter.env_var);
+            fprintf(stderr, "note: $" SERVER_STARTER_ENV_NAME " was \"%s\"\n", getenv(SERVER_STARTER_ENV_NAME));
             return EX_CONFIG;
         }
     }
+    unsetenv(SERVER_STARTER_ENV_NAME);
 
     h2o_srand();
     /* handle run_mode == MASTER|TEST */
