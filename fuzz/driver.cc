@@ -266,20 +266,9 @@ static int feeder(int sfd, char *buf, size_t len, h2o_barrier_t **barrier)
     int pair[2];
     struct writer_thread_arg *wta;
 
-    if (
-#ifdef __linux__
-        socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0, pair) == -1
-#else
-        socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == -1
-#endif
-		)
-
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, pair) == -1)
         return -1;
 
-#ifndef __linux__
-    fcntl(pair[0], F_SETFL, O_NONBLOCK);
-    fcntl(pair[1], F_SETFL, O_NONBLOCK);
-#endif
     wta = (struct writer_thread_arg *)malloc(sizeof(*wta));
     wta->fd = pair[0];
     wta->buf = buf;

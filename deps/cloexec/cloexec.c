@@ -53,7 +53,7 @@ Exit:
 int cloexec_pipe(int fds[2])
 {
 #ifdef __linux__
-    return pipe2(fds, O_CLOEXEC | O_NONBLOCK);
+    return pipe2(fds, O_CLOEXEC);
 #else
     int ret = -1;
     pthread_mutex_lock(&cloexec_mutex);
@@ -62,7 +62,6 @@ int cloexec_pipe(int fds[2])
         goto Exit;
     if (set_cloexec(fds[0]) != 0 || set_cloexec(fds[1]) != 0)
         goto Exit;
-
     ret = 0;
 
 Exit:
@@ -74,7 +73,7 @@ Exit:
 int cloexec_socket(int domain, int type, int protocol)
 {
 #ifdef __linux__
-    return socket(domain, type | SOCK_CLOEXEC | SOCK_NONBLOCK, protocol);
+    return socket(domain, type | SOCK_CLOEXEC, protocol);
 #else
     int fd = -1;
     pthread_mutex_lock(&cloexec_mutex);

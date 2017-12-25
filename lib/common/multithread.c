@@ -114,9 +114,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
         perror("pipe");
         abort();
     }
-    fcntl(fds[0], F_SETFL, O_NONBLOCK);
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
-
     queue->async.write = fds[1];
     queue->async.read = h2o_evloop_socket_create(loop, fds[0], 0);
 #endif

@@ -352,7 +352,6 @@ int do_export(h2o_socket_t *_sock, h2o_socket_export_t *info)
 
 h2o_socket_t *do_import(h2o_loop_t *loop, h2o_socket_export_t *info)
 {
-    fcntl(info->fd, F_SETFL, O_NONBLOCK);
     return h2o_evloop_socket_create(loop, info->fd, 0);
 }
 
@@ -408,6 +407,7 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
+    fcntl(fd, F_SETFL, O_NONBLOCK); /* not always needed under linux, the caller may already set this flag */
     return &create_socket(loop, fd, flags)->super;
 }
 
@@ -435,9 +435,7 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 
     if ((fd = cloexec_socket(addr->sa_family, SOCK_STREAM, 0)) == -1)
         return NULL;
-#ifndef __linux__
     fcntl(fd, F_SETFL, O_NONBLOCK);
-#endif
     if (!(connect(fd, addr, addrlen) == 0 || errno == EINPROGRESS)) {
         close(fd);
         return NULL;
