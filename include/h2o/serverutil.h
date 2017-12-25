@@ -42,7 +42,7 @@
  * environment variable name for listening socket's addr and fd
  * example: 127.0.0.1:80=3;/tmp/sock=4
  */
-#define SERVER_STARTER_ENV_NAME "SERVER_STARTER_PORT"
+#define SERVER_STARTER_PORT "SERVER_STARTER_PORT"
 
 /**
  * equivalent of signal(3)

@@ -89,10 +89,10 @@ size_t h2o_server_starter_get_fds(int **_fds)
     size_t t;
     H2O_VECTOR(int) fds = {NULL};
 
-    if ((ports_env = getenv(SERVER_STARTER_ENV_NAME)) == NULL)
+    if ((ports_env = getenv(SERVER_STARTER_PORT)) == NULL)
         return 0;
     if (ports_env[0] == '\0') {
-        fprintf(stderr, "$" SERVER_STARTER_ENV_NAME " is empty\n");
+        fprintf(stderr, "$" SERVER_STARTER_PORT " is empty\n");
         return SIZE_MAX;
     }
 
@@ -101,11 +101,11 @@ size_t h2o_server_starter_get_fds(int **_fds)
         if ((end = strchr(start, ';')) == NULL)
             end = start + strlen(start);
         if ((eq = memchr(start, '=', end - start)) == NULL) {
-            fprintf(stderr, "invalid $" SERVER_STARTER_ENV_NAME ", an element without `=` in: %s\n", ports_env);
+            fprintf(stderr, "invalid $" SERVER_STARTER_PORT ", an element without `=` in: %s\n", ports_env);
             goto Error;
         }
         if ((t = h2o_strtosize(eq + 1, end - eq - 1)) == SIZE_MAX) {
-            fprintf(stderr, "invalid file descriptor number in $" SERVER_STARTER_ENV_NAME ": %s\n", ports_env);
+            fprintf(stderr, "invalid file descriptor number in $" SERVER_STARTER_PORT ": %s\n", ports_env);
             goto Error;
         }
         h2o_vector_reserve(NULL, &fds, fds.size + 1);

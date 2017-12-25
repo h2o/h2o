@@ -28,27 +28,27 @@ static void test_server_starter(void)
     int *fds;
     size_t num_fds;
 
-    unsetenv(SERVER_STARTER_ENV_NAME);
+    unsetenv(SERVER_STARTER_PORT);
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 0);
 
-    setenv(SERVER_STARTER_ENV_NAME, "0.0.0.0:80=3", 1);
+    setenv(SERVER_STARTER_PORT, "0.0.0.0:80=3", 1);
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 1);
     ok(fds[0] == 3);
 
-    setenv(SERVER_STARTER_ENV_NAME, "0.0.0.0:80=3;/tmp/foo.sock=4", 1);
+    setenv(SERVER_STARTER_PORT, "0.0.0.0:80=3;/tmp/foo.sock=4", 1);
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 2);
     ok(fds[0] == 3);
     ok(fds[1] == 4);
 
-    setenv(SERVER_STARTER_ENV_NAME, "0.0.0.0:80=foo", 1);
+    setenv(SERVER_STARTER_PORT, "0.0.0.0:80=foo", 1);
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == SIZE_MAX);
 
     /* without bind address */
-    setenv(SERVER_STARTER_ENV_NAME, "50908=4", 1);
+    setenv(SERVER_STARTER_PORT, "50908=4", 1);
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 1);
     ok(fds[0] == 4);
