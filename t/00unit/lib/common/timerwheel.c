@@ -21,17 +21,15 @@
  */
 #include <inttypes.h>
 #include "../../test.h"
-#include "../../../../include/h2o.h"
-#include "../../../../include/h2o/socket.h"
+#include "../../../../include/h2o/timer.h"
 
-#if !H2O_USE_LIBUV
-int invokes = 0;
-static void my_callback(h2o_timeout_t *timer)
+static int invokes = 0;
+static void my_callback(h2o_timer_t *timer)
 {
     invokes++;
 }
 
-int rseed = 13;
+static int rseed = 13;
 
 static inline int lcg_rand()
 {
@@ -46,12 +44,12 @@ void test_add_fixed_timers()
     uint32_t abs_wtime = 3;
 
     h2o_timer_init_wheel(testwheel, abs_wtime);
-    h2o_timeout_t timers[N];
+    h2o_timer_t timers[N];
     /* add timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
-        h2o_timeout_init(&timers[i], my_callback);
-        h2o_timer_link_(testwheel, &timers[i], expiry);
+        h2o_timer_init(&timers[i], my_callback);
+        h2o_timer_link(testwheel, &timers[i], expiry);
     }
 
     /* run the wheel */
@@ -65,18 +63,18 @@ void test_del_timers()
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
 
     uint32_t abs_wtime = 3;
-    h2o_timeout_t timers[N];
+    h2o_timer_t timers[N];
     h2o_timer_init_wheel(testwheel, abs_wtime);
     /* add N timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
-        h2o_timeout_init(&timers[i], my_callback);
-        h2o_timer_link_(testwheel, &timers[i], expiry);
+        h2o_timer_init(&timers[i], my_callback);
+        h2o_timer_link(testwheel, &timers[i], expiry);
     }
 
     /* delete N-1 timers, so there should be 1 timer left */
     for (i = 0; i < N - 1; i++) {
-        h2o_timeout_unlink(&timers[i]);
+        h2o_timer_unlink(&timers[i]);
     }
 
     /* run the wheel */
@@ -93,12 +91,12 @@ void test_add_rand_timers()
 
     uint32_t abs_wtime = 3;
     h2o_timer_init_wheel(testwheel, abs_wtime);
-    h2o_timeout_t timers[N];
+    h2o_timer_t timers[N];
     /* add timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + lcg_rand() % N;
-        h2o_timeout_init(&timers[i], my_callback);
-        h2o_timer_link_(testwheel, &timers[i], expiry);
+        h2o_timer_init(&timers[i], my_callback);
+        h2o_timer_link(testwheel, &timers[i], expiry);
     }
 
     int start = invokes;
@@ -113,16 +111,16 @@ void test_invalid_timer()
     h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
     h2o_timer_init_wheel(testwheel, 3);
 
-    h2o_timeout_t timer = (h2o_timeout_t){};
+    h2o_timer_t timer = (h2o_timer_t){{NULL}};
     timer.cb = my_callback;
 
 #define NTIMERS 54
-    h2o_timeout_t *arr = calloc(NTIMERS, sizeof(h2o_timeout_t));
+    h2o_timer_t *arr = calloc(NTIMERS, sizeof(h2o_timer_t));
     uint32_t expiry = 11;
     int i;
     for (i = 0; i < NTIMERS; i++) {
         arr[i].cb = my_callback;
-        h2o_timer_link_(testwheel, &arr[i], expiry);
+        h2o_timer_link(testwheel, &arr[i], expiry);
         h2o_timer_show_wheel(testwheel);
         expiry++;
     }
@@ -140,14 +138,10 @@ void test_invalid_timer()
     }
 }
 
-#endif
-
 void test_lib__common__timerwheel_c()
 {
-#if !H2O_USE_LIBUV
     subtest("add fixed timers", test_add_fixed_timers);
     subtest("add random timers", test_add_rand_timers);
     subtest("del fixed timers", test_del_timers);
     subtest("test out-of-range timer", test_invalid_timer);
-#endif
 }

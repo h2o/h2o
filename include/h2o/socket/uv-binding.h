@@ -22,6 +22,7 @@
 #ifndef h2o__uv_binding_h
 #define h2o__uv_binding_h
 
+#include <string.h>
 #include <uv.h>
 
 #if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
@@ -33,22 +34,28 @@ typedef uv_loop_t h2o_loop_t;
 h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb);
 h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb);
 
+typedef struct st_h2o_timeout_t h2o_timeout_t;
+typedef void (*h2o_timeout_cb)(h2o_timeout_t *timer);
+struct st_h2o_timeout_t {
+    uv_timer_t uv_timer;
+    int is_linked;
+    h2o_timeout_cb cb;
+};
+
+void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, h2o_timeout_t *timer);
+int h2o_timeout_is_linked(h2o_timeout_t *timer);
+void h2o_timeout_unlink(h2o_timeout_t *timer);
+
+/* inline definitions */
+
 static inline uint64_t h2o_now(h2o_loop_t *loop)
 {
     return uv_now(loop);
 }
 
-struct st_h2o_timeout_t;
-typedef void (*h2o_timeout_cb)(struct st_h2o_timeout_t *timer);
-typedef struct st_h2o_timeout_t {
-    uv_timer_t uv_timer;
-    int is_linked;
-    h2o_timeout_cb cb;
-} h2o_timeout_t;
-
 static inline void h2o_timeout_init(h2o_timeout_t *timer, h2o_timeout_cb cb)
 {
-    *timer = (h2o_timeout_t){0};
+    memset(timer, 0, sizeof(*timer));
     timer->cb = cb;
 }
 
