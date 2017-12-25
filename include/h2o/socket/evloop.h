@@ -52,6 +52,9 @@ struct st_h2o_timeout_backend_properties_t {
     char _dummy; /* sizeof(empty_struct) differs bet. C (GCC extension) and C++ */
 };
 
+/**
+ * Note: fd should have SOCK_NONBLOCK(aka: O_NONBLOCK) flag set when calling this function
+ */
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 

@@ -354,12 +354,20 @@ int main(int argc, char **argv)
 
     if (mode_listen) {
         int fd, reuseaddr_flag = 1;
-        if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+        if (
+#ifdef __linux__
+            (fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0)) == -1 ||
+#else
+            (fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+#endif
             setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
             bind(fd, res->ai_addr, res->ai_addrlen) != 0 || listen(fd, SOMAXCONN) != 0) {
             fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
             exit(1);
         }
+#ifndef __linux__
+        fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
         h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_socket_read_start(listen_sock, on_accept);
     } else {

@@ -165,12 +165,19 @@ static int create_listener(void)
     addr.sin_addr.s_addr = htonl(0x7f000001);
     addr.sin_port = htons(7890);
 
-    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+    if (
+#ifdef __linux__
+        (fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0)) == -1 ||
+#else
+        (fd = socket(AF_INET, SOCK_STREAM, 0)) == -1 ||
+#endif
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr_flag, sizeof(reuseaddr_flag)) != 0 ||
         bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(fd, SOMAXCONN) != 0) {
         return -1;
     }
-
+#ifndef __linux__
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+#endif
     sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
     h2o_socket_read_start(sock, on_accept);
 
