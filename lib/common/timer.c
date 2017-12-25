@@ -114,7 +114,6 @@ uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
         for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++) {
             h2o_timer_wheel_slot_t *slot = &w->wheel[i][j];
             if (!h2o_linklist_is_empty(slot)) {
-                h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, slot->next);
                 /* return an approximation for the expiry */
                 ret = (1 << ((i - 1) * H2O_TIMERWHEEL_BITS_PER_WHEEL));
                 while (--i > 0) {
