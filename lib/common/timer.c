@@ -228,59 +228,30 @@ int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
 
 size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
 {
-    int i, j, now_slot, prev_slot, end_slot;
-    uint64_t abs_wtime = w->last_run;
     size_t count = 0;
     h2o_linklist_t todo;
+
+    assert(w->last_run <= now);
+
     h2o_linklist_init_anchor(&todo);
-    /* update the timestamp for the timerwheel */
-    assert(now >= w->last_run);
 
-    w->last_run = now;
-
-    /* how the wheel is run: based on abs_wtime and now, we should be able
-     * to figure out the wheel id on which most update happens. Most likely
-     * the operating wheel is wheel 0 (wid == 0), since we optimize the case
-     * where h2o_timer_run_wheel() is called very frequently, i.e the gap
-     * between abs_wtime and now is normally small. */
-    int wid = timer_wheel(w->num_wheels, abs_wtime ^ now);
-    WHEEL_DEBUG(" wtime %" PRIu64 ", now %" PRIu64 " wid %d\n", abs_wtime, now, wid);
-
-    if (wid > 0) {
-        /* now collect all the expired timers on wheels [0, wid-1] */
-        for (j = 0; j <= wid; j++) {
-            prev_slot = timer_slot(j, abs_wtime);
-            now_slot = timer_slot(j, now);
-            end_slot = j == wid ? now_slot : H2O_TIMERWHEEL_SLOTS_MASK;
-            /* all slots between 0 and end_slot are expired */
-            /* FIXME: we could start from prev_slot, but the logic is currently broken */
-            for (i = /*prev_slot*/ 0; i <= end_slot; i++) {
-                if (i == end_slot) {
-                    h2o_linklist_t *node, *next;
-                    h2o_timer_wheel_slot_t *slot = &w->wheel[j][i];
-                    for (node = slot->next; node != slot; node = next) {
-                        next = node->next;
-                        h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, node);
-                        if (entry->expire_at <= now) {
-                            h2o_linklist_unlink(&entry->_link);
-                            h2o_linklist_insert(&todo, node);
-                        }
-                    }
-                } else {
-                    h2o_linklist_insert_list(&todo, &w->wheel[j][i]);
-                }
-            }
-        }
-
-        /* cascade the timers on wheel[wid][now_slot] */
-        cascade(w, wid, now_slot);
-    } else {
-        prev_slot = timer_slot(0, abs_wtime);
-        now_slot = timer_slot(0, now);
-        for (i = prev_slot; i <= now_slot; i++) {
-            h2o_linklist_insert_list(&todo, &w->wheel[0][i]);
-        }
+    while (1) {
+        /* collect slots on the first wheel */
+        int slot = w->last_run & H2O_TIMERWHEEL_SLOTS_MASK;
+        do {
+            h2o_linklist_insert_list(&todo, &w->wheel[0][slot]);
+            if (w->last_run == now)
+                goto Collected;
+            ++w->last_run;
+        } while (++slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL);
+        /* cascade */
+        int wheel = 1;
+        do {
+            slot = (w->last_run >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL)) & H2O_TIMERWHEEL_SLOTS_MASK;
+            cascade(w, wheel, slot);
+        } while (slot == 0 && ++wheel < w->num_wheels);
     }
+Collected:
 
     /* expiration processing */
     while (!h2o_linklist_is_empty(&todo)) {
