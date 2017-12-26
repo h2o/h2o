@@ -130,7 +130,7 @@ void test_invalid_timer()
     expiry = 11;
     for (i = 0; i < NTIMERS; i++) {
         h2o_timer_show_wheel(testwheel);
-        int ret = h2o_timer_run_wheel(testwheel, expiry);
+        size_t ret = h2o_timer_run_wheel(testwheel, expiry);
         if (ret != 1) {
             h2o_timer_show_wheel(testwheel);
             abort();
