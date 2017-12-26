@@ -166,7 +166,7 @@ static void test_exhaustive_on_expire(h2o_timer_t *timer)
 static void test_exhaustive(void)
 {
     h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(2, 0);
-    h2o_timer_abs_t max_interval = H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
+    h2o_timer_abs_t max_interval = H2O_TIMERWHEEL_SLOTS_PER_WHEEL * (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1) + 1;
     h2o_timer_t *timer_buf;
     size_t timer_buf_size = max_interval * (max_interval + 1) / 2;
 
