@@ -425,11 +425,36 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     fcntl(fd, F_SETFL, O_NONBLOCK);
 #endif
 
-    if (0) { /* not apply to AF_UNIX sockets */
+
+/**
+ * the listening socket should already have TCP_NODELAY set.
+ * if accepted socket can inherit this option form listing socket, do not call setsockopt again
+ * FIXME: check more platforms: e.g. OpenBSD, Solaris, AIX
+ * currently done under:
+ *  linux
+ *  FreeBSD version bigger than 4
+ *  NetBSD verison equal or bigger than 1.6(@see NetBSD6.0/usr/share/man/html4/tcp.html)
+ */
+#if !(defined(__linux__) || (defined(__FreeBSD__) && (__FreeBSD__ > 4)) ||                                                         \
+      (defined(__NetBSD__) && (__NetBSD_Version__ >= 106000000)))
+    {
+        /* set TCP_NODELAY, ignore error */
+        int flag = 1;
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+    }
+#else
+#if !defined(NDEBUG) && defined(DEBUG)
+    {
+        /* check  TCP_NODELAY flag when debug */
         int flag = 0;
         socklen_t len = sizeof(flag);
-        assert(0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len) && flag == 1);
+        if (0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len)) {
+            assert(flag == 1);
+        }
     }
+#endif
+#endif
+
     return &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 }
 
