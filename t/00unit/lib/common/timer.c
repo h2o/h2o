@@ -20,6 +20,7 @@
  * IN THE SOFTWARE.
  */
 #include <inttypes.h>
+#include <sys/mman.h>
 #include "../../test.h"
 #include "../../../../include/h2o/timer.h"
 
@@ -138,10 +139,83 @@ void test_invalid_timer()
     }
 }
 
+static struct {
+    uint64_t now;
+    size_t num_linked;
+    h2o_linklist_t unused;
+} test_exhaustive_data;
+
+static void test_exhaustive_on_expire(h2o_timer_t *timer)
+{
+    if (test_exhaustive_data.now != timer->expire_at) {
+        note("unexpected expire time; expected: %" PRIu64 ", actual: %" PRIu64, timer->expire_at, test_exhaustive_data.now);
+        ok(0);
+    }
+    if (test_exhaustive_data.num_linked == 0) {
+        note("now: %" PRIu64, test_exhaustive_data.now);
+        ok(!"unexpected num_linked");
+    }
+    --test_exhaustive_data.num_linked;
+    h2o_linklist_insert(&test_exhaustive_data.unused, &timer->_link);
+}
+
+static void test_exhaustive(void)
+{
+    h2o_timer_wheel_t wheel;
+    h2o_timer_abs_t max_interval = H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL; /* TODO expand */
+    h2o_timer_t *timer_buf;
+    size_t timer_buf_size = max_interval * (max_interval + 1) / 2;
+
+    test_exhaustive_data.now = 0;
+    test_exhaustive_data.num_linked = 0;
+    h2o_linklist_init_anchor(&test_exhaustive_data.unused);
+
+    { /* use our own allocator so that a debug version of malloc (with guard pages) can be used for running other tests */
+        size_t i;
+        timer_buf = mmap(NULL, sizeof(*timer_buf) * timer_buf_size, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        for (i = 0; i != timer_buf_size; ++i) {
+            timer_buf[i].cb = test_exhaustive_on_expire;
+            h2o_linklist_insert(&test_exhaustive_data.unused, &timer_buf[i]._link);
+        }
+    }
+
+    h2o_timer_init_wheel(&wheel, test_exhaustive_data.now);
+
+    for (; test_exhaustive_data.now < max_interval * 2; ++test_exhaustive_data.now) {
+        h2o_timer_abs_t i;
+        for (i = 0; i < max_interval; ++i) {
+            assert(!h2o_linklist_is_empty(&test_exhaustive_data.unused));
+            h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, test_exhaustive_data.unused.next);
+            h2o_linklist_unlink(&timer->_link);
+            h2o_timer_link(&wheel, timer, test_exhaustive_data.now + i);
+            ++test_exhaustive_data.num_linked;
+        }
+        h2o_timer_run_wheel(&wheel, test_exhaustive_data.now);
+        size_t num_linked_expected;
+        if (test_exhaustive_data.now < max_interval) {
+            num_linked_expected =
+                (test_exhaustive_data.now + 1) * max_interval - (test_exhaustive_data.now + 1) * (test_exhaustive_data.now + 2) / 2;
+        } else {
+            num_linked_expected = max_interval * (max_interval - 1) / 2;
+        }
+        if (test_exhaustive_data.num_linked != num_linked_expected) {
+            note("unexpcted number of objects; expected: %zu, actual %zu, now: %" PRIu64, num_linked_expected,
+                 test_exhaustive_data.num_linked, test_exhaustive_data.now);
+            ok(0);
+        }
+    }
+    for (; test_exhaustive_data.now < max_interval * 3; ++test_exhaustive_data.now)
+        h2o_timer_run_wheel(&wheel, test_exhaustive_data.now);
+    ok(test_exhaustive_data.num_linked == 0);
+
+    munmap(timer_buf, sizeof(*timer_buf) * timer_buf_size);
+}
+
 void test_lib__common__timerwheel_c()
 {
     subtest("add fixed timers", test_add_fixed_timers);
     subtest("add random timers", test_add_rand_timers);
     subtest("del fixed timers", test_del_timers);
     subtest("test out-of-range timer", test_invalid_timer);
+    subtest("exhaustive", test_exhaustive);
 }
