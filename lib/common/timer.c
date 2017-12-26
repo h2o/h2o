@@ -35,12 +35,6 @@ struct st_h2o_timer_wheel_t {
     h2o_timer_wheel_slot_t wheel[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
 };
 
-static int clz(uint64_t n)
-{
-    H2O_BUILD_ASSERT(sizeof(unsigned long long) == 8);
-    return __builtin_clzll(n);
-}
-
 /* debug macros and functions */
 //#define WANT_DEBUG
 #ifdef WANT_DEBUG
@@ -94,7 +88,9 @@ static int timer_wheel(size_t num_wheels, uint64_t delta)
     delta &= H2O_TIMERWHEEL_MAX_TIMER(num_wheels);
     if (delta == 0)
         return 0;
-    return (H2O_TIMERWHEEL_SLOTS_MASK - clz(delta)) / H2O_TIMERWHEEL_BITS_PER_WHEEL;
+
+    H2O_BUILD_ASSERT(sizeof(unsigned long long) == 8);
+    return (63 - __builtin_clzll(delta)) / H2O_TIMERWHEEL_BITS_PER_WHEEL;
 }
 
 /* calculate slot number based on the absolute expiration time */
