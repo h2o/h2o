@@ -27,7 +27,13 @@
 #include "h2o/socket.h"
 
 #define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
-#define H2O_TIMERWHEEL_MAX_TIMER ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * H2O_TIMERWHEEL_MAX_WHEELS)) - 1)
+#define H2O_TIMERWHEEL_MAX_TIMER(num_wheels) ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * (num_wheels))) - 1)
+
+struct st_h2o_timer_wheel_t {
+    uint64_t last_run; /* the last time h2o_timer_run_wheel was called */
+    size_t num_wheels;
+    h2o_timer_wheel_slot_t wheel[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
+};
 
 static int clz(uint64_t n)
 {
@@ -71,7 +77,7 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
 {
     int i, slot;
 
-    for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
+    for (i = 0; i < w->num_wheels; i++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
             h2o_timer_wheel_slot_t *s = &(w->wheel[i][slot]);
             h2o_timer_slot_show_wheel(s, i, slot);
@@ -83,9 +89,9 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
 
 /* timer APIs */
 
-static int timer_wheel(uint64_t abs_wtime, uint64_t abs_expire)
+static int timer_wheel(size_t num_wheels, uint64_t abs_wtime, uint64_t abs_expire)
 {
-    uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_MAX_TIMER;
+    uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_MAX_TIMER(num_wheels);
     if (delta == 0)
         return 0;
     return (H2O_TIMERWHEEL_SLOTS_MASK - clz(delta)) / H2O_TIMERWHEEL_BITS_PER_WHEEL;
@@ -110,7 +116,7 @@ uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
         }
     }
     ret = w->last_run;
-    for (i = 1; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
+    for (i = 1; i < w->num_wheels; i++) {
         for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++) {
             h2o_timer_wheel_slot_t *slot = &w->wheel[i][j];
             if (!h2o_linklist_is_empty(slot)) {
@@ -136,7 +142,7 @@ static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t
 
     timer->expire_at = abs_expire;
 
-    wid = timer_wheel(w->last_run, abs_expire);
+    wid = timer_wheel(w->num_wheels, w->last_run, abs_expire);
     sid = timer_slot(wid, abs_expire);
     slot = &(w->wheel[wid][sid]);
 
@@ -157,17 +163,37 @@ void h2o_timer_unlink(h2o_timer_t *timer)
 /**
  * initializes a timerwheel
  */
-void h2o_timer_init_wheel(h2o_timer_wheel_t *w, uint64_t now)
+h2o_timer_wheel_t *h2o_timer_create_wheel(size_t num_wheels, uint64_t now)
 {
-    int i, j;
-    memset(w, 0, sizeof(h2o_timer_wheel_t));
+    h2o_timer_wheel_t *w = h2o_mem_alloc(offsetof(h2o_timer_wheel_t, wheel) + sizeof(w->wheel[0]) * num_wheels);
+    size_t i, j;
 
     w->last_run = now;
-    for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++) {
+    w->num_wheels = num_wheels;
+    for (i = 0; i < w->num_wheels; i++) {
+        memset(&w->wheel[i], 0, sizeof(w->wheel[i]));
         for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++) {
             h2o_linklist_init_anchor(&w->wheel[i][j]);
         }
     }
+
+    return w;
+}
+
+void h2o_timer_destroy_wheel(h2o_timer_wheel_t *w)
+{
+    size_t i, j;
+
+    for (i = 0; i < w->num_wheels; ++i) {
+        for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++j) {
+            while (!h2o_linklist_is_empty(&w->wheel[i][j])) {
+                h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, w->wheel[i][j].next);
+                h2o_timer_unlink(entry);
+            }
+        }
+    }
+
+    free(w);
 }
 
 /**
@@ -192,7 +218,7 @@ int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
 {
     int i, slot;
 
-    for (i = 0; i < H2O_TIMERWHEEL_MAX_WHEELS; i++)
+    for (i = 0; i < w->num_wheels; i++)
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++)
             if (!h2o_linklist_is_empty(&w->wheel[i][slot]))
                 return 0;
@@ -217,7 +243,7 @@ size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
      * the operating wheel is wheel 0 (wid == 0), since we optimize the case
      * where h2o_timer_run_wheel() is called very frequently, i.e the gap
      * between abs_wtime and now is normally small. */
-    int wid = timer_wheel(abs_wtime, now);
+    int wid = timer_wheel(w->num_wheels, abs_wtime, now);
     WHEEL_DEBUG(" wtime %" PRIu64 ", now %" PRIu64 " wid %d\n", abs_wtime, now, wid);
 
     if (wid > 0) {

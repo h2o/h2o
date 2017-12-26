@@ -40,11 +40,10 @@ static inline int lcg_rand()
 #define N 14000
 void test_add_fixed_timers()
 {
-    int i;
-    h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
     uint32_t abs_wtime = 3;
+    h2o_timer_wheel_t *testwheel = h2o_timer_create_wheel(6, abs_wtime);
+    int i;
 
-    h2o_timer_init_wheel(testwheel, abs_wtime);
     h2o_timer_t timers[N];
     /* add timers */
     for (i = 0; i < N; i++) {
@@ -56,16 +55,17 @@ void test_add_fixed_timers()
     /* run the wheel */
     ok(h2o_timer_run_wheel(testwheel, 139) == 132);
     h2o_timer_show_wheel(testwheel);
+
+    h2o_timer_destroy_wheel(testwheel);
 }
 
 void test_del_timers()
 {
-    int i;
-    h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
-
     uint32_t abs_wtime = 3;
+    h2o_timer_wheel_t *testwheel = h2o_timer_create_wheel(6, abs_wtime);
     h2o_timer_t timers[N];
-    h2o_timer_init_wheel(testwheel, abs_wtime);
+    int i;
+
     /* add N timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
@@ -83,16 +83,17 @@ void test_del_timers()
     h2o_timer_show_wheel(testwheel);
     ok(h2o_timer_run_wheel(testwheel, N + 7) == 1);
     h2o_timer_show_wheel(testwheel);
+
+    h2o_timer_destroy_wheel(testwheel);
 }
 
 void test_add_rand_timers()
 {
-    int i;
-    h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
-
     uint32_t abs_wtime = 3;
-    h2o_timer_init_wheel(testwheel, abs_wtime);
+    h2o_timer_wheel_t *testwheel = h2o_timer_create_wheel(6, abs_wtime);
     h2o_timer_t timers[N];
+    int i;
+
     /* add timers */
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + lcg_rand() % N;
@@ -105,12 +106,13 @@ void test_add_rand_timers()
     ok(h2o_timer_run_wheel(testwheel, N - 1 + abs_wtime) == N);
     ok(invokes - start == N);
     h2o_timer_show_wheel(testwheel);
+
+    h2o_timer_destroy_wheel(testwheel);
 }
 
 void test_invalid_timer()
 {
-    h2o_timer_wheel_t *testwheel = calloc(1, sizeof(h2o_timer_wheel_t));
-    h2o_timer_init_wheel(testwheel, 3);
+    h2o_timer_wheel_t *testwheel = h2o_timer_create_wheel(6, 3);
 
     h2o_timer_t timer = (h2o_timer_t){{NULL}};
     timer.cb = my_callback;
@@ -137,6 +139,8 @@ void test_invalid_timer()
         }
         expiry++;
     }
+
+    h2o_timer_destroy_wheel(testwheel);
 }
 
 static struct {
@@ -161,8 +165,8 @@ static void test_exhaustive_on_expire(h2o_timer_t *timer)
 
 static void test_exhaustive(void)
 {
-    h2o_timer_wheel_t wheel;
-    h2o_timer_abs_t max_interval = H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL; /* TODO expand */
+    h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(2, 0);
+    h2o_timer_abs_t max_interval = H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
     h2o_timer_t *timer_buf;
     size_t timer_buf_size = max_interval * (max_interval + 1) / 2;
 
@@ -179,18 +183,16 @@ static void test_exhaustive(void)
         }
     }
 
-    h2o_timer_init_wheel(&wheel, test_exhaustive_data.now);
-
     for (; test_exhaustive_data.now < max_interval * 2; ++test_exhaustive_data.now) {
         h2o_timer_abs_t i;
         for (i = 0; i < max_interval; ++i) {
             assert(!h2o_linklist_is_empty(&test_exhaustive_data.unused));
             h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, test_exhaustive_data.unused.next);
             h2o_linklist_unlink(&timer->_link);
-            h2o_timer_link(&wheel, timer, test_exhaustive_data.now + i);
+            h2o_timer_link(wheel, timer, test_exhaustive_data.now + i);
             ++test_exhaustive_data.num_linked;
         }
-        h2o_timer_run_wheel(&wheel, test_exhaustive_data.now);
+        h2o_timer_run_wheel(wheel, test_exhaustive_data.now);
         size_t num_linked_expected;
         if (test_exhaustive_data.now < max_interval) {
             num_linked_expected =
@@ -205,10 +207,11 @@ static void test_exhaustive(void)
         }
     }
     for (; test_exhaustive_data.now < max_interval * 3; ++test_exhaustive_data.now)
-        h2o_timer_run_wheel(&wheel, test_exhaustive_data.now);
+        h2o_timer_run_wheel(wheel, test_exhaustive_data.now);
     ok(test_exhaustive_data.num_linked == 0);
 
     munmap(timer_buf, sizeof(*timer_buf) * timer_buf_size);
+    h2o_timer_destroy_wheel(wheel);
 }
 
 void test_lib__common__timerwheel_c()

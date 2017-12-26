@@ -457,8 +457,8 @@ h2o_evloop_t *create_evloop(size_t sz)
 
     update_now(loop);
 
-    h2o_timer_init_wheel(&loop->_timerwheel, loop->_now);
-    h2o_timer_run_wheel(&loop->_timerwheel, loop->_now);
+    loop->_timerwheel = h2o_timer_create_wheel(6 /* TODO adjust num_wheels */, loop->_now);
+    h2o_timer_run_wheel(loop->_timerwheel, loop->_now); /* FIXME remove this? */
     h2o_evloop_run_pending(loop);
 
     return loop;
@@ -473,7 +473,7 @@ void update_now(h2o_evloop_t *loop)
 
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 {
-    uint64_t wake_at = h2o_timer_get_wake_at(&loop->_timerwheel);
+    uint64_t wake_at = h2o_timer_get_wake_at(loop->_timerwheel);
 
     update_now(loop);
 
@@ -555,7 +555,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     struct st_h2o_evloop_socket_t *sock;
 
     /* timeouts are governed by the application and MUST be destroyed prior to destroying the loop */
-    assert(h2o_timer_wheel_is_empty(&loop->_timerwheel));
+    assert(h2o_timer_wheel_is_empty(loop->_timerwheel));
 
     /* dispose all socket */
     while ((sock = loop->_pending_as_client) != NULL) {
@@ -578,6 +578,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     }
 
     /* lastly we need to free loop memory */
+    h2o_timer_destroy_wheel(loop->_timerwheel);
     free(loop);
 }
 
@@ -589,7 +590,7 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 
     /* run the pending callbacks */
     h2o_evloop_run_pending(loop);
-    h2o_timer_run_wheel(&loop->_timerwheel, loop->_now);
+    h2o_timer_run_wheel(loop->_timerwheel, loop->_now);
     h2o_evloop_run_pending(loop);
 
     /* assert h2o_timer_run_wheel has called run_pending */

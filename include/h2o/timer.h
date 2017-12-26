@@ -27,14 +27,10 @@
 /* link list of h2o_timer_t */
 typedef h2o_linklist_t h2o_timer_wheel_slot_t;
 
-#define H2O_TIMERWHEEL_MAX_WHEELS 6
 #define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
 #define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
 
-typedef struct st_h2o_timer_wheel_t {
-    h2o_timer_wheel_slot_t wheel[H2O_TIMERWHEEL_MAX_WHEELS][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
-    uint64_t last_run; /* the last time h2o_timer_run_wheel was called */
-} h2o_timer_wheel_t;
+typedef struct st_h2o_timer_wheel_t h2o_timer_wheel_t;
 
 typedef struct st_h2o_timer_t h2o_timer_t;
 typedef void (*h2o_timer_cb)(h2o_timer_t *timer);
@@ -65,9 +61,13 @@ void h2o_timer_unlink(h2o_timer_t *timer);
 static int h2o_timer_is_linked(h2o_timer_t *timer);
 
 /**
- * initializes a timerwheel
+ * creates a timerwheel
  */
-void h2o_timer_init_wheel(h2o_timer_wheel_t *w, uint64_t now);
+h2o_timer_wheel_t *h2o_timer_create_wheel(size_t num_wheels, uint64_t now);
+/**
+ * destroys a timerwheel
+ */
+void h2o_timer_destroy_wheel(h2o_timer_wheel_t *wheel);
 /**
  * display the contents of the timerwheel
  */
