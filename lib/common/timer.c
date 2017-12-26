@@ -89,9 +89,9 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
 
 /* timer APIs */
 
-static int timer_wheel(size_t num_wheels, uint64_t abs_wtime, uint64_t abs_expire)
+static int timer_wheel(size_t num_wheels, uint64_t delta)
 {
-    uint64_t delta = (abs_expire ^ abs_wtime) & H2O_TIMERWHEEL_MAX_TIMER(num_wheels);
+    delta &= H2O_TIMERWHEEL_MAX_TIMER(num_wheels);
     if (delta == 0)
         return 0;
     return (H2O_TIMERWHEEL_SLOTS_MASK - clz(delta)) / H2O_TIMERWHEEL_BITS_PER_WHEEL;
@@ -142,7 +142,7 @@ static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t
 
     timer->expire_at = abs_expire;
 
-    wid = timer_wheel(w->num_wheels, w->last_run, abs_expire);
+    wid = timer_wheel(w->num_wheels, abs_expire - w->last_run);
     sid = timer_slot(wid, abs_expire);
     slot = &(w->wheel[wid][sid]);
 
@@ -243,7 +243,7 @@ size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
      * the operating wheel is wheel 0 (wid == 0), since we optimize the case
      * where h2o_timer_run_wheel() is called very frequently, i.e the gap
      * between abs_wtime and now is normally small. */
-    int wid = timer_wheel(w->num_wheels, abs_wtime, now);
+    int wid = timer_wheel(w->num_wheels, abs_wtime ^ now);
     WHEEL_DEBUG(" wtime %" PRIu64 ", now %" PRIu64 " wid %d\n", abs_wtime, now, wid);
 
     if (wid > 0) {
