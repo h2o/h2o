@@ -104,12 +104,14 @@ struct listener_ssl_config_t {
 
 struct listener_config_t {
     int fd;
+#if defined(__linux__) && defined(SO_REUSEPORT)
+    int domain;
+    int so_reuseport;
+    H2O_VECTOR(int) reuseport_fds;
+#endif
     struct sockaddr_storage addr;
     socklen_t addrlen;
-    int domain;
-    int type;
-    int protocol;
-    int so_reuseport;
+
     h2o_hostconf_t **hosts;
     H2O_VECTOR(struct listener_ssl_config_t *) ssl;
     int proxy_protocol;
@@ -793,18 +795,27 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, int domain, int type, int protocol, int so_reuseport, struct sockaddr *addr, socklen_t addrlen,
+static struct listener_config_t *add_listener(int fd, int domain, int so_reuseport, struct sockaddr *addr, socklen_t addrlen,
                                               int is_global, int proxy_protocol)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
     memcpy(&listener->addr, addr, addrlen);
     listener->fd = fd;
-    listener->addrlen = addrlen;
+#if defined(__linux__) && defined(SO_REUSEPORT)
     listener->domain = domain;
-    listener->type = type;
-    listener->protocol = protocol;
     listener->so_reuseport = so_reuseport;
+
+    listener->reuseport_fds.entries = NULL;
+    listener->reuseport_fds.size = 0;
+    listener->reuseport_fds.capacity = 0;
+    if (so_reuseport) {
+        h2o_vector_reserve(NULL, &listener->reuseport_fds, conf.num_threads);
+        listener->reuseport_fds.entries[listener->reuseport_fds.size++] = fd;
+    }
+#endif
+
+    listener->addrlen = addrlen;
     if (is_global) {
         listener->hosts = NULL;
     } else {
@@ -913,7 +924,7 @@ ErrorExit:
 }
 
 static int create_socket_bind_addr_start_listen(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen,
-                                                int so_reuseport)
+                                                int *so_reuseport)
 {
     int fd;
 
@@ -932,10 +943,12 @@ static int create_socket_bind_addr_start_listen(int domain, int type, int protoc
             goto Error;
     }
 #if defined(__linux__) && defined(SO_REUSEPORT)
-    if (so_reuseport) { /* set reuseport */
+    if (*so_reuseport) { /* set reuseport */
         int flag = 1;
-        if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &flag, sizeof(flag)) != 0)
-            goto Error;
+        if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &flag, sizeof(flag)) != 0) {
+            fprintf(stderr, "[warning] failed to set SO_REUSEPORT:%s\n", strerror(errno));
+            *so_reuseport = 0;
+        }
     }
 #endif
 #ifdef TCP_DEFER_ACCEPT
@@ -984,7 +997,7 @@ Error:
 }
 
 static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                             int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int so_reuseport)
+                             int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int *so_reuseport)
 {
     int fd;
 
@@ -1027,10 +1040,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
-
-        if (so_reuseport_node != NULL &&
-            (so_reuseport = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
-            return -1;
+        }
+            if (so_reuseport_node != NULL &&
+                (so_reuseport = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
+                return -1;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
@@ -1050,7 +1063,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             return -1;
         }
         if (so_reuseport) {
-            h2o_configurator_errprintf(cmd, node, "[warning] unix socket does not support SO_REUSEPORT");
+            h2o_configurator_errprintf(cmd, node, "[warning] unix socket does not support so_reuseport");
             so_reuseport = 0;
         }
         sa.sun_family = AF_UNIX;
@@ -1074,8 +1087,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, AF_UNIX, SOCK_STREAM, 0, 0, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL,
-                                    proxy_protocol);
+            listener = add_listener(fd, AF_UNIX, 0, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1106,7 +1118,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (so_reuseport) {
 #if !(defined(__linux__) && defined(SO_REUSEPORT))
             h2o_configurator_errprintf(cmd, node,
-                                       "[warning] SO_REUSEPORT currently should only enabled under linux which support it");
+                                       "[warning] so_reuseport currently should only enabled under linux which support it");
             so_reuseport = 0;
 #endif
         }
@@ -1125,20 +1137,18 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             freeaddrinfo(res);
                             return -1;
                         }
-                    } else {
 #if defined(__linux__) && defined(SO_REUSEPORT)
-                        /**
-                         * socket open should after setuid() call when so_reuseport enabled in case of "user" has been configured
-                         * because: To prevent port hijacking all sockets bound to the same port using so_reuseport must have the
-                         * same uid
-                         */
                         if (so_reuseport) {
-                            /* delay open socket */
-                            fd = -1;
-                        } else
+                            int flag = 1;
+                            if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &flag, sizeof(flag)) != 0) {
+                                fprintf(stderr, "[warning] failed to set SO_REUSEPORT:%s\n", strerror(errno));
+                                so_reuseport = 0;
+                            }
+                        }
 #endif
+                    } else {
                         if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, so_reuseport)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, &so_reuseport)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1147,9 +1157,34 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_family, ai->ai_socktype, ai->ai_protocol, so_reuseport, ai->ai_addr,
-                                        ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                listener = add_listener(fd, ai->ai_family, so_reuseport, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL,
+                                        proxy_protocol);
                 listener_is_new = 1;
+#if defined(__linux__) && defined(SO_REUSEPORT)
+                /**
+                 * socket open for all threads should before setuid() call when so_reuseport enabled
+                 * in case of "user" has been configured.
+                 * because: To prevent port hijacking all sockets bound to the same port using so_reuseport must have the
+                 * same uid
+                 */
+                if (so_reuseport) {
+                    size_t i;
+                    assert(listener->reuseport_fds.capacity == conf.num_threads);
+                    assert(listener->reuseport_fds.size == 1);
+                    /* fprintf(stderr, "[INFO] so_reuseport open reuseport_fds[%d]: %d\n", 0, fd); */
+                    for (i = 1; i < listener->reuseport_fds.capacity; ++i) {
+                        if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
+                                                    ai->ai_addr, ai->ai_addrlen, &so_reuseport)) == -1) {
+                            freeaddrinfo(res);
+                            return -1;
+                        }
+                        assert(so_reuseport == 1);
+                        /* fprintf(stderr, "[INFO] so_reuseport open reuseport_fds[%d]: %d\n", i, fd); */
+                        listener->reuseport_fds.entries[listener->reuseport_fds.size++] = fd;
+                    }
+                }
+#endif
+
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
                 goto ProxyConflict;
@@ -1629,30 +1664,21 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
         int fd;
-        /* create or dup the listener fd for other threads than the main thread */
+        /* dup or use the listener fd for other threads than the main thread */
         if (thread_index == 0) {
             fd = listener_config->fd;
 #if defined(__linux__) && defined(SO_REUSEPORT)
-            if (fd == -1) {
-                assert(listener_config->so_reuseport == 1);
+            if (listener_config->so_reuseport) {
                 assert(listener_config->domain != AF_UNIX);
-                if ((fd = create_socket_bind_addr_start_listen(listener_config->domain, listener_config->type,
-                                                               listener_config->protocol, (struct sockaddr *)&listener_config->addr,
-                                                               listener_config->addrlen, listener_config->so_reuseport)) != -1) {
-                    listener_config->fd = fd;
-                } else {
-                    perror("failed to create listening socket");
-                    abort();
-                }
+                assert(fd == listener_config->reuseport_fds.entries[0]);
+                /* fprintf(stderr, "[INFO] so_reuseport enabled for thread: %d %d\n", thread_index, fd); */
             }
 #endif
         } else {
 #if defined(__linux__) && defined(SO_REUSEPORT)
             if ((listener_config->domain != AF_UNIX) && (listener_config->so_reuseport == 1) &&
-                (fd = create_socket_bind_addr_start_listen(listener_config->domain, listener_config->type,
-                                                           listener_config->protocol, (struct sockaddr *)&listener_config->addr,
-                                                           listener_config->addrlen, listener_config->so_reuseport)) != -1) {
-                listener_config->fd = fd;
+                ((fd = listener_config->reuseport_fds.entries[thread_index]) != -1)) {
+                /* fprintf(stderr, "[INFO] so_reuseport enabled for thread: %d %d\n", thread_index, fd); */
             } else
 #endif
             if ((fd = dup(listener_config->fd)) != -1) {
