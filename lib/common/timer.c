@@ -244,7 +244,7 @@ size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
         /* cascade */
         int wheel = 1;
         do {
-            slot = (w->last_run >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL)) & H2O_TIMERWHEEL_SLOTS_MASK;
+            slot = timer_slot(wheel, w->last_run);
             cascade(w, wheel, slot);
         } while (slot == 0 && ++wheel < w->num_wheels);
     }
