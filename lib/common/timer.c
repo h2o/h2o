@@ -207,6 +207,7 @@ static void cascade(h2o_timer_wheel_t *w, int wheel, int slot)
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
         h2o_linklist_unlink(&entry->_link);
         link_timer(w, entry, entry->expire_at);
+        assert(&entry->_link != s->prev); /* detect the entry reassigned to the same slot */
     }
 }
 
