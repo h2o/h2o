@@ -921,6 +921,7 @@
 		E9BC76E41F00E70700EB7A09 /* salsa20.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = salsa20.h; sourceTree = "<group>"; };
 		E9BC76E61F00E72D00EB7A09 /* chacha20.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chacha20.c; sourceTree = "<group>"; };
 		E9BC76E91F00E74C00EB7A09 /* poly1305.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = poly1305.c; sourceTree = "<group>"; };
+		E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http2-request-window-size.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80no-handler-vs-h2-post.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BCE6931FF35502003CEA11 /* 50mruby-channel.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50mruby-channel.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9CD04271F8F1D5D00524877 /* Changes */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Changes; sourceTree = "<group>"; };
@@ -1686,6 +1687,7 @@
 				105534F41A460EF600627ECB /* 10http1client.t */,
 				10FEF2481D6EC30800E11B1D /* 40bad-request.t */,
 				104CD5021CC465AF0057C62F /* 40env.t */,
+				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
 				104B9A301A58F55E009EEE64 /* 40max-connections.t */,
 				10A3D3D71B4F4D0900327CF9 /* 40memcached-session-resumption.t */,
 				105534F51A460EF600627ECB /* 40protocol.t */,
