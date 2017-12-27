@@ -416,7 +416,7 @@ h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
          * requiring the user of the event loop to set the flag would increase the complexity.
          * so we set here and ignore errors
          */
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag))
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
     }
 
     return &create_socket(loop, fd, flags)->super;
