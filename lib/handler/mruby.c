@@ -880,7 +880,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     ctx->shared->current_context = ctx;
 
     mrb_state *mrb = ctx->shared->mrb;
-    mrb_value output;
+    mrb_value output, resp;
     mrb_int status;
     h2o_mruby_generator_t *generator = NULL;
 
@@ -891,19 +891,25 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto GotException;
 
         if (!mrb_array_p(output)) {
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "Fiber.yield must return an array"));
+            goto GotException;
+        }
+
+        resp = mrb_ary_entry(output, 0);
+        if (!mrb_array_p(resp)) {
             mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "rack app did not return an array"));
             goto GotException;
         }
 
         /* fetch status */
-        H2O_MRUBY_EXEC_GUARD({status = mrb_int(mrb, mrb_ary_entry(output, 0));});
+        H2O_MRUBY_EXEC_GUARD({status = mrb_int(mrb, mrb_ary_entry(resp, 0));});
         if (mrb->exc != NULL)
             goto GotException;
         if (status >= 0)
             break;
 
-        receiver = mrb_ary_entry(output, 1);
-        mrb_value args = mrb_ary_entry(output, 2);
+        receiver = mrb_ary_entry(resp, 1);
+        mrb_value args = mrb_ary_entry(resp, 2);
         int run_again = 0;
 
         size_t callback_index = -status - 1;
@@ -931,7 +937,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         goto GotException;
     }
 
-    generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 3));
+    generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 1));
 
     /* send the response (unless req is already closed) */
     if (generator == NULL)
@@ -943,12 +949,14 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         goto GotException;
     }
 
-    if (send_response(generator, status, output, is_delegate) != 0)
+    if (send_response(generator, status, resp, is_delegate) != 0)
         goto GotException;
 
     goto Exit;
 
 GotException:
+    if (generator == NULL && mrb_array_p(output))
+        generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 1));
     handle_exception(ctx, generator);
 
 Exit:

@@ -200,6 +200,9 @@ The following describes the configuration directives for controlling the HTTP/2 
 <li><a href="configure/http2_directives.html#http2-idle-timeout">
 <code>http2-idle-timeout</code>
 </a></li>
+<li><a href="configure/http2_directives.html#http2-input-window-size">
+<code>http2-input-window-size</code>
+</a></li>
 <li><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection">
 <code>http2-max-concurrent-requests-per-connection</code>
 </a></li>
@@ -346,6 +349,28 @@ Timeout for idle connections in seconds.
 <dt>Default:</dt>
 <dd><code><pre>http2-idle-timeout: 10</pre></code>
 </dl>
+<div id="http2-input-window-size" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/http2_directives.html#http2-input-window-size"><code>"http2-input-window-size"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Default window size for HTTP request body.
+
+</p>
+
+The value is the maximum amount of request body (in bytes) that can be sent by the client in 1 RTT (round-trip time).
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>16777216</pre></code>
+</dl>
+
 <div id="http2-max-concurrent-requests-per-connection" class="directive-head">
 <h3><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a></h3>
 </div>

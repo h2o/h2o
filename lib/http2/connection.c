@@ -419,7 +419,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 #undef EXPECTED_MAP
-    if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE) {
+    if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
     }

@@ -436,13 +436,15 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
 }
 
-static int on_config_http2_stream_window_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_http2_input_window_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     uint32_t v;
     if (h2o_configurator_scanf(cmd, node, "%" SCNu32, &v) != 0)
         return -1;
-    if (!(1 <= v && v <= 0x7fffffff)) {
-        h2o_configurator_errprintf(cmd, node, "window size must be between 1 and %" PRIu32, 0x7fffffff);
+    if (!(H2O_HTTP2_MIN_STREAM_WINDOW_SIZE <= v && v <= H2O_HTTP2_MAX_STREAM_WINDOW_SIZE)) {
+        h2o_configurator_errprintf(cmd, node, "window size must be between %" PRIu32 " and %" PRIu32,
+                                   (uint32_t)H2O_HTTP2_MIN_STREAM_WINDOW_SIZE,
+                                   (uint32_t)H2O_HTTP2_MAX_STREAM_WINDOW_SIZE);
         return -1;
     }
     ctx->globalconf->http2.active_stream_window_size = v;
@@ -923,9 +925,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);
-        h2o_configurator_define_command(&c->super, "http2-stream-window-size",
+        h2o_configurator_define_command(&c->super, "http2-input-window-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                        on_config_http2_stream_window_size);
+                                        on_config_http2_input_window_size);
         h2o_configurator_define_command(&c->super, "http2-latency-optimization-min-rtt",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_latency_optimization_min_rtt);
