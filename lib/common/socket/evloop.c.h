@@ -408,6 +408,17 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
     fcntl(fd, F_SETFL, O_NONBLOCK); /* not always needed under linux, the caller may already set this flag */
+
+    {
+        int flag = 1;
+        /**
+         * fd maybe from pipe(2)/eventfd(2)/socketpair(2)/unix domain socket besides tcp sockets.
+         * requiring the user of the event loop to set the flag would increase the complexity.
+         * so we set here and ignore errors
+         */
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag))
+    }
+
     return &create_socket(loop, fd, flags)->super;
 }
 
