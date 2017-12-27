@@ -117,7 +117,7 @@ ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, siz
     frame->length = h2o_http2_decode24u(src);
     frame->type = src[3];
     frame->flags = src[4];
-    frame->stream_id = h2o_http2_decode32u(src + 5);
+    frame->stream_id = h2o_http2_decode32u(src + 5) & 0x7fffffff;
 
     if (frame->length > host_settings->max_frame_size)
         return H2O_HTTP2_ERROR_FRAME_SIZE;
