@@ -184,16 +184,18 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    static const h2o_header_t headers_sorted[] = {
-        {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, {H2O_STRLIT("text/plain; charset=utf-8")}},
-    };
-
     ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
     h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
     memcpy(ctx->resp.after_closed->bytes + ctx->resp.after_closed->size, errstr, errstr_len);
     ctx->resp.after_closed->size += errstr_len;
     ctx->resp.has_content = 1;
+
+    static const h2o_iovec_t client_warning = {H2O_STRLIT("client-warning")};
+    h2o_header_t headers_sorted[] = {
+        {(h2o_iovec_t *)&client_warning, NULL, h2o_iovec_init(errstr, errstr_len)},
+        {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, h2o_iovec_init(H2O_STRLIT("text/plain; charset=utf-8"))},
+    };
 
     post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
 }

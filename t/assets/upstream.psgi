@@ -114,6 +114,15 @@ builder {
             200, @resph, [ "Ok" ]
         ];
     };
+    mount "/echo-request-uri" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REQUEST_URI"} || ''],
+        ];
+    };
     mount "/echo-server-port" => sub {
         my $env = shift;
         return [
@@ -142,7 +151,7 @@ builder {
         my $env = shift;
         return sub {
             my $responder = shift;
-            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain', 'content-length' => 1 ] ]);
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
             sleep 1;
             $writer->write('x');
             $writer->close;

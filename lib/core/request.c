@@ -308,7 +308,7 @@ h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = h2o_req_setup(req);
     setup_pathconf(req, hostconf);
-    return req->pathconf->handlers.entries[0];
+    return req->pathconf->handlers.size != 0 ? req->pathconf->handlers.entries[0] : NULL;
 }
 
 void h2o_process_request(h2o_req_t *req)
@@ -490,9 +490,6 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
     if (!h2o_send_state_is_in_progress(state)) {
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
-    } else if (bufcnt == 0) {
-        h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
-        return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
 }

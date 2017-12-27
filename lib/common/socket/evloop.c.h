@@ -383,8 +383,6 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 {
     struct st_h2o_evloop_socket_t *sock;
 
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-
     sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
@@ -409,7 +407,7 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+    fcntl(fd, F_SETFL, O_NONBLOCK); /* not always needed under linux, the caller may already set this flag */
     return &create_socket(loop, fd, flags)->super;
 }
 
