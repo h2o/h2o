@@ -1098,9 +1098,14 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
 #if defined(__linux__) && defined(SO_REUSEPORT)
                         if (so_reuseport) {
-                            int flag = 1;
-                            if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &flag, sizeof(flag)) != 0) {
-                                fprintf(stderr, "[warning] failed to set SO_REUSEPORT:%s\n", strerror(errno));
+                            int flag = 0;
+                            socklen_t len = sizeof(flag);
+                            /**
+                             * must be set on each socket (including the first socket) prior to calling bind(2)
+                             * if check failed, just give a warning and ignore this option
+                             */
+                            if (getsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &flag, &len) != 0 || flag == 0) {
+                                fprintf(stderr, "[warning] ignore 'so-reuseport', server_starter forget to set SO_REUSEPORT?\n");
                                 so_reuseport = 0;
                             }
                         }
