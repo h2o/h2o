@@ -987,9 +987,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **so_reuseport_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &so_reuseport_node) != 0)
+        if (h2o_configurator_parse_mapping(
+                cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,so-reuseport:*", &port_node,
+                &host_node, &type_node, &owner_node, &permission_node, &ssl_node, &proxy_protocol_node, &so_reuseport_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -999,9 +999,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
-        }
             if (so_reuseport_node != NULL &&
-                (so_reuseport = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
+                (so_reuseport = (int)h2o_configurator_get_one_of(cmd, *so_reuseport_node, "OFF,ON")) == -1)
                 return -1;
     } break;
     default:
@@ -1022,7 +1021,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             return -1;
         }
         if (so_reuseport) {
-            h2o_configurator_errprintf(cmd, node, "[warning] unix socket does not support so_reuseport");
+            h2o_configurator_errprintf(cmd, node, "[warning] unix socket does not support 'so-reuseport'");
             so_reuseport = 0;
         }
         sa.sun_family = AF_UNIX;
@@ -1077,7 +1076,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (so_reuseport) {
 #if !(defined(__linux__) && defined(SO_REUSEPORT))
             h2o_configurator_errprintf(cmd, node,
-                                       "[warning] so_reuseport currently should only enabled under linux which support it");
+                                       "[warning] 'so-reuseport' currently should only enabled under linux which support it");
             so_reuseport = 0;
 #endif
         }
@@ -1133,7 +1132,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 if (so_reuseport) {
                     size_t i;
                     listener->reuseport_fds = h2o_mem_alloc(sizeof(int) * conf.num_threads);
-                    /* fprintf(stderr, "[INFO] so_reuseport open reuseport_fds[%d]: %d\n", 0, fd); */
                     listener->reuseport_fds[0] = fd;
                     for (i = 1; i < conf.num_threads; ++i) {
                         if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
@@ -1142,7 +1140,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                         assert(so_reuseport == 1);
-                        /* fprintf(stderr, "[INFO] so_reuseport open reuseport_fds[%d]: %d\n", i, fd); */
                         listener->reuseport_fds[i] = fd;
                     }
                 }
@@ -1632,7 +1629,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 #if defined(__linux__) && defined(SO_REUSEPORT)
             if (listener_config->reuseport_fds != NULL) {
                 assert(fd == listener_config->reuseport_fds[0]);
-                /* fprintf(stderr, "[INFO] so_reuseport enabled for thread:%d fd:%d\n", (int)thread_index, fd); */
             }
 #endif
         } else { /* dup the listener fd (or use directly when so-reuseport enabled) for other threads than the main thread */
@@ -1640,7 +1636,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             if (listener_config->reuseport_fds != NULL) {
                 fd = listener_config->reuseport_fds[thread_index];
                 assert(fd != -1);
-                /* fprintf(stderr, "[INFO] so_reuseport enabled for thread:%d fd:%d\n", (int)thread_index, fd); */
             } else
 #endif
             if ((fd = dup(listener_config->fd)) != -1) {
