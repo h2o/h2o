@@ -592,4 +592,18 @@ EOT
     is $body, 'handler1, , ', 'empty path';
 };
 
+subtest 'invalid response' => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env| nil }
+EOT
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr -m 1 http://127.0.0.1:$server->{port}/nil");
+    like $headers, qr{^HTTP/1\.1 500 }is;
+};
+
 done_testing();
