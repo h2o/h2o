@@ -441,8 +441,10 @@ static int on_config_http2_input_window_size(h2o_configurator_command_t *cmd, h2
     uint32_t v;
     if (h2o_configurator_scanf(cmd, node, "%" SCNu32, &v) != 0)
         return -1;
-    if (!(1 <= v && v <= 0x7fffffff)) {
-        h2o_configurator_errprintf(cmd, node, "window size must be between 1 and %" PRIu32, 0x7fffffff);
+    if (!(H2O_HTTP2_MIN_STREAM_WINDOW_SIZE <= v && v <= H2O_HTTP2_MAX_STREAM_WINDOW_SIZE)) {
+        h2o_configurator_errprintf(cmd, node, "window size must be between %" PRIu32 " and %" PRIu32,
+                                   (uint32_t)H2O_HTTP2_MIN_STREAM_WINDOW_SIZE,
+                                   (uint32_t)H2O_HTTP2_MAX_STREAM_WINDOW_SIZE);
         return -1;
     }
     ctx->globalconf->http2.active_stream_window_size = v;
