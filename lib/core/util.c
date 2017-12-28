@@ -64,7 +64,7 @@ static struct {
     unsigned expiration;
 } async_resumption_context;
 
-static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at,
+static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval *connected_at,
                                                        size_t sz)
 {
     struct st_h2o_accept_data_t *data = h2o_mem_alloc(sz);
@@ -72,19 +72,19 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
     data->sock = sock;
     data->timeout = (h2o_timeout_entry_t){0};
     h2o_timeout_link(ctx->ctx->loop, &ctx->ctx->handshake_timeout, &data->timeout);
-    data->connected_at = connected_at;
+    data->connected_at = *connected_at;
     return data;
 }
 
 static struct st_h2o_accept_data_t *create_default_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock,
-                                                               struct timeval connected_at)
+                                                               struct timeval *connected_at)
 {
     struct st_h2o_accept_data_t *data = create_accept_data(ctx, sock, connected_at, sizeof(struct st_h2o_accept_data_t));
     data->timeout.cb = on_accept_timeout;
     return data;
 }
 
-static struct st_h2o_accept_data_t *create_redis_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
+static struct st_h2o_accept_data_t *create_redis_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval *connected_at)
 {
     struct st_h2o_redis_resumption_accept_data_t *data = (struct st_h2o_redis_resumption_accept_data_t *)create_accept_data(
         ctx, sock, connected_at, sizeof(struct st_h2o_redis_resumption_accept_data_t));
@@ -94,7 +94,7 @@ static struct st_h2o_accept_data_t *create_redis_accept_data(h2o_accept_ctx_t *c
 }
 
 static struct st_h2o_accept_data_t *create_memcached_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock,
-                                                                 struct timeval connected_at)
+                                                                 struct timeval *connected_at)
 {
     struct st_h2o_memcached_resumption_accept_data_t *data = (struct st_h2o_memcached_resumption_accept_data_t *)create_accept_data(
         ctx, sock, connected_at, sizeof(struct st_h2o_memcached_resumption_accept_data_t));
@@ -130,7 +130,7 @@ static void destroy_memcached_accept_data(struct st_h2o_accept_data_t *_accept_d
 }
 
 static struct {
-    struct st_h2o_accept_data_t *(*create)(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
+    struct st_h2o_accept_data_t *(*create)(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval *connected_at);
     void (*destroy)(struct st_h2o_accept_data_t *accept_data);
 } accept_data_callbacks = {
     create_default_accept_data, destroy_default_accept_data,
@@ -354,12 +354,12 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     for (ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
         if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
             /* connect as http2 */
-            h2o_http2_accept(data->ctx, sock, data->connected_at);
+            h2o_http2_accept(data->ctx, sock, &data->connected_at);
             goto Exit;
         }
     }
     /* connect as http1 */
-    h2o_http1_accept(data->ctx, sock, data->connected_at);
+    h2o_http1_accept(data->ctx, sock, &data->connected_at);
 
 Exit:
     accept_data_callbacks.destroy(data);
@@ -491,7 +491,7 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
     } else {
         struct st_h2o_accept_data_t *data = sock->data;
         sock->data = NULL;
-        h2o_http1_accept(data->ctx, sock, data->connected_at);
+        h2o_http1_accept(data->ctx, sock, &data->connected_at);
         accept_data_callbacks.destroy(data);
     }
 }
@@ -501,14 +501,14 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
     struct timeval connected_at = *h2o_get_timestamp(ctx->ctx, NULL, NULL);
 
     if (ctx->expect_proxy_line || ctx->ssl_ctx != NULL) {
-        sock->data = accept_data_callbacks.create(ctx, sock, connected_at);
+        sock->data = accept_data_callbacks.create(ctx, sock, &connected_at);
         if (ctx->expect_proxy_line) {
             h2o_socket_read_start(sock, on_read_proxy_line);
         } else {
             h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, on_ssl_handshake_complete);
         }
     } else {
-        h2o_http1_accept(ctx, sock, connected_at);
+        h2o_http1_accept(ctx, sock, &connected_at);
     }
 }
 

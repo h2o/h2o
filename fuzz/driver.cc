@@ -301,9 +301,9 @@ static int create_accepted(int sfd, char *buf, size_t len, h2o_barrier_t **barri
     sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION);
 
 #if defined(HTTP1)
-    h2o_http1_accept(&accept_ctx, sock, connected_at);
+    h2o_http1_accept(&accept_ctx, sock, &connected_at);
 #else
-    h2o_http2_accept(&accept_ctx, sock, connected_at);
+    h2o_http2_accept(&accept_ctx, sock, &connected_at);
 #endif
 
     return fd;
