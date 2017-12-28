@@ -902,11 +902,9 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         }
 
         /* fetch status */
-        mrb_value v = mrb_to_int(mrb, mrb_ary_entry(resp, 0));
+        H2O_MRUBY_EXEC_GUARD({status = mrb_int(mrb, mrb_ary_entry(resp, 0));});
         if (mrb->exc != NULL)
             goto GotException;
-
-        status = mrb_fixnum(v);
         if (status >= 0)
             break;
 
