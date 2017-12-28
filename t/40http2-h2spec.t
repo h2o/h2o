@@ -14,6 +14,7 @@ hosts:
         file.dir: @{[DOC_ROOT]}
 EOT
 
-is system(qw(h2spec -t -k -p), $server->{tls_port}), 0;
+my $output = `h2spec -t -k -p $server->{tls_port} 2>&1`;
+like $output, qr/All tests passed/;
 
 done_testing();
