@@ -620,8 +620,8 @@ EOT
         like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'no headers';
         ($headers, $body) = $fetch->('[200, nil, nil]');
         like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'nil headers';
-        ($headers, $body) = $fetch->('[200, nil, nil]');
-        like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'nil headers';
+        ($headers, $body) = $fetch->('[200, "abc", nil]');
+        like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'invalid headers';
         ($headers, $body) = $fetch->('[200, {}]');
         like $headers, qr{^HTTP/[0-9.]+ 200 }is, 'no body';
         is $body, "";
