@@ -23,6 +23,11 @@ RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-pe
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
 RUN sudo cpanm --notest Starlet Test::TCP
 
+# h2get
+RUN apt-get install --yes golang && mkdir -p /golang && ln -sf /usr/local/bin /golang/bin
+ENV GOPATH=/golang
+RUN (go get github.com/summerwind/h2spec && cd /golang/src/github.com/summerwind/h2spec/cmd/h2spec && git checkout v2.0.0^ && go install)
+
 # create user
 RUN useradd --create-home ci
 RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
