@@ -808,7 +808,7 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         }
         /* apply the change to window size (to all the streams but not the connection, see 6.9.2 of draft-15) */
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
-            ssize_t delta = conn->peer_settings.initial_window_size - prev_initial_window_size;
+            ssize_t delta = (int32_t)conn->peer_settings.initial_window_size - (int32_t)prev_initial_window_size;
             h2o_http2_stream_t *stream;
             kh_foreach_value(conn->streams, stream, { update_stream_output_window(stream, delta); });
             resume_send(conn);
