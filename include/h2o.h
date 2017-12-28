@@ -1233,7 +1233,7 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
  * creates a new connection
  */
-static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval *connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
  * setups accept context for memcached SSL resumption
@@ -1992,14 +1992,14 @@ inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y
     }
 }
 
-inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval *connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
     h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
 
     conn->ctx = ctx;
     conn->hosts = hosts;
-    conn->connected_at = connected_at;
+    conn->connected_at = *connected_at;
 #ifdef H2O_NO_64BIT_ATOMICS
     pthread_mutex_lock(&h2o_conn_id_mutex);
     conn->id = ++h2o_connection_id;

@@ -139,7 +139,7 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
         (conn->req.upgrade.len == 3 ||
          (conn->req.upgrade.len == 6 && (memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-14")) == 0 ||
                                          memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-16")) == 0)))) {
-        if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) == 0) {
+        if (h2o_http2_handle_upgrade(&conn->req, &conn->super.connected_at) == 0) {
             return;
         }
     }
@@ -471,7 +471,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 conn->sock = NULL;
                 close_connection(conn, 1);
                 /* and accept as http2 connection */
-                h2o_http2_accept(&accept_ctx, sock, connected_at);
+                h2o_http2_accept(&accept_ctx, sock, &connected_at);
                 return;
             }
         }
@@ -794,7 +794,7 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
     return 0;
 }
 
-void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
+void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval *connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
         get_sockname, /* stringify address */
@@ -809,14 +809,16 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         }}};
     struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 
-    /* zero-fill all properties expect req */
+    /* zero-fill all properties except super and req */
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));
 
-    /* init properties that need to be non-zero */
-    conn->super.ctx = ctx->ctx;
-    conn->super.hosts = ctx->hosts;
-    conn->super.connected_at = connected_at;
-    conn->super.callbacks = &callbacks;
+    /* init properties that need to be non-zero, and already filled by h2o_create_connection() */
+    /* FIXME: remove the following asserts */
+    assert(conn->super.ctx == ctx->ctx);
+    assert(conn->super.hosts == ctx->hosts);
+    assert(conn->super.connected_at.tv_sec == connected_at->tv_sec && conn->super.connected_at.tv_usec == connected_at->tv_usec);
+    assert(conn->super.callbacks == &callbacks);
+
     conn->sock = sock;
     sock->data = conn;
     h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);

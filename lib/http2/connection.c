@@ -1298,7 +1298,7 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
-static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
+static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval *connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
         get_sockname,              /* stringify address */
@@ -1455,7 +1455,7 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
     return 0;
 }
 
-void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
+void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval *connected_at)
 {
     h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock, connected_at);
     sock->data = conn;
@@ -1465,7 +1465,7 @@ void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         on_read(sock, 0);
 }
 
-int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
+int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval *connected_at)
 {
     h2o_http2_conn_t *http2conn = create_conn(req->conn->ctx, req->conn->hosts, NULL, connected_at);
     h2o_http2_stream_t *stream;
