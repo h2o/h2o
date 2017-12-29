@@ -96,7 +96,7 @@ static int is_msie(h2o_req_t *req)
     return 1;
 }
 
-static void init_request(struct st_h2o_http1_conn_t *conn)
+static void init_connection(struct st_h2o_http1_conn_t *conn)
 {
     if (conn->_req_index != 0)
         h2o_dispose_request(&conn->req);
@@ -557,8 +557,8 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    /* handle next request */
-    init_request(conn);
+    /* prepare for handling next request */
+    init_connection(conn);
     h2o_buffer_consume(&conn->sock->input, conn->_reqsize);
     conn->_prevreqlen = 0;
     conn->_reqsize = 0;
@@ -809,19 +809,15 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         }}};
     struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
 
-    /* zero-fill all properties expect req */
+    /* zero-fill all properties except super and req */
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));
 
     /* init properties that need to be non-zero */
-    conn->super.ctx = ctx->ctx;
-    conn->super.hosts = ctx->hosts;
-    conn->super.connected_at = connected_at;
-    conn->super.callbacks = &callbacks;
     conn->sock = sock;
     sock->data = conn;
     h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
 
-    init_request(conn);
+    init_connection(conn);
     reqread_start(conn);
 }
 
