@@ -305,7 +305,7 @@ inline void h2o_http2_window_init(h2o_http2_window_t *window, const h2o_http2_se
 
 inline int h2o_http2_window_update(h2o_http2_window_t *window, ssize_t delta)
 {
-    size_t v = window->_avail + delta;
+    ssize_t v = window->_avail + delta;
     if (v > INT32_MAX)
         return -1;
     window->_avail = v;
