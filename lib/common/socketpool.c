@@ -147,15 +147,13 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
     }
 }
 
-h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf, size_t conf_len)
+h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
 {
     struct sockaddr_storage sa;
     socklen_t salen;
 
     h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-    if (lb_target_conf == NULL)
-        conf_len = sizeof(*lb_target_conf);
-    h2o_socketpool_target_conf_t *conf = h2o_mem_alloc(conf_len);
+    h2o_socketpool_target_conf_t *conf = h2o_mem_alloc(sizeof(*conf));
     h2o_url_copy(NULL, &target->url, origin);
     assert(target->url.host.base[target->url.host.len] == '\0'); /* needs to be null-terminated in order to be used in SNI */
     target->type = detect_target_type(origin, &sa, &salen);
@@ -178,7 +176,7 @@ h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_soc
     target->_shared.leased_count = 0;
     target->conf = conf;
     if (lb_target_conf != NULL)
-        memcpy(conf, lb_target_conf, conf_len);
+        memcpy(conf, lb_target_conf, sizeof(*conf));
     else {
         conf->weight = 1;
     }
@@ -199,9 +197,6 @@ void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_s
     if (balancer == NULL) {
         balancer = h2o_balancer_create_rr();
     }
-    if (balancer->callbacks->set_targets != NULL) {
-        balancer->callbacks->set_targets(balancer, targets, target_len);
-    }
 
     common_init(pool, target_vector, capacity, balancer);
 }
@@ -215,7 +210,7 @@ static size_t add_target(h2o_socketpool_t *pool, h2o_url_t *origin)
 {
     assert(is_global_pool(pool));
     h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
-    h2o_socketpool_target_t *target = h2o_socketpool_target_create(origin, NULL, 0);
+    h2o_socketpool_target_t *target = h2o_socketpool_target_create(origin, NULL);
     pool->targets.entries[pool->targets.size++] = target;
     return pool->targets.size - 1;
 }
@@ -401,7 +396,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
 
     if (req->lb.tried != NULL) {
         if (req->pool->targets.size > 1) {
-            req->selected_target = req->pool->balancer->callbacks->select(req->pool->balancer, &req->pool->targets,
+            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets,
                                                                       req->lb.tried);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;

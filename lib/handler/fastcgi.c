@@ -847,7 +847,7 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t 
     if (vars->document_root.base != NULL)
         handler->config.document_root = h2o_strdup(NULL, vars->document_root.base, vars->document_root.len);
 
-    h2o_socketpool_target_t *target = h2o_socketpool_target_create(upstream, NULL, 0);
+    h2o_socketpool_target_t *target = h2o_socketpool_target_create(upstream, NULL);
     h2o_socketpool_target_t **targets = &target;
     h2o_socketpool_init_specific(&handler->sockpool, SIZE_MAX /* FIXME */, targets, 1, NULL);
     h2o_socketpool_set_timeout(&handler->sockpool, handler->config.keepalive_timeout);

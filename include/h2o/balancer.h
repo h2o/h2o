@@ -36,21 +36,17 @@ typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool
 
 typedef void (*h2o_balancer_destroyer)(h2o_balancer_t *balancer);
 
-typedef void (*h2o_balancer_set_target_cb)(h2o_balancer_t *balancer, h2o_socketpool_target_t **targets, size_t target_len);
-
 typedef struct st_h2o_balancer_callbacks_t {
-    h2o_balancer_set_target_cb set_targets;
-    h2o_balancer_selector select;
+    h2o_balancer_selector select_;
     h2o_balancer_destroyer destroy;
 } h2o_balancer_callbacks_t;
 
 struct st_h2o_balancer_t {
     const h2o_balancer_callbacks_t *callbacks;
-    size_t target_conf_len;
 };
 
 /* round robin */
-h2o_balancer_t *h2o_balancer_create_rr();
+h2o_balancer_t *h2o_balancer_create_rr(void);
 
 /* least connection */
 h2o_balancer_t *h2o_balancer_create_lc(void);

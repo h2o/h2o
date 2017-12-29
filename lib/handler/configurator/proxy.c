@@ -318,15 +318,14 @@ static int parse_balancer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_soc
 
 static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size_t num_upstreams, h2o_socketpool_target_t **targets)
 {
-    struct proxy_configurator_t *self = (void *)cmd->configurator;
     size_t i, j;
     h2o_url_t upstream;
-    h2o_socketpool_target_conf_t *lb_per_target_conf = alloca(self->vars->conf.balancer->target_conf_len);
+    h2o_socketpool_target_conf_t lb_per_target_conf;
     for (i = 0; i != num_upstreams; ++i) {
         yoml_t *url_node = NULL;
         yoml_t *node_for_parsing;
-        memset(lb_per_target_conf, 0, sizeof(*lb_per_target_conf));
-        lb_per_target_conf->weight = 1; /* default weight of each target */
+        memset(&lb_per_target_conf, 0, sizeof(lb_per_target_conf));
+        lb_per_target_conf.weight = 0; /* default weight of each target */
         switch (inputs[i]->type) {
             case YOML_TYPE_SCALAR:
                 url_node = inputs[i];
@@ -354,11 +353,12 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size
                             h2o_configurator_errprintf(cmd, value, "value must be a scalar");
                             return -1;
                         }
-                        lb_per_target_conf->weight = h2o_strtosize(value->data.scalar, strlen(value->data.scalar));
-                        if (lb_per_target_conf->weight == SIZE_MAX || lb_per_target_conf->weight == 0) {
-                            h2o_configurator_errprintf(cmd, value, "value of weight must be an unsigned integer greater than 0");
+                        size_t weight = h2o_strtosize(value->data.scalar, strlen(value->data.scalar));
+                        if (weight > H2O_SOCKETPOOL_TARGET_MAX_WEIGHT || weight == 0) {
+                            h2o_configurator_errprintf(cmd, value, "value of weight must be an unsigned integer in range 1 - 256");
                             return -1;
                         }
+                        lb_per_target_conf.weight = weight - 1;
                     }
                 }
                 
@@ -379,7 +379,7 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size
             h2o_configurator_errprintf(cmd, url_node, "failed to parse URL: %s\n", url_node->data.scalar);
             return -1;
         }
-        targets[i] = h2o_socketpool_target_create(&upstream, lb_per_target_conf, self->vars->conf.balancer->target_conf_len);
+        targets[i] = h2o_socketpool_target_create(&upstream, &lb_per_target_conf);
     }
     return 0;
 }
@@ -441,13 +441,14 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 
     if (inputs == NULL) {
         h2o_configurator_errprintf(cmd, node, "No backend is defined.");
+        return -1;
     }
     if (balancer_conf != NULL) {
         if (parse_balancer(cmd, balancer_conf, targets, num_upstreams) != 0) {
             return -1;
         }
     } else {
-        self->vars->conf.balancer = h2o_balancer_create_rr(targets, num_upstreams);
+        self->vars->conf.balancer = h2o_balancer_create_rr();
     }
 
     if (parse_backends(cmd, inputs, num_upstreams, targets) != 0)

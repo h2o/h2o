@@ -21,46 +21,52 @@
  */
 #include "h2o/balancer.h"
 
-static size_t selector(h2o_balancer_t *ignored, h2o_socketpool_target_vector_t *targets, int *tried)
+struct least_conn_t {
+    h2o_balancer_t super;
+    pthread_mutex_t mutex;
+};
+
+static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, int *tried)
 {
+    struct least_conn_t *self = (void *)_self;
     size_t i;
-    size_t result = -1;
+    size_t result_index = -1;
     size_t result_weight = 0;
+    size_t result_leased = 1;
     uint64_t leftprod, rightprod;
 
     assert(targets->size != 0);
+    pthread_mutex_lock(&self->mutex);
     for (i = 0; i < targets->size; i++) {
-        if (!tried[i]) {
-            result = i;
-            result_weight = targets->entries[i]->conf->weight;
-            break;
-        }
-    }
-    /* I'm not sure if we should lock here. Or if difference between unlocked & locked could be acceptable. */
-    for (i += 1; i < targets->size; i++) {
         leftprod = targets->entries[i]->_shared.leased_count;
         leftprod *= result_weight;
-        rightprod = targets->entries[result]->_shared.leased_count;
-        rightprod *= targets->entries[i]->conf->weight;
+        rightprod = result_leased;
+        rightprod *= ((unsigned)targets->entries[i]->conf->weight) + 1;
         if (!tried[i] && leftprod < rightprod) {
-            result = i;
-            result_weight = targets->entries[i]->conf->weight;
+            result_index = i;
+            result_leased = targets->entries[i]->_shared.leased_count;
+            result_weight = ((unsigned)targets->entries[i]->conf->weight) + 1;
         }
     }
+    pthread_mutex_unlock(&self->mutex);
 
-    assert(result < targets->size);
-    return result;
+    assert(result_index < targets->size);
+    return result_index;
 }
 
-static void destroy(h2o_balancer_t *ignored) {}
+static void destroy(h2o_balancer_t *_self) {
+    struct least_conn_t *self = (void *)_self;
+    pthread_mutex_destroy(&self->mutex);
+}
 
 h2o_balancer_t *h2o_balancer_create_lc(void)
 {
     static const h2o_balancer_callbacks_t lc_callbacks = {
-        NULL,
         selector,
         destroy
     };
-    static h2o_balancer_t lc_balancer = {&lc_callbacks, sizeof(h2o_socketpool_target_conf_t)};
-    return &lc_balancer;
+    struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
+    self->super.callbacks = &lc_callbacks;
+    pthread_mutex_init(&self->mutex, NULL);
+    return &self->super;
 }

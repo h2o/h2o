@@ -23,89 +23,66 @@
 
 struct round_robin_t {
     h2o_balancer_t super;
-    size_t next_pos;           /* counting next logic index */
-    size_t next_actual_target; /* indicate next actual target index */
-    size_t *floor_next_target; /* caching logic indices indicating next target should be used */
-    size_t pos_less_than;      /* return point for logic count */
+    size_t pos;           /* current position */
+    size_t remained_weight; /* remained weight of current position */
     pthread_mutex_t mutex;
 };
+
+static inline void select_next(struct round_robin_t *self, h2o_socketpool_target_vector_t *targets) {
+    self->pos += 1;
+    if (self->pos == targets->size)
+        self->pos = 0;
+    self->remained_weight = ((unsigned)targets->entries[self->pos]->conf->weight) + 1;
+}
 
 static size_t selector(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, int *tried)
 {
     size_t i;
     size_t result = 0;
     struct round_robin_t *self = (void *)balancer;
+    
+    if (H2O_UNLIKELY(self->pos == SIZE_MAX)) {
+        self->pos = 0;
+        self->remained_weight = ((unsigned)targets->entries[0]->conf->weight) + 1;
+    }
 
     pthread_mutex_lock(&self->mutex);
 
     assert(targets->size != 0);
     for (i = 0; i < targets->size; i++) {
-        if (!tried[self->next_actual_target]) {
+        if (!tried[self->pos]) {
             /* get the result */
-            result = self->next_actual_target;
-            break;
-        }
-        /* this target has been tried, fall to next target */
-        self->next_pos = self->floor_next_target[self->next_actual_target];
-        self->next_actual_target++;
-        if (self->next_pos == self->pos_less_than) {
-            self->next_pos = 0;
-            self->next_actual_target = 0;
+            result = self->pos;
+            if (--self->remained_weight == 0)
+                select_next(self, targets);
+            pthread_mutex_unlock(&self->mutex);
+            return result;
+        } else {
+            select_next(self, targets);
         }
     }
-
-    assert(i < targets->size);
-    self->next_pos++;
-    if (self->next_pos == self->floor_next_target[self->next_actual_target]) {
-        self->next_actual_target++;
-    }
-    if (self->next_pos == self->pos_less_than) {
-        self->next_pos = 0;
-        self->next_actual_target = 0;
-    }
-    pthread_mutex_unlock(&self->mutex);
-    return result;
+    assert(!"unreachable");
 }
 
 static void destroy(h2o_balancer_t *balancer)
 {
     struct round_robin_t *self = (void *)balancer;
     pthread_mutex_destroy(&self->mutex);
-    free(self->floor_next_target);
     free(self);
 }
 
-static void set_targets(h2o_balancer_t *balancer, h2o_socketpool_target_t **targets, size_t target_len) {
-    struct round_robin_t *self = (void *)balancer;
-    size_t i;
-
-    pthread_mutex_lock(&self->mutex);
-    self->next_pos = 0;
-    self->next_actual_target = 0;
-    free(self->floor_next_target);
-    self->floor_next_target = h2o_mem_alloc(sizeof(*self->floor_next_target) * target_len);
-
-    self->floor_next_target[0] = targets[0]->conf->weight;
-    for (i = 1; i < target_len; i++) {
-        self->floor_next_target[i] = self->floor_next_target[i - 1] + targets[i]->conf->weight;
-    }
-    self->pos_less_than = self->floor_next_target[target_len - 1];
-    pthread_mutex_unlock(&self->mutex);
-}
-
-h2o_balancer_t *h2o_balancer_create_rr() {
+h2o_balancer_t *h2o_balancer_create_rr(void) {
     static const h2o_balancer_callbacks_t rr_callbacks = {
-        set_targets,
         selector,
         destroy
     };
-    static const size_t target_conf_len = sizeof(h2o_socketpool_target_conf_t);
 
     struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
     memset(self, 0, sizeof(*self));
     pthread_mutex_init(&self->mutex, NULL);
     self->super.callbacks = &rr_callbacks;
-    self->super.target_conf_len = target_conf_len;
+    self->pos = SIZE_MAX;
+    self->remained_weight = 0;
 
     return &self->super;
 }
