@@ -65,9 +65,7 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **ho
     h2o_loopback_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, (struct timeval){0}, &callbacks);
 
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_loopback_conn_t, req) - sizeof(conn->super));
-    conn->super.ctx = ctx;
-    conn->super.hosts = hosts;
-    conn->super.callbacks = &callbacks;
+
     h2o_init_request(&conn->req, &conn->super, NULL);
     h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
     conn->req._ostr_top = &conn->_ostr_final;
