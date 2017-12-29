@@ -191,7 +191,7 @@ Forwards the requests to the specified URL, and proxies the response.
 Load balancing between different backends with different path is supported. Currently we support <code>round-robin</code> and <code>least-conn</code> as balancer. <b>Load balancing strategies would only be applied when no pooled connections between h2o and upstream exist.</b> Failover would also be applied when some backends go down.
 </p>
 <p>
-Integer <code>weight</code> could be assigned on each backend, with default value <code>1</code>.
+Integer <code>weight</code> could be assigned on each backend, with default value <code>1</code>. Minimum <code>weight</code> is 1. Maximum <code>weight</code> is 256.
 </p>
 <p>
 For <code>round-robin</code> balancer, <code>weight</code> is respected in this way: each backend would be selected exactly <code>weight</code> times before next backend would be selected, except when the backend is not accessable.

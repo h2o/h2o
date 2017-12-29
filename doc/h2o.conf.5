@@ -2604,7 +2604,7 @@ proxy.reverse.url:
 Load balancing between different backends with different path is supported. Currently we support round-robin and least-conn as balancer. Load balancing strategies would only be applied when no pooled connections between h2o and upstream exist. Failover would also be applied when some backends go down.
 
 
-Integer weight could be assigned on each backend, with default value 1.
+Integer weight could be assigned on each backend, with default value 1. Minimum weight is 1. Maximum weight is 256.
 
 
 For round-robin balancer, weight is respected in this way: each backend would be selected exactly weight times before next backend would be selected, except when the backend is not accessable.
