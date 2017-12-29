@@ -308,7 +308,7 @@ h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = h2o_req_setup(req);
     setup_pathconf(req, hostconf);
-    return req->pathconf->handlers.entries[0];
+    return req->pathconf->handlers.size != 0 ? req->pathconf->handlers.entries[0] : NULL;
 }
 
 void h2o_process_request(h2o_req_t *req)

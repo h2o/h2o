@@ -1476,6 +1476,18 @@ Timeout for idle connections in seconds.
 
 .RE
 .RE
+.SS http2-input-window-size
+(since v2.3)
+Default window size for HTTP request body.
+
+
+.PP
+
+The value is the maximum amount of request body (in bytes) that can be sent by the client in 1 RTT (round-trip time).
+
+.RE
+.RE
+
 .SS http2-max-concurrent-requests-per-connection
 Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
 

@@ -42,8 +42,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
-    h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
-    h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
+    h2o_http2_window_init(&stream->output_window, conn->peer_settings.initial_window_size);
+    h2o_http2_input_window_init(&stream->input_window, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
     stream->received_priority = *received_priority;
 
     /* init request */
@@ -106,7 +106,7 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
 
     if ((conn_max = h2o_http2_conn_get_buffer_window(conn)) <= 0)
         return 0;
-    if ((stream_max = h2o_http2_window_get_window(&stream->output_window)) <= 0)
+    if ((stream_max = h2o_http2_window_get_avail(&stream->output_window)) <= 0)
         return 0;
     return sz_min(sz_min(conn_max, stream_max), conn->peer_settings.max_frame_size);
 }
@@ -378,7 +378,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    if (h2o_http2_window_get_window(&stream->output_window) <= 0)
+    if (h2o_http2_window_get_avail(&stream->output_window) <= 0)
         return;
 
     if (stream->_pull_cb != NULL) {
