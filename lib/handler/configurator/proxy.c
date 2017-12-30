@@ -324,7 +324,6 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size
     for (i = 0; i != num_upstreams; ++i) {
         yoml_t *url_node = NULL;
         yoml_t *node_for_parsing;
-        memset(&lb_per_target_conf, 0, sizeof(lb_per_target_conf));
         lb_per_target_conf.weight = 0; /* default weight of each target */
         switch (inputs[i]->type) {
             case YOML_TYPE_SCALAR:

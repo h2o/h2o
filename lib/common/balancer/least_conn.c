@@ -41,11 +41,11 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
         leftprod = targets->entries[i]->_shared.leased_count;
         leftprod *= result_weight;
         rightprod = result_leased;
-        rightprod *= ((unsigned)targets->entries[i]->conf->weight) + 1;
+        rightprod *= ((unsigned)targets->entries[i]->conf.weight) + 1;
         if (!tried[i] && leftprod < rightprod) {
             result_index = i;
             result_leased = targets->entries[i]->_shared.leased_count;
-            result_weight = ((unsigned)targets->entries[i]->conf->weight) + 1;
+            result_weight = ((unsigned)targets->entries[i]->conf.weight) + 1;
         }
     }
     pthread_mutex_unlock(&self->mutex);
@@ -57,6 +57,7 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
 static void destroy(h2o_balancer_t *_self) {
     struct least_conn_t *self = (void *)_self;
     pthread_mutex_destroy(&self->mutex);
+    free(self);
 }
 
 h2o_balancer_t *h2o_balancer_create_lc(void)

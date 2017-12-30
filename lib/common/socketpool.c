@@ -153,7 +153,6 @@ h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_soc
     socklen_t salen;
 
     h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-    h2o_socketpool_target_conf_t *conf = h2o_mem_alloc(sizeof(*conf));
     h2o_url_copy(NULL, &target->url, origin);
     assert(target->url.host.base[target->url.host.len] == '\0'); /* needs to be null-terminated in order to be used in SNI */
     target->type = detect_target_type(origin, &sa, &salen);
@@ -174,11 +173,10 @@ h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_soc
         break;
     }
     target->_shared.leased_count = 0;
-    target->conf = conf;
     if (lb_target_conf != NULL)
-        memcpy(conf, lb_target_conf, sizeof(*conf));
+        target->conf.weight = lb_target_conf->weight;
     else {
-        conf->weight = 1;
+        target->conf.weight = 0;
     }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
@@ -232,7 +230,6 @@ void h2o_socketpool_target_destroy(h2o_socketpool_target_t *target)
     free(target->url.authority.base);
     free(target->url.host.base);
     free(target->url.path.base);
-    free(target->conf);
     free(target);
 }
 

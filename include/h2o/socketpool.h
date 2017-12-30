@@ -70,7 +70,7 @@ typedef struct st_h2o_socketpool_target_t {
         } sockaddr;
     } peer;
     
-    h2o_socketpool_target_conf_t *conf;
+    h2o_socketpool_target_conf_t conf;
 
     struct {
         h2o_linklist_t sockets;
