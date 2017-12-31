@@ -1137,7 +1137,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     *still_is_active = 0;
 
     h2o_http2_stream_send_pending_data(conn, stream);
-    if (h2o_http2_stream_has_pending_data(stream)) {
+    if (h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL) {
         if (h2o_http2_window_get_avail(&stream->output_window) <= 0) {
             /* is blocked */
         } else {
