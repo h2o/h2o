@@ -56,8 +56,6 @@ static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static h2o_accept_ctx_t accept_ctx;
 
-
-
 static int setup_ssl(const char *cert_file, const char *key_file)
 {
     SSL_load_error_strings();
@@ -81,7 +79,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
 }
 
 #if H2O_USE_LIBUV
- static void on_accept(uv_stream_t *listener, int status)
+static void on_accept(uv_stream_t *listener, int status)
 {
     uv_tcp_t *conn;
     h2o_socket_t *sock;
