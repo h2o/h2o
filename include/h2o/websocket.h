@@ -41,7 +41,10 @@ struct st_h2o_websocket_conn_t {
     struct wslay_event_callbacks ws_callbacks;
     void *data;
     h2o_websocket_msg_callback cb;
-    void *_write_buf;
+    struct {
+        size_t cnt;
+        h2o_iovec_t bufs[4];
+    } _write_buf;
 };
 
 int h2o_is_websocket_handshake(h2o_req_t *req, const char **client_key);
