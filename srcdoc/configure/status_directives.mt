@@ -6,6 +6,8 @@ The status handler exposes the current states of the HTTP server.
 This document describes the configuration directives of the handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "status",
@@ -58,6 +60,8 @@ Enabling this feature has a noticeable CPU and memory impact.
 <p>
 Note that the time spent while processing a request in a blocking manner (such as opening a file or a mruby handler that does invoke a network operation) will not be reflected to the <code>process_time</code> element of the duration stats due to the fact that the timer being used for measuring the time spent is updated only once per loop.
 </p>
+? })
+
 ? })
 
 ? })

@@ -47,7 +47,11 @@ static int has_nul(const char *s, size_t l) {
 }
 
 static HostnameValidationResult validate_name(const char *hostname, ASN1_STRING *certname_asn1) {
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L) && !defined(LIBRESSL_VERSION_NUMBER)
+	char *certname_s = (char *) ASN1_STRING_get0_data(certname_asn1);
+#else
 	char *certname_s = (char *) ASN1_STRING_data(certname_asn1);
+#endif
 	int certname_len = ASN1_STRING_length(certname_asn1), hostname_len = strlen(hostname);
 
 	// Make sure there isn't an embedded NUL character in the DNS name

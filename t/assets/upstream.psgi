@@ -114,15 +114,48 @@ builder {
             200, @resph, [ "Ok" ]
         ];
     };
+    mount "/echo-request-uri" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REQUEST_URI"} || ''],
+        ];
+    };
     mount "/echo-server-port" => sub {
         my $env = shift;
         return [
             200,
             [
                 'x-server' => $env->{"SERVER_PORT"},
+                'req-connection' => $env->{"HTTP_CONNECTION"} || '',
             ],
             [$env->{"SERVER_PORT"}],
         ];
+    };
+    mount "/echo-remote-port" => sub {
+        my $env = shift;
+        return [
+            200,
+            [
+            ],
+            [$env->{"REMOTE_PORT"} || ''],
+        ];
+    };
+    mount "/sni-name" => sub {
+        my $env = shift;
+        [200, [], [$env->{"psgix.io"}->get_servername]];
+    };
+    mount "/suspend-body" => sub {
+        my $env = shift;
+        return sub {
+            my $responder = shift;
+            my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
+            sleep 1;
+            $writer->write('x');
+            $writer->close;
+        };
     };
     mount "/streaming-body" => sub {
         my $env = shift;
@@ -241,6 +274,17 @@ builder {
                 'content-type' => 'text/plain',
             ],
             [],
+        ];
+    };
+    mount "/content" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        return [
+            200,
+            [
+                ($query->{cl} ? ( 'content-length' => $query->{cl}) : ())
+            ],
+            [ 'a' x ($query->{size} || 0) ],
         ];
     };
 };

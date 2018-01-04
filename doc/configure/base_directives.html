@@ -45,7 +45,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -63,6 +63,79 @@ Base Directives
 <p>
 This document describes the configuration directives common to all the protocols and handlers.
 </p>
+
+<ul>
+<li><a href="configure/base_directives.html#hosts">
+<code>hosts</code>
+</a></li>
+<li><a href="configure/base_directives.html#paths">
+<code>paths</code>
+</a></li>
+<li><a href="configure/base_directives.html#listen">
+<code>listen</code>
+</a></li>
+<li><a href="configure/base_directives.html#error-log">
+<code>error-log</code>
+</a></li>
+<li><a href="configure/base_directives.html#error-log.emit-request-errors">
+<code>error-log.emit-request-errors</code>
+</a></li>
+<li><a href="configure/base_directives.html#handshake-timeout">
+<code>handshake-timeout</code>
+</a></li>
+<li><a href="configure/base_directives.html#limit-request-body">
+<code>limit-request-body</code>
+</a></li>
+<li><a href="configure/base_directives.html#max-connections">
+<code>max-connections</code>
+</a></li>
+<li><a href="configure/base_directives.html#max-delegations">
+<code>max-delegations</code>
+</a></li>
+<li><a href="configure/base_directives.html#num-name-resolution-threads">
+<code>num-name-resolution-threads</code>
+</a></li>
+<li><a href="configure/base_directives.html#num-ocsp-updaters">
+<code>num-ocsp-updaters</code>
+</a></li>
+<li><a href="configure/base_directives.html#num-threads">
+<code>num-threads</code>
+</a></li>
+<li><a href="configure/base_directives.html#pid-file">
+<code>pid-file</code>
+</a></li>
+<li><a href="configure/base_directives.html#tcp-fastopen">
+<code>tcp-fastopen</code>
+</a></li>
+<li><a href="configure/base_directives.html#send-server-name">
+<code>send-server-name</code>
+</a></li>
+<li><a href="configure/base_directives.html#server-name">
+<code>server-name</code>
+</a></li>
+<li><a href="configure/base_directives.html#setenv">
+<code>setenv</code>
+</a></li>
+<li><a href="configure/base_directives.html#unsetenv">
+<code>unsetenv</code>
+</a></li>
+<li><a href="configure/base_directives.html#ssl-session-resumption">
+<code>ssl-session-resumption</code>
+</a></li>
+<li><a href="configure/base_directives.html#temp-buffer-path">
+<code>temp-buffer-path</code>
+</a></li>
+<li><a href="configure/base_directives.html#user">
+<code>user</code>
+</a></li>
+<li><a href="configure/base_directives.html#crash-handler">
+<code>crash-handler</code>
+</a></li>
+<li><a href="configure/base_directives.html#crash-handler.wait-pipe-close">
+<code>crash-handler.wait-pipe-close</code>
+</a></li>
+</ul>
+
 
 <div id="hosts" class="directive-head">
 <h3><a href="configure/base_directives.html#hosts"><code>"hosts"</code></a></h3>
@@ -962,6 +1035,8 @@ process.</p>
 <dt>Default:</dt>
 <dd><code><pre>crash-handler.wait-pipe-close: OFF</pre></code>
 </dl>
+
+
 
 
 

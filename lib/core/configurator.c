@@ -320,6 +320,10 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "key (representing the virtual path) must be a string");
             return -1;
         }
+        if (strlen(key->data.scalar) == 0) {
+            h2o_configurator_errprintf(cmd, key, "key (representing the virtual path) must not be an empty string");
+            return -1;
+        }
     }
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
           (int (*)(const void *, const void *))sort_from_longer_paths);
@@ -430,6 +434,21 @@ static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurat
                                                                   yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_concurrent_requests_per_connection);
+}
+
+static int on_config_http2_input_window_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    uint32_t v;
+    if (h2o_configurator_scanf(cmd, node, "%" SCNu32, &v) != 0)
+        return -1;
+    if (!(H2O_HTTP2_MIN_STREAM_WINDOW_SIZE <= v && v <= H2O_HTTP2_MAX_STREAM_WINDOW_SIZE)) {
+        h2o_configurator_errprintf(cmd, node, "window size must be between %" PRIu32 " and %" PRIu32,
+                                   (uint32_t)H2O_HTTP2_MIN_STREAM_WINDOW_SIZE,
+                                   (uint32_t)H2O_HTTP2_MAX_STREAM_WINDOW_SIZE);
+        return -1;
+    }
+    ctx->globalconf->http2.active_stream_window_size = v;
+    return 0;
 }
 
 static int on_config_http2_latency_optimization_min_rtt(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
@@ -906,6 +925,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-max-concurrent-requests-per-connection",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_max_concurrent_requests_per_connection);
+        h2o_configurator_define_command(&c->super, "http2-input-window-size",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_input_window_size);
         h2o_configurator_define_command(&c->super, "http2-latency-optimization-min-rtt",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_latency_optimization_min_rtt);

@@ -31,7 +31,11 @@
 
 #if !defined(H2O_USE_ACCEPT4)
 #ifdef __linux__
+#if defined(__ANDROID__) && __ANDROID_API__ < 21
+#define H2O_USE_ACCEPT4 0
+#else
 #define H2O_USE_ACCEPT4 1
+#endif
 #elif __FreeBSD__ >= 10
 #define H2O_USE_ACCEPT4 1
 #else
@@ -284,7 +288,6 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
         goto Out;
     }
 
-
     /* setup the buffer to send pending data */
     if (bufcnt <= sizeof(sock->_wreq.smallbufs) / sizeof(sock->_wreq.smallbufs[0])) {
         sock->_wreq.bufs = sock->_wreq.smallbufs;
@@ -380,8 +383,6 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 {
     struct st_h2o_evloop_socket_t *sock;
 
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-
     sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
@@ -406,7 +407,7 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    fcntl(fd, F_SETFL, O_NONBLOCK);
+    fcntl(fd, F_SETFL, O_NONBLOCK); /* not always needed under linux, the caller may already set this flag */
     return &create_socket(loop, fd, flags)->super;
 }
 

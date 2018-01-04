@@ -42,8 +42,8 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
-    h2o_http2_window_init(&stream->output_window, &conn->peer_settings);
-    h2o_http2_window_init(&stream->input_window, &H2O_HTTP2_SETTINGS_HOST);
+    h2o_http2_window_init(&stream->output_window, conn->peer_settings.initial_window_size);
+    h2o_http2_input_window_init(&stream->input_window, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
     stream->received_priority = *received_priority;
 
     /* init request */
@@ -106,7 +106,7 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
 
     if ((conn_max = h2o_http2_conn_get_buffer_window(conn)) <= 0)
         return 0;
-    if ((stream_max = h2o_http2_window_get_window(&stream->output_window)) <= 0)
+    if ((stream_max = h2o_http2_window_get_avail(&stream->output_window)) <= 0)
         return 0;
     return sz_min(sz_min(conn_max, stream_max), conn->peer_settings.max_frame_size);
 }
@@ -122,6 +122,7 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
         h2o_http2_window_consume_window(&conn->_write.window, length);
         h2o_http2_window_consume_window(&stream->output_window, length);
         (*outbuf)->size += length + H2O_HTTP2_FRAME_HEADER_SIZE;
+        stream->req.bytes_sent += length;
     }
     /* send a RST_STREAM if there's an error */
     if (send_state == H2O_SEND_STATE_ERROR) {
@@ -210,9 +211,6 @@ static int is_blocking_asset(h2o_req_t *req)
 
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    h2o_timestamp_t ts;
-
-    h2o_get_timestamp(conn->super.ctx, &stream->req.pool, &ts);
 
     /* cancel push with an error response */
     if (h2o_http2_stream_is_push(stream->stream_id)) {
@@ -286,7 +284,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
                               H2O_STRLIT("pushed"));
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                               conn->peer_settings.max_frame_size, &stream->req.res, &ts, &conn->super.ctx->globalconf->server_name,
+                               conn->peer_settings.max_frame_size, &stream->req.res, &conn->super.ctx->globalconf->server_name,
                                stream->req.res.content_length);
     h2o_http2_conn_request_write(conn);
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
@@ -380,7 +378,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
 
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    if (h2o_http2_window_get_window(&stream->output_window) <= 0)
+    if (h2o_http2_window_get_avail(&stream->output_window) <= 0)
         return;
 
     if (stream->_pull_cb != NULL) {

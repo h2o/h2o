@@ -47,7 +47,14 @@ typedef struct st_h2o_http2_settings_t {
 } h2o_http2_settings_t;
 
 extern const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT;
-extern const h2o_http2_settings_t H2O_HTTP2_SETTINGS_HOST;
+
+/* don't forget to update SERVER_PREFACE when choosing non-default parameters */
+#define H2O_HTTP2_SETTINGS_HOST_HEADER_TABLE_SIZE 4096
+#define H2O_HTTP2_SETTINGS_HOST_ENABLE_PUSH 0 /* _client_ is never allowed to push */
+#define H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS 100
+#define H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE H2O_HTTP2_MAX_STREAM_WINDOW_SIZE
+#define H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE H2O_HTTP2_MIN_STREAM_WINDOW_SIZE
+#define H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE 16384
 
 typedef struct st_h2o_http2_priority_t {
     int exclusive;

@@ -45,7 +45,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -67,6 +67,46 @@ This document describes the configuration directives of the file handler - a han
 Two directives: <a href="configure/file_directives.html#file.dir"><code>file.dir</code></a> and <a href="configure/file_directives.html#file.file"><code>file.file</code></a> are used to define the mapping.
 Other directives modify the behavior of the mappings defined by the two.
 </p>
+
+<ul>
+<li><a href="configure/file_directives.html#file.custom-handler">
+<code>file.custom-handler</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.dir">
+<code>file.dir</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.dirlisting">
+<code>file.dirlisting</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.etag">
+<code>file.etag</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.file">
+<code>file.file</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.index">
+<code>file.index</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.addtypes">
+<code>file.mime.addtypes</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.removetypes">
+<code>file.mime.removetypes</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.setdefaulttype">
+<code>file.mime.setdefaulttype</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.mime.settypes">
+<code>file.mime.settypes</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.send-compressed">
+<code>file.send-compressed</code>
+</a></li>
+<li><a href="configure/file_directives.html#file.send-gzip">
+<code>file.send-gzip</code>
+</a></li>
+</ul>
+
 
 <div id="file.custom-handler" class="directive-head">
 <h3><a href="configure/file_directives.html#file.custom-handler"><code>"file.custom-handler"</code></a></h3>
@@ -413,6 +453,8 @@ Synonym of <a href="configure/file_directives.html#file.send-compressed"><code>f
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path</dd>
 </dl>
+
+
 
 
 

@@ -36,6 +36,8 @@ SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 
 INCLUDE(GNUInstallDirs)
+INCLUDE(CheckCSourceCompiles)
+INCLUDE(CMakePushCheckState)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -49,7 +51,6 @@ FIND_PACKAGE(Threads REQUIRED)
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(ZLIB REQUIRED)
 
-INCLUDE(CheckCSourceCompiles)
 CHECK_C_SOURCE_COMPILES("
 #include <stdint.h>
 int main(void) {
@@ -57,6 +58,32 @@ uint64_t a;
 __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
+
+
+
+# Find out if libc provices backtrace()
+CMAKE_PUSH_CHECK_STATE()
+FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
+IF (LIBC_BACKTRACE_LIB)
+    SET(CMAKE_REQUIRED_LIBRARIES ${LIBC_BACKTRACE_LIB})
+ENDIF()
+CHECK_C_SOURCE_COMPILES("
+#include <execinfo.h>
+int main(void) {
+void *p[10];
+int ret = backtrace(p, 10);
+backtrace_symbols_fd(p, ret, 2);
+return 0;
+}" LIBC_HAS_BACKTRACE)
+
+CMAKE_POP_CHECK_STATE()
+
+IF (LIBC_HAS_BACKTRACE)
+    ADD_DEFINITIONS("-DLIBC_HAS_BACKTRACE")
+    IF (LIBC_BACKTRACE_LIB)
+        LIST(APPEND EXTRA_LIBS ${LIBC_BACKTRACE_LIB})
+    ENDIF ()
+ENDIF ()
 
 SET(WITH_BUNDLED_SSL_DEFAULT "ON")
 IF ((NOT UNIX) OR CYGWIN)
@@ -104,7 +131,7 @@ ENDIF (WITH_BUNDLED_SSL)
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
-    deps/brotli/enc
+    deps/brotli/c/include
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -193,21 +220,25 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/writer.c)
 
 SET(BROTLI_SOURCE_FILES
-    deps/brotli/enc/backward_references.cc
-    deps/brotli/enc/block_splitter.cc
-    deps/brotli/enc/brotli_bit_stream.cc
-    deps/brotli/enc/compress_fragment.cc
-    deps/brotli/enc/compress_fragment_two_pass.cc
-    deps/brotli/enc/dictionary.cc
-    deps/brotli/enc/encode.cc
-    deps/brotli/enc/entropy_encode.cc
-    deps/brotli/enc/histogram.cc
-    deps/brotli/enc/literal_cost.cc
-    deps/brotli/enc/metablock.cc
-    deps/brotli/enc/static_dict.cc
-    deps/brotli/enc/streams.cc
-    deps/brotli/enc/utf8_util.cc
-    lib/handler/compress/brotli.cc)
+    deps/brotli/c/common/dictionary.c
+    deps/brotli/c/enc/backward_references.c
+    deps/brotli/c/enc/backward_references_hq.c
+    deps/brotli/c/enc/bit_cost.c
+    deps/brotli/c/enc/block_splitter.c
+    deps/brotli/c/enc/brotli_bit_stream.c
+    deps/brotli/c/enc/cluster.c
+    deps/brotli/c/enc/compress_fragment.c
+    deps/brotli/c/enc/compress_fragment_two_pass.c
+    deps/brotli/c/enc/dictionary_hash.c
+    deps/brotli/c/enc/encode.c
+    deps/brotli/c/enc/entropy_encode.c
+    deps/brotli/c/enc/histogram.c
+    deps/brotli/c/enc/literal_cost.c
+    deps/brotli/c/enc/memory.c
+    deps/brotli/c/enc/metablock.c
+    deps/brotli/c/enc/static_dict.c
+    deps/brotli/c/enc/utf8_util.c
+    lib/handler/compress/brotli.c)
 
 SET(PICOTLS_INCLUDE_DIRECTORIES
     deps/picotls/deps/cifra/src/ext
@@ -219,6 +250,7 @@ SET(PICOTLS_SOURCE_FILES
     deps/picotls/deps/micro-ecc/uECC.c
     deps/picotls/deps/cifra/src/aes.c
     deps/picotls/deps/cifra/src/blockwise.c
+    deps/picotls/deps/cifra/src/chacha20.c
     deps/picotls/deps/cifra/src/chash.c
     deps/picotls/deps/cifra/src/curve25519.c
     deps/picotls/deps/cifra/src/drbg.c
@@ -226,6 +258,7 @@ SET(PICOTLS_SOURCE_FILES
     deps/picotls/deps/cifra/src/gcm.c
     deps/picotls/deps/cifra/src/gf128.c
     deps/picotls/deps/cifra/src/modes.c
+    deps/picotls/deps/cifra/src/poly1305.c
     deps/picotls/deps/cifra/src/sha256.c
     deps/picotls/lib/picotls.c
     deps/picotls/lib/cifra.c
@@ -379,7 +412,12 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c)
 
-SET(EXTRA_LIBS ${EXTRA_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+SET(FUZZED_SOURCE_FILES
+    ${LIB_SOURCE_FILES}
+    ${LIBYAML_SOURCE_FILES}
+    ${BROTLI_SOURCE_FILES})
+
+SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
@@ -416,7 +454,7 @@ IF (OPENSSL_FOUND)
         SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
     ENDIF ()
     IF (NOT WITHOUT_LIBS)
-	INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
     ELSE ()
         SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
     ENDIF()
@@ -478,6 +516,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
         lib/handler/mruby/sleep.c
+        lib/handler/mruby/channel.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
@@ -634,15 +673,26 @@ IF (BUILD_FUZZER)
         SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer")
         SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
     ELSE ()
-        # Default non-oss-fuzz options
-        SET(LIB_FUZZER "${CMAKE_CURRENT_BINARY_DIR}/libFuzzer.a")
-        SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
+        EXEC_PROGRAM(${CMAKE_CXX_COMPILER} ARGS "--version 2>&1 | grep version" OUTPUT_VARIABLE _clang_version_info)
+        STRING(REGEX REPLACE "^.*[ ]version[ ]([0-9]+)\\.[0-9]+.*" "\\1" CLANG_MAJOR "${_clang_version_info}")
+        STRING(REGEX REPLACE "^.*[ ]version[ ][0-9]+\\.([0-9]+).*" "\\1" CLANG_MINOR "${_clang_version_info}")
 
-        ADD_CUSTOM_TARGET(libFuzzer ${CMAKE_CURRENT_SOURCE_DIR}/misc/build_libFuzzer.sh WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-        ADD_DEPENDENCIES(h2o-fuzzer-http1 libFuzzer)
-        ADD_DEPENDENCIES(h2o-fuzzer-http2 libFuzzer)
-        ADD_DEPENDENCIES(h2o-fuzzer-url libFuzzer)
+        IF ("${CLANG_MAJOR}.${CLANG_MINOR}" VERSION_LESS "5.0")
+            ADD_CUSTOM_TARGET(libFuzzer ${CMAKE_CURRENT_SOURCE_DIR}/misc/build_libFuzzer.sh WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+            ADD_DEPENDENCIES(h2o-fuzzer-http1 libFuzzer)
+            ADD_DEPENDENCIES(h2o-fuzzer-http2 libFuzzer)
+            ADD_DEPENDENCIES(h2o-fuzzer-url libFuzzer)
+
+            SET(LIB_FUZZER "${CMAKE_CURRENT_BINARY_DIR}/libFuzzer.a")
+            SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer -fsanitize=address -fsanitize-coverage=edge,indirect-calls,8bit-counters")
+        ELSE()
+            SET(FUZZED_SOURCE_FILES "fuzz/driver.cc" "fuzz/driver_url.cc" ${FUZZED_SOURCE_FILES})
+            SET_SOURCE_FILES_PROPERTIES(${FUZZED_SOURCE_FILES} PROPERTIES COMPILE_FLAGS "-fno-omit-frame-pointer -fsanitize=fuzzer,address -fsanitize-coverage=trace-pc-guard")
+            SET_TARGET_PROPERTIES(h2o-fuzzer-http1 h2o-fuzzer-http2 h2o-fuzzer-url PROPERTIES LINK_FLAGS "-fsanitize=fuzzer,address")
+            SET(CMAKE_EXE_LINKER_FLAGS "-fsanitize=address -fsanitize-coverage=trace-pc-guard")
+        ENDIF()
+
     ENDIF (OSS_FUZZ)
 
     TARGET_LINK_LIBRARIES(h2o-fuzzer-http1 libh2o-evloop ${EXTRA_LIBS} ${LIB_FUZZER})

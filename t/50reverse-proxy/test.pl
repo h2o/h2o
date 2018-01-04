@@ -84,6 +84,12 @@ hosts:
       /gzip:
         proxy.reverse.url: http://$upstream
         gzip: ON
+      /test-request-uri-noslash:
+        proxy.reverse.url: http://$upstream/echo-request-uri
+        gzip: ON
+      /test-request-uri-withslash:
+        proxy.reverse.url: http://$upstream/echo-request-uri/
+        gzip: ON
       /files:
         file.dir: @{[ DOC_ROOT ]}
 reproxy: ON
@@ -154,6 +160,23 @@ run_with_curl($server, sub {
         $content = `$curl --silent "$proto://127.0.0.1:$port/?resp:status=200&resp:x-reproxy-url=http://default/files"`;
         is length($content), $files{"index.txt"}->{size}, "redirect handled internally after delegation (size)";
         is md5_hex($content), $files{"index.txt"}->{md5}, "redirect handled internally after delegation (md5)";
+
+        subtest "keep-alive" => sub {
+            if ($unix_socket) {
+                pass;
+                return;
+            }
+            my ($headers, $body);
+            my $cmd = "$curl --silent --dump-header /dev/stderr \"$proto://127.0.0.1:$port/?resp:status=302&resp:x-reproxy-url=http://@{[uri_escape($upstream)]}/echo-remote-port\"";
+            ($headers, $body) = run_prog($cmd);
+            my $remote_port = $body;
+            ($headers, $body) = run_prog($cmd);
+            if ($h2o_keepalive && $starlet_keepalive) {
+                is $body, $remote_port, "keep-alive is enabled";
+            } else {
+                isnt $body, $remote_port, "keep-alive is disbaled";
+            }
+        };
     };
     subtest "x-forwarded ($proto)" => sub {
         my $resp = `$curl --silent $proto://127.0.0.1:$port/echo-headers`;
@@ -173,6 +196,20 @@ run_with_curl($server, sub {
             if $curl =~ /--http2/;
         my $resp = `$curl --silent -H Accept-Encoding:gzip $proto://127.0.0.1:$port/gzip/alice.txt | gzip -cd`;
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt");
+    };
+    subtest 'request uri' => sub {
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-noslash`;
+        like $resp, qr{^/echo-request-uri$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-withslash`;
+        like $resp, qr{^/echo-request-uri/$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-noslash?abc=def`;
+        like $resp, qr{^/echo-request-uri\?abc=def$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-withslash?abc=def`;
+        like $resp, qr{^/echo-request-uri/\?abc=def$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-noslash/abc`;
+        like $resp, qr{^/echo-request-uri/abc$}mi;
+        $resp = `$curl --silent $proto://127.0.0.1:$port/test-request-uri-withslash/abc`;
+        like $resp, qr{^/echo-request-uri/abc$}mi;
     };
 });
 

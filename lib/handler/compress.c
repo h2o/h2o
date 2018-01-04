@@ -39,6 +39,11 @@ struct st_compress_encoder_t {
 
 static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
+    if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
+        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
+        return;
+    }
+
     struct st_compress_encoder_t *self = (void *)_self;
     h2o_iovec_t *outbufs;
     size_t outbufcnt;
@@ -101,7 +106,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 /* open the compressor */
 #if H2O_USE_BROTLI
     if (self->args.brotli.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
-        compressor = h2o_compress_brotli_open(&req->pool, self->args.brotli.quality, req->res.content_length);
+        compressor =
+            h2o_compress_brotli_open(&req->pool, self->args.brotli.quality, req->res.content_length, req->preferred_chunk_size);
     } else
 #endif
         if (self->args.gzip.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {

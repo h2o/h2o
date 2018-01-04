@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
+use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -12,7 +13,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl run_with_h2get run_with_h2get_simple);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -180,7 +181,7 @@ sub spawn_h2o {
             if $conf->{opts};
         $conf = $conf->{conf};
     }
-    print $conffh <<"EOT";
+    $conf = <<"EOT";
 $conf
 listen:
   host: 0.0.0.0
@@ -192,6 +193,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 EOT
+    print $conffh $conf;
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
@@ -247,6 +249,7 @@ sub run_prog {
     my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
     my $stderr = `$cmd 2>&1 > $tempfn`;
     my $stdout = do { local $/; <$tempfh> };
+    close $tempfh; # tempfile does not close the file automatically (see perldoc)
     return ($stderr, $stdout);
 }
 
@@ -282,10 +285,14 @@ sub run_with_curl {
     };
 }
 
+sub h2get_exists {
+    prog_exists(bindir() . "/h2get_bin/h2get");
+}
+
 sub run_with_h2get {
     my ($server, $script) = @_;
     plan skip_all => "h2get not found"
-        unless prog_exists(bindir()."/h2get_bin/h2get");
+        unless h2get_exists();
     my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
     print $scriptfh $script;
     close($scriptfh);
@@ -314,5 +321,31 @@ EOS
     run_with_h2get($server, $settings."\n".$script);
 }
 
+sub one_shot_http_upstream {
+    my ($response, $port) = @_;
+    my $listen = IO::Socket::INET->new(
+        LocalHost => '0.0.0.0',
+        LocalPort => $port,
+        Proto     => 'tcp',
+        Listen    => 1,
+        Reuse     => 1,
+    ) or die "failed to listen to 127.0.0.1:$port:$!";
+
+    my $pid = fork;
+    die "fork failed" unless defined $pid;
+    if ($pid != 0) {
+        close $listen;
+        my $guard = scope_guard(sub {
+            kill 'KILL', $pid;
+            while (waitpid($pid, WNOHANG) != $pid) {}
+        });
+        return ($port, $guard);
+    }
+
+    while (my $sock = $listen->accept) {
+        $sock->print($response);
+        close $sock;
+    }
+}
 
 1;

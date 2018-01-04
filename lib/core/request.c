@@ -308,7 +308,7 @@ h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     h2o_hostconf_t *hostconf = h2o_req_setup(req);
     setup_pathconf(req, hostconf);
-    return req->pathconf->handlers.entries[0];
+    return req->pathconf->handlers.size != 0 ? req->pathconf->handlers.entries[0] : NULL;
 }
 
 void h2o_process_request(h2o_req_t *req)
@@ -386,7 +386,8 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     }
 
     /* handle the response using the handlers, if hostconf exists */
-    if (req->overrides == NULL && (hostconf = find_hostconf(req->conn->hosts, req->authority, req->scheme->default_port)) != NULL) {
+    h2o_hostconf_t **hosts = is_delegated ? req->conn->ctx->globalconf->hosts : req->conn->hosts;
+    if (req->overrides == NULL && (hostconf = find_hostconf(hosts, req->authority, req->scheme->default_port)) != NULL) {
         req->pathconf = NULL;
         process_hosted_request(req, hostconf);
         return;
@@ -435,15 +436,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
 
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    size_t i;
-
     assert(req->_generator != NULL);
 
     if (!h2o_send_state_is_in_progress(state))
         req->_generator = NULL;
-
-    for (i = 0; i != bufcnt; ++i)
-        req->bytes_sent += bufs[i].len;
 
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, state);
 }
@@ -494,9 +490,6 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
     if (!h2o_send_state_is_in_progress(state)) {
         assert(req->_ostr_top == ostream);
         req->_ostr_top = ostream->next;
-    } else if (bufcnt == 0) {
-        h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &req->_timeout_entry);
-        return;
     }
     ostream->next->do_send(ostream->next, req, bufs, bufcnt, state);
 }
@@ -713,4 +706,11 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
                                            req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
 
     return ret;
+}
+
+void h2o_resp_add_date_header(h2o_req_t *req)
+{
+    h2o_timestamp_t ts;
+    h2o_get_timestamp(req->conn->ctx, &req->pool, &ts);
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_DATE, NULL, ts.str->rfc1123, strlen(ts.str->rfc1123));
 }

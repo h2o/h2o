@@ -193,7 +193,7 @@ __DATA__
 30 0 0 0 0 0 0 content-range
 31 0 0 0 0 0 0 content-type
 32 0 0 0 0 0 1 cookie
-33 0 1 0 0 0 0 date
+33 0 0 0 0 0 0 date
 34 0 0 0 0 0 0 etag
 35 0 0 1 0 0 0 expect
 36 0 0 0 0 0 0 expires
@@ -224,7 +224,7 @@ __DATA__
 61 0 0 0 0 0 0 www-authenticate
 0 1 1 0 1 0 0 connection
 0 0 0 0 0 0 0 x-reproxy-url
-0 1 0 1 1 0 0 upgrade
+0 1 1 1 1 0 0 upgrade
 0 1 0 0 1 0 0 http2-settings
 0 1 0 0 1 0 0 te
 0 1 1 0 0 0 0 keep-alive
