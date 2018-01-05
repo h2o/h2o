@@ -57,12 +57,22 @@ static void on_recv(h2o_socket_t *sock, const char *err)
 static void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_websocket_conn_t *conn = sock->data;
+    h2o_iovec_t *buf;
+    size_t i;
 
     if (err != NULL) {
         on_close(conn);
         return;
     }
     assert(conn->_write_buf.cnt == 0);
+    for (i = 0; i < sizeof(conn->_write_buf.bufs) / sizeof(conn->_write_buf.bufs[0]); ++i) {
+        buf = &conn->_write_buf.bufs[i];
+        if (buf->base != NULL) {
+            free(buf->base);
+            buf->base = NULL;
+        }
+    }
+
     h2o_websocket_proceed(conn);
 }
 
@@ -98,7 +108,7 @@ static ssize_t send_callback(wslay_event_context_ptr ctx, const uint8_t *data, s
     buf = &conn->_write_buf.bufs[conn->_write_buf.cnt];
 
     /* copy data */
-    buf->base = h2o_mem_realloc(buf->base, len);
+    buf->base = h2o_mem_alloc(len);
     buf->len = len;
     memcpy(buf->base, data, len);
     ++conn->_write_buf.cnt;
