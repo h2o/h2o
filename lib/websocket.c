@@ -67,10 +67,10 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     assert(conn->_write_buf.cnt == 0);
     for (i = 0; i < sizeof(conn->_write_buf.bufs) / sizeof(conn->_write_buf.bufs[0]); ++i) {
         buf = &conn->_write_buf.bufs[i];
-        if (buf->base != NULL) {
-            free(buf->base);
-            buf->base = NULL;
-        }
+        if (buf->base == NULL)
+            break;
+        free(buf->base);
+        buf->base = NULL;
     }
 
     h2o_websocket_proceed(conn);
