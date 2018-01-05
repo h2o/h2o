@@ -206,6 +206,12 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
 static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    if (!h2o_http2_stream_is_push(stream->stream_id) && stream->stream_id > conn->pull_stream_ids.max_open) {
+        /* this stream is opend after sending GOAWAY, so ignore it */
+        h2o_http2_stream_reset(conn, stream);
+        return;
+    }
+
     /* TODO schedule the pending reqs using the scheduler */
     h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);
 
@@ -474,9 +480,6 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
-        return 0;
-
     if ((stream = h2o_http2_conn_get_stream(conn, frame.stream_id)) == NULL ||
         !(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY)) {
         *err_desc = "unexpected stream id in CONTINUATION frame";
@@ -631,9 +634,6 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     if ((ret = h2o_http2_decode_data_payload(&payload, frame, err_desc)) != 0)
         return ret;
 
-    if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
-        return 0;
-
     update_input_window(conn, 0, &conn->_input_window, payload.length);
 
     /* save the input in the request body buffer, or send error (and close the stream) */
@@ -681,8 +681,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
             if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0)
                 goto PREPARE_FOR_CONTINUATION;
             return handle_trailing_headers(conn, stream, payload.headers, payload.headers_len, err_desc);
-        } else if (!stream || stream->state != H2O_HTTP2_STREAM_STATE_IDLE) {
-            /* it's legit that stream exists and is IDLE if a PRIORITY frame was received earlier */
+        } else {
             *err_desc = "invalid stream id in HEADERS frame";
             return H2O_HTTP2_ERROR_STREAM_CLOSED;
         }
@@ -691,9 +690,6 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         *err_desc = "stream cannot depend on itself";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
-
-    if (conn->state >= H2O_HTTP2_CONN_STATE_HALF_CLOSED)
-        return 0;
 
     /* open or determine the stream and prepare */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL) {
@@ -1172,7 +1168,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
     case H2O_HTTP2_CONN_STATE_OPEN:
         break;
     case H2O_HTTP2_CONN_STATE_HALF_CLOSED:
-        if (conn->num_streams.pull.half_closed + conn->num_streams.push.half_closed != 0)
+        if (conn->num_streams.pull.open + conn->num_streams.push.open != 0)
             break;
         conn->state = H2O_HTTP2_CONN_STATE_IS_CLOSING;
     /* fall-thru */

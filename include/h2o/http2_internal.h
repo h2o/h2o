@@ -498,13 +498,19 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
 
 inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
     assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
 
     /* adjust max-open */
-    uint32_t *max_open =
-        h2o_http2_stream_is_push(stream->stream_id) ? &conn->push_stream_ids.max_open : &conn->pull_stream_ids.max_open;
-    if (*max_open < stream->stream_id)
+    uint32_t *max_open = NULL;
+    if (h2o_http2_stream_is_push(stream->stream_id)) {
+        max_open = &conn->push_stream_ids.max_open;
+    } else if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
+        max_open = &conn->pull_stream_ids.max_open;
+    }
+    if (max_open != NULL && *max_open < stream->stream_id)
         *max_open = stream->stream_id;
+
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
     h2o_http2_window_init(&stream->output_window, conn->peer_settings.initial_window_size);
 }
