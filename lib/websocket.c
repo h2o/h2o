@@ -224,7 +224,10 @@ void h2o_websocket_proceed(h2o_websocket_conn_t *conn)
             if (wslay_event_send(conn->ws_ctx) != 0) {
                 goto Close;
             }
-            handled = 1;
+            /* avoid infinite loop when user want send more bufers count than ours in on_msg_callback() */
+            if (conn->_write_buf.cnt < sizeof(conn->_write_buf.bufs) / sizeof(conn->_write_buf.bufs[0])) {
+                handled = 1;
+            }
         }
         if (conn->sock->input->size != 0 && wslay_event_want_read(conn->ws_ctx)) {
             if (wslay_event_recv(conn->ws_ctx) != 0) {
