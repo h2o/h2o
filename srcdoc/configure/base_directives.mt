@@ -591,6 +591,21 @@ Default is <code>sha-256</code>.
 </dd>
 <dt>ticket-file:</dt>
 <dd>for the <code>file</code> store specifies the file in which the secrets are stored</dd>
+The file can contain multiple entries of the form:
+<?= $ctx->{example}->('ticket-file:', <<'EOT');
+- name: 4622f2c5a7d964326e823d273e6f01a0
+  cipher: aes-256-cbc
+  hash: sha256
+  key: deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+  not_before: 0
+  not_after: 18446744073709551615</code>
+EOT
+?>
+<code>name</code>  should be 32 char HEX string
+<code>key</code> should be 96 bytes (192 char HEX string) if aes-256-cbc with sha265 is used <code>key</code> 
+
+whenever you rotate keys you should set <code>not_before</code> to the same value in the future on all servers. This enables you to gradually restart your servers and they will  automatically switch keys at the same time. 
+
 <dt>ticket-memcached-key:</dt>
 <dd>
 for the <code>memcached</code> store specifies the key used to store the secrets on memcached.
