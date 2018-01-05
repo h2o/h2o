@@ -329,10 +329,33 @@ hosts:
       port: 443
       ssl:
         <
+Starting from version 2.3, it is possible to refer to an environment variable (intepreted as a scalar) from the configuration file by using !env custom YAML tag.
+
+
+.PP
+.BR Example:\ 
+h2o.conf
+.PP
+.nf
+.RS
+hosts:
+  "example.com":
+    listen:
+      port: !env H2O_PORT
+    paths:
+      ...
+
+.RE
+.fi
+.PP
+
+
+
 
 .SS Notes:
 .PP
 [1]1 day is equivalent to 86400 seconds
+
 
 .SH BASE DIRECTIVES
 
