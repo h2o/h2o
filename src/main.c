@@ -1395,24 +1395,26 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
 
 static yoml_t *resolve_env_tag(yoml_t *node, resolve_tag_arg_t *arg)
 {
-
-    const char * env_var = node->data.scalar;
     if (node->type != YOML_TYPE_SCALAR) {
         fprintf(stderr, "value of !env must be a scalar");
         return NULL;
     }
 
-    const char *env_var_content;
-    if ((env_var_content = getenv(env_var)) == NULL)
-        env_var_content = "";
+    const char *value;
+    if ((value = getenv(node->data.scalar)) == NULL)
+        value = "";
 
+    /* free old data (we need to reset tag; otherwise we might try to resolve the value once again if the same object is referred
+     * more than once due to the use of aliases) */
     free(node->data.scalar);
-    node->data.scalar = h2o_strdup(NULL, env_var_content, SIZE_MAX).base;
+    free(node->tag);
+    node->tag = NULL;
+
+    node->data.scalar = h2o_strdup(NULL, value, SIZE_MAX).base;
     ++node->_refcnt;
 
     return node;
 }
-
 
 static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg)
 {
