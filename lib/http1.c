@@ -732,12 +732,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         conn->req.http1_is_persistent = 0;
     }
 
-    if (bufcnt != 0) {
-        h2o_socket_write(conn->sock, bufs, bufcnt,
-                         h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
-    } else {
-        on_send_complete(conn->sock, 0);
-    }
+    h2o_socket_write(conn->sock, bufs, bufcnt,
+                     h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
