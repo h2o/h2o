@@ -415,7 +415,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
         }
     }
     if (!self->sending.inflight)
-    do_send(self);
+        do_send(self);
 
     if (self->client && self->client->sock && overrides && self->client->sock->input->size > overrides->max_buffer_size) {
         self->await_send = await_send;
