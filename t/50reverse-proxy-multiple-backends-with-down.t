@@ -30,8 +30,8 @@ hosts:
       /:
         proxy.reverse.url:
           backends:
-            - http://127.0.0.1.XIP.IO:$unused_port/echo-server-port
-            - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
+            - http://127.0.0.1.xip.io:$unused_port/echo-server-port
+            - http://127.0.0.1.xip.io:$upstream_port/echo-server-port
           balancer: $balancer
 EOT
     

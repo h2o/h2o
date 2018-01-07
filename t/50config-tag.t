@@ -101,6 +101,36 @@ EOT
     like $stderr, qr{^bar: ?BAR\r$}im;
 };
 
+subtest 'env' => sub {
+    my $spawn = sub {
+        spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        header.add: !env FOO
+        file.dir: @{[DOC_ROOT]}
+EOT
+    };
+    subtest 'exist' => sub {
+        local $ENV{FOO} = "hello: world";
+        my $server = $spawn->();
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($stderr, $stdout) = run_prog("$curl --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+            like $stderr, qr{^hello: ?world\r$}im;
+        });
+    };
+    subtest 'nonexist' => sub {
+        local $@;
+        delete local $ENV{FOO};
+        eval {
+            $spawn->();
+        };
+        ok $@;
+    };
+};
+
 done_testing();
 
 sub temp_config_file {
