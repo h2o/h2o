@@ -44,7 +44,7 @@ static const uint8_t SERVER_PREFACE_BIN[] = {
     LIT_FRAME_HEADER(6, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100),
     /* window_update frame */
     LIT_FRAME_HEADER(4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, 0),
-    LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)};
+    LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)};
 #undef LIT16
 #undef LIT24
 #undef LIT32
@@ -646,10 +646,9 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         return ret;
 
     h2o_http2_window_consume_window(&conn->_input_window, payload.length);
-    if (h2o_http2_window_get_avail(&conn->_input_window) <= H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE / 2)
+    if (h2o_http2_window_get_avail(&conn->_input_window) <= H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE / 2)
         send_window_update(conn, 0, &conn->_input_window,
-                           H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE -
-                               h2o_http2_window_get_avail(&conn->_input_window));
+                           H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - h2o_http2_window_get_avail(&conn->_input_window));
 
     /* save the input in the request body buffer, or send error (and close the stream) */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL) {
@@ -1337,7 +1336,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->_read_expect = expect_preface;
     conn->_input_header_table.hpack_capacity = conn->_input_header_table.hpack_max_capacity =
         H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
-    h2o_http2_window_init(&conn->_input_window, H2O_HTTP2_SETTINGS_HOST_CONNECTION_INITIAL_WINDOW_SIZE);
+    h2o_http2_window_init(&conn->_input_window, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
     h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
