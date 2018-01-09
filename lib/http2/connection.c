@@ -650,12 +650,13 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     if ((ret = h2o_http2_decode_data_payload(&payload, frame, err_desc)) != 0)
         return ret;
 
+    /* update connection-level window */
     h2o_http2_window_consume_window(&conn->_input_window, payload.length);
     if (h2o_http2_window_get_avail(&conn->_input_window) <= H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE / 2)
         send_window_update(conn, 0, &conn->_input_window,
                            H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - h2o_http2_window_get_avail(&conn->_input_window));
 
-    /* save the input in the request body buffer, or send error (and close the stream) */
+    /* check state */
     if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL) {
         if (frame->stream_id <= conn->pull_stream_ids.max_open) {
             stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
@@ -670,8 +671,12 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         h2o_http2_stream_reset(conn, stream);
         return 0;
     }
-    handle_request_body_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
-                              (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+
+    /* actually handle the input */
+    if (payload.length != 0 || (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0)
+        handle_request_body_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
+                                  (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+
     return 0;
 }
 
