@@ -618,6 +618,7 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
 static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
+    h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
     h2o_handler_t *first_handler;
 
     /* if possible, switch to either streaming request body mode */
@@ -628,10 +629,14 @@ static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
         stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
         stream->req.write_req.cb = write_req_streaming_pre_dispatch;
         stream->req.proceed_req = proceed_request;
-        execute_or_enqueue_request_core((h2o_http2_conn_t *)stream->req.conn, stream);
+        execute_or_enqueue_request_core(conn, stream);
         return 0;
     }
 
+    /* TODO elect input streams one by one for non-streaming case as well? */
+    update_stream_input_window(conn, stream,
+                               conn->super.ctx->globalconf->http2.active_stream_window_size -
+                                   H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
     stream->req.write_req.cb = write_req_non_streaming;
     return write_req_non_streaming(stream->req.write_req.ctx, payload, is_end_stream);
 }
