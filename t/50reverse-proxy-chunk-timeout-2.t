@@ -45,8 +45,6 @@ subtest 'http (upgrade)' => sub {
     $doit->('http', '-u', $server->{port});
 };
 subtest 'https' => sub {
-    plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
-        unless openssl_can_negotiate();
     $doit->('https', '', $server->{tls_port});
 };
 
