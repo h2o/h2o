@@ -578,8 +578,8 @@ static void proceed_request(h2o_req_t *req, size_t written, int is_end_stream)
         update_stream_input_window(conn, stream, written);
     }
 
-    if (stream->blocked_by_server && stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY) {
-        assert(h2o_http2_window_get_avail(&stream->input_window.window) > 0);
+    if (stream->blocked_by_server && stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY &&
+        h2o_http2_window_get_avail(&stream->input_window.window) > 0) {
         h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
         update_idle_timeout(conn);
     }
