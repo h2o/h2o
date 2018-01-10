@@ -131,9 +131,10 @@ typedef struct st_h2o_buffer_t {
     char _buf[1];
 } h2o_buffer_t;
 
+#define H2O_TMP_FILE_TEMPLATE_MAX 256
 typedef struct st_h2o_buffer_mmap_settings_t {
     size_t threshold;
-    char fn_template[FILENAME_MAX];
+    char fn_template[H2O_TMP_FILE_TEMPLATE_MAX];
 } h2o_buffer_mmap_settings_t;
 
 struct st_h2o_buffer_prototype_t {
