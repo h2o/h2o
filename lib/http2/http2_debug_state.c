@@ -106,8 +106,8 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
     h2o_http2_debug_state_t *state = h2o_mem_alloc_pool(&req->pool, sizeof(*state));
     *state = (h2o_http2_debug_state_t){{NULL}};
 
-    state->conn_flow_in = conn->_write.window._avail;
-    state->conn_flow_out = conn->_write.window._avail;
+    state->conn_flow_in = h2o_http2_window_get_avail(&conn->_input_window);
+    state->conn_flow_out = h2o_http2_window_get_avail(&conn->_write.window);
 
     append_chunk(&req->pool, &state->json, "{\n"
                                            "  \"version\": \"draft-01\",\n"
@@ -132,7 +132,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                  H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE,
                  H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE, conn->peer_settings.header_table_size, conn->peer_settings.enable_push,
                  conn->peer_settings.max_concurrent_streams, conn->peer_settings.initial_window_size,
-                 conn->peer_settings.max_frame_size, h2o_http2_window_get_avail(&conn->_input_window.super),
+                 conn->peer_settings.max_frame_size, h2o_http2_window_get_avail(&conn->_input_window),
                  h2o_http2_window_get_avail(&conn->_write.window));
 
     /* encode streams */
@@ -152,7 +152,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                                                    "      \"dataOut\": %zu,\n"
                                                    "      \"created\": %" PRIu64 "\n"
                                                    "    },",
-                         stream->stream_id, state_string, h2o_http2_window_get_avail(&stream->input_window.super),
+                         stream->stream_id, state_string, h2o_http2_window_get_avail(&stream->input_window.window),
                          h2o_http2_window_get_avail(&stream->output_window), stream->_req_body.bytes_received,
                          stream->req.bytes_sent, (uint64_t)stream->req.timestamps.request_begin_at.tv_sec);
         });
