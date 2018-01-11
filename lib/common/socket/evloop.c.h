@@ -156,38 +156,42 @@ static void wreq_free_buffer_if_allocated(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-static int write_core(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
+static int write_core(int fd, h2o_iovec_t **bufs, size_t *bufcnt, size_t *first_buf_written)
 {
     int iovcnt;
     ssize_t wret;
 
-    if (*bufcnt != 0) {
-        do {
-            /* write */
-            iovcnt = IOV_MAX;
-            if (*bufcnt < iovcnt)
-                iovcnt = (int)*bufcnt;
-            while ((wret = writev(fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
-                ;
-            if (wret == -1) {
-                if (errno != EAGAIN)
-                    return -1;
+    *first_buf_written = 0;
+
+    while (*bufcnt != 0) {
+        /* write */
+        iovcnt = IOV_MAX;
+        if (*bufcnt < iovcnt)
+            iovcnt = (int)*bufcnt;
+        while ((wret = writev(fd, (struct iovec *)*bufs, iovcnt)) == -1 && errno == EINTR)
+            ;
+        if (wret == -1) {
+            if (errno != EAGAIN)
+                return -1;
+            break;
+        }
+        /* adjust the buffer */
+        while ((*bufs)->len < wret) {
+            wret -= (*bufs)->len;
+            ++*bufs;
+            --*bufcnt;
+            --iovcnt;
+        }
+        assert(iovcnt > 0);
+        if ((*bufs)->len == wret) {
+            ++*bufs;
+            --*bufcnt;
+            if (--iovcnt != 0)
                 break;
-            }
-            /* adjust the buffer */
-            while ((*bufs)->len < wret) {
-                wret -= (*bufs)->len;
-                ++*bufs;
-                --*bufcnt;
-                assert(*bufcnt != 0);
-            }
-            if (((*bufs)->len -= wret) == 0) {
-                ++*bufs;
-                --*bufcnt;
-            } else {
-                (*bufs)->base += wret;
-            }
-        } while (*bufcnt != 0 && iovcnt == IOV_MAX);
+        } else {
+            *first_buf_written = wret;
+            break;
+        }
     }
 
     return 0;
@@ -195,6 +199,8 @@ static int write_core(int fd, h2o_iovec_t **bufs, size_t *bufcnt)
 
 void write_pending(struct st_h2o_evloop_socket_t *sock)
 {
+    size_t first_buf_written;
+
     assert(sock->super._cb.write != NULL);
 
     /* DONT_WRITE poll */
@@ -202,8 +208,10 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
         goto Complete;
 
     /* write */
-    if (write_core(sock->fd, &sock->_wreq.bufs, &sock->_wreq.cnt) == 0 && sock->_wreq.cnt != 0) {
+    if (write_core(sock->fd, &sock->_wreq.bufs, &sock->_wreq.cnt, &first_buf_written) == 0 && sock->_wreq.cnt != 0) {
         /* partial write */
+        sock->_wreq.bufs[0].base += first_buf_written;
+        sock->_wreq.bufs[0].len -= first_buf_written;
         return;
     }
 
@@ -253,39 +261,30 @@ void do_dispose_socket(h2o_socket_t *_sock)
     link_to_statechanged(sock);
 }
 
-void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket_cb cb)
+void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
-    h2o_iovec_t *bufs;
-    h2o_iovec_t *tofree = NULL;
+    size_t first_buf_written, i;
 
     assert(sock->super._cb.write == NULL);
     assert(sock->_wreq.cnt == 0);
     sock->super._cb.write = cb;
 
-    /* cap the number of buffers, since we're using alloca */
-    if (bufcnt > 10000)
-        bufs = tofree = h2o_mem_alloc(sizeof(*bufs) * bufcnt);
-    else
-        bufs = alloca(sizeof(*bufs) * bufcnt);
-
-    memcpy(bufs, _bufs, sizeof(*bufs) * bufcnt);
-
     /* try to write now */
-    if (write_core(sock->fd, &bufs, &bufcnt) != 0) {
+    if (write_core(sock->fd, &bufs, &bufcnt, &first_buf_written) != 0) {
         /* fill in _wreq.bufs with fake data to indicate error */
         sock->_wreq.bufs = sock->_wreq.smallbufs;
         sock->_wreq.cnt = 1;
         *sock->_wreq.bufs = h2o_iovec_init(H2O_STRLIT("deadbeef"));
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
-        goto Out;
+        return;
     }
     if (bufcnt == 0) {
         /* write complete, schedule the callback */
         sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
         link_to_pending(sock);
-        goto Out;
+        return;
     }
 
     /* setup the buffer to send pending data */
@@ -295,13 +294,14 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *_bufs, size_t bufcnt, h2o_socket
         sock->_wreq.bufs = h2o_mem_alloc(sizeof(h2o_iovec_t) * bufcnt);
         sock->_wreq.alloced_ptr = sock->_wreq.bufs;
     }
-    memcpy(sock->_wreq.bufs, bufs, sizeof(h2o_iovec_t) * bufcnt);
+    sock->_wreq.bufs[0].base = bufs[0].base + first_buf_written;
+    sock->_wreq.bufs[0].len = bufs[0].len - first_buf_written;
+    for (i = 1; i < bufcnt; ++i)
+        sock->_wreq.bufs[i] = bufs[i];
     sock->_wreq.cnt = bufcnt;
 
     /* schedule the write */
     link_to_statechanged(sock);
-Out:
-    free(tofree);
 }
 
 int h2o_socket_get_fd(h2o_socket_t *_sock)
