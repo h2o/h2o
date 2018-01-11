@@ -368,6 +368,8 @@
 		E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76E41F00E70700EB7A09 /* salsa20.h */; };
 		E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
 		E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E91F00E74C00EB7A09 /* poly1305.c */; };
+		E9F677D42007476D006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
+		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -2663,6 +2665,7 @@
 				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
 				E9708B6A1E52C81D0029E0A5 /* access_log.c in Sources */,
 				E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */,
+				E9F677D520074770006476D3 /* roundrobin.c in Sources */,
 				E9708AE81E49A2420029E0A5 /* picotls.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
 				E987E5D31FD7BE9C00DE4346 /* literal_cost.c in Sources */,
@@ -2675,6 +2678,7 @@
 				10756E351AC1264D0009BF57 /* scanner.c in Sources */,
 				E9708B5A1E52C7EE0029E0A5 /* token.c in Sources */,
 				E9708B241E49BAD70029E0A5 /* gf128.c in Sources */,
+				E9F677D42007476D006476D3 /* least_conn.c in Sources */,
 				E9708B441E52C7DF0029E0A5 /* cache.c in Sources */,
 				E9708B831E52C8560029E0A5 /* cache_digests.c in Sources */,
 				E9708B7F1E52C8430029E0A5 /* requests.c in Sources */,
