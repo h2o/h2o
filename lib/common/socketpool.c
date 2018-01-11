@@ -310,9 +310,6 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     }
     target = req->pool->targets.entries[req->selected_target];
 
-    /* FIXME repsect `capacity` */
-    __sync_add_and_fetch(&req->pool->_shared.count, 1);
-
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
@@ -386,12 +383,12 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
 
     req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
     if (req->sock == NULL) {
-        __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         if (req->remaining_try_count > 0) {
             try_connect(req);
             return;
         }
+        __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         call_connect_cb(req, "failed to connect to host");
         return;
     }
@@ -411,13 +408,12 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     req->getaddr_req = NULL;
 
     if (errstr != NULL) {
-        __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
-
         if (req->remaining_try_count > 0) {
             try_connect(req);
             return;
         }
+        __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         call_connect_cb(req, errstr);
         return;
     }
