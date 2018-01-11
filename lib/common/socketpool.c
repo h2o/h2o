@@ -109,7 +109,7 @@ static void on_timeout(h2o_timeout_entry_t *timeout_entry)
     h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
+static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **targets, size_t num_targets, size_t capacity,
                         h2o_balancer_t *balancer)
 {
     memset(pool, 0, sizeof(*pool));
@@ -119,7 +119,10 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
-    memcpy(&pool->targets, &targets, sizeof(targets));
+
+    h2o_vector_reserve(NULL, &pool->targets, num_targets);
+    for (; pool->targets.size < num_targets; ++pool->targets.size)
+        pool->targets.entries[pool->targets.size] = targets[pool->targets.size];
 
     pool->balancer = balancer;
 }
@@ -183,20 +186,12 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
     return target;
 }
 
-void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t target_len,
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t num_targets,
                                   h2o_balancer_t *balancer)
 {
-    size_t i;
-    h2o_socketpool_target_vector_t target_vector = {};
-    h2o_vector_reserve(NULL, &target_vector, target_len);
-    for (i = 0; i < target_len; i++)
-        target_vector.entries[i] = targets[i];
-    target_vector.size = target_len;
-    if (balancer == NULL) {
+    if (balancer == NULL)
         balancer = h2o_balancer_create_rr();
-    }
-
-    common_init(pool, target_vector, capacity, balancer);
+    common_init(pool, targets, num_targets, capacity, balancer);
 }
 
 static inline int is_global_pool(h2o_socketpool_t *pool)
@@ -206,7 +201,7 @@ static inline int is_global_pool(h2o_socketpool_t *pool)
 
 void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity)
 {
-    common_init(pool, (h2o_socketpool_target_vector_t){}, capacity, NULL);
+    common_init(pool, NULL, 0, capacity, NULL);
 }
 
 void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target)

@@ -118,7 +118,7 @@ typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr
 /**
  * initializes a specific socket pool
  */
-void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t target_len,
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t num_targets,
                                   h2o_balancer_t *balancer);
 /**
  * initializes a global socket pool
