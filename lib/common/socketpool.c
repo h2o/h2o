@@ -204,15 +204,6 @@ static inline int is_global_pool(h2o_socketpool_t *pool)
     return pool->balancer == NULL;
 }
 
-static size_t add_target(h2o_socketpool_t *pool, h2o_url_t *origin)
-{
-    assert(is_global_pool(pool));
-    h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
-    h2o_socketpool_target_t *target = h2o_socketpool_create_target(origin, NULL);
-    pool->targets.entries[pool->targets.size++] = target;
-    return pool->targets.size - 1;
-}
-
 void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity)
 {
     common_init(pool, (h2o_socketpool_target_vector_t){}, capacity, NULL);
@@ -481,7 +472,9 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (is_global_pool(pool)) {
         target = lookup_target(pool, url);
         if (target == SIZE_MAX) {
-            target = add_target(pool, url);
+            h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
+            pool->targets.entries[pool->targets.size++] = h2o_socketpool_create_target(url, NULL);
+            target = pool->targets.size - 1;
         }
         sockets = &pool->targets.entries[target]->_shared.sockets;
     } else {
