@@ -78,9 +78,16 @@ typedef struct st_h2o_socketpool_target_t {
      */
     h2o_socketpool_target_conf_t conf;
 
+    /**
+     * the per-target portion of h2o_socketpool_t::_shared
+     */
     struct {
         h2o_linklist_t sockets;
-        size_t leased_count; /* synchoronus operations should be used, counting requests on the fly */
+        /**
+         * number of connections being _leased_ to the applications (i.e. not including the number of connections being pooled).
+         * Synchronous operation must be used to access the variable.
+         */
+        size_t leased_count;
     } _shared;
 } h2o_socketpool_target_t;
 
@@ -101,11 +108,20 @@ typedef struct st_h2o_socketpool_t {
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
 
-    /* vars that are modified by multiple threads */
+    /**
+     * variables shared between threads. Unless otherwise noted, the mutex should be acquired before accessing them.
+     */
     struct {
-        size_t count; /* synchronous operations should be used to access the variable */
         pthread_mutex_t mutex;
-        h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+        /**
+         * list of struct pool_entry_t
+         */
+        h2o_linklist_t sockets;
+        /**
+         * number of connections governed by the pool, includes sockets being pool and the ones trying to connect. Synchronous
+         * operation must be used to access the variable.
+         */
+        size_t count;
     } _shared;
 
     /* load balancer */
