@@ -40,10 +40,14 @@ typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
-/* if there's any other conf for specific balancer, create a subclass */
+/**
+ * TODO: support subclassing for adding balancer-specific properties
+ */
 typedef struct st_h2o_socketpool_target_conf_t {
-    /* weight for load balancer, mapped from [0, 255] to [1, 256] */
-    uint8_t weight;
+    /**
+     * weight - 1 for load balancer, where weight is an integer within range [1, 256]
+     */
+    uint8_t weight_m1;
 } h2o_socketpool_target_conf_t;
 
 #define H2O_SOCKETPOOL_TARGET_MAX_WEIGHT 256
@@ -69,12 +73,21 @@ typedef struct st_h2o_socketpool_target_t {
             socklen_t len;
         } sockaddr;
     } peer;
-    
+    /**
+     * per-target lb configuration
+     */
     h2o_socketpool_target_conf_t conf;
 
+    /**
+     * the per-target portion of h2o_socketpool_t::_shared
+     */
     struct {
         h2o_linklist_t sockets;
-        size_t leased_count;   /* synchoronus operations should be used, counting requests on the fly */
+        /**
+         * number of connections being _leased_ to the applications (i.e. not including the number of connections being pooled).
+         * Synchronous operation must be used to access the variable.
+         */
+        size_t leased_count;
     } _shared;
 } h2o_socketpool_target_t;
 
@@ -95,11 +108,20 @@ typedef struct st_h2o_socketpool_t {
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
 
-    /* vars that are modified by multiple threads */
+    /**
+     * variables shared between threads. Unless otherwise noted, the mutex should be acquired before accessing them.
+     */
     struct {
-        size_t count; /* synchronous operations should be used to access the variable */
         pthread_mutex_t mutex;
-        h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+        /**
+         * list of struct pool_entry_t
+         */
+        h2o_linklist_t sockets;
+        /**
+         * number of connections governed by the pool, includes sockets being pool and the ones trying to connect. Synchronous
+         * operation must be used to access the variable.
+         */
+        size_t count;
     } _shared;
 
     /* load balancer */
@@ -112,7 +134,7 @@ typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr
 /**
  * initializes a specific socket pool
  */
-void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t target_len,
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t num_targets,
                                   h2o_balancer_t *balancer);
 /**
  * initializes a global socket pool
@@ -125,11 +147,11 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
  * create a target. If lb_target_conf is NULL, a default target conf would be created.
  */
-h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
 /**
  * destroy a target
  */
-void h2o_socketpool_target_destroy(h2o_socketpool_target_t *target);
+void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target);
 /**
  *
  */

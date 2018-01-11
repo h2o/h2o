@@ -26,7 +26,7 @@ struct least_conn_t {
     pthread_mutex_t mutex;
 };
 
-static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, int *tried)
+static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, char *tried)
 {
     struct least_conn_t *self = (void *)_self;
     size_t i;
@@ -41,11 +41,11 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
         leftprod = targets->entries[i]->_shared.leased_count;
         leftprod *= result_weight;
         rightprod = result_leased;
-        rightprod *= ((unsigned)targets->entries[i]->conf.weight) + 1;
+        rightprod *= ((unsigned)targets->entries[i]->conf.weight_m1) + 1;
         if (!tried[i] && leftprod < rightprod) {
             result_index = i;
             result_leased = targets->entries[i]->_shared.leased_count;
-            result_weight = ((unsigned)targets->entries[i]->conf.weight) + 1;
+            result_weight = ((unsigned)targets->entries[i]->conf.weight_m1) + 1;
         }
     }
     pthread_mutex_unlock(&self->mutex);
@@ -54,7 +54,8 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
     return result_index;
 }
 
-static void destroy(h2o_balancer_t *_self) {
+static void destroy(h2o_balancer_t *_self)
+{
     struct least_conn_t *self = (void *)_self;
     pthread_mutex_destroy(&self->mutex);
     free(self);
@@ -62,10 +63,7 @@ static void destroy(h2o_balancer_t *_self) {
 
 h2o_balancer_t *h2o_balancer_create_lc(void)
 {
-    static const h2o_balancer_callbacks_t lc_callbacks = {
-        selector,
-        destroy
-    };
+    static const h2o_balancer_callbacks_t lc_callbacks = {selector, destroy};
     struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
     self->super.callbacks = &lc_callbacks;
     pthread_mutex_init(&self->mutex, NULL);

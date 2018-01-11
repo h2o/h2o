@@ -32,7 +32,7 @@ extern "C" {
 
 typedef struct st_h2o_balancer_t h2o_balancer_t;
 
-typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, int *tried);
+typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, char *tried);
 
 typedef void (*h2o_balancer_destroyer)(h2o_balancer_t *balancer);
 
