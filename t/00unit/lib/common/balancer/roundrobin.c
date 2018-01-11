@@ -4,7 +4,7 @@
 static h2o_socketpool_target_vector_t gen_targets(size_t size)
 {
     size_t i;
-    h2o_socketpool_target_vector_t targets = {};
+    h2o_socketpool_target_vector_t targets = {NULL};
 
     h2o_vector_reserve(NULL, &targets, size);
     for (i = 0; i < size; i++) {
@@ -32,7 +32,7 @@ static void free_targets(h2o_socketpool_target_vector_t *targets)
 static void test_when_backend_down(void)
 {
     h2o_socketpool_target_vector_t targets = gen_targets(10);
-    int tried[10] = {};
+    char tried[10] = {0};
     size_t i;
     size_t selected;
     h2o_balancer_t *balancer;
@@ -71,7 +71,7 @@ static void test_round_robin(void)
     size_t i, selected;
     size_t last_selected = 0;
     size_t total_count = 0;
-    int tried[10] = {};
+    char tried[10] = {0};
     int check_result = 1;
     h2o_balancer_t *balancer;
 
@@ -108,7 +108,7 @@ static void test_round_robin_weighted(void)
     size_t i, selected;
     size_t last_selected = 0;
     size_t total_count = 0;
-    int tried[10] = {};
+    char tried[10] = {0};
     int check_result = 1;
     h2o_balancer_t *balancer;
 
