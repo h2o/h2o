@@ -40,9 +40,13 @@ typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
-/* if there's any other conf for specific balancer, create a subclass */
+/**
+ * TODO: support subclassing for adding balancer-specific properties
+ */
 typedef struct st_h2o_socketpool_target_conf_t {
-    /* weight for load balancer, mapped from [0, 255] to [1, 256] */
+    /**
+     * weight for load balancer, mapped from [0, 255] to [1, 256]
+     */
     uint8_t weight;
 } h2o_socketpool_target_conf_t;
 
@@ -69,7 +73,9 @@ typedef struct st_h2o_socketpool_target_t {
             socklen_t len;
         } sockaddr;
     } peer;
-    
+    /**
+     * per-target lb configuration
+     */
     h2o_socketpool_target_conf_t conf;
 
     struct {
