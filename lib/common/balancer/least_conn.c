@@ -26,7 +26,7 @@ struct least_conn_t {
     pthread_mutex_t mutex;
 };
 
-static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, int *tried)
+static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, char *tried)
 {
     struct least_conn_t *self = (void *)_self;
     size_t i;

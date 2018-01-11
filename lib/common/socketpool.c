@@ -53,7 +53,7 @@ struct st_h2o_socketpool_connect_request_t {
     size_t selected_target;
     size_t remaining_try_count;
     struct {
-        int *tried;
+        char *tried;
     } lb;
 };
 
@@ -537,8 +537,8 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
     req->selected_target = target;
     if (target == SIZE_MAX) {
-        req->lb.tried = h2o_mem_alloc(sizeof(int) * pool->targets.size);
-        memset(req->lb.tried, 0, sizeof(int) * pool->targets.size);
+        req->lb.tried = h2o_mem_alloc(sizeof(req->lb.tried[0]) * pool->targets.size);
+        memset(req->lb.tried, 0, sizeof(req->lb.tried[0]) * pool->targets.size);
         req->remaining_try_count = pool->targets.size;
     } else {
         req->remaining_try_count = 1;

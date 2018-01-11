@@ -35,7 +35,7 @@ static inline void select_next(struct round_robin_t *self, h2o_socketpool_target
     self->consumed_weight = 0;
 }
 
-static size_t selector(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, int *tried)
+static size_t selector(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, char *tried)
 {
     size_t i;
     size_t result = 0;
