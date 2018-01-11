@@ -10,7 +10,7 @@ static h2o_socketpool_target_vector_t gen_targets(size_t size)
     for (i = 0; i < size; i++) {
         h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
         target->_shared.leased_count = 0;
-        target->conf.weight = 0;
+        target->conf.weight_m1 = 0;
         targets.entries[i] = target;
     }
     targets.size = size;
@@ -57,8 +57,8 @@ static int check_weight_distribution(h2o_socketpool_target_vector_t *targets)
 
     for (i = 0; i < targets->size; i++) {
         for (j = i + 1; j < targets->size; j++) {
-            if (targets->entries[i]->_shared.leased_count * ((unsigned)targets->entries[j]->conf.weight + 1) !=
-                targets->entries[j]->_shared.leased_count * ((unsigned)targets->entries[i]->conf.weight + 1))
+            if (targets->entries[i]->_shared.leased_count * ((unsigned)targets->entries[j]->conf.weight_m1 + 1) !=
+                targets->entries[j]->_shared.leased_count * ((unsigned)targets->entries[i]->conf.weight_m1 + 1))
                 return 0;
         }
     }
@@ -78,7 +78,7 @@ static void test_round_robin(void)
     balancer = h2o_balancer_create_rr();
 
     for (i = 0; i < targets.size; i++)
-        total_count += ((unsigned)targets.entries[i]->conf.weight) + 1;
+        total_count += ((unsigned)targets.entries[i]->conf.weight_m1) + 1;
     total_count *= 1000;
 
     for (i = 0; i < total_count; i++) {
@@ -113,11 +113,11 @@ static void test_round_robin_weighted(void)
     h2o_balancer_t *balancer;
 
     for (i = 0; i < 10; i++)
-        targets.entries[i]->conf.weight = i % 3;
+        targets.entries[i]->conf.weight_m1 = i % 3;
     balancer = h2o_balancer_create_rr();
 
     for (i = 0; i < targets.size; i++)
-        total_count += ((unsigned)targets.entries[i]->conf.weight) + 1;
+        total_count += ((unsigned)targets.entries[i]->conf.weight_m1) + 1;
     total_count *= 1000;
 
     for (i = 0; i < total_count; i++) {

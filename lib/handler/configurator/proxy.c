@@ -323,7 +323,7 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size
     for (i = 0; i != num_upstreams; ++i) {
         yoml_t *url_node = NULL;
         yoml_t *node_for_parsing;
-        lb_per_target_conf.weight = 0; /* default weight of each target */
+        lb_per_target_conf.weight_m1 = 0; /* default weight of each target */
         switch (inputs[i]->type) {
         case YOML_TYPE_SCALAR:
             url_node = inputs[i];
@@ -356,7 +356,7 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size
                         h2o_configurator_errprintf(cmd, value, "value of weight must be an unsigned integer in range 1 - 256");
                         return -1;
                     }
-                    lb_per_target_conf.weight = weight - 1;
+                    lb_per_target_conf.weight_m1 = weight - 1;
                 }
             }
 

@@ -45,9 +45,9 @@ typedef enum en_h2o_socketpool_target_type_t {
  */
 typedef struct st_h2o_socketpool_target_conf_t {
     /**
-     * weight for load balancer, mapped from [0, 255] to [1, 256]
+     * weight - 1 for load balancer, where weight is an integer within range [1, 256]
      */
-    uint8_t weight;
+    uint8_t weight_m1;
 } h2o_socketpool_target_conf_t;
 
 #define H2O_SOCKETPOOL_TARGET_MAX_WEIGHT 256

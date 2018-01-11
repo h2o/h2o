@@ -49,7 +49,7 @@ static size_t selector(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t 
         if (!tried[self->pos]) {
             /* get the result */
             result = self->pos;
-            if (++self->consumed_weight > targets->entries[self->pos]->conf.weight)
+            if (++self->consumed_weight > targets->entries[self->pos]->conf.weight_m1)
                 select_next(self, targets);
             pthread_mutex_unlock(&self->mutex);
             return result;
