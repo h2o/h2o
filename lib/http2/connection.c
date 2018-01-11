@@ -373,7 +373,6 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
 
 static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t payload, int is_end_stream)
 {
-    h2o_http2_window_consume_window(&stream->input_window.window, payload.len);
     stream->_req_body.bytes_received += payload.len;
 
     /* check size */
@@ -651,7 +650,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         return ret;
 
     /* update connection-level window */
-    h2o_http2_window_consume_window(&conn->_input_window, payload.length);
+    h2o_http2_window_consume_window(&conn->_input_window, frame->length);
     if (h2o_http2_window_get_avail(&conn->_input_window) <= H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE / 2)
         send_window_update(conn, 0, &conn->_input_window,
                            H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - h2o_http2_window_get_avail(&conn->_input_window));
@@ -671,6 +670,12 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         h2o_http2_stream_reset(conn, stream);
         return 0;
     }
+
+    /* update stream-level window (doing it here could end up in sending multiple WINDOW_UPDATE frames if the receive window is
+     * fully-used, but no need to worry; in such case we'd be sending ACKs at a very fast rate anyways) */
+    h2o_http2_window_consume_window(&stream->input_window.window, frame->length);
+    if (frame->length != payload.length)
+        update_stream_input_window(conn, stream, frame->length - payload.length);
 
     /* actually handle the input */
     if (payload.length != 0 || (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0)

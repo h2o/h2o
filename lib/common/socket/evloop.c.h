@@ -400,6 +400,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 
 static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, int flags)
 {
+    /* ignore errors returned by setsockopt; fd is not restricted to TCP sockets (could be a unix-domain socket for example) */
     int on = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
     return create_socket(loop, fd, flags);
@@ -407,13 +408,8 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
-    fcntl(fd, F_SETFL, O_NONBLOCK); /* not always needed under linux, the caller may already set this flag */
-
-    /**
-     * fd maybe from pipe(2)/eventfd(2)/socketpair(2)/unix domain socket besides tcp sockets.
-     * requiring the user of the event loop to set the flag would increase the complexity.
-     * so we set here and ignore errors
-     */
+    /* it is the reponsibility of the event loop to modify the properties of a socket for its use (i.e., set O_NONBLOCK) */
+    fcntl(fd, F_SETFL, O_NONBLOCK);
     return &create_socket_set_nodelay(loop, fd, flags)->super;
 }
 
@@ -423,30 +419,18 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
 
 #if H2O_USE_ACCEPT4
+    /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
     if ((fd = accept4(listener->fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
-    /**
-     * the listening socket should already have TCP_NODELAY set.
-     * if accepted socket can inherit this option form listing socket, do not call setsockopt(2) again.
-     * For platforms that support inheritance of TCP_NODELAY but do not provide accept4 (maybe it's only NetBSD?)
-     * so using H2O_USE_ACCEPT4 to judge TCP_NODELAY option inherit.
-     * FIXME: check more platforms: e.g. OpenBSD, Solaris, AIX
-     * TCP_NODELAY inherit from listening socket known under:
-     *  linux
-     *  FreeBSD version bigger than 4.5
-     *  NetBSD verison equal or bigger than 1.6(@see NetBSD6.0/usr/share/man/html4/tcp.html)
-     */
 #if !defined(NDEBUG) && defined(DEBUG)
-        {
-            /* check  TCP_NODELAY flag when debug */
-            int flag = 0;
-            socklen_t len = sizeof(flag);
-            if (0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len)) {
-                assert(flag == 1);
-            }
+    { /* assert that TCP_NODELAY flag is inherited */
+        int flag = 0;
+        socklen_t len = sizeof(flag);
+        if (0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len)) {
+            assert(flag == 1);
         }
+    }
 #endif
-
     return &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
     if ((fd = cloexec_accept(listener->fd, NULL, NULL)) == -1)
