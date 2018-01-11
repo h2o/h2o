@@ -1,7 +1,8 @@
 #include "../../../test.h"
 #include "../../../../../lib/common/balancer/least_conn.c"
 
-static h2o_socketpool_target_vector_t gen_targets(size_t size) {
+static h2o_socketpool_target_vector_t gen_targets(size_t size)
+{
     size_t i;
     h2o_socketpool_target_vector_t targets = {};
 
@@ -13,18 +14,18 @@ static h2o_socketpool_target_vector_t gen_targets(size_t size) {
         targets.entries[i] = target;
     }
     targets.size = size;
-    
+
     return targets;
 }
 
 static void free_targets(h2o_socketpool_target_vector_t *targets)
 {
     size_t i;
-    
+
     for (i = 0; i < targets->size; i++) {
         free(targets->entries[i]);
     }
-    
+
     free(targets->entries);
 }
 
@@ -35,16 +36,16 @@ static void test_when_backend_down(void)
     size_t i;
     size_t selected;
     h2o_balancer_t *balancer;
-    
+
     balancer = h2o_balancer_create_lc();
-    
+
     for (i = 0; i < 10; i++) {
         selected = selector(balancer, &targets, tried);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
     }
-    
+
     free_targets(&targets);
     destroy(balancer);
 }
@@ -55,7 +56,7 @@ static int check_if_acceptable(h2o_socketpool_target_vector_t *targets, size_t s
     size_t i;
     double selected_conn_weight_quotient = targets->entries[selected]->_shared.leased_count;
     selected_conn_weight_quotient /= ((int)targets->entries[selected]->conf.weight) + 1;
-    
+
     for (i = 0; i < targets->size; i++) {
         if (i == selected)
             continue;
@@ -65,7 +66,7 @@ static int check_if_acceptable(h2o_socketpool_target_vector_t *targets, size_t s
             return -1;
         }
     }
-    
+
     return 0;
 }
 
@@ -76,9 +77,9 @@ static void test_least_conn(void)
     int tried[10] = {};
     int check_result = 1;
     h2o_balancer_t *balancer;
-    
+
     balancer = h2o_balancer_create_lc();
-    
+
     for (i = 0; i < 10000; i++) {
         selected = selector(balancer, &targets, tried);
         if (selected > 10) {
@@ -93,7 +94,7 @@ static void test_least_conn(void)
         targets.entries[selected]->_shared.leased_count++;
     }
     ok(!check_result);
-    
+
 Done:
     free_targets(&targets);
     destroy(balancer);
@@ -106,12 +107,12 @@ static void test_least_conn_weighted(void)
     int tried[10] = {};
     int check_result = 1;
     h2o_balancer_t *balancer;
-    
+
     balancer = h2o_balancer_create_lc();
-    
+
     for (i = 0; i < 10; i++)
         targets.entries[i]->conf.weight = i % 3;
-    
+
     for (i = 0; i < 10000; i++) {
         selected = selector(balancer, &targets, tried);
         if (selected > 10) {
@@ -126,7 +127,7 @@ static void test_least_conn_weighted(void)
         targets.entries[selected]->_shared.leased_count++;
     }
     ok(!check_result);
-    
+
 Done:
     free_targets(&targets);
     destroy(balancer);

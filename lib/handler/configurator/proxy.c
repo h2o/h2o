@@ -307,9 +307,8 @@ static int parse_balancer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_soc
     } else if (strcmp(lb_type_node->data.scalar, "least-conn") == 0) {
         self->vars->conf.balancer = h2o_balancer_create_lc();
     } else {
-        h2o_configurator_errprintf(cmd, node,
-                                   "specified balancer is currently not supported. supported balancers are: "
-                                   "round-robin least-conn");
+        h2o_configurator_errprintf(cmd, node, "specified balancer is currently not supported. supported balancers are: "
+                                              "round-robin least-conn");
         return -1;
     }
 
@@ -326,53 +325,52 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size
         yoml_t *node_for_parsing;
         lb_per_target_conf.weight = 0; /* default weight of each target */
         switch (inputs[i]->type) {
-            case YOML_TYPE_SCALAR:
-                url_node = inputs[i];
-                node_for_parsing = NULL;
-                break;
-            case YOML_TYPE_MAPPING:
-                node_for_parsing = inputs[i];
-                for (j = 0; j < inputs[i]->data.mapping.size; j++) {
-                    yoml_t *key = inputs[i]->data.mapping.elements[j].key;
-                    yoml_t *value = inputs[i]->data.mapping.elements[j].value;
-                    if (key->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, key, "key must be a scalar");
-                        return -1;
-                    }
-                    if (strcasecmp(key->data.scalar, "url") == 0) {
-                        if (value->type != YOML_TYPE_SCALAR) {
-                            h2o_configurator_errprintf(cmd, value, "value must be a scalar");
-                            return -1;
-                        }
-                        url_node = value;
-                        continue;
-                    }
-                    if (strcasecmp(key->data.scalar, "weight") == 0) {
-                        if (value->type != YOML_TYPE_SCALAR) {
-                            h2o_configurator_errprintf(cmd, value, "value must be a scalar");
-                            return -1;
-                        }
-                        size_t weight = h2o_strtosize(value->data.scalar, strlen(value->data.scalar));
-                        if (weight > H2O_SOCKETPOOL_TARGET_MAX_WEIGHT || weight == 0) {
-                            h2o_configurator_errprintf(cmd, value, "value of weight must be an unsigned integer in range 1 - 256");
-                            return -1;
-                        }
-                        lb_per_target_conf.weight = weight - 1;
-                    }
-                }
-                
-                if (url_node == NULL) {
-                    h2o_configurator_errprintf(
-                                               cmd, inputs[i], "mapping element of a sequence passed to proxy.reverse.url must have `url` configured.");
+        case YOML_TYPE_SCALAR:
+            url_node = inputs[i];
+            node_for_parsing = NULL;
+            break;
+        case YOML_TYPE_MAPPING:
+            node_for_parsing = inputs[i];
+            for (j = 0; j < inputs[i]->data.mapping.size; j++) {
+                yoml_t *key = inputs[i]->data.mapping.elements[j].key;
+                yoml_t *value = inputs[i]->data.mapping.elements[j].value;
+                if (key->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, key, "key must be a scalar");
                     return -1;
                 }
-                
-                break;
-            default:
+                if (strcasecmp(key->data.scalar, "url") == 0) {
+                    if (value->type != YOML_TYPE_SCALAR) {
+                        h2o_configurator_errprintf(cmd, value, "value must be a scalar");
+                        return -1;
+                    }
+                    url_node = value;
+                    continue;
+                }
+                if (strcasecmp(key->data.scalar, "weight") == 0) {
+                    if (value->type != YOML_TYPE_SCALAR) {
+                        h2o_configurator_errprintf(cmd, value, "value must be a scalar");
+                        return -1;
+                    }
+                    size_t weight = h2o_strtosize(value->data.scalar, strlen(value->data.scalar));
+                    if (weight > H2O_SOCKETPOOL_TARGET_MAX_WEIGHT || weight == 0) {
+                        h2o_configurator_errprintf(cmd, value, "value of weight must be an unsigned integer in range 1 - 256");
+                        return -1;
+                    }
+                    lb_per_target_conf.weight = weight - 1;
+                }
+            }
+
+            if (url_node == NULL) {
                 h2o_configurator_errprintf(cmd, inputs[i],
-                                           "items of arguments passed to proxy.reverse.url must"
-                                           "be either a scalar or a mapping");
+                                           "mapping element of a sequence passed to proxy.reverse.url must have `url` configured.");
                 return -1;
+            }
+
+            break;
+        default:
+            h2o_configurator_errprintf(cmd, inputs[i], "items of arguments passed to proxy.reverse.url must"
+                                                       "be either a scalar or a mapping");
+            return -1;
         }
         if (h2o_url_parse(url_node->data.scalar, SIZE_MAX, &upstream) != 0) {
             h2o_configurator_errprintf(cmd, url_node, "failed to parse URL: %s\n", url_node->data.scalar);
@@ -596,7 +594,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.reverse.url",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
-                                        H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_reverse_url);
+                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                    on_config_reverse_url);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_preserve_host);

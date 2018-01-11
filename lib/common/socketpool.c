@@ -300,8 +300,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
 
     if (req->lb.tried != NULL) {
         if (req->pool->targets.size > 1) {
-            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets,
-                                                                      req->lb.tried);
+            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets, req->lb.tried);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
             __sync_add_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
@@ -315,15 +314,15 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     __sync_add_and_fetch(&req->pool->_shared.count, 1);
 
     switch (target->type) {
-        case H2O_SOCKETPOOL_TYPE_NAMED:
-            /* resolve the name, and connect */
-            req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
-                                                    SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
-            break;
-        case H2O_SOCKETPOOL_TYPE_SOCKADDR:
-            /* connect (using sockaddr_in) */
-            start_connect(req, (void *)&target->peer.sockaddr.bytes, target->peer.sockaddr.len);
-            break;
+    case H2O_SOCKETPOOL_TYPE_NAMED:
+        /* resolve the name, and connect */
+        req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
+                                                SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
+        break;
+    case H2O_SOCKETPOOL_TYPE_SOCKADDR:
+        /* connect (using sockaddr_in) */
+        start_connect(req, (void *)&target->peer.sockaddr.bytes, target->peer.sockaddr.len);
+        break;
     }
 }
 

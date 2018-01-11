@@ -1,10 +1,11 @@
 #include "../../../test.h"
 #include "../../../../../lib/common/balancer/roundrobin.c"
 
-static h2o_socketpool_target_vector_t gen_targets(size_t size) {
+static h2o_socketpool_target_vector_t gen_targets(size_t size)
+{
     size_t i;
     h2o_socketpool_target_vector_t targets = {};
-    
+
     h2o_vector_reserve(NULL, &targets, size);
     for (i = 0; i < size; i++) {
         h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
@@ -13,18 +14,18 @@ static h2o_socketpool_target_vector_t gen_targets(size_t size) {
         targets.entries[i] = target;
     }
     targets.size = size;
-    
+
     return targets;
 }
 
 static void free_targets(h2o_socketpool_target_vector_t *targets)
 {
     size_t i;
-    
+
     for (i = 0; i < targets->size; i++) {
         free(targets->entries[i]);
     }
-    
+
     free(targets->entries);
 }
 
@@ -35,25 +36,25 @@ static void test_when_backend_down(void)
     size_t i;
     size_t selected;
     h2o_balancer_t *balancer;
-    
+
     balancer = h2o_balancer_create_rr();
-    
+
     for (i = 0; i < 10; i++) {
         selected = selector(balancer, &targets, tried);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
     }
-    
+
     destroy(balancer);
-    
+
     free_targets(&targets);
 }
 
 static int check_weight_distribution(h2o_socketpool_target_vector_t *targets)
 {
     size_t i, j;
-    
+
     for (i = 0; i < targets->size; i++) {
         for (j = i + 1; j < targets->size; j++) {
             if (targets->entries[i]->_shared.leased_count * ((unsigned)targets->entries[j]->conf.weight + 1) !=
@@ -73,13 +74,13 @@ static void test_round_robin(void)
     int tried[10] = {};
     int check_result = 1;
     h2o_balancer_t *balancer;
-    
+
     balancer = h2o_balancer_create_rr();
-    
+
     for (i = 0; i < targets.size; i++)
         total_count += ((unsigned)targets.entries[i]->conf.weight) + 1;
     total_count *= 1000;
-    
+
     for (i = 0; i < total_count; i++) {
         selected = selector(balancer, &targets, tried);
         if (selected > targets.size) {
@@ -95,7 +96,7 @@ static void test_round_robin(void)
         last_selected = selected;
     }
     ok(check_weight_distribution(&targets));
-    
+
 Done:
     destroy(balancer);
     free_targets(&targets);
@@ -110,15 +111,15 @@ static void test_round_robin_weighted(void)
     int tried[10] = {};
     int check_result = 1;
     h2o_balancer_t *balancer;
-    
+
     for (i = 0; i < 10; i++)
         targets.entries[i]->conf.weight = i % 3;
     balancer = h2o_balancer_create_rr();
-    
+
     for (i = 0; i < targets.size; i++)
         total_count += ((unsigned)targets.entries[i]->conf.weight) + 1;
     total_count *= 1000;
-    
+
     for (i = 0; i < total_count; i++) {
         selected = selector(balancer, &targets, tried);
         if (selected > targets.size) {
@@ -134,7 +135,7 @@ static void test_round_robin_weighted(void)
         last_selected = selected;
     }
     ok(check_weight_distribution(&targets));
-    
+
 Done:
     destroy(balancer);
     free_targets(&targets);
@@ -146,4 +147,3 @@ void test_lib__common__balancer__roundrobin_c(void)
     subtest("round_robin", test_round_robin);
     subtest("round_robin_weighted", test_round_robin_weighted);
 }
-

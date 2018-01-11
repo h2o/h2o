@@ -54,7 +54,8 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
     return result_index;
 }
 
-static void destroy(h2o_balancer_t *_self) {
+static void destroy(h2o_balancer_t *_self)
+{
     struct least_conn_t *self = (void *)_self;
     pthread_mutex_destroy(&self->mutex);
     free(self);
@@ -62,10 +63,7 @@ static void destroy(h2o_balancer_t *_self) {
 
 h2o_balancer_t *h2o_balancer_create_lc(void)
 {
-    static const h2o_balancer_callbacks_t lc_callbacks = {
-        selector,
-        destroy
-    };
+    static const h2o_balancer_callbacks_t lc_callbacks = {selector, destroy};
     struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
     self->super.callbacks = &lc_callbacks;
     pthread_mutex_init(&self->mutex, NULL);
