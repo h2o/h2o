@@ -115,8 +115,8 @@ mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
 
 mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno)
 {
-    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 4, mrb_str_new_cstr(mrb, expr),
-                       mrb_nil_value(), mrb_str_new_cstr(mrb, path), mrb_fixnum_value(lineno));
+    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 4, mrb_str_new_cstr(mrb, expr), mrb_nil_value(), mrb_str_new_cstr(mrb, path),
+                       mrb_fixnum_value(lineno));
 }
 
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback)
@@ -902,7 +902,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         }
 
         /* fetch status */
-        H2O_MRUBY_EXEC_GUARD({status = mrb_int(mrb, mrb_ary_entry(resp, 0));});
+        H2O_MRUBY_EXEC_GUARD({ status = mrb_int(mrb, mrb_ary_entry(resp, 0)); });
         if (mrb->exc != NULL)
             goto GotException;
         if (status >= 0)

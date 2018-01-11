@@ -2018,7 +2018,8 @@ int main(int argc, char **argv)
                 case RUN_MODE_MASTER:
                 case RUN_MODE_DAEMON:
                     if (getenv(SERVER_STARTER_PORT) != NULL) {
-                        fprintf(stderr, "refusing to start in `%s` mode, environment variable " SERVER_STARTER_PORT " is already set\n",
+                        fprintf(stderr,
+                                "refusing to start in `%s` mode, environment variable " SERVER_STARTER_PORT " is already set\n",
                                 optarg);
                         exit(EX_SOFTWARE);
                     }
@@ -2117,7 +2118,8 @@ int main(int argc, char **argv)
         int all_were_bound = 1;
         for (i = 0; i != conf.server_starter.num_fds; ++i) {
             if (!conf.server_starter.bound_fd_map[i]) {
-                fprintf(stderr, "no configuration found for fd:%d passed in by $" SERVER_STARTER_PORT "\n", conf.server_starter.fds[i]);
+                fprintf(stderr, "no configuration found for fd:%d passed in by $" SERVER_STARTER_PORT "\n",
+                        conf.server_starter.fds[i]);
                 all_were_bound = 0;
                 break;
             }
