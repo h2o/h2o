@@ -62,7 +62,7 @@ struct on_close_data_t {
     size_t target;
 };
 
-static void try_connect(h2o_socketpool_connect_request_t *req);
+static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen);
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req);
 
 static void destroy_detached(struct pool_entry_t *entry)
@@ -306,6 +306,44 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     cb(sock, errstr, data, &selected_target->url);
 }
 
+static void try_connect(h2o_socketpool_connect_request_t *req)
+{
+    h2o_socketpool_target_t *target;
+    h2o_socketpool_t *pool = req->pool;
+    h2o_linklist_t *sockets = NULL;
+
+    req->remaining_try_count--;
+
+    if (req->lb.tried != NULL) {
+        if (req->pool->targets.size > 1) {
+            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets,
+                                                                      req->lb.tried);
+            assert(!req->lb.tried[req->selected_target]);
+            req->lb.tried[req->selected_target] = 1;
+            __sync_add_and_fetch(&pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
+        } else {
+            req->selected_target = 0;
+        }
+    }
+    target = req->pool->targets.entries[req->selected_target];
+    sockets = &pool->targets.entries[req->selected_target]->_shared.sockets;
+
+    /* FIXME repsect `capacity` */
+    __sync_add_and_fetch(&pool->_shared.count, 1);
+
+    switch (target->type) {
+        case H2O_SOCKETPOOL_TYPE_NAMED:
+            /* resolve the name, and connect */
+            req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
+                                                    SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
+            break;
+        case H2O_SOCKETPOOL_TYPE_SOCKADDR:
+            /* connect (using sockaddr_in) */
+            start_connect(req, (void *)&target->peer.sockaddr.bytes, target->peer.sockaddr.len);
+            break;
+    }
+}
+
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
@@ -381,44 +419,6 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
     req->sock->data = req;
     req->sock->on_close.cb = on_close;
     req->sock->on_close.data = close_data;
-}
-
-static void try_connect(h2o_socketpool_connect_request_t *req)
-{
-    h2o_socketpool_target_t *target;
-    h2o_socketpool_t *pool = req->pool;
-    h2o_linklist_t *sockets = NULL;
-
-    req->remaining_try_count--;
-
-    if (req->lb.tried != NULL) {
-        if (req->pool->targets.size > 1) {
-            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets,
-                                                                      req->lb.tried);
-            assert(!req->lb.tried[req->selected_target]);
-            req->lb.tried[req->selected_target] = 1;
-            __sync_add_and_fetch(&pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
-        } else {
-            req->selected_target = 0;
-        }
-    }
-    target = req->pool->targets.entries[req->selected_target];
-    sockets = &pool->targets.entries[req->selected_target]->_shared.sockets;
-
-    /* FIXME repsect `capacity` */
-    __sync_add_and_fetch(&pool->_shared.count, 1);
-    
-    switch (target->type) {
-        case H2O_SOCKETPOOL_TYPE_NAMED:
-            /* resolve the name, and connect */
-            req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
-                                                    SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
-            break;
-        case H2O_SOCKETPOOL_TYPE_SOCKADDR:
-            /* connect (using sockaddr_in) */
-            start_connect(req, (void *)&target->peer.sockaddr.bytes, target->peer.sockaddr.len);
-            break;
-    }
 }
 
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
