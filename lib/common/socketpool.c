@@ -147,7 +147,7 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
     }
 }
 
-h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
 {
     struct sockaddr_storage sa;
     socklen_t salen;
@@ -208,7 +208,7 @@ static size_t add_target(h2o_socketpool_t *pool, h2o_url_t *origin)
 {
     assert(is_global_pool(pool));
     h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
-    h2o_socketpool_target_t *target = h2o_socketpool_target_create(origin, NULL);
+    h2o_socketpool_target_t *target = h2o_socketpool_create_target(origin, NULL);
     pool->targets.entries[pool->targets.size++] = target;
     return pool->targets.size - 1;
 }
@@ -218,7 +218,7 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity)
     common_init(pool, (h2o_socketpool_target_vector_t){}, capacity, NULL);
 }
 
-void h2o_socketpool_target_destroy(h2o_socketpool_target_t *target)
+void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target)
 {
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
@@ -257,7 +257,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_socketpool_unregister_loop(pool, pool->_interval_cb.loop);
 
     for (i = 0; i < pool->targets.size; i++) {
-        h2o_socketpool_target_destroy(pool->targets.entries[i]);
+        h2o_socketpool_destroy_target(pool->targets.entries[i]);
     }
     free(pool->targets.entries);
 }

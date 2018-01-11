@@ -378,7 +378,7 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size
             h2o_configurator_errprintf(cmd, url_node, "failed to parse URL: %s\n", url_node->data.scalar);
             return -1;
         }
-        targets[i] = h2o_socketpool_target_create(&upstream, &lb_per_target_conf);
+        targets[i] = h2o_socketpool_create_target(&upstream, &lb_per_target_conf);
     }
     return 0;
 }

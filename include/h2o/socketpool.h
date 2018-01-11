@@ -125,11 +125,11 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
  * create a target. If lb_target_conf is NULL, a default target conf would be created.
  */
-h2o_socketpool_target_t *h2o_socketpool_target_create(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
 /**
  * destroy a target
  */
-void h2o_socketpool_target_destroy(h2o_socketpool_target_t *target);
+void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target);
 /**
  *
  */
