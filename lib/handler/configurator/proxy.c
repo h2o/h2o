@@ -266,55 +266,6 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
     return 0;
 }
 
-static int parse_balancer(h2o_configurator_command_t *cmd, yoml_t *node, h2o_socketpool_target_t **targets, size_t target_len)
-{
-    struct proxy_configurator_t *self = (void *)cmd->configurator;
-    yoml_t *lb_type_node = NULL;
-    size_t i;
-    switch (node->type) {
-    case YOML_TYPE_SCALAR:
-        lb_type_node = node;
-        break;
-    case YOML_TYPE_MAPPING:
-        for (i = 0; i < node->data.mapping.size; i++) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t *value = node->data.mapping.elements[i].value;
-            if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, key, "key must be a scalar");
-                return -1;
-            }
-            if (strcasecmp(key->data.scalar, "type") == 0) {
-                if (value->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, value, "value must be a scalar");
-                    return -1;
-                }
-                lb_type_node = value;
-                break;
-            }
-        }
-        if (lb_type_node == NULL) {
-            h2o_configurator_errprintf(cmd, node, "`type` must exist when proxy.reverse.balancer configured with a mapping");
-            return -1;
-        }
-        break;
-    default:
-        h2o_configurator_errprintf(cmd, node, "proxy.reverse.balancer must be either a scalar or a mapping");
-        return -1;
-    }
-
-    if (strcmp(lb_type_node->data.scalar, "round-robin") == 0) {
-        self->vars->conf.balancer = h2o_balancer_create_rr();
-    } else if (strcmp(lb_type_node->data.scalar, "least-conn") == 0) {
-        self->vars->conf.balancer = h2o_balancer_create_lc();
-    } else {
-        h2o_configurator_errprintf(cmd, node, "specified balancer is currently not supported. supported balancers are: "
-                                              "round-robin least-conn");
-        return -1;
-    }
-
-    return 0;
-}
-
 static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **inputs, size_t num_upstreams, h2o_socketpool_target_t **targets)
 {
     size_t i, j;
@@ -389,6 +340,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     yoml_t *balancer_conf = NULL;
     size_t num_upstreams = 0;
     size_t i;
+    h2o_balancer_t *balancer;
 
     /* parse the URL(s) */
     switch (node->type) {
@@ -441,11 +393,22 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     }
     if (balancer_conf != NULL) {
-        if (parse_balancer(cmd, balancer_conf, targets, num_upstreams) != 0) {
+        if (balancer_conf->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, node, "proxy.reverse.balancer must be a scalar");
+            return -1;
+        }
+
+        if (strcmp(balancer_conf->data.scalar, "round-robin") == 0)
+            balancer = h2o_balancer_create_rr();
+        else if (strcmp(balancer_conf->data.scalar, "least-conn") == 0)
+            balancer = h2o_balancer_create_lc();
+        else {
+            h2o_configurator_errprintf(cmd, node, "specified balancer is currently not supported. supported balancers are: "
+                                       "round-robin least-conn");
             return -1;
         }
     } else {
-        self->vars->conf.balancer = h2o_balancer_create_rr();
+        balancer = h2o_balancer_create_rr();
     }
 
     if (parse_backends(cmd, inputs, num_upstreams, targets) != 0)
@@ -468,7 +431,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     h2o_socketpool_t *sockpool = malloc(sizeof(*sockpool));
     memset(sockpool, 0, sizeof(*sockpool));
     /* init socket pool */
-    h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, num_upstreams, self->vars->conf.balancer);
+    h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, num_upstreams, balancer);
     h2o_socketpool_set_timeout(sockpool, self->vars->keepalive_timeout);
     h2o_socketpool_set_ssl_ctx(sockpool, self->vars->ssl_ctx);
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &self->vars->conf, sockpool);

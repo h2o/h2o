@@ -1898,7 +1898,6 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint64_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
-    h2o_balancer_t *balancer;
     size_t max_buffer_size;
 } h2o_proxy_config_vars_t;
 
