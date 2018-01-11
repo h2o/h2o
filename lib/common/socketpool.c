@@ -295,7 +295,6 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
 static void try_connect(h2o_socketpool_connect_request_t *req)
 {
     h2o_socketpool_target_t *target;
-    h2o_socketpool_t *pool = req->pool;
 
     req->remaining_try_count--;
 
@@ -305,7 +304,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
                                                                       req->lb.tried);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
-            __sync_add_and_fetch(&pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
+            __sync_add_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         } else {
             req->selected_target = 0;
         }
@@ -313,7 +312,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     target = req->pool->targets.entries[req->selected_target];
 
     /* FIXME repsect `capacity` */
-    __sync_add_and_fetch(&pool->_shared.count, 1);
+    __sync_add_and_fetch(&req->pool->_shared.count, 1);
 
     switch (target->type) {
         case H2O_SOCKETPOOL_TYPE_NAMED:
