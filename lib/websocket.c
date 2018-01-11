@@ -64,14 +64,13 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         on_close(conn);
         return;
     }
-    assert(conn->_write_buf.cnt == 0);
-    for (i = 0; i < sizeof(conn->_write_buf.bufs) / sizeof(conn->_write_buf.bufs[0]); ++i) {
+    assert(conn->_write_buf.cnt > 0);
+    for (i = 0; i < conn->_write_buf.cnt; ++i) {
         buf = &conn->_write_buf.bufs[i];
-        if (buf->base == NULL)
-            break;
         free(buf->base);
         buf->base = NULL;
     }
+    conn->_write_buf.cnt = 0;
 
     h2o_websocket_proceed(conn);
 }
@@ -237,10 +236,9 @@ void h2o_websocket_proceed(h2o_websocket_conn_t *conn)
         }
     } while (handled);
 
-    if (conn->_write_buf.cnt > 0) {
+    if (!h2o_socket_is_writing(conn->sock) && conn->_write_buf.cnt > 0) {
         /* write */
         h2o_socket_write(conn->sock, conn->_write_buf.bufs, conn->_write_buf.cnt, on_write_complete);
-        conn->_write_buf.cnt = 0;
     }
 
     if (wslay_event_want_read(conn->ws_ctx)) {
