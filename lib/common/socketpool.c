@@ -296,7 +296,6 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
 {
     h2o_socketpool_target_t *target;
     h2o_socketpool_t *pool = req->pool;
-    h2o_linklist_t *sockets = NULL;
 
     req->remaining_try_count--;
 
@@ -312,7 +311,6 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
         }
     }
     target = req->pool->targets.entries[req->selected_target];
-    sockets = &pool->targets.entries[req->selected_target]->_shared.sockets;
 
     /* FIXME repsect `capacity` */
     __sync_add_and_fetch(&pool->_shared.count, 1);
