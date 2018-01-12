@@ -105,16 +105,16 @@ OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFA
 OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
 
 IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
-    MESSAGE(WARNING "*************************************************************************\n"
-                 "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with web        *\n"
-                 "   * browsers.                                                             *\n"
-                 "   *************************************************************************\n")
+    MESSAGE(STATUS "*************************************************************************\n"
+                "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with web        *\n"
+                "   * browsers.                                                             *\n"
+                "   *************************************************************************\n")
 ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
 IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
-    MESSAGE(WARNING "*************************************************************************\n"
-                 "   * OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed when     *\n"
-                 "   * using external cache.                                                 *\n"
-                 "   *************************************************************************\n")
+    MESSAGE(STATUS "*************************************************************************\n"
+                "   * OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed when     *\n"
+                "   * using external cache.                                                 *\n"
+                "   *************************************************************************\n")
 ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
 
 INCLUDE_DIRECTORIES(
