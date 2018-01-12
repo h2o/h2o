@@ -938,6 +938,7 @@
 		E9F677D11FF62228006476D3 /* 50reverse-proxy-serialize-posts.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-serialize-posts.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9F677D21FF62228006476D3 /* 50reverse-proxy-serialize-posts-2.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-serialize-posts-2.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9F677D32004CCCA006476D3 /* 50zero-sized-timeout.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50zero-sized-timeout.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E9F677D82008686B006476D3 /* 40tls13-early-data.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40tls13-early-data.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1710,6 +1711,7 @@
 				109EEFDE1D77B350001F11D1 /* 40server-push-multiple.t */,
 				107D4D501B58B342004A9B21 /* 40session-ticket.t */,
 				104B9A321A59E27A009EEE64 /* 40ssl-cipher-suite.t */,
+				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
 				106C22FB1C0413DA00405689 /* 40websocket.t */,
