@@ -139,9 +139,11 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
     pool->chunk_offset = sizeof(pool->chunks->bytes);
 }
 
-void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz)
+void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
 {
     void *ret;
+
+    assert(alignment <= 2 * sizeof(void *) && sz % alignment == 0);
 
     if (sz >= sizeof(pool->chunks->bytes) / 4) {
         /* allocate large requests directly */
@@ -152,11 +154,9 @@ void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz)
     }
 
     /* return a valid pointer even for 0 sized allocs */
-    if (sz == 0)
-        sz = 1;
+    if (H2O_UNLIKELY(sz == 0))
+        sz = alignment;
 
-    /* 16-bytes rounding */
-    sz = (sz + 15) & ~15;
     if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
         struct st_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&mempool_allocator, sizeof(*newp));
@@ -165,6 +165,7 @@ void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz)
         pool->chunk_offset = 0;
     }
 
+    pool->chunk_offset = H2O_ALIGN(pool->chunk_offset, alignment);
     ret = pool->chunks->bytes + pool->chunk_offset;
     pool->chunk_offset += sz;
     return ret;
@@ -172,7 +173,7 @@ void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz)
 
 static void link_shared(h2o_mem_pool_t *pool, struct st_h2o_mem_pool_shared_entry_t *entry)
 {
-    struct st_h2o_mem_pool_shared_ref_t *ref = h2o_mem_alloc_pool(pool, sizeof(struct st_h2o_mem_pool_shared_ref_t));
+    struct st_h2o_mem_pool_shared_ref_t *ref = h2o_mem_alloc_pool(pool, *ref, 1);
     ref->entry = entry;
     ref->next = pool->shared_refs;
     pool->shared_refs = ref;
@@ -347,7 +348,8 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t eleme
     while (vector->capacity < new_capacity)
         vector->capacity *= 2;
     if (pool != NULL) {
-        new_entries = h2o_mem_alloc_pool(pool, element_size * vector->capacity);
+        new_entries =
+            h2o_mem_alloc_pool_aligned(pool, 2 * sizeof(void *), H2O_ALIGN(element_size * vector->capacity, 2 * sizeof(void *)));
         h2o_memcpy(new_entries, vector->entries, element_size * vector->size);
     } else {
         new_entries = h2o_mem_realloc(vector->entries, element_size * vector->capacity);

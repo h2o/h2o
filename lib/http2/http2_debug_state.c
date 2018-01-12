@@ -74,7 +74,7 @@ __attribute__((format(printf, 3, 4))) static void append_chunk(h2o_mem_pool_t *p
     assert(size > 0);
 
     h2o_iovec_t v;
-    v.base = h2o_mem_alloc_pool(pool, size + 1);
+    v.base = h2o_mem_alloc_pool(pool, char, size + 1);
 
     va_start(args, fmt);
     v.len = vsnprintf(v.base, size + 1, fmt, args);
@@ -103,7 +103,7 @@ static void append_header_table_chunks(h2o_mem_pool_t *pool, h2o_iovec_vector_t 
 h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled)
 {
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
-    h2o_http2_debug_state_t *state = h2o_mem_alloc_pool(&req->pool, sizeof(*state));
+    h2o_http2_debug_state_t *state = h2o_mem_alloc_pool(&req->pool, *state, 1);
     *state = (h2o_http2_debug_state_t){{NULL}};
 
     state->conn_flow_in = h2o_http2_window_get_avail(&conn->_input_window);

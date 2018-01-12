@@ -60,8 +60,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     }
 
     /* build request */
-    req = h2o_mem_alloc_pool(&pool, sizeof(*req));
-    req->base = h2o_mem_alloc_pool(&pool, 1024);
+    req = h2o_mem_alloc_pool(&pool, *req, 1);
+    req->base = h2o_mem_alloc_pool(&pool, char, 1024);
     req->len =
         snprintf(req->base, 1024, "%s %.*s HTTP/1.1\r\ncontent-length:%d\r\nhost: %.*s\r\n\r\n", method, (int)url_parsed.path.len,
                  url_parsed.path.base, body_size, (int)url_parsed.authority.len, url_parsed.authority.base);

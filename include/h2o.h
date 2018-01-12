@@ -1323,11 +1323,12 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
 /**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request
+ * @param alignment of the memory to be allocated for the ostream filter
  * @param size of the memory to be allocated for the ostream filter
  * @param slot where the stream should be inserted
  * @return pointer to the ostream filter
  */
-h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_ostream_t **slot);
 /**
  * prepares the request for processing by looking at the method, URI, headers
  */
@@ -1353,7 +1354,7 @@ static h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
-h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz);
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t alignment, size_t sz);
 /**
  * requests the next prefilter or filter (if any) to setup the ostream if necessary
  */

@@ -105,7 +105,7 @@ static void on_filter_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ost
 
 Found:
     /* register prefilter that rewrites the status code after the internal redirect is processed */
-    prefilter = (void *)h2o_add_prefilter(req, sizeof(*prefilter));
+    prefilter = (void *)h2o_add_prefilter(req, H2O_ALIGNOF(*prefilter), sizeof(*prefilter));
     prefilter->super.on_setup_ostream = on_prefilter_setup_stream;
     prefilter->req_headers = req->headers;
     prefilter->status = req->res.status;
@@ -124,7 +124,7 @@ Found:
     req->res.headers = (h2o_headers_t){NULL};
     h2o_send_redirect_internal(req, method, errordoc->url.base, errordoc->url.len, 0);
     /* create fake ostream that swallows the contents emitted by the generator */
-    ostream = h2o_add_ostream(req, sizeof(*ostream), slot);
+    ostream = h2o_add_ostream(req, H2O_ALIGNOF(*ostream), sizeof(*ostream), slot);
     ostream->do_send = on_ostream_send;
 }
 

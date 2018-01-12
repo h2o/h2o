@@ -67,6 +67,17 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
+# Find out whether compiler support __alignof__
+CHECK_C_SOURCE_COMPILES("
+int main(void) {
+char *p;
+int a;
+a = __alignof__(char);
+a = __alignof__(p);
+return 0;
+}" COMPILER_HAS_BUILT_IN_ALIGNOF)
+
+
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
 FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
@@ -650,6 +661,10 @@ ENDIF (BUILD_FUZZER)
 IF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_64BIT_ATOMICS")
 ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
+
+IF (NOT COMPILER_HAS_BUILT_IN_ALIGNOF)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_BUILT_IN_ALIGNOF")
+ENDIF (NOT COMPILER_HAS_BUILT_IN_ALIGNOF)
 
 # environment-specific tweaks
 IF (APPLE)

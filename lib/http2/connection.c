@@ -1249,7 +1249,7 @@ DEFINE_TLS_LOGGER(session_id)
 static h2o_iovec_t log_stream_id(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
-    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT32_LONGEST_STR));
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT32_LONGEST_STR));
     size_t len = (size_t)sprintf(s, "%" PRIu32, stream->stream_id);
     return h2o_iovec_init(s, len);
 }
@@ -1257,7 +1257,7 @@ static h2o_iovec_t log_stream_id(h2o_req_t *req)
 static h2o_iovec_t log_priority_received(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
-    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof("1:" H2O_UINT32_LONGEST_STR ":" H2O_UINT16_LONGEST_STR));
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof("1:" H2O_UINT32_LONGEST_STR ":" H2O_UINT16_LONGEST_STR));
     size_t len = (size_t)sprintf(s, "%c:%" PRIu32 ":%" PRIu16, stream->received_priority.exclusive ? '1' : '0',
                                  stream->received_priority.dependency, stream->received_priority.weight);
     return h2o_iovec_init(s, len);
@@ -1272,7 +1272,7 @@ static h2o_iovec_t log_priority_received_exclusive(h2o_req_t *req)
 static h2o_iovec_t log_priority_received_parent(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
-    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT32_LONGEST_STR));
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT32_LONGEST_STR));
     size_t len = sprintf(s, "%" PRIu32, stream->received_priority.dependency);
     return h2o_iovec_init(s, len);
 }
@@ -1280,7 +1280,7 @@ static h2o_iovec_t log_priority_received_parent(h2o_req_t *req)
 static h2o_iovec_t log_priority_received_weight(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
-    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT16_LONGEST_STR));
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT16_LONGEST_STR));
     size_t len = sprintf(s, "%" PRIu16, stream->received_priority.weight);
     return h2o_iovec_init(s, len);
 }
@@ -1300,7 +1300,7 @@ static h2o_iovec_t log_priority_actual(h2o_req_t *req)
 {
     h2o_http2_conn_t *conn = (void *)req->conn;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
-    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT32_LONGEST_STR ":" H2O_UINT16_LONGEST_STR));
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT32_LONGEST_STR ":" H2O_UINT16_LONGEST_STR));
     size_t len = (size_t)sprintf(s, "%" PRIu32 ":%" PRIu16, get_parent_stream_id(conn, stream),
                                  h2o_http2_scheduler_get_weight(&stream->_refs.scheduler));
     return h2o_iovec_init(s, len);
@@ -1310,7 +1310,7 @@ static h2o_iovec_t log_priority_actual_parent(h2o_req_t *req)
 {
     h2o_http2_conn_t *conn = (void *)req->conn;
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
-    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT32_LONGEST_STR));
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT32_LONGEST_STR));
     size_t len = (size_t)sprintf(s, "%" PRIu32, get_parent_stream_id(conn, stream));
     return h2o_iovec_init(s, len);
 }
@@ -1318,7 +1318,7 @@ static h2o_iovec_t log_priority_actual_parent(h2o_req_t *req)
 static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
-    char *s = h2o_mem_alloc_pool(&stream->req.pool, sizeof(H2O_UINT16_LONGEST_STR));
+    char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT16_LONGEST_STR));
     size_t len = (size_t)sprintf(s, "%" PRIu16, h2o_http2_scheduler_get_weight(&stream->_refs.scheduler));
     return h2o_iovec_init(s, len);
 }

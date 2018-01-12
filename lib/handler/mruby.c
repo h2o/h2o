@@ -197,7 +197,7 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
     h2o_iovec_t ret;
 
     ret.len = len + KEY_PREFIX_LEN;
-    ret.base = h2o_mem_alloc_pool(pool, ret.len);
+    ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
 
     memcpy(ret.base, KEY_PREFIX, KEY_PREFIX_LEN);
 
@@ -831,7 +831,7 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
             content.len += RSTRING_LEN(e);
         }
         /* allocate memory, and copy the response */
-        char *dst = content.base = h2o_mem_alloc_pool(&generator->req->pool, content.len);
+        char *dst = content.base = h2o_mem_alloc_pool(&generator->req->pool, char, content.len);
         for (i = 0; i != len; ++i) {
             mrb_value e = mrb_ary_entry(body, i);
             assert(mrb_string_p(e));

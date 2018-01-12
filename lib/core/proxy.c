@@ -91,7 +91,7 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
         return added;
 
     size_t newlen = merged.len + 2 + added.len;
-    char *buf = h2o_mem_alloc_pool(pool, newlen);
+    char *buf = h2o_mem_alloc_pool(pool, *buf, newlen);
     memcpy(buf, merged.base, merged.len);
     buf[merged.len] = seperator;
     buf[merged.len + 1] = ' ';
@@ -149,7 +149,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     buf.len = req->method.len + req->path.len + req->authority.len + 512;
     if (use_proxy_protocol)
         buf.len += H2O_PROXY_HEADER_MAX_LENGTH;
-    buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
+    buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
     do {                                                                                                                           \
@@ -158,7 +158,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             do {                                                                                                                   \
                 buf.len *= 2;                                                                                                      \
             } while (required > buf.len);                                                                                          \
-            char *newp = h2o_mem_alloc_pool(&req->pool, buf.len);                                                                  \
+            char *newp = h2o_mem_alloc_pool(&req->pool, char, buf.len);                                                            \
             memcpy(newp, buf.base, offset);                                                                                        \
             buf.base = newp;                                                                                                       \
         }                                                                                                                          \

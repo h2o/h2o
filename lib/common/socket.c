@@ -164,7 +164,7 @@ static int read_bio(BIO *b, char *out, int len)
 static void write_ssl_bytes(h2o_socket_t *sock, const void *in, size_t len)
 {
     if (len != 0) {
-        void *bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, len);
+        void *bytes_alloced = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, len);
         memcpy(bytes_alloced, in, len);
         h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
         sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(bytes_alloced, len);
@@ -666,7 +666,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
 #if H2O_USE_PICOTLS
                 if (sock->ssl->ptls != NULL) {
                     size_t dst_size = sz + ptls_get_record_overhead(sock->ssl->ptls);
-                    void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, dst_size);
+                    void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
                     ptls_buffer_t wbuf;
                     ptls_buffer_init(&wbuf, dst, dst_size);
                     ret = ptls_send(sock->ssl->ptls, &wbuf, bufs[0].base + off, sz);
@@ -834,7 +834,7 @@ h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *po
     if (rawid.base == NULL)
         return h2o_iovec_init(NULL, 0);
 
-    base64id.base = pool != NULL ? h2o_mem_alloc_pool(pool, h2o_base64_encode_capacity(rawid.len))
+    base64id.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, h2o_base64_encode_capacity(rawid.len))
                                  : h2o_mem_alloc(h2o_base64_encode_capacity(rawid.len));
     base64id.len = h2o_base64_encode(base64id.base, rawid.base, rawid.len, 1);
     return base64id;
@@ -844,7 +844,7 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
 {
     int bits = h2o_socket_get_ssl_cipher_bits(sock);
     if (bits != 0) {
-        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, sizeof(H2O_INT16_LONGEST_STR))
+        char *s = (char *)(pool != NULL ? h2o_mem_alloc_pool(pool, char, sizeof(H2O_INT16_LONGEST_STR))
                                         : h2o_mem_alloc(sizeof(H2O_INT16_LONGEST_STR)));
         size_t len = sprintf(s, "%" PRId16, (int16_t)bits);
         return h2o_iovec_init(s, len);

@@ -34,7 +34,7 @@ h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
         slen = strlen(s);
 
     if (pool != NULL) {
-        ret.base = h2o_mem_alloc_pool(pool, slen + 1);
+        ret.base = h2o_mem_alloc_pool(pool, char, slen + 1);
     } else {
         ret.base = h2o_mem_alloc(slen + 1);
     }
@@ -63,7 +63,7 @@ h2o_iovec_t h2o_strdup_slashed(h2o_mem_pool_t *pool, const char *src, size_t len
     h2o_iovec_t ret;
 
     ret.len = len != SIZE_MAX ? len : strlen(src);
-    ret.base = pool != NULL ? h2o_mem_alloc_pool(pool, ret.len + 2) : h2o_mem_alloc(ret.len + 2);
+    ret.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, ret.len + 2) : h2o_mem_alloc(ret.len + 2);
     memcpy(ret.base, src, ret.len);
     if (ret.len != 0 && ret.base[ret.len - 1] != '/')
         ret.base[ret.len++] = '/';
@@ -188,7 +188,7 @@ h2o_iovec_t h2o_decode_base64url(h2o_mem_pool_t *pool, const char *src, size_t l
     char remaining_input[4];
 
     decoded.len = len * 3 / 4;
-    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
+    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, decoded.len + 1) : h2o_mem_alloc(decoded.len + 1);
     dst = (uint8_t *)decoded.base;
 
     while (len >= 4) {
@@ -321,7 +321,7 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
     h2o_iovec_t encoded;
     size_t i, capacity = l * 3 + 1;
 
-    encoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, capacity) : h2o_mem_alloc(capacity);
+    encoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, capacity) : h2o_mem_alloc(capacity);
     encoded.len = 0;
 
     /* RFC 3986:
@@ -499,7 +499,7 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len)
     /* escape and return the result if necessary */
     if (add_size != 0) {
         /* allocate buffer and fill in the chars that are known not to require escaping */
-        h2o_iovec_t escaped = {h2o_mem_alloc_pool(pool, len + add_size + 1), 0};
+        h2o_iovec_t escaped = {h2o_mem_alloc_pool(pool, char, len + add_size + 1), 0};
         /* fill-in the rest */
         for (s = src; s != end; ++s) {
             switch (*s) {
@@ -539,7 +539,7 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
 
     /* allocate memory */
     if (pool != NULL)
-        ret.base = h2o_mem_alloc_pool(pool, ret.len + 1);
+        ret.base = h2o_mem_alloc_pool(pool, char, ret.len + 1);
     else
         ret.base = h2o_mem_alloc(ret.len + 1);
 

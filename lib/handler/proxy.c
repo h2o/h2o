@@ -32,7 +32,7 @@ struct rp_handler_t {
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
-    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
+    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, *overrides, 1);
 
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
