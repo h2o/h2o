@@ -698,6 +698,12 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     proceed_pull(conn, headers_len);
 }
 
+static void on_delayed_send_complete(h2o_timeout_entry_t *entry)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
+    on_send_complete(conn->sock, 0);
+}
+
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_finalostream_t *self = (void *)_self;
@@ -732,8 +738,12 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         conn->req.http1_is_persistent = 0;
     }
 
-    h2o_socket_write(conn->sock, bufs, bufcnt,
-                     h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
+    if (bufcnt != 0) {
+        h2o_socket_write(conn->sock, bufs, bufcnt,
+                         h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
+    } else {
+        set_timeout(conn, &conn->super.ctx->zero_timeout, on_delayed_send_complete);
+    }
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
