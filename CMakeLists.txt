@@ -36,6 +36,8 @@ SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY
 SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 
 INCLUDE(GNUInstallDirs)
+INCLUDE(CheckCSourceCompiles)
+INCLUDE(CMakePushCheckState)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -46,10 +48,17 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 FIND_PACKAGE(PkgConfig)
 FIND_PACKAGE(Threads REQUIRED)
 
-FIND_PACKAGE(OpenSSL)
+IF ((CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND NOT (DEFINED OPENSSL_ROOT_DIR OR DEFINED ENV{OPENSSL_ROOT_DIR}))
+    MESSAGE(STATUS "*************************************************************************\n"
+                "   * Setting OPENSSL_ROOT_DIR to /usr/local/opt/openssl. On macOS, OpenSSL *\n"
+                "   * should be installed using homebrew or OPENSSL_ROOT_DIR must be set to *\n"
+                "   * the path that has OpenSSL installed.                                  *\n"
+                "   *************************************************************************")
+    SET(OPENSSL_ROOT_DIR "/usr/local/opt/openssl")
+ENDIF ()
+FIND_PACKAGE(OpenSSL REQUIRED)
 FIND_PACKAGE(ZLIB REQUIRED)
 
-INCLUDE(CheckCSourceCompiles)
 CHECK_C_SOURCE_COMPILES("
 #include <stdint.h>
 int main(void) {
@@ -58,14 +67,28 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
-SET(WITH_BUNDLED_SSL_DEFAULT "ON")
-IF ((NOT UNIX) OR CYGWIN)
-    SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
-ENDIF ((NOT UNIX) OR CYGWIN)
-IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.2"))
-    SET(WITH_BUNDLED_SSL_DEFAULT "OFF")
-ENDIF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.2"))
-OPTION(WITH_BUNDLED_SSL "whether or not to use the bundled libressl" ${WITH_BUNDLED_SSL_DEFAULT})
+# Find out if libc provices backtrace()
+CMAKE_PUSH_CHECK_STATE()
+FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
+IF (LIBC_BACKTRACE_LIB)
+    SET(CMAKE_REQUIRED_LIBRARIES ${LIBC_BACKTRACE_LIB})
+ENDIF()
+CHECK_C_SOURCE_COMPILES("
+#include <execinfo.h>
+int main(void) {
+void *p[10];
+int ret = backtrace(p, 10);
+backtrace_symbols_fd(p, ret, 2);
+return 0;
+}" LIBC_HAS_BACKTRACE)
+CMAKE_POP_CHECK_STATE()
+
+IF (LIBC_HAS_BACKTRACE)
+    ADD_DEFINITIONS("-DLIBC_HAS_BACKTRACE")
+    IF (LIBC_BACKTRACE_LIB)
+        LIST(APPEND EXTRA_LIBS ${LIBC_BACKTRACE_LIB})
+    ENDIF ()
+ENDIF ()
 
 OPTION(WITHOUT_LIBS "skip building libs even when possible" OFF)
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
@@ -81,30 +104,23 @@ OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFA
 
 OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
 
-IF (WITH_BUNDLED_SSL)
-    SET(BUNDLED_SSL_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/include")
-    SET(BUNDLED_SSL_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libssl.a" "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/lib/libcrypto.a")
-    ADD_CUSTOM_TARGET(bundled-ssl make -f ${CMAKE_CURRENT_SOURCE_DIR}/misc/libressl.mk SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/misc
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-ELSE (WITH_BUNDLED_SSL)
-    IF (NOT OPENSSL_FOUND)
-        IF ((NOT UNIX) OR CYGWIN)
-            MESSAGE(FATAL_ERROR "OpenSSL not found (and the bundled libressl cannot be used on this platform)")
-        ENDIF ((NOT UNIX) OR CYGWIN)
-        MESSAGE(FATAL_ERROR "OpenSSL not found (nor H2O was configured to used the bundled libressl)")
-    ENDIF (NOT OPENSSL_FOUND)
-    IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
-        MESSAGE(WARNING "*********************************************************************** OpenSSL 1.0.2 is required for HTTP/2 interoperability with web browsers ***********************************************************************")
-    ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
-    IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
-        MESSAGE(WARNING "*********************************************************************** OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed when using external cache ***********************************************************************")
-    ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
-ENDIF (WITH_BUNDLED_SSL)
+IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
+    MESSAGE(STATUS "*************************************************************************\n"
+                "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with web        *\n"
+                "   * browsers.                                                             *\n"
+                "   *************************************************************************\n")
+ENDIF (OPENSSL_VERSION VERSION_LESS "1.0.2")
+IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
+    MESSAGE(STATUS "*************************************************************************\n"
+                "   * OpenSSL 1.1.0 ~ 1.1.0f would cause session resumption failed when     *\n"
+                "   * using external cache.                                                 *\n"
+                "   *************************************************************************\n")
+ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
 
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
-    deps/brotli/enc
+    deps/brotli/c/include
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -193,21 +209,25 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/writer.c)
 
 SET(BROTLI_SOURCE_FILES
-    deps/brotli/enc/backward_references.cc
-    deps/brotli/enc/block_splitter.cc
-    deps/brotli/enc/brotli_bit_stream.cc
-    deps/brotli/enc/compress_fragment.cc
-    deps/brotli/enc/compress_fragment_two_pass.cc
-    deps/brotli/enc/dictionary.cc
-    deps/brotli/enc/encode.cc
-    deps/brotli/enc/entropy_encode.cc
-    deps/brotli/enc/histogram.cc
-    deps/brotli/enc/literal_cost.cc
-    deps/brotli/enc/metablock.cc
-    deps/brotli/enc/static_dict.cc
-    deps/brotli/enc/streams.cc
-    deps/brotli/enc/utf8_util.cc
-    lib/handler/compress/brotli.cc)
+    deps/brotli/c/common/dictionary.c
+    deps/brotli/c/enc/backward_references.c
+    deps/brotli/c/enc/backward_references_hq.c
+    deps/brotli/c/enc/bit_cost.c
+    deps/brotli/c/enc/block_splitter.c
+    deps/brotli/c/enc/brotli_bit_stream.c
+    deps/brotli/c/enc/cluster.c
+    deps/brotli/c/enc/compress_fragment.c
+    deps/brotli/c/enc/compress_fragment_two_pass.c
+    deps/brotli/c/enc/dictionary_hash.c
+    deps/brotli/c/enc/encode.c
+    deps/brotli/c/enc/entropy_encode.c
+    deps/brotli/c/enc/histogram.c
+    deps/brotli/c/enc/literal_cost.c
+    deps/brotli/c/enc/memory.c
+    deps/brotli/c/enc/metablock.c
+    deps/brotli/c/enc/static_dict.c
+    deps/brotli/c/enc/utf8_util.c
+    lib/handler/compress/brotli.c)
 
 SET(PICOTLS_INCLUDE_DIRECTORIES
     deps/picotls/deps/cifra/src/ext
@@ -385,7 +405,8 @@ SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
     ${BROTLI_SOURCE_FILES})
-SET(EXTRA_LIBS ${EXTRA_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+
+SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT})
 
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
@@ -411,25 +432,20 @@ SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     SOVERSION ${LIBRARY_SOVERSION})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${EXTRA_LIBS})
 
-IF (OPENSSL_FOUND)
-    TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
-    TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
-    TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES})
-    TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES})
-    IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
-        INSTALL(TARGETS libh2o DESTINATION ${CMAKE_INSTALL_LIBDIR})
-    ELSE ()
-        SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
-    ENDIF ()
-    IF (NOT WITHOUT_LIBS)
-        INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
-    ELSE ()
-        SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
-    ENDIF()
-ELSE (OPENSSL_FOUND)
+TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
+TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
+    INSTALL(TARGETS libh2o DESTINATION ${CMAKE_INSTALL_LIBDIR})
+ELSE ()
     SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
+ENDIF ()
+IF (NOT WITHOUT_LIBS)
+    INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
+ELSE ()
     SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
-ENDIF (OPENSSL_FOUND)
+ENDIF()
 
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-http1client examples-simple examples-socket-client)
 IF (WSLAY_FOUND)
@@ -484,6 +500,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
         lib/handler/mruby/sleep.c
+        lib/handler/mruby/channel.c
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
@@ -494,16 +511,8 @@ IF (WITH_PICOTLS)
 ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
-IF (WITH_BUNDLED_SSL)
-    TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
-    TARGET_LINK_LIBRARIES(h2o ${BUNDLED_SSL_LIBRARIES})
-    ADD_DEPENDENCIES(h2o bundled-ssl)
-ELSE (WITH_BUNDLED_SSL)
-    IF (OPENSSL_FOUND)
-        TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
-        TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES})
-    ENDIF (OPENSSL_FOUND)
-ENDIF (WITH_BUNDLED_SSL)
+TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 IF (WITH_MRUBY)
     TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-input-stream/src)
     # note: the paths need to be determined before libmruby.flags.mak is generated
@@ -543,54 +552,30 @@ ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${EXTRA_LIBS})
 
 IF (LIBUV_FOUND)
     ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
     SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
         COMPILE_FLAGS "-DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
         EXCLUDE_FROM_ALL 1)
-    TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 ENDIF (LIBUV_FOUND)
 
-IF (WITH_BUNDLED_SSL)
-    TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
-    TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${BUNDLED_SSL_LIBRARIES})
-    ADD_DEPENDENCIES(t-00unit-evloop.t bundled-ssl)
-    IF (LIBUV_FOUND)
-        TARGET_INCLUDE_DIRECTORIES(t-00unit-libuv.t BEFORE PUBLIC ${BUNDLED_SSL_INCLUDE_DIR})
-        TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${BUNDLED_SSL_LIBRARIES})
-        ADD_DEPENDENCIES(t-00unit-libuv.t bundled-ssl)
-    ENDIF (LIBUV_FOUND)
-ELSE (WITH_BUNDLED_SSL)
-    IF (OPENSSL_FOUND)
-        TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t PUBLIC ${OPENSSL_INCLUDE_DIR})
-        TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${OPENSSL_LIBRARIES})
-        IF (LIBUV_FOUND)
-            TARGET_INCLUDE_DIRECTORIES(t-00unit-libuv.t PUBLIC ${OPENSSL_INCLUDE_DIR})
-            TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${OPENSSL_LIBRARIES})
-        ENDIF (LIBUV_FOUND)
-    ENDIF (OPENSSL_FOUND)
-ENDIF (WITH_BUNDLED_SSL)
+TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t PUBLIC ${OPENSSL_INCLUDE_DIR})
+TARGET_LINK_LIBRARIES(t-00unit-evloop.t ${OPENSSL_LIBRARIES} ${EXTRA_LIBS})
+IF (LIBUV_FOUND)
+    TARGET_INCLUDE_DIRECTORIES(t-00unit-libuv.t PUBLIC ${OPENSSL_INCLUDE_DIR})
+    TARGET_LINK_LIBRARIES(t-00unit-libuv.t ${LIBUV_LIBRARIES} ${OPENSSL_LIBRARIES} ${EXTRA_LIBS})
+ENDIF (LIBUV_FOUND)
 
 include(ExternalProject)
 
-IF (WITH_BUNDLED_SSL)
-    SET(H2GET_SSL_ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}/libressl-build/")
-ELSE ()
-    IF (OPENSSL_FOUND)
-        GET_FILENAME_COMPONENT(H2GET_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} DIRECTORY)
-    ENDIF ()
-ENDIF ()
+GET_FILENAME_COMPONENT(H2GET_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} DIRECTORY)
 
 ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(check t-00unit-libuv.t)
-    IF (OPENSSL_FOUND)
-        ADD_DEPENDENCIES(check lib-examples)
-    ENDIF ()
+    ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
 ENDIF ()
 
 IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
@@ -601,9 +586,6 @@ IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
                         BUILD_COMMAND make
                         INSTALL_COMMAND true)
     SET_TARGET_PROPERTIES(h2get PROPERTIES EXCLUDE_FROM_ALL TRUE)
-    IF (WITH_BUNDLED_SSL)
-        ADD_DEPENDENCIES(h2get bundled-ssl)
-    ENDIF ()
     ADD_DEPENDENCIES(check h2get)
 ENDIF ()
 
@@ -611,10 +593,7 @@ ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(check t-00unit-libuv.t)
-    IF (OPENSSL_FOUND)
-        ADD_DEPENDENCIES(check lib-examples)
-    ENDIF ()
+    ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
 ENDIF ()
 
 ADD_CUSTOM_TARGET(check-as-root env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/90root-*.t
@@ -677,13 +656,6 @@ IF (APPLE)
     SET_SOURCE_FILES_PROPERTIES(lib/socket.c lib/websocket.c src/main.c examples/simple.c examples/websocket.c PROPERTIES COMPILE_FLAGS -Wno-deprecated-declarations)
 ELSEIF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
      SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread -D_GNU_SOURCE")
-     IF (WITH_BUNDLED_SSL)
-         TARGET_LINK_LIBRARIES(h2o "rt")
-         TARGET_LINK_LIBRARIES(t-00unit-evloop.t "rt")
-         IF (LIBUV_FOUND)
-             TARGET_LINK_LIBRARIES(t-00unit-libuv.t "rt")
-         ENDIF (LIBUV_FOUND)
-    ENDIF (WITH_BUNDLED_SSL)
 ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthreads -D_POSIX_PTHREAD_SEMANTICS")
     TARGET_LINK_LIBRARIES(h2o "socket" "nsl")

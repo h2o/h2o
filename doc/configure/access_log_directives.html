@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -63,6 +63,13 @@ Access Log Directives
 This document describes the configuration directives of the access_log handler.
 </p>
 
+<ul>
+<li><a href="configure/access_log_directives.html#access-log">
+<code>access-log</code>
+</a></li>
+</ul>
+
+
 <div id="access-log" class="directive-head">
 <h3><a href="configure/access_log_directives.html#access-log"><code>"access-log"</code></a></h3>
 </div>
@@ -76,6 +83,10 @@ The directive sets the path and optionally the format of the access log.
 
 <p>
 If the supplied argument is a scalar, it is treated as the path of the log file, or if the value starts with a <code>|</code>, it is treated as a command to which the log should be emitted.
+</p>
+<p>
+The latter approach (i.e. <code>|</code>) needs to be used for rotating the logs.
+This is because the log file is opened (or the command that emits the log is spawned) before dropping privileges so that it can be owned by root or any other user; therefore it cannot be reopened by the server process itself once it starts running.
 </p>
 <div class="example">
 <div class="caption">Example. Emit access log to file</div>
@@ -202,6 +213,8 @@ Note that you may need to quote (and escape) the format string as required by YA
 <a href="configure/base_directives.html#error-log.emit-request-errors"><code>error-log.emit-request-errors</code></a>
 </dd>
 </dl>
+
+
 
 
 

@@ -31,7 +31,11 @@
 
 #if !defined(H2O_USE_ACCEPT4)
 #ifdef __linux__
+#if defined(__ANDROID__) && __ANDROID_API__ < 21
+#define H2O_USE_ACCEPT4 0
+#else
 #define H2O_USE_ACCEPT4 1
+#endif
 #elif __FreeBSD__ >= 10
 #define H2O_USE_ACCEPT4 1
 #else
@@ -379,8 +383,6 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 {
     struct st_h2o_evloop_socket_t *sock;
 
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-
     sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
     h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
@@ -398,6 +400,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 
 static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *loop, int fd, int flags)
 {
+    /* ignore errors returned by setsockopt; fd is not restricted to TCP sockets (could be a unix-domain socket for example) */
     int on = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
     return create_socket(loop, fd, flags);
@@ -405,8 +408,9 @@ static struct st_h2o_evloop_socket_t *create_socket_set_nodelay(h2o_evloop_t *lo
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags)
 {
+    /* it is the reponsibility of the event loop to modify the properties of a socket for its use (i.e., set O_NONBLOCK) */
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    return &create_socket(loop, fd, flags)->super;
+    return &create_socket_set_nodelay(loop, fd, flags)->super;
 }
 
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
@@ -415,15 +419,25 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
 
 #if H2O_USE_ACCEPT4
+    /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
     if ((fd = accept4(listener->fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
+#if !defined(NDEBUG) && defined(DEBUG)
+    { /* assert that TCP_NODELAY flag is inherited */
+        int flag = 0;
+        socklen_t len = sizeof(flag);
+        if (0 == getsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, &len)) {
+            assert(flag == 1);
+        }
+    }
+#endif
+    return &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
     if ((fd = cloexec_accept(listener->fd, NULL, NULL)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
-#endif
-
     return &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
+#endif
 }
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)

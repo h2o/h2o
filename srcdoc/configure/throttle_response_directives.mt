@@ -11,6 +11,8 @@ The value of <code>X-Traffic</code> header should be an integer that represents 
 The following are the configuration directives recognized by the handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name     => "throttle-response",
@@ -39,6 +41,8 @@ hosts:
         header.add: "X-Traffic: 100000"
 EOT
 ?>
+? })
+
 ? })
 
 ? })

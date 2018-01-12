@@ -86,6 +86,6 @@ publish: all
 	tar cf - `git ls-files` | (cd $$PUBLISH && tar xf -)
 
 clean:
-	rm -f $(OUTPUT) search/searchindex.js
+	rm -f $(OUTPUT) $(MAN) search/searchindex.js
 
 .PHONY: mkdir html publish publish-check do-publish manpage

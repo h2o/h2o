@@ -74,8 +74,8 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$upstream_port1/echo-server-port
-          - http://127.0.0.1.XIP.IO:$upstream_port2/echo-server-port
+          - http://127.0.0.1.xip.io:$upstream_port1/echo-server-port
+          - http://127.0.0.1.xip.io:$upstream_port2/echo-server-port
 EOT
 };
 
@@ -132,7 +132,7 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
+          - http://127.0.0.1.xip.io:$upstream_port/echo-server-port
           - http://[unix:$upstream_file]/echo-server-port
 EOT
 };

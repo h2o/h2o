@@ -314,6 +314,11 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
 
 static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
+    if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
+        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
+        return;
+    }
+
     struct st_gzip_decompress_t *self = (void *)_self;
     h2o_iovec_t *outbufs;
     size_t outbufcnt;
@@ -751,6 +756,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     rpath_len += self->real_path.len;
     memcpy(rpath + rpath_len, req->path_normalized.base + req_path_prefix, req->path_normalized.len - req_path_prefix);
     rpath_len += req->path_normalized.len - req_path_prefix;
+
+    h2o_resp_add_date_header(req);
 
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {

@@ -32,7 +32,7 @@
 #include "h2o/http2.h"
 #include "h2o/memcached.h"
 
-#define USE_HTTPS 0
+#define USE_HTTPS 1
 #define USE_MEMCACHED 0
 
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
@@ -179,7 +179,7 @@ static int create_listener(void)
 
 #endif
 
-static int setup_ssl(const char *cert_file, const char *key_file)
+static int setup_ssl(const char *cert_file, const char *key_file, const char *ciphers)
 {
     SSL_load_error_strings();
     SSL_library_init();
@@ -194,6 +194,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
                                                   86400);
         h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
     }
+    SSL_CTX_set_ecdh_auto(accept_ctx.ssl_ctx, 1);
 
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
@@ -202,6 +203,11 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     }
     if (SSL_CTX_use_PrivateKey_file(accept_ctx.ssl_ctx, key_file, SSL_FILETYPE_PEM) != 1) {
         fprintf(stderr, "an error occurred while trying to load private key file:%s\n", key_file);
+        return -1;
+    }
+
+    if (SSL_CTX_set_cipher_list(accept_ctx.ssl_ctx, ciphers) != 1) {
+        fprintf(stderr, "ciphers could not be set: %s\n", ciphers);
         return -1;
     }
 
@@ -239,7 +245,9 @@ int main(int argc, char **argv)
     if (USE_MEMCACHED)
         h2o_multithread_register_receiver(ctx.queue, &libmemcached_receiver, h2o_memcached_receiver);
 
-    if (USE_HTTPS && setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key") != 0)
+    if (USE_HTTPS &&
+        setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key",
+                  "DEFAULT:!MD5:!DSS:!DES:!RC4:!RC2:!SEED:!IDEA:!NULL:!ADH:!EXP:!SRP:!PSK") != 0)
         goto Error;
 
     /* disabled by default: uncomment the line below to enable access logging */

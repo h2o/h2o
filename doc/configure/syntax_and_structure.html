@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -265,6 +265,22 @@ key-file:         /path/to/example.com.crt
 </div>
 
 
+<p>
+Starting from version 2.3, it is possible to refer to an environment variable (intepreted as a scalar) from the configuration file by using <code>!env</code> custom YAML tag.
+</p>
+
+<div class="example">
+<div class="caption">Example. h2o.conf</div>
+<pre><code>hosts:
+  &quot;example.com&quot;:
+    listen:
+      port: !env H2O_PORT
+    paths:
+      ...
+</code></pre>
+</div>
+
+
 
 
 <div class="notes">
@@ -282,3 +298,4 @@ Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </div>
 </body>
 </html>
+

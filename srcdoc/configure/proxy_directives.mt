@@ -20,6 +20,8 @@ Support for HTTPS has been introduced in version 2.0.
 Following sections describe the configuration directives defined for the module.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "proxy.reverse.url",
@@ -109,6 +111,16 @@ $ctx->{directive}->(
     see_also => render_mt(<<'EOT'),
 <a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers"><code>proxy.emit-x-forwarded-headers</code></a>
 EOT
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.emit-missing-date-header",
+    levels  => [ qw(global) ],
+    since   => "2.3",
+    default => q{proxy.emit-missing-date-header: ON},
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should add a <code>date</date> header to the response, if that header is missing from the upstream response.",
 )->(sub {})
 ?>
 
@@ -268,5 +280,7 @@ $ctx->{directive}->(
     desc    => q{Sets idle timeout of a WebSocket connection being proxied.},
 )->(sub {})
 ?>
+
+? })
 
 ? })

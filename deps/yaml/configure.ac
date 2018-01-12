@@ -3,8 +3,8 @@
 # Define the package version numbers and the bug reporting link.
 m4_define([YAML_MAJOR], 0)
 m4_define([YAML_MINOR], 1)
-m4_define([YAML_PATCH], 6)
-m4_define([YAML_BUGS], [http://pyyaml.org/newticket?component=libyaml])
+m4_define([YAML_PATCH], 7)
+m4_define([YAML_BUGS], [https://bitbucket.org/xi/libyaml/issues/new])
 
 # Define the libtool version numbers; check the Autobook, Section 11.4.
 # Bump the libtool version numbers using the following algorithm:
@@ -19,7 +19,7 @@ m4_define([YAML_BUGS], [http://pyyaml.org/newticket?component=libyaml])
 #           YAML_AGE = 0
 m4_define([YAML_RELEASE], 0)
 m4_define([YAML_CURRENT], 2)
-m4_define([YAML_REVISION], 4)
+m4_define([YAML_REVISION], 5)
 m4_define([YAML_AGE], 0)
 
 # Initialize autoconf & automake.

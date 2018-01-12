@@ -5,6 +5,7 @@ use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
 use Socket qw(SOMAXCONN);
 use Test::More;
+use Time::HiRes qw(time);
 use t::Util;
 
 plan skip_all => 'nghttp not found'
@@ -20,7 +21,7 @@ my $listener = IO::Socket::INET->new(
 ) or die "failed to listen to 127.0.0.1:$upstream_port:$!";
 
 my $server = spawn_h2o(<< "EOT");
-http2-idle-timeout: 5
+http2-idle-timeout: 2
 hosts:
   default:
     paths:
@@ -44,8 +45,6 @@ subtest 'http (upgrade)' => sub {
     $doit->('http', '-u', $server->{port});
 };
 subtest 'https' => sub {
-    plan skip_all => 'OpenSSL does not support protocol negotiation; it is too old'
-        unless openssl_can_negotiate();
     $doit->('https', '', $server->{tls_port});
 };
 

@@ -305,7 +305,8 @@ void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root)
 
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
 {
-    assert(!ref->_self_is_active);
+    if (ref->_self_is_active)
+        return;
     ref->_self_is_active = 1;
     incr_active_cnt(&ref->node);
 }
