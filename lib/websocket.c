@@ -54,22 +54,23 @@ static void on_recv(h2o_socket_t *sock, const char *err)
     h2o_websocket_proceed(conn);
 }
 
+static void free_write_buf(h2o_websocket_conn_t *conn)
+{
+    size_t i;
+    for (i = 0; i < conn->_write_buf.cnt; ++i)
+        free(conn->_write_buf.bufs[i].base);
+}
+
 static void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_websocket_conn_t *conn = sock->data;
-    h2o_iovec_t *buf;
-    size_t i;
 
     if (err != NULL) {
         on_close(conn);
         return;
     }
     assert(conn->_write_buf.cnt > 0);
-    for (i = 0; i < conn->_write_buf.cnt; ++i) {
-        buf = &conn->_write_buf.bufs[i];
-        free(buf->base);
-        buf->base = NULL;
-    }
+    free_write_buf(conn);
     conn->_write_buf.cnt = 0;
 
     h2o_websocket_proceed(conn);
@@ -203,11 +204,9 @@ int h2o_is_websocket_handshake(h2o_req_t *req, const char **ws_client_key)
 
 void h2o_websocket_close(h2o_websocket_conn_t *conn)
 {
-    size_t i;
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
-    for (i = 0; i < sizeof(conn->_write_buf.bufs) / sizeof(conn->_write_buf.bufs[0]); ++i)
-        free(conn->_write_buf.bufs[i].base);
+    free_write_buf(conn);
     wslay_event_context_free(conn->ws_ctx);
     free(conn);
 }
