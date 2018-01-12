@@ -82,7 +82,7 @@ for my $i (1..50) {
     });
 }
 
-# if upstream connections are always closed, least-conn will always connect to the same upstream.
+# if upstream connections are always closed, least-conn will always connect to the same upstream when no other leased connection exists.
 ok $access_count1 * $access_count2 == 0 && $access_count1 + $access_count2 > 0, "least conn applied";
 
 done_testing();
