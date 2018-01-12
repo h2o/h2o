@@ -207,7 +207,7 @@ static int setup_ssl(const char *cert_file, const char *key_file, const char *ci
     }
 
     if (SSL_CTX_set_cipher_list(accept_ctx.ssl_ctx, ciphers) != 1) {
-        fprintf(stderr, "ciphers could not be set");
+        fprintf(stderr, "ciphers could not be set: %s\n", ciphers);
         return -1;
     }
 
