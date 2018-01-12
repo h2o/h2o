@@ -20,8 +20,8 @@ sub run_test {
 
     my $regex = join "|", map { quotemeta $_ } @candidates;
     $regex = qr/^($regex)$/
-    or die "failed to compile regex";
-    
+        or die "failed to compile regex";
+
     my $test = sub {
         for my $i (0..20) {
             run_with_curl($server, sub {
