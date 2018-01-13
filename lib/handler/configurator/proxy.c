@@ -270,12 +270,11 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **backends, si
                           h2o_socketpool_target_t **targets)
 {
     size_t i, j;
-    h2o_url_t backend;
-    h2o_socketpool_target_conf_t lb_per_target_conf;
+
     for (i = 0; i != num_backends; ++i) {
         yoml_t *url_node = NULL;
         yoml_t *node_for_parsing;
-        lb_per_target_conf.weight_m1 = 0; /* default weight of each target */
+        h2o_socketpool_target_conf_t lb_per_target_conf = {0}; /* default weight of each target */
         switch (backends[i]->type) {
         case YOML_TYPE_SCALAR:
             url_node = backends[i];
@@ -324,11 +323,12 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **backends, si
                                                          "be either a scalar or a mapping");
             return -1;
         }
-        if (h2o_url_parse(url_node->data.scalar, SIZE_MAX, &backend) != 0) {
+        h2o_url_t url;
+        if (h2o_url_parse(url_node->data.scalar, SIZE_MAX, &url) != 0) {
             h2o_configurator_errprintf(cmd, url_node, "failed to parse URL: %s\n", url_node->data.scalar);
             return -1;
         }
-        targets[i] = h2o_socketpool_create_target(&backend, &lb_per_target_conf);
+        targets[i] = h2o_socketpool_create_target(&url, &lb_per_target_conf);
     }
     return 0;
 }
