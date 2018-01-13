@@ -281,6 +281,10 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
             h2o_configurator_errprintf(cmd, backend, "cannot find mandatory property `url`");
             return NULL;
         }
+        if (url_node->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, url_node, "value of the `url` property must be a scalar");
+            return NULL;
+        }
         if ((weight_node = yoml_get(backend, "weight")) != NULL) {
             unsigned weight;
             if (h2o_configurator_scanf(cmd, weight_node, "%u", &weight) != 0)
