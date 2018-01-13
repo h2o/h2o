@@ -26,7 +26,7 @@ Following sections describe the configuration directives defined for the module.
 $ctx->{directive}->(
     name    => "proxy.reverse.url",
     levels  => [ qw(path) ],
-    desc    => q{Forwards the requests to the specified URL, and proxies the response.},
+    desc    => q{Forwards the requests to the specified backends, and proxies the response.},
 )->(sub {
 ?>
 <?= $ctx->{example}->(q{Forwarding the requests to application server running on <code>127.0.0.1:8080</code>}, <<'EOT')
@@ -49,16 +49,23 @@ proxy.reverse.url:
 EOT
 ?>
 <p>
-Load balancing between different backends with different path is supported. Currently we support <code>round-robin</code> and <code>least-conn</code> as balancer. <b>Load balancing strategies would only be applied when no pooled connections between h2o and upstream exist.</b> Failover would also be applied when some backends go down.
+When more than one backend is declared, the load is distributed among the backends using the strategy specified by the <code>balancer</code> property.
+Currently we support <code>round-robin</code> (the default) and <code>least-conn</code> as the value of the property.
+The strategies are applied when establishing a new connection becomes necessary (i.e. when no pooled connections exist).
 </p>
 <p>
-Integer <code>weight</code> could be assigned on each backend, with default value <code>1</code>. Minimum <code>weight</code> is 1. Maximum <code>weight</code> is 256.
+<code>weight</code> can be assigned to each backend as an integer between 1 and 256.
+The default value is 1.
 </p>
 <p>
-For <code>round-robin</code> balancer, <code>weight</code> is respected in this way: each backend would be selected exactly <code>weight</code> times before next backend would be selected, except when the backend is not accessable.
+For the <code>round-robin</code> balancer, <code>weight</code> is respected in this way: each backend would be selected exactly <code>weight</code> times before next backend would be selected, except when the backend is not accessable.
 </p>
 <p>
 For <code>least-conn</code> balancer, <code>weight</code> is respected in this way: the selected backend should have the minimum value of (request count) / (<code>weight</code>).
+</p>
+<p>
+H2O will try to reconnect to different backends (in the order determined by the load balancing strategy) until it successfully establishes a connection.
+It returns an error when it fails to connect to all of the backends.
 </p>
 <p>
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
