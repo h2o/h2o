@@ -269,7 +269,7 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **backends, size_t num_backends,
                           h2o_socketpool_target_t **targets)
 {
-    size_t i, j;
+    size_t i;
 
     for (i = 0; i != num_backends; ++i) {
         yoml_t *url_node = NULL;
@@ -278,43 +278,23 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **backends, si
         case YOML_TYPE_SCALAR:
             url_node = backends[i];
             break;
-        case YOML_TYPE_MAPPING:
-            for (j = 0; j < backends[i]->data.mapping.size; j++) {
-                yoml_t *key = backends[i]->data.mapping.elements[j].key;
-                yoml_t *value = backends[i]->data.mapping.elements[j].value;
-                if (key->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, key, "key must be a scalar");
-                    return -1;
-                }
-                if (strcasecmp(key->data.scalar, "url") == 0) {
-                    if (value->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, value, "value must be a scalar");
-                        return -1;
-                    }
-                    url_node = value;
-                    continue;
-                }
-                if (strcasecmp(key->data.scalar, "weight") == 0) {
-                    if (value->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, value, "value must be a scalar");
-                        return -1;
-                    }
-                    size_t weight = h2o_strtosize(value->data.scalar, strlen(value->data.scalar));
-                    if (weight > H2O_SOCKETPOOL_TARGET_MAX_WEIGHT || weight == 0) {
-                        h2o_configurator_errprintf(cmd, value, "value of weight must be an unsigned integer in range 1 - 256");
-                        return -1;
-                    }
-                    lb_per_target_conf.weight_m1 = weight - 1;
-                }
-            }
-
-            if (url_node == NULL) {
-                h2o_configurator_errprintf(cmd, backends[i],
-                                           "mapping element of a sequence passed to proxy.reverse.url must have `url` configured.");
+        case YOML_TYPE_MAPPING: {
+            yoml_t *weight_node;
+            if ((url_node = yoml_get(backends[i], "url")) == NULL) {
+                h2o_configurator_errprintf(cmd, backends[i], "cannot find mandatory property `url`");
                 return -1;
             }
-
-            break;
+            if ((weight_node = yoml_get(backends[i], "weight")) != NULL) {
+                unsigned weight;
+                if (h2o_configurator_scanf(cmd, weight_node, "%u", &weight) != 0)
+                    return -1;
+                if (!(1 <= weight && weight <= H2O_SOCKETPOOL_TARGET_MAX_WEIGHT)) {
+                    h2o_configurator_errprintf(cmd, weight_node, "weight must be an integer in range 1 - 256");
+                    return -1;
+                }
+                lb_per_target_conf.weight_m1 = weight - 1;
+            }
+        } break;
         default:
             h2o_configurator_errprintf(cmd, backends[i], "items of arguments passed to proxy.reverse.url must"
                                                          "be either a scalar or a mapping");
