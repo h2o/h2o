@@ -405,7 +405,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     if (self->vars->conf.headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars->conf.headers_cmds);
 
-    h2o_socketpool_t *sockpool = malloc(sizeof(*sockpool));
+    h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
     memset(sockpool, 0, sizeof(*sockpool));
     /* init socket pool */
     h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, num_backends, balancer);
