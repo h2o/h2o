@@ -318,7 +318,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     size_t i, num_backends = 0;
     h2o_balancer_t *balancer = NULL;
 
-    /* parse the URL(s) */
+    /* collect the nodes */
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         backends = &node;
@@ -373,6 +373,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     }
 
+    /* determine the balancer */
     if (balancer_conf != NULL) {
         if (balancer_conf->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, balancer_conf, "name of the balancer must be a scalar");
@@ -389,6 +390,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         }
     }
 
+    /* parse the backends */
     h2o_socketpool_target_t **targets = alloca(sizeof(*targets) * num_backends);
     for (i = 0; i != num_backends; ++i)
         if ((targets[i] = parse_backend(cmd, backends[i])) == NULL)
