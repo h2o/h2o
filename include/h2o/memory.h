@@ -98,7 +98,7 @@ struct st_h2o_mem_pool_shared_entry_t {
  * the memory pool
  */
 typedef struct st_h2o_mem_pool_t {
-    struct st_h2o_mem_pool_chunk_t *chunks;
+    union un_h2o_mem_pool_chunk_t *chunks;
     size_t chunk_offset;
     struct st_h2o_mem_pool_shared_ref_t *shared_refs;
     struct st_h2o_mem_pool_direct_t *directs;
@@ -201,12 +201,14 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
  */
 void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
 
+/**
+ * FIXME: is there any platform we need support but missing "__alignof__"?
+ */
 #ifdef H2O_NO_BUILT_IN_ALIGNOF
 #define H2O_ALIGNOF(type) (16)
 #else
 #define H2O_ALIGNOF(type) (__alignof__(type))
 #endif
-#define H2O_ALIGN(x, a) (((x) + (a)-1) & ~((a)-1))
 
 #define h2o_mem_alloc_pool(pool, type, cnt) h2o_mem_alloc_pool_aligned(pool, H2O_ALIGNOF(type), sizeof(type) * (cnt))
 
@@ -280,9 +282,11 @@ void h2o_buffer__dispose_linked(void *p);
  * @param new_capacity the capacity of the buffer after the function returns
  */
 #define h2o_vector_reserve(pool, vector, new_capacity)                                                                             \
-    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), sizeof((vector)->entries[0]), (new_capacity))
-static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
-void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), H2O_ALIGNOF((vector)->entries[0]), sizeof((vector)->entries[0]), \
+                        (new_capacity))
+static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size,
+                                size_t new_capacity);
+void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size, size_t new_capacity);
 /**
  * erase the entry at given index from the vector
  */
@@ -413,10 +417,11 @@ inline int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
     return 1;
 }
 
-inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size,
+                                size_t new_capacity)
 {
     if (vector->capacity < new_capacity) {
-        h2o_vector__expand(pool, vector, element_size, new_capacity);
+        h2o_vector__expand(pool, vector, alignment, element_size, new_capacity);
     }
 }
 
