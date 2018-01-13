@@ -338,9 +338,8 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     struct proxy_configurator_t *self = (void *)cmd->configurator;
 
     yoml_t **backends, *balancer_conf = NULL;
-    size_t num_backends = 0;
-    size_t i;
-    h2o_balancer_t *balancer;
+    size_t i, num_backends = 0;
+    h2o_balancer_t *balancer = NULL;
 
     /* parse the URL(s) */
     switch (node->type) {
@@ -407,8 +406,6 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
                 cmd, node, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn");
             return -1;
         }
-    } else {
-        balancer = h2o_balancer_create_rr();
     }
 
     h2o_socketpool_target_t **targets = alloca(sizeof(*targets) * num_backends);
