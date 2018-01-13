@@ -355,29 +355,29 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     case YOML_TYPE_MAPPING:
         for (i = 0; i < node->data.mapping.size; i++) {
             yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t *value = node->data.mapping.elements[i].value;
+            yoml_t **value = &node->data.mapping.elements[i].value;
             if (key->type != YOML_TYPE_SCALAR) {
                 h2o_configurator_errprintf(cmd, key, "key must be a scalar");
                 return -1;
             }
             if (strcasecmp(key->data.scalar, "backends") == 0) {
-                switch (value->type) {
+                switch ((*value)->type) {
                 case YOML_TYPE_SCALAR:
-                    inputs = &value;
+                    inputs = value;
                     num_upstreams = 1;
                     break;
                 case YOML_TYPE_SEQUENCE:
-                    inputs = value->data.sequence.elements;
-                    num_upstreams = value->data.sequence.size;
+                    inputs = (*value)->data.sequence.elements;
+                    num_upstreams = (*value)->data.sequence.size;
                     break;
                 default:
-                    h2o_configurator_errprintf(cmd, value, "value for backends must be either a scalar or a sequence");
+                    h2o_configurator_errprintf(cmd, *value, "value for backends must be either a scalar or a sequence");
                     return -1;
                 }
                 continue;
             }
             if (strcasecmp(key->data.scalar, "balancer") == 0) {
-                balancer_conf = value;
+                balancer_conf = *value;
             }
         }
         break;
