@@ -393,27 +393,25 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     }
 
-    h2o_socketpool_target_t **targets = alloca(sizeof(*targets) * num_backends);
-
     if (balancer_conf != NULL) {
         if (balancer_conf->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "proxy.reverse.balancer must be a scalar");
+            h2o_configurator_errprintf(cmd, balancer_conf, "name of the balancer must be a scalar");
             return -1;
         }
-
-        if (strcmp(balancer_conf->data.scalar, "round-robin") == 0)
+        if (strcmp(balancer_conf->data.scalar, "round-robin") == 0) {
             balancer = h2o_balancer_create_rr();
-        else if (strcmp(balancer_conf->data.scalar, "least-conn") == 0)
+        } else if (strcmp(balancer_conf->data.scalar, "least-conn") == 0) {
             balancer = h2o_balancer_create_lc();
-        else {
-            h2o_configurator_errprintf(cmd, node, "specified balancer is currently not supported. supported balancers are: "
-                                       "round-robin least-conn");
+        } else {
+            h2o_configurator_errprintf(
+                cmd, node, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn");
             return -1;
         }
     } else {
         balancer = h2o_balancer_create_rr();
     }
 
+    h2o_socketpool_target_t **targets = alloca(sizeof(*targets) * num_backends);
     if (parse_backends(cmd, backends, num_backends, targets) != 0)
         return -1;
 
