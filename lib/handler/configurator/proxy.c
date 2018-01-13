@@ -337,8 +337,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
 
-    yoml_t **backends = NULL;
-    yoml_t *balancer_conf = NULL;
+    yoml_t **backends, *balancer_conf = NULL;
     size_t num_backends = 0;
     size_t i;
     h2o_balancer_t *balancer;
@@ -354,6 +353,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         num_backends = node->data.sequence.size;
         break;
     case YOML_TYPE_MAPPING:
+        backends = NULL;
         for (i = 0; i < node->data.mapping.size; i++) {
             yoml_t *key = node->data.mapping.elements[i].key;
             yoml_t **value = &node->data.mapping.elements[i].value;
@@ -383,6 +383,10 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
                 return -1;
             }
         }
+        if (backends == NULL) {
+            h2o_configurator_errprintf(cmd, node, "mandatory property `backend` is missing");
+            return -1;
+        }
         break;
     default:
         h2o_fatal("unexpected node type");
@@ -391,10 +395,6 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 
     h2o_socketpool_target_t **targets = alloca(sizeof(*targets) * num_backends);
 
-    if (backends == NULL) {
-        h2o_configurator_errprintf(cmd, node, "No backend is defined.");
-        return -1;
-    }
     if (balancer_conf != NULL) {
         if (balancer_conf->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, node, "proxy.reverse.balancer must be a scalar");
