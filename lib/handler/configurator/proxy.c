@@ -273,15 +273,12 @@ static int parse_backends(h2o_configurator_command_t *cmd, yoml_t **backends, si
 
     for (i = 0; i != num_backends; ++i) {
         yoml_t *url_node = NULL;
-        yoml_t *node_for_parsing;
         h2o_socketpool_target_conf_t lb_per_target_conf = {0}; /* default weight of each target */
         switch (backends[i]->type) {
         case YOML_TYPE_SCALAR:
             url_node = backends[i];
-            node_for_parsing = NULL;
             break;
         case YOML_TYPE_MAPPING:
-            node_for_parsing = backends[i];
             for (j = 0; j < backends[i]->data.mapping.size; j++) {
                 yoml_t *key = backends[i]->data.mapping.elements[j].key;
                 yoml_t *value = backends[i]->data.mapping.elements[j].value;
