@@ -391,6 +391,10 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_fatal("unexpected node type");
         return -1;
     }
+    if (num_backends == 0) {
+        h2o_configurator_errprintf(cmd, node, "at least one backend url must be set");
+        return -1;
+    }
 
     if (balancer_conf != NULL) {
         if (balancer_conf->type != YOML_TYPE_SCALAR) {
@@ -418,10 +422,6 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     }
 
-    if (num_backends == 0) {
-        h2o_configurator_errprintf(cmd, node, "please set at least one backend url for reverse proxy");
-        return -1;
-    }
 
     if (self->vars->conf.headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars->conf.headers_cmds);
