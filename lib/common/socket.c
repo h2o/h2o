@@ -630,6 +630,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
 {
     size_t i, prev_bytes_written = sock->bytes_written;
 
+    assert(bufcnt > 0);
     for (i = 0; i != bufcnt; ++i) {
         sock->bytes_written += bufs[i].len;
 #if H2O_SOCKET_DUMP_WRITE
