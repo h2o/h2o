@@ -854,31 +854,30 @@ Found:
     return conf.server_starter.fds[i];
 }
 
-static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa)
+static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa, yoml_t **owner_node,
+                              yoml_t **permission_node)
 {
     struct stat st;
     int fd = -1;
     struct passwd *owner = NULL, pwbuf;
     char pwbuf_buf[65536];
     unsigned mode = UINT_MAX;
-    yoml_t *t;
 
     /* obtain owner and permission */
-    if ((t = yoml_get(node, "owner")) != NULL) {
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "`owner` is not a scalar");
+    if (owner_node != NULL) {
+        if ((*owner_node)->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, *owner_node, "`owner` is not a scalar");
             goto ErrorExit;
         }
-        if (getpwnam_r(t->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
-            h2o_configurator_errprintf(cmd, t, "failed to obtain uid of user:%s: %s", t->data.scalar, strerror(errno));
+        if (getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
+            h2o_configurator_errprintf(cmd, *owner_node, "failed to obtain uid of user:%s: %s", (*owner_node)->data.scalar,
+                                       strerror(errno));
             goto ErrorExit;
         }
     }
-    if ((t = yoml_get(node, "permission")) != NULL) {
-        if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%o", &mode) != 1) {
-            h2o_configurator_errprintf(cmd, t, "`permission` must be an octal number");
-            goto ErrorExit;
-        }
+    if (permission_node != NULL && h2o_configurator_scanf(cmd, *permission_node, "%o", &mode) != 0) {
+        h2o_configurator_errprintf(cmd, *permission_node, "`permission` must be an octal number");
+        goto ErrorExit;
     }
 
     /* remove existing socket file as suggested in #45 */
@@ -980,7 +979,7 @@ Error:
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
-    yoml_t **ssl_node;
+    yoml_t **ssl_node, **owner_node = NULL, **permission_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -991,8 +990,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port", "host,type,ssl,proxy-protocol", &port_node, &host_node, &type_node,
-                                           &ssl_node, &proxy_protocol_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "port", "host,type,owner,permission,ssl,proxy-protocol", &port_node,
+                                           &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
+                                           &proxy_protocol_node) != 0)
             return -1;
         if ((*port_node)->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, *port_node, "`port` is not a string");
@@ -1048,7 +1048,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         return -1;
                     }
                 } else {
-                    if ((fd = open_unix_listener(cmd, node, &sa)) == -1)
+                    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, permission_node)) == -1)
                         return -1;
                 }
                 break;
