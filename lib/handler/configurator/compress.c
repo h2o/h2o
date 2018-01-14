@@ -103,29 +103,22 @@ static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_
             }
         }
         break;
-    case YOML_TYPE_MAPPING:
+    case YOML_TYPE_MAPPING: {
+        yoml_t **gzip_node, **br_node;
         *self->vars = all_off;
-        for (i = 0; i != node->data.mapping.size; ++i) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t *value = node->data.mapping.elements[i].value;
-            if (key->type == YOML_TYPE_SCALAR && strcasecmp(key->data.scalar, "gzip") == 0) {
-                if (obtain_quality(value, 1, 9, DEFAULT_GZIP_QUALITY, &self->vars->gzip.quality) != 0) {
-                    h2o_configurator_errprintf(
-                        cmd, value, "value of gzip attribute must be either of `OFF`, `ON` or an integer value between 1 and 9");
-                    return -1;
-                }
-            } else if (key->type == YOML_TYPE_SCALAR && strcasecmp(key->data.scalar, "br") == 0) {
-                if (obtain_quality(value, 0, 11, DEFAULT_BROTLI_QUALITY, &self->vars->brotli.quality) != 0) {
-                    h2o_configurator_errprintf(
-                        cmd, value, "value of br attribute must be either of `OFF`, `ON` or an integer between 0 and 11");
-                    return -1;
-                }
-            } else {
-                h2o_configurator_errprintf(cmd, key, "key must be either of: `gzip`, `br`");
-                return -1;
-            }
+        if (h2o_configurator_parse_mapping(cmd, node, NULL, "gzip,br", &gzip_node, &br_node) != 0)
+            return -1;
+        if (gzip_node != NULL && obtain_quality(*gzip_node, 1, 9, DEFAULT_GZIP_QUALITY, &self->vars->gzip.quality) != 0) {
+            h2o_configurator_errprintf(cmd, *gzip_node,
+                                       "value of gzip attribute must be either of `OFF`, `ON` or an integer value between 1 and 9");
+            return -1;
         }
-        break;
+        if (br_node != NULL && obtain_quality(*br_node, 0, 11, DEFAULT_BROTLI_QUALITY, &self->vars->brotli.quality) != 0) {
+            h2o_configurator_errprintf(cmd, *br_node,
+                                       "value of br attribute must be either of `OFF`, `ON` or an integer between 0 and 11");
+            return -1;
+        }
+    } break;
     default:
         h2o_fatal("unexpected node type");
         break;
