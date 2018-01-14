@@ -228,6 +228,9 @@
 		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
 		7D0285C91EF422D40094292B /* sleep.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0285C81EF422D40094292B /* sleep.c */; };
 		7D9FA53A1FC323B200189F88 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FA5381FC323AC00189F88 /* channel.c */; };
+		D081373A1FD400F4004679DF /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
+		D081373B1FD400F4004679DF /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
+		D08137421FD408C2004679DF /* balancer.h in Headers */ = {isa = PBXBuildFile; fileRef = D08137411FD408C1004679DF /* balancer.h */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
@@ -363,6 +366,10 @@
 		E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76E41F00E70700EB7A09 /* salsa20.h */; };
 		E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
 		E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E91F00E74C00EB7A09 /* poly1305.c */; };
+		E9F677D42007476D006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
+		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
+		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
+		E9F677D720077603006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373E1FD40431004679DF /* roundrobin.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -812,6 +819,11 @@
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
 		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
+		D08137381FD400F4004679DF /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
+		D08137391FD400F4004679DF /* roundrobin.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = roundrobin.c; sourceTree = "<group>"; };
+		D081373D1FD40431004679DF /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
+		D081373E1FD40431004679DF /* roundrobin.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = roundrobin.c; sourceTree = "<group>"; };
+		D08137411FD408C1004679DF /* balancer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balancer.h; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
@@ -1066,6 +1078,7 @@
 		104B9A4A1A5FA7E5009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				D08137371FD400F4004679DF /* balancer */,
 				10DA969D1CD2BFAC00679165 /* cache.c */,
 				107D4D541B5B30EE004A9B21 /* file.c */,
 				1044812F1BFD10450007863F /* filecache.c */,
@@ -1137,6 +1150,7 @@
 		104B9A4D1A5FAA7B009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				D081373C1FD40431004679DF /* balancer */,
 				10DA969F1CD2BFEE00679165 /* cache.c */,
 				10F9F2661AFC5F550056F26B /* hostinfo.c */,
 				10AA2EAD1A8E22DA004322AC /* multithread.c */,
@@ -1460,6 +1474,7 @@
 		1079239F19A3215F00C52AD6 /* h2o */ = {
 			isa = PBXGroup;
 			children = (
+				D08137411FD408C1004679DF /* balancer.h */,
 				10DA969B1CD2BF9000679165 /* cache.h */,
 				1024A3FD1D22546800EB13F1 /* cache_digests.h */,
 				105534D71A3C785000627ECB /* configurator.h */,
@@ -1864,6 +1879,24 @@
 			path = neverbleed;
 			sourceTree = "<group>";
 		};
+		D08137371FD400F4004679DF /* balancer */ = {
+			isa = PBXGroup;
+			children = (
+				D08137381FD400F4004679DF /* least_conn.c */,
+				D08137391FD400F4004679DF /* roundrobin.c */,
+			);
+			path = balancer;
+			sourceTree = "<group>";
+		};
+		D081373C1FD40431004679DF /* balancer */ = {
+			isa = PBXGroup;
+			children = (
+				D081373D1FD40431004679DF /* least_conn.c */,
+				D081373E1FD40431004679DF /* roundrobin.c */,
+			);
+			path = balancer;
+			sourceTree = "<group>";
+		};
 		E9708AD01E499D8B0029E0A5 /* picotls */ = {
 			isa = PBXGroup;
 			children = (
@@ -2085,6 +2118,7 @@
 				10B38A721B8D34BB007DC191 /* mruby_.h in Headers */,
 				10FCC13F1B2E4A4500F13674 /* cloexec.h in Headers */,
 				E9708B1C1E49A3480029E0A5 /* handy.h in Headers */,
+				D08137421FD408C2004679DF /* balancer.h in Headers */,
 				1024A3FE1D22546800EB13F1 /* cache_digests.h in Headers */,
 				10DA969C1CD2BF9000679165 /* cache.h in Headers */,
 				1044812E1BFD0FBE0007863F /* filecache.h in Headers */,
@@ -2339,6 +2373,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D081373A1FD400F4004679DF /* least_conn.c in Sources */,
 				08790DDC1D80154C00A04BC1 /* sds.c in Sources */,
 				107E34101C7EB13F00AEF5F8 /* gzip.c in Sources */,
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
@@ -2361,6 +2396,7 @@
 				080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */,
 				10835E051C9B3C6200197E59 /* status.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
+				D081373B1FD400F4004679DF /* roundrobin.c in Sources */,
 				10835E031C9A860000197E59 /* status.c in Sources */,
 				084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
@@ -2450,7 +2486,9 @@
 			files = (
 				107D4D441B588021004A9B21 /* ssl.c in Sources */,
 				1079244A19A3266700C52AD6 /* frame.c in Sources */,
+				E9F677D720077603006476D3 /* roundrobin.c in Sources */,
 				1079244B19A3266700C52AD6 /* context.c in Sources */,
+				E9F677D6200775FF006476D3 /* least_conn.c in Sources */,
 				E987E5EE1FD8C04D00DE4346 /* bit_cost.c in Sources */,
 				E987E5FA1FD8C04D00DE4346 /* metablock.c in Sources */,
 				E987E5FB1FD8C04D00DE4346 /* static_dict.c in Sources */,
@@ -2627,6 +2665,7 @@
 				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
 				E9708B6A1E52C81D0029E0A5 /* access_log.c in Sources */,
 				E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */,
+				E9F677D520074770006476D3 /* roundrobin.c in Sources */,
 				E9708AE81E49A2420029E0A5 /* picotls.c in Sources */,
 				10756E361AC1264D0009BF57 /* writer.c in Sources */,
 				E987E5D31FD7BE9C00DE4346 /* literal_cost.c in Sources */,
@@ -2639,6 +2678,7 @@
 				10756E351AC1264D0009BF57 /* scanner.c in Sources */,
 				E9708B5A1E52C7EE0029E0A5 /* token.c in Sources */,
 				E9708B241E49BAD70029E0A5 /* gf128.c in Sources */,
+				E9F677D42007476D006476D3 /* least_conn.c in Sources */,
 				E9708B441E52C7DF0029E0A5 /* cache.c in Sources */,
 				E9708B831E52C8560029E0A5 /* cache_digests.c in Sources */,
 				E9708B7F1E52C8430029E0A5 /* requests.c in Sources */,
