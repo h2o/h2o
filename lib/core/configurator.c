@@ -522,21 +522,25 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
         /* set to default */
         self->vars->http2.casper = defaults;
         /* override the attributes defined */
-        yoml_t *t;
-        if ((t = yoml_get(node, "capacity-bits")) != NULL) {
-            if (!(t->type == YOML_TYPE_SCALAR && sscanf(t->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
+        yoml_t **capacity_bits, **tracking_types;
+        if (h2o_configurator_parse_mapping(cmd, node, NULL, "capacity-bits,tracking-types", &capacity_bits, &tracking_types) != 0)
+            return -1;
+        if (capacity_bits != NULL) {
+            if (!((*capacity_bits)->type == YOML_TYPE_SCALAR &&
+                  sscanf((*capacity_bits)->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
                   self->vars->http2.casper.capacity_bits < 16)) {
-                h2o_configurator_errprintf(cmd, t, "value of `capacity-bits` must be an integer between 0 to 15");
+                h2o_configurator_errprintf(cmd, *capacity_bits, "value of `capacity-bits` must be an integer between 0 to 15");
                 return -1;
             }
         }
-        if ((t = yoml_get(node, "tracking-types")) != NULL) {
-            if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "blocking-assets") == 0) {
+        if (tracking_types != NULL) {
+            if ((*tracking_types)->type == YOML_TYPE_SCALAR && strcasecmp((*tracking_types)->data.scalar, "blocking-assets") == 0) {
                 self->vars->http2.casper.track_all_types = 0;
-            } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "all") == 0) {
+            } else if ((*tracking_types)->type == YOML_TYPE_SCALAR && strcasecmp((*tracking_types)->data.scalar, "all") == 0) {
                 self->vars->http2.casper.track_all_types = 1;
             } else {
-                h2o_configurator_errprintf(cmd, t, "value of `tracking-types` must be either of: `blocking-assets` or `all`");
+                h2o_configurator_errprintf(cmd, *tracking_types,
+                                           "value of `tracking-types` must be either of: `blocking-assets` or `all`");
                 return -1;
             }
         }
@@ -605,39 +609,42 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
             break;
         case YOML_TYPE_MAPPING: {
-            yoml_t *t;
+            yoml_t **is_compressible, **priority, **extensions;
             h2o_mime_attributes_t attr;
             h2o_mimemap_get_default_attributes(key->data.scalar, &attr);
-            if ((t = yoml_get(value, "is_compressible")) != NULL) {
-                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "YES") == 0) {
+            if (h2o_configurator_parse_mapping(cmd, value, "extensions", "is_compressible,priority", &extensions, &is_compressible,
+                                               &priority) != 0)
+                return -1;
+            if (is_compressible != NULL) {
+                switch (h2o_configurator_get_one_of(cmd, *is_compressible, "YES,NO")) {
+                case 0:
                     attr.is_compressible = 1;
-                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "NO") == 0) {
+                    break;
+                case 1:
                     attr.is_compressible = 0;
-                } else {
-                    h2o_configurator_errprintf(cmd, t, "`is_compressible` attribute must be either of: `YES` or `NO`");
+                    break;
+                default:
                     return -1;
                 }
             }
-            if ((t = yoml_get(value, "priority")) != NULL) {
-                if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "normal") == 0) {
+            if (priority != NULL) {
+                switch (h2o_configurator_get_one_of(cmd, *priority, "normal,highest")) {
+                case 0:
                     attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_NORMAL;
-                } else if (t->type == YOML_TYPE_SCALAR && strcasecmp(t->data.scalar, "highest") == 0) {
+                    break;
+                case 1:
                     attr.priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
-                } else {
-                    h2o_configurator_errprintf(cmd, t, "`priority` attribute must be either of: `normal` or `highest`");
+                    break;
+                default:
                     return -1;
                 }
             }
-            if ((t = yoml_get(value, "extensions")) == NULL) {
-                h2o_configurator_errprintf(cmd, value, "cannot find mandatory attribute `extensions`");
+            if ((*extensions)->type != YOML_TYPE_SEQUENCE) {
+                h2o_configurator_errprintf(cmd, *extensions, "`extensions` attribute must be a sequence of scalars");
                 return -1;
             }
-            if (t->type != YOML_TYPE_SEQUENCE) {
-                h2o_configurator_errprintf(cmd, t, "`extensions` attribute must be a sequence of scalars");
-                return -1;
-            }
-            for (j = 0; j != t->data.sequence.size; ++j) {
-                yoml_t *ext_node = t->data.sequence.elements[j];
+            for (j = 0; j != (*extensions)->data.sequence.size; ++j) {
+                yoml_t *ext_node = (*extensions)->data.sequence.elements[j];
                 if (assert_is_extension(cmd, ext_node) != 0)
                     return -1;
                 h2o_mimemap_define_mimetype(mimemap, ext_node->data.scalar + 1, key->data.scalar, &attr);
@@ -1113,6 +1120,86 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
 Error:
     h2o_configurator_errprintf(cmd, node, "argument must be one of: %s", candidates);
     return -1;
+}
+
+static const char *get_next_key(const char *p, h2o_iovec_t *output)
+{
+    const char *endp;
+
+    if ((endp = strchr(p, ',')) == NULL) {
+        *output = h2o_iovec_init(p, strlen(p));
+        return NULL;
+    }
+    *output = h2o_iovec_init(p, endp - p);
+    return endp + 1;
+}
+
+int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
+                                       const char *keys_optional, yoml_t ****values, size_t num_values)
+{
+    struct {
+        h2o_iovec_t key;
+        int required;
+    } *keys = alloca(sizeof(keys[0]) * num_values);
+    size_t i, j;
+
+    assert(node->type == YOML_TYPE_MAPPING);
+
+    /* parse keys */
+    i = 0;
+    if (keys_required != NULL) {
+        const char *p = keys_required;
+        for (; p != NULL; ++i) {
+            assert(i < num_values);
+            p = get_next_key(p, &keys[i].key);
+            keys[i].required = 1;
+        }
+    }
+    if (keys_optional != NULL) {
+        const char *p = keys_optional;
+        for (; p != NULL; ++i) {
+            assert(i < num_values);
+            p = get_next_key(p, &keys[i].key);
+            keys[i].required = 0;
+        }
+    }
+    assert(i == num_values);
+
+    /* clear the output */
+    for (i = 0; i != num_values; ++i)
+        *values[i] = NULL;
+
+    /* extract the attributes */
+    for (i = 0; i != node->data.mapping.size; ++i) {
+        yoml_t *key = node->data.mapping.elements[i].key;
+        if (key->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, key, "key must be a scalar");
+            return -1;
+        }
+        size_t key_len = strlen(key->data.scalar);
+        for (j = 0; j != num_values; ++j)
+            if (keys[j].key.len == key_len && strncasecmp(keys[j].key.base, key->data.scalar, key_len) == 0)
+                goto Found;
+        /* not found */
+        h2o_configurator_errprintf(cmd, key, "unexpected key:%s", key->data.scalar);
+        return -1;
+    Found:
+        if (*values[j] != NULL) {
+            h2o_configurator_errprintf(cmd, key, "duplicate key found");
+            return -1;
+        }
+        *values[j] = &node->data.mapping.elements[i].value;
+    }
+
+    /* check if any of the required keys are missing */
+    for (i = 0; i < num_values && keys[i].required; ++i) {
+        if (*values[i] == NULL) {
+            h2o_configurator_errprintf(cmd, node, "cannot find mandatory attribute: %.*s", (int)keys[i].key.len, keys[i].key.base);
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 char *h2o_configurator_get_cmd_path(const char *cmd)
