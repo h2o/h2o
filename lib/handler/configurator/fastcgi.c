@@ -91,27 +91,13 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port", "host,type", &port_node, &host_node, &type_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s", &port_node, &host_node, &type_node) != 0)
             return -1;
-        if ((*port_node)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *port_node, "`port` is not a string");
-            return -1;
-        }
         servname = (*port_node)->data.scalar;
-        if (host_node != NULL) {
-            if ((*host_node)->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, *host_node, "`host` is not a string");
-                return -1;
-            }
+        if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
-        }
-        if (type_node != NULL) {
-            if ((*type_node)->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, *type_node, "`type` is not a string");
-                return -1;
-            }
+        if (type_node != NULL)
             type = (*type_node)->data.scalar;
-        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node,
@@ -248,20 +234,11 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **command_node, **user_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "command", "user", &command_node, &user_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "command:s", "user:s", &command_node, &user_node) != 0)
             return -1;
-        if ((*command_node)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *command_node, "attribute `command` must be scalar");
-            return -1;
-        }
         spawn_cmd = (*command_node)->data.scalar;
-        if (user_node != NULL) {
-            if ((*user_node)->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, *user_node, "attribute `user` must be scalar");
-                return -1;
-            }
+        if (user_node != NULL)
             spawn_user = (*user_node)->data.scalar;
-        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "argument must be scalar or mapping");

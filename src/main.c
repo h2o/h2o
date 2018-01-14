@@ -554,26 +554,13 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     /* parse */
-    if (h2o_configurator_parse_mapping(cmd, *ssl_node, "certificate-file,key-file",
-                                       "min-version,minimum-version,max-version,maximum-version,cipher-suite,ocsp-update-cmd,ocsp-"
-                                       "update-interval,ocsp-max-failures,dh-file,cipher-preference,neverbleed",
-                                       &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
-                                       &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
-                                       &dh_file, &cipher_preference_node, &neverbleed_node) != 0)
+    if (h2o_configurator_parse_mapping(
+            cmd, *ssl_node, "certificate-file:s,key-file:s",
+            "min-version:s,minimum-version:s,max-version:s,maximum-version:s,cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval,"
+            "ocsp-max-failures,dh-file:s,cipher-preference,neverbleed",
+            &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version, &cipher_suite, &ocsp_update_cmd,
+            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node) != 0)
         return -1;
-#define ASSERT_SCALAR(n, p)                                                                                                        \
-    if (p != NULL && (*p)->type != YOML_TYPE_SCALAR) {                                                                             \
-        h2o_configurator_errprintf(cmd, (*p), "`" n "` must be a string");                                                         \
-        return -1;                                                                                                                 \
-    }
-    ASSERT_SCALAR("certificate-file", certificate_file);
-    ASSERT_SCALAR("key-file", key_file);
-    ASSERT_SCALAR("min-version", min_version);
-    ASSERT_SCALAR("max-version", max_version);
-    ASSERT_SCALAR("cipher-suite", cipher_suite);
-    ASSERT_SCALAR("ocsp-update-cmd", ocsp_update_cmd);
-    ASSERT_SCALAR("dh-file", dh_file);
-#undef ASSERT_SCALAR
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
         case 0:
@@ -865,10 +852,6 @@ static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, str
 
     /* obtain owner and permission */
     if (owner_node != NULL) {
-        if ((*owner_node)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *owner_node, "`owner` is not a scalar");
-            goto ErrorExit;
-        }
         if (getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
             h2o_configurator_errprintf(cmd, *owner_node, "failed to obtain uid of user:%s: %s", (*owner_node)->data.scalar,
                                        strerror(errno));
@@ -990,29 +973,15 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port", "host,type,owner,permission,ssl,proxy-protocol", &port_node,
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission,ssl,proxy-protocol", &port_node,
                                            &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
                                            &proxy_protocol_node) != 0)
             return -1;
-        if ((*port_node)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *port_node, "`port` is not a string");
-            return -1;
-        }
         servname = (*port_node)->data.scalar;
-        if (host_node != NULL) {
-            if ((*host_node)->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, *host_node, "`host` is not a string");
-                return -1;
-            }
+        if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
-        }
-        if (type_node != NULL) {
-            if ((*type_node)->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, *type_node, "`type` is not a string");
-                return -1;
-            }
+        if (type_node != NULL)
             type = (*type_node)->data.scalar;
-        }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;

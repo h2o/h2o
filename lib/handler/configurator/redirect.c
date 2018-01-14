@@ -34,12 +34,8 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **url_node, **status_node, **internal_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "url,status", "internal", &url_node, &status_node, &internal_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "url:s,status", "internal", &url_node, &status_node, &internal_node) != 0)
             return -1;
-        if ((*url_node)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *url_node, "property `url` must be a string");
-            return -1;
-        }
         dest = (*url_node)->data.scalar;
         if (h2o_configurator_scanf(cmd, *status_node, "%d", &status) != 0)
             return -1;

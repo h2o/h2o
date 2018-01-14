@@ -261,12 +261,8 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **weight_node;
-        if (h2o_configurator_parse_mapping(cmd, backend, "url", "weight", &url_node, &weight_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, backend, "url:s", "weight", &url_node, &weight_node) != 0)
             return NULL;
-        if ((*url_node)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *url_node, "value of the `url` property must be a scalar");
-            return NULL;
-        }
         if (weight_node != NULL) {
             unsigned weight;
             if (h2o_configurator_scanf(cmd, *weight_node, "%u", &weight) != 0)
@@ -311,7 +307,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         num_backends = node->data.sequence.size;
         break;
     case YOML_TYPE_MAPPING:
-        if (h2o_configurator_parse_mapping(cmd, node, "backends", "balancer", &backends, &balancer_conf) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "backends", "balancer:s", &backends, &balancer_conf) != 0)
             return -1;
         switch ((*backends)->type) {
         case YOML_TYPE_SCALAR:
@@ -337,10 +333,6 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 
     /* determine the balancer */
     if (balancer_conf != NULL) {
-        if ((*balancer_conf)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *balancer_conf, "name of the balancer must be a scalar");
-            return -1;
-        }
         if (strcmp((*balancer_conf)->data.scalar, "round-robin") == 0) {
             balancer = h2o_balancer_create_rr();
         } else if (strcmp((*balancer_conf)->data.scalar, "least-conn") == 0) {

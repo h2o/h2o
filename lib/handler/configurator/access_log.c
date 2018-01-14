@@ -42,16 +42,8 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         path = &node;
         break;
     case YOML_TYPE_MAPPING:
-        if (h2o_configurator_parse_mapping(cmd, node, "path", "format,escape", &path, &format, &escape_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "path:s", "format:s,escape", &path, &format, &escape_node) != 0)
             return -1;
-        if ((*path)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *path, "`path` must be scalar");
-            return -1;
-        }
-        if (format != NULL && (*format)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *format, "`format` must be a scalar");
-            return -1;
-        }
         break;
     default:
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");

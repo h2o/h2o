@@ -774,39 +774,38 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         MODE_CACHE = 1,
         MODE_TICKET = 2,
     };
-    int modes = -1;
+    int modes;
     yoml_t **mode_node, **cache_store, **cache_memcached_num_threads, **cache_memcached_prefix, **cache_redis_prefix,
         **ticket_store, **ticket_cipher, **ticket_hash, **ticket_memcached_prefix, **ticket_redis_prefix, **ticket_file,
         **memcached_node, **redis_node, **lifetime;
 
-    if (h2o_configurator_parse_mapping(cmd, node, "mode", "cache-store,cache-memcached-num-threads,cache-memcached-prefix,cache-"
-                                                          "redis-prefix,ticket-store,ticket-cipher,ticket-hash,ticket-memcached-"
-                                                          "prefix,ticket-redis-prefix,ticket-file,memcached,redis,lifetime",
+    if (h2o_configurator_parse_mapping(cmd, node, "mode",
+                                       "cache-store,cache-memcached-num-threads,cache-memcached-prefix:s,cache-redis-prefix:s,"
+                                       "ticket-store,ticket-cipher:s,ticket-hash:s,ticket-memcached-prefix:s,ticket-redis-prefix:s,"
+                                       "ticket-file:s,memcached,redis,lifetime",
                                        &mode_node, &cache_store, &cache_memcached_num_threads, &cache_memcached_prefix,
                                        &cache_redis_prefix, &ticket_store, &ticket_cipher, &ticket_hash, &ticket_memcached_prefix,
                                        &ticket_redis_prefix, &ticket_file, &memcached_node, &redis_node, &lifetime) != 0)
         return -1;
 
-    if ((*mode_node)->type == YOML_TYPE_SCALAR) {
-        switch (h2o_configurator_get_one_of(cmd, *mode_node, "off,cache,ticket,all")) {
-        case 0:
-            modes = 0;
-            break;
-        case 1:
-            modes = MODE_CACHE;
-            break;
-        case 2:
-            modes = MODE_TICKET;
-            break;
-        case 3:
-            modes = MODE_CACHE;
+    switch (h2o_configurator_get_one_of(cmd, *mode_node, "off,cache,ticket,all")) {
+    case 0:
+        modes = 0;
+        break;
+    case 1:
+        modes = MODE_CACHE;
+        break;
+    case 2:
+        modes = MODE_TICKET;
+        break;
+    case 3:
+        modes = MODE_CACHE;
 #if H2O_USE_SESSION_TICKETS
-            modes |= MODE_TICKET;
+        modes |= MODE_TICKET;
 #endif
-            break;
-        default:
-            return -1;
-        }
+        break;
+    default:
+        return -1;
     }
 
     if ((modes & MODE_CACHE) != 0) {
@@ -838,22 +837,12 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
                     return -1;
                 }
             }
-            if (cache_memcached_prefix != NULL) {
-                if ((*cache_memcached_prefix)->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, *cache_memcached_prefix, "`cache-memcached-prefix` must be a string");
-                    return -1;
-                }
+            if (cache_memcached_prefix != NULL)
                 conf.cache.vars.memcached.prefix = h2o_strdup(NULL, (*cache_memcached_prefix)->data.scalar, SIZE_MAX).base;
-            }
         } else if (conf.cache.setup == setup_cache_redis) {
             conf.cache.vars.redis.prefix = "h2o:ssl-session-cache:";
-            if (cache_redis_prefix != NULL) {
-                if ((*cache_redis_prefix)->type != YOML_TYPE_SCALAR) {
-                    h2o_configurator_errprintf(cmd, *cache_redis_prefix, "`cache-redis-prefix` must be a string");
-                    return -1;
-                }
+            if (cache_redis_prefix != NULL)
                 conf.cache.vars.redis.prefix = h2o_strdup(NULL, (*cache_redis_prefix)->data.scalar, SIZE_MAX).base;
-            }
         }
     } else {
         conf.cache.setup = setup_cache_disable;
@@ -883,47 +872,29 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         if (conf.ticket.update_thread == ticket_internal_updater || conf.ticket.update_thread == ticket_memcached_updater ||
             conf.ticket.update_thread == ticket_redis_updater) {
             /* generating updater takes two arguments: cipher, hash */
-            if (ticket_cipher != NULL) {
-                if ((*ticket_cipher)->type != YOML_TYPE_SCALAR ||
-                    (conf.ticket.vars.generating.cipher = EVP_get_cipherbyname((*ticket_cipher)->data.scalar)) == NULL) {
-                    h2o_configurator_errprintf(cmd, *ticket_cipher, "unknown cipher algorithm");
-                    return -1;
-                }
+            if (ticket_cipher != NULL &&
+                (conf.ticket.vars.generating.cipher = EVP_get_cipherbyname((*ticket_cipher)->data.scalar)) == NULL) {
+                h2o_configurator_errprintf(cmd, *ticket_cipher, "unknown cipher algorithm");
+                return -1;
             }
-            if (ticket_hash != NULL) {
-                if ((*ticket_hash)->type != YOML_TYPE_SCALAR ||
-                    (conf.ticket.vars.generating.md = EVP_get_digestbyname((*ticket_hash)->data.scalar)) == NULL) {
-                    h2o_configurator_errprintf(cmd, *ticket_hash, "unknown hash algorithm");
-                    return -1;
-                }
+            if (ticket_hash != NULL &&
+                (conf.ticket.vars.generating.md = EVP_get_digestbyname((*ticket_hash)->data.scalar)) == NULL) {
+                h2o_configurator_errprintf(cmd, *ticket_hash, "unknown hash algorithm");
+                return -1;
             }
             if (conf.ticket.update_thread == ticket_memcached_updater) {
                 conf.ticket.vars.memcached.key = h2o_iovec_init(H2O_STRLIT("h2o:ssl-session-key"));
-                if (ticket_memcached_prefix != NULL) {
-                    if ((*ticket_memcached_prefix)->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, *ticket_memcached_prefix, "`ticket-memcached-key` must be a string");
-                        return -1;
-                    }
+                if (ticket_memcached_prefix != NULL)
                     conf.ticket.vars.memcached.key = h2o_strdup(NULL, (*ticket_memcached_prefix)->data.scalar, SIZE_MAX);
-                }
             } else if (conf.ticket.update_thread == ticket_redis_updater) {
                 conf.ticket.vars.redis.key = h2o_iovec_init(H2O_STRLIT("h2o:ssl-session-key"));
-                if (ticket_redis_prefix != NULL) {
-                    if ((*ticket_redis_prefix)->type != YOML_TYPE_SCALAR) {
-                        h2o_configurator_errprintf(cmd, *ticket_redis_prefix, "`ticket-redis-prefix` must be a string");
-                        return -1;
-                    }
+                if (ticket_redis_prefix != NULL)
                     conf.ticket.vars.redis.key = h2o_strdup(NULL, (*ticket_redis_prefix)->data.scalar, SIZE_MAX);
-                }
             }
         } else if (conf.ticket.update_thread == ticket_file_updater) {
             /* file updater reads the contents of the file and uses it as the session ticket secret */
             if (ticket_file == NULL) {
                 h2o_configurator_errprintf(cmd, node, "mandatory attribute `file` is missing");
-                return -1;
-            }
-            if ((*ticket_file)->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, *ticket_file, "`ticket-file` must be a string");
                 return -1;
             }
             conf.ticket.vars.file.filename = h2o_strdup(NULL, (*ticket_file)->data.scalar, SIZE_MAX).base;
@@ -943,12 +914,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             return -1;
         }
         yoml_t **host, **port, **protocol;
-        if (h2o_configurator_parse_mapping(cmd, *memcached_node, "host", "port,protocol", &host, &port, &protocol) != 0)
+        if (h2o_configurator_parse_mapping(cmd, *memcached_node, "host:s", "port,protocol", &host, &port, &protocol) != 0)
             return -1;
-        if ((*host)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *host, "`host` must be a string");
-            return -1;
-        }
         conf.store.memcached.host = h2o_strdup(NULL, (*host)->data.scalar, SIZE_MAX).base;
         conf.store.memcached.port = 11211;
         conf.store.memcached.text_protocol = 0;
@@ -965,12 +932,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
             return -1;
         }
         yoml_t **host, **port;
-        if (h2o_configurator_parse_mapping(cmd, *redis_node, "host", "port", &host, &port) != 0)
+        if (h2o_configurator_parse_mapping(cmd, *redis_node, "host:s", "port", &host, &port) != 0)
             return -1;
-        if ((*host)->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, *host, "`host` must be a string");
-            return -1;
-        }
         conf.store.redis.host = h2o_strdup(NULL, (*host)->data.scalar, SIZE_MAX).base;
         conf.store.redis.port = 6379;
         if (port != NULL && h2o_configurator_scanf(cmd, *port, "%" SCNu16, &conf.store.redis.port) != 0)
