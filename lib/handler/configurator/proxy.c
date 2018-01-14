@@ -213,39 +213,23 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         }
         break;
     case YOML_TYPE_MAPPING: {
-        size_t i;
-        for (i = 0; i != node->data.mapping.size; ++i) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t *value = node->data.mapping.elements[i].value;
-            if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, key, "key must be a scalar");
-                return -1;
-            }
-            if (strcasecmp(key->data.scalar, "capacity") == 0) {
-                if (h2o_configurator_scanf(cmd, value, "%zu", &capacity) != 0)
-                    return -1;
-                if (capacity == 0) {
-                    h2o_configurator_errprintf(cmd, key, "capacity must be greater than zero");
-                    return -1;
-                }
-            } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
-                unsigned lifetime = 0;
-                if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
-                    return -1;
-                if (lifetime == 0) {
-                    h2o_configurator_errprintf(cmd, key, "lifetime must be greater than zero");
-                    return -1;
-                }
-                duration = (uint64_t)lifetime * 1000;
-            } else {
-                h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
-                return -1;
-            }
-        }
-        if (capacity == 0 || duration == 0) {
-            h2o_configurator_errprintf(cmd, node, "`capacity` and `lifetime` are required");
+        yoml_t *capacity_node, *lifetime_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "capacity,lifetime", NULL, &capacity_node, &lifetime_node) != 0)
+            return -1;
+        if (h2o_configurator_scanf(cmd, capacity_node, "%zu", &capacity) != 0)
+            return -1;
+        if (capacity == 0) {
+            h2o_configurator_errprintf(cmd, capacity_node, "capacity must be greater than zero");
             return -1;
         }
+        unsigned lifetime = 0;
+        if (h2o_configurator_scanf(cmd, lifetime_node, "%u", &lifetime) != 0)
+            return -1;
+        if (lifetime == 0) {
+            h2o_configurator_errprintf(cmd, lifetime_node, "lifetime must be greater than zero");
+            return -1;
+        }
+        duration = (uint64_t)lifetime * 1000;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
@@ -277,15 +261,13 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t *weight_node;
-        if ((url_node = yoml_get(backend, "url")) == NULL) {
-            h2o_configurator_errprintf(cmd, backend, "cannot find mandatory property `url`");
+        if (h2o_configurator_parse_mapping(cmd, backend, "url", "weight", &url_node, &weight_node) != 0)
             return NULL;
-        }
         if (url_node->type != YOML_TYPE_SCALAR) {
             h2o_configurator_errprintf(cmd, url_node, "value of the `url` property must be a scalar");
             return NULL;
         }
-        if ((weight_node = yoml_get(backend, "weight")) != NULL) {
+        if (weight_node != NULL) {
             unsigned weight;
             if (h2o_configurator_scanf(cmd, weight_node, "%u", &weight) != 0)
                 return NULL;
@@ -328,42 +310,26 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         backends = node->data.sequence.elements;
         num_backends = node->data.sequence.size;
         break;
-    case YOML_TYPE_MAPPING:
-        backends = NULL;
-        for (i = 0; i < node->data.mapping.size; i++) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t **value = &node->data.mapping.elements[i].value;
-            if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, key, "name of the property must be a scalar");
-                return -1;
-            }
-            if (strcasecmp(key->data.scalar, "backends") == 0) {
-                switch ((*value)->type) {
-                case YOML_TYPE_SCALAR:
-                    backends = value;
-                    num_backends = 1;
-                    break;
-                case YOML_TYPE_SEQUENCE:
-                    backends = (*value)->data.sequence.elements;
-                    num_backends = (*value)->data.sequence.size;
-                    break;
-                default:
-                    h2o_configurator_errprintf(cmd, *value,
-                                               "value for the `backends` property must be either a scalar or a sequence");
-                    return -1;
-                }
-            } else if (strcasecmp(key->data.scalar, "balancer") == 0) {
-                balancer_conf = *value;
-            } else {
-                h2o_configurator_errprintf(cmd, key, "unknown property:%s", key->data.scalar);
-                return -1;
-            }
-        }
-        if (backends == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory property `backend` is missing");
+    case YOML_TYPE_MAPPING: {
+        yoml_t *backends_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "backends", "balancer", &backends_node, &balancer_conf) != 0)
+            return -1;
+        switch (backends_node->type) {
+        case YOML_TYPE_SCALAR:
+            backends = alloca(sizeof(*backends));
+            *backends = backends_node;
+            num_backends = 1;
+            break;
+        case YOML_TYPE_SEQUENCE:
+            backends = backends_node->data.sequence.elements;
+            num_backends = backends_node->data.sequence.size;
+            break;
+        default:
+            h2o_configurator_errprintf(cmd, backends_node,
+                                       "value for the `backends` property must be either a scalar or a sequence");
             return -1;
         }
-        break;
+    } break;
     default:
         h2o_fatal("unexpected node type");
         return -1;
