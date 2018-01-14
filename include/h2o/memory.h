@@ -201,14 +201,7 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
  */
 void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
 
-/**
- * FIXME: is there any platform we need support but missing "__alignof__"?
- */
-#ifdef H2O_NO_BUILT_IN_ALIGNOF
-#define H2O_ALIGNOF(type) (16)
-#else
 #define H2O_ALIGNOF(type) (__alignof__(type))
-#endif
 
 #define h2o_mem_alloc_pool(pool, type, cnt) h2o_mem_alloc_pool_aligned(pool, H2O_ALIGNOF(type), sizeof(type) * (cnt))
 

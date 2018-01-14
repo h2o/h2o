@@ -144,7 +144,7 @@ void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t 
 {
     void *ret;
 
-    if (sz >= sizeof(*pool->chunks) / 4) {
+    if (sz >= (sizeof(*pool->chunks) - sizeof(pool->chunks->next)) / 4) {
         /* allocate large requests directly */
         struct st_h2o_mem_pool_direct_t *newp = h2o_mem_alloc(offsetof(struct st_h2o_mem_pool_direct_t, bytes) + sz);
         newp->next = pool->directs;
@@ -156,15 +156,15 @@ void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t 
     if (H2O_UNLIKELY(sz == 0))
         sz = 1;
 
+    pool->chunk_offset = H2O_ALIGN(pool->chunk_offset, alignment);
     if (sizeof(*pool->chunks) - pool->chunk_offset < sz) {
         /* allocate new chunk */
         union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&mempool_allocator, sizeof(*newp));
         newp->next = pool->chunks;
         pool->chunks = newp;
-        pool->chunk_offset = sizeof(union un_h2o_mem_pool_chunk_t *);
+        pool->chunk_offset = H2O_ALIGN(sizeof(newp->next), alignment);
     }
 
-    pool->chunk_offset = H2O_ALIGN(pool->chunk_offset, alignment);
     ret = pool->chunks->bytes + pool->chunk_offset;
     pool->chunk_offset += sz;
     return ret;
