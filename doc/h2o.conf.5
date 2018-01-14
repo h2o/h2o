@@ -2636,7 +2636,7 @@ Following sections describe the configuration directives defined for the module.
 
 
 .SS proxy.reverse.url
-Forwards the requests to the specified URL, and proxies the response.
+Forwards the requests to the specified backends, and proxies the response.
 
 .PP
 
@@ -2684,16 +2684,23 @@ proxy.reverse.url:
 .PP
 
 
-Load balancing between different backends with different path is supported. Currently we support round-robin and least-conn as balancer. Load balancing strategies would only be applied when no pooled connections between h2o and upstream exist. Failover would also be applied when some backends go down.
+When more than one backend is declared, the load is distributed among the backends using the strategy specified by the balancer property.
+Currently we support round-robin (the default) and least-conn as the value of the property.
+The strategies are applied when establishing a new connection becomes necessary (i.e. when no pooled connections exist).
 
 
-Integer weight could be assigned on each backend, with default value 1. Minimum weight is 1. Maximum weight is 256.
+weight can be assigned to each backend as an integer between 1 and 256.
+The default value is 1.
 
 
-For round-robin balancer, weight is respected in this way: each backend would be selected exactly weight times before next backend would be selected, except when the backend is not accessable.
+For the round-robin balancer, weight is respected in this way: each backend would be selected exactly weight times before next backend would be selected, except when the backend is not accessable.
 
 
 For least-conn balancer, weight is respected in this way: the selected backend should have the minimum value of (request count) / (weight).
+
+
+H2O will try to reconnect to different backends (in the order determined by the load balancing strategy) until it successfully establishes a connection.
+It returns an error when it fails to connect to all of the backends.
 
 
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
