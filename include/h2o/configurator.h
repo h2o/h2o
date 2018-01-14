@@ -165,7 +165,7 @@ int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const 
  */
 ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *node, const char *candidates);
 /**
- * extracts keys (required and optional) from a mapping, or prints an error upon failure
+ * extracts values (required and optional) from a mapping by their keys, or prints an error upon failure
  * @param configurator configurator
  * @param node the mapping to parse
  * @param keys_required comma-separated list of required keys (or NULL)
