@@ -66,7 +66,7 @@ subtest "http/2" => sub {
             "\x00\x00@{[chr length $hpack]}\x01\x05\x00\x00\x00\x01$hpack", # HEADERS
         );
         # do not wait for idle-timeout
-        sleep 1;
+        sleep 3;
         kill 'KILL', $pid;
         open $fh, "<", "$tempdir/resp.txt"
             or die "failed to open file:$tempdir/resp.txt:$!";
@@ -110,14 +110,22 @@ EOT2
 EOT
     # run tests
     subtest "proxy" => sub {
-        unlink "$tempdir/session";
-        my $guard = spawn_starlet();
-        $do_test->($server, "/proxy/");
+        for my $sleep (0, 1) {
+            subtest "sleep=$sleep" => sub {
+                unlink "$tempdir/session";
+                my $guard = spawn_starlet($sleep);
+                $do_test->($server, "/proxy/");
+            };
+        }
     };
     subtest "fcgi" => sub {
-        unlink "$tempdir/session";
-        my $guard = spawn_fcgi();
-        $do_test->($server, "/fcgi/");
+        for my $sleep (0, 1) {
+            subtest "sleep=$sleep" => sub {
+                unlink "$tempdir/session";
+                my $guard = spawn_fcgi($sleep);
+                $do_test->($server, "/fcgi/");
+            };
+        }
     };
     subtest "mruby" => sub {
         unlink "$tempdir/session";
@@ -129,12 +137,13 @@ EOT
 
 
 sub spawn_plack_server {
-    my ($port, @options) = @_;
+    my ($sleep_secs, $port, @options) = @_;
     # the logic should be same as the mruby handler
     my $app = sub {
         my $num_reqs = 0;
         sub {
             my $env = shift;
+            sleep $sleep_secs;
             ++$num_reqs;
             my $body = "count:$num_reqs";
             return [$env->{HTTP_EARLY_DATA} ? 425 : 200, ["content-length" => length $body], [$body]];
@@ -160,11 +169,11 @@ sub spawn_plack_server {
 }
 
 sub spawn_starlet {
-    spawn_plack_server($upstream_port, qw(-s Starlet --max-workers=1 --access-log /dev/null));
+    spawn_plack_server(@_, $upstream_port, qw(-s Starlet --max-workers=1 --access-log /dev/null));
 }
 
 sub spawn_fcgi {
-    spawn_plack_server($upstream_port, qw(-s FCGI --nproc 1 --access-log /dev/null));
+    spawn_plack_server(@_, $upstream_port, qw(-s FCGI --nproc 1 --access-log /dev/null));
 }
 
 done_testing;
