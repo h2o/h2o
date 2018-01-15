@@ -200,8 +200,12 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
 /**
  * allocates given size of memory from the memory pool, or dies if impossible
  */
-void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
 #define h2o_mem_alloc_pool(pool, type, cnt) h2o_mem_alloc_pool_aligned(pool, H2O_ALIGNOF(type), sizeof(type) * (cnt))
+/**
+ * allocates given size of memory from pool using given alignment
+ */
+static void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
+void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
 /**
  * allocates a ref-counted chunk of given size from the memory pool, or dies if impossible.
  * The ref-count of the returned chunk is 1 regardless of whether or not the chunk is linked to a pool.
@@ -349,6 +353,14 @@ inline void *h2o_mem_realloc(void *oldp, size_t sz)
         return oldp;
     }
     return newp;
+}
+
+inline void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size)
+{
+    /* C11 6.2.8: "Every valid alignment value shall be a nonnegative integral power of two"; assert will be resolved at compile-
+     * time for performance-sensitive cases */
+    assert(alignment != 0 && (alignment & (alignment - 1)) == 0);
+    return h2o_mem__do_alloc_pool_aligned(pool, alignment, size);
 }
 
 inline void h2o_mem_addref_shared(void *p)

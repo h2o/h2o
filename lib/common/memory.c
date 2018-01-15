@@ -140,7 +140,7 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
     pool->chunk_offset = sizeof(*pool->chunks);
 }
 
-void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
+void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
 {
     void *ret;
 
