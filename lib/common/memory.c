@@ -45,8 +45,6 @@
 #define USE_POSIX_FALLOCATE 0
 #endif
 
-#define H2O_ALIGN(x, a) (((x) + (a)-1) & ~((a)-1))
-
 struct st_h2o_mem_recycle_chunk_t {
     struct st_h2o_mem_recycle_chunk_t *next;
 };
@@ -142,6 +140,7 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
 
 void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
 {
+#define ALIGN_TO(x, a) (((x) + (a)-1) & ~((a)-1))
     void *ret;
 
     if (sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
@@ -156,18 +155,19 @@ void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, siz
     if (H2O_UNLIKELY(sz == 0))
         sz = 1;
 
-    pool->chunk_offset = H2O_ALIGN(pool->chunk_offset, alignment);
+    pool->chunk_offset = ALIGN_TO(pool->chunk_offset, alignment);
     if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
         union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&mempool_allocator, sizeof(*newp));
         newp->next = pool->chunks;
         pool->chunks = newp;
-        pool->chunk_offset = H2O_ALIGN(sizeof(newp->next), alignment);
+        pool->chunk_offset = ALIGN_TO(sizeof(newp->next), alignment);
     }
 
     ret = pool->chunks->bytes + pool->chunk_offset;
     pool->chunk_offset += sz;
     return ret;
+#undef ALIGN_TO
 }
 
 static void link_shared(h2o_mem_pool_t *pool, struct st_h2o_mem_pool_shared_entry_t *entry)
