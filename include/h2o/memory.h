@@ -36,6 +36,7 @@ extern "C" {
 #endif
 
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
+#define H2O_ALIGNOF(type) (__alignof__(type))
 
 #if __GNUC__ >= 3
 #define H2O_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -200,11 +201,7 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
  * allocates given size of memory from the memory pool, or dies if impossible
  */
 void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
-
-#define H2O_ALIGNOF(type) (__alignof__(type))
-
 #define h2o_mem_alloc_pool(pool, type, cnt) h2o_mem_alloc_pool_aligned(pool, H2O_ALIGNOF(type), sizeof(type) * (cnt))
-
 /**
  * allocates a ref-counted chunk of given size from the memory pool, or dies if impossible.
  * The ref-count of the returned chunk is 1 regardless of whether or not the chunk is linked to a pool.
