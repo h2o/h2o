@@ -170,7 +170,7 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
  * @param node the mapping to parse
  * @param keys_required comma-separated list of required keys (or NULL)
  * @param keys_optional comma-separated list of optional keys (or NULL)
- * @param ... pointers to `yoml_t *` for receiving the results; they should appear in the order they appear in the key names
+ * @param ... pointers to `yoml_t **` for receiving the results; they should appear in the order they appear in the key names
  * @return 0 if successful, -1 if not
  */
 #define h2o_configurator_parse_mapping(cmd, node, keys_required, keys_optional, ...)                                               \
