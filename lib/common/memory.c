@@ -347,7 +347,7 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t align
     while (vector->capacity < new_capacity)
         vector->capacity *= 2;
     if (pool != NULL) {
-        new_entries = h2o_mem_alloc_pool_aligned(pool, alignment, H2O_ALIGN(element_size * vector->capacity, alignment));
+        new_entries = h2o_mem_alloc_pool_aligned(pool, alignment, element_size * vector->capacity);
         h2o_memcpy(new_entries, vector->entries, element_size * vector->size);
     } else {
         new_entries = h2o_mem_realloc(vector->entries, element_size * vector->capacity);
