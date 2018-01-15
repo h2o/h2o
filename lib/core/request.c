@@ -422,6 +422,7 @@ void h2o_replay_request(h2o_req_t *req)
             if (*handler == req->handler)
                 break;
         }
+        close_generator_and_filters(req);
         call_handlers(req, handler);
     } else {
         h2o_reprocess_request(req, req->method, req->scheme, req->authority, req->path, req->overrides, 0);
