@@ -175,7 +175,7 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
  */
 #define h2o_configurator_parse_mapping(cmd, node, keys_required, keys_optional, ...)                                               \
     h2o_configurator__do_parse_mapping((cmd), (node), (keys_required), (keys_optional), (yoml_t * **[]){__VA_ARGS__},              \
-                                       sizeof((yoml_t ***[]){__VA_ARGS__}) / sizeof(yoml_t **))
+                                       sizeof((yoml_t ***[]){__VA_ARGS__}) / sizeof(yoml_t ***))
 int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
                                        const char *keys_optional, yoml_t ****values, size_t num_values);
 /**
