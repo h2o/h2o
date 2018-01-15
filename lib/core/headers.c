@@ -76,7 +76,7 @@ void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const c
             return;
         }
     }
-    name_buf = h2o_mem_alloc_pool(pool, sizeof(h2o_iovec_t));
+    name_buf = h2o_mem_alloc_pool(pool, *name_buf, 1);
     name_buf->base = (char *)name;
     name_buf->len = name_len;
     add_header(pool, headers, name_buf, orig_name, value, value_len);
@@ -118,7 +118,7 @@ void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const c
             slot->len = value_len;
         }
     } else {
-        h2o_iovec_t *name_buf = h2o_mem_alloc_pool(pool, sizeof(h2o_iovec_t));
+        h2o_iovec_t *name_buf = h2o_mem_alloc_pool(pool, *name_buf, 1);
         name_buf->base = (char *)name;
         name_buf->len = name_len;
         add_header(pool, headers, name_buf, NULL, value, value_len);

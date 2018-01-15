@@ -116,7 +116,7 @@ static void encode_begin_request(void *p, uint16_t reqId, uint16_t role, uint8_t
 
 static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId, uint16_t role, uint8_t flags)
 {
-    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE),
+    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, char, FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE),
                                      FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE);
     encode_begin_request(rec.base, reqId, role, flags);
     return rec;
@@ -124,7 +124,7 @@ static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId, ui
 
 static h2o_iovec_t create_header(h2o_mem_pool_t *pool, uint8_t type, uint16_t reqId, uint16_t sz)
 {
-    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, FCGI_RECORD_HEADER_SIZE), FCGI_RECORD_HEADER_SIZE);
+    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, char, FCGI_RECORD_HEADER_SIZE), FCGI_RECORD_HEADER_SIZE);
     encode_record_header(rec.base, type, reqId, sz);
     return rec;
 }
@@ -143,7 +143,7 @@ static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s,
     if (blocks->entries[blocks->size - 1].len + len > APPEND_BLOCKSIZE) {
         h2o_vector_reserve(pool, blocks, blocks->size + 1);
         slot = blocks->entries + blocks->size++;
-        slot->base = h2o_mem_alloc_pool(pool, len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
+        slot->base = h2o_mem_alloc_pool(pool, char, len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
         slot->len = 0;
     } else {
         slot = blocks->entries + blocks->size - 1;

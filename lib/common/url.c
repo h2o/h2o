@@ -75,8 +75,8 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t sr
     }
 
     /* dst can be 1 byte more than src if src is missing the prefixing '/' */
-    dst = h2o_mem_alloc_pool(pool, src_len + 1);
-    *norm_indexes = h2o_mem_alloc_pool(pool, (src_len + 1) * sizeof(*norm_indexes[0]));
+    dst = h2o_mem_alloc_pool(pool, char, src_len + 1);
+    *norm_indexes = h2o_mem_alloc_pool(pool,  *norm_indexes[0], (src_len + 1));
 
     if (src[0] == '/')
         src_off++;
@@ -428,7 +428,7 @@ int h2o_url_init_with_hostport(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_u
             return -1;
 
         url->authority.len = host.len + 1 + port_len;
-        url->authority.base = pool == NULL ? h2o_mem_alloc(url->authority.len) : h2o_mem_alloc_pool(pool, url->authority.len);
+        url->authority.base = pool == NULL ? h2o_mem_alloc(url->authority.len) : h2o_mem_alloc_pool(pool, char, url->authority.len);
         memcpy(url->authority.base, host.base, host.len);
         memcpy(url->authority.base + host.len, ":", 1);
         memcpy(url->authority.base + host.len + 1, _port, port_len);
@@ -448,7 +448,7 @@ int h2o_url_init_with_sun_path(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_u
 #define PREFIX "[unix:"
 #define SUFFIX "]"
     url->authority.len = strlen(PREFIX SUFFIX) + sun_path.len;
-    url->authority.base = pool == NULL ? h2o_mem_alloc(url->authority.len) : h2o_mem_alloc_pool(pool, url->authority.len);
+    url->authority.base = pool == NULL ? h2o_mem_alloc(url->authority.len) : h2o_mem_alloc_pool(pool, char, url->authority.len);
     memcpy(url->authority.base, PREFIX, sizeof(PREFIX) - 1);
     memcpy(url->authority.base + sizeof(PREFIX) - 1, sun_path.base, sun_path.len);
     memcpy(url->authority.base + url->authority.len - 1, SUFFIX, sizeof(SUFFIX) - 1);

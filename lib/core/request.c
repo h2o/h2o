@@ -244,7 +244,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         size_t i;
 #define COPY(buf)                                                                                                                  \
     do {                                                                                                                           \
-        req->buf.base = h2o_mem_alloc_pool(&req->pool, src->buf.len);                                                              \
+        req->buf.base = h2o_mem_alloc_pool(&req->pool, char, src->buf.len);                                                        \
         memcpy(req->buf.base, src->buf.base, src->buf.len);                                                                        \
         req->buf.len = src->buf.len;                                                                                               \
     } while (0)
@@ -270,7 +270,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
             if (h2o_iovec_is_token(src_header->name)) {
                 dst_header->name = src_header->name;
             } else {
-                dst_header->name = h2o_mem_alloc_pool(&req->pool, sizeof(*dst_header->name));
+                dst_header->name = h2o_mem_alloc_pool(&req->pool, *dst_header->name, 1);
                 *dst_header->name = h2o_strdup(&req->pool, src_header->name->base, src_header->name->len);
             }
             dst_header->value = h2o_strdup(&req->pool, src_header->value.base, src_header->value.len);
@@ -444,17 +444,17 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, state);
 }
 
-h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz)
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t alignment, size_t sz)
 {
-    h2o_req_prefilter_t *prefilter = h2o_mem_alloc_pool(&req->pool, sz);
+    h2o_req_prefilter_t *prefilter = h2o_mem_alloc_pool_aligned(&req->pool, alignment, sz);
     prefilter->next = req->prefilters;
     req->prefilters = prefilter;
     return prefilter;
 }
 
-h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot)
+h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_ostream_t **slot)
 {
-    h2o_ostream_t *ostr = h2o_mem_alloc_pool(&req->pool, sz);
+    h2o_ostream_t *ostr = h2o_mem_alloc_pool_aligned(&req->pool, alignment, sz);
     ostr->next = *slot;
     ostr->do_send = NULL;
     ostr->stop = NULL;
@@ -559,7 +559,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
                                                                                                                                    \
     static void h2o_send_error_deferred_##status_(h2o_req_t *req, const char *reason, const char *body, int flags)                 \
     {                                                                                                                              \
-        struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, sizeof(*args));                                     \
+        struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, *args, 1);                                          \
         *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
         args->_timeout.cb = send_error_deferred_cb_##status_;                                                                      \
         h2o_timeout_link(req->conn->ctx->loop, &req->conn->ctx->zero_timeout, &args->_timeout);                                    \
@@ -573,7 +573,7 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 {
 #define INITIAL_BUF_SIZE 256
 
-    char *errbuf = h2o_mem_alloc_pool(&req->pool, INITIAL_BUF_SIZE);
+    char *errbuf = h2o_mem_alloc_pool(&req->pool, char, INITIAL_BUF_SIZE);
     int errlen;
     va_list args;
 
@@ -582,7 +582,7 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
     va_end(args);
 
     if (errlen >= INITIAL_BUF_SIZE) {
-        errbuf = h2o_mem_alloc_pool(&req->pool, errlen + 1);
+        errbuf = h2o_mem_alloc_pool(&req->pool, char, errlen + 1);
         va_start(args, fmt);
         errlen = vsnprintf(errbuf, errlen + 1, fmt, args);
         va_end(args);
