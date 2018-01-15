@@ -212,10 +212,10 @@ static int setup_ssl(const char *cert_file, const char *key_file, const char *ci
     }
 
 /* setup protocol negotiation methods */
-#if H2O_USE_NPN
+#if H2O_USE_NPN && USE_HTTPS
     h2o_ssl_register_npn_protocols(accept_ctx.ssl_ctx, h2o_http2_npn_protocols);
 #endif
-#if H2O_USE_ALPN
+#if H2O_USE_ALPN && USE_HTTPS
     h2o_ssl_register_alpn_protocols(accept_ctx.ssl_ctx, h2o_http2_alpn_protocols);
 #endif
 
