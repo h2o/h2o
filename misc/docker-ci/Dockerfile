@@ -28,8 +28,14 @@ RUN apt-get install --yes golang && mkdir -p /golang && ln -sf /usr/local/bin /g
 ENV GOPATH=/golang
 RUN (go get github.com/summerwind/h2spec && cd /golang/src/github.com/summerwind/h2spec/cmd/h2spec && git checkout v2.0.0^ && go install)
 
+# use dumb-init
+RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
+ && chmod +x /usr/local/bin/dumb-init
+
 # create user
 RUN useradd --create-home ci
 RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 WORKDIR /home/ci
 USER ci
+
+ENTRYPOINT ["/usr/local/bin/dumb-init"]
