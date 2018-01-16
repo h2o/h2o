@@ -156,6 +156,7 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 #endif
 #endif
     pthread_mutex_destroy(&queue->mutex);
+    free(queue);
 }
 
 void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver,

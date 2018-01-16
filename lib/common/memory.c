@@ -91,6 +91,7 @@ void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz)
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
 {
     struct st_h2o_mem_recycle_chunk_t *chunk;
+
     if (allocator->cnt == allocator->max) {
         free(p);
         return;
@@ -100,6 +101,17 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     chunk->next = allocator->_link;
     allocator->_link = chunk;
     ++allocator->cnt;
+}
+
+void h2o_mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator)
+{
+    struct st_h2o_mem_recycle_chunk_t *chunk;
+
+    while (allocator->cnt-- > 0) {
+        chunk = allocator->_link;
+        allocator->_link = allocator->_link->next;
+        free(chunk);
+    }
 }
 
 void h2o_mem_init_pool(h2o_mem_pool_t *pool)
