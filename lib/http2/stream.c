@@ -211,6 +211,10 @@ static int is_blocking_asset(h2o_req_t *req)
 
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
+        h2o_http2_conn_register_for_replay(conn, stream);
+        return -1;
+    }
 
     /* cancel push with an error response */
     if (h2o_http2_stream_is_push(stream->stream_id)) {

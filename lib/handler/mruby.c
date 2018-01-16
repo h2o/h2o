@@ -637,32 +637,48 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
 
     { /* headers */
-        h2o_header_t **sorted = alloca(sizeof(*sorted) * generator->req->headers.size);
-        size_t i, num_sorted = 0;
+        h2o_header_t **headers_sorted = alloca(sizeof(*headers_sorted) * (generator->req->headers.size + 1));
+        size_t i, num_headers_sorted = 0;
+        int found_early_data = 0;
+        /* build list of headers to be set, sorted by their names */
         for (i = 0; i != generator->req->headers.size; ++i) {
-            if (generator->req->headers.entries[i].name == &H2O_TOKEN_TRANSFER_ENCODING->buf)
-                continue;
-            sorted[num_sorted++] = generator->req->headers.entries + i;
+            h2o_header_t *header = generator->req->headers.entries + i;
+            if (h2o_iovec_is_token(header->name)) {
+                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
+                if (token == H2O_TOKEN_TRANSFER_ENCODING) {
+                    continue;
+                } else if (token == H2O_TOKEN_EARLY_DATA) {
+                    found_early_data = 1;
+                }
+            }
+            headers_sorted[num_headers_sorted++] = header;
         }
-        qsort(sorted, num_sorted, sizeof(*sorted), build_env_sort_header_cb);
-        h2o_iovec_t *values = alloca(sizeof(*values) * (num_sorted * 2 - 1));
-        for (i = 0; i != num_sorted; ++i) {
+        if (!found_early_data && h2o_conn_is_early_data(generator->req->conn)) {
+            static const h2o_header_t early_data = {&H2O_TOKEN_EARLY_DATA->buf, "early-data", {H2O_STRLIT("1")}};
+            headers_sorted[num_headers_sorted++] = (h2o_header_t *)&early_data;
+            generator->req->reprocess_if_too_early = 1;
+        }
+        qsort(headers_sorted, num_headers_sorted, sizeof(*headers_sorted), build_env_sort_header_cb);
+        /* emit the headers */
+        h2o_iovec_t *values = alloca(sizeof(*values) * (num_headers_sorted * 2 - 1));
+        for (i = 0; i != num_headers_sorted; ++i) {
             /* build flattened value of the header field values that have the same name as sorted[i] */
             size_t num_values = 0;
-            values[num_values++] = sorted[i]->value;
-            while (i < num_sorted - 1 && h2o_header_name_is_equal(sorted[i], sorted[i + 1])) {
+            values[num_values++] = headers_sorted[i]->value;
+            while (i < num_headers_sorted - 1 && h2o_header_name_is_equal(headers_sorted[i], headers_sorted[i + 1])) {
                 ++i;
-                values[num_values++] = h2o_iovec_init(sorted[i]->name == &H2O_TOKEN_COOKIE->buf ? "; " : ", ", 2);
-                values[num_values++] = sorted[i]->value;
+                values[num_values++] = h2o_iovec_init(headers_sorted[i]->name == &H2O_TOKEN_COOKIE->buf ? "; " : ", ", 2);
+                values[num_values++] = headers_sorted[i]->value;
             }
             h2o_iovec_t flattened_values = num_values == 1 ? values[0] : h2o_concat_list(&generator->req->pool, values, num_values);
             /* build mrb_values for name, header, and set them to the hash */
             mrb_value n, v = h2o_mruby_new_str(mrb, flattened_values.base, flattened_values.len);
-            if (h2o_iovec_is_token(sorted[i]->name)) {
-                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, sorted[i]->name);
+            if (h2o_iovec_is_token(headers_sorted[i]->name)) {
+                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers_sorted[i]->name);
                 n = mrb_ary_entry(shared->constants, (mrb_int)(token - h2o__tokens));
             } else {
-                h2o_iovec_t vec = convert_header_name_to_env(&generator->req->pool, sorted[i]->name->base, sorted[i]->name->len);
+                h2o_iovec_t vec =
+                    convert_header_name_to_env(&generator->req->pool, headers_sorted[i]->name->base, headers_sorted[i]->name->len);
                 n = h2o_mruby_new_str(mrb, vec.base, vec.len);
             }
             mrb_hash_set(mrb, env, n, v);
@@ -805,10 +821,12 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
 
     /* return without processing body, if status is fallthru */
     if (generator->req->res.status == STATUS_FALLTHRU) {
-        if (is_delegate != NULL)
+        if (is_delegate != NULL) {
             *is_delegate = 1;
-        else
-            h2o_delegate_request_deferred(generator->req, &generator->ctx->handler->super);
+        } else {
+            assert(generator->req->handler == &generator->ctx->handler->super);
+            h2o_delegate_request_deferred(generator->req);
+        }
         return 0;
     }
 

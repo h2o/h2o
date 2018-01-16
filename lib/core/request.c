@@ -36,11 +36,6 @@ struct st_deferred_request_action_t {
     h2o_req_t *req;
 };
 
-struct st_delegate_request_deferred_t {
-    struct st_deferred_request_action_t super;
-    h2o_handler_t *current_handler;
-};
-
 struct st_reprocess_request_deferred_t {
     struct st_deferred_request_action_t super;
     h2o_iovec_t method;
@@ -149,9 +144,11 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
 {
     h2o_handler_t **end = req->pathconf->handlers.entries + req->pathconf->handlers.size;
 
-    for (; handler != end; ++handler)
+    for (; handler != end; ++handler) {
+        req->handler = *handler;
         if ((*handler)->on_req(*handler, req) == 0)
             return;
+    }
 
     h2o_send_error_404(req, "File Not Found", "not found", 0);
 }
@@ -321,31 +318,27 @@ void h2o_process_request(h2o_req_t *req)
     }
 }
 
-void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler)
+void h2o_delegate_request(h2o_req_t *req)
 {
     h2o_handler_t **handler = req->pathconf->handlers.entries, **end = handler + req->pathconf->handlers.size;
-
-    for (; handler != end; ++handler) {
-        if (*handler == current_handler) {
-            ++handler;
+    for (;; ++handler) {
+        assert(handler != end);
+        if (*handler == req->handler)
             break;
-        }
     }
+    ++handler;
     call_handlers(req, handler);
 }
 
 static void on_delegate_request_cb(h2o_timeout_entry_t *entry)
 {
-    struct st_delegate_request_deferred_t *args =
-        H2O_STRUCT_FROM_MEMBER(struct st_delegate_request_deferred_t, super.timeout, entry);
-    h2o_delegate_request(args->super.req, args->current_handler);
+    struct st_deferred_request_action_t *args = H2O_STRUCT_FROM_MEMBER(struct st_deferred_request_action_t, timeout, entry);
+    h2o_delegate_request(args->req);
 }
 
-void h2o_delegate_request_deferred(h2o_req_t *req, h2o_handler_t *current_handler)
+void h2o_delegate_request_deferred(h2o_req_t *req)
 {
-    struct st_delegate_request_deferred_t *args =
-        (struct st_delegate_request_deferred_t *)create_deferred_action(req, sizeof(*args), on_delegate_request_cb);
-    args->current_handler = current_handler;
+    create_deferred_action(req, sizeof(struct st_deferred_request_action_t), on_delegate_request_cb);
 }
 
 void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
@@ -359,6 +352,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     close_generator_and_filters(req);
 
     /* setup the request/response parameters */
+    req->handler = NULL;
     req->method = method;
     req->scheme = scheme;
     req->authority = authority;
@@ -366,6 +360,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     req->overrides = overrides;
     req->res_is_delegated |= is_delegated;
+    req->reprocess_if_too_early = 0;
     reset_response(req);
 
     /* check the delegation (or reprocess) counter */
@@ -416,6 +411,33 @@ void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2
     args->path = path;
     args->overrides = overrides;
     args->is_delegated = is_delegated;
+}
+
+void h2o_replay_request(h2o_req_t *req)
+{
+    if (req->handler != NULL) {
+        h2o_handler_t **handler = req->pathconf->handlers.entries, **end = handler + req->pathconf->handlers.size;
+        for (;; ++handler) {
+            assert(handler != end);
+            if (*handler == req->handler)
+                break;
+        }
+        close_generator_and_filters(req);
+        call_handlers(req, handler);
+    } else {
+        h2o_reprocess_request(req, req->method, req->scheme, req->authority, req->path, req->overrides, 0);
+    }
+}
+
+static void on_replay_request_cb(h2o_timeout_entry_t *entry)
+{
+    struct st_deferred_request_action_t *args = H2O_STRUCT_FROM_MEMBER(struct st_deferred_request_action_t, timeout, entry);
+    h2o_replay_request(args->req);
+}
+
+void h2o_replay_request_deferred(h2o_req_t *req)
+{
+    create_deferred_action(req, sizeof(struct st_deferred_request_action_t), on_replay_request_cb);
 }
 
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)

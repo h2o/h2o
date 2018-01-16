@@ -154,10 +154,21 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
     h2o_timeout_unlink(&conn->_timeout_entry);
 
-    if (conn->num_streams.blocked_by_server == 0 && conn->_write.buf_in_flight == NULL) {
-        conn->_timeout_entry.cb = on_idle_timeout;
-        h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
-    }
+    /* always set idle timeout if TLS handshake is in progress */
+    if (conn->sock->ssl != NULL && h2o_socket_ssl_is_early_data(conn->sock))
+        goto SetTimeout;
+
+    /* no need to set timeout if pending requests exist */
+    if (conn->num_streams.blocked_by_server != 0)
+        return;
+
+    /* no need to set timeout if write is in flight */
+    if (conn->_write.buf_in_flight != NULL)
+        return;
+
+SetTimeout:
+    conn->_timeout_entry.cb = on_idle_timeout;
+    h2o_timeout_link(conn->super.ctx->loop, &conn->super.ctx->http2.idle_timeout, &conn->_timeout_entry);
 }
 
 static int can_run_requests(h2o_http2_conn_t *conn)
@@ -1033,6 +1044,19 @@ static void on_read(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    /* dispatch requests blocked by 425 when TLS handshake is complete */
+    if (!h2o_linklist_is_empty(&conn->early_data.blocked_streams)) {
+        assert(conn->sock->ssl != NULL);
+        if (!h2o_socket_ssl_is_early_data(conn->sock)) {
+            while (conn->early_data.blocked_streams.next != &conn->early_data.blocked_streams) {
+                h2o_http2_stream_t *stream =
+                    H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link,conn->early_data.blocked_streams.next);
+                h2o_linklist_unlink(&stream->_refs.link);
+                h2o_replay_request(&stream->req);
+            }
+        }
+    }
+
     if (parse_input(conn) != 0)
         return;
     update_idle_timeout(conn);
@@ -1091,6 +1115,15 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
         }
     } else {
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+    }
+}
+
+void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    if (conn->sock->ssl != NULL && h2o_socket_ssl_is_early_data(conn->sock)) {
+        h2o_linklist_insert(&conn->early_data.blocked_streams, &stream->_refs.link);
+    } else {
+        h2o_replay_request_deferred(&stream->req);
     }
 }
 
@@ -1358,6 +1391,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_linklist_init_anchor(&conn->_write.streams_to_proceed);
     conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&conn->_write.window, conn->peer_settings.initial_window_size);
+    h2o_linklist_init_anchor(&conn->early_data.blocked_streams);
 
     return conn;
 }
