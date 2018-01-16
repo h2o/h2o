@@ -1396,6 +1396,11 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     return conn;
 }
 
+void h2o_http2_wbuf_buffer_prototype__dispose(void)
+{
+    h2o_mem_allocator_recycle__dispose(&wbuf_buffer_prototype.allocator);
+}
+
 static int update_push_memo(h2o_http2_conn_t *conn, h2o_req_t *src_req, const char *abspath, size_t abspath_len)
 {
 

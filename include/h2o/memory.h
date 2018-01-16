@@ -189,6 +189,10 @@ void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz);
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
 
 /**
+ * release all the memory chunks cached in input allocator to system
+ */
+void h2o_mem_allocator_recycle__dispose(h2o_mem_recycle_t *allocator);
+/**
  * initializes the memory pool.
  */
 void h2o_mem_init_pool(h2o_mem_pool_t *pool);
@@ -197,6 +201,7 @@ void h2o_mem_init_pool(h2o_mem_pool_t *pool);
  * Applications may dispose the pool after calling the function or reuse it without calling h2o_mem_init_pool.
  */
 void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
+
 /**
  * allocates given size of memory from the memory pool, or dies if impossible
  */

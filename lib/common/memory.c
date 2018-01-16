@@ -102,6 +102,17 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     ++allocator->cnt;
 }
 
+void h2o_mem_allocator_recycle__dispose(h2o_mem_recycle_t *allocator)
+{
+    struct st_h2o_mem_recycle_chunk_t *chunk;
+
+    while (allocator->cnt-- > 0) {
+        chunk = allocator->_link;
+        allocator->_link = allocator->_link->next;
+        free(chunk);
+    }
+}
+
 void h2o_mem_init_pool(h2o_mem_pool_t *pool)
 {
     pool->chunks = NULL;
@@ -136,6 +147,11 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
         pool->chunks = next;
     }
     pool->chunk_offset = sizeof(pool->chunks->bytes);
+}
+
+void h2o_mem_pool_allocator__dispose(void)
+{
+    h2o_mem_allocator_recycle__dispose(&mempool_allocator);
 }
 
 void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
