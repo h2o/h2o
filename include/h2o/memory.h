@@ -201,6 +201,12 @@ void h2o_mem_init_pool(h2o_mem_pool_t *pool);
  * Applications may dispose the pool after calling the function or reuse it without calling h2o_mem_init_pool.
  */
 void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
+
+/**
+ * release all the memory chunks cached in per-thread pool allocator to system
+ */
+void h2o_mem_pool_allocator_dispose(void)
+
 /**
  * allocates given size of memory from the memory pool, or dies if impossible
  */
