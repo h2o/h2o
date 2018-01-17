@@ -81,8 +81,6 @@ void __mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator);
 static void __h2o_tls_destroy(void *value)
 {
     h2o_per_thread_data_t *p = value;
-    fprintf(stderr, "__h2o_tls_destroy\n");
-
     __mem_allocator_recycle_dispose(&p->mempool_allocator);
     __mem_allocator_recycle_dispose(&p->h2o_socket_buffer_prototype.allocator);
     __mem_allocator_recycle_dispose(&p->http2_wbuf_buffer_prototype.allocator);
@@ -95,7 +93,7 @@ __attribute__ ((constructor)) static void __h2o__constructor (void) {
         h2o_fatal("pthread_key_create failed");
     }
 }
-h2o_per_thread_data_t *_create_h2o_per_thread_data(void) {
+h2o_per_thread_data_t *__create_h2o_per_thread_data(void) {
     h2o_per_thread_data_t *p = h2o_mem_alloc(sizeof(*p));
     memset(p, 0x00, sizeof(*p));
     p->h2o_socket_buffer_prototype.allocator.max = 16;

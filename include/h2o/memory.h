@@ -170,32 +170,32 @@ typedef struct st_h2o_per_thread_data_t {
 extern pthread_key_t h2o_tls_key;
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 
-static h2o_per_thread_data_t *_get_h2o_per_thread_data(void);
-h2o_per_thread_data_t *_create_h2o_per_thread_data(void);
+static h2o_per_thread_data_t *__get_h2o_per_thread_data(void);
+h2o_per_thread_data_t *__create_h2o_per_thread_data(void);
 
 static h2o_buffer_prototype_t *get_socket_buffer_prototype(void);
 static h2o_mem_recycle_t *get_mempool_allocator(void);
 static h2o_buffer_prototype_t *get_http2_buffer_prototype(void);
 
-inline h2o_per_thread_data_t *_get_h2o_per_thread_data(void) {
+inline h2o_per_thread_data_t *__get_h2o_per_thread_data(void) {
     h2o_per_thread_data_t *p = pthread_getspecific(h2o_tls_key);
     if (H2O_UNLIKELY(p == NULL)) {
-        p = _create_h2o_per_thread_data();
+        p = __create_h2o_per_thread_data();
     }
     return p;
 }
 
 inline h2o_buffer_prototype_t *get_socket_buffer_prototype(void)
 {
-    return &(_get_h2o_per_thread_data()->h2o_socket_buffer_prototype);
+    return &(__get_h2o_per_thread_data()->h2o_socket_buffer_prototype);
 }
 inline h2o_mem_recycle_t *get_mempool_allocator(void)
 {
-    return &(_get_h2o_per_thread_data()->mempool_allocator);
+    return &(__get_h2o_per_thread_data()->mempool_allocator);
 }
 inline h2o_buffer_prototype_t *get_http2_buffer_prototype(void)
 {
-    return &(_get_h2o_per_thread_data()->http2_wbuf_buffer_prototype);
+    return &(__get_h2o_per_thread_data()->http2_wbuf_buffer_prototype);
 }
 
 
