@@ -67,9 +67,10 @@ static void dispose_subreq(struct st_mruby_subreq_t *subreq)
     /* suqbre must be alive until generator gets disposed when shortcut used */
     assert(subreq->shortcut == NULL);
 
-    assert(!mrb_nil_p(subreq->error_stream));
-    mrb_gc_unregister(subreq->ctx->shared->mrb, subreq->error_stream);
-    subreq->error_stream = mrb_nil_value();
+    if (!mrb_nil_p(subreq->error_stream)) {
+        mrb_gc_unregister(subreq->ctx->shared->mrb, subreq->error_stream);
+        subreq->error_stream = mrb_nil_value();
+    }
 
     if (!mrb_nil_p(subreq->chunks)) {
         mrb_gc_unregister(subreq->ctx->shared->mrb, subreq->chunks);
@@ -370,7 +371,7 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
     }
 }
 
-static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env)
+static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env, int is_reprocess)
 {
     static const h2o_conn_callbacks_t callbacks = {
         get_sockname,    /* stringify address */
@@ -511,6 +512,16 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     CHECK_REQUIRED("QUERY_STRING", query_string);
 #undef CHECK_REQUIRED
 
+    if (!is_reprocess) {
+        /* ensure that SCRIPT_NAME is not modified */
+        h2o_iovec_t confpath = ctx->handler->pathconf->path;
+        size_t confpath_len_wo_slash = confpath.base[confpath.len - 1] == '/' ? confpath.len - 1 : confpath.len;
+        if (!(RSTRING_LEN(script_name) == confpath_len_wo_slash && memcmp(RSTRING_PTR(script_name), confpath.base, confpath_len_wo_slash))) {
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "can't modify `SCRIPT_NAME` with `H2O.next`. Is `H2O.reprocess` what you want?"));
+            goto Failed;
+        }
+    }
+
 #define STR_TO_IOVEC(val) h2o_iovec_init(RSTRING_PTR(val), RSTRING_LEN(val))
 
     /* construct url and parse */
@@ -598,7 +609,7 @@ static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value in
     mrb_value reprocess = mrb_ary_entry(args, 1);
 
     /* create subreq */
-    struct st_mruby_subreq_t *subreq = create_subreq(ctx, env);
+    struct st_mruby_subreq_t *subreq = create_subreq(ctx, env, mrb_bool(reprocess));
     if (mrb->exc != NULL) {
         mrb_value exc = mrb_obj_value(mrb->exc);
         mrb->exc = NULL;

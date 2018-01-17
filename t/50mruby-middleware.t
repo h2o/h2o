@@ -648,4 +648,41 @@ EOT
     });
 };
 
+subtest 'modify SCRIPT_NAME' => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths: &paths
+      /next:
+        - mruby.handler: |
+            proc {|env|
+              env['SCRIPT_NAME'] = '/foo'
+              H2O.next.call(env)
+            }
+        - file.dir: @{[ ASSETS_DIR ]}/doc_root
+      /reprocess:
+        - mruby.handler: |
+            proc {|env|
+              env['SCRIPT_NAME'] = '/foo'
+              H2O.reprocess.call(env)
+            }
+      /foo:
+        - mruby.handler: proc {|env| [200, {}, []] }
+  "127.0.0.1:$tls_port":
+    paths: *paths
+EOT
+    });
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+
+        my ($status, $headers, $body);
+        ($status, $headers, $body) = get($proto, $port, $curl, '/next');
+        is $status, 500, 'next';
+        ($status, $headers, $body) = get($proto, $port, $curl, '/reprocess');
+        is $status, 200, 'reprocess';
+    });
+};
+
 done_testing();
