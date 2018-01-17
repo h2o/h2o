@@ -119,15 +119,6 @@ static void on_write_complete(h2o_socket_t *sock, const char *err);
 #include "socket/evloop.c.h"
 #endif
 
-h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
-    32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
-    "/tmp/h2o.b.XXXXXX"};
-
-__thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
-    {16},                                       /* keep 16 recently used chunks */
-    {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
-    &h2o_socket_buffer_mmap_settings};
-
 const char *h2o_socket_error_out_of_memory = "out of memory";
 const char *h2o_socket_error_io = "I/O error";
 const char *h2o_socket_error_closed = "socket closed by peer";
@@ -429,7 +420,7 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
     }
     info->input = sock->input;
     h2o_buffer_set_prototype(&info->input, &nonpooling_prototype);
-    h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&sock->input, get_socket_buffer_prototype());
 
     h2o_socket_close(sock);
 
@@ -446,10 +437,10 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     info->fd = -1; /* just in case */
     if ((sock->ssl = info->ssl) != NULL) {
         setup_bio(sock);
-        h2o_buffer_set_prototype(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
+        h2o_buffer_set_prototype(&sock->ssl->input.encrypted, get_socket_buffer_prototype());
     }
     sock->input = info->input;
-    h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);
+    h2o_buffer_set_prototype(&sock->input, get_socket_buffer_prototype());
     return sock;
 }
 
@@ -1182,7 +1173,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
     sock->ssl->ssl_ctx = ssl_ctx;
 
     /* setup the buffers; sock->input should be empty, sock->ssl->input.encrypted should contain the initial input, if any */
-    h2o_buffer_init(&sock->ssl->input.encrypted, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&sock->ssl->input.encrypted, get_socket_buffer_prototype());
     if (sock->input->size != 0) {
         h2o_buffer_t *tmp = sock->input;
         sock->input = sock->ssl->input.encrypted;

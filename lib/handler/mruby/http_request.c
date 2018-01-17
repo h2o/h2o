@@ -361,8 +361,8 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     memset(ctx, 0, sizeof(*ctx));
     ctx->ctx = shared_ctx->current_context;
     ctx->receiver = mrb_nil_value();
-    h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&ctx->resp.after_closed, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&ctx->req.buf, get_socket_buffer_prototype());
+    h2o_buffer_init(&ctx->resp.after_closed, get_socket_buffer_prototype());
     ctx->refs.request = mrb_nil_value();
     ctx->refs.input_stream = mrb_nil_value();
 

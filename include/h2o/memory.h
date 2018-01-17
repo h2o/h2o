@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -154,6 +155,50 @@ struct st_h2o_buffer_prototype_t {
 typedef H2O_VECTOR(void) h2o_vector_t;
 typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
+#define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
+
+/* connection flow control window + alpha */
+#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
+
+typedef struct st_h2o_per_thread_data_t {
+    h2o_buffer_prototype_t h2o_socket_buffer_prototype;
+    h2o_mem_recycle_t mempool_allocator;
+    h2o_buffer_prototype_t http2_wbuf_buffer_prototype;
+} h2o_per_thread_data_t;
+
+
+extern pthread_key_t h2o_tls_key;
+extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
+
+static h2o_per_thread_data_t *_get_h2o_per_thread_data(void);
+h2o_per_thread_data_t *_create_h2o_per_thread_data(void);
+
+static h2o_buffer_prototype_t *get_socket_buffer_prototype(void);
+static h2o_mem_recycle_t *get_mempool_allocator(void);
+static h2o_buffer_prototype_t *get_http2_buffer_prototype(void);
+
+inline h2o_per_thread_data_t *_get_h2o_per_thread_data(void) {
+    h2o_per_thread_data_t *p = pthread_getspecific(h2o_tls_key);
+    if (H2O_UNLIKELY(p == NULL)) {
+        p = _create_h2o_per_thread_data();
+    }
+    return p;
+}
+
+inline h2o_buffer_prototype_t *get_socket_buffer_prototype(void)
+{
+    return &(_get_h2o_per_thread_data()->h2o_socket_buffer_prototype);
+}
+inline h2o_mem_recycle_t *get_mempool_allocator(void)
+{
+    return &(_get_h2o_per_thread_data()->mempool_allocator);
+}
+inline h2o_buffer_prototype_t *get_http2_buffer_prototype(void)
+{
+    return &(_get_h2o_per_thread_data()->http2_wbuf_buffer_prototype);
+}
+
+
 extern void *(*h2o_mem__set_secure)(void *, int, size_t);
 
 /**
@@ -187,10 +232,6 @@ void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz);
  * returns the memory to the reusing allocator
  */
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
-/**
- * release all the memory chunks cached in allocator to system
- */
-void h2o_mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator);
 
 /**
  * initializes the memory pool.
@@ -201,11 +242,6 @@ void h2o_mem_init_pool(h2o_mem_pool_t *pool);
  * Applications may dispose the pool after calling the function or reuse it without calling h2o_mem_init_pool.
  */
 void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
-
-/**
- * release all the memory chunks cached in per-thread pool allocator to system
- */
-void h2o_mem_pool_allocator_dispose(void)
 
 /**
  * allocates given size of memory from the memory pool, or dies if impossible

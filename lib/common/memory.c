@@ -65,9 +65,54 @@ struct st_h2o_mem_pool_shared_ref_t {
     struct st_h2o_mem_pool_shared_entry_t *entry;
 };
 
-void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 
-static __thread h2o_mem_recycle_t mempool_allocator = {16};
+pthread_key_t h2o_tls_key;
+
+h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
+    32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
+    "/tmp/h2o.b.XXXXXX"};
+
+
+/**
+ * release all the memory chunks cached in allocator to system
+ */
+void __mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator);
+
+static void __h2o_tls_destroy(void *value)
+{
+    h2o_per_thread_data_t *p = value;
+    fprintf(stderr, "__h2o_tls_destroy\n");
+
+    __mem_allocator_recycle_dispose(&p->mempool_allocator);
+    __mem_allocator_recycle_dispose(&p->h2o_socket_buffer_prototype.allocator);
+    __mem_allocator_recycle_dispose(&p->http2_wbuf_buffer_prototype.allocator);
+
+    free(value);
+}
+
+__attribute__ ((constructor)) static void __h2o__constructor (void) {
+    if (pthread_key_create(&h2o_tls_key, __h2o_tls_destroy) != 0) {
+        h2o_fatal("pthread_key_create failed");
+    }
+}
+h2o_per_thread_data_t *_create_h2o_per_thread_data(void) {
+    h2o_per_thread_data_t *p = h2o_mem_alloc(sizeof(*p));
+    memset(p, 0x00, sizeof(*p));
+    p->h2o_socket_buffer_prototype.allocator.max = 16;
+    p->h2o_socket_buffer_prototype._initial_buf.capacity = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2;
+    p->h2o_socket_buffer_prototype.mmap_settings = &h2o_socket_buffer_mmap_settings;
+
+    p->mempool_allocator.max = 16;
+
+    p->http2_wbuf_buffer_prototype.allocator.max = 16;
+    p->http2_wbuf_buffer_prototype._initial_buf.capacity = H2O_HTTP2_DEFAULT_OUTBUF_SIZE;
+
+    pthread_setspecific(h2o_tls_key, p);
+    return p;
+}
+
+
+void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 void h2o__fatal(const char *msg)
 {
@@ -103,7 +148,7 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     ++allocator->cnt;
 }
 
-void h2o_mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator)
+void __mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator)
 {
     struct st_h2o_mem_recycle_chunk_t *chunk;
 
@@ -144,15 +189,10 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
     /* free chunks, and reset the first chunk */
     while (pool->chunks != NULL) {
         union un_h2o_mem_pool_chunk_t *next = pool->chunks->next;
-        h2o_mem_free_recycle(&mempool_allocator, pool->chunks);
+        h2o_mem_free_recycle(get_mempool_allocator(), pool->chunks);
         pool->chunks = next;
     }
     pool->chunk_offset = sizeof(pool->chunks->bytes);
-}
-
-void h2o_mem_pool_allocator_dispose(void)
-{
-    h2o_mem_allocator_recycle_dispose(&mempool_allocator);
 }
 
 void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
@@ -175,7 +215,7 @@ void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, siz
     pool->chunk_offset = ALIGN_TO(pool->chunk_offset, alignment);
     if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
-        union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&mempool_allocator, sizeof(*newp));
+        union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(get_mempool_allocator(), sizeof(*newp));
         newp->next = pool->chunks;
         pool->chunks = newp;
         pool->chunk_offset = ALIGN_TO(sizeof(newp->next), alignment);

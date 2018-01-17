@@ -52,7 +52,6 @@ static const uint8_t SERVER_PREFACE_BIN[] = {
 
 static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SERVER_PREFACE_BIN)};
 
-static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
@@ -747,7 +746,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 
     /* setup container for request body if it is expected to arrive */
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0)
-        h2o_buffer_init(&stream->_req_body.body, &h2o_socket_buffer_prototype);
+        h2o_buffer_init(&stream->_req_body.body, get_socket_buffer_prototype());
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
         /* request is complete, handle it */
@@ -757,7 +756,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 PREPARE_FOR_CONTINUATION:
     /* request is not complete, store in buffer */
     conn->_read_expect = expect_continuation_of_headers;
-    h2o_buffer_init(&conn->_headers_unparsed, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&conn->_headers_unparsed, get_socket_buffer_prototype());
     h2o_buffer_reserve(&conn->_headers_unparsed, payload.headers_len);
     memcpy(conn->_headers_unparsed->bytes, payload.headers, payload.headers_len);
     conn->_headers_unparsed->size = payload.headers_len;
@@ -1080,7 +1079,7 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     conn->sock = sock;
     sock->data = conn;
     conn->_http1_req_input = sock->input;
-    h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&sock->input, get_socket_buffer_prototype());
 
     /* setup inbound */
     h2o_socket_read_start(conn->sock, on_read);
@@ -1221,7 +1220,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
         h2o_iovec_t buf = {conn->_write.buf->bytes, conn->_write.buf->size};
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
-        h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
+        h2o_buffer_init(&conn->_write.buf, get_http2_buffer_prototype());
         update_idle_timeout(conn);
     }
 
@@ -1387,7 +1386,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_http2_window_init(&conn->_input_window, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
-    h2o_buffer_init(&conn->_write.buf, &wbuf_buffer_prototype);
+    h2o_buffer_init(&conn->_write.buf, get_http2_buffer_prototype());
     h2o_linklist_init_anchor(&conn->_write.streams_to_proceed);
     conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&conn->_write.window, conn->peer_settings.initial_window_size);

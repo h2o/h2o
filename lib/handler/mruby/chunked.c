@@ -117,7 +117,7 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
     /* if final, steal socket input buffer to shortcut.remaining, and reset pointer to client */
     if (is_final) {
         chunked->shortcut.remaining = *input;
-        h2o_buffer_init(input, &h2o_socket_buffer_prototype);
+        h2o_buffer_init(input, get_socket_buffer_prototype());
         input = &chunked->shortcut.remaining;
         h2o_mruby_http_unset_shortcut(generator->ctx->shared->mrb, chunked->shortcut.client, generator);
         chunked->shortcut.client = NULL;
@@ -152,7 +152,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
     }
 
     h2o_mruby_chunked_t *chunked = h2o_mem_alloc_pool(&generator->req->pool, *chunked, 1);
-    h2o_doublebuffer_init(&chunked->sending, &h2o_socket_buffer_prototype);
+    h2o_doublebuffer_init(&chunked->sending, get_socket_buffer_prototype());
     chunked->bytes_left = h2o_memis(generator->req->method.base, generator->req->method.len, H2O_STRLIT("HEAD"))
                               ? 0
                               : generator->req->res.content_length;
@@ -170,7 +170,7 @@ mrb_value h2o_mruby_send_chunked_init(h2o_mruby_generator_t *generator, mrb_valu
         ret = mrb_nil_value();
     } else {
         chunked->type = H2O_MRUBY_CHUNKED_TYPE_CALLBACK;
-        h2o_buffer_init(&chunked->callback.receiving, &h2o_socket_buffer_prototype);
+        h2o_buffer_init(&chunked->callback.receiving, get_socket_buffer_prototype());
         ret = mrb_ary_entry(generator->ctx->shared->constants, H2O_MRUBY_CHUNKED_PROC_EACH_TO_FIBER);
     }
 

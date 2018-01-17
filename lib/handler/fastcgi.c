@@ -795,8 +795,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->req = req;
     generator->sock = NULL;
     generator->sent_headers = 0;
-    h2o_doublebuffer_init(&generator->resp.sending, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&generator->resp.receiving, &h2o_socket_buffer_prototype);
+    h2o_doublebuffer_init(&generator->resp.sending, get_socket_buffer_prototype());
+    h2o_buffer_init(&generator->resp.receiving, get_socket_buffer_prototype());
     generator->timeout = (h2o_timeout_entry_t){0};
 
     set_timeout(generator, &generator->ctx->io_timeout, on_connect_timeout);
