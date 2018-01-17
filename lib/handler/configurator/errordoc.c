@@ -28,21 +28,6 @@ struct errordoc_configurator_t {
     H2O_VECTOR(h2o_errordoc_t) * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int scan_and_check_status(h2o_configurator_command_t *cmd, yoml_t *value, int *slot)
-{
-    if (value->type != YOML_TYPE_SCALAR) {
-        h2o_configurator_errprintf(cmd, value, "status must be must be either of: scalar, sequence of scalar");
-        return -1;
-    }
-    if (h2o_configurator_scanf(cmd, value, "%d", slot) != 0)
-        return -1;
-    if (!(400 <= *slot && *slot <= 599)) {
-        h2o_configurator_errprintf(cmd, value, "status must be within range of 400 to 599");
-        return -1;
-    }
-    return 0;
-}
-
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
 {
     struct errordoc_configurator_t *self = (void *)cmd->configurator;
