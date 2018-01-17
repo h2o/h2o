@@ -7,6 +7,8 @@ use t::Util;
 
 plan skip_all => "nc not found"
     unless prog_exists("nc");
+plan skip_all => "h2get not found"
+    unless h2get_exists();
 
 my $upstream_port = empty_port();
 $| = 1;

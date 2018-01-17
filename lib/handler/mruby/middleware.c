@@ -103,7 +103,7 @@ static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *
     h2o_iovec_t ret;
 
     ret.len = len - KEY_PREFIX_LEN;
-    ret.base = h2o_mem_alloc_pool(pool, ret.len);
+    ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
 
     name += KEY_PREFIX_LEN;
     char *d = ret.base;
@@ -402,10 +402,10 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
     super->is_subrequest = 1;
-    h2o_ostream_t *ostream = h2o_add_ostream(super, sizeof(*ostream), &super->_ostr_top);
+    h2o_ostream_t *ostream = h2o_add_ostream(super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &super->_ostr_top);
     ostream->do_send = subreq_ostream_send;
     if (ctx->handler->pathconf->host) {
-        subreq->conn.super.hosts = h2o_mem_alloc_pool(&subreq->super.pool, sizeof(subreq->conn.super.hosts[0]) * 2);
+        subreq->conn.super.hosts = h2o_mem_alloc_pool(&subreq->super.pool, H2O_ALIGNOF(subreq->conn.super.hosts[0]), sizeof(subreq->conn.super.hosts[0]) * 2);
         subreq->conn.super.hosts[0] = ctx->handler->pathconf->host;
         subreq->conn.super.hosts[1] = NULL;
     } else {
@@ -624,7 +624,7 @@ static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value in
     if (mrb_bool(reprocess)) {
         h2o_reprocess_request_deferred(super, super->method, super->scheme, super->authority, super->path, super->overrides, 1);
     } else {
-        h2o_delegate_request_deferred(super, &ctx->handler->super);
+        h2o_delegate_request_deferred(super);
     }
 
     return mrb_nil_value();
@@ -748,7 +748,7 @@ h2o_mruby_sender_t *h2o_mruby_middleware_sender_create(h2o_mruby_generator_t *ge
     if ((subreq = mrb_data_check_get_ptr(mrb, body, &app_input_stream_type)) == NULL)
         return NULL;
 
-    struct st_h2o_mruby_middleware_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, sizeof(*sender));
+    struct st_h2o_mruby_middleware_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
     sender->subreq = subreq;
 
     sender->super.start = do_sender_start;

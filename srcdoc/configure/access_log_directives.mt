@@ -21,6 +21,10 @@ EOT
 <p>
 If the supplied argument is a scalar, it is treated as the path of the log file, or if the value starts with a <code>|</code>, it is treated as a command to which the log should be emitted.
 </p>
+<p>
+The latter approach (i.e. <code>|</code>) needs to be used for rotating the logs.
+This is because the log file is opened (or the command that emits the log is spawned) before dropping privileges so that it can be owned by root or any other user; therefore it cannot be reopened by the server process itself once it starts running.
+</p>
 <?= $ctx->{example}->('Emit access log to file', <<'EOT')
 access-log: /path/to/access-log-file
 EOT

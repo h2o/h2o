@@ -101,7 +101,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     req->bytes_counted_by_ostream = 1;
 
     /* setup filter */
-    encoder = (void *)h2o_add_ostream(req, sizeof(chunked_encoder_t), slot);
+    encoder = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*encoder), sizeof(*encoder), slot);
     encoder->super.do_send = send_chunk;
     slot = &encoder->super.next;
 

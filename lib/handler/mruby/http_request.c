@@ -231,7 +231,7 @@ h2o_mruby_sender_t *h2o_mruby_http_sender_create(h2o_mruby_generator_t *generato
     }
     ctx->consumed = 1;
 
-    struct st_h2o_mruby_http_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, sizeof(*sender));
+    struct st_h2o_mruby_http_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
     h2o_doublebuffer_init(&sender->sending, &h2o_socket_buffer_prototype);
     sender->client = ctx;
     sender->remaining = NULL;
@@ -305,16 +305,18 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    static const h2o_header_t headers_sorted[] = {
-        {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, {H2O_STRLIT("text/plain; charset=utf-8")}},
-    };
-
     ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
     h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
     memcpy(ctx->resp.after_closed->bytes + ctx->resp.after_closed->size, errstr, errstr_len);
     ctx->resp.after_closed->size += errstr_len;
     ctx->resp.has_content = 1;
+
+    static const h2o_iovec_t client_warning = {H2O_STRLIT("client-warning")};
+    h2o_header_t headers_sorted[] = {
+        {(h2o_iovec_t *)&client_warning, NULL, h2o_iovec_init(errstr, errstr_len)},
+        {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, h2o_iovec_init(H2O_STRLIT("text/plain; charset=utf-8"))},
+    };
 
     post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
 }

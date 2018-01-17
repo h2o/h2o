@@ -686,7 +686,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
         if (push_only) {
             if (filtered_value->base == NULL) {
                 /* the max. size of filtered_value would be x2 in the worst case, when "," is converted to ", " */
-                filtered_value->base = h2o_mem_alloc_pool(pool, value_len * 2);
+                filtered_value->base = h2o_mem_alloc_pool(pool, char, value_len * 2);
                 const char *prev_comma = h2o_memrchr(value, ',', url_with_brackets.base - value);
                 if (prev_comma != NULL)
                     PUSH_FILTERED_VALUE(value, prev_comma);

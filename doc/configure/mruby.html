@@ -237,6 +237,9 @@ Since the API provides an asynchronous HTTP client, it is possible to effectivel
 <p>
 When HTTPS is used, servers are verified using the properties of <a href="configure/proxy_directives.html#proxy.ssl.cafile"><code>proxy.ssl.cafile</code></a> and <a href="configure/proxy_directives.html#proxy.ssl.verify-peer"><code>proxy.ssl.verify-peer</code></a> specified at the global level.
 </p>
+<p>
+Timeouts defined for the proxy handler (<a href="configure/proxy_directives.html#proxy.timeout.io"><code>proxy.timeout.*</code></a>) are applied to the requests that are issued by the <code>http_request</code> method.
+</p>
 
 <h3 id="logging-arbitrary-variable">Logging Arbitrary Variable</h3>
 

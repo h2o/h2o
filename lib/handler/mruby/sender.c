@@ -97,9 +97,9 @@ void h2o_mruby_sender_close_body(h2o_mruby_generator_t *generator)
     }
 }
 
-h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mrb_value body, size_t sz)
+h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mrb_value body, size_t alignment, size_t sz)
 {
-    h2o_mruby_sender_t *sender = h2o_mem_alloc_pool(&generator->req->pool, sz);
+    h2o_mruby_sender_t *sender = h2o_mem_alloc_pool_aligned(&generator->req->pool, alignment, sz);
     memset(sender, 0, sizeof(*sender));
     sender->body_obj = body;
     sender->bytes_left = h2o_memis(generator->req->method.base, generator->req->method.len, H2O_STRLIT("HEAD"))
@@ -151,7 +151,7 @@ static void do_callback_sender_dispose(h2o_mruby_generator_t *generator)
 
 h2o_mruby_sender_t *callback_sender_create(h2o_mruby_generator_t *generator, mrb_value body)
 {
-    struct st_h2o_mruby_callback_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, sizeof(*sender));
+    struct st_h2o_mruby_callback_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
     h2o_doublebuffer_init(&sender->sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&sender->receiving, &h2o_socket_buffer_prototype);
 

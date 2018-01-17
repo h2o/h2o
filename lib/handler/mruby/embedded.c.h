@@ -35,7 +35,7 @@
     "\n"                                                                                                                           \
     "  def _h2o_define_callback(name, callback_id)\n"                                                                              \
     "    Kernel.define_method(name) do |*args|\n"                                                                                  \
-    "      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])\n"                                                      \
+    "      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ], nil)\n"                                                 \
     "      if ret.kind_of? Exception\n"                                                                                            \
     "        raise ret\n"                                                                                                          \
     "      end\n"                                                                                                                  \
@@ -74,7 +74,7 @@
     "            while 1\n"                                                                                                        \
     "              resp = app.call(req)\n"                                                                                         \
     "              cached = self_fiber\n"                                                                                          \
-    "              (req, generator) = Fiber.yield(*resp, generator)\n"                                                             \
+    "              (req, generator) = Fiber.yield(resp, generator)\n"                                                              \
     "            end\n"                                                                                                            \
     "          rescue => e\n"                                                                                                      \
     "            cached = self_fiber\n"                                                                                            \

@@ -47,6 +47,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("content-type")}, 31, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("cookie")}, 32, 0, 0, 0, 0, 0, 1},
                              {{H2O_STRLIT("date")}, 33, 0, 0, 0, 0, 0, 0},
+                             {{H2O_STRLIT("early-data")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("etag")}, 34, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("expect")}, 35, 0, 0, 1, 0, 0, 0},
                              {{H2O_STRLIT("expires")}, 36, 0, 0, 0, 0, 0, 0},
@@ -83,7 +84,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-forwarded-for")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-traffic")}, 0, 0, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 62;
+size_t h2o__num_tokens = 63;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -224,6 +225,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         break;
     case 10:
         switch (name[9]) {
+        case 'a':
+            if (memcmp(name, "early-dat", 9) == 0)
+                return H2O_TOKEN_EARLY_DATA;
+            break;
         case 'e':
             if (memcmp(name, "keep-aliv", 9) == 0)
                 return H2O_TOKEN_KEEP_ALIVE;

@@ -220,7 +220,7 @@ int h2o_mruby_init_sender(h2o_mruby_generator_t *generator, mrb_value body);
 /**
  * create base sender object, called by subclasses (http_request, middleware, etc)
  */
-h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mrb_value body, size_t sz);
+h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mrb_value body, size_t alignment, size_t sz);
 /**
  * a wrapper of h2o_send with counting and checking content-length
  */

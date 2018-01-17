@@ -56,7 +56,8 @@ mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const ch
     if (mrb->exc != NULL)
         h2o_mruby__abort_exc(mrb, "h2o_mruby_new_str:precondition failure", file, line);
     mrb_value ret = mrb_str_new(mrb, s, len);
-    h2o_mruby_assert(mrb);
+    if (mrb->exc != NULL)
+        h2o_mruby__abort_exc(mrb, "h2o_mruby_new_str:failed to create string", file, line);
     return ret;
 }
 
@@ -133,8 +134,8 @@ mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
 
 mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno)
 {
-    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 4, mrb_str_new_cstr(mrb, expr),
-                       mrb_nil_value(), mrb_str_new_cstr(mrb, path), mrb_fixnum_value(lineno));
+    return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 4, mrb_str_new_cstr(mrb, expr), mrb_nil_value(), mrb_str_new_cstr(mrb, path),
+                       mrb_fixnum_value(lineno));
 }
 
 void h2o_mruby_define_callback(mrb_state *mrb, const char *name, h2o_mruby_callback_t callback)
@@ -215,7 +216,7 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
     h2o_iovec_t ret;
 
     ret.len = len + KEY_PREFIX_LEN;
-    ret.base = h2o_mem_alloc_pool(pool, ret.len);
+    ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
 
     memcpy(ret.base, KEY_PREFIX, KEY_PREFIX_LEN);
 
@@ -729,6 +730,12 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
 
     /* headers */
     h2o_mruby_iterate_headers(shared, &generator->req->pool, &generator->req->headers, iterate_headers_callback, mrb_obj_ptr(env));
+    mrb_value early_data_key = mrb_ary_entry(shared->constants, H2O_TOKEN_EARLY_DATA - h2o__tokens);
+    int found_early_data = !mrb_nil_p(mrb_hash_fetch(mrb, env, early_data_key, mrb_nil_value()));
+    if (!found_early_data && h2o_conn_is_early_data(generator->req->conn)) {
+        mrb_hash_set(mrb, env, early_data_key, h2o_mruby_new_str(mrb, "1", 1));
+        generator->req->reprocess_if_too_early = 1;
+    }
 
     /* rack.* */
     /* TBD rack.version? */
@@ -875,15 +882,17 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
         return -1;
     }
     /* add date: if it's missing from the response */
-    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, 0) == -1)
+    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)
         h2o_resp_add_date_header(generator->req);
 
     /* return without processing body, if status is fallthru */
     if (generator->req->res.status == STATUS_FALLTHRU) {
-        if (is_delegate != NULL)
+        if (is_delegate != NULL) {
             *is_delegate = 1;
-        else
-            h2o_delegate_request_deferred(generator->req, &generator->ctx->handler->super);
+        } else {
+            assert(generator->req->handler == &generator->ctx->handler->super);
+            h2o_delegate_request_deferred(generator->req);
+        }
         return 0;
     }
 
@@ -906,7 +915,7 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
             content.len += RSTRING_LEN(e);
         }
         /* allocate memory, and copy the response */
-        char *dst = content.base = h2o_mem_alloc_pool(&generator->req->pool, content.len);
+        char *dst = content.base = h2o_mem_alloc_pool(&generator->req->pool, char, content.len);
         for (i = 0; i != len; ++i) {
             mrb_value e = mrb_ary_entry(body, i);
             assert(mrb_string_p(e));
@@ -950,7 +959,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     ctx->shared->current_context = ctx;
 
     mrb_state *mrb = ctx->shared->mrb;
-    mrb_value output;
+    mrb_value output, resp;
     mrb_int status;
     h2o_mruby_generator_t *generator = NULL;
 
@@ -961,21 +970,25 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
             goto GotException;
 
         if (!mrb_array_p(output)) {
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "Fiber.yield must return an array"));
+            goto GotException;
+        }
+
+        resp = mrb_ary_entry(output, 0);
+        if (!mrb_array_p(resp)) {
             mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "rack app did not return an array"));
             goto GotException;
         }
 
         /* fetch status */
-        mrb_value v = mrb_to_int(mrb, mrb_ary_entry(output, 0));
+        H2O_MRUBY_EXEC_GUARD({ status = mrb_int(mrb, mrb_ary_entry(resp, 0)); });
         if (mrb->exc != NULL)
             goto GotException;
-
-        status = mrb_fixnum(v);
         if (status >= 0)
             break;
 
-        receiver = mrb_ary_entry(output, 1);
-        mrb_value args = mrb_ary_entry(output, 2);
+        receiver = mrb_ary_entry(resp, 1);
+        mrb_value args = mrb_ary_entry(resp, 2);
         int run_again = 0;
 
         size_t callback_index = -status - 1;
@@ -1003,7 +1016,7 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         goto GotException;
     }
 
-    generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 3));
+    generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 1));
 
     /* send the response (unless req is already closed) */
     if (generator == NULL)
@@ -1015,12 +1028,14 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         goto GotException;
     }
 
-    if (send_response(generator, status, output, is_delegate) != 0)
+    if (send_response(generator, status, resp, is_delegate) != 0)
         goto GotException;
 
     goto Exit;
 
 GotException:
+    if (generator == NULL && mrb_array_p(output))
+        generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 1));
     handle_exception(ctx, generator);
 
 Exit:

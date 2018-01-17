@@ -15,7 +15,7 @@ plan skip_all => 'Starlet not found'
 my $tempdir = tempdir(CLEANUP => 1);
 
 sub run_test {
-    my ($conf, @candidates) = @_;
+    my ($conf, $balancer, @candidates) = @_;
     my ($server, $use_keepalive);
 
     my $regex = join "|", map { quotemeta $_ } @candidates;
@@ -35,7 +35,10 @@ sub run_test {
     };
 
     subtest "keepalive-on", sub {
-        $server = spawn_h2o($conf);
+        $server = spawn_h2o(<< "EOT");
+$conf
+          balancer: $balancer
+EOT
         $use_keepalive = 1;
         $test->();
     };
@@ -43,11 +46,18 @@ sub run_test {
     subtest "keepalive-off", sub {
         $server = spawn_h2o(<< "EOT");
 $conf
+          balancer: $balancer
 proxy.timeout.keepalive: 0
 EOT
         $use_keepalive = 0;
         $test->();
     };
+}
+
+sub run_tests {
+    my ($conf, $srv0, $srv1) = @_;
+    run_test($conf, "round-robin", $srv0, $srv1);
+    run_test($conf, "least-conn", $srv0, $srv1);
 }
 
 subtest "both-tcp", sub {
@@ -68,14 +78,15 @@ subtest "both-tcp", sub {
         },
     );
 
-    run_test(<< "EOT", $upstream_port1, $upstream_port2);
+    run_tests(<< "EOT", $upstream_port1, $upstream_port2);
 hosts:
   default:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$upstream_port1/echo-server-port
-          - http://127.0.0.1.XIP.IO:$upstream_port2/echo-server-port
+          backends:
+            - http://127.0.0.1.xip.io:$upstream_port1/echo-server-port
+            - http://127.0.0.1.xip.io:$upstream_port2/echo-server-port
 EOT
 };
 
@@ -97,14 +108,15 @@ subtest "both-unix", sub {
         },
     );
 
-    run_test(<< "EOT", $upstream_file1, $upstream_file2);
+    run_tests(<< "EOT", $upstream_file1, $upstream_file2);
 hosts:
   default:
     paths:
       /:
         proxy.reverse.url:
-          - http://[unix:$upstream_file1]/echo-server-port
-          - http://[unix:$upstream_file2]/echo-server-port
+          backends:
+            - http://[unix:$upstream_file1]/echo-server-port
+            - http://[unix:$upstream_file2]/echo-server-port
 EOT
 };
 
@@ -126,14 +138,15 @@ subtest "tcp-unix", sub {
         },
     );
 
-    run_test(<< "EOT", $upstream_port, $upstream_file);
+    run_tests(<< "EOT", $upstream_port, $upstream_file);
 hosts:
   default:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.XIP.IO:$upstream_port/echo-server-port
-          - http://[unix:$upstream_file]/echo-server-port
+          backends:
+            - http://127.0.0.1.xip.io:$upstream_port/echo-server-port
+            - http://[unix:$upstream_file]/echo-server-port
 EOT
 };
 

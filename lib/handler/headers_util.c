@@ -101,7 +101,7 @@ AppendToken:
     if (target->value.len != 0) {
         h2o_iovec_t v;
         v.len = target->value.len + 2 + cmd->value.len;
-        v.base = h2o_mem_alloc_pool(pool, v.len);
+        v.base = h2o_mem_alloc_pool(pool, char, v.len);
         memcpy(v.base, target->value.base, target->value.len);
         v.base[target->value.len] = ',';
         v.base[target->value.len + 1] = ' ';
