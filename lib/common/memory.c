@@ -65,18 +65,16 @@ struct st_h2o_mem_pool_shared_ref_t {
     struct st_h2o_mem_pool_shared_entry_t *entry;
 };
 
-
 pthread_key_t h2o_tls_key;
 
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
     32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
     "/tmp/h2o.b.XXXXXX"};
 
-
 /**
  * release all the memory chunks cached in allocator to system
  */
-void __mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator);
+static void __mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator);
 
 static void __h2o_tls_destroy(void *value)
 {
@@ -88,14 +86,21 @@ static void __h2o_tls_destroy(void *value)
     free(value);
 }
 
-__attribute__ ((constructor)) static void __h2o__constructor (void) {
+__attribute__((constructor)) static void __h2o__constructor(void)
+{
     if (pthread_key_create(&h2o_tls_key, __h2o_tls_destroy) != 0) {
         h2o_fatal("pthread_key_create failed");
     }
 }
-h2o_per_thread_data_t *__create_h2o_per_thread_data(void) {
+
+h2o_per_thread_data_t *__create_h2o_per_thread_data(void)
+{
     h2o_per_thread_data_t *p = h2o_mem_alloc(sizeof(*p));
     memset(p, 0x00, sizeof(*p));
+
+#define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
+/* connection flow control window + alpha */
+#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
     p->h2o_socket_buffer_prototype.allocator.max = 16;
     p->h2o_socket_buffer_prototype._initial_buf.capacity = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2;
     p->h2o_socket_buffer_prototype.mmap_settings = &h2o_socket_buffer_mmap_settings;
@@ -104,11 +109,12 @@ h2o_per_thread_data_t *__create_h2o_per_thread_data(void) {
 
     p->http2_wbuf_buffer_prototype.allocator.max = 16;
     p->http2_wbuf_buffer_prototype._initial_buf.capacity = H2O_HTTP2_DEFAULT_OUTBUF_SIZE;
+#undef H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE
+#undef H2O_HTTP2_DEFAULT_OUTBUF_SIZE
 
     pthread_setspecific(h2o_tls_key, p);
     return p;
 }
-
 
 void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 
@@ -134,7 +140,6 @@ void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz)
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
 {
     struct st_h2o_mem_recycle_chunk_t *chunk;
-
     if (allocator->cnt == allocator->max) {
         free(p);
         return;
@@ -146,7 +151,7 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     ++allocator->cnt;
 }
 
-void __mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator)
+static void __mem_allocator_recycle_dispose(h2o_mem_recycle_t *allocator)
 {
     struct st_h2o_mem_recycle_chunk_t *chunk;
 

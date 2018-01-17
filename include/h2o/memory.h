@@ -155,11 +155,6 @@ struct st_h2o_buffer_prototype_t {
 typedef H2O_VECTOR(void) h2o_vector_t;
 typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
-#define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
-
-/* connection flow control window + alpha */
-#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
-
 typedef struct st_h2o_per_thread_data_t {
     h2o_buffer_prototype_t h2o_socket_buffer_prototype;
     h2o_mem_recycle_t mempool_allocator;
@@ -242,7 +237,6 @@ void h2o_mem_init_pool(h2o_mem_pool_t *pool);
  * Applications may dispose the pool after calling the function or reuse it without calling h2o_mem_init_pool.
  */
 void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
-
 /**
  * allocates given size of memory from the memory pool, or dies if impossible
  */

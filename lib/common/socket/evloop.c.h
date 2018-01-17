@@ -66,7 +66,6 @@ static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
 static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
 
-
 /* functions to be defined in the backends */
 static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
 static void evloop_do_dispose(h2o_evloop_t *_loop);
