@@ -194,7 +194,10 @@ static int setup_ssl(const char *cert_file, const char *key_file, const char *ci
                                                   86400);
         h2o_socket_ssl_async_resumption_setup_ctx(accept_ctx.ssl_ctx);
     }
+
+#ifdef SSL_CTX_set_ecdh_auto
     SSL_CTX_set_ecdh_auto(accept_ctx.ssl_ctx, 1);
+#endif
 
     /* load certificate and private key */
     if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
