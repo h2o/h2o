@@ -35,7 +35,7 @@ static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_c
     size_t i, j, num_status;
 
     /* extract the nodes to handle */
-    if (h2o_configurator_parse_mapping(cmd, hash, "url:s,status", NULL, &url_node, &status_nodes) != 0)
+    if (h2o_configurator_parse_mapping(cmd, hash, "url:s,status:*", NULL, &url_node, &status_nodes) != 0)
         return -1;
     switch ((*status_nodes)->type) {
     case YOML_TYPE_SCALAR:

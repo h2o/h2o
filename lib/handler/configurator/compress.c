@@ -106,7 +106,7 @@ static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_
     case YOML_TYPE_MAPPING: {
         yoml_t **gzip_node, **br_node;
         *self->vars = all_off;
-        if (h2o_configurator_parse_mapping(cmd, node, NULL, "gzip,br", &gzip_node, &br_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, NULL, "gzip:*,br:*", &gzip_node, &br_node) != 0)
             return -1;
         if (gzip_node != NULL && obtain_quality(*gzip_node, 1, 9, DEFAULT_GZIP_QUALITY, &self->vars->gzip.quality) != 0) {
             h2o_configurator_errprintf(cmd, *gzip_node,

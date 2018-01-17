@@ -42,7 +42,7 @@ static int on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t
         path = &node;
         break;
     case YOML_TYPE_MAPPING:
-        if (h2o_configurator_parse_mapping(cmd, node, "path:s", "format:s,escape", &path, &format, &escape_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "path:s", "format:s,escape:*", &path, &format, &escape_node) != 0)
             return -1;
         break;
     default:

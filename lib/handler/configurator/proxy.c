@@ -214,7 +214,7 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **capacity_node, **lifetime_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "capacity,lifetime", NULL, &capacity_node, &lifetime_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "capacity:*,lifetime:*", NULL, &capacity_node, &lifetime_node) != 0)
             return -1;
         if (h2o_configurator_scanf(cmd, *capacity_node, "%zu", &capacity) != 0)
             return -1;
@@ -261,7 +261,7 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **weight_node;
-        if (h2o_configurator_parse_mapping(cmd, backend, "url:s", "weight", &url_node, &weight_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, backend, "url:s", "weight:*", &url_node, &weight_node) != 0)
             return NULL;
         if (weight_node != NULL) {
             unsigned weight;
@@ -307,7 +307,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         num_backends = node->data.sequence.size;
         break;
     case YOML_TYPE_MAPPING:
-        if (h2o_configurator_parse_mapping(cmd, node, "backends", "balancer:s", &backends, &balancer_conf) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "backends:*", "balancer:s", &backends, &balancer_conf) != 0)
             return -1;
         switch ((*backends)->type) {
         case YOML_TYPE_SCALAR:

@@ -548,16 +548,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     if (ssl_node == NULL)
         return 0;
-    if ((*ssl_node)->type != YOML_TYPE_MAPPING) {
-        h2o_configurator_errprintf(cmd, *ssl_node, "`ssl` is not a mapping");
-        return -1;
-    }
 
     /* parse */
     if (h2o_configurator_parse_mapping(
-            cmd, *ssl_node, "certificate-file:s,key-file:s",
-            "min-version:s,minimum-version:s,max-version:s,maximum-version:s,cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval,"
-            "ocsp-max-failures,dh-file:s,cipher-preference,neverbleed",
+            cmd, *ssl_node, "certificate-file:s,key-file:s", "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
+                                                             "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
+                                                             "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*",
             &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version, &cipher_suite, &ocsp_update_cmd,
             &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node) != 0)
         return -1;
@@ -973,8 +969,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission,ssl,proxy-protocol", &port_node,
-                                           &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
+                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
                                            &proxy_protocol_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;

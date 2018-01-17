@@ -523,7 +523,8 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
         self->vars->http2.casper = defaults;
         /* override the attributes defined */
         yoml_t **capacity_bits, **tracking_types;
-        if (h2o_configurator_parse_mapping(cmd, node, NULL, "capacity-bits:s,tracking-types", &capacity_bits, &tracking_types) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, NULL, "capacity-bits:s,tracking-types:*", &capacity_bits, &tracking_types) !=
+            0)
             return -1;
         if (capacity_bits != NULL) {
             if (!(sscanf((*capacity_bits)->data.scalar, "%u", &self->vars->http2.casper.capacity_bits) == 1 &&
@@ -604,8 +605,8 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             yoml_t **is_compressible, **priority, **extensions;
             h2o_mime_attributes_t attr;
             h2o_mimemap_get_default_attributes(key->data.scalar, &attr);
-            if (h2o_configurator_parse_mapping(cmd, value, "extensions", "is_compressible,priority", &extensions, &is_compressible,
-                                               &priority) != 0)
+            if (h2o_configurator_parse_mapping(cmd, value, "extensions:a", "is_compressible:*,priority:*", &extensions,
+                                               &is_compressible, &priority) != 0)
                 return -1;
             if (is_compressible != NULL) {
                 switch (h2o_configurator_get_one_of(cmd, *is_compressible, "YES,NO")) {
@@ -630,10 +631,6 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
                 default:
                     return -1;
                 }
-            }
-            if ((*extensions)->type != YOML_TYPE_SEQUENCE) {
-                h2o_configurator_errprintf(cmd, *extensions, "`extensions` attribute must be a sequence of scalars");
-                return -1;
             }
             for (j = 0; j != (*extensions)->data.sequence.size; ++j) {
                 yoml_t *ext_node = (*extensions)->data.sequence.elements[j];
@@ -1114,32 +1111,39 @@ Error:
     return -1;
 }
 
-static const char *get_next_key(const char *p, h2o_iovec_t *output, int *is_scalar)
+static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned *type_mask)
 {
-    const char *endp, *colon;
+    const char *p = strchr(start, ':');
+    assert(p != NULL);
 
-    /* extract one comma-separated name */
-    if ((endp = strchr(p, ',')) != NULL) {
-        *output = h2o_iovec_init(p, endp - p);
-        endp += 1;
-    } else {
-        *output = h2o_iovec_init(p, strlen(p));
-        endp = NULL;
-    }
+    /* set output */
+    *output = h2o_iovec_init(start, p - start);
 
-    /* extract attributes */
-    *is_scalar = 0;
-    if ((colon = strchr(p, ':')) != NULL && colon < output->base + output->len) {
-        size_t attr_len = output->base + output->len - colon;
-        output->len -= attr_len;
-        if (attr_len == 2 && strncmp(colon, ":s", 2) == 0) {
-            *is_scalar = 1;
-        } else {
+    /* parse attributes */
+    *type_mask = 0;
+    for (++p; *p != '\0'; ++p) {
+        switch (*p) {
+        case ',':
+            return p + 1;
+        case 's':
+            *type_mask |= 1u << YOML_TYPE_SCALAR;
+            break;
+        case 'a':
+            *type_mask |= 1u << YOML_TYPE_SEQUENCE;
+            break;
+        case 'm':
+            *type_mask |= 1u << YOML_TYPE_MAPPING;
+            break;
+        case '*':
+            *type_mask |= (1u << YOML_TYPE_SCALAR) | (1u << YOML_TYPE_SEQUENCE) | (1u << YOML_TYPE_MAPPING);
+            break;
+        default:
             h2o_fatal("unexpected attribute");
+            break;
         }
     }
 
-    return endp;
+    return NULL;
 }
 
 int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
@@ -1148,7 +1152,7 @@ int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *
     struct {
         h2o_iovec_t key;
         int is_required;
-        int is_scalar;
+        unsigned type_mask;
     } *keys = alloca(sizeof(keys[0]) * num_values);
     size_t i, j;
 
@@ -1160,7 +1164,7 @@ int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *
         const char *p = keys_required;
         for (; p != NULL; ++i) {
             assert(i < num_values);
-            p = get_next_key(p, &keys[i].key, &keys[i].is_scalar);
+            p = get_next_key(p, &keys[i].key, &keys[i].type_mask);
             keys[i].is_required = 1;
         }
     }
@@ -1168,7 +1172,7 @@ int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *
         const char *p = keys_optional;
         for (; p != NULL; ++i) {
             assert(i < num_values);
-            p = get_next_key(p, &keys[i].key, &keys[i].is_scalar);
+            p = get_next_key(p, &keys[i].key, &keys[i].type_mask);
             keys[i].is_required = 0;
         }
     }
@@ -1198,8 +1202,17 @@ int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *
             h2o_configurator_errprintf(cmd, element->key, "duplicate key found");
             return -1;
         }
-        if (keys[j].is_scalar && element->value->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, element->value, "attribute `%s` must be a scalar", element->key->data.scalar);
+        if ((keys[j].type_mask & (1u << element->value->type)) == 0) {
+            char permitted_types[32] = "";
+            if ((keys[j].type_mask & (1u << YOML_TYPE_SCALAR)) != 0)
+                strcat(permitted_types, " or a scalar");
+            if ((keys[j].type_mask & (1u << YOML_TYPE_SEQUENCE)) != 0)
+                strcat(permitted_types, " or a sequence");
+            if ((keys[j].type_mask & (1u << YOML_TYPE_MAPPING)) != 0)
+                strcat(permitted_types, " or a mapping");
+            assert(strlen(permitted_types) != 0);
+            h2o_configurator_errprintf(cmd, element->value, "attribute `%s` must be %s", element->key->data.scalar,
+                                       permitted_types + 4);
             return -1;
         }
         *values[j] = &element->value;

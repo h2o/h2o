@@ -779,13 +779,13 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         **ticket_store, **ticket_cipher, **ticket_hash, **ticket_memcached_prefix, **ticket_redis_prefix, **ticket_file,
         **memcached_node, **redis_node, **lifetime;
 
-    if (h2o_configurator_parse_mapping(cmd, node, "mode",
-                                       "cache-store,cache-memcached-num-threads,cache-memcached-prefix:s,cache-redis-prefix:s,"
-                                       "ticket-store,ticket-cipher:s,ticket-hash:s,ticket-memcached-prefix:s,ticket-redis-prefix:s,"
-                                       "ticket-file:s,memcached,redis,lifetime",
-                                       &mode_node, &cache_store, &cache_memcached_num_threads, &cache_memcached_prefix,
-                                       &cache_redis_prefix, &ticket_store, &ticket_cipher, &ticket_hash, &ticket_memcached_prefix,
-                                       &ticket_redis_prefix, &ticket_file, &memcached_node, &redis_node, &lifetime) != 0)
+    if (h2o_configurator_parse_mapping(
+            cmd, node, "mode:*", "cache-store:*,cache-memcached-num-threads:*,cache-memcached-prefix:s,cache-redis-prefix:s,"
+                                 "ticket-store:*,ticket-cipher:s,ticket-hash:s,ticket-memcached-prefix:s,ticket-redis-prefix:s,"
+                                 "ticket-file:s,memcached:m,redis:m,lifetime:*",
+            &mode_node, &cache_store, &cache_memcached_num_threads, &cache_memcached_prefix, &cache_redis_prefix, &ticket_store,
+            &ticket_cipher, &ticket_hash, &ticket_memcached_prefix, &ticket_redis_prefix, &ticket_file, &memcached_node,
+            &redis_node, &lifetime) != 0)
         return -1;
 
     switch (h2o_configurator_get_one_of(cmd, *mode_node, "off,cache,ticket,all")) {
@@ -909,12 +909,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     }
 
     if (memcached_node != NULL) {
-        if ((*memcached_node)->type != YOML_TYPE_MAPPING) {
-            h2o_configurator_errprintf(cmd, *memcached_node, "`memcached` attribute must be a mapping");
-            return -1;
-        }
         yoml_t **host, **port, **protocol;
-        if (h2o_configurator_parse_mapping(cmd, *memcached_node, "host:s", "port,protocol", &host, &port, &protocol) != 0)
+        if (h2o_configurator_parse_mapping(cmd, *memcached_node, "host:s", "port:*,protocol:*", &host, &port, &protocol) != 0)
             return -1;
         conf.store.memcached.host = h2o_strdup(NULL, (*host)->data.scalar, SIZE_MAX).base;
         conf.store.memcached.port = 11211;
@@ -927,12 +923,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     }
 
     if (redis_node != NULL) {
-        if ((*redis_node)->type != YOML_TYPE_MAPPING) {
-            h2o_configurator_errprintf(cmd, *redis_node, "`redis` attribute must be a mapping");
-            return -1;
-        }
         yoml_t **host, **port;
-        if (h2o_configurator_parse_mapping(cmd, *redis_node, "host:s", "port", &host, &port) != 0)
+        if (h2o_configurator_parse_mapping(cmd, *redis_node, "host:s", "port:*", &host, &port) != 0)
             return -1;
         conf.store.redis.host = h2o_strdup(NULL, (*host)->data.scalar, SIZE_MAX).base;
         conf.store.redis.port = 6379;
