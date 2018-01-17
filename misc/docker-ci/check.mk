@@ -32,4 +32,10 @@ _do-fuzz-extra:
 	./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http2-corpus < /dev/null
 	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
-.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra
+enter:
+	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
+
+pull:
+	docker pull $(CONTAINER_NAME)
+
+.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull
