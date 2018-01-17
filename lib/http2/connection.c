@@ -1220,7 +1220,7 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
         h2o_iovec_t buf = {conn->_write.buf->bytes, conn->_write.buf->size};
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
-        h2o_buffer_init(&conn->_write.buf, get_http2_buffer_prototype());
+        h2o_buffer_init(&conn->_write.buf, get_http2_wbuf_buffer_prototype());
         update_idle_timeout(conn);
     }
 
@@ -1386,7 +1386,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_http2_window_init(&conn->_input_window, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE);
     conn->_output_header_table.hpack_capacity = H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
     h2o_linklist_init_anchor(&conn->_pending_reqs);
-    h2o_buffer_init(&conn->_write.buf, get_http2_buffer_prototype());
+    h2o_buffer_init(&conn->_write.buf, get_http2_wbuf_buffer_prototype());
     h2o_linklist_init_anchor(&conn->_write.streams_to_proceed);
     conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&conn->_write.window, conn->peer_settings.initial_window_size);

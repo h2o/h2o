@@ -175,7 +175,7 @@ h2o_per_thread_data_t *__create_h2o_per_thread_data(void);
 
 static h2o_buffer_prototype_t *get_socket_buffer_prototype(void);
 static h2o_mem_recycle_t *get_mempool_allocator(void);
-static h2o_buffer_prototype_t *get_http2_buffer_prototype(void);
+static h2o_buffer_prototype_t *get_http2_wbuf_buffer_prototype(void);
 
 inline h2o_per_thread_data_t *__get_h2o_per_thread_data(void) {
     h2o_per_thread_data_t *p = pthread_getspecific(h2o_tls_key);
@@ -193,7 +193,7 @@ inline h2o_mem_recycle_t *get_mempool_allocator(void)
 {
     return &(__get_h2o_per_thread_data()->mempool_allocator);
 }
-inline h2o_buffer_prototype_t *get_http2_buffer_prototype(void)
+inline h2o_buffer_prototype_t *get_http2_wbuf_buffer_prototype(void)
 {
     return &(__get_h2o_per_thread_data()->http2_wbuf_buffer_prototype);
 }
