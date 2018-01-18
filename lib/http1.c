@@ -80,10 +80,15 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
+static void request_shutdown(h2o_context_t *ctx);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
-    NULL, /* graceful_shutdown (note: nothing special needs to be done for handling graceful shutdown) */
-    foreach_request};
+    /**
+     * graceful_shutdown (shutdown immediately by:
+     *  if sock is reading, link to zero timeout list.
+     *  or else, force http1_is_persistent to 0)
+     */
+    request_shutdown, foreach_request};
 
 static int is_msie(h2o_req_t *req)
 {
@@ -785,6 +790,21 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
     char *s = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT64_LONGEST_STR));
     size_t len = sprintf(s, "%" PRIu64, conn->_req_index);
     return h2o_iovec_init(s, len);
+}
+
+static void request_shutdown(h2o_context_t *ctx)
+{
+    h2o_linklist_t *node;
+
+    for (node = ctx->http1._conns.next; node != &ctx->http1._conns; node = node->next) {
+        struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _conns, node);
+        if (h2o_socket_is_reading(conn->sock)) {
+            set_timeout(conn, &conn->super.ctx->zero_timeout, reqread_on_timeout);
+        } else {
+            /* request is being handled */
+            conn->req.http1_is_persistent = 0;
+        }
+    }
 }
 
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
