@@ -228,15 +228,31 @@ static int setup_ssl(const char *cert_file, const char *key_file, const char *ci
 int main(int argc, char **argv)
 {
     h2o_hostconf_t *hostconf;
+    h2o_access_log_filehandle_t *logfh = h2o_access_log_open_handle("/dev/stdout", NULL, H2O_LOGCONF_ESCAPE_APACHE);
+    h2o_pathconf_t *pathconf;
 
     signal(SIGPIPE, SIG_IGN);
 
     h2o_config_init(&config);
     hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT("default")), 65535);
-    register_handler(hostconf, "/post-test", post_test);
-    register_handler(hostconf, "/chunked-test", chunked_test);
-    h2o_reproxy_register(register_handler(hostconf, "/reproxy-test", reproxy_test));
-    h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "examples/doc_root", NULL, NULL, 0);
+
+    pathconf = register_handler(hostconf, "/post-test", post_test);
+    if (logfh != NULL)
+        h2o_access_log_register(pathconf, logfh);
+
+    pathconf = register_handler(hostconf, "/chunked-test", chunked_test);
+    if (logfh != NULL)
+        h2o_access_log_register(pathconf, logfh);
+
+    pathconf = register_handler(hostconf, "/reproxy-test", reproxy_test);
+    h2o_reproxy_register(pathconf);
+    if (logfh != NULL)
+        h2o_access_log_register(pathconf, logfh);
+
+    pathconf = h2o_config_register_path(hostconf, "/", 0);
+    h2o_file_register(pathconf, "examples/doc_root", NULL, NULL, 0);
+    if (logfh != NULL)
+        h2o_access_log_register(pathconf, logfh);
 
 #if H2O_USE_LIBUV
     uv_loop_t loop;
@@ -252,9 +268,6 @@ int main(int argc, char **argv)
         setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key",
                   "DEFAULT:!MD5:!DSS:!DES:!RC4:!RC2:!SEED:!IDEA:!NULL:!ADH:!EXP:!SRP:!PSK") != 0)
         goto Error;
-
-    /* disabled by default: uncomment the line below to enable access logging */
-    /* h2o_access_log_register(&config.default_host, "/dev/stdout", NULL); */
 
     accept_ctx.ctx = &ctx;
     accept_ctx.hosts = config.hosts;
