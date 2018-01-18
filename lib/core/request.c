@@ -438,6 +438,9 @@ void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2
 
 void h2o_replay_request(h2o_req_t *req)
 {
+    close_generator_and_filters(req);
+    reset_response(req);
+
     if (req->handler != NULL) {
         h2o_handler_t **handler = req->pathconf->handlers.entries, **end = handler + req->pathconf->handlers.size;
         for (;; ++handler) {
@@ -445,7 +448,6 @@ void h2o_replay_request(h2o_req_t *req)
             if (*handler == req->handler)
                 break;
         }
-        close_generator_and_filters(req);
         call_handlers(req, handler);
     } else {
         process_resolved_request(req, req->conn->hosts);
