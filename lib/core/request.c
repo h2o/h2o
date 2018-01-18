@@ -172,12 +172,6 @@ static void setup_pathconf(h2o_req_t *req, h2o_hostconf_t *hostconf)
     h2o_req_bind_conf(req, hostconf, selected_pathconf);
 }
 
-static void process_hosted_request(h2o_req_t *req, h2o_hostconf_t *hostconf)
-{
-    setup_pathconf(req, hostconf);
-    call_handlers(req, req->pathconf->handlers.entries);
-}
-
 static void deferred_proceed_cb(h2o_timeout_entry_t *entry)
 {
     h2o_req_t *req = H2O_STRUCT_FROM_MEMBER(h2o_req_t, _timeout_entry, entry);
@@ -340,10 +334,9 @@ void h2o_process_request(h2o_req_t *req)
 {
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
-        process_hosted_request(req, hostconf);
-    } else {
-        call_handlers(req, req->pathconf->handlers.entries);
+        setup_pathconf(req, hostconf);
     }
+    call_handlers(req, req->pathconf->handlers.entries);
 }
 
 void h2o_delegate_request(h2o_req_t *req)
@@ -369,11 +362,22 @@ void h2o_delegate_request_deferred(h2o_req_t *req)
     create_deferred_action(req, sizeof(struct st_deferred_request_action_t), on_delegate_request_cb);
 }
 
+static void process_resolved_request(h2o_req_t *req, h2o_hostconf_t **hosts)
+{
+    h2o_hostconf_t *hostconf;
+    if (req->overrides == NULL && (hostconf = find_hostconf(hosts, req->authority, req->scheme->default_port)) != NULL) {
+        setup_pathconf(req, hostconf);
+        call_handlers(req, req->pathconf->handlers.entries);
+        return;
+    }
+
+    /* uses the current pathconf, in other words, proxy uses the previous pathconf for building filters */
+    h2o__proxy_process_request(req);
+}
+
 void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
                            h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated)
 {
-    h2o_hostconf_t *hostconf;
-
     retain_original_response(req);
 
     /* close generators and filters that are already running */
@@ -408,16 +412,7 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
         --req->remaining_reprocesses;
     }
 
-    /* handle the response using the handlers, if hostconf exists */
-    h2o_hostconf_t **hosts = is_delegated ? req->conn->ctx->globalconf->hosts : req->conn->hosts;
-    if (req->overrides == NULL && (hostconf = find_hostconf(hosts, req->authority, req->scheme->default_port)) != NULL) {
-        req->pathconf = NULL;
-        process_hosted_request(req, hostconf);
-        return;
-    }
-
-    /* uses the current pathconf, in other words, proxy uses the previous pathconf for building filters */
-    h2o__proxy_process_request(req);
+    process_resolved_request(req, req->conn->ctx->globalconf->hosts);
 }
 
 static void on_reprocess_request_cb(h2o_timeout_entry_t *entry)
@@ -453,7 +448,7 @@ void h2o_replay_request(h2o_req_t *req)
         close_generator_and_filters(req);
         call_handlers(req, handler);
     } else {
-        h2o_reprocess_request(req, req->method, req->scheme, req->authority, req->path, req->overrides, 0);
+        process_resolved_request(req, req->conn->hosts);
     }
 }
 
