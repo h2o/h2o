@@ -31,7 +31,7 @@
 #define H2O_MRUBY_MODULE_NAME "h2o_mruby"
 
 enum {
-    H2O_MRUBY_LIT_REQUEST_METHOD = H2O_MAX_TOKENS,
+    H2O_MRUBY_LIT_REQUEST_METHOD = H2O_MAX_TOKENS * 2,
     H2O_MRUBY_LIT_SCRIPT_NAME,
     H2O_MRUBY_LIT_PATH_INFO,
     H2O_MRUBY_LIT_QUERY_STRING,
@@ -210,6 +210,9 @@ int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_valu
                                 int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data);
 int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
                               int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data);
+
+mrb_value h2o_mruby_token_string(h2o_mruby_shared_context_t *shared, const h2o_token_t *token);
+mrb_value h2o_mruby_token_env_key(h2o_mruby_shared_context_t *shared, const h2o_token_t *token);
 
 /* handler/mruby/sender.c */
 void h2o_mruby_sender_init_context(h2o_mruby_shared_context_t *ctx);

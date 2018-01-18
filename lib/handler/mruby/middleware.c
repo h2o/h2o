@@ -122,7 +122,13 @@ static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *
 static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_iovec_t *name, h2o_iovec_t value, void *cb_data)
 {
     mrb_value result_hash = mrb_obj_value(cb_data);
-    mrb_value n = h2o_mruby_new_str(shared_ctx->mrb, name->base, name->len); /* TODO: use prepared constant */
+    mrb_value n;
+    if (h2o_iovec_is_token(name)) {
+        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+        n = h2o_mruby_token_string(shared_ctx, token);
+    } else {
+        n = h2o_mruby_new_str(shared_ctx->mrb, name->base, name->len);
+    }
     mrb_value v = h2o_mruby_new_str(shared_ctx->mrb, value.base, value.len);
     mrb_hash_set(shared_ctx->mrb, result_hash, n, v);
     return 0;

@@ -242,6 +242,14 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
         h2o_mem_init_pool(&pool);
         for (i = 0; i != H2O_MAX_TOKENS; ++i) {
             const h2o_token_t *token = h2o__tokens + i;
+            if (token->buf.len == 0)
+                continue;
+            mrb_value lit = h2o_mruby_new_str(mrb, token->buf.base, token->buf.len);
+            FREEZE_STRING(lit);
+            mrb_ary_set(mrb, ary, i, lit);
+        }
+        for (; i != H2O_MAX_TOKENS * 2; ++i) {
+            const h2o_token_t *token = h2o__tokens + i - H2O_MAX_TOKENS;
             mrb_value lit = mrb_nil_value();
             if (token == H2O_TOKEN_CONTENT_TYPE) {
                 lit = mrb_str_new_lit(mrb, "CONTENT_TYPE");
@@ -651,7 +659,7 @@ static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_
     mrb_value n;
     if (h2o_iovec_is_token(name)) {
         const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
-        n = mrb_ary_entry(shared_ctx->constants, (mrb_int)(token - h2o__tokens));
+        n = h2o_mruby_token_env_key(shared_ctx, token);
     } else {
         h2o_iovec_t vec = convert_header_name_to_env(pool, name->base, name->len);
         n = h2o_mruby_new_str(shared_ctx->mrb, vec.base, vec.len);
@@ -659,6 +667,16 @@ static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_
     mrb_value v = h2o_mruby_new_str(shared_ctx->mrb, value.base, value.len);
     mrb_hash_set(shared_ctx->mrb, env, n, v);
     return 0;
+}
+
+mrb_value h2o_mruby_token_string(h2o_mruby_shared_context_t *shared, const h2o_token_t *token)
+{
+    return mrb_ary_entry(shared->constants, token - h2o__tokens);
+}
+
+mrb_value h2o_mruby_token_env_key(h2o_mruby_shared_context_t *shared, const h2o_token_t *token)
+{
+    return mrb_ary_entry(shared->constants, token - h2o__tokens + H2O_MAX_TOKENS);
 }
 
 static mrb_value build_env(h2o_mruby_generator_t *generator)
@@ -701,7 +719,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
         if (!mrb_nil_p(p))
             mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_PORT), p);
     }
-    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_TOKEN_HOST - h2o__tokens),
+    mrb_hash_set(mrb, env, h2o_mruby_token_env_key(shared, H2O_TOKEN_HOST),
                  h2o_mruby_new_str(mrb, generator->req->authority.base, generator->req->authority.len));
     if (generator->req->entity.base != NULL) {
         char buf[32];
@@ -730,7 +748,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
 
     /* headers */
     h2o_mruby_iterate_headers(shared, &generator->req->pool, &generator->req->headers, iterate_headers_callback, mrb_obj_ptr(env));
-    mrb_value early_data_key = mrb_ary_entry(shared->constants, H2O_TOKEN_EARLY_DATA - h2o__tokens);
+    mrb_value early_data_key = h2o_mruby_token_env_key(shared, H2O_TOKEN_EARLY_DATA);
     int found_early_data = !mrb_nil_p(mrb_hash_fetch(mrb, env, early_data_key, mrb_nil_value()));
     if (!found_early_data && h2o_conn_is_early_data(generator->req->conn)) {
         mrb_hash_set(mrb, env, early_data_key, h2o_mruby_new_str(mrb, "1", 1));
