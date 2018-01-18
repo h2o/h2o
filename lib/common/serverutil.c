@@ -244,7 +244,7 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     pid_t pid = -1;
     int mutex_locked = 0, ret = -1;
 
-    h2o_buffer_init(resp, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(resp, get_socket_buffer_prototype());
 
     pthread_mutex_lock(&cloexec_mutex);
     mutex_locked = 1;

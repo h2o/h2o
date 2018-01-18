@@ -264,7 +264,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
 {
     struct st_h2o_uv_socket_t *sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
-    h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&sock->super.input, get_socket_buffer_prototype());
 
     sock->handle = handle;
     sock->close_cb = close_cb;

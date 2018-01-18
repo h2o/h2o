@@ -419,7 +419,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     if (errstr != NULL) {
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
-        h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
+        h2o_buffer_init(&self->client->sock->input, get_socket_buffer_prototype());
         self->client = NULL;
         if (errstr != h2o_http1client_error_is_eos) {
             h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
@@ -678,8 +678,8 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->had_body_error = 0;
     self->await_send = NULL;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
-    h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
-    h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&self->last_content_before_send, get_socket_buffer_prototype());
+    h2o_doublebuffer_init(&self->sending, get_socket_buffer_prototype());
 
     return self;
 }

@@ -98,7 +98,7 @@ static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res
     h2o_http2_frame_t frame;
     const char *err_desc;
 
-    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&buf, get_socket_buffer_prototype());
     h2o_hpack_flatten_response(&buf, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, SIZE_MAX);
 
     ok(h2o_http2_decode_frame(&frame, (uint8_t *)buf->bytes, buf->size, &err_desc) > 0);
@@ -379,7 +379,7 @@ static void test_hpack_push(void)
     h2o_req_t req = {NULL};
     h2o_mem_init_pool(&req.pool);
     h2o_buffer_t *buf;
-    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&buf, get_socket_buffer_prototype());
 
     /* setup first request */
     req.input.method = method;
@@ -480,7 +480,7 @@ void test_token_wo_hpack_id(void)
     table.hpack_capacity = 4096;
     h2o_res_t res = {0};
     h2o_buffer_t *buf;
-    h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&buf, get_socket_buffer_prototype());
 
     res.status = 200;
     res.reason = "OK";

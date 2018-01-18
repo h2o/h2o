@@ -69,7 +69,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
     h2o_buffer_t *_;
     h2o_iovec_t path_normalized_escaped = h2o_htmlescape(pool, path_normalized.base, path_normalized.len);
 
-    h2o_buffer_init(&_, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&_, get_socket_buffer_prototype());
 
     {
         h2o_iovec_t _s = (h2o_iovec_init(H2O_STRLIT("<!DOCTYPE html>\n<TITLE>Index of ")));

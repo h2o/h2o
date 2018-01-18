@@ -64,7 +64,7 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
     if (rsc->logconf == NULL)
         return;
 
-    h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&cbdata.buffer, get_socket_buffer_prototype());
     ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
     ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
 

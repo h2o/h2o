@@ -74,7 +74,7 @@ h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **ho
     conn->super.hosts = hosts;
     conn->super.callbacks = &callbacks;
     h2o_init_request(&conn->req, &conn->super, NULL);
-    h2o_buffer_init(&conn->body, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&conn->body, get_socket_buffer_prototype());
     conn->req._ostr_top = &conn->_ostr_final;
     conn->_ostr_final.do_send = loopback_on_send;
 

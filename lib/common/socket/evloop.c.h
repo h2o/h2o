@@ -68,6 +68,7 @@ static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
 
 /* functions to be defined in the backends */
 static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
+static void evloop_do_dispose(h2o_evloop_t *_loop);
 static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock);
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
@@ -385,7 +386,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 
     sock = h2o_mem_alloc(sizeof(*sock));
     memset(sock, 0, sizeof(*sock));
-    h2o_buffer_init(&sock->super.input, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&sock->super.input, get_socket_buffer_prototype());
     sock->loop = loop;
     sock->fd = fd;
     sock->_flags = flags;
@@ -583,6 +584,8 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
         loop->_statechanged.head = sock->_next_statechanged;
         free(sock);
     }
+
+    evloop_do_dispose(loop);
 
     /* lastly we need to free loop memory */
     free(loop);
