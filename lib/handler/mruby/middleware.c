@@ -451,7 +451,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     mrb_value rack_errors = mrb_nil_value();
 
 #define RETRIEVE_ENV(val, stringify) do { \
-    val = kh_value(h, k).v; \
+    val = value; \
     if (!mrb_nil_p(val) && stringify) { \
         val = h2o_mruby_to_str(mrb, val); \
         if (mrb->exc != NULL) \
@@ -469,12 +469,12 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         mrb_value key = h2o_mruby_to_str(mrb, kh_key(h, k));
         if (mrb->exc != NULL)
             goto Failed;
-        mrb_value value = h2o_mruby_to_str(mrb, kh_value(h, k).v);
-        if (mrb->exc != NULL)
-            goto Failed;
+        mrb_value value = kh_value(h, k).v;
 
         if (CHECK_KEY("CONTENT_LENGTH")) {
             super->content_length = h2o_strtosize(RSTRING_PTR(value), RSTRING_LEN(value));
+        } else if (CHECK_KEY("HTTP_HOST")) {
+            RETRIEVE_ENV(http_host, 1);
         } else if (CHECK_KEY("PATH_INFO")) {
             RETRIEVE_ENV(path_info, 1);
         } else if (CHECK_KEY("QUERY_STRING")) {
@@ -485,8 +485,6 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             RETRIEVE_ENV(remote_port, 1);
         } else if (CHECK_KEY("REQUEST_METHOD")) {
             RETRIEVE_ENV(method, 1);
-        } else if (CHECK_KEY("HTTP_HOST")) {
-            RETRIEVE_ENV(http_host, 1);
         } else if (CHECK_KEY("SCRIPT_NAME")) {
             RETRIEVE_ENV(script_name, 1);
         } else if (CHECK_KEY("SERVER_ADDR")) {
@@ -497,20 +495,27 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             RETRIEVE_ENV(server_port, 1);
         } else if (CHECK_KEY("SERVER_PROTOCOL")) {
             RETRIEVE_ENV(server_protocol, 1);
+        } else if (CHECK_KEY("SERVER_SOFTWARE")) {
         } else if (CHECK_KEY("h2o.remaining_delegations")) {
             RETRIEVE_ENV(remaining_delegations, 0);
         } else if (CHECK_KEY("h2o.remaining_reprocesses")) {
             RETRIEVE_ENV(remaining_reprocesses, 0);
         } else if (CHECK_KEY("rack.errors")) {
             RETRIEVE_ENV(rack_errors, 0);
+        } else if (CHECK_KEY("rack.hijack?")) {
         } else if (CHECK_KEY("rack.input")) {
             RETRIEVE_ENV(rack_input, 0);
+        } else if (CHECK_KEY("rack.multiprocess")) {
+        } else if (CHECK_KEY("rack.multithread")) {
+        } else if (CHECK_KEY("rack.run_once")) {
         } else if (CHECK_KEY("rack.url_scheme")) {
             RETRIEVE_ENV(scheme, 1);
         } else if (RSTRING_LEN(key) >= 5 && memcmp(RSTRING_PTR(key), "HTTP_", 5) == 0) {
+            value = h2o_mruby_to_str(mrb, value);
             h2o_mruby_split_header_pair(ctx->shared, key, value, handle_request_header, &subreq->super);
         } else {
             /* set to req->env */
+            value = h2o_mruby_to_str(mrb, value);
             h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
             super->env.entries[super->env.size] = h2o_strdup(&super->pool, RSTRING_PTR(key), RSTRING_LEN(key));
             super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(value), RSTRING_LEN(value));
