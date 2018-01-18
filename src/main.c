@@ -525,11 +525,11 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
 }
 
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
-                              yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
+                              yoml_t **ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *dh_file = NULL, *min_version = NULL, *max_version = NULL,
-           *cipher_suite = NULL, *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
+    yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
+        **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
@@ -541,117 +541,70 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             return -1;
         }
         if (listener->ssl.size == 0 && ssl_node != NULL) {
-            h2o_configurator_errprintf(cmd, ssl_node, "cannot accept HTTPS; already defined to accept HTTP");
+            h2o_configurator_errprintf(cmd, *ssl_node, "cannot accept HTTPS; already defined to accept HTTP");
             return -1;
         }
     }
 
     if (ssl_node == NULL)
         return 0;
-    if (ssl_node->type != YOML_TYPE_MAPPING) {
-        h2o_configurator_errprintf(cmd, ssl_node, "`ssl` is not a mapping");
-        return -1;
-    }
 
-    { /* parse */
-        size_t i;
-        for (i = 0; i != ssl_node->data.sequence.size; ++i) {
-            yoml_t *key = ssl_node->data.mapping.elements[i].key, *value = ssl_node->data.mapping.elements[i].value;
-            /* obtain the target command */
-            if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(NULL, key, "command must be a string");
-                return -1;
-            }
-#define FETCH_PROPERTY(n, p)                                                                                                       \
-    if (strcmp(key->data.scalar, n) == 0) {                                                                                        \
-        if (value->type != YOML_TYPE_SCALAR) {                                                                                     \
-            h2o_configurator_errprintf(cmd, value, "property of `" n "` must be a string");                                        \
-            return -1;                                                                                                             \
-        }                                                                                                                          \
-        p = value;                                                                                                                 \
-        continue;                                                                                                                  \
+    /* parse */
+    if (h2o_configurator_parse_mapping(
+            cmd, *ssl_node, "certificate-file:s,key-file:s", "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
+                                                             "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
+                                                             "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*",
+            &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version, &cipher_suite, &ocsp_update_cmd,
+            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node) != 0)
+        return -1;
+    if (cipher_preference_node != NULL) {
+        switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
+        case 0:
+            ssl_options &= ~SSL_OP_CIPHER_SERVER_PREFERENCE;
+            break;
+        case 1:
+            ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
+            break;
+        default:
+            return -1;
+        }
     }
-            FETCH_PROPERTY("certificate-file", certificate_file);
-            FETCH_PROPERTY("key-file", key_file);
-            FETCH_PROPERTY("min-version", min_version);
-            FETCH_PROPERTY("minimum-version", min_version);
-            FETCH_PROPERTY("max-version", max_version);
-            FETCH_PROPERTY("maximum-version", max_version);
-            FETCH_PROPERTY("cipher-suite", cipher_suite);
-            FETCH_PROPERTY("ocsp-update-cmd", ocsp_update_cmd);
-            FETCH_PROPERTY("ocsp-update-interval", ocsp_update_interval_node);
-            FETCH_PROPERTY("ocsp-max-failures", ocsp_max_failures_node);
-            FETCH_PROPERTY("dh-file", dh_file);
-            if (strcmp(key->data.scalar, "cipher-preference") == 0) {
-                if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "client") == 0) {
-                    ssl_options &= ~SSL_OP_CIPHER_SERVER_PREFERENCE;
-                } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "server") == 0) {
-                    ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
-                } else {
-                    h2o_configurator_errprintf(cmd, value, "property of `cipher-preference` must be either of: `client`, `server`");
-                    return -1;
-                }
-                continue;
-            }
-            if (strcmp(key->data.scalar, "neverbleed") == 0) {
-                if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "ON") == 0) {
-                    /* no need to enable neverbleed for daemon / master */
-                    use_neverbleed = 1;
-                } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "OFF") == 0) {
-                    use_neverbleed = 0;
-                } else {
-                    h2o_configurator_errprintf(cmd, value, "property of `neverbleed` must be either of: `ON`, `OFF");
-                    return -1;
-                }
-                continue;
-            }
-            h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
-            return -1;
-#undef FETCH_PROPERTY
-        }
-        if (certificate_file == NULL) {
-            h2o_configurator_errprintf(cmd, ssl_node, "could not find mandatory property `certificate-file`");
-            return -1;
-        }
-        if (key_file == NULL) {
-            h2o_configurator_errprintf(cmd, ssl_node, "could not find mandatory property `key-file`");
-            return -1;
-        }
-        if (min_version != NULL) {
+    if (neverbleed_node != NULL && (use_neverbleed = (int)h2o_configurator_get_one_of(cmd, *neverbleed_node, "off,on")) == -1)
+        return -1;
+    if (min_version != NULL) {
 #define MAP(tok, op)                                                                                                               \
-    if (strcasecmp(min_version->data.scalar, tok) == 0) {                                                                          \
+    if (strcasecmp((*min_version)->data.scalar, tok) == 0) {                                                                       \
         ssl_options |= (op);                                                                                                       \
         goto VersionFound;                                                                                                         \
     }
-            MAP("sslv2", 0);
-            MAP("sslv3", SSL_OP_NO_SSLv2);
-            MAP("tlsv1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
-            MAP("tlsv1.1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
+        MAP("sslv2", 0);
+        MAP("sslv3", SSL_OP_NO_SSLv2);
+        MAP("tlsv1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+        MAP("tlsv1.1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
 #ifdef SSL_OP_NO_TLSv1_1
-            MAP("tlsv1.2", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
+        MAP("tlsv1.2", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
 #endif
 #ifdef SSL_OP_NO_TLSv1_2
-            MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
+        MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
 #endif
 #undef MAP
-            h2o_configurator_errprintf(cmd, min_version, "unknown protocol version: %s", min_version->data.scalar);
-        VersionFound:;
-        } else {
-            /* default is >= TLSv1 */
-            ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
-        }
-        if (max_version != NULL) {
-            if (strcasecmp(max_version->data.scalar, "tlsv1.3") < 0)
-                use_picotls = 0;
-        }
-        if (ocsp_update_interval_node != NULL) {
-            if (h2o_configurator_scanf(cmd, ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
-                goto Error;
-        }
-        if (ocsp_max_failures_node != NULL) {
-            if (h2o_configurator_scanf(cmd, ocsp_max_failures_node, "%u", &ocsp_max_failures) != 0)
-                goto Error;
-        }
+        h2o_configurator_errprintf(cmd, *min_version, "unknown protocol version: %s", (*min_version)->data.scalar);
+    VersionFound:;
+    } else {
+        /* default is >= TLSv1 */
+        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+    }
+    if (max_version != NULL) {
+        if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0)
+            use_picotls = 0;
+    }
+    if (ocsp_update_interval_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
+            goto Error;
+    }
+    if (ocsp_max_failures_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *ocsp_max_failures_node, "%u", &ocsp_max_failures) != 0)
+            goto Error;
     }
 
     /* add the host to the existing SSL config, if the certificate file is already registered */
@@ -659,7 +612,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         size_t i;
         for (i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
-            if (strcmp(ssl_config->certificate_file, certificate_file->data.scalar) == 0) {
+            if (strcmp(ssl_config->certificate_file, (*certificate_file)->data.scalar) == 0) {
                 listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
                 return 0;
             }
@@ -676,8 +629,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
     setup_ecc_key(ssl_ctx);
-    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, certificate_file, "failed to load certificate file:%s\n", certificate_file->data.scalar);
+    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
+                                   (*certificate_file)->data.scalar);
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
@@ -701,33 +655,33 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 abort();
             }
         }
-        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, key_file->data.scalar, errbuf) != 1) {
-            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s:%s\n", key_file->data.scalar, errbuf);
+        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*key_file)->data.scalar, errbuf) != 1) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s:%s\n", (*key_file)->data.scalar, errbuf);
             goto Error;
         }
     } else {
-        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
-            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, (*key_file)->data.scalar, SSL_FILETYPE_PEM) != 1) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s\n", (*key_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
     }
-    if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, cipher_suite, "failed to setup SSL cipher suite\n");
+    if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, (*cipher_suite)->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, *cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
     if (dh_file != NULL) {
-        BIO *bio = BIO_new_file(dh_file->data.scalar, "r");
+        BIO *bio = BIO_new_file((*dh_file)->data.scalar, "r");
         if (bio == NULL) {
-            h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
+            h2o_configurator_errprintf(cmd, *dh_file, "failed to load dhparam file:%s\n", (*dh_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
         DH *dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
         BIO_free(bio);
         if (dh == NULL) {
-            h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
+            h2o_configurator_errprintf(cmd, *dh_file, "failed to load dhparam file:%s\n", (*dh_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
@@ -759,7 +713,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
     }
     ssl_config->ctx = ssl_ctx;
-    ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
+    ssl_config->certificate_file = h2o_strdup(NULL, (*certificate_file)->data.scalar, SIZE_MAX).base;
 
 #if !H2O_USE_OCSP
     if (ocsp_update_interval != 0)
@@ -770,8 +724,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
 #endif
     pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
-    ssl_config->ocsp_stapling.cmd =
-        ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base : "share/h2o/fetch-ocsp-response";
+    ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? h2o_strdup(NULL, (*ocsp_update_cmd)->data.scalar, SIZE_MAX).base
+                                                            : "share/h2o/fetch-ocsp-response";
     if (ocsp_update_interval != 0) {
         switch (conf.run_mode) {
         case RUN_MODE_WORKER:
@@ -786,19 +740,19 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             break;
         case RUN_MODE_TEST: {
             h2o_buffer_t *respbuf;
-            fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
-            switch (get_ocsp_response(certificate_file->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
+            fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", (*certificate_file)->data.scalar);
+            switch (get_ocsp_response((*certificate_file)->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
             case 0:
                 h2o_buffer_dispose(&respbuf);
-                fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
+                fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", (*certificate_file)->data.scalar);
                 break;
             case EX_TEMPFAIL:
-                h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] temporary failed for file:%s\n",
-                                           certificate_file->data.scalar);
+                h2o_configurator_errprintf(cmd, *certificate_file, "[OCSP Stapling] temporary failed for file:%s\n",
+                                           (*certificate_file)->data.scalar);
                 break;
             default:
-                h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n",
-                                           certificate_file->data.scalar);
+                h2o_configurator_errprintf(cmd, *certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n",
+                                           (*certificate_file)->data.scalar);
                 break;
             }
         } break;
@@ -810,7 +764,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_picotls) {
         const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
         if (errstr != NULL)
-            h2o_configurator_errprintf(cmd, ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
+            h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
     }
 #endif
 
@@ -883,31 +837,26 @@ Found:
     return conf.server_starter.fds[i];
 }
 
-static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa)
+static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa, yoml_t **owner_node,
+                              yoml_t **permission_node)
 {
     struct stat st;
     int fd = -1;
     struct passwd *owner = NULL, pwbuf;
     char pwbuf_buf[65536];
     unsigned mode = UINT_MAX;
-    yoml_t *t;
 
     /* obtain owner and permission */
-    if ((t = yoml_get(node, "owner")) != NULL) {
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "`owner` is not a scalar");
-            goto ErrorExit;
-        }
-        if (getpwnam_r(t->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
-            h2o_configurator_errprintf(cmd, t, "failed to obtain uid of user:%s: %s", t->data.scalar, strerror(errno));
+    if (owner_node != NULL) {
+        if (getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
+            h2o_configurator_errprintf(cmd, *owner_node, "failed to obtain uid of user:%s: %s", (*owner_node)->data.scalar,
+                                       strerror(errno));
             goto ErrorExit;
         }
     }
-    if ((t = yoml_get(node, "permission")) != NULL) {
-        if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%o", &mode) != 1) {
-            h2o_configurator_errprintf(cmd, t, "`permission` must be an octal number");
-            goto ErrorExit;
-        }
+    if (permission_node != NULL && h2o_configurator_scanf(cmd, *permission_node, "%o", &mode) != 0) {
+        h2o_configurator_errprintf(cmd, *permission_node, "`permission` must be an octal number");
+        goto ErrorExit;
     }
 
     /* remove existing socket file as suggested in #45 */
@@ -1008,56 +957,30 @@ Error:
 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    const char *hostname = NULL, *servname = NULL, *type = "tcp";
-    yoml_t *ssl_node = NULL;
+    const char *hostname = NULL, *servname, *type = "tcp";
+    yoml_t **ssl_node, **owner_node = NULL, **permission_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         servname = node->data.scalar;
+        ssl_node = NULL;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "host")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`host` is not a string");
-                return -1;
-            }
-            hostname = t->data.scalar;
-        }
-        if ((t = yoml_get(node, "port")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
+                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
+                                           &proxy_protocol_node) != 0)
             return -1;
-        }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "`port` is not a string");
+        servname = (*port_node)->data.scalar;
+        if (host_node != NULL)
+            hostname = (*host_node)->data.scalar;
+        if (type_node != NULL)
+            type = (*type_node)->data.scalar;
+        if (proxy_protocol_node != NULL &&
+            (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
-        }
-        servname = t->data.scalar;
-        if ((t = yoml_get(node, "type")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`type` is not a string");
-                return -1;
-            }
-            type = t->data.scalar;
-        }
-        if ((t = yoml_get(node, "ssl")) != NULL)
-            ssl_node = t;
-        if ((t = yoml_get(node, "proxy-protocol")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "`proxy-protocol` must be a string");
-                return -1;
-            }
-            if (strcasecmp(t->data.scalar, "ON") == 0) {
-                proxy_protocol = 1;
-            } else if (strcasecmp(t->data.scalar, "OFF") == 0) {
-                proxy_protocol = 0;
-            } else {
-                h2o_configurator_errprintf(cmd, node, "value of `proxy-protocol` must be either of: ON,OFF");
-                return -1;
-            }
-        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
@@ -1090,7 +1013,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         return -1;
                     }
                 } else {
-                    if ((fd = open_unix_listener(cmd, node, &sa)) == -1)
+                    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, permission_node)) == -1)
                         return -1;
                 }
                 break;
