@@ -221,10 +221,6 @@ typedef struct st_h2o_pathconf_t {
      */
     h2o_globalconf_t *global;
     /**
-     * hostconf to which the pathconf belongs (may be NULL if file.custom-handler is used)
-     */
-    h2o_hostconf_t *host;
-    /**
      * pathname in lower case, may or may not have "/" at last, NULL terminated, or is {NULL,0} if is fallback or extension-level
      */
     h2o_iovec_t path;
@@ -1429,7 +1425,7 @@ void h2o_config_unsetenv(h2o_envconf_t *envconf, const char *name);
  * @param path path to serve, or NULL if fallback or extension-level
  * @param mimemap mimemap to use, or NULL if fallback or extension-level
  */
-void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf, const char *path, h2o_mimemap_t *mimemap);
+void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *globalconf, const char *path, h2o_mimemap_t *mimemap);
 /**
  *
  */
@@ -1665,7 +1661,7 @@ void h2o_mimemap_define_mimetype(h2o_mimemap_t *mimemap, const char *ext, const 
 /**
  * adds a mime-type mapping
  */
-h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf, h2o_hostconf_t *hostconf);
+h2o_mimemap_type_t *h2o_mimemap_define_dynamic(h2o_mimemap_t *mimemap, const char **exts, h2o_globalconf_t *globalconf);
 /**
  * removes a mime-type mapping
  */

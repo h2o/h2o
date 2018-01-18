@@ -116,7 +116,7 @@ static void test_dynamic()
     h2o_mimemap_t *mimemap = h2o_mimemap_create();
     const char *exts[] = {".php", NULL};
     h2o_globalconf_t global = {NULL};
-    h2o_mimemap_define_dynamic(mimemap, exts, &global, NULL);
+    h2o_mimemap_define_dynamic(mimemap, exts, &global);
     h2o_mem_release_shared(mimemap);
 }
 

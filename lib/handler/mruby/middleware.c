@@ -404,13 +404,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     super->is_subrequest = 1;
     h2o_ostream_t *ostream = h2o_add_ostream(super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &super->_ostr_top);
     ostream->do_send = subreq_ostream_send;
-    if (ctx->handler->pathconf->host) {
-        subreq->conn.super.hosts = h2o_mem_alloc_pool(&subreq->super.pool, H2O_ALIGNOF(subreq->conn.super.hosts[0]), sizeof(subreq->conn.super.hosts[0]) * 2);
-        subreq->conn.super.hosts[0] = ctx->handler->pathconf->host;
-        subreq->conn.super.hosts[1] = NULL;
-    } else {
-        subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
-    }
+    subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
     subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
     subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
     subreq->conn.super.callbacks = &callbacks;
