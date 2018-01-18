@@ -31,10 +31,14 @@
 struct st_mruby_subreq_conn_t {
     h2o_conn_t super;
     struct {
+        h2o_iovec_t host;
+        h2o_iovec_t port;
         struct sockaddr_storage addr;
         socklen_t len;
     } server;
     struct {
+        h2o_iovec_t host;
+        h2o_iovec_t port;
         struct sockaddr_storage addr;
         socklen_t len;
     } remote;
@@ -261,48 +265,41 @@ static void prepare_subreq_entity(h2o_req_t *subreq, h2o_mruby_context_t *ctx, m
     }
 }
 
-static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
+static socklen_t parse_hostport(h2o_mem_pool_t *pool, h2o_iovec_t host, h2o_iovec_t port, struct sockaddr_storage *ss)
 {
-    struct st_mruby_subreq_conn_t *conn = (void *)_conn;
-    memcpy(sa, &conn->server.addr, conn->server.len);
-    return conn->server.len;
-}
-
-static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
-{
-    struct st_mruby_subreq_conn_t *conn = (void *)_conn;
-    memcpy(sa, &conn->remote.addr, conn->remote.len);
-    return conn->remote.len;
-}
-
-static h2o_socket_t *get_socket(h2o_conn_t *conn)
-{
-    return NULL;
-}
-
-static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, struct sockaddr_storage *ss)
-{
-    const char *hostname, *servname;
-    struct addrinfo hints, *res = NULL;
-
-    assert(mrb->exc == NULL);
-    assert(!(mrb_nil_p(host) || mrb_nil_p(port)));
-
-    hostname = mrb_string_value_cstr(mrb, &host);
-    if (mrb->exc != NULL)
-        goto Error;
-
-    servname = mrb_string_value_cstr(mrb, &port);
-    if (mrb->exc != NULL)
-        goto Error;
+    /* fast path for IPv4 addresses */
+    {
+        unsigned int d1, d2, d3, d4, _port;
+        int parsed_len;
+        if (sscanf(host.base, "%" SCNd32 "%*[.]%" SCNd32 "%*[.]%" SCNd32 "%*[.]%" SCNd32 "%n", &d1, &d2, &d3, &d4, &parsed_len) == 4 && parsed_len == host.len &&
+            d1 <= UCHAR_MAX && d2 <= UCHAR_MAX && d3 <= UCHAR_MAX && d4 <= UCHAR_MAX) {
+            if (sscanf(port.base, "%" SCNd32 "%n", &_port, &parsed_len) == 1 && parsed_len == port.len && _port <= USHRT_MAX) {
+                struct sockaddr_in sin;
+                sin.sin_family = AF_INET;
+                sin.sin_port = htons(_port);
+                sin.sin_addr.s_addr = ntohl((d1 << 24) + (d2 << 16) + (d3 << 8) + d4);
+                *ss = *((struct sockaddr_storage *)&sin);
+                return sizeof(sin);
+            }
+        }
+    }
 
     /* call getaddrinfo */
+    struct addrinfo hints, *res = NULL;
+
+    char *hostname = h2o_mem_alloc_pool(pool, char, host.len + 1);
+    memcpy(hostname, host.base, host.len);
+    hostname[host.len] = '\0';
+    char *servname = h2o_mem_alloc_pool(pool, char, port.len + 1);
+    memcpy(servname, port.base, port.len);
+    hostname[port.len] = '\0';
+
     memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV;
     if (getaddrinfo(hostname, servname, &hints, &res) != 0) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "getaddrinfo failed"));
         goto Error;
     }
 
@@ -312,7 +309,6 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
             memcpy(ss, res->ai_addr, res->ai_addrlen);
             break;
         default:
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unknown address family"));
             goto Error;
     }
 
@@ -321,10 +317,38 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
     return len;
 
 Error:
-    assert(mrb->exc != NULL);
     if (res != NULL)
         freeaddrinfo(res);
     return 0;
+}
+
+static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
+{
+    struct st_mruby_subreq_conn_t *conn = (void *)_conn;
+    if (conn->server.host.base != NULL) {
+        struct st_mruby_subreq_t *subreq = H2O_STRUCT_FROM_MEMBER(struct st_mruby_subreq_t, conn, conn);
+        conn->server.len = parse_hostport(&subreq->super.pool, conn->server.host, conn->server.port, &conn->server.addr);
+        conn->server.host.base = NULL;
+    }
+    memcpy(sa, &conn->server.addr, conn->server.len);
+    return conn->server.len;
+}
+
+static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
+{
+    struct st_mruby_subreq_conn_t *conn = (void *)_conn;
+    if (conn->remote.host.base != NULL) {
+        struct st_mruby_subreq_t *subreq = H2O_STRUCT_FROM_MEMBER(struct st_mruby_subreq_t, conn, conn);
+        conn->remote.len = parse_hostport(&subreq->super.pool, conn->remote.host, conn->remote.port, &conn->remote.addr);
+        conn->remote.host.base = NULL;
+    }
+    memcpy(sa, &conn->remote.addr, conn->remote.len);
+    return conn->remote.len;
+}
+
+static h2o_socket_t *get_socket(h2o_conn_t *conn)
+{
+    return NULL;
 }
 
 static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
@@ -579,15 +603,13 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         super->version = 0x101;
 
     if (!(mrb_nil_p(server_addr) || mrb_nil_p(server_port))) {
-        subreq->conn.server.len = parse_hostport(mrb, server_addr, server_port, &subreq->conn.server.addr);
-        if (mrb->exc != NULL)
-            goto Failed;
+        subreq->conn.server.host = h2o_strdup(&super->pool, RSTRING_PTR(server_addr), RSTRING_LEN(server_addr));
+        subreq->conn.server.port = h2o_strdup(&super->pool, RSTRING_PTR(server_port), RSTRING_LEN(server_port));
     }
 
     if (!(mrb_nil_p(remote_addr) || mrb_nil_p(remote_port))) {
-        subreq->conn.remote.len = parse_hostport(mrb, remote_addr, remote_port, &subreq->conn.remote.addr);
-        if (mrb->exc != NULL)
-            goto Failed;
+        subreq->conn.remote.host = h2o_strdup(&super->pool, RSTRING_PTR(remote_addr), RSTRING_LEN(remote_addr));
+        subreq->conn.remote.port = h2o_strdup(&super->pool, RSTRING_PTR(remote_port), RSTRING_LEN(remote_port));
     }
 
     if (! mrb_nil_p(remaining_delegations)) {
