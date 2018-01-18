@@ -417,8 +417,10 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     mrb_value path_info = mrb_nil_value();
     mrb_value query_string = mrb_nil_value();
     mrb_value rack_input = mrb_nil_value();
-    mrb_value server_addr = mrb_nil_value();
+    mrb_value http_host = mrb_nil_value();
+    mrb_value server_name = mrb_nil_value();
     mrb_value server_port = mrb_nil_value();
+    mrb_value server_addr = mrb_nil_value();
     mrb_value remote_addr = mrb_nil_value();
     mrb_value remote_port = mrb_nil_value();
     mrb_value server_protocol = mrb_nil_value();
@@ -461,10 +463,14 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             RETRIEVE_ENV(remote_port, 1);
         } else if (CHECK_KEY("REQUEST_METHOD")) {
             RETRIEVE_ENV(method, 1);
+        } else if (CHECK_KEY("HTTP_HOST")) {
+            RETRIEVE_ENV(http_host, 1);
         } else if (CHECK_KEY("SCRIPT_NAME")) {
             RETRIEVE_ENV(script_name, 1);
         } else if (CHECK_KEY("SERVER_ADDR")) {
             RETRIEVE_ENV(server_addr, 1);
+        } else if (CHECK_KEY("SERVER_NAME")) {
+            RETRIEVE_ENV(server_name, 1);
         } else if (CHECK_KEY("SERVER_PORT")) {
             RETRIEVE_ENV(server_port, 1);
         } else if (CHECK_KEY("SERVER_PROTOCOL")) {
@@ -493,18 +499,35 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 #undef CALC_HASH
 #undef CHECK_KEY
 
-#define CHECK_REQUIRED(key, val) do { \
+    /* do validations */
+#define CHECK_REQUIRED(key, val, non_empty) do { \
     if (mrb_nil_p(val)) { \
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: ## key")); \
         goto Failed; \
+    } else if (non_empty && RSTRING_LEN(val) == 0) { \
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "key ## must be not empty")); \
+        goto Failed; \
     } \
 } while (0)
-    CHECK_REQUIRED("REQUEST_METHOD", method);
-    CHECK_REQUIRED("rack.url_scheme", scheme);
-    CHECK_REQUIRED("SCRIPT_NAME", script_name);
-    CHECK_REQUIRED("PATH_INFO", path_info);
-    CHECK_REQUIRED("QUERY_STRING", query_string);
+    CHECK_REQUIRED("REQUEST_METHOD", method, 1);
+    CHECK_REQUIRED("rack.url_scheme", scheme, 1);
+    CHECK_REQUIRED("SCRIPT_NAME", script_name, 0);
+    CHECK_REQUIRED("PATH_INFO", path_info, 0);
+    CHECK_REQUIRED("QUERY_STRING", query_string, 0);
 #undef CHECK_REQUIRED
+
+    if (RSTRING_LEN(script_name) != 0 && RSTRING_PTR(script_name)[0] != '/') {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "SCRIPT_NAME must start with `/`"));
+        goto Failed;
+    }
+    if (RSTRING_LEN(path_info) != 0 && RSTRING_PTR(path_info)[0] != '/') {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "PATH_INFO must start with `/`"));
+        goto Failed;
+    }
+    if (mrb_nil_p(http_host) && (mrb_nil_p(server_name) || mrb_nil_p(server_port))) {
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "HTTP_HOST or (SERVER_NAME and SERVER_PORT) is required"));
+        goto Failed;
+    }
 
     if (!is_reprocess) {
         /* ensure that SCRIPT_NAME is not modified */
@@ -523,9 +546,13 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     int num_comps = 0;
     url_comps[num_comps++] = STR_TO_IOVEC(scheme);
     url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT("://"));
-    url_comps[num_comps++] = STR_TO_IOVEC(server_addr);
-    url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT(":"));
-    url_comps[num_comps++] = STR_TO_IOVEC(server_port);
+    if (!mrb_nil_p(http_host)) {
+        url_comps[num_comps++] = STR_TO_IOVEC(http_host);
+    } else {
+        url_comps[num_comps++] = STR_TO_IOVEC(server_name);
+        url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT(":"));
+        url_comps[num_comps++] = STR_TO_IOVEC(server_port);
+    }
     url_comps[num_comps++] = STR_TO_IOVEC(script_name);
     url_comps[num_comps++] = STR_TO_IOVEC(path_info);
     if (RSTRING_LEN(query_string) != 0) {
