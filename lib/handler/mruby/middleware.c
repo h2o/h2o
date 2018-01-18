@@ -516,7 +516,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         /* ensure that SCRIPT_NAME is not modified */
         h2o_iovec_t confpath = ctx->handler->pathconf->path;
         size_t confpath_len_wo_slash = confpath.base[confpath.len - 1] == '/' ? confpath.len - 1 : confpath.len;
-        if (!(RSTRING_LEN(script_name) == confpath_len_wo_slash && memcmp(RSTRING_PTR(script_name), confpath.base, confpath_len_wo_slash))) {
+        if (!(RSTRING_LEN(script_name) == confpath_len_wo_slash && memcmp(RSTRING_PTR(script_name), confpath.base, confpath_len_wo_slash) == 0)) {
             mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "can't modify `SCRIPT_NAME` with `H2O.next`. Is `H2O.reprocess` what you want?"));
             goto Failed;
         }
