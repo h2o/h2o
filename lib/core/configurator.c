@@ -1114,7 +1114,8 @@ Error:
 static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned *type_mask)
 {
     const char *p = strchr(start, ':');
-    assert(p != NULL);
+    if (p == NULL)
+        goto Error;
 
     /* set output */
     *output = h2o_iovec_init(start, p - start);
@@ -1138,12 +1139,15 @@ static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned
             *type_mask |= (1u << YOML_TYPE_SCALAR) | (1u << YOML_TYPE_SEQUENCE) | (1u << YOML_TYPE_MAPPING);
             break;
         default:
-            h2o_fatal("unexpected attribute");
-            break;
+            goto Error;
         }
     }
 
     return NULL;
+
+Error:
+    fprintf(stderr, "%s: detected invalid or missing type specifier; input is: %s\n", __FUNCTION__, start);
+    abort();
 }
 
 int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
