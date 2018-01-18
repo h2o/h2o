@@ -286,9 +286,7 @@ static socklen_t parse_hostport(mrb_state *mrb, mrb_value host, mrb_value port, 
     struct addrinfo hints, *res = NULL;
 
     assert(mrb->exc == NULL);
-
-    if (mrb_nil_p(host) || mrb_nil_p(port))
-        goto Error; // FIXME
+    assert(!(mrb_nil_p(host) || mrb_nil_p(port)));
 
     hostname = mrb_string_value_cstr(mrb, &host);
     if (mrb->exc != NULL)
@@ -580,13 +578,17 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     if (super->version == -1)
         super->version = 0x101;
 
-    // TODO how about unix socket?
-    subreq->conn.server.len = parse_hostport(mrb, server_addr, server_port, &subreq->conn.server.addr);
-    if (mrb->exc != NULL)
-        goto Failed;
-    subreq->conn.remote.len = parse_hostport(mrb, remote_addr, remote_port, &subreq->conn.remote.addr);
-    if (mrb->exc != NULL)
-        goto Failed;
+    if (!(mrb_nil_p(server_addr) || mrb_nil_p(server_port))) {
+        subreq->conn.server.len = parse_hostport(mrb, server_addr, server_port, &subreq->conn.server.addr);
+        if (mrb->exc != NULL)
+            goto Failed;
+    }
+
+    if (!(mrb_nil_p(remote_addr) || mrb_nil_p(remote_port))) {
+        subreq->conn.remote.len = parse_hostport(mrb, remote_addr, remote_port, &subreq->conn.remote.addr);
+        if (mrb->exc != NULL)
+            goto Failed;
+    }
 
     if (! mrb_nil_p(remaining_delegations)) {
         mrb_int v = mrb_int(mrb, remaining_delegations);
