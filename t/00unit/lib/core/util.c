@@ -149,7 +149,7 @@ static void test_extract_push_path_from_link_header(void)
 
 void test_build_destination(void)
 {
-    h2o_pathconf_t conf_not_slashed = {NULL, NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, NULL, {H2O_STRLIT("/abc/")}};
+    h2o_pathconf_t conf_not_slashed = {NULL, {H2O_STRLIT("/abc")}}, conf_slashed = {NULL, {H2O_STRLIT("/abc/")}};
     h2o_req_t req;
     h2o_iovec_t dest;
     int escape;
@@ -240,7 +240,7 @@ void test_build_destination_escaping(void)
     /* 'j' runs the test with a missing leading '/' in the input path */
     for (j = 0; j <= 1; j++) {
         for (i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
-            h2o_pathconf_t conf = {NULL, NULL, {tests[i].pathconf, strlen(tests[i].pathconf)}};
+            h2o_pathconf_t conf = {NULL, {tests[i].pathconf, strlen(tests[i].pathconf)}};
             req.pathconf = &conf;
             req.path = req.input.path = h2o_iovec_init(tests[i].input + j, strlen(tests[i].input) - j);
             req.norm_indexes = NULL;

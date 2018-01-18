@@ -26,7 +26,7 @@
 
 void test_percent_encode_zero_byte(void)
 {
-    h2o_pathconf_t pathconf = {NULL, NULL, {H2O_STRLIT("/abc")}};
+    h2o_pathconf_t pathconf = {NULL, {H2O_STRLIT("/abc")}};
     h2o_req_t req;
     h2o_iovec_t dest;
 
