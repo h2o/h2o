@@ -39,7 +39,8 @@ module H2O
   class AppRequest
     def join
       if !@resp
-        @resp = _h2o_middleware_join_response(self)
+        _h2o_middleware_wait_response(self) unless _can_build_response?
+        @resp = _build_response
       end
       @resp
     end

@@ -780,7 +780,7 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     return env;
 }
 
-static int handle_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
+int h2o_mruby_handle_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
@@ -896,7 +896,7 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
     generator->req->res.status = (int)status;
 
     /* set headers */
-    if (h2o_mruby_iterate_headers_obj(generator->ctx->shared, mrb_ary_entry(resp, 1), handle_response_header, generator->req) != 0) {
+    if (h2o_mruby_iterate_headers_obj(generator->ctx->shared, mrb_ary_entry(resp, 1), h2o_mruby_handle_response_header, generator->req) != 0) {
         return -1;
     }
     /* add date: if it's missing from the response */
@@ -978,8 +978,9 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
 
     mrb_state *mrb = ctx->shared->mrb;
     mrb_value output, resp;
-    mrb_int status;
+    mrb_int status = 0;
     h2o_mruby_generator_t *generator = NULL;
+    h2o_mruby_send_response_callback_t send_response_callback = NULL;
 
     while (1) {
         /* send input to fiber */
@@ -994,16 +995,25 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
 
         resp = mrb_ary_entry(output, 0);
         if (!mrb_array_p(resp)) {
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "rack app did not return an array"));
-            goto GotException;
+            if ((send_response_callback = h2o_mruby_middleware_get_send_response_callback(ctx, resp)) != NULL) {
+                break;
+            } else {
+                mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "rack app did not return an array"));
+                goto GotException;
+            }
         }
 
         /* fetch status */
         H2O_MRUBY_EXEC_GUARD({ status = mrb_int(mrb, mrb_ary_entry(resp, 0)); });
         if (mrb->exc != NULL)
             goto GotException;
-        if (status >= 0)
+        if (status >= 0) {
+            if (!(100 <= status && status <= 999)) {
+                mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "status returned from rack app is out of range"));
+                goto GotException;
+            }
             break;
+        }
 
         receiver = mrb_ary_entry(resp, 1);
         mrb_value args = mrb_ary_entry(resp, 2);
@@ -1029,24 +1039,19 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
         mrb_gc_protect(mrb, input);
     }
 
-    if (!(100 <= status && status <= 999)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "status returned from rack app is out of range"));
-        goto GotException;
-    }
-
+    /* retrieve and validate generator */
     generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 1));
-
-    /* send the response (unless req is already closed) */
     if (generator == NULL)
-        goto Exit;
+        goto Exit; /* do nothing if req is already closed */
     assert(generator->req != NULL);
-
     if (generator->req->_generator != NULL) {
         mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpectedly received a rack response"));
         goto GotException;
     }
 
-    if (send_response(generator, status, resp, is_delegate) != 0)
+    if (send_response_callback == NULL)
+        send_response_callback = send_response;
+    if (send_response_callback(generator, status, resp, is_delegate) != 0)
         goto GotException;
 
     goto Exit;

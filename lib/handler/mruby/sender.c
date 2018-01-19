@@ -102,10 +102,11 @@ h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mr
     h2o_mruby_sender_t *sender = h2o_mem_alloc_pool_aligned(&generator->req->pool, alignment, sz);
     memset(sender, 0, sizeof(*sender));
     sender->body_obj = body;
+    if (!mrb_nil_p(body))
+        mrb_gc_register(generator->ctx->shared->mrb, body);
     sender->bytes_left = h2o_memis(generator->req->method.base, generator->req->method.len, H2O_STRLIT("HEAD"))
                           ? 0
                           : generator->req->res.content_length;
-    mrb_gc_register(generator->ctx->shared->mrb, body);
     return sender;
 }
 

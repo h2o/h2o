@@ -286,7 +286,8 @@
     "  class AppRequest\n"                                                                                                         \
     "    def join\n"                                                                                                               \
     "      if !@resp\n"                                                                                                            \
-    "        @resp = _h2o_middleware_join_response(self)\n"                                                                        \
+    "        _h2o_middleware_wait_response(self) unless _can_build_response?\n"                                                    \
+    "        @resp = _build_response\n"                                                                                            \
     "      end\n"                                                                                                                  \
     "      @resp\n"                                                                                                                \
     "    end\n"                                                                                                                    \

@@ -122,6 +122,8 @@ typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_contex
 typedef struct st_h2o_mruby_channel_context_t h2o_mruby_channel_context_t;
 typedef struct st_h2o_mruby_generator_t h2o_mruby_generator_t;
 
+typedef int (*h2o_mruby_send_response_callback_t)(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate);
+
 struct st_h2o_mruby_sender_t {
     mrb_value body_obj; /* becomes nil on eos */
     size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
@@ -211,6 +213,7 @@ int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_valu
                                 int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data);
 int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
                               int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data);
+int h2o_mruby_handle_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *data);
 
 mrb_value h2o_mruby_token_string(h2o_mruby_shared_context_t *shared, const h2o_token_t *token);
 mrb_value h2o_mruby_token_env_key(h2o_mruby_shared_context_t *shared, const h2o_token_t *token);
@@ -248,6 +251,7 @@ void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
 /* handler/mruby/middleware.c */
 void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *ctx);
 h2o_mruby_sender_t *h2o_mruby_middleware_sender_create(h2o_mruby_generator_t *generator, mrb_value body);
+h2o_mruby_send_response_callback_t h2o_mruby_middleware_get_send_response_callback(h2o_mruby_context_t *ctx, mrb_value resp);
 
 /* handler/mruby/channel.c */
 void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *ctx);

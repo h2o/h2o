@@ -501,6 +501,45 @@ EOT
             });
         };
     }
+
+    subtest 'response shortcut' => sub {
+        my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              H2O.$mode.request(env)
+            }
+EOT
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $headers->{'content-length'}, length($body);
+            is length($body), $files{$file}->{size};
+            is md5_hex($body), $files{$file}->{md5};
+            $reprocess_check->($headers);
+            $live_check->($proto, $port, $curl);
+        });
+    };
+
+    subtest 'discard request' => sub {
+        my $server = $spawner->(<< "EOT");
+        - mruby.handler: |
+            proc {|env|
+              modify_env(env)
+              req = H2O.$mode.request(env)
+              [200, {}, ['mruby']]
+            }
+EOT
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my ($status, $headers, $body) = get($proto, $port, $curl, "$path/$file");
+            is $status, 200;
+            is $body, 'mruby';
+            $live_check->($proto, $port, $curl);
+        });
+    };
+
 }
 
 subtest 'file' => sub {
@@ -682,6 +721,50 @@ EOT
         is $status, 500, 'next';
         ($status, $headers, $body) = get($proto, $port, $curl, '/reprocess');
         is $status, 200, 'reprocess';
+    });
+};
+
+subtest 'non-blocking' => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths: &paths
+      /blocking:
+        - mruby.handler: |
+            proc {|env|
+              st = Time.now
+              H2O.next.call(env)
+              H2O.next.call(env)
+              et = Time.now
+              [200, {}, [et - st]]
+            }
+        - mruby.handler:  proc {|env| sleep 1; [200, {}, []] }
+      /non-blocking:
+        - mruby.handler: |
+            proc {|env|
+              st = Time.now
+              req1 = H2O.next.request(env)
+              req2 = H2O.next.request(env)
+              req1.join
+              req2.join
+              et = Time.now
+              [200, {}, [et - st]]
+            }
+        - mruby.handler:  proc {|env| sleep 1; [200, {}, []] }
+  "127.0.0.1:$tls_port":
+    paths: *paths
+EOT
+    });
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+
+        my ($status, $headers, $body);
+        ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/blocking');
+        cmp_ok $body, '>', 2;
+        ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/non-blocking');
+        cmp_ok $body, '<', 2;
     });
 };
 
