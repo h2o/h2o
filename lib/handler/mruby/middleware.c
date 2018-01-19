@@ -78,7 +78,7 @@ struct st_h2o_mruby_middleware_sender_t {
 
 static void dispose_subreq(struct st_mruby_subreq_t *subreq)
 {
-    /* subreq must be alive until generator gets disposed when shortcut used */
+    /* subreq must be alive until generator gets disposed if shortcut is used */
     assert(subreq->shortcut.response == NULL);
     assert(subreq->shortcut.body == NULL);
 
@@ -868,8 +868,15 @@ void do_sender_dispose(h2o_mruby_generator_t *generator)
 {
     struct st_h2o_mruby_middleware_sender_t *sender = (void *)generator->sender;
 
+    if (sender->subreq->shortcut.response != NULL) {
+        assert(!mrb_nil_p(sender->subreq->refs.request));
+        mrb_gc_unregister(generator->ctx->shared->mrb, sender->subreq->refs.request);
+        sender->subreq->shortcut.response = NULL;
+    }
+
     assert(sender->subreq->shortcut.body == generator);
     sender->subreq->shortcut.body = NULL;
+
     dispose_subreq(sender->subreq);
     sender->subreq = NULL;
 
@@ -928,7 +935,6 @@ static void send_response_shortcutted(struct st_mruby_subreq_t *subreq)
     h2o_mruby_sender_t *sender = create_sender(generator, subreq, mrb_nil_value());
     generator->sender = sender;
     generator->super.proceed = sender->proceed;
-    subreq->shortcut.response = NULL;
 
     /* start sending response */
     h2o_start_response(generator->req, &generator->super);
@@ -939,8 +945,10 @@ static int send_response_callback(h2o_mruby_generator_t *generator, mrb_int stat
 {
     struct st_mruby_subreq_t *subreq = mrb_data_check_get_ptr(generator->ctx->shared->mrb, resp, &app_request_type);
     assert(subreq != NULL);
+    assert(mrb_obj_ptr(subreq->refs.request) == mrb_obj_ptr(resp));
 
     subreq->shortcut.response = generator;
+    mrb_gc_register(generator->ctx->shared->mrb, resp); /* prevent request and subreq from being disposed */
 
     if (subreq->state != INITIAL) {
         /* immediately start sending response, otherwise defer it until once receive data from upstream (subreq_ostream_send) */
