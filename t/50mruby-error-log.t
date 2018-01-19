@@ -3,6 +3,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port check_port);
+use Scope::Guard qw(scope_guard);
 use Test::More;
 use Test::Exception;
 use Time::HiRes;
@@ -151,7 +152,9 @@ EOT
             my $upstream_port = empty_port();
 
             # create upstream
-            fork or do {
+            my $upstream_pid = fork;
+            die "fork failed: $!" unless defined $upstream_pid;
+            unless ($upstream_pid) {
                 my $sock = IO::Socket::INET->new(
                     LocalHost => '127.0.0.1',
                     LocalPort => $upstream_port,
@@ -169,9 +172,13 @@ EOT
                 Time::HiRes::sleep 0.5;
                 $client->send("X"); # this causes an invalid chunk error in proxy handler
                 $client->close;
-                exit;
+                exit 0;
             };
-            spawn_h2o(sub {
+            my $upstream = scope_guard(sub {
+                kill 'TERM', $upstream_pid;
+                while (waitpid($upstream_pid, 0) != $upstream_pid) {}
+            });
+            my $server = spawn_h2o(sub {
                 my ($port, $tls_port) = @_;
                 << "EOT";
 hosts:
@@ -194,6 +201,7 @@ access-log:
 error-log: $error_log_file
 EOT
             });
+            ($server, $upstream);
         };
 
         run_with_curl({}, sub {
@@ -201,7 +209,7 @@ EOT
             truncate $access_log_file, 0;
             truncate $error_log_file, 0;
 
-            my $server = $spawner->();
+            my ($server, $upstream) = $spawner->();
             my $port = $proto eq 'http' ? $server->{port} : $server->{tls_port};
 
             my ($headers, $body) = get($proto, $port, $curl, '/');
