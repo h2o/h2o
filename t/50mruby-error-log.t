@@ -85,6 +85,7 @@ EOT
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
+            note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
             is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failed', 'access log';
@@ -139,6 +140,7 @@ EOT
             like $headers, qr{^HTTP/[0-9.]+ 502}is;
 
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
+            note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
             is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failed', 'access log';
@@ -219,6 +221,7 @@ EOT
             sleep 1;
 
             my ($access_logs, $error_logs) = read_logs($access_log_file, $error_log_file);
+            note $_ for @$error_logs;
 
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
