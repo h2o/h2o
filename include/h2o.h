@@ -1235,11 +1235,11 @@ extern const char *h2o_npn_protocols;
 extern const h2o_iovec_t *h2o_http2_alpn_protocols;
 extern const h2o_iovec_t *h2o_alpn_protocols;
 /**
- * release all resources in tls used by h2o
+ * release all resources in tls(thread local storage) used by h2o
  * normally there is no need to do this like standalone server.
  * but when used as a library(libh2o or libh2o-evloop), the user may want to release resources hold in tls
  */
-void h2o_tls_data_dispose(void);
+void h2o_cleanup_thread(void);
 
 /**
  * accepts a connection
