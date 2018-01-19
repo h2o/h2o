@@ -396,13 +396,13 @@ static h2o_socket_t *get_socket(h2o_conn_t *conn)
     return NULL;
 }
 
-static int handle_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
+static int handle_header_env_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *env_key, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
 
     /* convert env key to header name (lower case) */
-    name = convert_env_to_header_name(&req->pool, name.base, name.len);
+    h2o_iovec_t name = convert_env_to_header_name(&req->pool, env_key->base, env_key->len);
     if (name.base == NULL)
         return 0;
 
@@ -559,7 +559,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             RETRIEVE_ENV(scheme, 1);
         } else if (RSTRING_LEN(key) >= 5 && memcmp(RSTRING_PTR(key), "HTTP_", 5) == 0) {
             value = h2o_mruby_to_str(mrb, value);
-            h2o_mruby_split_header_pair(ctx->shared, key, value, handle_request_header, &subreq->super);
+            h2o_mruby_split_header_pair(ctx->shared, key, value, handle_header_env_key, &subreq->super);
         } else {
             /* set to req->env */
             value = h2o_mruby_to_str(mrb, value);
@@ -918,7 +918,7 @@ static void send_response_shortcutted(struct st_mruby_subreq_t *subreq)
     int i;
     for (i = 0; i != subreq->super.res.headers.size; ++i) {
         h2o_header_t *header = subreq->super.res.headers.entries + i;
-        h2o_mruby_handle_response_header(generator->ctx->shared, *header->name, header->value, generator->req);
+        h2o_mruby_set_response_header(generator->ctx->shared, header->name, header->value, generator->req);
     }
     /* add date: if it's missing from the response */
     if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)

@@ -434,25 +434,25 @@ static inline void append_to_buffer(h2o_buffer_t **buf, const void *src, size_t 
     (*buf)->size += len;
 }
 
-static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_ctx)
+static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
 
     /* ignore certain headers */
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("content-length")) || h2o_lcstris(name.base, name.len, H2O_STRLIT("host")))
+    if (h2o_lcstris(name->base, name->len, H2O_STRLIT("content-length")) || h2o_lcstris(name->base, name->len, H2O_STRLIT("host")))
         return 0;
 
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("connection"))) {
+    if (h2o_lcstris(name->base, name->len, H2O_STRLIT("connection"))) {
         if (!ctx->req.can_keepalive)
             return 0;
     }
 
     /* mark the existence of transfer-encoding in order to prevent us from adding content-length header */
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT("transfer-encoding")))
+    if (h2o_lcstris(name->base, name->len, H2O_STRLIT("transfer-encoding")))
         ctx->req.has_transfer_encoding = 1;
 
-    h2o_buffer_reserve(&ctx->req.buf, name.len + value.len + sizeof(": \r\n") - 1);
-    append_to_buffer(&ctx->req.buf, name.base, name.len);
+    h2o_buffer_reserve(&ctx->req.buf, name->len + value.len + sizeof(": \r\n") - 1);
+    append_to_buffer(&ctx->req.buf, name->base, name->len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT(": "));
     append_to_buffer(&ctx->req.buf, value.base, value.len);
     append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));

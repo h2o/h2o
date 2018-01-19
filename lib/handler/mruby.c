@@ -780,17 +780,23 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     return env;
 }
 
-int h2o_mruby_handle_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
+int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
     static const h2o_iovec_t fallthru_set_prefix = {H2O_STRLIT(FALLTHRU_SET_PREFIX)};
+    h2o_iovec_t lc_name;
 
-    /* convert name to lowercase */
-    name = h2o_strdup(&req->pool, name.base, name.len);
-    h2o_strtolower(name.base, name.len);
+    if (h2o_iovec_is_token(name)) {
+        token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+    } else {
+        /* convert name to lowercase */
+        lc_name = h2o_strdup(&req->pool, name->base, name->len);
+        h2o_strtolower(lc_name.base, lc_name.len);
+        token = h2o_lookup_token(lc_name.base, lc_name.len);
+    }
 
-    if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
+    if (token != NULL) {
         if (token->proxy_should_drop_for_res) {
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
@@ -805,19 +811,19 @@ int h2o_mruby_handle_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o
                 h2o_add_header(&req->pool, &req->res.headers, token, NULL, value.base, value.len);
             }
         }
-    } else if (name.len > fallthru_set_prefix.len &&
-               h2o_memis(name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
+    } else if (lc_name.len > fallthru_set_prefix.len &&
+               h2o_memis(lc_name.base, fallthru_set_prefix.len, fallthru_set_prefix.base, fallthru_set_prefix.len)) {
         /* register environment variables (with the name converted to uppercase, and using `_`) */
         size_t i;
-        name.base += fallthru_set_prefix.len;
-        name.len -= fallthru_set_prefix.len;
-        for (i = 0; i != name.len; ++i)
-            name.base[i] = name.base[i] == '-' ? '_' : h2o_toupper(name.base[i]);
-        h2o_iovec_t *slot = h2o_req_getenv(req, name.base, name.len, 1);
+        lc_name.base += fallthru_set_prefix.len;
+        lc_name.len -= fallthru_set_prefix.len;
+        for (i = 0; i != lc_name.len; ++i)
+            lc_name.base[i] = lc_name.base[i] == '-' ? '_' : h2o_toupper(lc_name.base[i]);
+        h2o_iovec_t *slot = h2o_req_getenv(req, lc_name.base, lc_name.len, 1);
         *slot = h2o_strdup(&req->pool, value.base, value.len);
     } else {
         value = h2o_strdup(&req->pool, value.base, value.len);
-        h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, NULL, value.base, value.len);
+        h2o_add_header_by_str(&req->pool, &req->res.headers, lc_name.base, lc_name.len, 0, NULL, value.base, value.len);
     }
 
     return 0;
@@ -896,7 +902,7 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
     generator->req->res.status = (int)status;
 
     /* set headers */
-    if (h2o_mruby_iterate_headers_obj(generator->ctx->shared, mrb_ary_entry(resp, 1), h2o_mruby_handle_response_header, generator->req) != 0) {
+    if (h2o_mruby_iterate_headers_obj(generator->ctx->shared, mrb_ary_entry(resp, 1), h2o_mruby_set_response_header, generator->req) != 0) {
         return -1;
     }
     /* add date: if it's missing from the response */
@@ -1089,7 +1095,7 @@ mrb_value h2o_mruby_each_to_array(h2o_mruby_shared_context_t *shared_ctx, mrb_va
 }
 
 int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_value name, mrb_value value,
-                                int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data)
+                                int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
 {
     mrb_state *mrb = shared_ctx->mrb;
 
@@ -1107,8 +1113,8 @@ int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_valu
         for (eol = vstart; eol != vend; ++eol)
             if (*eol == '\n')
                 break;
-        if (cb(shared_ctx, h2o_iovec_init(RSTRING_PTR(name), RSTRING_LEN(name)), h2o_iovec_init(vstart, eol - vstart), cb_data) !=
-            0)
+        h2o_iovec_t namevec = (h2o_iovec_init(RSTRING_PTR(name), RSTRING_LEN(name)));
+        if (cb(shared_ctx, &namevec, h2o_iovec_init(vstart, eol - vstart), cb_data) != 0)
             return -1;
         if (eol == vend)
             break;
@@ -1119,7 +1125,7 @@ int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_valu
 }
 
 int h2o_mruby_iterate_headers_obj(h2o_mruby_shared_context_t *shared_ctx, mrb_value headers,
-                                  int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t, h2o_iovec_t, void *), void *cb_data)
+                                  int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
 {
     mrb_state *mrb = shared_ctx->mrb;
 
