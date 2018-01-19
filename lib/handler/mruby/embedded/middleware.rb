@@ -25,7 +25,7 @@ module H2O
       @reprocess = reprocess
     end
     def call(env)
-      _h2o_middleware_call(env, @reprocess)
+      request(env).join
     end
   end
 
@@ -34,6 +34,15 @@ module H2O
   end
   def self.reprocess
     @@reprocess ||= App.new(true)
+  end
+
+  class AppRequest
+    def join
+      if !@resp
+        @resp = _h2o_middleware_join_response(self)
+      end
+      @resp
+    end
   end
 
   class AppInputStream

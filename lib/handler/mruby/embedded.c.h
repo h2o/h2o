@@ -272,7 +272,7 @@
     "      @reprocess = reprocess\n"                                                                                               \
     "    end\n"                                                                                                                    \
     "    def call(env)\n"                                                                                                          \
-    "      _h2o_middleware_call(env, @reprocess)\n"                                                                                \
+    "      request(env).join\n"                                                                                                    \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
@@ -281,6 +281,15 @@
     "  end\n"                                                                                                                      \
     "  def self.reprocess\n"                                                                                                       \
     "    @@reprocess ||= App.new(true)\n"                                                                                          \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  class AppRequest\n"                                                                                                         \
+    "    def join\n"                                                                                                               \
+    "      if !@resp\n"                                                                                                            \
+    "        @resp = _h2o_middleware_join_response(self)\n"                                                                        \
+    "      end\n"                                                                                                                  \
+    "      @resp\n"                                                                                                                \
+    "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
     "  class AppInputStream\n"                                                                                                     \

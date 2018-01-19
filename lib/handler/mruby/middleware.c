@@ -49,7 +49,10 @@ struct st_mruby_subreq_t {
     struct st_mruby_subreq_conn_t conn;
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
-    mrb_value ref;
+    struct {
+        mrb_value request;
+        mrb_value input_stream;
+    } refs;
     mrb_value chunks;
     mrb_value error_stream;
     h2o_mruby_generator_t *shortcut;
@@ -81,19 +84,34 @@ static void dispose_subreq(struct st_mruby_subreq_t *subreq)
         subreq->chunks = mrb_nil_value();
     }
 
-    if (! mrb_nil_p(subreq->ref))
-        DATA_PTR(subreq->ref) = NULL;
+    if (!mrb_nil_p(subreq->refs.request))
+        DATA_PTR(subreq->refs.request) = NULL;
+    if (!mrb_nil_p(subreq->refs.input_stream))
+        DATA_PTR(subreq->refs.input_stream) = NULL;
+
     h2o_dispose_request(&subreq->super);
     free(subreq);
+}
+
+static void on_gc_dispose_app_request(mrb_state *mrb, void *_subreq)
+{
+    struct st_mruby_subreq_t *subreq = _subreq;
+    if (subreq == NULL) return;
+    subreq->refs.request = mrb_nil_value();
+    if (mrb_nil_p(subreq->refs.input_stream))
+        dispose_subreq(subreq);
 }
 
 static void on_gc_dispose_app_input_stream(mrb_state *mrb, void *_subreq)
 {
     struct st_mruby_subreq_t *subreq = _subreq;
     if (subreq == NULL) return;
-    dispose_subreq(subreq);
+    subreq->refs.input_stream = mrb_nil_value();
+    if (mrb_nil_p(subreq->refs.request))
+        dispose_subreq(subreq);
 }
 
+const static struct mrb_data_type app_request_type = {"app_request_type", on_gc_dispose_app_request};
 const static struct mrb_data_type app_input_stream_type = {"app_input_stream", on_gc_dispose_app_input_stream};
 
 static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *name, size_t len)
@@ -185,6 +203,16 @@ static void push_chunks(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, s
     mrb_gc_arena_restore(mrb, gc_arena);
 }
 
+static mrb_value detach_receiver(struct st_mruby_subreq_t *subreq)
+{
+    mrb_value receiver = subreq->receiver;
+    assert(!mrb_nil_p(receiver));
+    subreq->receiver = mrb_nil_value();
+    mrb_gc_unregister(subreq->ctx->shared->mrb, receiver);
+    mrb_gc_protect(subreq->ctx->shared->mrb, receiver);
+    return receiver;
+}
+
 static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     struct st_mruby_subreq_t *subreq = (void *)_subreq;
@@ -213,28 +241,25 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
 
     push_chunks(subreq, inbufs, inbufcnt);
 
-    /* detach receiver */
-    if (! mrb_nil_p(subreq->receiver)) {
-        int gc_arena = mrb_gc_arena_save(mrb);
+    int gc_arena = mrb_gc_arena_save(mrb);
 
-        mrb_value input = mrb_nil_value();
-        if (mrb_nil_p(subreq->ref)) {
-            /* at first call, main fiber should be blocking at H2O.next.call */
-            mrb_value resp = build_app_response(subreq);
-            subreq->ref = mrb_ary_entry(resp, 2);
-            input = resp;
+    if (mrb_nil_p(subreq->refs.input_stream)) {
+        /* at first, build app response using subreq->res */
+        mrb_value resp = build_app_response(subreq);
+        subreq->refs.input_stream = mrb_ary_entry(resp, 2);
+
+        if (mrb_nil_p(subreq->receiver)) {
+            mrb_iv_set(mrb, subreq->refs.request, mrb_intern_lit(mrb, "@resp"), resp);
         } else {
-            input = mrb_ary_shift(mrb, subreq->chunks);
+            h2o_mruby_run_fiber(subreq->ctx, detach_receiver(subreq), resp, NULL);
         }
-
-        mrb_value receiver = subreq->receiver;
-        mrb_gc_unregister(mrb, receiver);
-        mrb_gc_protect(mrb, receiver);
-        subreq->receiver = mrb_nil_value();
-        h2o_mruby_run_fiber(subreq->ctx, receiver, input, NULL);
-
-        mrb_gc_arena_restore(mrb, gc_arena);
+    } else if (!mrb_nil_p(subreq->receiver) && (RARRAY_LEN(subreq->chunks) != 0 || subreq->final_received)){
+        /* after that, provide first body chunk to waiting receiver */
+        mrb_value chunk = mrb_ary_shift(mrb, subreq->chunks);
+        h2o_mruby_run_fiber(subreq->ctx, detach_receiver(subreq), chunk, NULL);
     }
+
+    mrb_gc_arena_restore(mrb, gc_arena);
 }
 
 static void prepare_subreq_entity(h2o_req_t *subreq, h2o_mruby_context_t *ctx, mrb_value rack_input)
@@ -419,7 +444,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     memset(&subreq->conn, 0, sizeof(subreq->conn));
     subreq->ctx = ctx;
     subreq->receiver = mrb_nil_value();
-    subreq->ref = mrb_nil_value();
+    subreq->refs.request = mrb_nil_value();
+    subreq->refs.input_stream = mrb_nil_value();
     subreq->chunks = mrb_ary_new(mrb);
     mrb_gc_register(mrb, subreq->chunks);
     subreq->shortcut = NULL;
@@ -653,38 +679,51 @@ Failed:
 #undef STR_TO_IOVEC
 }
 
-static mrb_value middleware_call_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
+static mrb_value middleware_join_response_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                             int *run_again)
 {
-    mrb_state *mrb = ctx->shared->mrb;
+    mrb_state *mrb = mctx->shared->mrb;
+    struct st_mruby_subreq_t *subreq;
 
-    mrb_value env = mrb_ary_entry(args, 0);
-    if (! mrb_hash_p(env)) {
+    if ((subreq = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &app_request_type)) == NULL) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "env must be a hash");
+        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "AppRequest#join wrong self");
     }
 
-    mrb_value reprocess = mrb_ary_entry(args, 1);
+    subreq->receiver = *receiver;
+    mrb_gc_register(mrb, *receiver);
+    return mrb_nil_value();
+}
+
+static mrb_value middleware_request_method(mrb_state *mrb, mrb_value self)
+{
+    h2o_mruby_shared_context_t *shared_ctx = mrb->ud;
+    h2o_mruby_context_t *ctx = shared_ctx->current_context;
+    assert(ctx != NULL);
+
+    mrb_value env;
+    mrb_value reprocess;
+    mrb_get_args(mrb, "H", &env);
+    reprocess = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@reprocess"));
 
     /* create subreq */
-    struct st_mruby_subreq_t *subreq = create_subreq(ctx, env, mrb_bool(reprocess));
+    struct st_mruby_subreq_t *subreq = create_subreq(shared_ctx->current_context, env, mrb_bool(reprocess));
     if (mrb->exc != NULL) {
         mrb_value exc = mrb_obj_value(mrb->exc);
         mrb->exc = NULL;
-        *run_again = 1;
-        return exc;
+        mrb_exc_raise(mrb, exc);
     }
-    subreq->receiver = *receiver;
-    mrb_gc_register(mrb, *receiver);
+
+    subreq->refs.request = h2o_mruby_create_data_instance(mrb, mrb_ary_entry(ctx->shared->constants, H2O_MRUBY_APP_REQUEST_CLASS), subreq, &app_request_type);
 
     h2o_req_t *super = &subreq->super;
-
     if (mrb_bool(reprocess)) {
         h2o_reprocess_request_deferred(super, super->method, super->scheme, super->authority, super->path, super->overrides, 1);
     } else {
         h2o_delegate_request_deferred(super);
     }
 
-    return mrb_nil_value();
+    return subreq->refs.request;
 }
 
 static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
@@ -724,10 +763,17 @@ void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *shared_ctx)
 
     struct RClass *module = mrb_define_module(mrb, "H2O");
 
-    h2o_mruby_define_callback(mrb, "_h2o_middleware_call", middleware_call_callback);
+    struct RClass *app_klass = mrb_class_get_under(shared_ctx->mrb, module, "App");
+    mrb_define_method(mrb, app_klass, "request", middleware_request_method, MRB_ARGS_ARG(1, 0));
+
+    struct RClass *app_request_klass = mrb_class_get_under(shared_ctx->mrb, module, "AppRequest");
+    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_APP_REQUEST_CLASS, mrb_obj_value(app_request_klass));
+    h2o_mruby_define_callback(mrb, "_h2o_middleware_join_response", middleware_join_response_callback);
+
+    struct RClass *app_input_stream_klass = mrb_class_get_under(shared_ctx->mrb, module, "AppInputStream");
+    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_APP_INPUT_STREAM_CLASS, mrb_obj_value(app_input_stream_klass));
     h2o_mruby_define_callback(mrb, "_h2o_middleware_wait_chunk", middleware_wait_chunk_callback);
-    struct RClass *klass = mrb_class_get_under(shared_ctx->mrb, module, "AppInputStream");
-    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_APP_INPUT_STREAM_CLASS, mrb_obj_value(klass));
+
     h2o_mruby_assert(mrb);
 }
 
@@ -735,7 +781,7 @@ static void flush_chunks(struct st_mruby_subreq_t *subreq)
 {
     h2o_mruby_generator_t *generator = subreq->shortcut;
     mrb_state *mrb = generator->ctx->shared->mrb;
-    assert(!mrb_nil_p(subreq->ref));
+    assert(!mrb_nil_p(subreq->refs.input_stream));
 
     size_t bufcnt = RARRAY_LEN(subreq->chunks);
     h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * bufcnt);
