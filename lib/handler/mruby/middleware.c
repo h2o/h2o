@@ -580,12 +580,12 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 #undef CHECK_KEY
 
     /* do validations */
-#define CHECK_REQUIRED(key, val, non_empty) do { \
-    if (mrb_nil_p(val)) { \
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: ## key")); \
+#define CHECK_REQUIRED(k, v, non_empty) do { \
+    if (mrb_nil_p(v)) { \
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: " k)); \
         goto Failed; \
-    } else if (non_empty && RSTRING_LEN(val) == 0) { \
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "key ## must be not empty")); \
+    } else if (non_empty && RSTRING_LEN(v) == 0) { \
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, k " must be not empty")); \
         goto Failed; \
     } \
 } while (0)
