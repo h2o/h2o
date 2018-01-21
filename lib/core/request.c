@@ -644,7 +644,7 @@ void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...)
 #undef INITIAL_BUF_SIZE
 
     /* build prefix */
-    char *pbuf = h2o_mem_alloc_pool(&req->pool, char, sizeof("[] in request::") + 32), *p = pbuf;
+    char *pbuf = h2o_mem_alloc_pool(&req->pool, char, sizeof("[] in request::") + 32 + strlen(module)), *p = pbuf;
     p += sprintf(p, "[%s] in request:", module);
     if (req->path.len < 32) {
         memcpy(p, req->path.base, req->path.len);
