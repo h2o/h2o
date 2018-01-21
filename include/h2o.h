@@ -1234,12 +1234,6 @@ extern const char *h2o_http2_npn_protocols;
 extern const char *h2o_npn_protocols;
 extern const h2o_iovec_t *h2o_http2_alpn_protocols;
 extern const h2o_iovec_t *h2o_alpn_protocols;
-/**
- * release all resources in tls(thread local storage) used by h2o
- * normally there is no need to do this like standalone server.
- * but when used as a library(libh2o or libh2o-evloop), the user may want to release resources hold in tls
- */
-void h2o_cleanup_thread(void);
 
 /**
  * accepts a connection
@@ -1291,6 +1285,10 @@ int h2o_get_compressible_types(const h2o_headers_t *headers);
  * builds destination URL or path, by contatenating the prefix and path_info of the request
  */
 h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized);
+/**
+ * release all thread-local resources used by h2o
+ */
+void h2o_cleanup_thread(void);
 
 extern uint64_t h2o_connection_id;
 
