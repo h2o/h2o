@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <inttypes.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -26,8 +27,9 @@
 #include "h2o/string_.h"
 #include "h2o/url.h"
 
-const h2o_url_scheme_t H2O_URL_SCHEME_HTTP = {{H2O_STRLIT("http")}, 80};
-const h2o_url_scheme_t H2O_URL_SCHEME_HTTPS = {{H2O_STRLIT("https")}, 443};
+const h2o_url_scheme_t H2O_URL_SCHEME_HTTP = {{H2O_STRLIT("http")}, 80, 0};
+const h2o_url_scheme_t H2O_URL_SCHEME_HTTPS = {{H2O_STRLIT("https")}, 443, 1};
+const h2o_url_scheme_t H2O_URL_SCHEME_FASTCGI = {{H2O_STRLIT("fastcgi")}, 65535, 0};
 
 static int decode_hex(int ch)
 {
@@ -73,8 +75,8 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t sr
     }
 
     /* dst can be 1 byte more than src if src is missing the prefixing '/' */
-    dst = h2o_mem_alloc_pool(pool, src_len + 1);
-    *norm_indexes = h2o_mem_alloc_pool(pool, (src_len + 1) * sizeof(*norm_indexes[0]));
+    dst = h2o_mem_alloc_pool(pool, char, src_len + 1);
+    *norm_indexes = h2o_mem_alloc_pool(pool,  *norm_indexes[0], (src_len + 1));
 
     if (src[0] == '/')
         src_off++;
@@ -407,3 +409,53 @@ const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
 }
 
 const char *h2o_url_host_to_sun_err_is_not_unix_socket = "supplied name does not look like an unix-domain socket";
+
+int h2o_url_init_with_hostport(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host,
+                               uint16_t port, h2o_iovec_t path)
+{
+    url->scheme = scheme;
+    url->path = path;
+
+    if (port == scheme->default_port) {
+        url->_port = 65535;
+        url->authority = h2o_strdup(pool, host.base, host.len);
+        url->host = url->authority;
+    } else {
+        url->_port = port;
+        char _port[sizeof(H2O_UINT16_LONGEST_STR)];
+        int port_len = sprintf(_port, "%" PRIu16, port);
+        if (port_len < 0)
+            return -1;
+
+        url->authority.len = host.len + 1 + port_len;
+        url->authority.base = pool == NULL ? h2o_mem_alloc(url->authority.len) : h2o_mem_alloc_pool(pool, char, url->authority.len);
+        memcpy(url->authority.base, host.base, host.len);
+        memcpy(url->authority.base + host.len, ":", 1);
+        memcpy(url->authority.base + host.len + 1, _port, port_len);
+        url->host = h2o_iovec_init(url->authority.base, url->authority.len - 1 - port_len);
+    }
+
+    return 0;
+}
+
+int h2o_url_init_with_sun_path(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t sun_path,
+                               h2o_iovec_t path)
+{
+    url->scheme = scheme;
+    url->path = path;
+    url->_port = 65535;
+
+#define PREFIX "[unix:"
+#define SUFFIX "]"
+    url->authority.len = strlen(PREFIX SUFFIX) + sun_path.len;
+    url->authority.base = pool == NULL ? h2o_mem_alloc(url->authority.len) : h2o_mem_alloc_pool(pool, char, url->authority.len);
+    memcpy(url->authority.base, PREFIX, sizeof(PREFIX) - 1);
+    memcpy(url->authority.base + sizeof(PREFIX) - 1, sun_path.base, sun_path.len);
+    memcpy(url->authority.base + url->authority.len - 1, SUFFIX, sizeof(SUFFIX) - 1);
+#undef PREFIX
+#undef SUFFIX
+
+    url->host = h2o_iovec_init(url->authority.base + 1, url->authority.len - 2);
+
+    return 0;
+}

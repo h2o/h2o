@@ -21,7 +21,7 @@ License and algorithms supported by the bindings are as follows:
 
 Note 1: Minicrypto binding is capable of signing a handshake using the certificate's key, but cannot verify a signature sent by the peer.
 
-How to
+Building picotls
 ---
 
 If you have cloned picotls from git then ensure that you have initialised the submodules:
@@ -36,6 +36,16 @@ Build using cmake:
 % make
 % make check
 ```
+
+A dedicated documentation for using picotls with Visual Studio can be found in [WindowsPort.md](WindowsPort.md).
+
+Developer documentation
+---
+
+Developer documentation should be available on [the wiki](https://github.com/h2o/picotls/wiki).
+
+Using the cli command
+---
 
 Run the test server (at 127.0.0.1:8443):
 ```

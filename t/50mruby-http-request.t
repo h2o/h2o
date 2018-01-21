@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
+use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port check_port);
 use Test::More;
 use t::Util;
@@ -17,15 +18,20 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $upstream_hostport = "127.0.0.1:@{[empty_port()]}";
+my $tempdir = tempdir(CLEANUP => 1);
 
 sub create_upstream {
+    my %opts = @_;
+    my $upstream_hostport = $opts{upstream_hostport} || "127.0.0.1:@{[empty_port()]}";
     my @args = (
         qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen),
         $upstream_hostport,
-        ASSETS_DIR . "/upstream.psgi",
     );
-    spawn_server(
+    if ($opts{keepalive}) {
+        push(@args, qw(--max-keepalive-reqs 100));
+    }
+    push(@args, ASSETS_DIR . "/upstream.psgi");
+    my $server = spawn_server(
         argv     => \@args,
         is_ready =>  sub {
             $upstream_hostport =~ /:([0-9]+)$/s
@@ -33,11 +39,14 @@ sub create_upstream {
             check_port($1);
         },
     );
+    return ($server, $upstream_hostport);
 };
 
-my $server = spawn_h2o(sub {
-    my ($port, $tls_port) = @_;
-    return << "EOT";
+subtest 'basic' => sub {
+    my $upstream_hostport = "127.0.0.1:@{[empty_port()]}";
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
 proxy.timeout.io: 1000
 hosts:
   default:
@@ -144,98 +153,99 @@ hosts:
             [200, {}, ["delegated!"]]
           end
 EOT
-});
-
-run_with_curl($server, sub {
-    my ($proto, $port, $curl_cmd) = @_;
-    $curl_cmd .= ' --silent --dump-header /dev/stderr';
-    subtest "connection-error" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
-        like $headers, qr{HTTP/[^ ]+ 500\s}is;
-    };
-    my $upstream = create_upstream();
-    subtest "get" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
-        like $headers, qr{HTTP/[^ ]+ 200\s}is;
-        is $body, "hello\n";
-    };
-    subtest "headers" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/echo-headers");
-        like $headers, qr{^HTTP/[^ ]+ 200\s}is;
-        like $body, qr{^host: $upstream_hostport$}im;
-        unlike $body, qr{^host: 127.0.0.1:$port$}im;
-        like $body, qr{^user-agent: *curl/}im;
-        like $body, qr{^accept: *\*/\*$}im;
-        like $body, qr{^x-h2o-mruby:}im;
-    };
-    subtest "post" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd --data 'hello world' $proto://127.0.0.1:$port/echo");
-        like $headers, qr{HTTP/[^ ]+ 200\s}is;
-        is $body, 'hello world';
-    };
-    subtest "slow-chunked" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/streaming-body");
-        like $headers, qr{HTTP/[^ ]+ 200\s}is;
-        is $body, (join "", 1..30);
-    };
-    subtest "as_str" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/as_str/");
-        like $headers, qr{HTTP/[^ ]+ 200\s}is;
-        is $body, "hello\n";
-    };
-    subtest "content-length" => sub {
-        subtest "non-chunked" => sub {
-            for my $i (0..15) {
-                subtest "cl=$i" => sub {
-                    my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
-                    like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
-                    is $body, substr "abcdefghijklmno", 0, $i;
-                }
-            };
-            for my $i (16..30) {
-                subtest "cl=$i" => sub {
-                    my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
-                    like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*15\r}is;
-                    is $body, "abcdefghijklmno";
-                }
-            };
+    });
+    
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl_cmd) = @_;
+        $curl_cmd .= ' --silent --dump-header /dev/stderr';
+        subtest "connection-error" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
+            like $headers, qr{HTTP/[^ ]+ 500\s}is;
         };
-        subtest "chunked" => sub {
-            for my $i (0..30) {
-                subtest "cl=$i" => sub {
-                    my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i/chunked");
-                    like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
-                    is $body, substr "abcdefghijklmno", 0, $i;
-                }
-            };
-        };
-    };
-    subtest "esi" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
-        like $headers, qr{HTTP/[^ ]+ 200\s}is;
-        is $body, "Hello to the world, from H2O!\n";
-    };
-    subtest "partial" => sub {
-        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/partial/");
-        like $headers, qr{HTTP/[^ ]+ 200\s}is;
-        is $body, join "", 2..30;
-    };
-    subtest "async-delegate" => sub {
-        subtest "non-delegated" => sub {
-            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/index.txt");
+        my ($upstream) = create_upstream(upstream_hostport => $upstream_hostport);
+        subtest "get" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
             like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "hello\n";
         };
-        subtest "delegated" => sub {
-            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/notfound");
-            like $headers, qr{HTTP/[^ ]+ 200\s}is;
-            is $body, "delegated!";
+        subtest "headers" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/echo-headers");
+            like $headers, qr{^HTTP/[^ ]+ 200\s}is;
+            like $body, qr{^host: $upstream_hostport$}im;
+            unlike $body, qr{^host: 127.0.0.1:$port$}im;
+            like $body, qr{^user-agent: *curl/}im;
+            like $body, qr{^accept: *\*/\*$}im;
+            like $body, qr{^x-h2o-mruby:}im;
         };
-    };
-});
+        subtest "post" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd --data 'hello world' $proto://127.0.0.1:$port/echo");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, 'hello world';
+        };
+        subtest "slow-chunked" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/streaming-body");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, (join "", 1..30);
+        };
+        subtest "as_str" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/as_str/");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, "hello\n";
+        };
+        subtest "content-length" => sub {
+            subtest "non-chunked" => sub {
+                for my $i (0..15) {
+                    subtest "cl=$i" => sub {
+                        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
+                        like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
+                        is $body, substr "abcdefghijklmno", 0, $i;
+                    }
+                };
+                for my $i (16..30) {
+                    subtest "cl=$i" => sub {
+                        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
+                        like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*15\r}is;
+                        is $body, "abcdefghijklmno";
+                    }
+                };
+            };
+            subtest "chunked" => sub {
+                for my $i (0..30) {
+                    subtest "cl=$i" => sub {
+                        my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i/chunked");
+                        like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
+                        is $body, substr "abcdefghijklmno", 0, $i;
+                    }
+                };
+            };
+        };
+        subtest "esi" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, "Hello to the world, from H2O!\n";
+        };
+        subtest "partial" => sub {
+            my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/partial/");
+            like $headers, qr{HTTP/[^ ]+ 200\s}is;
+            is $body, join "", 2..30;
+        };
+        subtest "async-delegate" => sub {
+            subtest "non-delegated" => sub {
+                my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/index.txt");
+                like $headers, qr{HTTP/[^ ]+ 200\s}is;
+                is $body, "hello\n";
+            };
+            subtest "delegated" => sub {
+                my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/async-delegate/notfound");
+                like $headers, qr{HTTP/[^ ]+ 200\s}is;
+                is $body, "delegated!";
+            };
+        };
+    });
+};
 
 subtest 'cache-response' => sub {
-    my $upstream = create_upstream();
+    my ($upstream, $upstream_hostport) = create_upstream();
     my $server = spawn_h2o(sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
@@ -265,7 +275,7 @@ EOT
 };
 
 subtest 'double consume' => sub {
-    my $upstream = create_upstream();
+    my ($upstream, $upstream_hostport) = create_upstream();
     my $server = spawn_h2o(sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
@@ -339,7 +349,7 @@ EOT
 };
 
 subtest 'empty body' => sub {
-    my $upstream = create_upstream();
+    my ($upstream, $upstream_hostport) = create_upstream();
     my $server = spawn_h2o(sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
@@ -379,6 +389,207 @@ EOT
             is $body, "";
         };
     });
+};
+
+subtest 'keep-alive (h2o <=> upstream)' => sub {
+    my ($upstream, $upstream_hostport) = create_upstream(keepalive => 1);
+    my $spawner = sub {
+        my %opts = @_;
+        spawn_h2o(<< "EOT");
+@{[ $opts{keepalive} ? "" : "proxy.timeout.keepalive: 0" ]}
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            q = env['QUERY_STRING']
+            headers = q.empty? ? nil : { 'Connection' => q }
+            resp = http_request("http://$upstream_hostport/echo-remote-port", { :headers => headers }).join
+            resp[1]['upstream-connection'] = resp[1]['connection'] || 'keep-alive'
+            resp
+          }
+EOT
+    };
+    my $curl = 'curl --silent --dump-header /dev/stderr';
+
+    subtest 'on' => sub {
+        subtest "default" => sub {
+            my $server = $spawner->(keepalive => 1);
+            my ($headers, $body);
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/");
+            like $headers, qr{^upstream-connection: keep-alive}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            is $body, $remote_port
+        };
+
+        subtest "keep-alive" => sub {
+            my $server = $spawner->(keepalive => 1);
+            my ($headers, $body);
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
+            like $headers, qr{^upstream-connection: keep-alive}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            is $body, $remote_port
+        };
+
+        subtest "close" => sub {
+            my $server = $spawner->(keepalive => 1);
+            my ($headers, $body);
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            my $remote_port = $body;
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+            like $headers, qr{^upstream-connection: close}im;
+            isnt $body, $remote_port
+        };
+    };
+
+    subtest 'off' => sub {
+        my $server = $spawner->(keepalive => 0);
+        my ($headers, $body);
+
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
+        like $headers, qr{^upstream-connection: close}im;
+        my $remote_port = $body;
+
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
+        like $headers, qr{^upstream-connection: close}im;
+        isnt $body, $remote_port
+    };
+};
+
+subtest 'keep-alive (client <=> h2o)' => sub {
+    my $doit = sub {
+        my ($path, $chunked) = @_;
+
+        unlink "$tempdir/access_log";
+        my ($upstream, $upstream_hostport) = create_upstream();
+        my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+access-log:
+  format: "%{remote}p"
+  path: $tempdir/access_log
+hosts:
+  default:
+    paths:
+      /shortcut:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/halfdome.jpg").join
+            headers = {}
+            unless env['QUERY_STRING'] == '?chunked'
+              headers['content-length'] = resp[1]['content-length']
+            end
+            [200, headers, resp[2]]
+          }
+      /no-shortcut:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/halfdome.jpg").join
+            headers = {}
+            unless env['QUERY_STRING'] == '?chunked'
+              headers['content-length'] = resp[1]['content-length']
+            end
+            [200, headers, Class.new do
+              def initialize(body)
+                \@body = body
+              end
+              def each
+                \@body.each {|buf| yield buf }
+              end
+            end.new(resp[2])]
+          }
+EOT
+
+        my $query = $chunked ? '?chunked' : '';
+        my $url = "http://127.0.0.1:$server->{port}$path$query";
+        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr $url $url");
+        undef $server->{guard}; # wait until the log gets emitted
+        my @log = do {
+            open my $fh, "<", "$tempdir/access_log" or die "failed to open access_log:$!";
+            map { my $l = $_; chomp $l; $l } <$fh>;
+        };
+        is $log[0], $log[1];
+    };
+
+    subtest 'no-shortcut' => sub {
+        subtest 'chunked' => sub {
+            $doit->('/no-shortcut', 1);
+        };
+        subtest 'no-chunked' => sub {
+            $doit->('/no-shortcut', 0);
+        };
+    };
+
+    subtest 'shortcut' => sub {
+        subtest 'chunked' => sub {
+            $doit->('/shortcut', 1);
+        };
+        subtest 'no-chunked' => sub {
+            $doit->('/shortcut', 0);
+        };
+    };
+};
+
+subtest 'timeout' => sub {
+    subtest 'connect timeout' => sub {
+        my $server = spawn_h2o(<< "EOT");
+proxy.timeout.connect: 100
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://192.0.2.0/").join
+            if warn = resp[1].delete('client-warning')
+              [504, resp[1], ["client warning: #{warn}"]]
+            else
+              resp
+            end
+          }
+EOT
+
+        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        like $headers, qr{HTTP/[^ ]+ 504\s}is;
+        is $body, 'client warning: connection timeout';
+    };
+
+    subtest 'first byte timeout' => sub {
+        my ($upstream, $upstream_hostport) = create_upstream();
+        my $server = spawn_h2o(<< "EOT");
+proxy.timeout.first_byte: 100
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            resp = http_request("http://$upstream_hostport/sleep-and-respond?sleep=1").join
+            if warn = resp[1].delete('client-warning')
+              [504, resp[1], ["client warning: #{warn}"]]
+            else
+              resp
+            end
+          }
+EOT
+
+        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        like $headers, qr{HTTP/[^ ]+ 504\s}is;
+        is $body, 'client warning: I/O timeout';
+    };
 };
 
 done_testing();

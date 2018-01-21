@@ -525,4 +525,113 @@ EOT
     unlike $headers, qr{^content-length:}im;
 };
 
+subtest 'PATH_INFO and SCRIPT_NAME' => sub {
+    plan skip_all => "nc not found"
+        unless prog_exists("nc");
+
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            [200, {}, ['handler1, ' + env['SCRIPT_NAME'] + ', ' + env['PATH_INFO']]]
+          }
+      /abc:
+        mruby.handler: |
+          proc {|env|
+            [200, {}, ['handler2, ' + env['SCRIPT_NAME'] + ', ' + env['PATH_INFO']]]
+          }
+      "/foo bar":
+        mruby.handler: |
+          proc {|env|
+            [200, {}, ['handler3, ' + env['SCRIPT_NAME'] + ', ' + env['PATH_INFO']]]
+          }
+EOT
+    my $nc = sub {
+        my $path = shift;
+        my $cmd = "echo 'GET $path HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r' | nc 127.0.0.1 $server->{port}";
+        (undef, my $r) = run_prog($cmd);
+        split(/\r\n\r\n/, $r, 2);
+    };
+
+    my $body;
+    (undef, $body) = $nc->('/abc/def%20ghi');
+    is $body, 'handler2, /abc, /def%20ghi', 'should be kept undecoded';
+
+    (undef, $body) = $nc->('/abc/def/../ghi/../jhk');
+    is $body, 'handler2, /abc, /def/../ghi/../jhk', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339614160';
+
+    (undef, $body) = $nc->('/123/../abc/def/../ghi');
+    is $body, 'handler2, /abc, /def/../ghi', 'https://github.com/h2o/h2o/pull/1480#issuecomment-339658134';
+
+    (undef, $body) = $nc->('/foo%20bar/baz');
+    is $body, 'handler3, /foo bar, /baz', 'paths should be decoded';
+
+    (undef, $body) = $nc->('/xxx/../hoge');
+    is $body, 'handler1, , /xxx/../hoge', 'string size is too big issue 1';
+
+    (undef, $body) = $nc->('/../abc');
+    is $body, 'handler2, /abc, ', 'string size is too big issue 2';
+
+    (undef, $body) = $nc->('abc');
+    is $body, 'handler2, /abc, ', 'no leading slash 1';
+
+    (undef, $body) = $nc->('abc/def');
+    is $body, 'handler2, /abc, /def', 'no leading slash 2';
+
+    (undef, $body) = $nc->('123/../abc/def/../ghi');
+    is $body, 'handler2, /abc, /def/../ghi', 'no leading slash 3';
+
+    (undef, $body) = $nc->('xyz');
+    is $body, 'handler1, , xyz', 'no leading slash 4';
+
+    (undef, $body) = $nc->('');
+    is $body, 'handler1, , ', 'empty path';
+};
+
+subtest 'invalid response' => sub {
+    my $server = spawn_h2o(<< "EOT");
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env| eval([env["QUERY_STRING"]].pack("H*")) }
+EOT
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $fetch = sub {
+            run_prog("$curl --silent --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/?@{[unpack 'H*', $_[0]]}");
+        };
+        my ($headers, $body) = $fetch->('[200, {}, ["hello world"]]');
+        subtest "verify the methodology" => sub {
+            like $headers, qr{^HTTP/[0-9.]+ 200 }is;
+            is $body, "hello world";
+        };
+        ($headers, $body) = $fetch->('nil');
+        like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'nil';
+        ($headers, $body) = $fetch->('["200", {}, []]');
+        like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'invalid status';
+        ($headers, $body) = $fetch->('[200]');
+        like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'no headers';
+        ($headers, $body) = $fetch->('[200, nil, nil]');
+        like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'nil headers';
+        ($headers, $body) = $fetch->('[200, "abc", nil]');
+        like $headers, qr{^HTTP/[0-9.]+ 500 }is, 'invalid headers';
+        ($headers, $body) = $fetch->('[200, {}]');
+        like $headers, qr{^HTTP/[0-9.]+ 200 }is, 'no body';
+        is $body, "";
+        ($headers, $body) = $fetch->('[200, {}, nil]');
+        like $headers, qr{^HTTP/[0-9.]+ 200 }is, 'nil body';
+        is $body, "";
+        ($headers, $body) = $fetch->('[200, {}, "abc"]');
+        like $headers, qr{^HTTP/[0-9.]+ 200 }is, 'invalid body';
+        is $body, "";
+    });
+};
+
 done_testing();

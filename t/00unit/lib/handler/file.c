@@ -548,10 +548,10 @@ static void test_range_req(void)
         ok(h2o_memis(content_type.base, mimebaselen, "multipart/byteranges; boundary=", mimebaselen));
         memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
         boundary[BOUNDARY_SIZE] = 0;
-        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, char, 256);
         expected[0].len =
             sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 0-9/1000\r\n\r\n%s", "text/plain", "123456789\n");
-        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, char, 256);
         expected[1].len = sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 989-999/1000\r\n\r\n%s", "text/plain",
                                   "\n123456789\n");
         ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
@@ -578,10 +578,10 @@ static void test_range_req(void)
         ok(h2o_memis(content_type.base, mimebaselen, "multipart/byteranges; boundary=", mimebaselen));
         memcpy(boundary, content_type.base + mimebaselen, BOUNDARY_SIZE);
         boundary[BOUNDARY_SIZE] = 0;
-        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[0].base = h2o_mem_alloc_pool(&conn->req.pool, char, 256);
         expected[0].len =
             sprintf(expected[0].base, "Content-Type: %s\r\nContent-Range: bytes 1-3/1000\r\n\r\n%s", "text/plain", "234");
-        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, 256);
+        expected[1].base = h2o_mem_alloc_pool(&conn->req.pool, char, 256);
         expected[1].len =
             sprintf(expected[1].base, "Content-Type: %s\r\nContent-Range: bytes 5-9/1000\r\n\r\n%s", "text/plain", "6789\n");
         ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);

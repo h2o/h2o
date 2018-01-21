@@ -40,96 +40,142 @@ typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
+/**
+ * TODO: support subclassing for adding balancer-specific properties
+ */
+typedef struct st_h2o_socketpool_target_conf_t {
+    /**
+     * weight - 1 for load balancer, where weight is an integer within range [1, 256]
+     */
+    uint8_t weight_m1;
+} h2o_socketpool_target_conf_t;
+
+#define H2O_SOCKETPOOL_TARGET_MAX_WEIGHT 256
+
 typedef struct st_h2o_socketpool_target_t {
+    /**
+     * target URL
+     */
+    h2o_url_t url;
+    /**
+     * target type (extracted from url)
+     */
     h2o_socketpool_target_type_t type;
-    int is_ssl;
-    struct {
-        h2o_iovec_t host;
-        union {
-            /* used to specify servname passed to getaddrinfo */
-            h2o_iovec_t named_serv;
-            /* if type is sockaddr, the `host` is not resolved but is used for TLS SNI and hostname verification */
-            struct {
-                struct sockaddr_storage bytes;
-                socklen_t len;
-            } sockaddr;
-        };
+    /**
+     * peer address (extracted from url)
+     */
+    union {
+        /* used to specify servname passed to getaddrinfo */
+        h2o_iovec_t named_serv;
+        /* if type is sockaddr, the `host` is not resolved but is used for TLS SNI and hostname verification */
+        struct {
+            struct sockaddr_storage bytes;
+            socklen_t len;
+        } sockaddr;
     } peer;
-    h2o_url_t *url;
+    /**
+     * per-target lb configuration
+     */
+    h2o_socketpool_target_conf_t conf;
+
+    /**
+     * the per-target portion of h2o_socketpool_t::_shared
+     */
+    struct {
+        h2o_linklist_t sockets;
+        /**
+         * number of connections being _leased_ to the applications (i.e. not including the number of connections being pooled).
+         * Synchronous operation must be used to access the variable.
+         */
+        size_t leased_count;
+    } _shared;
 } h2o_socketpool_target_t;
 
-typedef H2O_VECTOR(h2o_socketpool_target_t) h2o_socketpool_target_vector_t;
+typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
 
-typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried);
-
-typedef void (*h2o_socketpool_lb_initializer)(h2o_socketpool_target_vector_t *targets, void **data);
-
-typedef void (*h2o_socketpool_lb_dispose_cb)(void *data);
+typedef struct st_h2o_balancer_t h2o_balancer_t;
 
 typedef struct st_h2o_socketpool_t {
 
     /* read-only vars */
     h2o_socketpool_target_vector_t targets;
     size_t capacity;
-    uint64_t timeout; /* in milliseconds (UINT64_MAX if not set) */
+    uint64_t timeout; /* in milliseconds */
     struct {
         h2o_loop_t *loop;
         h2o_timeout_t timeout;
         h2o_timeout_entry_t entry;
     } _interval_cb;
+    SSL_CTX *_ssl_ctx;
 
-    /* vars that are modified by multiple threads */
+    /**
+     * variables shared between threads. Unless otherwise noted, the mutex should be acquired before accessing them.
+     */
     struct {
-        size_t count; /* synchronous operations should be used to access the variable */
         pthread_mutex_t mutex;
-        h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+        /**
+         * list of struct pool_entry_t
+         */
+        h2o_linklist_t sockets;
+        /**
+         * number of connections governed by the pool, includes sockets being pool and the ones trying to connect. Synchronous
+         * operation must be used to access the variable.
+         */
+        size_t count;
     } _shared;
 
-    /* vars used by load balancing, modified by multiple threads */
-    struct {
-        h2o_socketpool_lb_selector selector;
-        h2o_socketpool_lb_dispose_cb dispose;
-        void *data;
-    } _lb;
+    /* load balancer */
+    h2o_balancer_t *balancer;
 } h2o_socketpool_t;
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
 
-typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_socketpool_target_t *target);
+typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *url);
 /**
- * initializes a socket loop
+ * initializes a specific socket pool
  */
-void h2o_socketpool_init_by_address(h2o_socketpool_t *pool, struct sockaddr *sa, socklen_t salen, int is_ssl, size_t capacity);
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t num_targets,
+                                  h2o_balancer_t *balancer);
 /**
- * initializes a socket loop
+ * initializes a global socket pool
  */
-void h2o_socketpool_init_by_hostport(h2o_socketpool_t *pool, h2o_iovec_t host, uint16_t port, int is_ssl, size_t capacity);
-/**
- * initializes a socket pool with specified target vector
- */
-void h2o_socketpool_init_by_targets(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity);
-/**
- * initializes a target by specified address
- */
-void h2o_socketpool_init_target_by_address(h2o_socketpool_target_t *target, struct sockaddr *sa, socklen_t salen, int is_ssl,
-                                           h2o_url_t *url);
-/**
- * initializes a target by specified hostport
- */
-void h2o_socketpool_init_target_by_hostport(h2o_socketpool_target_t *target, h2o_iovec_t host, uint16_t port, int is_ssl,
-                                            h2o_url_t *url);
+void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
 /**
  * disposes of a socket loop
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
- * sets a close timeout for the sockets being pooled
+ * create a target. If lb_target_conf is NULL, a default target conf would be created.
  */
-void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, h2o_loop_t *loop, uint64_t msec);
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+/**
+ * destroy a target
+ */
+void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target);
+/**
+ *
+ */
+static uint64_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool);
+/**
+ *
+ */
+static void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, uint64_t msec);
+/**
+ *
+ */
+void h2o_socketpool_set_ssl_ctx(h2o_socketpool_t *pool, SSL_CTX *ssl_ctx);
+/**
+ * associates a loop
+ */
+void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
+/**
+ * unregisters the associated loop
+ */
+void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
 /**
  * connects to the peer (or returns a pooled connection)
  */
-void h2o_socketpool_connect(h2o_socketpool_connect_request_t **req, h2o_socketpool_t *pool, h2o_loop_t *loop,
+void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
                             h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
 /**
  * cancels a connect request
@@ -146,10 +192,22 @@ static int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *
 
 /* inline defs */
 
+inline uint64_t h2o_socketpool_get_timeout(h2o_socketpool_t *pool)
+{
+    return pool->timeout;
+}
+
+inline void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, uint64_t msec)
+{
+    pool->timeout = msec;
+}
+
 inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {
     return sock->on_close.data == pool;
 }
+
+int h2o_socketpool_can_keepalive(h2o_socketpool_t *pool);
 
 #ifdef __cplusplus
 }

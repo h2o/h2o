@@ -51,6 +51,7 @@ extern "C" {
 #include "h2o/timeout.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
+#include "h2o/balancer.h"
 
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
@@ -73,6 +74,9 @@ extern "C" {
 #define H2O_SOMAXCONN 65535
 #endif
 
+#define H2O_HTTP2_MIN_STREAM_WINDOW_SIZE 65535
+#define H2O_HTTP2_MAX_STREAM_WINDOW_SIZE 16777216
+
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
 #define H2O_DEFAULT_MAX_DELEGATIONS 5
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS 10
@@ -84,6 +88,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS 0 /* no timeout */
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT (H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE H2O_HTTP2_MAX_STREAM_WINDOW_SIZE
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
@@ -382,6 +387,10 @@ struct st_h2o_globalconf_t {
          */
         size_t max_streams_for_priority;
         /**
+         * size of the stream-level flow control window (once it becomes active)
+         */
+        uint32_t active_stream_window_size;
+        /**
          * conditions for latency optimization
          */
         h2o_socket_latency_optimization_conditions_t latency_optimization;
@@ -405,10 +414,6 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
-         * SSL context for connections initiated by the proxy (optional, governed by the application)
-         */
-        SSL_CTX *ssl_ctx;
-        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -424,6 +429,14 @@ struct st_h2o_globalconf_t {
          * a boolean flag if set to true, instructs the proxy to emit a via header
          */
         unsigned emit_via_header : 1;
+        /**
+         * a boolean flag if set to true, instructs the proxy to emit a date header, if it's missing from the upstream response
+         */
+        unsigned emit_missing_date_header : 1;
+        /**
+         * global socketpool
+         */
+        h2o_socketpool_t global_socketpool;
     } proxy;
 
     /**
@@ -877,12 +890,9 @@ typedef struct st_h2o_req_overrides_t {
      */
     h2o_socketpool_t *socketpool;
     /**
-     * upstream host:port to connect to (or host.base == NULL)
+     * upstream to connect to (or NULL)
      */
-    struct {
-        h2o_iovec_t host;
-        uint16_t port;
-    } hostport;
+    h2o_url_t *upstream;
     /**
      * parameters for rewriting the `Location` header (only used if match.len != 0)
      */
@@ -974,6 +984,10 @@ struct st_h2o_req_t {
      * the path context
      */
     h2o_pathconf_t *pathconf;
+    /**
+     * the handler that has been executed
+     */
+    h2o_handler_t *handler;
     /**
      * scheme (http, https, etc.)
      */
@@ -1076,12 +1090,21 @@ struct st_h2o_req_t {
      * whether or not the connection is persistent.
      * Applications should set this flag to zero in case the connection cannot be kept keep-alive (due to an error etc.)
      */
-    char http1_is_persistent;
+    unsigned char http1_is_persistent : 1;
     /**
      * whether if the response has been delegated (i.e. reproxied).
      * For delegated responses, redirect responses would be handled internally.
      */
-    char res_is_delegated;
+    unsigned char res_is_delegated : 1;
+    /**
+     * whether if the bytes sent is counted by ostreams other than final ostream
+     */
+    unsigned char bytes_counted_by_ostream : 1;
+    /**
+     * set by the generator if the protocol handler should replay the request upon seeing 425
+     */
+    unsigned char reprocess_if_too_early : 1;
+
     /**
      * Whether the producer of the response has explicitely disabled or
      * enabled compression. One of H2O_COMPRESS_HINT_*
@@ -1131,12 +1154,14 @@ typedef struct st_h2o_accept_ctx_t {
 
 typedef struct st_h2o_doublebuffer_t {
     h2o_buffer_t *buf;
-    size_t bytes_inflight;
+    unsigned char inflight : 1;
+    size_t _bytes_inflight;
 } h2o_doublebuffer_t;
 
 static void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype);
 static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
 static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
+static void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db);
 static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* token */
@@ -1155,6 +1180,7 @@ int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 /* headers */
 
+static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
@@ -1219,6 +1245,10 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
+ *
+ */
+static int h2o_conn_is_early_data(h2o_conn_t *conn);
+/**
  * setups accept context for memcached SSL resumption
  */
 void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
@@ -1280,13 +1310,13 @@ void h2o_process_request(h2o_req_t *req);
  */
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req);
 /**
- * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
+ * delegates the request to the next handler
  */
-void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler);
+void h2o_delegate_request(h2o_req_t *req);
 /**
  * calls h2o_delegate_request using zero_timeout callback
  */
-void h2o_delegate_request_deferred(h2o_req_t *req, h2o_handler_t *current_handler);
+void h2o_delegate_request_deferred(h2o_req_t *req);
 /**
  * reprocesses a request once more (used for internal redirection)
  */
@@ -1298,6 +1328,14 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
                                     h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated);
 /**
+ *
+ */
+void h2o_replay_request(h2o_req_t *req);
+/**
+ *
+ */
+void h2o_replay_request_deferred(h2o_req_t *req);
+/**
  * called by handlers to set the generator
  * @param req the request
  * @param generator the generator
@@ -1306,11 +1344,12 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
 /**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request
+ * @param alignment of the memory to be allocated for the ostream filter
  * @param size of the memory to be allocated for the ostream filter
  * @param slot where the stream should be inserted
  * @return pointer to the ostream filter
  */
-h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_ostream_t **slot);
 /**
  * prepares the request for processing by looking at the method, URI, headers
  */
@@ -1336,7 +1375,7 @@ static h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
-h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz);
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t alignment, size_t sz);
 /**
  * requests the next prefilter or filter (if any) to setup the ostream if necessary
  */
@@ -1507,6 +1546,10 @@ enum {
     H2O_SEND_ERROR_KEEP_HEADERS = 0x2
 };
 
+/**
+ * Add a `date:` header to the response
+ */
+void h2o_resp_add_date_header(h2o_req_t *req);
 /**
  * sends the given string as the response
  */
@@ -1703,7 +1746,8 @@ h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool);
 /**
  * instantiates the brotli compressor (only available if H2O_USE_BROTLI is set)
  */
-h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length);
+h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length,
+                                                 size_t preferred_chunk_size);
 /**
  * registers the configurator for the gzip/brotli output filter
  */
@@ -1776,13 +1820,7 @@ typedef struct st_h2o_fastcgi_config_vars_t {
 /**
  * registers the fastcgi handler to the context
  */
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
-                                                        h2o_fastcgi_config_vars_t *vars);
-/**
- * registers the fastcgi handler to the context
- */
-h2o_fastcgi_handler_t *h2o_fastcgi_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
-                                                       h2o_fastcgi_config_vars_t *vars);
+h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t *upstream, h2o_fastcgi_config_vars_t *vars);
 /**
  * registers the fastcgi handler to the context
  */
@@ -1876,25 +1914,18 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t first_byte_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
-    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     struct {
         int enabled;
         uint64_t timeout;
     } websocket;
     h2o_headers_command_t *headers_cmds;
-    h2o_iovec_t reverse_path; /* optional */
-    /* I don't know how to detect if handler registered on same path twice, so temporarily use these switches to do so. */
-    unsigned registered_as_url : 1;
-    unsigned registered_as_backends : 1;
-    SSL_CTX *ssl_ctx; /* optional */
     size_t max_buffer_size;
 } h2o_proxy_config_vars_t;
 
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t count,
-                                      h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool);
 /**
  * registers the configurator
  */
@@ -1973,6 +2004,15 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
 
+inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y)
+{
+    if (x->name == y->name) {
+        return 1;
+    } else {
+        return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
+    }
+}
+
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)
 {
@@ -1991,6 +2031,12 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->callbacks = callbacks;
 
     return conn;
+}
+
+inline int h2o_conn_is_early_data(h2o_conn_t *conn)
+{
+    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
+    return sock != NULL && sock->ssl != NULL && h2o_socket_ssl_is_early_data(sock);
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)
@@ -2034,7 +2080,6 @@ inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
     h2o_send_state_t send_state;
     assert(req->_generator != NULL);
     send_state = cb(req->_generator, req, buf);
-    req->bytes_sent += buf->len;
     if (!h2o_send_state_is_in_progress(send_state))
         req->_generator = NULL;
     return send_state;
@@ -2126,7 +2171,8 @@ static inline void h2o_context_set_logger_context(h2o_context_t *ctx, h2o_logger
 static inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)
 {
     h2o_buffer_init(&db->buf, prototype);
-    db->bytes_inflight = 0;
+    db->inflight = 0;
+    db->_bytes_inflight = 0;
 }
 
 static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
@@ -2136,7 +2182,8 @@ static inline void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db)
 
 static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes)
 {
-    assert(db->bytes_inflight == 0);
+    assert(!db->inflight);
+    assert(max_bytes != 0);
 
     if (db->buf->size == 0) {
         if ((*receiving)->size == 0)
@@ -2146,16 +2193,25 @@ static inline h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_b
         db->buf = *receiving;
         *receiving = t;
     }
-    if ((db->bytes_inflight = db->buf->size) > max_bytes)
-        db->bytes_inflight = max_bytes;
-    return h2o_iovec_init(db->buf->bytes, db->bytes_inflight);
+    if ((db->_bytes_inflight = db->buf->size) > max_bytes)
+        db->_bytes_inflight = max_bytes;
+    db->inflight = 1;
+    return h2o_iovec_init(db->buf->bytes, db->_bytes_inflight);
+}
+
+static inline void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db)
+{
+    assert(!db->inflight);
+    db->inflight = 1;
 }
 
 static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
 {
-    assert(db->bytes_inflight != 0);
-    h2o_buffer_consume(&db->buf, db->bytes_inflight);
-    db->bytes_inflight = 0;
+    assert(db->inflight);
+    db->inflight = 0;
+
+    h2o_buffer_consume(&db->buf, db->_bytes_inflight);
+    db->_bytes_inflight = 0;
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \

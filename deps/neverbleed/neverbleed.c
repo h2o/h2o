@@ -45,7 +45,11 @@
 #endif
 #include "neverbleed.h"
 
-#define OPENSSL_1_1_API (!defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010000fL)
+#if (!defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010000fL)
+#define OPENSSL_1_1_API 1
+#else
+#define OPENSSL_1_1_API 0
+#endif
 
 enum neverbleed_type { NEVERBLEED_TYPE_ERROR, NEVERBLEED_TYPE_RSA, NEVERBLEED_TYPE_ECDSA };
 

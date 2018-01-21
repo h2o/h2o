@@ -14,6 +14,8 @@ If the value of the response header is set to <code>off</code>, then the respons
 The following are the  configuration directives recognized by the handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name     => "compress",
@@ -77,6 +79,8 @@ EOT
 )->(sub {
 ?>
 Equivalent to <code>compress: [ gzip ]</code>.
+? })
+
 ? })
 
 ? })

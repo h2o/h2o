@@ -666,7 +666,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
         if (push_only) {
             if (filtered_value->base == NULL) {
                 /* the max. size of filtered_value would be x2 in the worst case, when "," is converted to ", " */
-                filtered_value->base = h2o_mem_alloc_pool(pool, value_len * 2);
+                filtered_value->base = h2o_mem_alloc_pool(pool, char, value_len * 2);
                 const char *prev_comma = h2o_memrchr(value, ',', url_with_brackets.base - value);
                 if (prev_comma != NULL)
                     PUSH_FILTERED_VALUE(value, prev_comma);
@@ -713,11 +713,15 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
 {
     h2o_iovec_t parts[4];
     size_t num_parts = 0;
-    int conf_ends_with_slash = req->pathconf->path.base[req->pathconf->path.len - 1] == '/';
-    int prefix_ends_with_slash = prefix[prefix_len - 1] == '/';
+    int conf_ends_with_slash = req->pathconf->path.base[req->pathconf->path.len - 1] == '/', prefix_ends_with_slash;
 
-    /* destination starts with given prefix */
-    parts[num_parts++] = h2o_iovec_init(prefix, prefix_len);
+    /* destination starts with given prefix, if any */
+    if (prefix_len != 0) {
+        parts[num_parts++] = h2o_iovec_init(prefix, prefix_len);
+        prefix_ends_with_slash = prefix[prefix_len - 1] == '/';
+    } else {
+        prefix_ends_with_slash = 0;
+    }
 
     /* make adjustments depending on the trailing slashes */
     if (conf_ends_with_slash != prefix_ends_with_slash) {

@@ -22,6 +22,9 @@
  */
 #include <assert.h>
 #include <pthread.h>
+#ifdef __linux__
+#include <sys/eventfd.h>
+#endif
 #include "cloexec.h"
 #include "h2o/multithread.h"
 
@@ -90,6 +93,21 @@ static void on_read(h2o_socket_t *sock, const char *err)
 
 static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 {
+#if defined(__linux__)
+    /**
+     * The kernel overhead of an eventfd file descriptor is
+     * much lower than that of a pipe, and only one file descriptor is required
+     */
+    int fd;
+
+    fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (fd == -1) {
+        perror("eventfd");
+        abort();
+    }
+    queue->async.write = fd;
+    queue->async.read = h2o_evloop_socket_create(loop, fd, 0);
+#else
     int fds[2];
 
     if (cloexec_pipe(fds) != 0) {
@@ -99,6 +117,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
     queue->async.write = fds[1];
     queue->async.read = h2o_evloop_socket_create(loop, fds[0], 0);
+#endif
     queue->async.read->data = queue;
     h2o_socket_read_start(queue->async.read, on_read);
 }
@@ -131,7 +150,10 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 #else
     h2o_socket_read_stop(queue->async.read);
     h2o_socket_close(queue->async.read);
+#ifndef __linux__
+    /* only one file descriptor is required for eventfd and already closed by h2o_socket_close() */
     close(queue->async.write);
+#endif
 #endif
     pthread_mutex_destroy(&queue->mutex);
 }
@@ -181,7 +203,12 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 #if H2O_USE_LIBUV
         uv_async_send(&receiver->queue->async);
 #else
+#ifdef __linux__
+        uint64_t tmp = 1;
+        while (write(receiver->queue->async.write, &tmp, sizeof(tmp)) == -1 && errno == EINTR)
+#else
         while (write(receiver->queue->async.write, "", 1) == -1 && errno == EINTR)
+#endif
             ;
 #endif
     }
@@ -243,6 +270,7 @@ void h2o_barrier_init(h2o_barrier_t *barrier, size_t count)
     pthread_mutex_init(&barrier->_mutex, NULL);
     pthread_cond_init(&barrier->_cond, NULL);
     barrier->_count = count;
+    barrier->_out_of_wait = count;
 }
 
 int h2o_barrier_wait(h2o_barrier_t *barrier)
@@ -259,6 +287,12 @@ int h2o_barrier_wait(h2o_barrier_t *barrier)
         ret = 0;
     }
     pthread_mutex_unlock(&barrier->_mutex);
+    /*
+     * this is needed to synchronize h2o_barrier_destroy with the
+     * exit of this function, so make sure that we can't destroy the
+     * mutex or the condition before all threads have exited wait()
+     */
+    __sync_sub_and_fetch(&barrier->_out_of_wait, 1);
     return ret;
 }
 
@@ -269,6 +303,9 @@ int h2o_barrier_done(h2o_barrier_t *barrier)
 
 void h2o_barrier_destroy(h2o_barrier_t *barrier)
 {
+    while (__sync_add_and_fetch(&barrier->_out_of_wait, 0) != 0) {
+        sched_yield();
+    }
     pthread_mutex_destroy(&barrier->_mutex);
     pthread_cond_destroy(&barrier->_cond);
 }

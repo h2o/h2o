@@ -289,13 +289,26 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
     return command_ctx->refs.command;
 }
 
+static mrb_value redis_join_reply_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                             int *run_again)
+{
+    mrb_state *mrb = mctx->shared->mrb;
+    struct st_h2o_mruby_redis_command_context_t *ctx;
+
+    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &command_type)) == NULL)
+        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Redis::Command#join wrong self");
+
+    attach_receiver(ctx, *receiver);
+    return mrb_nil_value();
+}
+
 void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
 
     struct RClass *module = mrb_define_module(mrb, "H2O");
 
-    h2o_mruby_define_callback(mrb, "_h2o__redis_join_reply", H2O_MRUBY_CALLBACK_ID_REDIS_JOIN_REPLY);
+    h2o_mruby_define_callback(mrb, "_h2o__redis_join_reply", redis_join_reply_callback);
 
     struct RClass *redis_klass = mrb_class_get_under(mrb, module, "Redis");
     mrb_define_method(mrb, redis_klass, "__setup", setup_method, MRB_ARGS_NONE());
@@ -304,17 +317,3 @@ void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx)
     mrb_define_method(mrb, redis_klass, "disconnect", disconnect_method, MRB_ARGS_NONE());
     mrb_define_method(mrb, redis_klass, "__call", call_method, MRB_ARGS_ARG(1, 0));
 }
-
-mrb_value h2o_mruby_redis_join_reply_callback(h2o_mruby_context_t *mctx, mrb_value receiver, mrb_value args,
-                                                int *run_again)
-{
-    mrb_state *mrb = mctx->shared->mrb;
-    struct st_h2o_mruby_redis_command_context_t *ctx;
-
-    if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &command_type)) == NULL)
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Redis::Command#join wrong self");
-
-    attach_receiver(ctx, receiver);
-    return mrb_nil_value();
-}
-

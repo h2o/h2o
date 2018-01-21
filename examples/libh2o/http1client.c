@@ -41,7 +41,7 @@ static int cur_body_size;
 
 static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
                                           int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, h2o_url_t *location_rewrite_url);
+                                          h2o_iovec_t *cur_body, int *body_is_chunked, h2o_url_t *origin);
 static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
                                        h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
 
@@ -49,7 +49,6 @@ static void start_request(h2o_http1client_ctx_t *ctx)
 {
     h2o_url_t url_parsed;
     h2o_iovec_t *req;
-    int is_ssl;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
@@ -59,11 +58,10 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
-    is_ssl = url_parsed.scheme == &H2O_URL_SCHEME_HTTPS;
 
     /* build request */
-    req = h2o_mem_alloc_pool(&pool, sizeof(*req));
-    req->base = h2o_mem_alloc_pool(&pool, 1024);
+    req = h2o_mem_alloc_pool(&pool, *req, 1);
+    req->base = h2o_mem_alloc_pool(&pool, char, 1024);
     req->len =
         snprintf(req->base, 1024, "%s %.*s HTTP/1.1\r\ncontent-length:%d\r\nhost: %.*s\r\n\r\n", method, (int)url_parsed.path.len,
                  url_parsed.path.base, body_size, (int)url_parsed.authority.len, url_parsed.authority.base);
@@ -71,16 +69,20 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     assert(req->len < 1024);
 
     /* initiate the request */
-    if (1) {
-        if (sockpool == NULL) {
-            sockpool = h2o_mem_alloc(sizeof(*sockpool));
-            h2o_socketpool_init_by_hostport(sockpool, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, 10);
-            h2o_socketpool_set_timeout(sockpool, ctx->loop, 5000 /* in msec */);
-        }
-        h2o_http1client_connect_with_pool(NULL, req, ctx, sockpool, on_connect, 0);
-    } else {
-        h2o_http1client_connect(NULL, req, ctx, url_parsed.host, h2o_url_get_port(&url_parsed), is_ssl, on_connect, 0, NULL);
+    if (sockpool == NULL) {
+        sockpool = h2o_mem_alloc(sizeof(*sockpool));
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(&url_parsed, NULL);
+        h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
+        h2o_socketpool_set_timeout(sockpool, 5000 /* in msec */);
+        h2o_socketpool_register_loop(sockpool, ctx->loop);
+
+        SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
+        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
+        SSL_CTX_free(ssl_ctx);
     }
+    h2o_http1client_connect(NULL, req, ctx, sockpool, &url_parsed, on_connect);
 }
 
 static int on_body(h2o_http1client_t *client, const char *errstr)
@@ -174,9 +176,9 @@ static void proceed_request(h2o_http1client_t *client, size_t written, int is_en
     }
 }
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, h2o_url_t *dummy)
+h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
+                                   int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb, h2o_iovec_t *cur_body,
+                                   int *body_is_chunked, h2o_url_t *dummy)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -218,9 +220,6 @@ int main(int argc, char **argv)
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
-    ctx.ssl_ctx = SSL_CTX_new(TLSv1_client_method());
-    SSL_CTX_load_verify_locations(ctx.ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
-    SSL_CTX_set_verify(ctx.ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
     while ((opt = getopt(argc, argv, "t:m:b:c:i:")) != -1) {
         switch (opt) {
