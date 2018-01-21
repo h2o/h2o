@@ -10,7 +10,7 @@ MRuby::Build.new do |conf|
     toolchain :gcc
   end
 
-  enable_debug
+  # enable_debug
 
   # use mrbgems
   Dir.glob("../mruby-*/mrbgem.rake") do |x|

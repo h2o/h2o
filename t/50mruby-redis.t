@@ -495,7 +495,7 @@ sub setup {
     unless (ref($confmap)) {
       $confmap = +{ '/' => $confmap };
     }
-    
+
     my $conf = <<"EOT";
 num-threads: 1
 hosts:
