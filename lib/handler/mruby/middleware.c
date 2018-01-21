@@ -505,8 +505,11 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             goto Failed; \
     } \
 } while (0)
-#define CALC_HASH(str, strlen) ((strlen) ^ str[0])
-#define CHECK_KEY(lit) (CALC_HASH(lit, sizeof(lit) - 1) == CALC_HASH(RSTRING_PTR(key), RSTRING_LEN(key)) && memcmp(RSTRING_PTR(key), lit, RSTRING_LEN(key)) == 0)
+#define COND0(str, lit, pos) (sizeof(lit) - 1 <= (pos) || (str)[pos] == (lit)[pos])
+#define COND1(str, lit, pos) (COND0(str, lit, pos) && COND0(str, lit, pos + 1) && COND0(str, lit, pos + 2))
+#define COND2(str, lit, pos) (COND1(str, lit, pos) && COND1(str, lit, pos + 3) && COND1(str, lit, pos + 6))
+#define COND(str, lit)       (COND2(str, lit, 0)   && COND2(str, lit, 9)       && COND2(str, lit, 18))
+#define CHECK_KEY(lit) ((sizeof(lit) - 1) == keystr_len && COND(keystr, lit))
 
     khiter_t k;
     khash_t(ht) *h = mrb_hash_tbl(mrb, env);
@@ -517,6 +520,9 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         if (mrb->exc != NULL)
             goto Failed;
         mrb_value value = kh_value(h, k).v;
+
+        const char *keystr = RSTRING_PTR(key);
+        const mrb_int keystr_len = RSTRING_LEN(key);
 
         if (CHECK_KEY("CONTENT_LENGTH")) {
             super->content_length = h2o_strtosize(RSTRING_PTR(value), RSTRING_LEN(value));
@@ -557,14 +563,14 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         } else if (CHECK_KEY("rack.run_once")) {
         } else if (CHECK_KEY("rack.url_scheme")) {
             RETRIEVE_ENV(scheme, 1);
-        } else if (RSTRING_LEN(key) >= 5 && memcmp(RSTRING_PTR(key), "HTTP_", 5) == 0) {
+        } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
             value = h2o_mruby_to_str(mrb, value);
             h2o_mruby_split_header_pair(ctx->shared, key, value, handle_header_env_key, &subreq->super);
-        } else {
+        } else if (keystr_len != 0){
             /* set to req->env */
             value = h2o_mruby_to_str(mrb, value);
             h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
-            super->env.entries[super->env.size] = h2o_strdup(&super->pool, RSTRING_PTR(key), RSTRING_LEN(key));
+            super->env.entries[super->env.size] = h2o_strdup(&super->pool, keystr, keystr_len);
             super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(value), RSTRING_LEN(value));
             super->env.size += 2;
         }
