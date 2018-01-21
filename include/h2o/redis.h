@@ -27,6 +27,11 @@
 struct redisAsyncContext;
 struct redisReply;
 
+extern const char *const h2o_redis_error_connection;
+extern const char *const h2o_redis_error_protocol;
+extern const char *const h2o_redis_error_connect_timeout;
+extern const char *const h2o_redis_error_command_timeout;
+
 typedef enum {
     H2O_REDIS_CONNECTION_STATE_CLOSED = 0,
     H2O_REDIS_CONNECTION_STATE_CONNECTING,
@@ -49,7 +54,7 @@ typedef struct st_h2o_redis_conn_t {
     int _did_connect_timeout : 1;
 } h2o_redis_conn_t;
 
-typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, int err, const char *errstr);
+typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, const char *errstr);
 
 typedef enum enum_h2o_redis_command_type_t {
     H2O_REDIS_COMMAND_TYPE_NORMAL = 1,

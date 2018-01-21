@@ -224,7 +224,7 @@ static h2o_iovec_t build_redis_value(h2o_iovec_t session_data)
 
 #undef BASE64_LENGTH
 
-static void redis_resumption_on_get(redisReply *reply, void *_accept_data, int err, const char *errstr)
+static void redis_resumption_on_get(redisReply *reply, void *_accept_data, const char *errstr)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = _accept_data;
     accept_data->get_command = NULL;

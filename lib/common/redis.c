@@ -25,6 +25,11 @@
 #include "h2o/redis.h"
 #include "h2o/socket.h"
 
+const char *const h2o_redis_error_connection = "Connection Error";
+const char *const h2o_redis_error_protocol = "Protocol Error";
+const char *const h2o_redis_error_connect_timeout = "Connection Timeout";
+const char *const h2o_redis_error_command_timeout = "Command Timeout";
+
 static void attach_loop(redisAsyncContext *ac, h2o_loop_t *loop);
 
 static void invoke_deferred(h2o_redis_conn_t *conn, h2o_timeout_entry_t *entry, h2o_timeout_cb cb)
@@ -192,42 +197,39 @@ static void return_reply(redisAsyncContext *redis, redisReply *reply, h2o_redis_
     if (command->cb == NULL)
         return;
 
-    int err = H2O_REDIS_ERROR_NONE;
-    char *errstr = NULL;
+    const char *errstr = NULL;
     if (command->conn->_did_connect_timeout) {
-        err = H2O_REDIS_ERROR_CONNECT_TIMEOUT;
-        errstr = "Connection timeout";
+        errstr = h2o_redis_error_connect_timeout;
     } else if (command->_did_command_timeout) {
-        err = H2O_REDIS_ERROR_COMMAND_TIMEOUT;
-        errstr = "Command timeout";
+        errstr = h2o_redis_error_command_timeout;
     } else if (redis->err != REDIS_OK) {
         errstr = redis->c.errstr;
         switch (redis->c.err) {
         case REDIS_ERR_IO:
             /* hiredis internally checks socket error and set errno */
             if (errno == ETIMEDOUT) {
-                err = H2O_REDIS_ERROR_CONNECT_TIMEOUT;
-                errstr = "Connection timeout";
+                errstr = h2o_redis_error_connect_timeout;
             } else {
-                err = H2O_REDIS_ERROR_CONNECTION;
+                errstr = h2o_redis_error_connection;
             }
             break;
         case REDIS_ERR_EOF:
-            err = H2O_REDIS_ERROR_CONNECTION;
+            errstr = h2o_redis_error_connection;
             break;
         case REDIS_ERR_PROTOCOL:
-            err = H2O_REDIS_ERROR_PROTOCOL;
+            errstr = h2o_redis_error_protocol;
             break;
         case REDIS_ERR_OOM:
+            errstr = "Out of Memory";
         case REDIS_ERR_OTHER:
-            err = H2O_REDIS_ERROR_UNKNOWN;
+            errstr = "Unknown";
             break;
         default:
             assert(!"FIXME");
         }
     }
 
-    command->cb(reply, command->data, err, errstr);
+    command->cb(reply, command->data, errstr);
 }
 
 static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)

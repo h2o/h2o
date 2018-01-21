@@ -198,7 +198,7 @@ static mrb_value decode_redis_reply(mrb_state *mrb, redisReply *reply, mrb_value
     return decoded;
 }
 
-static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char *errstr)
+static void on_redis_command(redisReply *_reply, void *_ctx, const char *errstr)
 {
     struct st_h2o_mruby_redis_command_context_t *ctx = _ctx;
     mrb_state *mrb = ctx->conn->ctx->shared->mrb;
@@ -206,30 +206,24 @@ static void on_redis_command(redisReply *_reply, void *_ctx, int err, const char
 
     int gc_arena = mrb_gc_arena_save(mrb);
 
-    if (err == H2O_REDIS_ERROR_NONE) {
+    if (errstr == NULL) {
         if (_reply == NULL) return;
         reply = decode_redis_reply(mrb, _reply, ctx->refs.command);
     } else {
         struct RClass *error_klass = NULL;
-        switch(err) {
-        case H2O_REDIS_ERROR_CONNECTION:
+
+        if (errstr == h2o_redis_error_connection) {
             error_klass = get_error_class(mrb, "ConnectionError");
-            break;
-        case H2O_REDIS_ERROR_PROTOCOL:
+        } else if (errstr == h2o_redis_error_protocol) {
             error_klass = get_error_class(mrb, "ProtocolError");
-            break;
-        case H2O_REDIS_ERROR_UNKNOWN:
-            error_klass = get_error_class(mrb, "UnknownError");
-            break;
-        case H2O_REDIS_ERROR_CONNECT_TIMEOUT:
+        } else if (errstr == h2o_redis_error_connect_timeout) {
             error_klass = get_error_class(mrb, "ConnectTimeoutError");
-            break;
-        case H2O_REDIS_ERROR_COMMAND_TIMEOUT:
+        } else if (errstr == h2o_redis_error_command_timeout) {
             error_klass = get_error_class(mrb, "CommandTimeoutError");
-            break;
-        default:
-            assert(!"FIXME");
+        } else {
+            error_klass = get_error_class(mrb, "UnknownError");
         }
+
         reply = mrb_exc_new(mrb, error_klass, errstr, strlen(errstr));
     }
 
