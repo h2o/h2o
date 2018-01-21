@@ -795,9 +795,6 @@ const char *h2o_npn_protocols = NPN_PROTOCOLS_CORE "\x08"
 
 uint64_t h2o_connection_id = 0;
 
-extern __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
-extern __thread h2o_mem_recycle_t h2o_mem_pool_allocator;
-
 void h2o_cleanup_thread(void)
 {
     h2o_mem_clear_recycle(&h2o_mem_pool_allocator);
