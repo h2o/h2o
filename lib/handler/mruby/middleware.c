@@ -48,12 +48,12 @@ struct st_mruby_subreq_t {
     h2o_req_t super;
     struct st_mruby_subreq_conn_t conn;
     h2o_mruby_context_t *ctx;
+    h2o_buffer_t *buf;
     mrb_value receiver;
     struct {
         mrb_value request;
         mrb_value input_stream;
     } refs;
-    mrb_value chunks;
     mrb_value error_stream;
     struct {
         h2o_mruby_generator_t *response;
@@ -69,6 +69,7 @@ struct st_mruby_subreq_t {
 
 struct st_h2o_mruby_middleware_sender_t {
     h2o_mruby_sender_t super;
+    h2o_doublebuffer_t sending;
     struct st_mruby_subreq_t *subreq;
     struct {
         h2o_iovec_t *bufs;
@@ -87,10 +88,8 @@ static void dispose_subreq(struct st_mruby_subreq_t *subreq)
         subreq->error_stream = mrb_nil_value();
     }
 
-    if (!mrb_nil_p(subreq->chunks)) {
-        mrb_gc_unregister(subreq->ctx->shared->mrb, subreq->chunks);
-        subreq->chunks = mrb_nil_value();
-    }
+    if (subreq->buf != NULL)
+        h2o_buffer_dispose(&subreq->buf);
 
     if (!mrb_nil_p(subreq->refs.request))
         DATA_PTR(subreq->refs.request) = NULL;
@@ -195,20 +194,12 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     return resp;
 }
 
-static void push_chunks(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, size_t inbufcnt)
+static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, size_t inbufcnt)
 {
-    mrb_state *mrb = subreq->ctx->shared->mrb;
-    assert(! mrb_nil_p(subreq->chunks));
-
-    int gc_arena = mrb_gc_arena_save(mrb);
-
     int i;
-    for (i = 0; i < inbufcnt; ++i) {
-        mrb_value chunk = h2o_mruby_new_str(mrb, inbufs[i].base, inbufs[i].len);
-        mrb_ary_push(mrb, subreq->chunks, chunk);
+    for (i = 0; i != inbufcnt; ++i) {
+        h2o_buffer_append(&subreq->buf, inbufs[i].base, inbufs[i].len);
     }
-
-    mrb_gc_arena_restore(mrb, gc_arena);
 }
 
 static mrb_value detach_receiver(struct st_mruby_subreq_t *subreq)
@@ -233,13 +224,14 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
             return; /* TODO: close subreq ASAP */
 
         subreq->chain_proceed = 1;
-        if (mrb_nil_p(subreq->chunks)) {
+        if (subreq->buf == NULL) {
             /* flushing chunks has been finished, so send directly */
             h2o_mruby_sender_do_send(subreq->shortcut.body, inbufs, inbufcnt, state);
         } else {
             /* flushing, buffer chunks again */
-            push_chunks(subreq, inbufs, inbufcnt);
+            append_bufs(subreq, inbufs, inbufcnt);
         }
+
         return;
     }
 
@@ -251,7 +243,7 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
         subreq->state = FINAL_RECEIVED;
     }
 
-    push_chunks(subreq, inbufs, inbufcnt);
+    append_bufs(subreq, inbufs, inbufcnt);
 
     /* response shortcut */
     if (subreq->shortcut.response != NULL) {
@@ -267,10 +259,13 @@ static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_io
     if (is_first) {
         /* the fiber is waiting due to calling req.join */
         h2o_mruby_run_fiber(subreq->ctx, detach_receiver(subreq), mrb_nil_value(), NULL);
-    } else if (RARRAY_LEN(subreq->chunks) != 0 || subreq->state == FINAL_RECEIVED) {
+    } else if (subreq->buf->size != 0) {
         /* resume callback sender fiber */
-        mrb_value chunk = mrb_ary_shift(mrb, subreq->chunks);
+        mrb_value chunk = h2o_mruby_new_str(mrb, subreq->buf->bytes, subreq->buf->size);
+        h2o_buffer_consume(&subreq->buf, subreq->buf->size);
         h2o_mruby_run_fiber(subreq->ctx, detach_receiver(subreq), chunk, NULL);
+    } else if (subreq->state == FINAL_RECEIVED) {
+        h2o_mruby_run_fiber(subreq->ctx, detach_receiver(subreq), mrb_nil_value(), NULL);
     }
 
     mrb_gc_arena_restore(mrb, gc_arena);
@@ -460,8 +455,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->receiver = mrb_nil_value();
     subreq->refs.request = mrb_nil_value();
     subreq->refs.input_stream = mrb_nil_value();
-    subreq->chunks = mrb_ary_new(mrb);
-    mrb_gc_register(mrb, subreq->chunks);
+    h2o_buffer_init(&subreq->buf, &h2o_socket_buffer_prototype);
     subreq->shortcut.response = NULL;
     subreq->shortcut.body = NULL;
     subreq->state = INITIAL;
@@ -779,9 +773,10 @@ static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_v
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "AppInputStream#each wrong self");
     }
 
-    if (RARRAY_LEN(subreq->chunks) > 0) {
+    if (subreq->buf->size != 0) {
         *run_again = 1;
-        mrb_value chunk = mrb_ary_shift(mrb, subreq->chunks);
+        mrb_value chunk = h2o_mruby_new_str(mrb, subreq->buf->bytes, subreq->buf->size);
+        h2o_buffer_consume(&subreq->buf, subreq->buf->size);
         return chunk;
     } else if (subreq->state == FINAL_RECEIVED) {
         *run_again = 1;
@@ -819,50 +814,38 @@ void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *shared_ctx)
     h2o_mruby_assert(mrb);
 }
 
-static void flush_chunks(struct st_mruby_subreq_t *subreq)
-{
-    h2o_mruby_generator_t *generator = subreq->shortcut.body;
-    mrb_state *mrb = generator->ctx->shared->mrb;
-
-    size_t bufcnt = RARRAY_LEN(subreq->chunks);
-    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * bufcnt);
-
-    if (bufcnt > 0) {
-        int i;
-        for (i = 0; i != bufcnt; ++i) {
-            mrb_value chunk = mrb_ary_entry(subreq->chunks, i);
-            bufs[i].base = RSTRING_PTR(chunk);
-            bufs[i].len = RSTRING_LEN(chunk);
-        }
-        mrb_ary_clear(mrb, subreq->chunks);
-    }
-
-    h2o_mruby_sender_do_send(generator, bufs, bufcnt, subreq->state == FINAL_RECEIVED ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
-}
-
 void do_sender_start(h2o_mruby_generator_t *generator)
 {
     struct st_h2o_mruby_middleware_sender_t *sender = (void *)generator->sender;
     struct st_mruby_subreq_t *subreq = sender->subreq;
-    flush_chunks(subreq);
+
+    if (subreq->buf->size == 0 && subreq->state != FINAL_RECEIVED) {
+        h2o_doublebuffer_prepare_empty(&sender->sending);
+        h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+    } else {
+        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &subreq->buf, subreq->state == FINAL_RECEIVED ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+    }
 }
 
 void do_sender_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 {
     h2o_mruby_generator_t *generator = (void *)_generator;
-    mrb_state *mrb = generator->ctx->shared->mrb;
     struct st_h2o_mruby_middleware_sender_t *sender = (void *)generator->sender;
+    struct st_mruby_subreq_t *subreq = sender->subreq;
 
     if (generator->sender->final_sent)
         return; /* TODO: close subreq ASAP */
 
-    if (!mrb_nil_p(sender->subreq->chunks)) {
-        if (RARRAY_LEN(sender->subreq->chunks) > 0) {
-            flush_chunks(sender->subreq);
-            return;
+    if (subreq->buf != NULL) {
+        h2o_doublebuffer_consume(&sender->sending);
+
+        if (subreq->buf->size != 0) {
+            h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &subreq->buf, subreq->state == FINAL_RECEIVED ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+            return; /* don't proceed because it's already requested in subreq_ostream_send*/
         } else {
-            mrb_gc_unregister(mrb, sender->subreq->chunks);
-            sender->subreq->chunks = mrb_nil_value();
+            /* start direct shortcut */
+            h2o_buffer_dispose(&subreq->buf);
+            subreq->buf = NULL;
         }
     }
 
@@ -873,6 +856,8 @@ void do_sender_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 void do_sender_dispose(h2o_mruby_generator_t *generator)
 {
     struct st_h2o_mruby_middleware_sender_t *sender = (void *)generator->sender;
+
+    h2o_doublebuffer_dispose(&sender->sending);
 
     if (sender->subreq->shortcut.response != NULL) {
         assert(!mrb_nil_p(sender->subreq->refs.request));
@@ -893,6 +878,8 @@ static h2o_mruby_sender_t *create_sender(h2o_mruby_generator_t *generator, struc
 {
     struct st_h2o_mruby_middleware_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
     sender->subreq = subreq;
+
+    h2o_doublebuffer_init(&sender->sending, &h2o_socket_buffer_prototype);
 
     sender->super.start = do_sender_start;
     sender->super.proceed = do_sender_proceed;
