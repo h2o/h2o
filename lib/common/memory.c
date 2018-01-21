@@ -67,7 +67,7 @@ struct st_h2o_mem_pool_shared_ref_t {
 
 void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
 
-static __thread h2o_mem_recycle_t mempool_allocator = {16};
+__thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
 
 void h2o__fatal(const char *msg)
 {
@@ -102,6 +102,17 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     ++allocator->cnt;
 }
 
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator)
+{
+    struct st_h2o_mem_recycle_chunk_t *chunk;
+
+    while (allocator->cnt-- > 0) {
+        chunk = allocator->_link;
+        allocator->_link = allocator->_link->next;
+        free(chunk);
+    }
+}
+
 void h2o_mem_init_pool(h2o_mem_pool_t *pool)
 {
     pool->chunks = NULL;
@@ -132,7 +143,7 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
     /* free chunks, and reset the first chunk */
     while (pool->chunks != NULL) {
         union un_h2o_mem_pool_chunk_t *next = pool->chunks->next;
-        h2o_mem_free_recycle(&mempool_allocator, pool->chunks);
+        h2o_mem_free_recycle(&h2o_mem_pool_allocator, pool->chunks);
         pool->chunks = next;
     }
     pool->chunk_offset = sizeof(pool->chunks->bytes);
@@ -158,7 +169,7 @@ void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, siz
     pool->chunk_offset = ALIGN_TO(pool->chunk_offset, alignment);
     if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
-        union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&mempool_allocator, sizeof(*newp));
+        union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&h2o_mem_pool_allocator, sizeof(*newp));
         newp->next = pool->chunks;
         pool->chunks = newp;
         pool->chunk_offset = ALIGN_TO(sizeof(newp->next), alignment);
