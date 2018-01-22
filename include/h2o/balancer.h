@@ -32,7 +32,7 @@ extern "C" {
 
 typedef struct st_h2o_balancer_t h2o_balancer_t;
 
-typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, char *tried);
+typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, char *tried, void *socketpool_req_data);
 
 typedef void (*h2o_balancer_destroyer)(h2o_balancer_t *balancer);
 
@@ -41,15 +41,36 @@ typedef struct st_h2o_balancer_callbacks_t {
     h2o_balancer_destroyer destroy;
 } h2o_balancer_callbacks_t;
 
+typedef enum en_h2o_balancer_type_t {
+    H2O_BALANCER_TYPE_ROUND_ROBIN,
+    H2O_BALANCER_TYPE_LEAST_CONN,
+    H2O_BALANCER_TYPE_HASH
+} h2o_balancer_type_t;
+
 struct st_h2o_balancer_t {
     const h2o_balancer_callbacks_t *callbacks;
+    h2o_balancer_type_t type;
 };
+
+typedef enum en_h2o_balancer_hash_key_type_t {
+    H2O_BALANCER_HASH_KEY_IP,
+    H2O_BALANCER_HASH_KEY_IP_PORT,
+    H2O_BALANCER_HASH_KEY_PATH
+} h2o_balancer_hash_key_type_t;
 
 /* round robin */
 h2o_balancer_t *h2o_balancer_create_rr(void);
 
 /* least connection */
 h2o_balancer_t *h2o_balancer_create_lc(void);
+
+/* consistent hashing with bound */
+h2o_balancer_t *h2o_balancer_create_hash(float c, h2o_balancer_hash_key_type_t type);
+
+typedef h2o_iovec_t (*h2o_balancer_hash_get_key_cb)(void *socketpool_req_data, h2o_balancer_hash_key_type_t key_type);
+void h2o_balancer_hash_set_get_key_cb(h2o_balancer_t *balancer, h2o_balancer_hash_get_key_cb cb);
+void h2o_balancer_hash_set_total_leased_count(h2o_balancer_t *balancer, size_t *total_leased_count);
+void h2o_balancer_hash_set_targets(h2o_balancer_t *balancer, h2o_socketpool_target_t **targets, size_t num_targets);
 
 #ifdef __cplusplus
 }

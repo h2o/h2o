@@ -46,4 +46,5 @@ EOT
 
 do_test("round-robin");
 do_test("least-conn");
+do_test("hash");
 done_testing();

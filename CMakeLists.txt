@@ -130,7 +130,8 @@ INCLUDE_DIRECTORIES(
     deps/picohttpparser
     deps/picotest
     deps/yaml/include
-    deps/yoml)
+    deps/yoml
+    deps/siphash)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -271,6 +272,7 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/strerror.c
     deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
+    deps/siphash/siphash.c
 
     lib/common/cache.c
     lib/common/file.c
@@ -290,6 +292,7 @@ SET(LIB_SOURCE_FILES
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
+    lib/common/balancer/hash.c
 
     lib/core/config.c
     lib/core/configurator.c

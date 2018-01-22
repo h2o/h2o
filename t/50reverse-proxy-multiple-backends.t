@@ -58,6 +58,7 @@ sub run_tests {
     my ($conf, $srv0, $srv1) = @_;
     run_test($conf, "round-robin", $srv0, $srv1);
     run_test($conf, "least-conn", $srv0, $srv1);
+    run_test($conf, "hash", $srv0, $srv1);
 }
 
 subtest "both-tcp", sub {

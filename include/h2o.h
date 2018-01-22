@@ -1625,6 +1625,11 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
  */
 void h2o__proxy_process_request(h2o_req_t *req);
 
+/**
+ * get source request by generator
+ */
+h2o_req_t *h2o_proxy_get_req_by_generator(h2o_generator_t *generator);
+
 /* mime mapper */
 
 /**

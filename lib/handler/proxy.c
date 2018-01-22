@@ -125,6 +125,41 @@ static void on_handler_dispose(h2o_handler_t *_self)
     free(self->sockpool);
 }
 
+static h2o_iovec_t get_hash_key(void *socketpool_req_data, h2o_balancer_hash_key_type_t key_type)
+{
+    /* data of socketpool_req should be http1client. data of http1client should be rp_generator. */
+    /* I'm not sure if this approach is okay for future maintenance though. */
+    h2o_http1client_t *client = socketpool_req_data;
+    h2o_generator_t *generator = client->data;
+    h2o_req_t *req = h2o_proxy_get_req_by_generator(generator);
+    h2o_iovec_t key;
+    struct sockaddr_storage ss;
+    size_t remote_addr_len = SIZE_MAX;
+    char *remote_addr = h2o_mem_alloc_pool(&req->pool, char, NI_MAXHOST + sizeof(":65535"));
+    socklen_t sslen;
+
+    if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
+        remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
+
+    /* if no remote_addr could be get, fallback to path as a key */
+    if (remote_addr_len == SIZE_MAX)
+        key_type = H2O_BALANCER_HASH_KEY_PATH;
+    switch (key_type) {
+        case H2O_BALANCER_HASH_KEY_IP:
+            key.base = remote_addr;
+            key.len = remote_addr_len;
+            break;
+        case H2O_BALANCER_HASH_KEY_IP_PORT:
+            key.len = sprintf(remote_addr + remote_addr_len, ":%d", h2o_socket_getport((void *)&ss));
+            key.base = remote_addr;
+            key.len += remote_addr_len;
+            break;
+        case H2O_BALANCER_HASH_KEY_PATH:
+            return req->path;
+    }
+    return key;
+}
+
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool)
 {
     struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
@@ -136,4 +171,8 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config
     self->super.supports_request_streaming = 1;
     self->config = *config;
     self->sockpool = sockpool;
+
+    if (self->sockpool->balancer->type == H2O_BALANCER_TYPE_HASH) {
+        h2o_balancer_hash_set_get_key_cb(self->sockpool->balancer, get_hash_key);
+    }
 }

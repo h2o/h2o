@@ -26,7 +26,7 @@ struct least_conn_t {
     pthread_mutex_t mutex;
 };
 
-static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, char *tried)
+static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *targets, char *tried, void *ignored)
 {
     struct least_conn_t *self = (void *)_self;
     size_t i;
@@ -66,6 +66,7 @@ h2o_balancer_t *h2o_balancer_create_lc(void)
     static const h2o_balancer_callbacks_t lc_callbacks = {selector, destroy};
     struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
     self->super.callbacks = &lc_callbacks;
+    self->super.type = H2O_BALANCER_TYPE_LEAST_CONN;
     pthread_mutex_init(&self->mutex, NULL);
     return &self->super;
 }

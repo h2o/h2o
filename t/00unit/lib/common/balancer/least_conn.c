@@ -40,7 +40,7 @@ static void test_when_backend_down(void)
     balancer = h2o_balancer_create_lc();
 
     for (i = 0; i < 10; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, &targets, tried, NULL);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
@@ -81,7 +81,7 @@ static void test_least_conn(void)
     balancer = h2o_balancer_create_lc();
 
     for (i = 0; i < 10000; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, &targets, tried, NULL);
         if (selected > 10) {
             ok(selected >= 0 && selected < targets.size);
             goto Done;
@@ -114,7 +114,7 @@ static void test_least_conn_weighted(void)
         targets.entries[i]->conf.weight_m1 = i % 3;
 
     for (i = 0; i < 10000; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, &targets, tried, NULL);
         if (selected > 10) {
             ok(selected >= 0 && selected < targets.size);
             goto Done;
