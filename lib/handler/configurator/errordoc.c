@@ -28,102 +28,60 @@ struct errordoc_configurator_t {
     H2O_VECTOR(h2o_errordoc_t) * vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static int scan_and_check_status(h2o_configurator_command_t *cmd, yoml_t *value, int *slot)
-{
-    if (value->type != YOML_TYPE_SCALAR) {
-        h2o_configurator_errprintf(cmd, value, "status must be must be either of: scalar, sequence of scalar");
-        return -1;
-    }
-    if (h2o_configurator_scanf(cmd, value, "%d", slot) != 0)
-        return -1;
-    if (!(400 <= *slot && *slot <= 599)) {
-        h2o_configurator_errprintf(cmd, value, "status must be within range of 400 to 599");
-        return -1;
-    }
-    return 0;
-}
-
 static int register_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *hash)
 {
     struct errordoc_configurator_t *self = (void *)cmd->configurator;
-    int status[200];
-    size_t status_len = 0;
-    int parsed;
-    const char *url = NULL;
-    size_t i, j, k;
-    yoml_t *key, *value;
+    yoml_t **url_node, **status_nodes;
+    size_t i, j, num_status;
 
-    for (i = 0; i != hash->data.mapping.size; ++i) {
-        key = hash->data.mapping.elements[i].key;
-        value = hash->data.mapping.elements[i].value;
-        if (key->type != YOML_TYPE_SCALAR)
-            goto UnknownKeyError;
-        if (strcmp(key->data.scalar, "status") == 0) {
-            if (status_len != 0)
-                goto KeyAlreadyDefinedError;
+    /* extract the nodes to handle */
+    if (h2o_configurator_parse_mapping(cmd, hash, "url:s,status:*", NULL, &url_node, &status_nodes) != 0)
+        return -1;
+    switch ((*status_nodes)->type) {
+    case YOML_TYPE_SCALAR:
+        num_status = 1;
+        break;
+    case YOML_TYPE_SEQUENCE:
+        if ((*status_nodes)->data.sequence.size == 0) {
+            h2o_configurator_errprintf(cmd, *status_nodes, "status cannot be an empty sequence");
+            return -1;
+        }
+        num_status = (*status_nodes)->data.sequence.size;
+        status_nodes = (*status_nodes)->data.sequence.elements;
+        break;
+    default:
+        h2o_configurator_errprintf(cmd, *status_nodes, "status must be a 3-digit scalar or a sequence of 3-digit scalars");
+        return -1;
+    }
 
-            if (value->type == YOML_TYPE_SEQUENCE) {
-                if (value->data.sequence.size == 0) {
-                    h2o_configurator_errprintf(cmd, value, "status sequence must not be empty");
-                    return -1;
-                }
-                for (j = 0; j != value->data.sequence.size; ++j) {
-                    if (scan_and_check_status(cmd, value->data.sequence.elements[j], &parsed) != 0)
-                        return -1;
-                    /* check the scanned status hasn't already appeared */
-                    for (k = 0; k != status_len; ++k) {
-                        if (status[k] == parsed) {
-                            h2o_configurator_errprintf(cmd, value, "status %d appears multiple times", status[k]);
-                            return -1;
-                        }
-                    }
-                    status[status_len++] = parsed;
-                }
-            } else {
-                if (scan_and_check_status(cmd, value, &parsed) != 0)
-                    return -1;
-                status[status_len++] = parsed;
-            }
-
-        } else if (strcmp(key->data.scalar, "url") == 0) {
-            if (url != NULL)
-                goto KeyAlreadyDefinedError;
-            if (value->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, value, "URL must be a scalar");
+    /* convert list of status_nodes (in string) to list of 3-digit codes */
+    int *status_codes = alloca(sizeof(*status_codes) * num_status);
+    for (i = 0; i != num_status; ++i) {
+        if (h2o_configurator_scanf(cmd, status_nodes[i], "%d", &status_codes[i]) != 0)
+            return -1;
+        if (!(400 <= status_codes[i] && status_codes[i] <= 599)) {
+            h2o_configurator_errprintf(cmd, status_nodes[i], "status must be within range of 400 to 599");
+            return -1;
+        }
+        /* check the scanned status hasn't already appeared */
+        for (j = 0; j != i; ++j) {
+            if (status_codes[j] == status_codes[i]) {
+                h2o_configurator_errprintf(cmd, status_nodes[i], "status %d appears multiple times", status_codes[i]);
                 return -1;
             }
-            url = value->data.scalar;
-        } else {
-            goto UnknownKeyError;
         }
     }
 
-    if (status_len == 0) {
-        h2o_configurator_errprintf(cmd, hash, "mandatory key `status` is not defined");
-        return -1;
-    }
-    if (url == NULL) {
-        h2o_configurator_errprintf(cmd, hash, "mandatory key `url` is not defined");
-        return -1;
-    }
-
-    h2o_iovec_t _url = h2o_strdup(&self->pool, url, SIZE_MAX);
-    for (i = 0; i != status_len; ++i) {
+    h2o_iovec_t url = h2o_strdup(&self->pool, (*url_node)->data.scalar, SIZE_MAX);
+    for (i = 0; i != num_status; ++i) {
         /* register */
         h2o_vector_reserve(&self->pool, self->vars, self->vars->size + 1);
         h2o_errordoc_t *errordoc = self->vars->entries + self->vars->size++;
-        errordoc->status = status[i];
-        errordoc->url = _url;
+        errordoc->status = status_codes[i];
+        errordoc->url = url;
     }
 
     return 0;
-
-UnknownKeyError:
-    h2o_configurator_errprintf(cmd, key, "key must be either of: `status`, `url`");
-    return -1;
-KeyAlreadyDefinedError:
-    h2o_configurator_errprintf(cmd, key, "the key cannot be defined more than once");
-    return -1;
 }
 
 static int on_config_errordoc(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)

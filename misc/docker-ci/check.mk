@@ -3,7 +3,7 @@ SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
-DOCKER_RUN_OPTS=-v `pwd`:$(SRC_DIR) --add-host=127.0.0.1.xip.io:127.0.0.1 -t
+DOCKER_RUN_OPTS=-v `pwd`:$(SRC_DIR) --add-host=127.0.0.1.xip.io:127.0.0.1 -it
 
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f /h2o/misc/docker-ci/check.mk _check
@@ -32,4 +32,10 @@ _do-fuzz-extra:
 	./h2o-fuzzer-http2 -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/http2-corpus < /dev/null
 	./h2o-fuzzer-url -close_fd_mask=3 -runs=1 -max_len=16384 $(SRC_DIR)/fuzz/url-corpus < /dev/null
 
-.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra
+enter:
+	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
+
+pull:
+	docker pull $(CONTAINER_NAME)
+
+.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull

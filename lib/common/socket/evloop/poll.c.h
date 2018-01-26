@@ -171,6 +171,10 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
     loop->socks.entries[sock->fd] = NULL;
 }
 
+static void evloop_do_dispose(h2o_evloop_t *loop)
+{
+}
+
 h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)create_evloop(sizeof(*loop));

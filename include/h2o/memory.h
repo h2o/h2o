@@ -187,6 +187,10 @@ void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz);
  * returns the memory to the reusing allocator
  */
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
+/**
+ * release all the memory chunks cached in input allocator to system
+ */
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator);
 
 /**
  * initializes the memory pool.
@@ -316,6 +320,8 @@ void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
  * appends an element to a NULL-terminated list allocated using malloc
  */
 void h2o_append_to_null_terminated_list(void ***list, void *element);
+
+extern __thread h2o_mem_recycle_t h2o_mem_pool_allocator;
 
 /* inline defs */
 
