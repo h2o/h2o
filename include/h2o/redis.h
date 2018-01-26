@@ -51,7 +51,6 @@ typedef struct st_h2o_redis_conn_t {
     h2o_timeout_entry_t _defer_timeout_entry;
     h2o_timeout_t _connect_timeout;
     h2o_timeout_entry_t _connect_timeout_entry;
-    int _did_connect_timeout : 1;
 } h2o_redis_conn_t;
 
 typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, const char *errstr);
@@ -83,7 +82,6 @@ typedef struct st_h2o_redis_command_t {
     h2o_timeout_entry_t _defer_timeout_entry;
     h2o_timeout_t _command_timeout;
     h2o_timeout_entry_t _command_timeout_entry;
-    int _did_command_timeout : 1;
 } h2o_redis_command_t;
 
 h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz);

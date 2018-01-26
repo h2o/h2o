@@ -78,7 +78,7 @@ EOT
         is $body, 'WRONGTYPE Operation against a key holding the wrong kind of value (command: LPUSH k1 1)';
     };
 
-    subtest 'connection error' => sub {
+    subtest 'abort connection' => sub {
         my ($tester, $guard) = setup(<<"EOT");
               redis.set('k1', 'hoge').join
               proc {|env|
@@ -99,6 +99,40 @@ EOT
 
         undef $guard->{redis}; # shutdown redis-server
 
+        ($status, $headers, $body) = $tester->();
+        is $status, 503;
+    };
+
+    subtest 'connection closed initially' => sub {
+        my ($tester, $guard) = setup(<<"EOT", +{ no_redis => 1 });
+              proc {|env|
+                begin
+                  reply = redis.get('k1').join
+                rescue H2O::Redis::ConnectionError => e
+                  [503, {}, []]
+                else
+                  [200, {}, [reply]]
+                end
+              }
+EOT
+        my ($status, $headers, $body);
+        ($status, $headers, $body) = $tester->();
+        is $status, 503;
+    };
+
+    subtest 'invalid host' => sub {
+        my ($tester, $guard) = setup(<<"EOT", +{ host => '-' });
+              proc {|env|
+                begin
+                  reply = redis.get('k1').join
+                rescue H2O::Redis::ConnectionError => e
+                  [503, {}, []]
+                else
+                  [200, {}, [reply]]
+                end
+              }
+EOT
+        my ($status, $headers, $body);
         ($status, $headers, $body) = $tester->();
         is $status, 503;
     };
@@ -507,7 +541,7 @@ EOT
       $conf .= <<"EOT";
       $path:
         mruby.handler: |
-          redis = H2O::Redis.new(:host => '127.0.0.1', :port => $redis_port)
+          redis = H2O::Redis.new(:host => '@{[ $opts->{host} || '127.0.0.1' ]}', :port => $redis_port)
 $code
 EOT
     }
