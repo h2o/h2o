@@ -25,6 +25,7 @@
 #include <math.h>
 
 struct hash_bucket_t {
+    /* hash should be first so that pointer to bucket is also pointer to hash */
     uint64_t hash;
     size_t target;
     size_t weight;
@@ -43,9 +44,6 @@ struct bounded_hash_t {
     pthread_mutex_t mutex;
     h2o_balancer_hash_get_key_cb get_key_cb;
 };
-
-/* though endians would cause difference, we could accept it, wouldn't we? */
-#define BYTE_TO_QWORD(x) (*(uint64_t *)x)
 
 /* we don't really need a key */
 static uint8_t hash_key[16];
@@ -74,11 +72,29 @@ static size_t range_bsearch(const void *key, const void *base, size_t num, size_
     return end;
 }
 
+union un_hash_result {
+    uint8_t octets[8];
+    uint32_t dword[2];
+};
+
 static uint64_t compute_hash(const void *key, size_t key_len)
 {
-    uint8_t hashtag_array[8];
-    siphash(key, key_len, hash_key, hashtag_array, 8);
-    return BYTE_TO_QWORD(hashtag_array);
+    union un_hash_result hash_result = {};
+    siphash(key, key_len, hash_key, hash_result.octets, 8);
+    /**
+     * Hash result should be treated as the same uint64 no matter which endianness
+     * is chosen. Or else locality of backends could not be optimal when served
+     * with clustered servers working with different endianness.
+     *
+     * Actually little endian would be preferred since it is mostly chosen nowadays
+     * but is there any portable ways to do such endianness independence without
+     * much performance overhead?
+     *
+     * Or... do we really need to care about that?
+     */
+    uint64_t hash = ntohl(hash_result.dword[0]);
+    hash = (hash << 32) | ntohl(hash_result.dword[1]);
+    return hash;
 }
 
 static int hash_cmp(const void *_key, const void *_elt)
@@ -98,7 +114,7 @@ static size_t find_bucket_for_item(hash_bucket_vector_t *ring, void *key, size_t
     return index;
 }
 
-static void insert_new_bucket(hash_bucket_vector_t *ring, struct hash_bucket_t *bucket)
+static void add_bucket(hash_bucket_vector_t *ring, struct hash_bucket_t *bucket)
 {
     size_t index = range_bsearch(bucket, ring->entries, ring->size, sizeof(struct hash_bucket_t), hash_cmp, 0);
     size_t i;
@@ -110,18 +126,9 @@ static void insert_new_bucket(hash_bucket_vector_t *ring, struct hash_bucket_t *
     ring->size++;
 }
 
-static void add_bucket(hash_bucket_vector_t *ring, size_t target_index, size_t weight, size_t *request_count, uint64_t hash)
+static size_t bounded_find_target(struct bounded_hash_t *self, size_t startat)
 {
-    struct hash_bucket_t bucket = {hash, target_index, weight, request_count};
-    if (ring->capacity == ring->size) {
-        h2o_vector_reserve(NULL, ring, 2 * ring->capacity);
-    }
-    insert_new_bucket(ring, &bucket);
-}
-
-static size_t bounded_find_bucket(struct bounded_hash_t *self, size_t startat)
-{
-    size_t index;
+    size_t index = startat;
     size_t i;
     size_t total = 0;
     if (self->total_leased == NULL) {
@@ -131,15 +138,15 @@ static size_t bounded_find_bucket(struct bounded_hash_t *self, size_t startat)
         total = *self->total_leased;
     }
 
-    float bound_total = (total + 1) * self->c;
+    float bound_per_weight = ((total + 1) * self->c) / self->total_weight;
     for (i = 0; i < self->buckets.size; i++) {
-        index = startat + i;
-        if (index == self->buckets.size)
-            index = 0;
-        float bound_this_bucket = ceil((bound_total / self->total_weight) * self->buckets.entries[index].weight);
+        size_t bound_this_bucket = ceil(bound_per_weight * self->buckets.entries[index].weight);
         if (*self->buckets.entries[index].request_count + 1 <= bound_this_bucket) {
             return self->buckets.entries[index].target;
         }
+        index++;
+        if (index == self->buckets.size)
+            index = 0;
     }
     assert(!"all buckets over bound. should not happen");
 }
@@ -150,7 +157,7 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
     h2o_iovec_t hash_key = self->get_key_cb(socketpool_req_data, self->type);
 
     size_t index;
-    size_t target;
+    size_t result;
     size_t i;
     hash_bucket_vector_t buckets = self->buckets;
 
@@ -158,23 +165,23 @@ static size_t selector(h2o_balancer_t *_self, h2o_socketpool_target_vector_t *ta
 
     pthread_mutex_lock(&self->mutex);
 
-    target = bounded_find_bucket(self, index);
+    result = bounded_find_target(self, index);
 
     /* If the chosen bucket was used (i.e. failed to connect), fall back to find next available bucket */
-    if (tried[index]) {
+    if (tried[result]) {
         for (i = 1; i < buckets.size; i++) {
-            index++;
-            if (index == buckets.size)
-                index = 0;
-            if (!tried[index])
+            result++;
+            if (result == buckets.size)
+                result = 0;
+            if (!tried[result])
                 break;
         }
     }
     pthread_mutex_unlock(&self->mutex);
-    return index;
+    return result;
 }
 
-static void destroyer(h2o_balancer_t *_self)
+static void destroy(h2o_balancer_t *_self)
 {
     struct bounded_hash_t *self = (void *)_self;
 
@@ -186,7 +193,7 @@ static void destroyer(h2o_balancer_t *_self)
 h2o_balancer_t *h2o_balancer_create_hash(float c, h2o_balancer_hash_key_type_t type) {
     static const h2o_balancer_callbacks_t hash_callbacks = {
         selector,
-        destroyer
+        destroy
     };
 
     struct bounded_hash_t *self = h2o_mem_alloc(sizeof(*self));
@@ -229,7 +236,16 @@ void h2o_balancer_hash_set_targets(h2o_balancer_t *_self, h2o_socketpool_target_
     h2o_vector_reserve(NULL, &self->buckets, num_targets);
     for (i = 0; i < num_targets; i++) {
         tag_buf_len = sprintf(tag_buf, "%s:%zu", targets[i]->url.host.base, i);
-        add_bucket(&self->buckets, i, targets[i]->conf.weight_m1 + 1, &targets[i]->_shared.leased_count, compute_hash(tag_buf, tag_buf_len));
+        struct hash_bucket_t bucket = {
+            compute_hash(tag_buf, tag_buf_len),
+            i,
+            targets[i]->conf.weight_m1 + 1,
+            &targets[i]->_shared.leased_count
+        };
+        if (self->buckets.capacity == self->buckets.size) {
+            h2o_vector_reserve(NULL, &self->buckets, 2 * self->buckets.capacity);
+        }
+        add_bucket(&self->buckets, &bucket);
         self->total_weight += targets[i]->conf.weight_m1 + 1;
     }
 }

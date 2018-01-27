@@ -158,6 +158,7 @@ int main(int argc, char **argv)
     { /* library tests */
         subtest("lib/common/balancer/least_conn.c", test_lib__common__balancer__least_conn_c);
         subtest("lib/common/balancer/roundrobin.c", test_lib__common__balancer__roundrobin_c);
+        subtest("lib/common/balancer/hash.c", test_lib__common__balancer__hash_c);
         subtest("lib/cache.c", test_lib__common__cache_c);
         subtest("lib/common/multithread.c", test_lib__common__multithread_c);
         subtest("lib/common/hostinfo.c", test_lib__common__hostinfo_c);

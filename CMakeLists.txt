@@ -360,6 +360,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/test.c
     t/00unit/lib/common/balancer/least_conn.c
     t/00unit/lib/common/balancer/roundrobin.c
+    t/00unit/lib/common/balancer/hash.c
     t/00unit/lib/common/cache.c
     t/00unit/lib/common/hostinfo.c
     t/00unit/lib/common/multithread.c
@@ -387,6 +388,7 @@ SET(UNIT_TEST_SOURCE_FILES
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/balancer/least_conn.c
     lib/common/balancer/roundrobin.c
+    lib/common/balancer/hash.c
     lib/common/cache.c
     lib/common/hostinfo.c
     lib/common/multithread.c

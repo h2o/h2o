@@ -30,6 +30,7 @@ hosts:
       /:
         proxy.reverse.url:
           backends:
+            - http://unresolvable/not/even/exists
             - http://127.0.0.1.xip.io:$unused_port/echo-server-port
             - http://127.0.0.1.xip.io:$upstream_port/echo-server-port
           balancer: $balancer
