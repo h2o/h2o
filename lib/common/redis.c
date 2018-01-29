@@ -78,10 +78,6 @@ static void disconnect(h2o_redis_client_t *client, const char *errstr)
 
 static const char *get_error(const redisAsyncContext *redis)
 {
-    struct st_redis_socket_data_t *data = redis->ev.data;
-    if (data->errstr != NULL)
-        return data->errstr;
-
     switch (redis->err) {
     case REDIS_OK:
         return NULL;
@@ -239,7 +235,10 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
 {
     redisReply *reply = (redisReply *)_reply;
     h2o_redis_command_t *command = (h2o_redis_command_t *)privdata;
-    handle_reply(command, reply, get_error(redis));
+    const char *errstr = ((struct st_redis_socket_data_t *)redis->ev.data)->errstr;
+    if (errstr == NULL)
+        errstr = get_error(redis);
+    handle_reply(command, reply, errstr);
 }
 
 static void on_command_timeout_deferred(h2o_timeout_entry_t *entry)
