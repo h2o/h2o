@@ -67,7 +67,6 @@ static mrb_value detach_receiver(struct st_h2o_mruby_redis_command_context_t *ct
 static void on_gc_dispose_redis(mrb_state *mrb, void *_conn)
 {
     struct st_h2o_mruby_redis_conn_t *conn = _conn;
-    if (conn == NULL) return;
 
     conn->refs.redis = mrb_nil_value();
     h2o_redis_free(&conn->super);
@@ -76,7 +75,7 @@ static void on_gc_dispose_redis(mrb_state *mrb, void *_conn)
 static void on_gc_dispose_command(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_redis_command_context_t *ctx = _ctx;
-    if (ctx == NULL) return;
+
     if (! mrb_nil_p(ctx->receiver)) {
         detach_receiver(ctx, 0);
     }
