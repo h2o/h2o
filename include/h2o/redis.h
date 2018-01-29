@@ -65,15 +65,6 @@ typedef enum enum_h2o_redis_command_type_t {
     H2O_REDIS_COMMAND_TYPE_ERROR
 } h2o_redis_command_type_t;
 
-enum {
-    H2O_REDIS_ERROR_NONE,
-    H2O_REDIS_ERROR_CONNECTION,
-    H2O_REDIS_ERROR_PROTOCOL,
-    H2O_REDIS_ERROR_CONNECT_TIMEOUT,
-    H2O_REDIS_ERROR_COMMAND_TIMEOUT,
-    H2O_REDIS_ERROR_UNKNOWN
-};
-
 typedef struct st_h2o_redis_command_t {
     h2o_redis_client_t *client;
     h2o_redis_command_cb cb;
