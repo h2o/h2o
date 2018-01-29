@@ -38,7 +38,7 @@ typedef enum {
     H2O_REDIS_CONNECTION_STATE_CONNECTED,
 } h2o_redis_connection_state_t;
 
-typedef struct st_h2o_redis_conn_t {
+typedef struct st_h2o_redis_client_t {
     h2o_loop_t *loop;
     h2o_redis_connection_state_t state;
     void (*on_connect)(void);
@@ -51,7 +51,7 @@ typedef struct st_h2o_redis_conn_t {
     h2o_timeout_entry_t _defer_timeout_entry;
     h2o_timeout_t _connect_timeout;
     h2o_timeout_entry_t _connect_timeout_entry;
-} h2o_redis_conn_t;
+} h2o_redis_client_t;
 
 typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, const char *errstr);
 
@@ -75,7 +75,7 @@ enum {
 };
 
 typedef struct st_h2o_redis_command_t {
-    h2o_redis_conn_t *conn;
+    h2o_redis_client_t *client;
     h2o_redis_command_cb cb;
     void *data;
     h2o_redis_command_type_t type;
@@ -84,13 +84,13 @@ typedef struct st_h2o_redis_command_t {
     h2o_timeout_entry_t _command_timeout_entry;
 } h2o_redis_command_t;
 
-h2o_redis_conn_t *h2o_redis_create_connection(h2o_loop_t *loop, size_t sz);
-void h2o_redis_connect(h2o_redis_conn_t *conn, const char *host, uint16_t port);
-void h2o_redis_disconnect(h2o_redis_conn_t *conn);
-void h2o_redis_free(h2o_redis_conn_t *conn);
+h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz);
+void h2o_redis_connect(h2o_redis_client_t *client, const char *host, uint16_t port);
+void h2o_redis_disconnect(h2o_redis_client_t *client);
+void h2o_redis_free(h2o_redis_client_t *client);
 
-h2o_redis_command_t *h2o_redis_command(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
-h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_conn_t *conn, h2o_redis_command_cb cb, void *cb_data, int argc,
+h2o_redis_command_t *h2o_redis_command(h2o_redis_client_t *client, h2o_redis_command_cb cb, void *cb_data, const char *format, ...);
+h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_client_t *client, h2o_redis_command_cb cb, void *cb_data, int argc,
                                             const char **argv, const size_t *argvlen);
 
 #endif

@@ -28,7 +28,7 @@ static h2o_loop_t *loop;
 static int exit_loop;
 const char *host;
 uint16_t port;
-h2o_redis_conn_t *conn;
+h2o_redis_client_t *client;
 
 static void usage(const char *cmd)
 {
@@ -69,10 +69,10 @@ static void dump_reply(redisReply *reply, unsigned indent)
     }
 }
 
-static void on_redis_command(redisReply *reply, void *cb_data, int err, const char *errstr)
+static void on_redis_command(redisReply *reply, void *cb_data, const char *errstr)
 {
-    if (err != H2O_REDIS_ERROR_NONE) {
-        fprintf(stderr, "redis error(%d): %s\n", err, errstr);
+    if (errstr != NULL) {
+        fprintf(stderr, "redis error: %s\n", errstr);
         return;
     }
     if (reply != NULL) {
@@ -83,7 +83,7 @@ static void on_redis_command(redisReply *reply, void *cb_data, int err, const ch
 static void on_redis_connect(void)
 {
     fprintf(stderr, "connected to redis\n");
-    h2o_redis_command(conn, on_redis_command, "get server info", "INFO");
+    h2o_redis_command(client, on_redis_command, "get server info", "INFO");
 }
 
 static void on_redis_close(const char *errstr)
@@ -94,7 +94,7 @@ static void on_redis_close(const char *errstr)
         fprintf(stderr, "redis connection failure: %s\n", errstr);
         /* try to reconnect after 1 second */
         usleep(1000000);
-        h2o_redis_connect(conn, host, port);
+        h2o_redis_connect(client, host, port);
     }
 }
 
@@ -119,12 +119,12 @@ int main(int argc, char **argv)
     loop = h2o_evloop_create();
 #endif
 
-    conn = h2o_redis_create_connection(loop, sizeof(*conn));
-    conn->on_connect = on_redis_connect;
-    conn->on_close = on_redis_close;
+    client = h2o_redis_create_client(loop, sizeof(*client));
+    client->on_connect = on_redis_connect;
+    client->on_close = on_redis_close;
 
-    h2o_redis_connect(conn, host, port);
-    h2o_redis_command(conn, on_redis_command, "list all keys", "KEYS *");
+    h2o_redis_connect(client, host, port);
+    h2o_redis_command(client, on_redis_command, "list all keys", "KEYS *");
 
     while (!exit_loop) {
 #if H2O_USE_LIBUV
@@ -138,7 +138,7 @@ int main(int argc, char **argv)
 
 Exit:
 
-    h2o_redis_free(conn);
+    h2o_redis_free(client);
 
     if (loop != NULL) {
 #if H2O_USE_LIBUV
