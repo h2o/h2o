@@ -53,10 +53,13 @@ static void dispose_connect_timeout(h2o_redis_conn_t *conn)
         h2o_timeout_dispose(conn->loop, &conn->_connect_timeout);
 }
 
-static void close_connection(h2o_redis_conn_t *conn)
+static void close_and_detach_connection(h2o_redis_conn_t *conn, const char *errstr)
 {
     assert(conn->_redis != NULL);
     conn->state = H2O_REDIS_CONNECTION_STATE_CLOSED;
+    if (conn->on_close != NULL)
+        conn->on_close(errstr);
+
     conn->_redis->data = NULL;
     conn->_redis = NULL;
     dispose_connect_timeout(conn);
@@ -70,10 +73,8 @@ static void disconnect(h2o_redis_conn_t *conn, const char *errstr)
     redisAsyncContext *redis = conn->_redis;
     struct st_redis_socket_data_t *data = redis->ev.data;
     data->errstr = errstr;
-    close_connection(conn);
+    close_and_detach_connection(conn, errstr);
     redisAsyncFree(redis); /* immediately call all callbacks of pending commands with nil replies */
-    if (conn->on_close != NULL)
-        conn->on_close(errstr);
 }
 
 static const char *get_error(const redisAsyncContext *redis)
@@ -111,9 +112,7 @@ static void on_connect(const redisAsyncContext *redis, int status)
         return;
 
     if (status != REDIS_OK) {
-        close_connection(conn);
-        if (conn->on_close != NULL)
-            conn->on_close(h2o_redis_error_connection);
+        close_and_detach_connection(conn, h2o_redis_error_connection);
         return;
     }
     dispose_connect_timeout(conn);
@@ -129,11 +128,7 @@ static void on_disconnect(const redisAsyncContext *redis, int status)
     if (conn == NULL)
         return;
 
-    close_connection(conn);
-    if (conn->on_close != NULL) {
-        const char *errstr = get_error(redis);
-        conn->on_close(errstr);
-    }
+    close_and_detach_connection(conn, get_error(redis));
 }
 
 static void on_connect_timeout_deferred(h2o_timeout_entry_t *entry)
