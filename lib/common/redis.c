@@ -36,7 +36,6 @@ struct st_redis_socket_data_t {
     h2o_socket_t *socket;
 };
 
-
 static void attach_loop(redisAsyncContext *ac, h2o_loop_t *loop);
 
 static void invoke_deferred(h2o_redis_client_t *client, h2o_timeout_entry_t *entry, h2o_timeout_cb cb)
@@ -218,21 +217,21 @@ static void handle_reply(h2o_redis_command_t *command, redisReply *reply, const 
         command->cb(reply, command->data, errstr);
 
     switch (command->type) {
-        case H2O_REDIS_COMMAND_TYPE_SUBSCRIBE:
-        case H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE:
-            if (reply != NULL && reply->type == REDIS_REPLY_ARRAY) {
-                char *unsub = command->type == H2O_REDIS_COMMAND_TYPE_SUBSCRIBE ? "unsubscribe" : "punsubscribe";
-                if (strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
-                    dispose_command(command);
-                } else {
-                    /* (p)subscribe commands doesn't get freed until (p)unsubscribe or disconnect */
-                }
-            } else {
+    case H2O_REDIS_COMMAND_TYPE_SUBSCRIBE:
+    case H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE:
+        if (reply != NULL && reply->type == REDIS_REPLY_ARRAY) {
+            char *unsub = command->type == H2O_REDIS_COMMAND_TYPE_SUBSCRIBE ? "unsubscribe" : "punsubscribe";
+            if (strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
                 dispose_command(command);
+            } else {
+                /* (p)subscribe commands doesn't get freed until (p)unsubscribe or disconnect */
             }
-            break;
-        default:
+        } else {
             dispose_command(command);
+        }
+        break;
+    default:
+        dispose_command(command);
     }
 }
 
@@ -270,7 +269,7 @@ static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis
     command->_command_timeout_entry.cb = on_command_timeout;
 
     if (client->command_timeout != 0 && (type == H2O_REDIS_COMMAND_TYPE_NORMAL || type == H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE ||
-                                       type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE)) {
+                                         type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE)) {
         h2o_timeout_init(client->loop, &command->_command_timeout, client->command_timeout);
         h2o_timeout_link(client->loop, &command->_command_timeout, &command->_command_timeout_entry);
     }

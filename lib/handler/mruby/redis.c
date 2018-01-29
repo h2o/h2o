@@ -30,7 +30,6 @@
 #include "h2o/redis.h"
 #include "hiredis.h"
 
-
 struct st_h2o_mruby_redis_client_t {
     h2o_redis_client_t super;
     h2o_mruby_context_t *ctx;
@@ -60,7 +59,8 @@ static mrb_value detach_receiver(struct st_h2o_mruby_redis_command_context_t *ct
     assert(!mrb_nil_p(ret));
     ctx->receiver = mrb_nil_value();
     mrb_gc_unregister(ctx->client->ctx->shared->mrb, ret);
-    if (protect) mrb_gc_protect(ctx->client->ctx->shared->mrb, ret);
+    if (protect)
+        mrb_gc_protect(ctx->client->ctx->shared->mrb, ret);
     return ret;
 }
 
@@ -76,7 +76,7 @@ static void on_gc_dispose_command(mrb_state *mrb, void *_ctx)
 {
     struct st_h2o_mruby_redis_command_context_t *ctx = _ctx;
 
-    if (! mrb_nil_p(ctx->receiver)) {
+    if (!mrb_nil_p(ctx->receiver)) {
         detach_receiver(ctx, 0);
     }
     free(ctx);
@@ -110,17 +110,18 @@ static mrb_value setup_method(mrb_state *mrb, mrb_value self)
     h2o_mruby_shared_context_t *shared = mrb->ud;
     assert(shared->current_context != NULL);
 
-    struct st_h2o_mruby_redis_client_t *client = (struct st_h2o_mruby_redis_client_t *)h2o_redis_create_client(shared->ctx->loop, sizeof(*client));
+    struct st_h2o_mruby_redis_client_t *client =
+        (struct st_h2o_mruby_redis_client_t *)h2o_redis_create_client(shared->ctx->loop, sizeof(*client));
     client->ctx = shared->current_context;
 
     mrb_value _connect_timeout = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@connect_timeout"));
-    if (! mrb_nil_p(_connect_timeout)) {
+    if (!mrb_nil_p(_connect_timeout)) {
         uint64_t connect_timeout = mrb_float(_connect_timeout) * 1000;
         client->super.connect_timeout = connect_timeout;
     }
 
     mrb_value _command_timeout = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "@command_timeout"));
-    if (! mrb_nil_p(_command_timeout)) {
+    if (!mrb_nil_p(_command_timeout)) {
         uint64_t command_timeout = mrb_float(_command_timeout) * 1000;
         client->super.command_timeout = command_timeout;
     }
@@ -206,7 +207,8 @@ static void on_redis_command(redisReply *_reply, void *_ctx, const char *errstr)
     int gc_arena = mrb_gc_arena_save(mrb);
 
     if (errstr == NULL) {
-        if (_reply == NULL) return;
+        if (_reply == NULL)
+            return;
         reply = decode_redis_reply(mrb, _reply, ctx->refs.command);
     } else {
         struct RClass *error_klass = NULL;
@@ -283,7 +285,7 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value redis_join_reply_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
-                                             int *run_again)
+                                           int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     struct st_h2o_mruby_redis_command_context_t *ctx;
