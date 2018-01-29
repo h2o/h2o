@@ -12,6 +12,7 @@ RUN apt-get install --yes libev-dev libc-ares-dev libnghttp2-dev libssl-dev libu
 
 # clang-4.0 for fuzzing
 RUN apt-get install -y clang-4.0
+ENV PATH=/usr/lib/llvm-4.0/bin:$PATH
 
 # curl with http2 support
 RUN wget --no-verbose -O - https://curl.haxx.se/download/curl-7.57.0.tar.gz | tar xzf -
