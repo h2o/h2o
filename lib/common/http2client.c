@@ -139,6 +139,12 @@ struct st_h2o_http2client_stream_t {
         h2o_buffer_t *body;
     } input;
 
+    struct {
+        h2o_http2client_proceed_req_cb proceed_req;
+        size_t bytes_in_flight;
+        unsigned char done : 1;
+    } streaming;
+
     h2o_mem_pool_t pool;
 };
 
@@ -786,7 +792,7 @@ static void enqueue_goaway(struct st_h2o_http2client_conn_t *conn, int errnum, h
 static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
 {
     assert(errstr != NULL);
-    stream->cb.on_connect(&stream->client, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+    stream->cb.on_connect(&stream->client, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     close_stream(stream);
 }
 
@@ -889,9 +895,9 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     size_t num_headers;
     h2o_iovec_t *bodies;
     size_t num_bodies;
-    int is_chunked = 0; // TODO: is this needed?
+    int dummy = 0;
     stream->cb.on_head = stream->cb.on_connect(&stream->client, NULL, &method, &url, &headers, &num_headers, &bodies, &num_bodies,
-                                                 &is_chunked, &conn->origin->url);
+                                                 &dummy, &stream->streaming.proceed_req, &conn->origin->url);
     if (stream->cb.on_head == NULL) {
         close_stream(stream);
         return;
@@ -950,8 +956,17 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         h2o_linklist_t *link = conn->output.sent_streams.next;
         struct st_h2o_http2client_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
-        transition_state(stream, STREAM_STATE_RECV_HEADERS);
-        h2o_timeout_link(stream->client.ctx->loop, stream->client.ctx->first_byte_timeout, &stream->timeout_entry);
+
+        if (stream->streaming.proceed_req != NULL) {
+            size_t bytes_written = stream->streaming.bytes_in_flight;
+            stream->streaming.bytes_in_flight = 0;
+            stream->streaming.proceed_req(&stream->client, bytes_written, stream->streaming.done);
+        }
+
+        if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
+            transition_state(stream, STREAM_STATE_RECV_HEADERS);
+            h2o_timeout_link(stream->client.ctx->loop, stream->client.ctx->first_byte_timeout, &stream->timeout_entry);
+        }
     }
 
     /* reset the other buffer */
@@ -986,11 +1001,11 @@ static size_t calc_max_payload_size(struct st_h2o_http2client_stream_t *stream)
     return sz_min(sz_min(conn_max, stream_max), stream->conn->peer_settings.max_frame_size);
 }
 
-static void stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
+static size_t stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
 {
     size_t max_payload_size = calc_max_payload_size(stream);
     if (max_payload_size == 0)
-        return;
+        return 0;
 
     /* reserve buffer and point dst to the payload */
     h2o_iovec_t dst;
@@ -1016,7 +1031,7 @@ static void stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
     }
 
     if (dst.len == max_payload_size)
-        return; /* nothing is emitted at all */
+        return 0; /* nothing is emitted at all */
 
     /* emit data frame */
     size_t length = max_payload_size - dst.len;
@@ -1036,6 +1051,8 @@ static void stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
         memcpy(stream->output.data.entries, buf, sizeof(*buf) * new_size);
         stream->output.data.size = new_size;
     }
+
+    return length;
 }
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
@@ -1050,14 +1067,18 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
         struct st_h2o_http2client_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, node);
         h2o_linklist_unlink(node);
 
+        size_t bytes_emitted = 0;
         if (stream->output.data.size != 0)
-            stream_emit_pending_data(stream);
+            bytes_emitted = stream_emit_pending_data(stream);
 
         if (stream->output.data.size == 0) {
             h2o_linklist_insert(&conn->output.sent_streams, node);
         } else if (h2o_http2_window_get_window(&stream->output.window) > 0) {
             h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
         }
+
+        if (stream->streaming.proceed_req != NULL)
+            stream->streaming.bytes_in_flight += bytes_emitted;
 
         if (next == first)
             break;
@@ -1254,4 +1275,24 @@ void h2o_http2client_cancel(h2o_http1client_t *client)
     struct st_h2o_http2client_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, client, client);
     stream_send_error(stream->conn, stream->stream_id, H2O_HTTP2_ERROR_CANCEL);
     close_stream(stream);
+}
+
+int h2o_http2client_write_req(h2o_http1client_t *client, h2o_iovec_t chunk, int is_end_stream)
+{
+    struct st_h2o_http2client_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, client, client);
+    assert(stream->streaming.proceed_req != NULL);
+    assert(!h2o_linklist_is_linked(&stream->output.sending_link));
+
+    if (is_end_stream)
+        stream->streaming.done = 1;
+
+    if (chunk.len != 0) {
+        h2o_vector_reserve(&stream->pool, &stream->output.data, stream->output.data.size + 1);
+        stream->output.data.entries[stream->output.data.size++] = chunk;
+    }
+
+    h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
+    request_write(stream->conn);
+
+    return 0;
 }

@@ -34,18 +34,20 @@ extern "C" {
 
 struct st_h2o_header_t;
 
+typedef void (*h2o_http2client_proceed_req_cb)(h2o_http1client_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_http2client_body_cb)(h2o_http1client_t *client, const char *errstr);
 typedef h2o_http2client_body_cb (*h2o_http2client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
                                                            int status, h2o_iovec_t msg, struct st_h2o_header_t *headers,
                                                            size_t num_headers, int rlen);
 typedef h2o_http2client_head_cb (*h2o_http2client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                                               struct st_h2o_header_t **headers, size_t *num_headers, h2o_iovec_t **bodies, size_t *num_bodies,
-                                                              int *body_is_chunked, h2o_url_t *origin);
+                                                              int *body_is_chunked, h2o_http1client_proceed_req_cb *proceed_req_cb, h2o_url_t *origin);
 
 
 void h2o_http2client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
                              h2o_url_t *target, h2o_http2client_connect_cb cb);
 void h2o_http2client_cancel(h2o_http1client_t *client);
+int h2o_http2client_write_req(h2o_http1client_t *client, h2o_iovec_t chunk, int is_end_stream);
 
 #ifdef __cplusplus
 }
