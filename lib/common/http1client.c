@@ -406,7 +406,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     }
 
     if (client->_body_buf != NULL && client->_body_buf->size != 0)
-        h2o_http1client_write_req(client->sock, h2o_iovec_init(NULL, 0), client->_body_buf_is_done);
+        h2o_http1client_write_req(&client->super, h2o_iovec_init(NULL, 0), client->_body_buf_is_done);
     else if (client->_body_buf_is_done)
         on_send_request(client->sock, NULL);
 }
@@ -437,9 +437,9 @@ void write_chunk_to_socket(struct st_h2o_http1client_private_t *client, h2o_iove
     h2o_socket_write(client->sock, chunk_and_reqbufs, i, cb);
 }
 
-int h2o_http1client_write_req(void *priv, h2o_iovec_t chunk, int is_end_stream)
+int h2o_http1client_write_req(h2o_http1client_t *_client, h2o_iovec_t chunk, int is_end_stream)
 {
-    struct st_h2o_http1client_private_t *client = priv;
+    struct st_h2o_http1client_private_t *client = (struct st_h2o_http1client_private_t *)_client;
 
     client->_body_buf_is_done = is_end_stream;
 

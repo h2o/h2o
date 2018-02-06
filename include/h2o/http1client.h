@@ -80,7 +80,7 @@ struct st_h2o_http1client_t {  // TODO: rename to st_h2o_httpclient_t
 
 extern const char *const h2o_http1client_error_is_eos;
 
-int h2o_http1client_write_req(void *priv, h2o_iovec_t chunk, int is_end_stream);
+int h2o_http1client_write_req(h2o_http1client_t *client, h2o_iovec_t chunk, int is_end_stream);
 /**
  * connects to a HTTP/1.1 server
  * @param client
