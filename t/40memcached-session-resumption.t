@@ -46,6 +46,7 @@ hosts:
       /:
         file.dir: @{[ DOC_ROOT ]}
 EOT
+            sleep 1; # wait for h2o to connect to memcached
             my $lines = do {
                 open my $fh, "-|", "openssl s_client -no_ticket $opts -connect 127.0.0.1:$server->{tls_port} 2>&1 < /dev/null"
                     or die "failed to open pipe:$!";

@@ -141,12 +141,22 @@ h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
     return queue;
 }
 
+#if H2O_USE_LIBUV
+static void libuv_destroy_delayed(uv_handle_t *handle)
+{
+    h2o_multithread_queue_t *queue = H2O_STRUCT_FROM_MEMBER(h2o_multithread_queue_t, async, (uv_async_t *)handle);
+    free(queue);
+}
+#endif
+
 void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 {
     assert(h2o_linklist_is_empty(&queue->receivers.active));
     assert(h2o_linklist_is_empty(&queue->receivers.inactive));
+    pthread_mutex_destroy(&queue->mutex);
+
 #if H2O_USE_LIBUV
-    uv_close((uv_handle_t *)&queue->async, (uv_close_cb)free);
+    uv_close((uv_handle_t *)&queue->async, libuv_destroy_delayed);
 #else
     h2o_socket_read_stop(queue->async.read);
     h2o_socket_close(queue->async.read);
@@ -154,8 +164,8 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
     /* only one file descriptor is required for eventfd and already closed by h2o_socket_close() */
     close(queue->async.write);
 #endif
+    free(queue);
 #endif
-    pthread_mutex_destroy(&queue->mutex);
 }
 
 void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver,

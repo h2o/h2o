@@ -1079,7 +1079,6 @@ parser_error:
     }
 
     yaml_event_delete(&input_event);
-    yaml_event_delete(&output_event);
     yaml_parser_delete(&parser);
     yaml_emitter_delete(&emitter);
 
@@ -1110,7 +1109,6 @@ emitter_error:
     }
 
     yaml_event_delete(&input_event);
-    yaml_event_delete(&output_event);
     yaml_parser_delete(&parser);
     yaml_emitter_delete(&emitter);
 
@@ -1121,7 +1119,6 @@ event_error:
     fprintf(stderr, "Memory error: Not enough memory for creating an event\n");
 
     yaml_event_delete(&input_event);
-    yaml_event_delete(&output_event);
     yaml_parser_delete(&parser);
     yaml_emitter_delete(&emitter);
 

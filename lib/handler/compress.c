@@ -39,6 +39,11 @@ struct st_compress_encoder_t {
 
 static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
+    if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
+        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
+        return;
+    }
+
     struct st_compress_encoder_t *self = (void *)_self;
     h2o_iovec_t *outbufs;
     size_t outbufcnt;
@@ -124,7 +129,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     }
 
     /* setup filter */
-    encoder = (void *)h2o_add_ostream(req, sizeof(*encoder), slot);
+    encoder = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*encoder), sizeof(*encoder), slot);
     encoder->super.do_send = do_send;
     slot = &encoder->super.next;
     encoder->compressor = compressor;

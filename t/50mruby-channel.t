@@ -116,4 +116,28 @@ EOT
 
 };
 
+subtest "fiber-switch in constructor" => sub {
+    my $server = spawn_h2o(<< 'EOT');
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          class Klass
+            def initialize(ch)
+              task do
+                ch.push [200, {}, ["hello world"]]
+              end
+            end
+          end
+          Proc.new do |env|
+            ch = H2O::Channel.new
+            Klass.new(ch)
+            ch.shift
+          end
+EOT
+    my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    is $stdout, "hello world";
+};
+
 done_testing();

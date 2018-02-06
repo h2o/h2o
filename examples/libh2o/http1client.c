@@ -60,8 +60,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     }
 
     /* build request */
-    req = h2o_mem_alloc_pool(&pool, sizeof(*req));
-    req->base = h2o_mem_alloc_pool(&pool, 1024);
+    req = h2o_mem_alloc_pool(&pool, *req, 1);
+    req->base = h2o_mem_alloc_pool(&pool, char, 1024);
     req->len =
         snprintf(req->base, 1024, "%s %.*s HTTP/1.1\r\ncontent-length:%d\r\nhost: %.*s\r\n\r\n", method, (int)url_parsed.path.len,
                  url_parsed.path.base, body_size, (int)url_parsed.authority.len, url_parsed.authority.base);
@@ -71,7 +71,8 @@ static void start_request(h2o_http1client_ctx_t *ctx)
     /* initiate the request */
     if (sockpool == NULL) {
         sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_init_specific(sockpool, 10, &url_parsed, 1);
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(&url_parsed, NULL);
+        h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, 5000 /* in msec */);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
 

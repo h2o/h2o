@@ -52,6 +52,7 @@ extern "C" {
 #include "h2o/timeout.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
+#include "h2o/balancer.h"
 
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
@@ -74,6 +75,9 @@ extern "C" {
 #define H2O_SOMAXCONN 65535
 #endif
 
+#define H2O_HTTP2_MIN_STREAM_WINDOW_SIZE 65535
+#define H2O_HTTP2_MAX_STREAM_WINDOW_SIZE 16777216
+
 #define H2O_DEFAULT_MAX_REQUEST_ENTITY_SIZE (1024 * 1024 * 1024)
 #define H2O_DEFAULT_MAX_DELEGATIONS 5
 #define H2O_DEFAULT_HANDSHAKE_TIMEOUT_IN_SECS 10
@@ -85,6 +89,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS 0 /* no timeout */
 #define H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT (H2O_DEFAULT_HTTP2_GRACEFUL_SHUTDOWN_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE H2O_HTTP2_MAX_STREAM_WINDOW_SIZE
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS 30
 #define H2O_DEFAULT_PROXY_IO_TIMEOUT (H2O_DEFAULT_PROXY_IO_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS 300
@@ -382,6 +387,10 @@ struct st_h2o_globalconf_t {
          * maximum nuber of streams (per connection) to be allowed in IDLE / CLOSED state (used for tracking dependencies).
          */
         size_t max_streams_for_priority;
+        /**
+         * size of the stream-level flow control window (once it becomes active)
+         */
+        uint32_t active_stream_window_size;
         /**
          * conditions for latency optimization
          */
@@ -979,6 +988,10 @@ struct st_h2o_req_t {
      */
     h2o_pathconf_t *pathconf;
     /**
+     * the handler that has been executed
+     */
+    h2o_handler_t *handler;
+    /**
      * scheme (http, https, etc.)
      */
     const h2o_url_scheme_t *scheme;
@@ -1090,6 +1103,10 @@ struct st_h2o_req_t {
      * whether if the bytes sent is counted by ostreams other than final ostream
      */
     unsigned char bytes_counted_by_ostream : 1;
+    /**
+     * set by the generator if the protocol handler should replay the request upon seeing 425
+     */
+    unsigned char reprocess_if_too_early : 1;
 
     /**
      * Whether the producer of the response has explicitely disabled or
@@ -1231,6 +1248,10 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
+ *
+ */
+static int h2o_conn_is_early_data(h2o_conn_t *conn);
+/**
  * setups accept context for memcached SSL resumption
  */
 void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, unsigned expiration);
@@ -1267,6 +1288,10 @@ int h2o_get_compressible_types(const h2o_headers_t *headers);
  * builds destination URL or path, by contatenating the prefix and path_info of the request
  */
 h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized);
+/**
+ * release all thread-local resources used by h2o
+ */
+void h2o_cleanup_thread(void);
 
 extern uint64_t h2o_connection_id;
 
@@ -1292,13 +1317,13 @@ void h2o_process_request(h2o_req_t *req);
  */
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req);
 /**
- * delegates the request to the next handler; called asynchronously by handlers that returned zero from `on_req`
+ * delegates the request to the next handler
  */
-void h2o_delegate_request(h2o_req_t *req, h2o_handler_t *current_handler);
+void h2o_delegate_request(h2o_req_t *req);
 /**
  * calls h2o_delegate_request using zero_timeout callback
  */
-void h2o_delegate_request_deferred(h2o_req_t *req, h2o_handler_t *current_handler);
+void h2o_delegate_request_deferred(h2o_req_t *req);
 /**
  * reprocesses a request once more (used for internal redirection)
  */
@@ -1310,6 +1335,14 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
 void h2o_reprocess_request_deferred(h2o_req_t *req, h2o_iovec_t method, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
                                     h2o_iovec_t path, h2o_req_overrides_t *overrides, int is_delegated);
 /**
+ *
+ */
+void h2o_replay_request(h2o_req_t *req);
+/**
+ *
+ */
+void h2o_replay_request_deferred(h2o_req_t *req);
+/**
  * called by handlers to set the generator
  * @param req the request
  * @param generator the generator
@@ -1318,11 +1351,12 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
 /**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request
+ * @param alignment of the memory to be allocated for the ostream filter
  * @param size of the memory to be allocated for the ostream filter
  * @param slot where the stream should be inserted
  * @return pointer to the ostream filter
  */
-h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t sz, h2o_ostream_t **slot);
+h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_ostream_t **slot);
 /**
  * prepares the request for processing by looking at the method, URI, headers
  */
@@ -1348,7 +1382,7 @@ static h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iov
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
-h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t sz);
+h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t alignment, size_t sz);
 /**
  * requests the next prefilter or filter (if any) to setup the ostream if necessary
  */
@@ -1898,8 +1932,7 @@ typedef struct st_h2o_proxy_config_vars_t {
 /**
  * registers the reverse proxy handler to the context
  */
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      uint64_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config);
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool);
 /**
  * registers the configurator
  */
@@ -2005,6 +2038,12 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
     conn->callbacks = callbacks;
 
     return conn;
+}
+
+inline int h2o_conn_is_early_data(h2o_conn_t *conn)
+{
+    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
+    return sock != NULL && sock->ssl != NULL && h2o_socket_ssl_is_early_data(sock);
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)

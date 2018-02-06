@@ -101,7 +101,7 @@ static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res
     h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
     h2o_hpack_flatten_response(&buf, header_table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res, NULL, SIZE_MAX);
 
-    ok(h2o_http2_decode_frame(&frame, (uint8_t *)buf->bytes, buf->size, &H2O_HTTP2_SETTINGS_DEFAULT, &err_desc) > 0);
+    ok(h2o_http2_decode_frame(&frame, (uint8_t *)buf->bytes, buf->size, &err_desc) > 0);
     ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
 
     h2o_buffer_dispose(&buf);
