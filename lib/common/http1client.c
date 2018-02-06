@@ -464,17 +464,10 @@ int h2o_http1client_write_req(void *priv, h2o_iovec_t chunk, int is_end_stream)
         return 0;
     }
 
+    h2o_iovec_t iov = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
     if (client->_is_chunked) {
-        if (is_end_stream && client->_body_buf_in_flight->size == 0) {
-            on_send_request(client->sock, NULL);
-            return 0;
-        }
-        write_chunk_to_socket(client, h2o_iovec_init(NULL, 0),
-                              h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size),
-                              on_req_body_done);
+        write_chunk_to_socket(client, h2o_iovec_init(NULL, 0), iov, on_req_body_done);
     } else {
-        h2o_iovec_t iov = h2o_iovec_init(client->_body_buf_in_flight->bytes, client->_body_buf_in_flight->size);
-
         h2o_socket_write(client->sock, &iov, 1, on_req_body_done);
     }
     return 0;
