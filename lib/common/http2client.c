@@ -44,13 +44,8 @@ enum enum_conn_state_t {
     CONN_STATE_IS_CLOSING,
 };
 
-static const h2o_http2_settings_t H2O_HTTP2_SETTINGS_CLIENT = {
-    4096,     /* header_table_size */
-    0,        /* enable_push (http2client doesn't support push) */
-    100,      /* max_concurrent_streams */
-    16777216, /* initial_window_size */
-    16384     /* max_frame_size */
-};
+#define H2O_HTTP2_SETTINGS_CLIENT_INITIAL_WINDOW_SIZE 16777216
+#define H2O_HTTP2_SETTINGS_CLIENT_HEADER_TABLE_SIZE 4096
 
 #define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
@@ -163,8 +158,8 @@ static void request_write(struct st_h2o_http2client_conn_t *conn)
 static void update_input_window(struct st_h2o_http2client_conn_t *conn, uint32_t stream_id, h2o_http2_window_t *window, size_t consumed)
 {
     h2o_http2_window_consume_window(window, consumed);
-    if (h2o_http2_window_get_window(window) * 2 < H2O_HTTP2_SETTINGS_CLIENT.initial_window_size) {
-        int32_t delta = (int32_t)(H2O_HTTP2_SETTINGS_CLIENT.initial_window_size - h2o_http2_window_get_window(window));
+    if (h2o_http2_window_get_avail(window) * 2 < H2O_HTTP2_SETTINGS_CLIENT_INITIAL_WINDOW_SIZE) {
+        int32_t delta = (int32_t)(H2O_HTTP2_SETTINGS_CLIENT_INITIAL_WINDOW_SIZE - h2o_http2_window_get_avail(window));
         h2o_http2_encode_window_update_frame(&conn->output.buf, stream_id, delta);
         request_write(conn);
         h2o_http2_window_update(window, delta);
@@ -312,7 +307,7 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
     struct st_h2o_http2client_stream_t *stream;
     int hret;
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, &H2O_HTTP2_SETTINGS_CLIENT, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
         return ret;
     if (frame.type != H2O_HTTP2_FRAME_TYPE_CONTINUATION) {
         *err_desc = "expected CONTINUATION frame";
@@ -499,10 +494,10 @@ static int handle_rst_stream_frame(struct st_h2o_http2client_conn_t *conn, h2o_h
 
 static int update_stream_output_window(struct st_h2o_http2client_stream_t *stream, ssize_t delta)
 {
-    ssize_t before = h2o_http2_window_get_window(&stream->output.window);
+    ssize_t before = h2o_http2_window_get_avail(&stream->output.window);
     if (h2o_http2_window_update(&stream->output.window, delta) != 0)
         return -1;
-    ssize_t after = h2o_http2_window_get_window(&stream->output.window);
+    ssize_t after = h2o_http2_window_get_avail(&stream->output.window);
     if (before <= 0 && 0 < after && stream->output.data.size != 0) {
         assert(!h2o_linklist_is_linked(&stream->output.sending_link));
         h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
@@ -526,7 +521,7 @@ static ssize_t conn_get_buffer_window(struct st_h2o_http2client_conn_t *conn)
     if (ret < H2O_HTTP2_FRAME_HEADER_SIZE)
         return 0;
     ret -= H2O_HTTP2_FRAME_HEADER_SIZE;
-    winsz = h2o_http2_window_get_window(&conn->output.window);
+    winsz = h2o_http2_window_get_avail(&conn->output.window);
     if (winsz < ret)
         ret = winsz;
     return ret;
@@ -680,7 +675,7 @@ ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *sr
         handle_invalid_continuation_frame /* CONTINUATION */
     };
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, &H2O_HTTP2_SETTINGS_CLIENT, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
         return ret;
 
     if (frame.type < sizeof(FRAME_HANDLERS) / sizeof(FRAME_HANDLERS[0])) {
@@ -701,7 +696,7 @@ static ssize_t expect_settings(struct st_h2o_http2client_conn_t *conn, const uin
     h2o_http2_frame_t frame;
     ssize_t ret;
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, &H2O_HTTP2_SETTINGS_CLIENT, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
         return ret;
 
     if (frame.type != H2O_HTTP2_FRAME_TYPE_SETTINGS)
@@ -905,7 +900,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 
     register_stream(stream, conn);
 
-    h2o_http2_window_init(&stream->output.window, &conn->peer_settings);
+    h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* send headers */
     h2o_headers_t headers_vec = {headers, num_headers, num_headers};
@@ -996,7 +991,7 @@ static size_t calc_max_payload_size(struct st_h2o_http2client_stream_t *stream)
 
     if ((conn_max = conn_get_buffer_window(stream->conn)) <= 0)
         return 0;
-    if ((stream_max = h2o_http2_window_get_window(&stream->output.window)) <= 0)
+    if ((stream_max = h2o_http2_window_get_avail(&stream->output.window)) <= 0)
         return 0;
     return sz_min(sz_min(conn_max, stream_max), stream->conn->peer_settings.max_frame_size);
 }
@@ -1073,7 +1068,7 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
 
         if (stream->output.data.size == 0) {
             h2o_linklist_insert(&conn->output.sent_streams, node);
-        } else if (h2o_http2_window_get_window(&stream->output.window) > 0) {
+        } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
             h2o_linklist_insert(&conn->output.sending_streams, node); /* move to the tail to rotate buffers */
         }
 
@@ -1153,8 +1148,8 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_http1client_ctx_t
     conn->keepalive_timeout_entry.cb = on_keepalive_timeout;
 
     /* output */
-    conn->output.header_table.hpack_capacity = H2O_HTTP2_SETTINGS_CLIENT.header_table_size;
-    h2o_http2_window_init(&conn->output.window, &conn->peer_settings);
+    conn->output.header_table.hpack_capacity = H2O_HTTP2_SETTINGS_CLIENT_HEADER_TABLE_SIZE;
+    h2o_http2_window_init(&conn->output.window, conn->peer_settings.initial_window_size);
     h2o_buffer_init(&conn->output.buf, &wbuf_buffer_prototype);
     conn->output.defer_timeout_entry.cb = emit_writereq;
     h2o_linklist_init_anchor(&conn->output.sending_streams);
@@ -1163,7 +1158,7 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_http1client_ctx_t
     /* input */
     conn->input.header_table.hpack_capacity = conn->input.header_table.hpack_max_capacity =
     H2O_HTTP2_SETTINGS_DEFAULT.header_table_size;
-    h2o_http2_window_init(&conn->input.window, &H2O_HTTP2_SETTINGS_DEFAULT);
+    h2o_http2_window_init(&conn->input.window, H2O_HTTP2_SETTINGS_DEFAULT.initial_window_size);
     conn->input.read_frame = expect_settings;
 
     return conn;
@@ -1214,7 +1209,7 @@ static struct st_h2o_http2client_stream_t *create_stream(h2o_http1client_t **cli
     stream->input.res.content_length = SIZE_MAX;
     stream->state = STREAM_STATE_SEND_HEADERS;
     stream->timeout_entry.cb = on_stream_timeout;
-    h2o_http2_window_init(&stream->input.window, &H2O_HTTP2_SETTINGS_CLIENT);
+    h2o_http2_window_init(&stream->input.window, H2O_HTTP2_SETTINGS_CLIENT_INITIAL_WINDOW_SIZE);
 
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
 
