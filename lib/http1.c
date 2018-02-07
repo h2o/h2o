@@ -676,6 +676,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         if (send_state == H2O_SEND_STATE_ERROR) {
             conn->req.http1_is_persistent = 0;
+            conn->req.send_server_timing_trailer = 0;
         }
         buf.len += cbuf.len;
         conn->req.bytes_sent += cbuf.len;
@@ -757,6 +758,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         conn->req.http1_is_persistent = 0;
+        conn->req.send_server_timing_trailer = 0;
     }
 
     if (bufcnt != 0) {

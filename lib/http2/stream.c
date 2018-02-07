@@ -385,8 +385,9 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     if (h2o_http2_window_get_avail(&stream->output_window) <= 0)
         return;
 
+    h2o_send_state_t send_state;
+
     if (stream->_pull_cb != NULL) {
-        h2o_send_state_t send_state;
         /* pull mode */
         assert(stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM);
         send_state = send_data_pull(conn, stream);
@@ -397,6 +398,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         }
     } else {
         /* push mode */
+        send_state = stream->send_state;
         h2o_iovec_t *nextbuf = send_data_push(conn, stream, stream->_data.entries, stream->_data.size, stream->send_state);
         if (nextbuf == stream->_data.entries + stream->_data.size) {
             /* sent all data */
@@ -409,6 +411,10 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
             memmove(stream->_data.entries, nextbuf, sizeof(h2o_iovec_t) * newsize);
             stream->_data.size = newsize;
         }
+    }
+
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        stream->req.send_server_timing_trailer = 0;
     }
 }
 
