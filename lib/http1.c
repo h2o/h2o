@@ -551,6 +551,27 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
 
     conn->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
 
+    if (conn->req.send_server_timing_trailer) {
+        conn->req.send_server_timing_trailer = 0;
+
+        int64_t delta_usec;
+        if (h2o_time_compute_duration(&conn->req, &delta_usec)) {
+            static const h2o_iovec_t name = {H2O_STRLIT("server-timing: ")};
+
+            char buf[50];
+            memcpy(buf, name.base, name.len);
+            size_t len = name.len;
+            len += h2o_server_timing_encode_total(buf + len, delta_usec);
+            buf[len++] = '\r';
+            buf[len++] = '\n';
+            buf[len++] = '\r';
+            buf[len++] = '\n';
+            h2o_iovec_t iovec = h2o_iovec_init(buf, len);
+            h2o_socket_write(conn->sock, &iovec, 1, on_send_complete);
+            return;
+        }
+    }
+
     if (!conn->req.http1_is_persistent) {
         /* TODO use lingering close */
         close_connection(conn, 1);

@@ -51,12 +51,12 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         outbufcnt += inbufcnt;
         if (state != H2O_SEND_STATE_ERROR) {
             outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
-            outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? 7 : 2;
+            outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? (req->send_server_timing_trailer ? 5 : 7) : 2;
             outbufcnt++;
         }
     } else if (state == H2O_SEND_STATE_FINAL) {
         outbufs[outbufcnt].base = "0\r\n\r\n";
-        outbufs[outbufcnt].len = 5;
+        outbufs[outbufcnt].len = req->send_server_timing_trailer ? 3 : 5;
         outbufcnt++;
     }
 

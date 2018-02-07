@@ -1105,6 +1105,8 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
 
+    unsigned char send_server_timing_trailer : 1;
+
     /**
      * Whether the producer of the response has explicitely disabled or
      * enabled compression. One of H2O_COMPRESS_HINT_*
@@ -1705,6 +1707,11 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  * registers the chunked encoding output filter (added by default)
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
+
+/* lib/handler/server_timing.c */
+void h2o_server_timing_register(h2o_pathconf_t *pathconf);
+void h2o_server_timing_register_configurator(h2o_globalconf_t *conf);
+size_t h2o_server_timing_encode_total(char *buf, int64_t duration_usec);
 
 /* lib/compress.c */
 
