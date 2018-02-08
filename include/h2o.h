@@ -928,7 +928,8 @@ typedef struct st_h2o_req_overrides_t {
  * additional information for extension-based dynamic content
  */
 typedef struct st_h2o_filereq_t {
-    size_t url_path_len;
+    h2o_iovec_t script_name;
+    h2o_iovec_t path_info;
     h2o_iovec_t local_path;
 } h2o_filereq_t;
 

@@ -547,8 +547,8 @@ static void gen_rand_string(h2o_iovec_t *s)
     s->base[s->len] = 0;
 }
 
-static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const char *local_path, size_t local_path_len,
-                                    h2o_mimemap_type_t *mime_type)
+static int delegate_dynamic_request(h2o_req_t *req, h2o_iovec_t script_name, h2o_iovec_t path_info, const char *local_path,
+                                    size_t local_path_len, h2o_mimemap_type_t *mime_type)
 {
     h2o_filereq_t *filereq;
     h2o_handler_t *handler;
@@ -556,7 +556,8 @@ static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const c
     assert(mime_type->data.dynamic.pathconf.handlers.size == 1);
 
     filereq = h2o_mem_alloc_pool(&req->pool, *filereq, 1);
-    filereq->url_path_len = url_path_len;
+    filereq->script_name = script_name;
+    filereq->path_info = path_info;
     filereq->local_path = h2o_strdup(&req->pool, local_path, local_path_len);
 
     h2o_req_bind_conf(req, req->hostconf, &mime_type->data.dynamic.pathconf);
@@ -595,8 +596,12 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         return -1;
-    case H2O_MIMEMAP_TYPE_DYNAMIC:
-        return delegate_dynamic_request(req, self->conf_path.len + slash_at - self->real_path.len, rpath, slash_at, mime_type);
+    case H2O_MIMEMAP_TYPE_DYNAMIC: {
+        h2o_iovec_t script_name = h2o_iovec_init(req->path_normalized.base, self->conf_path.len + slash_at - self->real_path.len);
+        h2o_iovec_t path_info =
+            h2o_iovec_init(req->path_normalized.base + script_name.len, req->path_normalized.len - script_name.len);
+        return delegate_dynamic_request(req, script_name, path_info, rpath, slash_at, mime_type);
+    }
     }
     fprintf(stderr, "unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
     abort();
@@ -608,8 +613,8 @@ static void send_method_not_allowed(h2o_req_t *req)
     h2o_send_error_405(req, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
-static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, const char *rpath, size_t rpath_len,
-                                h2o_mimemap_type_t *mime_type)
+static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, h2o_iovec_t resolved_path,
+                                const char *rpath, size_t rpath_len, h2o_mimemap_type_t *mime_type)
 {
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
     size_t if_modified_since_header_index, if_none_match_header_index;
@@ -627,7 +632,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
     /* obtain mime type */
     if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
         do_close(&generator->super, req);
-        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
+        return delegate_dynamic_request(req, resolved_path, h2o_iovec_init(NULL, 0), rpath, rpath_len, mime_type);
     }
     assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
 
@@ -759,6 +764,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     h2o_resp_add_date_header(req);
 
+    h2o_iovec_t resolved_path = req->path_normalized;
+
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
         h2o_iovec_t *index_file;
@@ -767,6 +774,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             rpath[rpath_len + index_file->len] = '\0';
             if ((generator = create_generator(req, rpath, rpath_len + index_file->len, &is_dir, self->flags)) != NULL) {
                 rpath_len += index_file->len;
+                resolved_path = h2o_concat(&req->pool, req->path_normalized, *index_file);
                 goto Opened;
             }
             if (is_dir) {
@@ -825,7 +833,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 
 Opened:
-    return serve_with_generator(generator, req, rpath, rpath_len,
+    return serve_with_generator(generator, req, resolved_path, rpath, rpath_len,
                                 h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len)));
 }
 
@@ -944,7 +952,7 @@ static int specific_handler_on_req(h2o_handler_t *_self, h2o_req_t *req)
         return 0;
     }
 
-    return serve_with_generator(generator, req, self->real_path.base, self->real_path.len, self->mime_type);
+    return serve_with_generator(generator, req, req->path_normalized, self->real_path.base, self->real_path.len, self->mime_type);
 }
 
 h2o_handler_t *h2o_file_register_file(h2o_pathconf_t *pathconf, const char *real_path, h2o_mimemap_type_t *mime_type, int flags)
