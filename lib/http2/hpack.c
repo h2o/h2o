@@ -914,17 +914,17 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
 }
 
 void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, h2o_headers_t trailers)
+                                size_t max_frame_size, h2o_header_t *headers, size_t num_headers)
 {
-    size_t capacity = calc_headers_capacity(trailers.entries, trailers.size);
+    size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE;
 
     size_t start_at = (*buf)->size;
     uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE); /* skip frame header */
 
     size_t i;
-    for (i = 0; i != trailers.size; ++i)
-        dst = encode_header(header_table, dst, trailers.entries[i].name, &trailers.entries[i].value);
+    for (i = 0; i != num_headers; ++i)
+        dst = encode_header(header_table, dst, headers[i].name, &headers[i].value);
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */
