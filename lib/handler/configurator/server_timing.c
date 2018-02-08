@@ -76,6 +76,7 @@ void h2o_server_timing_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
 
     /* server_timing: ON | OFF */
-    h2o_configurator_define_command(&c->super, "server-timing", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_define_command(&c->super, "server-timing",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_server_timing);
 }

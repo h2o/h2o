@@ -810,13 +810,14 @@ static size_t calc_headers_capacity(const h2o_header_t *headers, size_t num_head
     return capacity;
 }
 
-static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t type, uint32_t stream_id, size_t max_frame_size, int flags)
+static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t type, uint32_t stream_id, size_t max_frame_size,
+                                int flags)
 {
     /* try to fit all data into single frame, using the preallocated space for the frame header */
     size_t payload_size = (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
     if (payload_size <= max_frame_size) {
-        h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), payload_size, type, H2O_HTTP2_FRAME_FLAG_END_HEADERS | flags,
-                                      stream_id);
+        h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), payload_size, type,
+                                      H2O_HTTP2_FRAME_FLAG_END_HEADERS | flags, stream_id);
         return;
     }
 
