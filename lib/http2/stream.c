@@ -112,13 +112,13 @@ static size_t calc_max_payload_size(h2o_http2_conn_t *conn, h2o_http2_stream_t *
 }
 
 static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_buffer_t **outbuf, size_t length,
-                               h2o_send_state_t send_state, int has_trailer)
+                               h2o_send_state_t send_state)
 {
     assert(outbuf != NULL);
     /* send a DATA frame if there's data or the END_STREAM flag to send */
     if (length || send_state == H2O_SEND_STATE_FINAL) {
         h2o_http2_encode_frame_header((void *)((*outbuf)->bytes + (*outbuf)->size), length, H2O_HTTP2_FRAME_TYPE_DATA,
-                                      (send_state == H2O_SEND_STATE_FINAL && !has_trailer) ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
+                                      (send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing_trailer) ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
         h2o_http2_window_consume_window(&conn->_write.window, length);
         h2o_http2_window_consume_window(&stream->output_window, length);
         (*outbuf)->size += length + H2O_HTTP2_FRAME_HEADER_SIZE;
@@ -145,7 +145,7 @@ static h2o_send_state_t send_data_pull(h2o_http2_conn_t *conn, h2o_http2_stream_
     cbuf.len = max_payload_size;
     send_state = h2o_pull(&stream->req, stream->_pull_cb, &cbuf);
     /* write the header */
-    commit_data_header(conn, stream, &conn->_write.buf, cbuf.len, send_state, stream->req.send_server_timing_trailer);
+    commit_data_header(conn, stream, &conn->_write.buf, cbuf.len, send_state);
 
 Exit:
     return send_state;
@@ -195,7 +195,7 @@ static h2o_iovec_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         if (bufcnt != 0) {
             send_state = H2O_SEND_STATE_IN_PROGRESS;
         }
-        commit_data_header(conn, stream, &conn->_write.buf, payload_len, send_state, stream->req.send_server_timing_trailer);
+        commit_data_header(conn, stream, &conn->_write.buf, payload_len, send_state);
     }
 
 Exit:
