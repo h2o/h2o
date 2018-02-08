@@ -579,7 +579,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     if (err != NULL)
         conn->req.http1_is_persistent = 0;
 
-    if (conn->req.send_server_timing_trailer) {
+    if (err == NULL && conn->req.send_server_timing_trailer) {
         int64_t delta_usec;
         if (h2o_time_compute_duration(&conn->req, &delta_usec)) {
             static const h2o_iovec_t name = {H2O_STRLIT("server-timing: ")};
