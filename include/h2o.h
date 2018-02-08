@@ -1288,6 +1288,11 @@ int h2o_get_compressible_types(const h2o_headers_t *headers);
  */
 h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized);
 /**
+ * encodes the value of the `server-timing` trailer header field
+ */
+size_t h2o_encode_server_timing_trailer(char *buf, int64_t duration_usec);
+#define H2O_SERVER_TIMING_TRAILER_LONGEST_STR "total; dur=" H2O_INT32_LONGEST_STR ".000"
+/**
  * release all thread-local resources used by h2o
  */
 void h2o_cleanup_thread(void);
@@ -1711,8 +1716,6 @@ void h2o_chunked_register(h2o_pathconf_t *pathconf);
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf);
 void h2o_server_timing_register_configurator(h2o_globalconf_t *conf);
-#define H2O_SERVER_TIMING_TRAILER_LONGEST_STR "total; dur=" H2O_INT32_LONGEST_STR ".000"
-size_t h2o_server_timing_encode_trailer(char *buf, int64_t duration_usec);
 
 /* lib/compress.c */
 

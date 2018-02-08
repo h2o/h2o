@@ -51,22 +51,3 @@ void h2o_server_timing_register(h2o_pathconf_t *pathconf)
     self->on_setup_ostream = on_setup_ostream;
 }
 
-size_t h2o_server_timing_encode_trailer(char *buf, int64_t duration_usec)
-{
-    int32_t duration_msec = (int32_t)(duration_usec / 1000);
-    duration_usec -= ((int64_t)duration_msec * 1000);
-    char *pos = buf;
-    pos += sprintf(pos, "total; dur=%" PRId32, duration_msec);
-    if (duration_usec != 0) {
-        *pos++ = '.';
-        int denom;
-        for (denom = 100; denom != 0; denom /= 10) {
-            int d = (int)duration_usec / denom;
-            *pos++ = '0' + d;
-            duration_usec -= d * denom;
-            if (duration_usec == 0)
-                break;
-        }
-    }
-    return pos - buf;
-}

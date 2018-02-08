@@ -769,6 +769,26 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     return h2o_concat_list(&req->pool, parts, num_parts);
 }
 
+size_t h2o_encode_server_timing_trailer(char *buf, int64_t duration_usec)
+{
+    int32_t duration_msec = (int32_t)(duration_usec / 1000);
+    duration_usec -= ((int64_t)duration_msec * 1000);
+    char *pos = buf;
+    pos += sprintf(pos, "total; dur=%" PRId32, duration_msec);
+    if (duration_usec != 0) {
+        *pos++ = '.';
+        int denom;
+        for (denom = 100; denom != 0; denom /= 10) {
+            int d = (int)duration_usec / denom;
+            *pos++ = '0' + d;
+            duration_usec -= d * denom;
+            if (duration_usec == 0)
+                break;
+        }
+    }
+    return pos - buf;
+}
+
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
 #define ALPN_ENTRY(s)                                                                                                              \
     {                                                                                                                              \

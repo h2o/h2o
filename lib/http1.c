@@ -586,7 +586,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
             char buf[sizeof("server-timing: " H2O_SERVER_TIMING_TRAILER_LONGEST_STR "\r\n\r\n")];
             memcpy(buf, name.base, name.len);
             size_t len = name.len;
-            len += h2o_server_timing_encode_trailer(buf + len, delta_usec);
+            len += h2o_encode_server_timing_trailer(buf + len, delta_usec);
             buf[len++] = '\r';
             buf[len++] = '\n';
             buf[len++] = '\r';
