@@ -51,7 +51,7 @@ void h2o_server_timing_register(h2o_pathconf_t *pathconf)
     self->on_setup_ostream = on_setup_ostream;
 }
 
-size_t h2o_server_timing_encode_total(char *buf, int64_t duration_usec)
+size_t h2o_server_timing_encode_trailer(char *buf, int64_t duration_usec)
 {
     int32_t duration_msec = (int32_t)(duration_usec / 1000);
     duration_usec -= ((int64_t)duration_msec * 1000);

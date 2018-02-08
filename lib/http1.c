@@ -561,7 +561,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
             char buf[50];
             memcpy(buf, name.base, name.len);
             size_t len = name.len;
-            len += h2o_server_timing_encode_total(buf + len, delta_usec);
+            len += h2o_server_timing_encode_trailer(buf + len, delta_usec);
             buf[len++] = '\r';
             buf[len++] = '\n';
             buf[len++] = '\r';
