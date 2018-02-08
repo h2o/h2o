@@ -1196,8 +1196,6 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
 
     h2o_http2_stream_send_pending_data(conn, stream);
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->req.send_server_timing_trailer) {
-        stream->req.send_server_timing_trailer = 0;
-
         int64_t delta_usec;
         if (h2o_time_compute_duration(&stream->req, &delta_usec)) {
             char buf[sizeof(H2O_SERVER_TIMING_TRAILER_LONGEST_STR)];
