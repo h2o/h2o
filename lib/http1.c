@@ -576,6 +576,9 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
 
     conn->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
 
+    if (err != NULL)
+        conn->req.http1_is_persistent = 0;
+
     if (conn->req.send_server_timing_trailer) {
         int64_t delta_usec;
         if (h2o_time_compute_duration(&conn->req, &delta_usec)) {
