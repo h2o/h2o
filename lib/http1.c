@@ -558,7 +558,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         if (h2o_time_compute_duration(&conn->req, &delta_usec)) {
             static const h2o_iovec_t name = {H2O_STRLIT("server-timing: ")};
 
-            char buf[50];
+            char buf[sizeof("server-timing: " H2O_SERVER_TIMING_TRAILER_LONGEST_STR "\r\n\r\n")];
             memcpy(buf, name.base, name.len);
             size_t len = name.len;
             len += h2o_server_timing_encode_trailer(buf + len, delta_usec);
