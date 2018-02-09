@@ -769,24 +769,95 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     return h2o_concat_list(&req->pool, parts, num_parts);
 }
 
-size_t h2o_encode_server_timing_trailer(char *buf, int64_t duration_usec)
+#define SERVER_TIMING_DURATION_LONGEST_STR "dur=" H2O_INT32_LONGEST_STR ".000"
+
+size_t stringify_duration(char *buf, int64_t usec)
 {
-    int32_t duration_msec = (int32_t)(duration_usec / 1000);
-    duration_usec -= ((int64_t)duration_msec * 1000);
+    int32_t msec = (int32_t)(usec / 1000);
+    usec -= ((int64_t)msec * 1000);
     char *pos = buf;
-    pos += sprintf(pos, "total; dur=%" PRId32, duration_msec);
-    if (duration_usec != 0) {
+    pos += sprintf(pos, "dur=%" PRId32, msec);
+    if (usec != 0) {
         *pos++ = '.';
         int denom;
         for (denom = 100; denom != 0; denom /= 10) {
-            int d = (int)duration_usec / denom;
+            int d = (int)usec / denom;
             *pos++ = '0' + d;
-            duration_usec -= d * denom;
-            if (duration_usec == 0)
+            usec -= d * denom;
+            if (usec == 0)
                 break;
         }
     }
     return pos - buf;
+}
+
+void h2o_add_server_timing_header(h2o_req_t *req)
+{
+    /* caller needs to make sure that trailers can be used */
+    if (0x101 <= req->version && req->version < 0x200)
+        assert(req->content_length == SIZE_MAX);
+
+    /* add trailer header */
+    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("trailer"), 0, NULL, H2O_STRLIT("server-timing"));
+
+    /* emit timings */
+    h2o_iovec_t value = {NULL};
+#define LONGEST_STR "recv; " SERVER_TIMING_DURATION_LONGEST_STR ", process; " SERVER_TIMING_DURATION_LONGEST_STR
+#define EMIT_ELEMENT(func, name)                                                                                                   \
+    do {                                                                                                                           \
+        int64_t usec;                                                                                                              \
+        if (h2o_time_compute_##func(req, &usec)) {                                                                                 \
+            if (value.len == 0) {                                                                                                  \
+                value.base = h2o_mem_alloc_pool(&req->pool, *value.base, sizeof(LONGEST_STR));                                     \
+            } else {                                                                                                               \
+                value.base[value.len++] = ',';                                                                                     \
+                value.base[value.len++] = ' ';                                                                                     \
+            }                                                                                                                      \
+            memcpy(value.base + value.len, name, sizeof(name) - 1);                                                                \
+            value.len += sizeof(name) - 1;                                                                                         \
+            value.base[value.len++] = ';';                                                                                         \
+            value.base[value.len++] = ' ';                                                                                         \
+            value.len += stringify_duration(value.base + value.len, usec);                                                         \
+        }                                                                                                                          \
+    } while (0)
+
+    EMIT_ELEMENT(request_total_time, "recv");
+    EMIT_ELEMENT(process_time, "process");
+    if (value.len != 0)
+        h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("server-timing"), 0, NULL, value.base, value.len);
+
+#undef EMIT_ELEMENT
+#undef LONGEST_STR
+}
+
+h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, size_t prefix_len, const char *suffix,
+                                            size_t suffix_len)
+{
+    h2o_iovec_t value;
+    int64_t usec;
+
+    if (!h2o_time_compute_duration(req, &usec))
+        return h2o_iovec_init(NULL, 0);
+
+    value.base =
+        h2o_mem_alloc_pool(&req->pool, *value.base, prefix_len + suffix_len + sizeof("total; " SERVER_TIMING_DURATION_LONGEST_STR));
+    value.len = 0;
+
+    if (prefix_len != 0) {
+        memcpy(value.base + value.len, prefix, prefix_len);
+        value.len += prefix_len;
+    }
+
+    memcpy(value.base + value.len, "total; ", 7);
+    value.len += 7;
+    value.len += stringify_duration(value.base + value.len, usec);
+
+    if (suffix_len != 0) {
+        memcpy(value.base + value.len, suffix, suffix_len);
+        value.len += suffix_len;
+    }
+
+    return value;
 }
 
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */

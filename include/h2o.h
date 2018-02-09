@@ -1104,8 +1104,10 @@ struct st_h2o_req_t {
      * set by the generator if the protocol handler should replay the request upon seeing 425
      */
     unsigned char reprocess_if_too_early : 1;
-
-    unsigned char send_server_timing_trailer : 1;
+    /**
+     * whether if the response should include server-timing
+     */
+    unsigned char send_server_timing : 1;
 
     /**
      * Whether the producer of the response has explicitely disabled or
@@ -1288,10 +1290,14 @@ int h2o_get_compressible_types(const h2o_headers_t *headers);
  */
 h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized);
 /**
- * encodes the value of the `server-timing` trailer header field
+ * encodes the duration value of the `server-timing` header
  */
-size_t h2o_encode_server_timing_trailer(char *buf, int64_t duration_usec);
-#define H2O_SERVER_TIMING_TRAILER_LONGEST_STR "total; dur=" H2O_INT32_LONGEST_STR ".000"
+void h2o_add_server_timing_header(h2o_req_t *req);
+/**
+ * encodes the duration value of the `server-timing` trailer
+ */
+h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, size_t prefix_len, const char *suffix,
+                                            size_t suffix_len);
 /**
  * release all thread-local resources used by h2o
  */

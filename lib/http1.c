@@ -579,21 +579,11 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     if (err != NULL)
         conn->req.http1_is_persistent = 0;
 
-    if (err == NULL && conn->req.send_server_timing_trailer) {
-        int64_t delta_usec;
-        if (h2o_time_compute_duration(&conn->req, &delta_usec)) {
-            static const h2o_iovec_t name = {H2O_STRLIT("server-timing: ")};
-            char *buf = h2o_mem_alloc_pool(&conn->req.pool, *buf,
-                                           sizeof("server-timing: " H2O_SERVER_TIMING_TRAILER_LONGEST_STR "\r\n\r\n"));
-            memcpy(buf, name.base, name.len);
-            size_t len = name.len;
-            len += h2o_encode_server_timing_trailer(buf + len, delta_usec);
-            buf[len++] = '\r';
-            buf[len++] = '\n';
-            buf[len++] = '\r';
-            buf[len++] = '\n';
-            h2o_iovec_t iovec = h2o_iovec_init(buf, len);
-            h2o_socket_write(conn->sock, &iovec, 1, on_send_complete_post_trailers);
+    if (err == NULL && conn->req.send_server_timing) {
+        h2o_iovec_t trailer;
+        if ((trailer = h2o_build_server_timing_trailer(&conn->req, H2O_STRLIT("server-timing: "), H2O_STRLIT("\r\n\r\n"))).len !=
+            0) {
+            h2o_socket_write(conn->sock, &trailer, 1, on_send_complete_post_trailers);
             return;
         }
     }
@@ -691,7 +681,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         if (send_state == H2O_SEND_STATE_ERROR) {
             conn->req.http1_is_persistent = 0;
-            conn->req.send_server_timing_trailer = 0;
+            conn->req.send_server_timing = 0;
         }
         buf.len += cbuf.len;
         conn->req.bytes_sent += cbuf.len;
@@ -713,6 +703,8 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     assert(!conn->_ostr_final.sent_headers);
 
     conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+    if (conn->req.send_server_timing)
+        h2o_add_server_timing_header(&conn->req);
 
     /* register the pull callback */
     conn->_ostr_final.pull.cb = cb;
@@ -760,6 +752,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+        if (conn->req.send_server_timing)
+            h2o_add_server_timing_header(&conn->req);
         /* build headers and send */
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
         bufs[bufcnt].base = h2o_mem_alloc_pool(
@@ -773,7 +767,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         conn->req.http1_is_persistent = 0;
-        conn->req.send_server_timing_trailer = 0;
+        conn->req.send_server_timing = 0;
     }
 
     if (bufcnt != 0) {

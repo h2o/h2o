@@ -46,11 +46,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
         goto Next;
     }
 
-    /* set content-encoding header */
-    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("trailer"), 0, NULL, H2O_STRLIT("server-timing"));
-
-    /* set the flag that tells finalostream that req->bytes_sent is already counted */
-    req->send_server_timing_trailer = 1;
+    /* indicate the protocol handler to emit server timing */
+    req->send_server_timing = 1;
 
 Next:
     h2o_setup_next_ostream(req, slot);
@@ -62,4 +59,3 @@ void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce)
     self->super.on_setup_ostream = on_setup_ostream;
     self->enforce = enforce;
 }
-

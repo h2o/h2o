@@ -457,7 +457,6 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         assert(stream->state == H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         stream->state = new_state;
         ++stream->_num_streams_slot->send_body;
-        stream->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
         assert(stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY);
