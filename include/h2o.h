@@ -1714,7 +1714,7 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
 /* lib/handler/server_timing.c */
-void h2o_server_timing_register(h2o_pathconf_t *pathconf);
+void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);
 void h2o_server_timing_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/compress.c */

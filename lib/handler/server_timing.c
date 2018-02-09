@@ -25,12 +25,23 @@
 #include <stdlib.h>
 #include "h2o.h"
 
-static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
+struct st_server_timing_filter_t {
+    h2o_filter_t super;
+    unsigned enforce : 1;
+};
+
+static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
 {
+    struct st_server_timing_filter_t *self = (struct st_server_timing_filter_t *)_self;
+
     if (req->version == 0x200) {
         /* ok */
-    } else if (req->version == 0x101 && req->res.content_length == SIZE_MAX) {
-        /* ok */
+    } else if (0x101 <= req->version && req->version < 0x200) {
+        if (req->res.content_length != SIZE_MAX) {
+            if (!self->enforce)
+                goto Next;
+            req->res.content_length = SIZE_MAX;
+        }
     } else {
         goto Next;
     }
@@ -45,9 +56,10 @@ Next:
     h2o_setup_next_ostream(req, slot);
 }
 
-void h2o_server_timing_register(h2o_pathconf_t *pathconf)
+void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce)
 {
-    h2o_filter_t *self = h2o_create_filter(pathconf, sizeof(*self));
-    self->on_setup_ostream = on_setup_ostream;
+    struct st_server_timing_filter_t *self = (struct st_server_timing_filter_t *)h2o_create_filter(pathconf, sizeof(*self));
+    self->super.on_setup_ostream = on_setup_ostream;
+    self->enforce = enforce;
 }
 
