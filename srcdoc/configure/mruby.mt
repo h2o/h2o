@@ -174,7 +174,7 @@ Timeouts defined for the proxy handler (<a href="configure/proxy_directives.html
 <h3 id="logging-arbitrary-variable">Logging Arbitrary Variable</h3>
 
 <p>
-In version 2.3, it is possible from mruby to set and log an arbitrary-named variable that is associated to a HTTP request.
+In version 2.2, it is possible from mruby to set and log an arbitrary-named variable that is associated to a HTTP request.
 A HTTP response header that starts with <code>x-fallthru-set-</code> is handled specially by the H2O server. Instead of sending the header downstream, the server accepts the value as a request environment variable, taking the suffix of the header name as the name of the variable.
 </p>
 <p>
@@ -198,5 +198,108 @@ paths:
       format: '{"POST": %{POSTDATA}e}'
 EOT
 ?>
+
+
+<h3 id="using-redis">Using Redis</h3>
+
+<p>
+Since version 2.3, you can use redis from an mruby handler. 
+All redis methods are supported. 
+</p>
+<p>
+
+</p>
+
+<?= $ctx->{example}->('redis handler', <<'EOT')
+
+listen:
+  port: 8080
+
+num-threads: 1
+hosts:
+  "*":
+    paths:
+      /test:
+        mruby.handler: |
+          redis = H2O::Redis.new(
+            :host => localhost, 
+            :port => 6379, 
+            :db => 1, #optional, default: 1
+            :password => redis_password, # optional, default: nil
+            :connect_timeout => 2, # optional, default: 5,
+            :command_timeout => 2, # optional, default: 5
+          )
+          redis.set("numberofthreads", 0).join
+          [ 
+            redis.set("users:1", "kazuho"), 
+            redis.incr("numberofthreads") 
+          ].map(&:join)
+          #note: this will create one connection per h2o thread and per handler.
+
+          Proc.new do |env|
+            #parse params (but do not decode them)
+            params = Hash[env["QUERY_STRING"].split("&").map{|kv| kv.split("=")}] 
+            user_id = params["user_id"]
+            user_name, threads = [
+              redis.get("users:#{user_id}"),
+              redis.get("numberofthreads"),
+            ].map(&:join) #parallel calls
+            result_string = {'name' => user_name, "server_threads" => threads }.to_json
+            [200, {"Content-Type" => "application/json"}, [result_string]]
+          end
+          #curl 'localhost:8080/test?user_id=1'
+EOT
+?>
+
+
+<p>
+  You can even use redis publish subscribe feature. pub/sub calls are synchronous, thus you need to wrap it into a task.
+  the following example shows how to create one asynchronous publisher and subscriber per h2o thread each. It basically counts the number of seconds each publisher task is alive. 
+</p>
+
+<?= $ctx->{example}->('asynchronous redis task', <<'EOT')
+
+listen:
+  port: 8080
+
+num-threads: 1 #in a multi threaded env this example will not work
+hosts:
+  "*":
+    paths:
+      /test:
+        mruby.handler: |
+          redis = H2O::Redis.new(:host => '127.0.0.1', :port => 6379)
+          pid = %x[echo $$].chomp #get the pid of this thread
+          my_channel = "counter_#{pid}"
+
+          message = 'initial'
+
+          task {
+
+            # a subscriber needs his own redis client
+            redis_sub = H2O::Redis.new(:host => '127.0.0.1', :port => 6379)
+            streaming = redis_sub.subscribe(my_channel).join
+
+            while true
+              channel, msg = streaming.shift
+              message = "#{channel} is at #{msg}\n" if channel = my_channel
+            end
+          }
+
+          task {
+            incr = 0
+            while true
+              reply = redis.publish(my_channel, incr)
+              incr +=1
+              sleep 1
+            end
+          }
+
+          proc {|env|
+            [200, {}, [message]]
+          }
+EOT
+?>
+
 
 ? })
