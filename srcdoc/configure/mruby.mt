@@ -301,5 +301,29 @@ hosts:
 EOT
 ?>
 
+<p>
+you can do explicit connection management by calling <code>disconnect</code>. closed connections are automatically reconnected for any redis calls.
+</>
+<?= $ctx->{example}->('redis connection management', <<'EOT')
+listen:
+  port: 8080
+
+num-threads: 1 #in a multi threaded env this example will not work
+hosts:
+  "*":
+    paths:
+      /test:
+        mruby.handler: |
+          redis = H2O::Redis.new(:host => '127.0.0.1', :port => 6379)
+          redis.connect
+          proc {|env|
+            reply = redis.get('foo').join
+            redis.disconnect # if you want to disconnect per request
+            [200, {}, [reply]]
+          }
+
+EOT
+?>
+
 
 ? })
