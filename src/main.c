@@ -169,6 +169,7 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
     const char *default_cert_dir;
+    int needs_acme_challenge_dir;
 } conf = {
     {NULL},                                 /* globalconf */
     RUN_MODE_WORKER,                        /* dry-run */
@@ -188,6 +189,7 @@ static struct {
     "share/h2o/annotate-backtrace-symbols", /* crash_handler */
     0,                                      /* crash_handler_wait_pipe_close */
     "/etc/letsencrypt/live",                /* default_cert_dir */
+    0                                       /* needs_acme_challenge_dir */
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -569,24 +571,27 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         /* certificate and key files are manually set */
         cert_path = (*certificate_file_node)->data.scalar;
         key_path = (*key_file_node)->data.scalar;
-    } else if (ctx->hostconf != NULL) {
-        /* certbot mode, set to the host-level values; or start the server without associating a certificate */
-        cert_path = alloca(strlen(conf.default_cert_dir) + ctx->hostconf->authority.host.len + sizeof("//fullchain.pem"));
-        sprintf(cert_path, "%s/%.*s/fullchain.pem", conf.default_cert_dir, (int)ctx->hostconf->authority.host.len,
-                ctx->hostconf->authority.host.base);
-        struct stat st;
-        if (stat(cert_path, &st) != 0 && errno == ENOENT) {
+    } else {
+        if (ctx->hostconf != NULL) {
+            /* certbot mode, set to the host-level values; or start the server without associating a certificate */
+            cert_path = alloca(strlen(conf.default_cert_dir) + ctx->hostconf->authority.host.len + sizeof("//fullchain.pem"));
+            sprintf(cert_path, "%s/%.*s/fullchain.pem", conf.default_cert_dir, (int)ctx->hostconf->authority.host.len,
+                    ctx->hostconf->authority.host.base);
+            struct stat st;
+            if (stat(cert_path, &st) != 0 && errno == ENOENT) {
+                cert_path = NULL;
+                key_path = NULL;
+            } else {
+                key_path = alloca(strlen(conf.default_cert_dir) + ctx->hostconf->authority.host.len + sizeof("//privkey.pem"));
+                sprintf(key_path, "%s/%.*s/privkey.pem", conf.default_cert_dir, (int)ctx->hostconf->authority.host.len,
+                        ctx->hostconf->authority.host.base);
+            }
+        } else {
+            /* global-level configuration for certbot is remapped in exit phase */
             cert_path = NULL;
             key_path = NULL;
-        } else {
-            key_path = alloca(strlen(conf.default_cert_dir) + ctx->hostconf->authority.host.len + sizeof("//privkey.pem"));
-            sprintf(key_path, "%s/%.*s/privkey.pem", conf.default_cert_dir, (int)ctx->hostconf->authority.host.len,
-                    ctx->hostconf->authority.host.base);
         }
-    } else {
-        /* global-level configuration for certbot is remapped in exit phase */
-        cert_path = NULL;
-        key_path = NULL;
+        conf.needs_acme_challenge_dir = 1;
     }
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
@@ -2075,6 +2080,16 @@ int main(int argc, char **argv)
     }
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
+    /* setup acme challenge dir for every host */
+    if (conf.needs_acme_challenge_dir) {
+        h2o_hostconf_t **hostconf;
+        for (hostconf = conf.globalconf.hosts; *hostconf != NULL; ++hostconf) {
+            h2o_pathconf_t *pathconf =
+                h2o_config_register_path(*hostconf, "/.well-known/acme-challenge", H2O_CONFIG_REGISTER_PATH_FLAGS_SORT);
+            h2o_file_register(pathconf, H2O_TO_STR(H2O_LOCALSTATE_DIR) "/h2o/acme-challenge/.well-known/acme-challenge", NULL, NULL,
+                              0);
+        }
+    }
 
     /* check if all the fds passed in by server::starter were bound */
     if (conf.server_starter.fds != NULL) {

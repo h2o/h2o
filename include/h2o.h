@@ -1445,7 +1445,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
  * registers a path context
  * @param hostconf host-level configuration that the path-level configuration belongs to
  * @param path path
- * @param flags unused and must be set to zero
+ * @param flags
  *
  * Handling of the path argument has changed in version 2.0 (of the standard server).
  *
@@ -1460,6 +1460,7 @@ h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t h
  * * configuration path does not end with a `/`, and the request path begins with the configuration path followed by a `/`
  */
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags);
+#define H2O_CONFIG_REGISTER_PATH_FLAGS_SORT 0x1
 /**
  * registers an extra status handler
  */
