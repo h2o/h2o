@@ -3746,6 +3746,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/brotli/c/include,
 					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
@@ -3781,6 +3782,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/brotli/c/include,
 					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
@@ -3812,6 +3814,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/brotli/c/include,
 					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
@@ -3843,6 +3846,7 @@
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					deps/brotli/c/include,
 					"deps/hiredis/**",
 					deps/yaml/include,
 					deps/mruby/include,
