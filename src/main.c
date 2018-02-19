@@ -459,6 +459,28 @@ Exit:
     return ret;
 }
 
+static void check_add_cipher(ptls_cipher_suite_t **list, const char *name)
+{
+    ptls_cipher_suite_t *c = NULL;
+
+    if (strstr(name, "-AES128-GCM-SHA256") != NULL) {
+        c = &ptls_openssl_aes128gcmsha256;
+    }
+#if defined(PTLS_OPENSSL_HAVE_CHACHA20_POLY1305)
+    else if (strstr(name, "-CHACHA20-POLY1305") != NULL) {
+        c = &ptls_openssl_chacha20poly1305sha256;
+    }
+#endif
+
+    if (c != NULL) {
+        for (; *list != NULL; ++list)
+            if (*list == c)
+                return;
+        *list++ = c;
+        *list = NULL;
+    }
+}
+
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
                                               SSL_CTX *ssl_ctx)
 {
@@ -468,10 +490,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         struct st_on_client_hello_ptls_t ch;
         struct st_staple_ocsp_ptls_t so;
         ptls_openssl_sign_certificate_t sc;
+        ptls_cipher_suite_t *cs[3];
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
     EVP_PKEY *key;
     X509 *cert;
     STACK_OF(X509) * cert_chain;
+    const char *err = NULL;
     int ret;
 
     *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
@@ -495,12 +519,21 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         assert(key != NULL);
         cert = SSL_get_certificate(fakeconn);
         assert(cert != NULL);
+        const char *cipher_name;
+        int cipher_index;
+        for (cipher_index = 0; (cipher_name = SSL_get_cipher_list(fakeconn, cipher_index)) != NULL; ++cipher_index)
+            check_add_cipher(pctx->cs, cipher_name);
         SSL_free(fakeconn);
     }
 
+    if (pctx->cs[0] == NULL) {
+        err = "cannot offer a cipher-suite";
+        goto Fail;
+    }
+
     if (ptls_openssl_init_sign_certificate(&pctx->sc, key) != 0) {
-        free(pctx);
-        return "failed to setup private key";
+        err = "failed to setup private key";
+        goto Fail;
     }
 
     SSL_CTX_get_extra_chain_certs(ssl_ctx, &cert_chain);
@@ -508,8 +541,11 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     assert(ret == 0);
 
     h2o_socket_ssl_set_picotls_context(ssl_ctx, &pctx->ctx);
-
     return NULL;
+
+Fail:
+    free(pctx);
+    return err;
 }
 
 #endif
