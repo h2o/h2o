@@ -1,6 +1,6 @@
 /*
  Parson ( http://kgabis.github.com/parson/ )
- Copyright (c) 2012 - 2016 Krzysztof Gabis
+ Copyright (c) 2012 - 2017 Krzysztof Gabis
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -128,6 +128,7 @@ int           json_object_dotget_boolean(const JSON_Object *object, const char *
 size_t        json_object_get_count   (const JSON_Object *object);
 const char  * json_object_get_name    (const JSON_Object *object, size_t index);
 JSON_Value  * json_object_get_value_at(const JSON_Object *object, size_t index);
+JSON_Value  * json_object_get_wrapping_value(const JSON_Object *object);
 
 /* Functions to check if object has a value with a specific name. Returned value is 1 if object has
  * a value and 0 if it doesn't. dothas functions behave exactly like dotget functions. */
@@ -172,7 +173,8 @@ JSON_Array  * json_array_get_array  (const JSON_Array *array, size_t index);
 double        json_array_get_number (const JSON_Array *array, size_t index); /* returns 0 on fail */
 int           json_array_get_boolean(const JSON_Array *array, size_t index); /* returns -1 on fail */
 size_t        json_array_get_count  (const JSON_Array *array);
-
+JSON_Value  * json_array_get_wrapping_value(const JSON_Array *array);
+    
 /* Frees and removes value at given index, does nothing and returns JSONFailure if index doesn't exist.
  * Order of values in array may change during execution.  */
 JSON_Status json_array_remove(JSON_Array *array, size_t i);
@@ -215,6 +217,7 @@ JSON_Array  *   json_value_get_array  (const JSON_Value *value);
 const char  *   json_value_get_string (const JSON_Value *value);
 double          json_value_get_number (const JSON_Value *value);
 int             json_value_get_boolean(const JSON_Value *value);
+JSON_Value  *   json_value_get_parent (const JSON_Value *value);
 
 /* Same as above, but shorter */
 JSON_Value_Type json_type   (const JSON_Value *value);
