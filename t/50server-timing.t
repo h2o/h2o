@@ -26,28 +26,29 @@ hosts:
             }
 EOT
 
-    subtest 'http1' => sub {
-        my @sts = nc_get($server, '/', 1);
-        is scalar(@sts), 2, 'header and trailer';
-    
+    my $check = sub {
+        my @sts = @_;
+        # durations might be less than the slept amount because h2o's timestamps are updated at each eventloop
+        # so we have to introduce 100ms lower buffer (i.e. 900ms, 1900ms)
         test_element($sts[0], 'connect', undef, undef);
         test_element($sts[0], 'header', undef, undef);
         test_element($sts[0], 'request_total', undef, undef);
-        test_element($sts[0], 'process', 1000, 2000);
-        test_element($sts[1], 'response', 1000, 2000);
-        test_element($sts[1], 'total', 2000, 3000);
+        test_element($sts[0], 'process', 900, 1100);
+        test_element($sts[1], 'response', 900, 1100);
+        test_element($sts[1], 'total', 1900, 2100);
+    };
+
+    subtest 'http1' => sub {
+        my @sts = nc_get($server, '/', 1);
+        is scalar(@sts), 2, 'header and trailer';
+        $check->(@sts);
+    
     };
     
     subtest 'http2' => sub {
         my @sts = nghttp_get($server, '/');
         is scalar(@sts), 2, 'header and trailer';
-    
-        test_element($sts[0], 'connect', undef, undef);
-        test_element($sts[0], 'header', undef, undef);
-        test_element($sts[0], 'request_total', undef, undef);
-        test_element($sts[0], 'process', 1000, 2000);
-        test_element($sts[1], 'response', 1000, 2000);
-        test_element($sts[1], 'total', 2000, 3000);
+        $check->(@sts);
     };
 };
 
