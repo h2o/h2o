@@ -100,3 +100,27 @@ end
 assert('Array#to_json') do
   assert_equal '[1,3,true,["foo"]]', [1 ,3, true,["foo"]].to_json
 end
+assert('Array#to_json') do
+  assert_equal '[1,3,true,["foo"]]', [1 ,3, true,["foo"]].to_json
+end
+assert('pretty cat 🐱') do
+  assert_equal "true", JSON::pretty_generate(true)
+  assert_equal "1.2", JSON::pretty_generate(1.2)
+  assert_equal "[\n]", JSON::pretty_generate([])
+  assert_equal "{\n}", JSON::pretty_generate({})
+  want =<<EOS
+{
+  "bar":[
+    1,
+    2,
+    [
+      {
+        "baz":true
+      },
+      3
+    ]
+  ]
+}
+EOS
+  assert_equal want[0..-2], JSON::pretty_generate({"bar"=> [1,2,[{"baz" => true}, 3]]})
+end

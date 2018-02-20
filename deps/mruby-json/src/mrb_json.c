@@ -42,7 +42,15 @@ mrb_method_defined(mrb_state* mrb, mrb_value value, const char* name) {
 }
 
 static mrb_value
-mrb_value_to_string(mrb_state* mrb, mrb_value value) {
+pretty_cat(mrb_state* mrb, mrb_value str, int pretty) {
+  int i;
+  str = mrb_str_cat_cstr(mrb, str, "\n");
+  for (i = 0; i < pretty; i++) str = mrb_str_cat_cstr(mrb, str, "  ");
+  return str;
+}
+
+static mrb_value
+mrb_value_to_string(mrb_state* mrb, mrb_value value, int pretty) {
   mrb_value str;
 
   if (mrb_nil_p(value)) {
@@ -103,9 +111,15 @@ mrb_value_to_string(mrb_state* mrb, mrb_value value) {
     {
       mrb_value keys;
       int n, l;
+
       str = mrb_str_new_cstr(mrb, "{");
       keys = mrb_hash_keys(mrb, value);
       l = RARRAY_LEN(keys);
+      if (l == 0) {
+        if (pretty >= 0) return mrb_str_cat_cstr(mrb, str, "\n}");
+        return mrb_str_cat_cstr(mrb, str, "}");
+      }
+      if (pretty >= 0) str = pretty_cat(mrb, str, ++pretty);
       for (n = 0; n < l; n++) {
         mrb_value obj;
         int ai = mrb_gc_arena_save(mrb);
@@ -115,29 +129,39 @@ mrb_value_to_string(mrb_state* mrb, mrb_value value) {
         mrb_str_concat(mrb, str, enckey);
         mrb_str_cat_cstr(mrb, str, ":");
         obj = mrb_hash_get(mrb, value, key);
-        mrb_str_concat(mrb, str, mrb_value_to_string(mrb, obj));
+        mrb_str_concat(mrb, str, mrb_value_to_string(mrb, obj, pretty));
         if (n != l - 1) {
           mrb_str_cat_cstr(mrb, str, ",");
+          if (pretty >= 0) str = pretty_cat(mrb, str, pretty);
         }
         mrb_gc_arena_restore(mrb, ai);
       }
+      if (pretty >= 0) str = pretty_cat(mrb, str, --pretty);
       mrb_str_cat_cstr(mrb, str, "}");
       break;
     }
   case MRB_TT_ARRAY:
     {
       int n, l;
+
       str = mrb_str_new_cstr(mrb, "[");
       l = RARRAY_LEN(value);
+      if (l == 0) {
+        if (pretty >= 0) return mrb_str_cat_cstr(mrb, str, "\n]");
+        return mrb_str_cat_cstr(mrb, str, "]");
+      }
+      if (pretty >= 0) str = pretty_cat(mrb, str, ++pretty);
       for (n = 0; n < l; n++) {
         int ai = mrb_gc_arena_save(mrb);
         mrb_value obj = mrb_ary_entry(value, n);
-        mrb_str_concat(mrb, str, mrb_value_to_string(mrb, obj));
+        mrb_str_concat(mrb, str, mrb_value_to_string(mrb, obj, pretty));
         if (n != l - 1) {
           mrb_str_cat_cstr(mrb, str, ",");
+          if (pretty >= 0) str = pretty_cat(mrb, str, pretty);
         }
         mrb_gc_arena_restore(mrb, ai);
       }
+      if (pretty >= 0) str = pretty_cat(mrb, str, --pretty);
       mrb_str_cat_cstr(mrb, str, "]");
       break;
     }
@@ -146,7 +170,7 @@ mrb_value_to_string(mrb_state* mrb, mrb_value value) {
       if (mrb_method_defined(mrb, value, "to_json"))
         str = mrb_funcall(mrb, value, "to_json", 0, NULL);
       else
-        str = mrb_value_to_string(mrb, mrb_funcall(mrb, value, "to_s", 0, NULL));
+        str = mrb_value_to_string(mrb, mrb_funcall(mrb, value, "to_s", 0, NULL), pretty);
     }
   } 
   return str;
@@ -238,18 +262,23 @@ mrb_json_parse(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
-mrb_json_stringify(mrb_state *mrb, mrb_value self)
-{
+mrb_json_generate(mrb_state *mrb, mrb_value self) {
   mrb_value obj;
   mrb_get_args(mrb, "o", &obj);
-  return mrb_value_to_string(mrb, obj);
+  return mrb_value_to_string(mrb, obj, -1);
 }
 
 
 static mrb_value
-mrb_json_to_json(mrb_state *mrb, mrb_value self)
-{
-  return mrb_value_to_string(mrb, self);
+mrb_json_pretty_generate(mrb_state *mrb, mrb_value self) {
+  mrb_value obj;
+  mrb_get_args(mrb, "o", &obj);
+  return mrb_value_to_string(mrb, obj, 0);
+}
+
+static mrb_value
+mrb_json_to_json(mrb_state *mrb, mrb_value self) {
+  return mrb_value_to_string(mrb, self, -1);
 }
 /*********************************************************
  * register
@@ -259,8 +288,9 @@ void
 mrb_mruby_json_gem_init(mrb_state* mrb) {
   struct RClass *_class_json = mrb_define_module(mrb, "JSON");
   mrb_define_class_method(mrb, _class_json, "parse", mrb_json_parse, MRB_ARGS_REQ(1));
-  mrb_define_class_method(mrb, _class_json, "stringify", mrb_json_stringify, MRB_ARGS_REQ(1));
-  mrb_define_class_method(mrb, _class_json, "generate", mrb_json_stringify, MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, _class_json, "stringify", mrb_json_generate, MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, _class_json, "generate", mrb_json_generate, MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, _class_json, "pretty_generate", mrb_json_pretty_generate, MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, mrb->object_class, "to_json", mrb_json_to_json, MRB_ARGS_NONE());
 }
 
