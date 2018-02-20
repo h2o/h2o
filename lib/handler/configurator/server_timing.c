@@ -23,11 +23,7 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 
-enum {
-    SERVER_TIMING_MODE_OFF,
-    SERVER_TIMING_MODE_ON,
-    SERVER_TIMING_MODE_ENFORCE
-};
+enum { SERVER_TIMING_MODE_OFF, SERVER_TIMING_MODE_ON, SERVER_TIMING_MODE_ENFORCE };
 
 struct st_server_timing_config_t {
     int mode;
