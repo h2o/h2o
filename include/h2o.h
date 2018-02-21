@@ -2257,6 +2257,7 @@ COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->pr
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
 COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
 COMPUTE_DURATION(duration, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+COMPUTE_DURATION(total, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
 
 #undef COMPUTE_DURATION
 
