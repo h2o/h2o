@@ -793,7 +793,6 @@ size_t stringify_duration(char *buf, int64_t usec)
 
 #define DELIMITER ", "
 #define ELEMENT_LONGEST_STR(name) #name "; " SERVER_TIMING_DURATION_LONGEST_STR
-#define EMIT_ELEMENT(req, dst, name, max_len) emit_server_timing_element(req, dst, #name, h2o_time_compute_##name##_time, max_len)
 
 static void emit_server_timing_element(h2o_req_t *req, h2o_iovec_t *dst, const char *name,
                                        int (*compute_func)(h2o_req_t *, int64_t *), size_t max_len)
@@ -834,11 +833,11 @@ void h2o_add_server_timing_header(h2o_req_t *req)
         DELIMITER ELEMENT_LONGEST_STR(process) DELIMITER ELEMENT_LONGEST_STR(response)
     size_t max_len = sizeof(LONGEST_STR);
 
-    EMIT_ELEMENT(req, &dst, connect, max_len);
-    EMIT_ELEMENT(req, &dst, header, max_len);
-    EMIT_ELEMENT(req, &dst, body, max_len);
-    EMIT_ELEMENT(req, &dst, request_total, max_len);
-    EMIT_ELEMENT(req, &dst, process, max_len);
+    emit_server_timing_element(req, &dst, "connect", h2o_time_compute_connect_time, max_len);
+    emit_server_timing_element(req, &dst, "request-header", h2o_time_compute_header_time, max_len);
+    emit_server_timing_element(req, &dst, "request-body", h2o_time_compute_body_time, max_len);
+    emit_server_timing_element(req, &dst, "request-total", h2o_time_compute_request_total_time, max_len);
+    emit_server_timing_element(req, &dst, "process", h2o_time_compute_process_time, max_len);
 
     if (dst.len != 0)
         h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("server-timing"), 0, NULL, dst.base, dst.len);
@@ -862,7 +861,7 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     }
 
     h2o_iovec_t dst = h2o_iovec_init(value.base + value.len, 0);
-    EMIT_ELEMENT(req, &dst, response, SIZE_MAX);
+    emit_server_timing_element(req, &dst, "response", h2o_time_compute_response_time, SIZE_MAX);
     emit_server_timing_element(req, &dst, "total", h2o_time_compute_duration, SIZE_MAX);
     if (dst.len == 0)
         return h2o_iovec_init(NULL, 0);
@@ -876,7 +875,6 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     return value;
 }
 
-#undef EMIT_ELEMENT
 #undef ELEMENT_LONGEST_STR
 #undef DELIMITER
 

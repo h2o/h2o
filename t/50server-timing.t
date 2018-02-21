@@ -31,8 +31,8 @@ EOT
         # durations might be less than the slept amount because h2o's timestamps are updated at each eventloop
         # so we have to introduce 100ms lower buffer (i.e. 900ms, 1900ms)
         test_element($sts[0], 'connect', undef, undef);
-        test_element($sts[0], 'header', undef, undef);
-        test_element($sts[0], 'request_total', undef, undef);
+        test_element($sts[0], 'request-header', undef, undef);
+        test_element($sts[0], 'request-total', undef, undef);
         test_element($sts[0], 'process', 900, 1100);
         test_element($sts[1], 'response', 900, 1100);
         test_element($sts[1], 'total', 1900, 2100);
