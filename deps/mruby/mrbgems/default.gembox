@@ -1,4 +1,7 @@
 MRuby::GemBox.new do |conf|
+  # Use postgres module PG
+  conf.gem :core => "mruby-pg"
+
   # Use standard Kernel#sprintf method
   conf.gem :core => "mruby-sprintf"
 
