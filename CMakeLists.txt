@@ -93,8 +93,7 @@ ENDIF ()
 OPTION(WITHOUT_LIBS "skip building libs even when possible" OFF)
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 
-OPTION(WITH_GIT_REVISION "whether or not to include git revision number in server header value" "OFF")
-IF (WITH_GIT_REVISION)
+IF (EXISTS "${CMAKE_SOURCE_DIR}/.git")
   EXECUTE_PROCESS(
     COMMAND git log -1 --format=%h
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
