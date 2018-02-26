@@ -22,8 +22,8 @@
 #ifndef h2o__version_h
 #define h2o__version_h
 
-#ifdef GIT_REVISION
-#define H2O_VERSION "2.3.0-DEV@" H2O_TO_STR(GIT_REVISION)
+#ifdef H2O_GIT_REVISION
+#define H2O_VERSION "2.3.0-DEV@" H2O_TO_STR(H2O_GIT_REVISION)
 #else
 #define H2O_VERSION "2.3.0-DEV"
 #endif
