@@ -229,6 +229,7 @@
 		7D0285C91EF422D40094292B /* sleep.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0285C81EF422D40094292B /* sleep.c */; };
 		7D0341FB1FE4D5B60052E0A1 /* http2client.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0341FA1FE4D5B60052E0A1 /* http2client.c */; };
 		7D0341FC1FE4D5BD0052E0A1 /* http2client.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0341FA1FE4D5B60052E0A1 /* http2client.c */; };
+		7D2DF4EE20297EEF004AD361 /* header.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D2DF4ED20297EE0004AD361 /* header.h */; };
 		7D4ADC471FCE494A00CB9F92 /* http2client.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D4ADC461FCE441B00CB9F92 /* http2client.h */; };
 		7D9FA53A1FC323B200189F88 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FA5381FC323AC00189F88 /* channel.c */; };
 		D081373A1FD400F4004679DF /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
@@ -822,6 +823,7 @@
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
 		7D0341FA1FE4D5B60052E0A1 /* http2client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2client.c; sourceTree = "<group>"; };
+		7D2DF4ED20297EE0004AD361 /* header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = header.h; sourceTree = "<group>"; };
 		7D4ADC461FCE441B00CB9F92 /* http2client.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http2client.h; sourceTree = "<group>"; };
 		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
 		D08137381FD400F4004679DF /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
@@ -1487,6 +1489,7 @@
 				105534D71A3C785000627ECB /* configurator.h */,
 				107D4D521B5B2412004A9B21 /* file.h */,
 				1044812D1BFD0FBE0007863F /* filecache.h */,
+				7D2DF4ED20297EE0004AD361 /* header.h */,
 				1058C8871AA6DE4B008D6180 /* hostinfo.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				10D0905619F102DA0043D458 /* http1client.h */,
@@ -2136,6 +2139,7 @@
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
 				108867751AD9069900987967 /* defaults.c.h in Headers */,
 				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
+				7D2DF4EE20297EEF004AD361 /* header.h in Headers */,
 				1047A9FF1D0E6D5900CC4BCE /* rand.h in Headers */,
 				10AA2E941A80A592004322AC /* time_.h in Headers */,
 				0812AB2C1D7FD54700004F23 /* read.h in Headers */,
