@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include "h2o/header.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
@@ -40,8 +41,8 @@ typedef h2o_http2client_body_cb (*h2o_http2client_head_cb)(h2o_http1client_t *cl
                                                            int status, h2o_iovec_t msg, struct st_h2o_header_t *headers,
                                                            size_t num_headers, int rlen);
 typedef h2o_http2client_head_cb (*h2o_http2client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                                              struct st_h2o_header_t **headers, size_t *num_headers, h2o_iovec_t **bodies, size_t *num_bodies,
-                                                              int *body_is_chunked, h2o_http1client_proceed_req_cb *proceed_req_cb, h2o_url_t *origin);
+                                                              h2o_headers_t *headers, h2o_iovec_vector_t *bodies,
+                                                              h2o_http1client_proceed_req_cb *proceed_req_cb, h2o_url_t *origin);
 
 
 void h2o_http2client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
