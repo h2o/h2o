@@ -63,6 +63,7 @@ typedef struct st_h2o_http2_priority_t {
 } h2o_http2_priority_t;
 
 extern const h2o_http2_priority_t h2o_http2_default_priority;
+extern __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
 int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at);
