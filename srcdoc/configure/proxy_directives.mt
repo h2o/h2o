@@ -48,10 +48,24 @@ proxy.reverse.url:
   balancer: least-conn
 EOT
 ?>
+<?= $ctx->{example}->(q{Forwarding the requests to multiple application server with hashing}, <<'EOT')
+proxy.reverse.url:
+  backends:
+    - http://10.0.0.1:8080/
+    - http://10.0.0.2:8080/
+  balancer:
+    type: hash
+    hash.key-type: path
+    hash.bound-factor: 1.3
+EOT
+?>
 <p>
-When more than one backend is declared, the load is distributed among the backends using the strategy specified by the <code>balancer</code> property.
-Currently we support <code>round-robin</code> (the default) and <code>least-conn</code> as the value of the property.
+When more than one backend is declared, the load is distributed among the backends using the strategy specified by the <code>balancer</code> property or the <code>type</code> property under <code>balancer</code>.
+Currently we support <code>round-robin</code> (the default), <code>least-conn</code> and <code>hash</code> as the value of the property.
 The strategies are applied when establishing a new connection becomes necessary (i.e. when no pooled connections exist).
+</p>
+<p>
+<code>hash</code> balancer would distribute the requests by <a href="https://arxiv.org/pdf/1608.01350.pdf">consistent hashing with bounded load</a>. Key for hashing requests could be specified by setting the <code>hash.key-type</code> property. <code>ip-port</code> (the default), <code>ip</code> and <code>path</code> is supported by <code>hash.key-type</code>. The load bound (c in the paper referred above) of each backend (or each <code>weight</code>) can be tuned by setting the <code>hash.bound-factor</code> with a decimal over <code>1.0</code>. The default value of <code>hash.bound-factor</code> is <code>1.2</code>.
 </p>
 <p>
 <code>weight</code> can be assigned to each backend as an integer between 1 and 256.
@@ -62,6 +76,9 @@ For the <code>round-robin</code> balancer, <code>weight</code> is respected in t
 </p>
 <p>
 For <code>least-conn</code> balancer, <code>weight</code> is respected in this way: the selected backend should have the minimum value of (request count) / (<code>weight</code>).
+</p>
+<p>
+For <code>hash</code> balancer, <code>weight</code> is respected in this way: new connections would not be tried to backends that are handling more than the ceiling of (bound factor) * (<code>weight</code>) * (total request count) / (sum of <code>weight</code>) requests.
 </p>
 <p>
 H2O will try to reconnect to different backends (in the order determined by the load balancing strategy) until it successfully establishes a connection.

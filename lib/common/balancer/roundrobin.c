@@ -70,11 +70,10 @@ static void destroy(h2o_balancer_t *balancer)
 h2o_balancer_t *h2o_balancer_create_rr(void)
 {
     static const h2o_balancer_callbacks_t rr_callbacks = {selector, destroy};
-
+    static const struct round_robin_t template = {{&rr_callbacks, 0, H2O_BALANCER_TYPE_ROUND_ROBIN}};
     struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
+    memcpy(self, &template, sizeof(template));
     pthread_mutex_init(&self->mutex, NULL);
-    self->super.callbacks = &rr_callbacks;
-    self->super.type = H2O_BALANCER_TYPE_ROUND_ROBIN;
     self->pos = 0;
     self->consumed_weight = 0;
 

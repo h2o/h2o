@@ -49,6 +49,7 @@ typedef enum en_h2o_balancer_type_t {
 
 struct st_h2o_balancer_t {
     const h2o_balancer_callbacks_t *callbacks;
+    const int idempotent;
     h2o_balancer_type_t type;
 };
 

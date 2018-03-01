@@ -64,9 +64,9 @@ static void destroy(h2o_balancer_t *_self)
 h2o_balancer_t *h2o_balancer_create_lc(void)
 {
     static const h2o_balancer_callbacks_t lc_callbacks = {selector, destroy};
+    static const struct least_conn_t template = {{&lc_callbacks, 1, H2O_BALANCER_TYPE_LEAST_CONN}};
     struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
-    self->super.callbacks = &lc_callbacks;
-    self->super.type = H2O_BALANCER_TYPE_LEAST_CONN;
+    memcpy(self, &template, sizeof(template));
     pthread_mutex_init(&self->mutex, NULL);
     return &self->super;
 }

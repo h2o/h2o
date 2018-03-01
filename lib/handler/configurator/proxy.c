@@ -297,7 +297,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     size_t i, num_backends = 0;
     h2o_balancer_t *balancer = NULL;
     h2o_balancer_hash_key_type_t hash_key_type = H2O_BALANCER_HASH_KEY_IP_PORT;
-    float c = 1.2;
+    float bound_factor = 1.2;
     int scanf_ret;
 
     /* collect the nodes */
@@ -344,7 +344,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             } else if (strcmp((*balancer_conf)->data.scalar, "least-conn") == 0) {
                 balancer = h2o_balancer_create_lc();
             } else if (strcmp((*balancer_conf)->data.scalar, "hash") == 0) {
-                balancer = h2o_balancer_create_hash(c, hash_key_type);
+                balancer = h2o_balancer_create_hash(bound_factor, hash_key_type);
             } else {
                 h2o_configurator_errprintf(
                                             cmd, *balancer_conf, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn, hash");
@@ -352,7 +352,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             }
             break;
         case YOML_TYPE_MAPPING:
-            if (h2o_configurator_parse_mapping(cmd, *balancer_conf, "type:s", "key-type:s,c:s", &balancer_type,
+            if (h2o_configurator_parse_mapping(cmd, *balancer_conf, "type:s", "hash.key-type:s,hash.bound-factor:s", &balancer_type,
                                            &balancer_hash_key_type, &balancer_hash_c) != 0)
                 return -1;
             if (strcmp((*balancer_type)->data.scalar, "round-robin") == 0) {
@@ -361,22 +361,26 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
                 balancer = h2o_balancer_create_lc();
             } else if (strcmp((*balancer_type)->data.scalar, "hash") == 0) {
                 /* hash key type */
-                if (strcasecmp((*balancer_hash_key_type)->data.scalar, "ip") == 0) {
-                    hash_key_type = H2O_BALANCER_HASH_KEY_IP;
-                } else if (strcasecmp((*balancer_hash_key_type)->data.scalar, "ip-port") == 0) {
-                    hash_key_type = H2O_BALANCER_HASH_KEY_IP_PORT;
-                } else if (strcasecmp((*balancer_hash_key_type)->data.scalar, "path") == 0) {
-                    hash_key_type = H2O_BALANCER_HASH_KEY_PATH;
-                } else {
-                    h2o_configurator_errprintf(cmd, *balancer_hash_key_type, "specified hash key is not supported. Currently supported ones are: ip, ip-port, path");
+                if (balancer_hash_key_type != NULL) {
+                    if (strcasecmp((*balancer_hash_key_type)->data.scalar, "ip") == 0) {
+                        hash_key_type = H2O_BALANCER_HASH_KEY_IP;
+                    } else if (strcasecmp((*balancer_hash_key_type)->data.scalar, "ip-port") == 0) {
+                        hash_key_type = H2O_BALANCER_HASH_KEY_IP_PORT;
+                    } else if (strcasecmp((*balancer_hash_key_type)->data.scalar, "path") == 0) {
+                        hash_key_type = H2O_BALANCER_HASH_KEY_PATH;
+                    } else {
+                        h2o_configurator_errprintf(cmd, *balancer_hash_key_type, "specified hash key is not supported. Currently supported ones are: ip, ip-port, path");
+                    }
                 }
                 /* c for hash bounding */
-                scanf_ret = sscanf((*balancer_hash_c)->data.scalar, "%f", &c);
-                if (scanf_ret != 1 || c <= 1.0) {
-                    h2o_configurator_errprintf(cmd, *balancer_hash_c, "c must be over 1.0");
-                    return -1;
+                if (balancer_hash_c != NULL) {
+                    scanf_ret = sscanf((*balancer_hash_c)->data.scalar, "%f", &bound_factor);
+                    if (scanf_ret != 1 || bound_factor <= 1.0) {
+                        h2o_configurator_errprintf(cmd, *balancer_hash_c, "hash.bound-factor must be over 1.0");
+                        return -1;
+                    }
                 }
-                balancer = h2o_balancer_create_hash(c, hash_key_type);
+                balancer = h2o_balancer_create_hash(bound_factor, hash_key_type);
             } else {
                 h2o_configurator_errprintf(
                                             cmd, *balancer_type, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn, hash");

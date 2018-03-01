@@ -195,10 +195,10 @@ h2o_balancer_t *h2o_balancer_create_hash(float c, h2o_balancer_hash_key_type_t t
         selector,
         destroy
     };
+    static const struct bounded_hash_t template = {{&hash_callbacks, 1, H2O_BALANCER_TYPE_HASH}};
 
     struct bounded_hash_t *self = h2o_mem_alloc(sizeof(*self));
-    self->super.callbacks = &hash_callbacks;
-    self->super.type = H2O_BALANCER_TYPE_HASH;
+    memcpy(self, &template, sizeof(template));
 
     self->c = c;
     self->type = type;
