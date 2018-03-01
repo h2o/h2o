@@ -63,7 +63,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
         ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
-        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled)
+        ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout &&
+        ctx->globalconf->proxy.keepalive_timeout == self->config.keepalive_timeout && !self->config.websocket.enabled)
         return;
 
     h2o_httpclient_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
@@ -79,7 +80,10 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     ALLOC_TIMEOUT(io_timeout);
     ALLOC_TIMEOUT(connect_timeout);
     ALLOC_TIMEOUT(first_byte_timeout);
+    ALLOC_TIMEOUT(keepalive_timeout);
 #undef ALLOC_TIMEOUT
+    client_ctx->zero_timeout = &ctx->zero_timeout;
+
     if (self->config.websocket.enabled) {
         /* FIXME avoid creating h2o_timeout_t for every path-level context in case the timeout values are the same */
         client_ctx->websocket_timeout = h2o_mem_alloc(sizeof(*client_ctx->websocket_timeout));

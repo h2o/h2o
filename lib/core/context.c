@@ -106,13 +106,13 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_timeout_init(ctx->loop, &ctx->proxy.io_timeout, config->proxy.io_timeout);
     h2o_timeout_init(ctx->loop, &ctx->proxy.connect_timeout, config->proxy.connect_timeout);
     h2o_timeout_init(ctx->loop, &ctx->proxy.first_byte_timeout, config->proxy.first_byte_timeout);
-    h2o_timeout_init(ctx->loop, &ctx->proxy.http2_keepalive_timeout, 5000); /* FIXME use configuration value */
+    h2o_timeout_init(ctx->loop, &ctx->proxy.keepalive_timeout, config->proxy.keepalive_timeout);
     ctx->proxy.client_ctx.getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
     ctx->proxy.client_ctx.io_timeout = &ctx->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = &ctx->proxy.connect_timeout;
     ctx->proxy.client_ctx.first_byte_timeout = &ctx->proxy.first_byte_timeout;
     ctx->proxy.client_ctx.zero_timeout = &ctx->zero_timeout;
-    ctx->proxy.client_ctx.http2.keepalive_timeout = &ctx->proxy.http2_keepalive_timeout;
+    ctx->proxy.client_ctx.keepalive_timeout = &ctx->proxy.keepalive_timeout;
     ctx->proxy.client_ctx.http2.latency_optimization = ctx->globalconf->http2.latency_optimization;
     h2o_linklist_init_anchor(&ctx->proxy.client_ctx.http2.conns);
 

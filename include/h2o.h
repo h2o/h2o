@@ -416,6 +416,10 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
+         * keepalive timeout (in milliseconds)
+         */
+        uint64_t keepalive_timeout;
+        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -657,8 +661,10 @@ struct st_h2o_context_t {
          * timeout handler used by the default client context
          */
         h2o_timeout_t first_byte_timeout;
-
-        h2o_timeout_t http2_keepalive_timeout; // TODO
+        /**
+         * timeout handler used by the default client context
+         */
+        h2o_timeout_t keepalive_timeout;
     } proxy;
 
     /**
@@ -1897,6 +1903,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     uint64_t io_timeout;
     uint64_t connect_timeout;
     uint64_t first_byte_timeout;
+    uint64_t keepalive_timeout;
     unsigned preserve_host : 1;
     unsigned use_proxy_protocol : 1;
     struct {

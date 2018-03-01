@@ -229,7 +229,7 @@ static void unregister_stream(struct st_h2o_http2client_stream_t *stream)
     --stream->conn->num_streams;
 
     if (stream->conn->num_streams == 0)
-        h2o_timeout_link(stream->conn->ctx->loop, stream->conn->ctx->http2.keepalive_timeout,
+        h2o_timeout_link(stream->conn->ctx->loop, stream->conn->ctx->keepalive_timeout,
                          &stream->conn->keepalive_timeout_entry);
 }
 

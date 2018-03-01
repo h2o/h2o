@@ -59,12 +59,12 @@ typedef struct st_h2o_httpclient_ctx_t {
     h2o_timeout_t *connect_timeout;
     h2o_timeout_t *first_byte_timeout;
     h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
+    h2o_timeout_t *keepalive_timeout;
     h2o_timeout_t *zero_timeout;
 
     struct {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         h2o_linklist_t conns;
-        h2o_timeout_t *keepalive_timeout;
     } http2;
 
 } h2o_httpclient_ctx_t;

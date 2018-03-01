@@ -31,7 +31,6 @@
 
 struct proxy_config_vars_t {
     h2o_proxy_config_vars_t conf;
-    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     SSL_CTX *ssl_ctx;
 };
 
@@ -74,7 +73,7 @@ static int on_config_timeout_first_byte(h2o_configurator_command_t *cmd, h2o_con
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.keepalive_timeout);
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -350,7 +349,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         if ((targets[i] = parse_backend(cmd, backends[i])) == NULL)
             return -1;
 
-    if (self->vars->keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
+    if (self->vars->conf.keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
         h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
                                               "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
@@ -363,7 +362,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     memset(sockpool, 0, sizeof(*sockpool));
     /* init socket pool */
     h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, num_backends, balancer);
-    h2o_socketpool_set_timeout(sockpool, self->vars->keepalive_timeout);
+    h2o_socketpool_set_timeout(sockpool, self->vars->conf.keepalive_timeout);
     h2o_socketpool_set_ssl_ctx(sockpool, self->vars->ssl_ctx);
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &self->vars->conf, sockpool);
     return 0;
@@ -450,8 +449,9 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.io_timeout = self->vars->conf.io_timeout;
         ctx->globalconf->proxy.connect_timeout = self->vars->conf.connect_timeout;
         ctx->globalconf->proxy.first_byte_timeout = self->vars->conf.first_byte_timeout;
+        ctx->globalconf->proxy.keepalive_timeout = self->vars->conf.keepalive_timeout;
         h2o_socketpool_set_ssl_ctx(&ctx->globalconf->proxy.global_socketpool, self->vars->ssl_ctx);
-        h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->keepalive_timeout);
+        h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->conf.keepalive_timeout);
     }
     SSL_CTX_free(self->vars->ssl_ctx);
 
@@ -480,7 +480,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->conf.websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->conf.websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
     c->vars->conf.max_buffer_size = SIZE_MAX;
-    c->vars->keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
+    c->vars->conf.keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
 
     /* setup handlers */
     c->super.enter = on_config_enter;
