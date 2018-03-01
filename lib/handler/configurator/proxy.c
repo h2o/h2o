@@ -450,6 +450,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.connect_timeout = self->vars->conf.connect_timeout;
         ctx->globalconf->proxy.first_byte_timeout = self->vars->conf.first_byte_timeout;
         ctx->globalconf->proxy.keepalive_timeout = self->vars->conf.keepalive_timeout;
+        ctx->globalconf->proxy.max_buffer_size = self->vars->conf.max_buffer_size;
         h2o_socketpool_set_ssl_ctx(&ctx->globalconf->proxy.global_socketpool, self->vars->ssl_ctx);
         h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->conf.keepalive_timeout);
     }

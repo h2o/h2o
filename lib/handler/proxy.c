@@ -40,7 +40,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->socketpool = self->sockpool;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
-    overrides->max_buffer_size = self->config.max_buffer_size;
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
@@ -64,7 +63,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
         ctx->globalconf->proxy.connect_timeout == self->config.connect_timeout &&
         ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout &&
-        ctx->globalconf->proxy.keepalive_timeout == self->config.keepalive_timeout && !self->config.websocket.enabled)
+        ctx->globalconf->proxy.keepalive_timeout == self->config.keepalive_timeout &&
+        ctx->globalconf->proxy.max_buffer_size == self->config.max_buffer_size && !self->config.websocket.enabled)
         return;
 
     h2o_httpclient_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
@@ -91,6 +91,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     } else {
         client_ctx->websocket_timeout = NULL;
     }
+
+    client_ctx->max_buffer_size = self->config.max_buffer_size;
 
     h2o_linklist_init_anchor(&client_ctx->http2.conns);
 

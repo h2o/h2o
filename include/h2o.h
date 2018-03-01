@@ -440,6 +440,10 @@ struct st_h2o_globalconf_t {
          */
         unsigned emit_missing_date_header : 1;
         /**
+         * maximum size to buffer for the response
+         */
+        size_t max_buffer_size;
+        /**
          * global socketpool
          */
         h2o_socketpool_t global_socketpool;
@@ -905,10 +909,6 @@ typedef struct st_h2o_req_overrides_t {
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
     h2o_headers_command_t *headers_cmds;
-    /**
-     * Maximum size to buffer for the response
-     */
-    size_t max_buffer_size;
 } h2o_req_overrides_t;
 
 /**

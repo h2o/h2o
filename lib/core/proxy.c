@@ -41,7 +41,6 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
-    void (*await_send)(h2o_httpclient_t *);
 };
 
 struct rp_ws_upgrade_info_t {
@@ -330,10 +329,8 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 
     h2o_doublebuffer_consume(&self->sending);
     do_send(self);
-    if (self->await_send) {
-        self->await_send(self->client);
-        self->await_send = NULL;
-    }
+    if (self->client != NULL)
+        self->client->update_window(self->client);
 }
 
 static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
@@ -361,16 +358,9 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout
     h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
 }
 
-static void await_send(h2o_httpclient_t *client)
-{
-    if (client)
-        client->resume_read(client);
-}
-
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
-    h2o_req_overrides_t *overrides = self->src_req->overrides;
 
     if (errstr != NULL) {
         /* detach the content */
@@ -384,11 +374,6 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     }
     if (!self->sending.inflight)
         do_send(self);
-
-    if (self->client && *self->client->buf && overrides && (*self->client->buf)->size > overrides->max_buffer_size) {
-        self->await_send = await_send;
-        self->client->stop_read(self->client);
-    }
 
     return 0;
 }
@@ -626,7 +611,6 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
         self->is_websocket_handshake = 0;
     }
     self->had_body_error = 0;
-    self->await_send = NULL;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);

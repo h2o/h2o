@@ -61,6 +61,7 @@ typedef struct st_h2o_httpclient_ctx_t {
     h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
     h2o_timeout_t *keepalive_timeout;
     h2o_timeout_t *zero_timeout;
+    size_t max_buffer_size;
 
     struct {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
@@ -81,8 +82,7 @@ struct st_h2o_httpclient_t {
 
     void (*cancel)(h2o_httpclient_t *client);
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
-    void (*stop_read)(h2o_httpclient_t *client);
-    void (*resume_read)(h2o_httpclient_t *client);
+    void (*update_window)(h2o_httpclient_t *client);
     int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_stream);
 };
 

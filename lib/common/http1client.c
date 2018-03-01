@@ -99,6 +99,7 @@ static void on_body_timeout(h2o_timeout_entry_t *entry)
     on_body_error(client, "I/O timeout");
 }
 
+static void do_update_window(h2o_httpclient_t *_client);
 static void on_body_until_close(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_private_t *client = sock->data;
@@ -116,6 +117,7 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
+        do_update_window(&client->super);
     }
 
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
@@ -156,6 +158,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
+        do_update_window(&client->super);
     }
 
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
@@ -216,6 +219,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
             close_client(client);
             return;
         }
+        do_update_window(&client->super);
     }
 
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
@@ -637,17 +641,19 @@ static void do_cancel(h2o_httpclient_t *_client)
     close_client(client);
 }
 
-static void do_stop_read(h2o_httpclient_t *_client)
+static void do_update_window(h2o_httpclient_t *_client)
 {
     struct st_h2o_http1client_private_t *client = (void *)_client;
-    client->reader = client->sock->_cb.read;
-    h2o_socket_read_stop(client->sock);
-}
-
-static void do_resume_read(h2o_httpclient_t *_client)
-{
-    struct st_h2o_http1client_private_t *client = (void *)_client;
-    h2o_socket_read_start(client->sock, client->reader);
+    if ((*client->super.buf)->size >= client->super.ctx->max_buffer_size) {
+        if (client->sock->_cb.read != NULL) {
+            client->reader = client->sock->_cb.read;
+            h2o_socket_read_stop(client->sock);
+        }
+    } else {
+        if (client->sock->_cb.read == NULL) {
+            h2o_socket_read_start(client->sock, client->reader);
+        }
+    }
 }
 
 static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
@@ -659,8 +665,7 @@ static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
     return sock;
 }
 
-static struct st_h2o_http1client_private_t *create_client(h2o_httpclient_t **_client, void *data, h2o_httpclient_ctx_t *ctx,
-                                                          h2o_httpclient_connect_cb cb)
+static struct st_h2o_http1client_private_t *create_client(h2o_httpclient_t **_client, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
 {
     struct st_h2o_http1client_private_t *client = h2o_mem_alloc(sizeof(*client));
     memset(client, 0, offsetof(struct st_h2o_http1client_private_t, pool));
@@ -669,8 +674,7 @@ static struct st_h2o_http1client_private_t *create_client(h2o_httpclient_t **_cl
     client->super.data = data;
     client->super.cancel = do_cancel;
     client->super.steal_socket = do_steal_socket;
-    client->super.stop_read = do_stop_read;
-    client->super.resume_read = do_resume_read;
+    client->super.update_window = do_update_window;
     client->super.write_req = do_write_req;
     client->_cb.on_connect = cb;
     /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
