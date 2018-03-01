@@ -30,15 +30,16 @@
 
 struct st_h2o_mruby_http_request_context_t {
     h2o_mruby_context_t *ctx;
-    h2o_http1client_t *client;
+    h2o_httpclient_t *client;
     mrb_value receiver;
     unsigned consumed : 1; /* flag to check that the response body is consumed only once */
     struct {
-        h2o_buffer_t *buf;
+        h2o_iovec_t method;
+        h2o_url_t url;
+        h2o_headers_t headers;
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
         unsigned method_is_head : 1;
         unsigned has_transfer_encoding : 1;
-        h2o_iovec_t _bufs[2];
         unsigned can_keepalive : 1;
     } req;
     struct {
@@ -53,6 +54,7 @@ struct st_h2o_mruby_http_request_context_t {
         h2o_mruby_generator_t *generator;
         void (*notify_cb)(h2o_mruby_generator_t *generator);
     } shortcut;
+    h2o_mem_pool_t pool;
 };
 
 static void attach_receiver(struct st_h2o_mruby_http_request_context_t *ctx, mrb_value receiver)
@@ -81,7 +83,7 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 
     /* clear the refs */
     if (ctx->client != NULL) {
-        h2o_http1client_cancel(ctx->client);
+        ctx->client->cancel(ctx->client);
         ctx->client = NULL;
     }
 
@@ -91,11 +93,9 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
         DATA_PTR(ctx->refs.input_stream) = NULL;
 
     /* clear bufs */
-    h2o_buffer_dispose(&ctx->req.buf);
     h2o_buffer_dispose(&ctx->resp.after_closed);
 
-    if (ctx->req.body.base != NULL)
-        free(ctx->req.body.base);
+    h2o_mem_clear_pool(&ctx->pool);
 
     free(ctx);
 }
@@ -209,7 +209,7 @@ static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
     if (ctx->client != NULL) {
         assert((*ctx->client->buf)->size != 0);
         chunk = h2o_mruby_new_str(ctx->ctx->shared->mrb, (*ctx->client->buf)->bytes, (*ctx->client->buf)->size);
-        h2o_buffer_consume(&(*ctx->client->buf), (*ctx->client->buf)->size);
+        h2o_buffer_consume(ctx->client->buf, (*ctx->client->buf)->size);
         ctx->resp.has_content = 0;
     } else {
         if (ctx->resp.after_closed->size == 0) {
@@ -224,7 +224,7 @@ static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
     return chunk;
 }
 
-static int on_body(h2o_http1client_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -264,13 +264,13 @@ static int headers_sort_cb(const void *_x, const void *_y)
     return memcmp(x->name->base, y->name->base, x->name->len);
 }
 
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen)
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+                                      h2o_header_t *headers, size_t num_headers, int rlen)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
     if (errstr != NULL) {
-        if (errstr != h2o_http1client_error_is_eos) {
+        if (errstr != h2o_httpclient_error_is_eos) {
             /* error */
             post_error(ctx, errstr);
             return NULL;
@@ -284,9 +284,9 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     return on_body;
 }
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, int *body_is_chunked, h2o_url_t *dummy)
+static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
+                                         h2o_headers_t *headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                         h2o_httpclient_features_t features, h2o_url_t *origin)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -295,23 +295,21 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         return NULL;
     }
 
-    ctx->req._bufs[0] = h2o_iovec_init(ctx->req.buf->bytes, ctx->req.buf->size);
-    if (ctx->req.body.base != NULL) {
-        *reqbufcnt = 2;
-        ctx->req._bufs[1] = ctx->req.body;
-    } else {
-        *reqbufcnt = 1;
+    if (features.connection_header) {
+        if (!ctx->req.can_keepalive) {
+            h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONNECTION, NULL, H2O_STRLIT("close"));
+        }
     }
-    *reqbufs = ctx->req._bufs;
-    *method_is_head = ctx->req.method_is_head;
+
+    *method = ctx->req.method;
+    *url = ctx->req.url;
+    *headers = ctx->req.headers;
+
+    if (ctx->req.body.base != NULL) {
+        *body = ctx->req.body;
+    }
 
     return on_head;
-}
-
-static inline void append_to_buffer(h2o_buffer_t **buf, const void *src, size_t len)
-{
-    memcpy((*buf)->bytes + (*buf)->size, src, len);
-    (*buf)->size += len;
 }
 
 static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_ctx)
@@ -331,11 +329,7 @@ static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     if (h2o_lcstris(name.base, name.len, H2O_STRLIT("transfer-encoding")))
         ctx->req.has_transfer_encoding = 1;
 
-    h2o_buffer_reserve(&ctx->req.buf, name.len + value.len + sizeof(": \r\n") - 1);
-    append_to_buffer(&ctx->req.buf, name.base, name.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(": "));
-    append_to_buffer(&ctx->req.buf, value.base, value.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    h2o_add_header_by_str(&ctx->pool, &ctx->req.headers, name.base, name.len, 1, NULL, value.base, value.len);
 
     return 0;
 }
@@ -358,17 +352,20 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
 
     /* allocate context and initialize */
     ctx = h2o_mem_alloc(sizeof(*ctx));
-    memset(ctx, 0, sizeof(*ctx));
+    memset(ctx, 0, offsetof(struct st_h2o_mruby_http_request_context_t, pool));
+    h2o_mem_init_pool(&ctx->pool);
+
     ctx->ctx = shared_ctx->current_context;
     ctx->receiver = mrb_nil_value();
-    h2o_buffer_init(&ctx->req.buf, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&ctx->resp.after_closed, &h2o_socket_buffer_prototype);
     ctx->refs.request = mrb_nil_value();
     ctx->refs.input_stream = mrb_nil_value();
+    ctx->req.can_keepalive = h2o_socketpool_can_keepalive(&shared_ctx->ctx->globalconf->proxy.global_socketpool);
 
     /* uri */
     if (h2o_url_parse(arg_url, arg_url_len, &url) != 0)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "invaild URL");
+    h2o_url_copy(&ctx->pool, &ctx->req.url, &url);
 
     /* method */
     method = h2o_iovec_init(H2O_STRLIT("GET"));
@@ -382,24 +379,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
             }
         }
     }
-
-    /* start building the request */
-    h2o_buffer_reserve(&ctx->req.buf, method.len + 1 + url.path.len + sizeof(" HTTP/1.1\r\n") - 1);
-    append_to_buffer(&ctx->req.buf, method.base, method.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" "));
-    append_to_buffer(&ctx->req.buf, url.path.base, url.path.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT(" HTTP/1.1\r\n"));
-
-    ctx->req.can_keepalive = h2o_socketpool_can_keepalive(&shared_ctx->ctx->globalconf->proxy.global_socketpool);
-    if (!ctx->req.can_keepalive) {
-        h2o_buffer_reserve(&ctx->req.buf, sizeof("Connection: close\r\n") - 1);
-        append_to_buffer(&ctx->req.buf, H2O_STRLIT("Connection: close\r\n"));
-    }
-
-    h2o_buffer_reserve(&ctx->req.buf, url.authority.len + sizeof("Host: \r\n") - 1);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("Host: "));
-    append_to_buffer(&ctx->req.buf, url.authority.base, url.authority.len);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
+    ctx->req.method = h2o_strdup(&ctx->pool, method.base, method.len);
 
     /* headers */
     if (mrb_hash_p(arg_hash)) {
@@ -412,6 +392,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
             }
         }
     }
+
     /* body */
     if (mrb_hash_p(arg_hash)) {
         mrb_value body = mrb_hash_get(mrb, arg_hash, mrb_symbol_value(ctx->ctx->shared->symbols.sym_body));
@@ -422,18 +403,14 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
                     mrb_raise(mrb, E_ARGUMENT_ERROR, "body.read did not return string");
             }
             // FIXME: how to handle fastpath and who frees this?
-            ctx->req.body = h2o_strdup(NULL, RSTRING_PTR(body), RSTRING_LEN(body));
+            ctx->req.body = h2o_strdup(&ctx->pool, RSTRING_PTR(body), RSTRING_LEN(body));
             if (!ctx->req.has_transfer_encoding) {
-                char buf[64];
-                size_t l = (size_t)sprintf(buf, "content-length: %zu\r\n", ctx->req.body.len);
-                h2o_buffer_reserve(&ctx->req.buf, l);
-                append_to_buffer(&ctx->req.buf, buf, l);
+                char *buf = h2o_mem_alloc_pool(&ctx->pool, char, sizeof(H2O_UINT64_LONGEST_STR) - 1);
+                size_t l = (size_t)sprintf(buf, "%zu", ctx->req.body.len);
+                h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONTENT_LENGTH, NULL, buf, l);
             }
         }
     }
-
-    h2o_buffer_reserve(&ctx->req.buf, 2);
-    append_to_buffer(&ctx->req.buf, H2O_STRLIT("\r\n"));
 
     /* build request and connect */
     ctx->refs.request = h2o_mruby_create_data_instance(
@@ -529,7 +506,7 @@ void h2o_mruby_http_unset_shortcut(mrb_state *mrb, h2o_mruby_http_request_contex
 h2o_buffer_t **h2o_mruby_http_peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)
 {
     *is_final = ctx->client == NULL;
-    return ctx->client != NULL && ctx->resp.has_content ? &(*ctx->client->buf) : &ctx->resp.after_closed;
+    return ctx->client != NULL && ctx->resp.has_content ? ctx->client->buf : &ctx->resp.after_closed;
 }
 
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx)

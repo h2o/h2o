@@ -33,22 +33,8 @@ extern "C" {
 #include "h2o/timeout.h"
 #include "h2o/cache.h"
 
-struct st_h2o_header_t;
-
-typedef void (*h2o_http2client_proceed_req_cb)(h2o_http1client_t *client, size_t written, int is_end_stream);
-typedef int (*h2o_http2client_body_cb)(h2o_http1client_t *client, const char *errstr);
-typedef h2o_http2client_body_cb (*h2o_http2client_head_cb)(h2o_http1client_t *client, const char *errstr, int minor_version,
-                                                           int status, h2o_iovec_t msg, struct st_h2o_header_t *headers,
-                                                           size_t num_headers, int rlen);
-typedef h2o_http2client_head_cb (*h2o_http2client_connect_cb)(h2o_http1client_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                                              h2o_headers_t *headers, h2o_iovec_vector_t *bodies,
-                                                              h2o_http1client_proceed_req_cb *proceed_req_cb, h2o_url_t *origin);
-
-
-void h2o_http2client_connect(h2o_http1client_t **client, void *data, h2o_http1client_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *target, h2o_http2client_connect_cb cb);
-void h2o_http2client_cancel(h2o_http1client_t *client);
-int h2o_http2client_write_req(h2o_http1client_t *client, h2o_iovec_t chunk, int is_end_stream);
+void h2o_http2client_connect(h2o_httpclient_t **client, void *data, h2o_httpclient_ctx_t *ctx, h2o_socketpool_t *socketpool,
+                             h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 #ifdef __cplusplus
 }

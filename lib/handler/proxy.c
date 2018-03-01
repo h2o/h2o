@@ -66,7 +66,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         ctx->globalconf->proxy.first_byte_timeout == self->config.first_byte_timeout && !self->config.websocket.enabled)
         return;
 
-    h2o_http1client_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
+    h2o_httpclient_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
     client_ctx->loop = ctx->loop;
     client_ctx->getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
 #define ALLOC_TIMEOUT(to_)                                                                                                         \
@@ -94,7 +94,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct rp_handler_t *self = (void *)_self;
-    h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
+    h2o_httpclient_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
 
     if (client_ctx == NULL)
         return;
