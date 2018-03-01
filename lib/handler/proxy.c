@@ -92,6 +92,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         client_ctx->websocket_timeout = NULL;
     }
 
+    h2o_linklist_init_anchor(&client_ctx->http2.conns);
+
     h2o_context_set_handler_context(ctx, &self->super, client_ctx);
 }
 
