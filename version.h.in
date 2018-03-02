@@ -22,11 +22,7 @@
 #ifndef h2o__version_h
 #define h2o__version_h
 
-#ifndef __has_include
-#define __has_include(x) 0
-#endif
-
-#if __has_include("h2o/gitrev.h")
+#ifdef HAS_GITREV_H
 #include "h2o/gitrev.h"
 #endif
 
