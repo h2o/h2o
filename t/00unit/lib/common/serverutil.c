@@ -32,6 +32,10 @@ static void test_server_starter(void)
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 0);
 
+    setenv(SERVER_STARTER_PORT, "", 1);
+    num_fds = h2o_server_starter_get_fds(&fds);
+    ok(num_fds == 0);
+
     setenv(SERVER_STARTER_PORT, "0.0.0.0:80=3", 1);
     num_fds = h2o_server_starter_get_fds(&fds);
     ok(num_fds == 1);

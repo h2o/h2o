@@ -93,7 +93,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
         return 0;
     if (ports_env[0] == '\0') {
         fprintf(stderr, "$" SERVER_STARTER_PORT " is empty\n");
-        return SIZE_MAX;
+        return 0;
     }
 
     /* ports_env example: 127.0.0.1:80=3;/tmp/sock=4 */
