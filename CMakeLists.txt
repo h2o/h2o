@@ -734,8 +734,9 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git
     ADD_CUSTOM_TARGET(gitrev ALL
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.sh
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    GET_PROPERTY(_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
-    FOREACH(_target IN LISTS _targets)
-        ADD_DEPENDENCIES(${_target} gitrev)
-    ENDFOREACH()
+    ADD_DEPENDENCIES(libh2o gitrev)
+    ADD_DEPENDENCIES(libh2o-evloop gitrev)
+    ADD_DEPENDENCIES(h2o gitrev)
+    ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
+    ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
 ENDIF ()
