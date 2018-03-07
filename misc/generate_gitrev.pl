@@ -4,7 +4,7 @@ use warnings;
 
 my $gitrev = exec_git_command('git rev-parse --short HEAD') or die "failed to get current revision";
 my $gittag = exec_git_command("git tag --points-at $gitrev");
-my $content = $gittag ? '' : "#define H2O_GITREV $gitrev";
+my $content = $gittag ? '' : "#define H2O_GITREV $gitrev\n";
 my $outpath = 'include/h2o/gitrev.h';
 
 my $current = -f $outpath ? do {
