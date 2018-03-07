@@ -14,6 +14,7 @@
 		0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB1F1D7FCFEB00004F23 /* hiredis.h */; };
 		0812AB2B1D7FD54700004F23 /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; };
 		0812AB2C1D7FD54700004F23 /* read.h in Headers */ = {isa = PBXBuildFile; fileRef = 0812AB2A1D7FD54700004F23 /* read.h */; };
+		0812174E1E07B89600712F36 /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812174C1E07B89600712F36 /* redis.c */; };
 		084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* http2_debug_state.c */; };
 		084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C31D54BB9200E89F66 /* http2_debug_state.c */; };
 		08790DDA1D80153600A04BC1 /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; };
@@ -498,6 +499,7 @@
 		0812AB1F1D7FCFEB00004F23 /* hiredis.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hiredis.h; sourceTree = "<group>"; };
 		0812AB291D7FD54700004F23 /* read.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = read.c; sourceTree = "<group>"; };
 		0812AB2A1D7FD54700004F23 /* read.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = read.h; sourceTree = "<group>"; };
+		0812174C1E07B89600712F36 /* redis.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = redis.c; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
@@ -1057,6 +1059,7 @@
 				08E9CC4D1E41F6660049DD26 /* embedded.c.h */,
 				100A55141C30C5BC00C4E3E0 /* chunked.c */,
 				100A550E1C2BB15100C4E3E0 /* http_request.c */,
+				0812174C1E07B89600712F36 /* redis.c */,
 				7D0285C81EF422D40094292B /* sleep.c */,
 				7D9FA5381FC323AC00189F88 /* channel.c */,
 			);
@@ -2630,6 +2633,7 @@
 				E9708B6D1E52C8250029E0A5 /* gzip.c in Sources */,
 				10756E2C1AC126420009BF57 /* emitter.c in Sources */,
 				E9708B3D1E52C7860029E0A5 /* recv.c in Sources */,
+				0812174E1E07B89600712F36 /* redis.c in Sources */,
 				E9708B691E52C80F0029E0A5 /* http2_debug_state.c in Sources */,
 				100A55151C30C5BC00C4E3E0 /* chunked.c in Sources */,
 				E9708B3E1E52C7860029E0A5 /* send.c in Sources */,

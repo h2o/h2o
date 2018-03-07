@@ -398,10 +398,12 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
+    h2o_mruby_redis_init_context(shared_ctx);
     h2o_mruby_sleep_init_context(shared_ctx);
     h2o_mruby_channel_init_context(shared_ctx);
 
     struct RClass *module = mrb_define_module(shared_ctx->mrb, "H2O");
+    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_H2O_MODULE, mrb_obj_value(module));
     struct RClass *generator_klass = mrb_define_class_under(shared_ctx->mrb, module, "Generator", shared_ctx->mrb->object_class);
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_GENERATOR_CLASS, mrb_obj_value(generator_klass));
 

@@ -183,21 +183,21 @@ static void on_redis_close(const char *errstr)
     }
 }
 
-static void dispose_redis_connection(void *conn)
+static void dispose_redis_connection(void *client)
 {
-    h2o_redis_free((h2o_redis_conn_t *)conn);
+    h2o_redis_free((h2o_redis_client_t *)client);
 }
 
-static h2o_redis_conn_t *get_redis_connection(h2o_context_t *ctx)
+static h2o_redis_client_t *get_redis_client(h2o_context_t *ctx)
 {
     static size_t key = SIZE_MAX;
-    h2o_redis_conn_t **conn = (h2o_redis_conn_t **)h2o_context_get_storage(ctx, &key, dispose_redis_connection);
-    if (*conn == NULL) {
-        *conn = h2o_redis_create_connection(ctx->loop, sizeof(h2o_redis_conn_t));
-        (*conn)->on_connect = on_redis_connect;
-        (*conn)->on_close = on_redis_close;
+    h2o_redis_client_t **client = (h2o_redis_client_t **)h2o_context_get_storage(ctx, &key, dispose_redis_connection);
+    if (*client == NULL) {
+        *client = h2o_redis_create_client(ctx->loop, sizeof(h2o_redis_client_t));
+        (*client)->on_connect = on_redis_connect;
+        (*client)->on_close = on_redis_close;
     }
-    return *conn;
+    return *client;
 }
 
 #define BASE64_LENGTH(len) (((len) + 2) / 3 * 4 + 1)
@@ -224,7 +224,7 @@ static h2o_iovec_t build_redis_value(h2o_iovec_t session_data)
 
 #undef BASE64_LENGTH
 
-static void redis_resumption_on_get(redisReply *reply, void *_accept_data)
+static void redis_resumption_on_get(redisReply *reply, void *_accept_data, const char *errstr)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = _accept_data;
     accept_data->get_command = NULL;
@@ -254,16 +254,16 @@ static void on_redis_resumption_get_failed(h2o_timeout_entry_t *timeout_entry)
 static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = sock->data;
-    h2o_redis_conn_t *conn = get_redis_connection(accept_data->super.ctx->ctx);
+    h2o_redis_client_t *client = get_redis_client(accept_data->super.ctx->ctx);
 
-    if (conn->state == H2O_REDIS_CONNECTION_STATE_CONNECTED) {
+    if (client->state == H2O_REDIS_CONNECTION_STATE_CONNECTED) {
         h2o_iovec_t key = build_redis_key(session_id, async_resumption_context.redis.prefix);
-        accept_data->get_command = h2o_redis_command(conn, redis_resumption_on_get, accept_data, "GET %s", key.base);
+        accept_data->get_command = h2o_redis_command(client, redis_resumption_on_get, accept_data, "GET %s", key.base);
         free(key.base);
     } else {
-        if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
+        if (client->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
             // try to connect
-            h2o_redis_connect(conn, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
+            h2o_redis_connect(client, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
         }
         // abort resumption
         h2o_timeout_unlink(&accept_data->super.timeout);
@@ -276,16 +276,16 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 static void redis_resumption_new(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = sock->data;
-    h2o_redis_conn_t *conn = get_redis_connection(accept_data->super.ctx->ctx);
+    h2o_redis_client_t *client = get_redis_client(accept_data->super.ctx->ctx);
 
-    if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
+    if (client->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
         // try to connect
-        h2o_redis_connect(conn, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
+        h2o_redis_connect(client, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
     }
 
     h2o_iovec_t key = build_redis_key(session_id, async_resumption_context.redis.prefix);
     h2o_iovec_t value = build_redis_value(session_data);
-    h2o_redis_command(conn, NULL, NULL, "SETEX %s %d %s", key.base, async_resumption_context.expiration * 10, value.base);
+    h2o_redis_command(client, NULL, NULL, "SETEX %s %d %s", key.base, async_resumption_context.expiration * 10, value.base);
     free(key.base);
     free(value.base);
 }
