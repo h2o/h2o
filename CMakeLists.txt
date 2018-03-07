@@ -130,7 +130,8 @@ INCLUDE_DIRECTORIES(
     deps/picohttpparser
     deps/picotest
     deps/yaml/include
-    deps/yoml)
+    deps/yoml
+    deps/siphash)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -271,6 +272,7 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/strerror.c
     deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
+    deps/siphash/siphash.c
 
     lib/common/cache.c
     lib/common/file.c
@@ -290,6 +292,7 @@ SET(LIB_SOURCE_FILES
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
+    lib/common/balancer/hash.c
 
     lib/core/config.c
     lib/core/configurator.c
@@ -359,6 +362,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/test.c
     t/00unit/lib/common/balancer/least_conn.c
     t/00unit/lib/common/balancer/roundrobin.c
+    t/00unit/lib/common/balancer/hash.c
     t/00unit/lib/common/cache.c
     t/00unit/lib/common/hostinfo.c
     t/00unit/lib/common/multithread.c
@@ -386,6 +390,7 @@ SET(UNIT_TEST_SOURCE_FILES
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/balancer/least_conn.c
     lib/common/balancer/roundrobin.c
+    lib/common/balancer/hash.c
     lib/common/cache.c
     lib/common/hostinfo.c
     lib/common/multithread.c

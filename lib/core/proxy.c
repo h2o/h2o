@@ -716,3 +716,9 @@ void h2o__proxy_process_request(h2o_req_t *req)
      */
     h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect);
 }
+
+h2o_req_t *h2o_proxy_get_req_by_generator(h2o_generator_t *_self)
+{
+    struct rp_generator_t *self = (void *)_self;
+    return self->src_req;
+}

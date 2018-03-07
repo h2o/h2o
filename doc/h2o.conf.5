@@ -2683,10 +2683,32 @@ proxy.reverse.url:
 .fi
 .PP
 
+.PP
+.BR Example:\ 
+Forwarding the requests to multiple application server with hashing
+.PP
+.nf
+.RS
+proxy.reverse.url:
+  backends:
+    - http://10.0.0.1:8080/
+    - http://10.0.0.2:8080/
+  balancer:
+    type: hash
+    hash.key-type: path
+    hash.bound-factor: 1.3
 
-When more than one backend is declared, the load is distributed among the backends using the strategy specified by the balancer property.
-Currently we support round-robin (the default) and least-conn as the value of the property.
+.RE
+.fi
+.PP
+
+
+When more than one backend is declared, the load is distributed among the backends using the strategy specified by the balancer property or the type property under balancer.
+Currently we support round-robin (the default), least-conn and hash as the value of the property.
 The strategies are applied when establishing a new connection becomes necessary (i.e. when no pooled connections exist).
+
+
+hash balancer would distribute the requests by consistent hashing with bounded load. Key for hashing requests could be specified by setting the hash.key-type property. ip-port (the default), ip and path is supported by hash.key-type. The load bound (c in the paper referred above) of each backend (or each weight) can be tuned by setting the hash.bound-factor with a decimal over 1.0. The default value of hash.bound-factor is 1.2.
 
 
 weight can be assigned to each backend as an integer between 1 and 256.
@@ -2697,6 +2719,9 @@ For the round-robin balancer, weight is respected in this way: each backend woul
 
 
 For least-conn balancer, weight is respected in this way: the selected backend should have the minimum value of (request count) / (weight).
+
+
+For hash balancer, weight is respected in this way: new connections would not be tried to backends that are handling more than the ceiling of (bound factor) * (weight) * (total request count) / (sum of weight) requests.
 
 
 H2O will try to reconnect to different backends (in the order determined by the load balancing strategy) until it successfully establishes a connection.

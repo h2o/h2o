@@ -40,7 +40,7 @@ static void test_when_backend_down(void)
     balancer = h2o_balancer_create_rr();
 
     for (i = 0; i < 10; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, &targets, tried, NULL);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
@@ -82,7 +82,7 @@ static void test_round_robin(void)
     total_count *= 1000;
 
     for (i = 0; i < total_count; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, &targets, tried, NULL);
         if (selected > targets.size) {
             ok(selected >= 0 && selected < targets.size);
             goto Done;
@@ -121,7 +121,7 @@ static void test_round_robin_weighted(void)
     total_count *= 1000;
 
     for (i = 0; i < total_count; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, &targets, tried, NULL);
         if (selected > targets.size) {
             ok(selected >= 0 && selected < targets.size);
             goto Done;

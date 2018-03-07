@@ -292,9 +292,13 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
 
-    yoml_t **backends, **balancer_conf = NULL;
+    yoml_t **backends, **balancer_conf = NULL, **balancer_type = NULL;
+    yoml_t **balancer_hash_key_type = NULL, **balancer_hash_c = NULL;
     size_t i, num_backends = 0;
     h2o_balancer_t *balancer = NULL;
+    h2o_balancer_hash_key_type_t hash_key_type = H2O_BALANCER_HASH_KEY_IP_PORT;
+    float bound_factor = 1.2;
+    int scanf_ret;
 
     /* collect the nodes */
     switch (node->type) {
@@ -307,7 +311,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         num_backends = node->data.sequence.size;
         break;
     case YOML_TYPE_MAPPING:
-        if (h2o_configurator_parse_mapping(cmd, node, "backends:*", "balancer:s", &backends, &balancer_conf) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, "backends:*", "balancer:sm", &backends, &balancer_conf) != 0)
             return -1;
         switch ((*backends)->type) {
         case YOML_TYPE_SCALAR:
@@ -333,13 +337,58 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
 
     /* determine the balancer */
     if (balancer_conf != NULL) {
-        if (strcmp((*balancer_conf)->data.scalar, "round-robin") == 0) {
-            balancer = h2o_balancer_create_rr();
-        } else if (strcmp((*balancer_conf)->data.scalar, "least-conn") == 0) {
-            balancer = h2o_balancer_create_lc();
-        } else {
-            h2o_configurator_errprintf(
-                cmd, node, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn");
+        switch ((*balancer_conf)->type) {
+        case YOML_TYPE_SCALAR:
+            if (strcmp((*balancer_conf)->data.scalar, "round-robin") == 0) {
+                balancer = h2o_balancer_create_rr();
+            } else if (strcmp((*balancer_conf)->data.scalar, "least-conn") == 0) {
+                balancer = h2o_balancer_create_lc();
+            } else if (strcmp((*balancer_conf)->data.scalar, "hash") == 0) {
+                balancer = h2o_balancer_create_hash(bound_factor, hash_key_type);
+            } else {
+                h2o_configurator_errprintf(
+                                            cmd, *balancer_conf, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn, hash");
+                return -1;
+            }
+            break;
+        case YOML_TYPE_MAPPING:
+            if (h2o_configurator_parse_mapping(cmd, *balancer_conf, "type:s", "hash.key-type:s,hash.bound-factor:s", &balancer_type,
+                                           &balancer_hash_key_type, &balancer_hash_c) != 0)
+                return -1;
+            if (strcmp((*balancer_type)->data.scalar, "round-robin") == 0) {
+                balancer = h2o_balancer_create_rr();
+            } else if (strcmp((*balancer_type)->data.scalar, "least-conn") == 0) {
+                balancer = h2o_balancer_create_lc();
+            } else if (strcmp((*balancer_type)->data.scalar, "hash") == 0) {
+                /* hash key type */
+                if (balancer_hash_key_type != NULL) {
+                    if (strcasecmp((*balancer_hash_key_type)->data.scalar, "ip") == 0) {
+                        hash_key_type = H2O_BALANCER_HASH_KEY_IP;
+                    } else if (strcasecmp((*balancer_hash_key_type)->data.scalar, "ip-port") == 0) {
+                        hash_key_type = H2O_BALANCER_HASH_KEY_IP_PORT;
+                    } else if (strcasecmp((*balancer_hash_key_type)->data.scalar, "path") == 0) {
+                        hash_key_type = H2O_BALANCER_HASH_KEY_PATH;
+                    } else {
+                        h2o_configurator_errprintf(cmd, *balancer_hash_key_type, "specified hash key is not supported. Currently supported ones are: ip, ip-port, path");
+                    }
+                }
+                /* c for hash bounding */
+                if (balancer_hash_c != NULL) {
+                    scanf_ret = sscanf((*balancer_hash_c)->data.scalar, "%f", &bound_factor);
+                    if (scanf_ret != 1 || bound_factor <= 1.0) {
+                        h2o_configurator_errprintf(cmd, *balancer_hash_c, "hash.bound-factor must be over 1.0");
+                        return -1;
+                    }
+                }
+                balancer = h2o_balancer_create_hash(bound_factor, hash_key_type);
+            } else {
+                h2o_configurator_errprintf(
+                                            cmd, *balancer_type, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn, hash");
+                return -1;
+            }
+            break;
+        default:
+            h2o_configurator_errprintf(cmd, *backends, "value for the `balancer` property must be either a scalar or a map");
             return -1;
         }
     }
@@ -365,6 +414,11 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, num_backends, balancer);
     h2o_socketpool_set_timeout(sockpool, self->vars->keepalive_timeout);
     h2o_socketpool_set_ssl_ctx(sockpool, self->vars->ssl_ctx);
+
+    if (balancer != NULL && balancer->type == H2O_BALANCER_TYPE_HASH) {
+        h2o_balancer_hash_set_targets(balancer, targets, num_backends);
+        h2o_balancer_hash_set_total_leased_count(balancer, &sockpool->_shared.leased_count);
+    }
     h2o_proxy_register_reverse_proxy(ctx->pathconf, &self->vars->conf, sockpool);
     return 0;
 }

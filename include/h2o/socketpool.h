@@ -122,6 +122,11 @@ typedef struct st_h2o_socketpool_t {
          * operation must be used to access the variable.
          */
         size_t count;
+        /**
+         * number of connections being _leased_ to the applications (i.e. not including the number of connections being pooled).
+         * Synchronous operation must be used to access the variable.
+         */
+        size_t leased_count;
     } _shared;
 
     /* load balancer */
