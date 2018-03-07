@@ -28,6 +28,9 @@ lib/handler/file/templates.c.h: misc/picotemplate-conf.pl lib/handler/file/_temp
 clang-format-all:
 	misc/clang-format-all.sh
 
+clang-format-diff:
+	misc/clang-format-diff.sh
+
 share/h2o/start_server: FORCE
 	cd misc/p5-Server-Starter; \
 	fatpack-simple --shebang "$$FATPACK_SHEBANG" -o ../../$@ script/start_server
