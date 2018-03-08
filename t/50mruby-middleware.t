@@ -762,9 +762,9 @@ EOT
 
         my ($status, $headers, $body);
         ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/blocking');
-        cmp_ok $body, '>', 2;
+        cmp_ok $body, '>', 1.9;
         ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/non-blocking');
-        cmp_ok $body, '<', 2;
+        cmp_ok $body, '<', 1.1;
     });
 };
 
