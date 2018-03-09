@@ -448,7 +448,6 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 
     /* create subreq */
     struct st_mruby_subreq_t *subreq = h2o_mem_alloc(sizeof(*subreq));
-    h2o_req_t *super = &subreq->super;
     memset(&subreq->conn, 0, sizeof(subreq->conn));
     subreq->ctx = ctx;
     subreq->receiver = mrb_nil_value();
@@ -463,8 +462,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     /* initialize super and conn */
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
-    super->is_subrequest = 1;
-    h2o_ostream_t *ostream = h2o_add_ostream(super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &super->_ostr_top);
+    subreq->super.is_subrequest = 1;
+    h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
     ostream->do_send = subreq_ostream_send;
     subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
     subreq->conn.super.connected_at = (struct timeval){0}; /* no need because subreq won't logged */
@@ -528,7 +527,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             mrb_value content_length = mrb_nil_value();
             RETRIEVE_ENV_NUM(content_length);
             if (!mrb_nil_p(content_length))
-                super->content_length = mrb_fixnum(content_length);
+                subreq->super.content_length = mrb_fixnum(content_length);
         } else if (CHECK_KEY("HTTP_HOST")) {
             RETRIEVE_ENV_STR(http_host);
         } else if (CHECK_KEY("PATH_INFO")) {
@@ -576,10 +575,10 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             mrb_value reqenv = mrb_nil_value();
             RETRIEVE_ENV_STR(reqenv);
             if (!mrb_nil_p(reqenv)) {
-                h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
-                super->env.entries[super->env.size] = h2o_strdup(&super->pool, keystr, keystr_len);
-                super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
-                super->env.size += 2;
+                h2o_vector_reserve(&subreq->super.pool, &subreq->super.env, subreq->super.env.size + 2);
+                subreq->super.env.entries[subreq->super.env.size] = h2o_strdup(&subreq->super.pool, keystr, keystr_len);
+                subreq->super.env.entries[subreq->super.env.size + 1] = h2o_strdup(&subreq->super.pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
+                subreq->super.env.size += 2;
             }
         }
     }
@@ -653,7 +652,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT("?"));
         url_comps[num_comps++] = STR_TO_IOVEC(query_string);
     }
-    h2o_iovec_t url_str = h2o_concat_list(&super->pool, url_comps, num_comps);
+    h2o_iovec_t url_str = h2o_concat_list(&subreq->super.pool, url_comps, num_comps);
     h2o_url_t url_parsed;
     if (h2o_url_parse(url_str.base, url_str.len, &url_parsed) != 0) {
         /* TODO is there any other way to show better error message? */
@@ -662,45 +661,45 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     }
 
     /* setup req and conn using retrieved values */
-    super->input.scheme = url_parsed.scheme;
-    super->input.method = h2o_strdup(&super->pool, RSTRING_PTR(method), RSTRING_LEN(method));
-    super->input.authority = h2o_strdup(&super->pool, url_parsed.authority.base, url_parsed.authority.len);
-    super->input.path = h2o_strdup(&super->pool, url_parsed.path.base, url_parsed.path.len);
-    h2o_hostconf_t *hostconf = h2o_req_setup(super);
-    super->hostconf = hostconf;
-    super->pathconf = ctx->handler->pathconf;
-    super->handler = &ctx->handler->super;
-    super->version = h2o_parse_protocol_version(STR_TO_IOVEC(server_protocol));
-    if (super->version == -1)
-        super->version = 0x101;
+    subreq->super.input.scheme = url_parsed.scheme;
+    subreq->super.input.method = h2o_strdup(&subreq->super.pool, RSTRING_PTR(method), RSTRING_LEN(method));
+    subreq->super.input.authority = h2o_strdup(&subreq->super.pool, url_parsed.authority.base, url_parsed.authority.len);
+    subreq->super.input.path = h2o_strdup(&subreq->super.pool, url_parsed.path.base, url_parsed.path.len);
+    h2o_hostconf_t *hostconf = h2o_req_setup(&subreq->super);
+    subreq->super.hostconf = hostconf;
+    subreq->super.pathconf = ctx->handler->pathconf;
+    subreq->super.handler = &ctx->handler->super;
+    subreq->super.version = h2o_parse_protocol_version(STR_TO_IOVEC(server_protocol));
+    if (subreq->super.version == -1)
+        subreq->super.version = 0x101;
 
     if (!mrb_nil_p(server_addr) && !mrb_nil_p(server_port)) {
-        subreq->conn.server.host = h2o_strdup(&super->pool, RSTRING_PTR(server_addr), RSTRING_LEN(server_addr));
-        subreq->conn.server.port = h2o_strdup(&super->pool, RSTRING_PTR(server_port), RSTRING_LEN(server_port));
+        subreq->conn.server.host = h2o_strdup(&subreq->super.pool, RSTRING_PTR(server_addr), RSTRING_LEN(server_addr));
+        subreq->conn.server.port = h2o_strdup(&subreq->super.pool, RSTRING_PTR(server_port), RSTRING_LEN(server_port));
     }
 
     if (!mrb_nil_p(remote_addr) && !mrb_nil_p(remote_port)) {
-        subreq->conn.remote.host = h2o_strdup(&super->pool, RSTRING_PTR(remote_addr), RSTRING_LEN(remote_addr));
-        subreq->conn.remote.port = h2o_strdup(&super->pool, RSTRING_PTR(remote_port), RSTRING_LEN(remote_port));
+        subreq->conn.remote.host = h2o_strdup(&subreq->super.pool, RSTRING_PTR(remote_addr), RSTRING_LEN(remote_addr));
+        subreq->conn.remote.port = h2o_strdup(&subreq->super.pool, RSTRING_PTR(remote_port), RSTRING_LEN(remote_port));
     }
 
     if (! mrb_nil_p(remaining_delegations)) {
         mrb_int v = mrb_fixnum(remaining_delegations);
-        super->remaining_delegations = (unsigned)(v < 0 ? 0 : v);
+        subreq->super.remaining_delegations = (unsigned)(v < 0 ? 0 : v);
     }
     if (! mrb_nil_p(remaining_reprocesses)) {
         mrb_int v = mrb_fixnum(remaining_reprocesses);
-        super->remaining_reprocesses = (unsigned)(v < 0 ? 0 : v);
+        subreq->super.remaining_reprocesses = (unsigned)(v < 0 ? 0 : v);
     }
 
     if (! mrb_nil_p(rack_errors)) {
         subreq->error_stream = rack_errors;
         mrb_gc_register(mrb, rack_errors);
-        super->error_logger.cb = on_subreq_error_callback;
-        super->error_logger.data = subreq;
+        subreq->super.error_logger.cb = on_subreq_error_callback;
+        subreq->super.error_logger.data = subreq;
     }
 
-    prepare_subreq_entity(super, ctx, rack_input);
+    prepare_subreq_entity(&subreq->super, ctx, rack_input);
     if (mrb->exc != NULL)
         goto Failed;
 
