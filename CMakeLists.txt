@@ -315,6 +315,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/redirect.c
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
+    lib/handler/server_timing.c
     lib/handler/status.c
     lib/handler/headers_util.c
     lib/handler/status/events.c
@@ -332,6 +333,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/throttle_resp.c
+    lib/handler/configurator/server_timing.c
     lib/handler/configurator/status.c
     lib/handler/configurator/http2_debug_state.c
     lib/handler/configurator/headers_util.c
@@ -536,6 +538,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby.c
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
+        lib/handler/mruby/redis.c
         lib/handler/mruby/sleep.c
         lib/handler/mruby/channel.c
         lib/handler/configurator/mruby.c)
@@ -726,3 +729,15 @@ ENDIF ()
 IF (NOT OSS_FUZZ)
     SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 ENDIF (NOT OSS_FUZZ)
+
+IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
+    ADD_CUSTOM_TARGET(gitrev ALL
+        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    ADD_DEPENDENCIES(libh2o gitrev)
+    ADD_DEPENDENCIES(libh2o-evloop gitrev)
+    ADD_DEPENDENCIES(h2o gitrev)
+    ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
+    ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
+ENDIF ()

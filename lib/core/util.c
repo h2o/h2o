@@ -183,21 +183,21 @@ static void on_redis_close(const char *errstr)
     }
 }
 
-static void dispose_redis_connection(void *conn)
+static void dispose_redis_connection(void *client)
 {
-    h2o_redis_free((h2o_redis_conn_t *)conn);
+    h2o_redis_free((h2o_redis_client_t *)client);
 }
 
-static h2o_redis_conn_t *get_redis_connection(h2o_context_t *ctx)
+static h2o_redis_client_t *get_redis_client(h2o_context_t *ctx)
 {
     static size_t key = SIZE_MAX;
-    h2o_redis_conn_t **conn = (h2o_redis_conn_t **)h2o_context_get_storage(ctx, &key, dispose_redis_connection);
-    if (*conn == NULL) {
-        *conn = h2o_redis_create_connection(ctx->loop, sizeof(h2o_redis_conn_t));
-        (*conn)->on_connect = on_redis_connect;
-        (*conn)->on_close = on_redis_close;
+    h2o_redis_client_t **client = (h2o_redis_client_t **)h2o_context_get_storage(ctx, &key, dispose_redis_connection);
+    if (*client == NULL) {
+        *client = h2o_redis_create_client(ctx->loop, sizeof(h2o_redis_client_t));
+        (*client)->on_connect = on_redis_connect;
+        (*client)->on_close = on_redis_close;
     }
-    return *conn;
+    return *client;
 }
 
 #define BASE64_LENGTH(len) (((len) + 2) / 3 * 4 + 1)
@@ -224,7 +224,7 @@ static h2o_iovec_t build_redis_value(h2o_iovec_t session_data)
 
 #undef BASE64_LENGTH
 
-static void redis_resumption_on_get(redisReply *reply, void *_accept_data)
+static void redis_resumption_on_get(redisReply *reply, void *_accept_data, const char *errstr)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = _accept_data;
     accept_data->get_command = NULL;
@@ -254,16 +254,16 @@ static void on_redis_resumption_get_failed(h2o_timeout_entry_t *timeout_entry)
 static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = sock->data;
-    h2o_redis_conn_t *conn = get_redis_connection(accept_data->super.ctx->ctx);
+    h2o_redis_client_t *client = get_redis_client(accept_data->super.ctx->ctx);
 
-    if (conn->state == H2O_REDIS_CONNECTION_STATE_CONNECTED) {
+    if (client->state == H2O_REDIS_CONNECTION_STATE_CONNECTED) {
         h2o_iovec_t key = build_redis_key(session_id, async_resumption_context.redis.prefix);
-        accept_data->get_command = h2o_redis_command(conn, redis_resumption_on_get, accept_data, "GET %s", key.base);
+        accept_data->get_command = h2o_redis_command(client, redis_resumption_on_get, accept_data, "GET %s", key.base);
         free(key.base);
     } else {
-        if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
+        if (client->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
             // try to connect
-            h2o_redis_connect(conn, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
+            h2o_redis_connect(client, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
         }
         // abort resumption
         h2o_timeout_unlink(&accept_data->super.timeout);
@@ -276,16 +276,16 @@ static void redis_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
 static void redis_resumption_new(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = sock->data;
-    h2o_redis_conn_t *conn = get_redis_connection(accept_data->super.ctx->ctx);
+    h2o_redis_client_t *client = get_redis_client(accept_data->super.ctx->ctx);
 
-    if (conn->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
+    if (client->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
         // try to connect
-        h2o_redis_connect(conn, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
+        h2o_redis_connect(client, async_resumption_context.redis.host.base, async_resumption_context.redis.port);
     }
 
     h2o_iovec_t key = build_redis_key(session_id, async_resumption_context.redis.prefix);
     h2o_iovec_t value = build_redis_value(session_data);
-    h2o_redis_command(conn, NULL, NULL, "SETEX %s %d %s", key.base, async_resumption_context.expiration * 10, value.base);
+    h2o_redis_command(client, NULL, NULL, "SETEX %s %d %s", key.base, async_resumption_context.expiration * 10, value.base);
     free(key.base);
     free(value.base);
 }
@@ -768,6 +768,115 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
 
     return h2o_concat_list(&req->pool, parts, num_parts);
 }
+
+#define SERVER_TIMING_DURATION_LONGEST_STR "dur=" H2O_INT32_LONGEST_STR ".000"
+
+size_t stringify_duration(char *buf, int64_t usec)
+{
+    int32_t msec = (int32_t)(usec / 1000);
+    usec -= ((int64_t)msec * 1000);
+    char *pos = buf;
+    pos += sprintf(pos, "dur=%" PRId32, msec);
+    if (usec != 0) {
+        *pos++ = '.';
+        int denom;
+        for (denom = 100; denom != 0; denom /= 10) {
+            int d = (int)usec / denom;
+            *pos++ = '0' + d;
+            usec -= d * denom;
+            if (usec == 0)
+                break;
+        }
+    }
+    return pos - buf;
+}
+
+#define DELIMITER ", "
+#define ELEMENT_LONGEST_STR(name) #name "; " SERVER_TIMING_DURATION_LONGEST_STR
+
+static void emit_server_timing_element(h2o_req_t *req, h2o_iovec_t *dst, const char *name,
+                                       int (*compute_func)(h2o_req_t *, int64_t *), size_t max_len)
+{
+    int64_t usec;
+    if (compute_func(req, &usec) == 0)
+        return;
+    if (dst->len == 0) {
+        if (max_len != SIZE_MAX)
+            dst->base = h2o_mem_alloc_pool(&req->pool, *dst->base, max_len);
+    } else {
+        dst->base[dst->len++] = ',';
+        dst->base[dst->len++] = ' ';
+    }
+    size_t name_len = strlen(name);
+    memcpy(dst->base + dst->len, name, name_len);
+    dst->len += name_len;
+    dst->base[dst->len++] = ';';
+    dst->base[dst->len++] = ' ';
+    dst->len += stringify_duration(dst->base + dst->len, usec);
+}
+
+void h2o_add_server_timing_header(h2o_req_t *req)
+{
+    /* caller needs to make sure that trailers can be used */
+    if (0x101 <= req->version && req->version < 0x200)
+        assert(req->content_length == SIZE_MAX);
+
+    /* add trailer header */
+    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("trailer"), 0, NULL, H2O_STRLIT("server-timing"));
+
+    /* emit timings */
+    h2o_iovec_t dst = {NULL};
+
+#define LONGEST_STR                                                                                                                \
+    ELEMENT_LONGEST_STR(connect)                                                                                                   \
+    DELIMITER ELEMENT_LONGEST_STR(header) DELIMITER ELEMENT_LONGEST_STR(body) DELIMITER ELEMENT_LONGEST_STR(request_total)         \
+        DELIMITER ELEMENT_LONGEST_STR(process) DELIMITER ELEMENT_LONGEST_STR(response)
+    size_t max_len = sizeof(LONGEST_STR);
+
+    emit_server_timing_element(req, &dst, "connect", h2o_time_compute_connect_time, max_len);
+    emit_server_timing_element(req, &dst, "request-header", h2o_time_compute_header_time, max_len);
+    emit_server_timing_element(req, &dst, "request-body", h2o_time_compute_body_time, max_len);
+    emit_server_timing_element(req, &dst, "request-total", h2o_time_compute_request_total_time, max_len);
+    emit_server_timing_element(req, &dst, "process", h2o_time_compute_process_time, max_len);
+
+    if (dst.len != 0)
+        h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("server-timing"), 0, NULL, dst.base, dst.len);
+
+#undef LONGEST_STR
+}
+
+h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, size_t prefix_len, const char *suffix,
+                                            size_t suffix_len)
+{
+    h2o_iovec_t value;
+
+    value.base =
+        h2o_mem_alloc_pool(&req->pool, *value.base,
+                           prefix_len + suffix_len + sizeof(ELEMENT_LONGEST_STR(response) DELIMITER ELEMENT_LONGEST_STR(total)));
+    value.len = 0;
+
+    if (prefix_len != 0) {
+        memcpy(value.base + value.len, prefix, prefix_len);
+        value.len += prefix_len;
+    }
+
+    h2o_iovec_t dst = h2o_iovec_init(value.base + value.len, 0);
+    emit_server_timing_element(req, &dst, "response", h2o_time_compute_response_time, SIZE_MAX);
+    emit_server_timing_element(req, &dst, "total", h2o_time_compute_total_time, SIZE_MAX);
+    if (dst.len == 0)
+        return h2o_iovec_init(NULL, 0);
+    value.len += dst.len;
+
+    if (suffix_len != 0) {
+        memcpy(value.base + value.len, suffix, suffix_len);
+        value.len += suffix_len;
+    }
+
+    return value;
+}
+
+#undef ELEMENT_LONGEST_STR
+#undef DELIMITER
 
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
 #define ALPN_ENTRY(s)                                                                                                              \
