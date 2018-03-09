@@ -423,8 +423,7 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
 
     assert(!mrb_nil_p(subreq->error_stream));
 
-    h2o_iovec_t list[] = {prefix, msg};
-    h2o_iovec_t concat = h2o_concat_list(&subreq->super.pool, list, 2);
+    h2o_iovec_t concat = h2o_concat(&subreq->super.pool, prefix, msg);
     mrb_value msgstr = h2o_mruby_new_str(mrb, concat.base, concat.len);
     mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
     if (mrb->exc != NULL) {
