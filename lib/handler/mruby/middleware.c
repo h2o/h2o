@@ -653,12 +653,12 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     if (super->version == -1)
         super->version = 0x101;
 
-    if (!(mrb_nil_p(server_addr) || mrb_nil_p(server_port))) {
+    if (!mrb_nil_p(server_addr) && !mrb_nil_p(server_port)) {
         subreq->conn.server.host = h2o_strdup(&super->pool, RSTRING_PTR(server_addr), RSTRING_LEN(server_addr));
         subreq->conn.server.port = h2o_strdup(&super->pool, RSTRING_PTR(server_port), RSTRING_LEN(server_port));
     }
 
-    if (!(mrb_nil_p(remote_addr) || mrb_nil_p(remote_port))) {
+    if (!mrb_nil_p(remote_addr) && !mrb_nil_p(remote_port)) {
         subreq->conn.remote.host = h2o_strdup(&super->pool, RSTRING_PTR(remote_addr), RSTRING_LEN(remote_addr));
         subreq->conn.remote.port = h2o_strdup(&super->pool, RSTRING_PTR(remote_port), RSTRING_LEN(remote_port));
     }
