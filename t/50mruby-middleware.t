@@ -768,4 +768,47 @@ EOT
     });
 };
 
+subtest 'invalid env' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /modify:
+        - mruby.handler: |
+            proc {|env|
+              env.merge!(env['QUERY_STRING'].split('&').map {|p| p.split('=') }.to_h)
+              H2O.next.call(env)
+            }
+        - file.dir: @{[DOC_ROOT]}
+      /delete:
+        - mruby.handler: |
+            proc {|env|
+              env.delete(env['QUERY_STRING'])
+              H2O.next.call(env)
+            }
+        - file.dir: @{[DOC_ROOT]}
+EOT
+    map {
+        my $path = $_;
+        subtest $path => sub {
+            my ($status) = get('http', $server->{port}, 'curl', $path);
+            is $status, 500;
+        };
+    } qw(
+        /delete?REQUEST_METHOD
+        /delete?rack.url_scheme
+        /delete?SCRIPT_NAME
+        /delete?PATH_INFO
+        /delete?QUERY_STRING
+        /modify?CONTENT_LENGTH=foo
+        /modify?h2o.remaining_delegations=foo
+        /modify?h2o.remaining_reprocesses=foo
+        /modify?REQUEST_METHOD=
+        /modify?rack.url_scheme=
+        /modify?SCRIPT_NAME=foo
+        /modify?PATH_INFO=foo
+        /modify?SCRIPT_NAME=/bar
+    );
+};
+
 done_testing();
