@@ -167,44 +167,47 @@ sub spawn_server {
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
-    my @opts;
 
-    # decide the port numbers
-    my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
-
-    # setup the configuration file
-    my ($conffh, $conffn) = tempfile(UNLINK => 1);
-    $conf = $conf->($port, $tls_port)
-        if ref $conf eq 'CODE';
-    if (ref $conf eq 'HASH') {
-        @opts = @{$conf->{opts}}
-            if $conf->{opts};
-        $conf = $conf->{conf};
+    if (ref $conf ne 'HASH') {
+        $conf = +{ conf => $conf };
     }
-    $conf = <<"EOT";
-$conf
+    $conf = +{ %$conf }; # take shallow copy
+
+    $conf->{ports} ||= [ empty_ports(2, { host => "0.0.0.0" }) ];
+    for my $key (qw/conf raw/) {
+        $conf->{$key} = $conf->{$key}->(@{$conf->{ports}}) if ref $conf->{$key} eq 'CODE';
+    }
+    unless (defined $conf->{raw}) {
+        $conf->{raw} = $conf->{conf};
+        $conf->{raw} = join("\n", $conf->{raw}, <<"EOT");
 listen:
   host: 0.0.0.0
-  port: $port
+  port: $conf->{ports}->[0]
+EOT
+        $conf->{raw} = join("\n", $conf->{raw}, <<"EOT") if $conf->{ports}->[1];
 listen:
   host: 0.0.0.0
-  port: $tls_port
+  port: $conf->{ports}->[1]
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 EOT
-    print $conffh $conf;
+    }
+
+    my ($conffh, $conffn) = tempfile(UNLINK => 1);
+    print $conffh $conf->{raw};
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn, @opts ],
+        argv     => [ bindir() . "/h2o", "-c", $conffn, @{$conf->{opts} || []} ],
         is_ready => sub {
-            check_port($port) && check_port($tls_port);
+            check_port($_) or return for @{ $conf->{ports} };
+            1;
         },
     );
     my $ret = {
-        port     => $port,
-        tls_port => $tls_port,
+        port     => $conf->{ports}->[0],
+        tls_port => $conf->{ports}->[1],
         guard    => $guard,
         pid      => $pid,
         conf_file => $conffn,
