@@ -219,7 +219,7 @@ void h2o_write_error_log(h2o_iovec_t prefix, h2o_iovec_t msg)
 {
     /* use writev(2) to emit error atomically */
     struct iovec vecs[] = {{prefix.base, prefix.len}, {msg.base, msg.len}, {"\n", 1}};
-    H2O_BUILD_ASSERT(sizeof(vecs) / sizeof(vecs[0]) < IOV_MAX);
+    H2O_BUILD_ASSERT(sizeof(vecs) / sizeof(vecs[0]) <= IOV_MAX);
     writev(2, vecs, sizeof(vecs) / sizeof(vecs[0]));
 }
 
