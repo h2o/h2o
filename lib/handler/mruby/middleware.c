@@ -615,7 +615,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 #define STR_TO_IOVEC(val) h2o_iovec_init(RSTRING_PTR(val), RSTRING_LEN(val))
 
     /* construct url and parse */
-    h2o_iovec_t *url_comps = alloca(sizeof(*url_comps) * 9);
+    h2o_iovec_t url_comps[9];
     int num_comps = 0;
     url_comps[num_comps++] = STR_TO_IOVEC(scheme);
     url_comps[num_comps++] = h2o_iovec_init(H2O_STRLIT("://"));
