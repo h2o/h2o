@@ -558,10 +558,14 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             RETRIEVE_ENV(scheme, 1);
         } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
             value = h2o_mruby_to_str(mrb, value);
+            if (mrb->exc != NULL)
+                goto Failed;
             h2o_mruby_split_header_pair(ctx->shared, key, value, handle_header_env_key, &subreq->super);
         } else if (keystr_len != 0){
             /* set to req->env */
             value = h2o_mruby_to_str(mrb, value);
+            if (mrb->exc != NULL)
+                goto Failed;
             h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
             super->env.entries[super->env.size] = h2o_strdup(&super->pool, keystr, keystr_len);
             super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(value), RSTRING_LEN(value));
