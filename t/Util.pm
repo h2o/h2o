@@ -13,7 +13,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -167,52 +167,59 @@ sub spawn_server {
 # returns a hash containing `port`, `tls_port`, `guard`
 sub spawn_h2o {
     my ($conf) = @_;
+    my @opts;
 
-    if (ref $conf ne 'HASH') {
-        $conf = +{ conf => $conf };
-    }
-    $conf = +{ %$conf }; # take shallow copy
+    # decide the port numbers
+    my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
 
-    $conf->{ports} ||= [ empty_ports(2, { host => "0.0.0.0" }) ];
-    for my $key (qw/conf raw/) {
-        $conf->{$key} = $conf->{$key}->(@{$conf->{ports}}) if ref $conf->{$key} eq 'CODE';
+    # setup the configuration file
+    $conf = $conf->($port, $tls_port)
+        if ref $conf eq 'CODE';
+    if (ref $conf eq 'HASH') {
+        @opts = @{$conf->{opts}}
+            if $conf->{opts};
+        $conf = $conf->{conf};
     }
-    unless (defined $conf->{raw}) {
-        $conf->{raw} = $conf->{conf};
-        $conf->{raw} = join("\n", $conf->{raw}, <<"EOT");
+    $conf = <<"EOT";
+$conf
 listen:
   host: 0.0.0.0
-  port: $conf->{ports}->[0]
-EOT
-        $conf->{raw} = join("\n", $conf->{raw}, <<"EOT") if $conf->{ports}->[1];
+  port: $port
 listen:
   host: 0.0.0.0
-  port: $conf->{ports}->[1]
+  port: $tls_port
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 EOT
-    }
+
+    my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
+    return {
+        %$ret,
+        port => $port,
+        tls_port => $tls_port,
+    };
+}
+
+sub spawn_h2o_raw {
+    my ($conf, $check_ports, $opts) = @_;
 
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
-    print $conffh $conf->{raw};
+    print $conffh $conf;
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn, @{$conf->{opts} || []} ],
+        argv     => [ bindir() . "/h2o", "-c", $conffn, @{$opts || []} ],
         is_ready => sub {
-            check_port($_) or return for @{ $conf->{ports} };
+            check_port($_) or return for @{ $check_ports || [] };
             1;
         },
     );
-    my $ret = {
-        port     => $conf->{ports}->[0],
-        tls_port => $conf->{ports}->[1],
+    return {
         guard    => $guard,
         pid      => $pid,
         conf_file => $conffn,
     };
-    return $ret;
 }
 
 sub empty_ports {

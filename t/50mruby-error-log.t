@@ -54,11 +54,9 @@ sub read_logs {
 
 subtest 'middleware' => sub {
     subtest 'basic' => sub {
+        my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $empty_port = empty_port();
-        my $server = spawn_h2o(+{
-            raw => sub {
-                my ($port, $tls_port) = @_;
-                <<"EOT";
+        my $server = spawn_h2o_raw(<<"EOT", [$port, $tls_port]);
 hosts:
   "127.0.0.1:$port":
     paths: &paths
@@ -86,8 +84,7 @@ listen:
     certificate-file: examples/h2o/server.crt
     ocsp-update-interval: 0
 EOT
-            },
-        });
+        $server = +{ %$server, port => $port, tls_port => $tls_port };
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             truncate $access_log_file, 0;
@@ -107,10 +104,8 @@ EOT
 
     subtest 'wrap error stream' => sub {
         my $empty_port = empty_port();
-        my $server = spawn_h2o(+{
-            raw => sub {
-            my ($port, $tls_port) = @_;
-            << "EOT";
+        my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+        my $server = spawn_h2o_raw(<< "EOT", [$port, $tls_port]);
 hosts:
   "127.0.0.1:$port":
     paths: &paths
@@ -153,8 +148,7 @@ listen:
     certificate-file: examples/h2o/server.crt
     ocsp-update-interval: 0
 EOT
-            },
-        });
+        $server = +{ %$server, port => $port, tls_port => $tls_port };
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             truncate $access_log_file, 0;
@@ -204,10 +198,8 @@ EOT
                 kill 'TERM', $upstream_pid;
                 while (waitpid($upstream_pid, 0) != $upstream_pid) {}
             });
-            my $server = spawn_h2o(+{
-                raw => sub {
-                    my ($port, $tls_port) = @_;
-                    << "EOT";
+            my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+            my $server = spawn_h2o_raw(<< "EOT", [$port, $tls_port]);
 hosts:
   "127.0.0.1:$port":
     paths: &paths
@@ -237,8 +229,7 @@ listen:
     certificate-file: examples/h2o/server.crt
     ocsp-update-interval: 0
 EOT
-                },
-            });
+            $server = +{ %$server, port => $port, tls_port => $tls_port };
             ($server, $upstream);
         };
 
