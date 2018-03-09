@@ -490,14 +490,21 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     mrb_value remaining_reprocesses = mrb_nil_value();
     mrb_value rack_errors = mrb_nil_value();
 
-#define RETRIEVE_ENV(val, stringify) do { \
+#define RETRIEVE_ENV(val, stringify, numify) do { \
     val = value; \
-    if (!mrb_nil_p(val) && stringify) { \
-        val = h2o_mruby_to_str(mrb, val); \
+    if (!mrb_nil_p(val)) { \
+        if (stringify) \
+            val = h2o_mruby_to_str(mrb, val); \
+        if (numify) \
+            val = h2o_mruby_to_int(mrb, val); \
         if (mrb->exc != NULL) \
             goto Failed; \
     } \
 } while (0)
+#define RETRIEVE_ENV_OBJ(val) RETRIEVE_ENV(val, 0, 0);
+#define RETRIEVE_ENV_STR(val) RETRIEVE_ENV(val, 1, 0);
+#define RETRIEVE_ENV_NUM(val) RETRIEVE_ENV(val, 0, 1);
+
 #define COND0(str, lit, pos) (sizeof(lit) - 1 <= (pos) || (str)[pos] == (lit)[pos])
 #define COND1(str, lit, pos) (COND0(str, lit, pos) && COND0(str, lit, pos + 1) && COND0(str, lit, pos + 2))
 #define COND2(str, lit, pos) (COND1(str, lit, pos) && COND1(str, lit, pos + 3) && COND1(str, lit, pos + 6))
@@ -518,62 +525,72 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         const mrb_int keystr_len = RSTRING_LEN(key);
 
         if (CHECK_KEY("CONTENT_LENGTH")) {
-            super->content_length = h2o_strtosize(RSTRING_PTR(value), RSTRING_LEN(value));
+            mrb_value content_length = mrb_nil_value();
+            RETRIEVE_ENV_NUM(content_length);
+            if (!mrb_nil_p(content_length))
+                super->content_length = mrb_fixnum(content_length);
         } else if (CHECK_KEY("HTTP_HOST")) {
-            RETRIEVE_ENV(http_host, 1);
+            RETRIEVE_ENV_STR(http_host);
         } else if (CHECK_KEY("PATH_INFO")) {
-            RETRIEVE_ENV(path_info, 1);
+            RETRIEVE_ENV_STR(path_info);
         } else if (CHECK_KEY("QUERY_STRING")) {
-            RETRIEVE_ENV(query_string, 1);
+            RETRIEVE_ENV_STR(query_string);
         } else if (CHECK_KEY("REMOTE_ADDR")) {
-            RETRIEVE_ENV(remote_addr, 1);
+            RETRIEVE_ENV_STR(remote_addr);
         } else if (CHECK_KEY("REMOTE_PORT")) {
-            RETRIEVE_ENV(remote_port, 1);
+            RETRIEVE_ENV_STR(remote_port);
         } else if (CHECK_KEY("REQUEST_METHOD")) {
-            RETRIEVE_ENV(method, 1);
+            RETRIEVE_ENV_STR(method);
         } else if (CHECK_KEY("SCRIPT_NAME")) {
-            RETRIEVE_ENV(script_name, 1);
+            RETRIEVE_ENV_STR(script_name);
         } else if (CHECK_KEY("SERVER_ADDR")) {
-            RETRIEVE_ENV(server_addr, 1);
+            RETRIEVE_ENV_STR(server_addr);
         } else if (CHECK_KEY("SERVER_NAME")) {
-            RETRIEVE_ENV(server_name, 1);
+            RETRIEVE_ENV_STR(server_name);
         } else if (CHECK_KEY("SERVER_PORT")) {
-            RETRIEVE_ENV(server_port, 1);
+            RETRIEVE_ENV_STR(server_port);
         } else if (CHECK_KEY("SERVER_PROTOCOL")) {
-            RETRIEVE_ENV(server_protocol, 1);
+            RETRIEVE_ENV_STR(server_protocol);
         } else if (CHECK_KEY("SERVER_SOFTWARE")) {
         } else if (CHECK_KEY("h2o.remaining_delegations")) {
-            RETRIEVE_ENV(remaining_delegations, 0);
+            RETRIEVE_ENV_NUM(remaining_delegations);
         } else if (CHECK_KEY("h2o.remaining_reprocesses")) {
-            RETRIEVE_ENV(remaining_reprocesses, 0);
+            RETRIEVE_ENV_NUM(remaining_reprocesses);
         } else if (CHECK_KEY("rack.errors")) {
-            RETRIEVE_ENV(rack_errors, 0);
+            RETRIEVE_ENV_OBJ(rack_errors);
         } else if (CHECK_KEY("rack.hijack?")) {
         } else if (CHECK_KEY("rack.input")) {
-            RETRIEVE_ENV(rack_input, 0);
+            RETRIEVE_ENV_OBJ(rack_input);
         } else if (CHECK_KEY("rack.multiprocess")) {
         } else if (CHECK_KEY("rack.multithread")) {
         } else if (CHECK_KEY("rack.run_once")) {
         } else if (CHECK_KEY("rack.url_scheme")) {
-            RETRIEVE_ENV(scheme, 1);
+            RETRIEVE_ENV_STR(scheme);
         } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
-            value = h2o_mruby_to_str(mrb, value);
-            if (mrb->exc != NULL)
-                goto Failed;
-            h2o_mruby_split_header_pair(ctx->shared, key, value, handle_header_env_key, &subreq->super);
+            mrb_value http_header = mrb_nil_value();
+            RETRIEVE_ENV_STR(http_header);
+            if (!mrb_nil_p(http_header))
+                h2o_mruby_split_header_pair(ctx->shared, key, http_header, handle_header_env_key, &subreq->super);
         } else if (keystr_len != 0){
             /* set to req->env */
-            value = h2o_mruby_to_str(mrb, value);
-            if (mrb->exc != NULL)
-                goto Failed;
-            h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
-            super->env.entries[super->env.size] = h2o_strdup(&super->pool, keystr, keystr_len);
-            super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(value), RSTRING_LEN(value));
-            super->env.size += 2;
+            mrb_value reqenv = mrb_nil_value();
+            RETRIEVE_ENV_STR(reqenv);
+            if (!mrb_nil_p(reqenv)) {
+                h2o_vector_reserve(&super->pool, &super->env, super->env.size + 2);
+                super->env.entries[super->env.size] = h2o_strdup(&super->pool, keystr, keystr_len);
+                super->env.entries[super->env.size + 1] = h2o_strdup(&super->pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
+                super->env.size += 2;
+            }
         }
     }
 #undef RETRIEVE_ENV
-#undef CALC_HASH
+#undef RETRIEVE_ENV_OBJ
+#undef RETRIEVE_ENV_STR
+#undef RETRIEVE_ENV_NUM
+#undef COND0
+#undef COND1
+#undef COND2
+#undef COND
 #undef CHECK_KEY
 
     /* do validations */
@@ -668,11 +685,11 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     }
 
     if (! mrb_nil_p(remaining_delegations)) {
-        mrb_int v = mrb_int(mrb, remaining_delegations);
+        mrb_int v = mrb_fixnum(remaining_delegations);
         super->remaining_delegations = (unsigned)(v < 0 ? 0 : v);
     }
     if (! mrb_nil_p(remaining_reprocesses)) {
-        mrb_int v = mrb_int(mrb, remaining_reprocesses);
+        mrb_int v = mrb_fixnum(remaining_reprocesses);
         super->remaining_reprocesses = (unsigned)(v < 0 ? 0 : v);
     }
 

@@ -127,6 +127,12 @@ mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v)
     return v;
 }
 
+mrb_value h2o_mruby_to_int(mrb_state *mrb, mrb_value v)
+{
+    H2O_MRUBY_EXEC_GUARD({ v = mrb_Integer(mrb, v); });
+    return v;
+}
+
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr)
 {
     return mrb_funcall(mrb, mrb_top_self(mrb), "eval", 1, mrb_str_new_cstr(mrb, expr));
