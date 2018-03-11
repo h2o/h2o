@@ -206,7 +206,7 @@ mrb_input_stream_read(mrb_state *mrb, mrb_value self)
   start = stream->base + pos;
 
   if (pos >= stream->len) {
-    return mrb_nil_value();
+    return n == 0 ? mrb_str_new_lit(mrb, "") : mrb_nil_value();
   }
   if (n == 0) {
     stream->pos = stream->len;

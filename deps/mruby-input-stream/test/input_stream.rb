@@ -11,6 +11,7 @@ end
 assert('InputStream#read') do
   vec = InputStream.new("foo")
   assert_equal "foo", vec.read
+  assert_equal "", vec.read
 end
 
 assert('InputStream#read(2)') do
