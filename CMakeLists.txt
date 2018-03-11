@@ -739,5 +739,7 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git
     ADD_DEPENDENCIES(libh2o-evloop gitrev)
     ADD_DEPENDENCIES(h2o gitrev)
     ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
-    ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
+    IF (LIBUV_FOUND)
+        ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
+    ENDIF (LIBUV_FOUND)
 ENDIF ()
