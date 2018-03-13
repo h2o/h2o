@@ -124,3 +124,16 @@ assert('pretty cat 🐱') do
 EOS
   assert_equal want[0..-2], JSON::pretty_generate({"bar"=> [1,2,[{"baz" => true}, 3]]})
 end
+assert('dump') do
+  class DummyWriter
+    def initialize();@s = '';end
+    def write(s);@s += s;end
+    def to_s();@s;end
+  end
+  w = DummyWriter.new
+  JSON.dump(123, w)
+  assert_equal "123", w.to_s
+end
+assert('ParserError') do
+  assert_raise(JSON::ParserError) { JSON::parse('{') }
+end
