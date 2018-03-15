@@ -1,2 +1,0 @@
-script:
-  - "ruby run_test.rb all test"
