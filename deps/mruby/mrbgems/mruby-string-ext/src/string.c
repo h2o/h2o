@@ -23,7 +23,7 @@ static mrb_value
 mrb_str_setbyte(mrb_state *mrb, mrb_value str)
 {
   mrb_int pos, byte;
-  long len;
+  mrb_int len;
 
   mrb_get_args(mrb, "ii", &pos, &byte);
 
@@ -35,7 +35,7 @@ mrb_str_setbyte(mrb_state *mrb, mrb_value str)
 
   mrb_str_modify(mrb, mrb_str_ptr(str));
   byte &= 0xff;
-  RSTRING_PTR(str)[pos] = byte;
+  RSTRING_PTR(str)[pos] = (unsigned char)byte;
   return mrb_fixnum_value((unsigned char)byte);
 }
 
@@ -44,12 +44,13 @@ mrb_str_byteslice(mrb_state *mrb, mrb_value str)
 {
   mrb_value a1;
   mrb_int len;
-  int argc;
 
-  argc = mrb_get_args(mrb, "o|i", &a1, &len);
-  if (argc == 2) {
-    return mrb_str_substr(mrb, str, mrb_fixnum(a1), len);
+  if (mrb_get_argc(mrb) == 2) {
+    mrb_int pos;
+    mrb_get_args(mrb, "ii", &pos, &len);
+    return mrb_str_substr(mrb, str, pos, len);
   }
+  mrb_get_args(mrb, "o|i", &a1, &len);
   switch (mrb_type(a1)) {
   case MRB_TT_RANGE:
     {
@@ -67,9 +68,11 @@ mrb_str_byteslice(mrb_state *mrb, mrb_value str)
       }
       return mrb_nil_value();
     }
+#ifndef MRB_WITHOUT_FLOAT
   case MRB_TT_FLOAT:
     a1 = mrb_fixnum_value((mrb_int)mrb_float(a1));
     /* fall through */
+#endif
   case MRB_TT_FIXNUM:
     return mrb_str_substr(mrb, str, mrb_fixnum(a1), 1);
   default:
@@ -650,6 +653,118 @@ mrb_str_upto(mrb_state *mrb, mrb_value beg)
   return beg;
 }
 
+/*
+ *  call-seq:
+ *     str.delete_prefix!(prefix) -> self or nil
+ *
+ *  Deletes leading <code>prefix</code> from <i>str</i>, returning
+ *  <code>nil</code> if no change was made.
+ *
+ *     "hello".delete_prefix!("hel") #=> "lo"
+ *     "hello".delete_prefix!("llo") #=> nil
+ */
+static mrb_value
+mrb_str_del_prefix_bang(mrb_state *mrb, mrb_value self)
+{
+  mrb_int plen, slen;
+  char *ptr, *s;
+  struct RString *str = RSTRING(self);
+
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTR_LEN(str);
+  if (plen > slen) return mrb_nil_value();
+  s = RSTR_PTR(str);
+  if (memcmp(s, ptr, plen) != 0) return mrb_nil_value();
+  if (!MRB_FROZEN_P(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
+    str->as.heap.ptr += plen;
+  }
+  else {
+    mrb_str_modify(mrb, str);
+    s = RSTR_PTR(str);
+    memmove(s, s+plen, slen-plen);
+  }
+  RSTR_SET_LEN(str, slen-plen);
+  return self;
+}
+
+/*
+ *  call-seq:
+ *     str.delete_prefix(prefix) -> new_str
+ *
+ *  Returns a copy of <i>str</i> with leading <code>prefix</code> deleted.
+ *
+ *     "hello".delete_prefix("hel") #=> "lo"
+ *     "hello".delete_prefix("llo") #=> "hello"
+ */
+static mrb_value
+mrb_str_del_prefix(mrb_state *mrb, mrb_value self)
+{
+  mrb_int plen, slen;
+  char *ptr;
+
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTRING_LEN(self);
+  if (plen > slen) return mrb_str_dup(mrb, self);
+  if (memcmp(RSTRING_PTR(self), ptr, plen) != 0)
+    return mrb_str_dup(mrb, self);
+  return mrb_str_substr(mrb, self, plen, slen-plen);
+}
+
+/*
+ *  call-seq:
+ *     str.delete_suffix!(suffix) -> self or nil
+ *
+ *  Deletes trailing <code>suffix</code> from <i>str</i>, returning
+ *  <code>nil</code> if no change was made.
+ *
+ *     "hello".delete_suffix!("llo") #=> "he"
+ *     "hello".delete_suffix!("hel") #=> nil
+ */
+static mrb_value
+mrb_str_del_suffix_bang(mrb_state *mrb, mrb_value self)
+{
+  mrb_int plen, slen;
+  char *ptr, *s;
+  struct RString *str = RSTRING(self);
+
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTR_LEN(str);
+  if (plen > slen) return mrb_nil_value();
+  s = RSTR_PTR(str);
+  if (memcmp(s+slen-plen, ptr, plen) != 0) return mrb_nil_value();
+  if (!MRB_FROZEN_P(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
+    /* no need to modify string */
+  }
+  else {
+    mrb_str_modify(mrb, str);
+  }
+  RSTR_SET_LEN(str, slen-plen);
+  return self;
+}
+
+/*
+ *  call-seq:
+ *     str.delete_suffix(suffix) -> new_str
+ *
+ *  Returns a copy of <i>str</i> with leading <code>suffix</code> deleted.
+ *
+ *     "hello".delete_suffix("hel") #=> "lo"
+ *     "hello".delete_suffix("llo") #=> "hello"
+ */
+static mrb_value
+mrb_str_del_suffix(mrb_state *mrb, mrb_value self)
+{
+  mrb_int plen, slen;
+  char *ptr;
+
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTRING_LEN(self);
+  if (plen > slen) return mrb_str_dup(mrb, self);
+  if (memcmp(RSTRING_PTR(self)+slen-plen, ptr, plen) != 0)
+    return mrb_str_dup(mrb, self);
+  return mrb_str_substr(mrb, self, 0, slen-plen);
+}
+
 void
 mrb_mruby_string_ext_gem_init(mrb_state* mrb)
 {
@@ -673,8 +788,12 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "succ!",           mrb_str_succ_bang,       MRB_ARGS_NONE());
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next"), mrb_intern_lit(mrb, "succ"));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next!"), mrb_intern_lit(mrb, "succ!"));
-  mrb_define_method(mrb, s, "ord", mrb_str_ord, MRB_ARGS_NONE());
-  mrb_define_method(mrb, s, "upto", mrb_str_upto, MRB_ARGS_ANY());
+  mrb_define_method(mrb, s, "ord",             mrb_str_ord,             MRB_ARGS_NONE());
+  mrb_define_method(mrb, s, "upto",            mrb_str_upto,            MRB_ARGS_ANY());
+  mrb_define_method(mrb, s, "delete_prefix!",  mrb_str_del_prefix_bang, MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "delete_prefix",   mrb_str_del_prefix,      MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "delete_suffix!",  mrb_str_del_suffix_bang, MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "delete_suffix",   mrb_str_del_suffix,      MRB_ARGS_REQ(1));
 
   mrb_define_method(mrb, mrb->fixnum_class, "chr", mrb_fixnum_chr, MRB_ARGS_NONE());
 }

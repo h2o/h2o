@@ -123,7 +123,7 @@ fiber_init(mrb_state *mrb, mrb_value self)
 
   /* adjust return callinfo */
   ci = c->ci;
-  ci->target_class = p->target_class;
+  ci->target_class = MRB_PROC_TARGET_CLASS(p);
   ci->proc = p;
   mrb_field_write_barrier(mrb, (struct RBasic*)mrb_obj_ptr(self), (struct RBasic*)p);
   ci->pc = p->body.irep->iseq;
@@ -212,8 +212,8 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
     while (b<e) {
       *b++ = *a++;
     }
-    c->cibase->argc = len;
-    value = c->stack[0] = c->ci->proc->env->stack[0];
+    c->cibase->argc = (int)len;
+    value = c->stack[0] = MRB_PROC_ENV(c->ci->proc)->stack[0];
   }
   else {
     value = fiber_result(mrb, a, len);

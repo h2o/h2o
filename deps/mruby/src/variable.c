@@ -261,7 +261,7 @@ mrb_obj_iv_set(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v)
   iv_tbl *t = obj->iv;
 
   if (MRB_FROZEN_P(obj)) {
-    mrb_raisef(mrb, E_RUNTIME_ERROR, "can't modify frozen %S", mrb_obj_value(obj));
+    mrb_raisef(mrb, E_FROZEN_ERROR, "can't modify frozen %S", mrb_obj_value(obj));
   }
   if (!t) {
     t = obj->iv = iv_new(mrb);
@@ -632,19 +632,18 @@ mrb_cv_defined(mrb_state *mrb, mrb_value mod, mrb_sym sym)
 mrb_value
 mrb_vm_cv_get(mrb_state *mrb, mrb_sym sym)
 {
-  struct RClass *c = mrb->c->ci->proc->target_class;
+  struct RClass *c;
 
-  if (!c) c = mrb->c->ci->target_class;
-
+  c = MRB_PROC_TARGET_CLASS(mrb->c->ci->proc);
   return mrb_mod_cv_get(mrb, c, sym);
 }
 
 void
 mrb_vm_cv_set(mrb_state *mrb, mrb_sym sym, mrb_value v)
 {
-  struct RClass *c = mrb->c->ci->proc->target_class;
+  struct RClass *c;
 
-  if (!c) c = mrb->c->ci->target_class;
+  c = MRB_PROC_TARGET_CLASS(mrb->c->ci->proc);
   mrb_mod_cv_set(mrb, c, sym, v);
 }
 
@@ -663,25 +662,24 @@ mod_const_check(mrb_state *mrb, mrb_value mod)
 }
 
 static mrb_value
-const_get(mrb_state *mrb, struct RClass *base, mrb_sym sym)
+const_get(mrb_state *mrb, struct RClass *base, mrb_sym sym, mrb_bool top)
 {
   struct RClass *c = base;
   mrb_value v;
-  iv_tbl *t;
   mrb_bool retry = FALSE;
   mrb_value name;
+  struct RClass *oclass = mrb->object_class;
 
 L_RETRY:
   while (c) {
-    if (c->iv) {
-      t = c->iv;
-      if (iv_get(mrb, t, sym, &v))
+    if (c->iv && (top || c != oclass || base == oclass)) {
+      if (iv_get(mrb, c->iv, sym, &v))
         return v;
     }
     c = c->super;
   }
-  if (!retry && base && base->tt == MRB_TT_MODULE) {
-    c = mrb->object_class;
+  if (!retry && base->tt == MRB_TT_MODULE) {
+    c = oclass;
     retry = TRUE;
     goto L_RETRY;
   }
@@ -693,20 +691,18 @@ MRB_API mrb_value
 mrb_const_get(mrb_state *mrb, mrb_value mod, mrb_sym sym)
 {
   mod_const_check(mrb, mod);
-  return const_get(mrb, mrb_class_ptr(mod), sym);
+  return const_get(mrb, mrb_class_ptr(mod), sym, FALSE);
 }
 
 mrb_value
 mrb_vm_const_get(mrb_state *mrb, mrb_sym sym)
 {
-  struct RClass *c = mrb->c->ci->proc->target_class;
+  struct RClass *c;
   struct RClass *c2;
   mrb_value v;
-  mrb_irep *irep;
+  struct RProc *proc;
 
-  if (!c) c = mrb->c->ci->target_class;
-  mrb_assert(c != NULL);
-
+  c = MRB_PROC_TARGET_CLASS(mrb->c->ci->proc);
   if (c->iv && iv_get(mrb, c->iv, sym, &v)) {
     return v;
   }
@@ -719,17 +715,15 @@ mrb_vm_const_get(mrb_state *mrb, mrb_sym sym)
   }
   if (c2->tt == MRB_TT_CLASS || c2->tt == MRB_TT_MODULE) c = c2;
   mrb_assert(!MRB_PROC_CFUNC_P(mrb->c->ci->proc));
-  irep = mrb->c->ci->proc->body.irep;
-  while (irep) {
-    if (irep->target_class) {
-      c2 = irep->target_class;
-      if (c2->iv && iv_get(mrb, c2->iv, sym, &v)) {
-        return v;
-      }
+  proc = mrb->c->ci->proc;
+  while (proc) {
+    c2 = MRB_PROC_TARGET_CLASS(proc);
+    if (c2 && c2->iv && iv_get(mrb, c2->iv, sym, &v)) { 
+      return v;
     }
-    irep = irep->outer;
+    proc = proc->upper;
   }
-  return const_get(mrb, c, sym);
+  return const_get(mrb, c, sym, TRUE);
 }
 
 MRB_API void
@@ -745,9 +739,9 @@ mrb_const_set(mrb_state *mrb, mrb_value mod, mrb_sym sym, mrb_value v)
 void
 mrb_vm_const_set(mrb_state *mrb, mrb_sym sym, mrb_value v)
 {
-  struct RClass *c = mrb->c->ci->proc->target_class;
+  struct RClass *c;
 
-  if (!c) c = mrb->c->ci->target_class;
+  c = MRB_PROC_TARGET_CLASS(mrb->c->ci->proc);
   mrb_obj_iv_set(mrb, (struct RObject*)c, sym, v);
 }
 
@@ -893,7 +887,7 @@ mrb_const_defined_0(mrb_state *mrb, mrb_value mod, mrb_sym id, mrb_bool exclude,
 {
   struct RClass *klass = mrb_class_ptr(mod);
   struct RClass *tmp;
-  mrb_bool mod_retry = 0;
+  mrb_bool mod_retry = FALSE;
 
   tmp = klass;
 retry:
@@ -905,7 +899,7 @@ retry:
     tmp = tmp->super;
   }
   if (!exclude && !mod_retry && (klass->tt == MRB_TT_MODULE)) {
-    mod_retry = 1;
+    mod_retry = TRUE;
     tmp = mrb->object_class;
     goto retry;
   }
@@ -954,6 +948,7 @@ find_class_sym(mrb_state *mrb, struct RClass *outer, struct RClass *c)
   struct csym_arg arg;
  
   if (!outer) return 0;
+  if (outer == c) return 0;
   arg.c = c;
   arg.sym = 0;
   iv_foreach(mrb, outer->iv, csym_i, &arg);

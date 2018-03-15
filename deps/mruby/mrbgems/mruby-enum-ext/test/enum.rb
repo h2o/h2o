@@ -100,6 +100,7 @@ end
 assert("Enumerable#none?") do
   assert_true %w(ant bear cat).none? { |word| word.length == 5 }
   assert_false %w(ant bear cat).none? { |word| word.length >= 4 }
+  assert_false [1, 3.14, 42].none?(Float)
   assert_true [].none?
   assert_true [nil, false].none?
   assert_false [nil, true].none?
@@ -109,8 +110,21 @@ assert("Enumerable#one?") do
   assert_true %w(ant bear cat).one? { |word| word.length == 4 }
   assert_false %w(ant bear cat).one? { |word| word.length > 4 }
   assert_false %w(ant bear cat).one? { |word| word.length < 4 }
+  assert_true [1, 3.14, 42].one?(Float)
   assert_false [nil, true, 99].one?
   assert_true [nil, true, false].one?
+  assert_true [ nil, true, 99 ].one?(Integer)
+  assert_false [].one?
+end
+
+assert("Enumerable#all? (enhancement)") do
+  assert_false [1, 2, 3.14].all?(Integer)
+  assert_true [1, 2, 3.14].all?(Numeric)
+end
+
+assert("Enumerable#any? (enhancement)") do
+  assert_false [1, 2, 3].all?(Float)
+  assert_true [nil, true, 99].any?(Integer)
 end
 
 assert("Enumerable#each_with_object") do

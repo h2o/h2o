@@ -32,3 +32,24 @@ assert 'Module#singleton_class?' do
   assert_false cls.singleton_class?
   assert_true scl.singleton_class?
 end
+
+assert 'Module#module_eval' do
+  mod = Module.new
+  mod.class_exec(1,2,3) do |a,b,c|
+    assert_equal([1,2,3], [a,b,c])
+    def hi
+      "hi"
+    end
+  end
+  cls = Class.new
+  cls.class_exec(42) do |x|
+    assert_equal(42, x)
+    include mod
+    def hello
+      "hello"
+    end
+  end
+  obj = cls.new
+  assert_equal("hi", obj.hi)
+  assert_equal("hello", obj.hello)
+end

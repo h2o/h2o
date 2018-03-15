@@ -451,20 +451,30 @@ module Enumerable
   ##
   #  call-seq:
   #     enum.none? [{ |obj| block }]   -> true or false
+  #     enum.none?(pattern)            -> true or false
   #
   #  Passes each element of the collection to the given block. The method
   #  returns <code>true</code> if the block never returns <code>true</code>
   #  for all elements. If the block is not given, <code>none?</code> will return
   #  <code>true</code> only if none of the collection members is true.
   #
+  #  If a pattern is supplied instead, the method returns whether
+  #  <code>pattern === element</code> for none of the collection members.
+  #
   #     %w(ant bear cat).none? { |word| word.length == 5 } #=> true
   #     %w(ant bear cat).none? { |word| word.length >= 4 } #=> false
+  #     %w{ant bear cat}.none?(/d/)                        #=> true
+  #     [1, 3.14, 42].none?(Float)                         #=> false
   #     [].none?                                           #=> true
   #     [nil, false].none?                                 #=> true
   #     [nil, true].none?                                  #=> false
 
-  def none?(&block)
-    if block
+  def none?(pat=NONE, &block)
+    if pat != NONE
+      self.each do |*val|
+        return false if pat === val.__svalue
+      end
+    elsif block
       self.each do |*val|
         return false if block.call(*val)
       end
@@ -479,6 +489,7 @@ module Enumerable
   ##
   #  call-seq:
   #    enum.one? [{ |obj| block }]   -> true or false
+  #    enum.one?(pattern)            -> true or false
   #
   # Passes each element of the collection to the given block. The method
   # returns <code>true</code> if the block returns <code>true</code>
@@ -486,16 +497,26 @@ module Enumerable
   # <code>true</code> only if exactly one of the collection members is
   # true.
   #
+  # If a pattern is supplied instead, the method returns whether
+  # <code>pattern === element</code> for exactly one collection member.
+  #
   #    %w(ant bear cat).one? { |word| word.length == 4 }  #=> true
   #    %w(ant bear cat).one? { |word| word.length > 4 }   #=> false
   #    %w(ant bear cat).one? { |word| word.length < 4 }   #=> false
+  #    %w{ant bear cat}.one?(/t/)                         #=> false
   #    [nil, true, 99].one?                               #=> false
   #    [nil, true, false].one?                            #=> true
-  #
+  #    [ nil, true, 99 ].one?(Integer)                    #=> true
+  #    [].one?                                            #=> false
 
-  def one?(&block)
+  def one?(pat=NONE, &block)
     count = 0
-    if block
+    if pat!=NONE
+      self.each do |*val|
+        count += 1 if pat === val.__svalue
+        return false if count > 1
+      end
+    elsif block
       self.each do |*val|
         count += 1 if block.call(*val)
         return false if count > 1
@@ -508,6 +529,71 @@ module Enumerable
     end
 
     count == 1 ? true : false
+  end
+
+  # ISO 15.3.2.2.1
+  #  call-seq:
+  #     enum.all? [{ |obj| block } ]   -> true or false
+  #     enum.all?(pattern)             -> true or false
+  #
+  #  Passes each element of the collection to the given block. The method
+  #  returns <code>true</code> if the block never returns
+  #  <code>false</code> or <code>nil</code>. If the block is not given,
+  #  Ruby adds an implicit block of <code>{ |obj| obj }</code> which will
+  #  cause #all? to return +true+ when none of the collection members are
+  #  +false+ or +nil+.
+  #
+  #  If a pattern is supplied instead, the method returns whether
+  #  <code>pattern === element</code> for every collection member.
+  #
+  #     %w[ant bear cat].all? { |word| word.length >= 3 } #=> true
+  #     %w[ant bear cat].all? { |word| word.length >= 4 } #=> false
+  #     %w[ant bear cat].all?(/t/)                        #=> false
+  #     [1, 2i, 3.14].all?(Numeric)                       #=> true
+  #     [nil, true, 99].all?                              #=> false
+  #
+  def all?(pat=NONE, &block)
+    if pat != NONE
+      self.each{|*val| return false unless pat === val.__svalue}
+    elsif block
+      self.each{|*val| return false unless block.call(*val)}
+    else
+      self.each{|*val| return false unless val.__svalue}
+    end
+    true
+  end
+
+  # ISO 15.3.2.2.2
+  #  call-seq:
+  #     enum.any? [{ |obj| block }]   -> true or false
+  #     enum.any?(pattern)            -> true or false
+  #
+  #  Passes each element of the collection to the given block. The method
+  #  returns <code>true</code> if the block ever returns a value other
+  #  than <code>false</code> or <code>nil</code>. If the block is not
+  #  given, Ruby adds an implicit block of <code>{ |obj| obj }</code> that
+  #  will cause #any? to return +true+ if at least one of the collection
+  #  members is not +false+ or +nil+.
+  #
+  #  If a pattern is supplied instead, the method returns whether
+  #  <code>pattern === element</code> for any collection member.
+  #
+  #     %w[ant bear cat].any? { |word| word.length >= 3 } #=> true
+  #     %w[ant bear cat].any? { |word| word.length >= 4 } #=> true
+  #     %w[ant bear cat].any?(/d/)                        #=> false
+  #     [nil, true, 99].any?(Integer)                     #=> true
+  #     [nil, true, 99].any?                              #=> true
+  #     [].any?                                           #=> false
+  #
+  def any?(pat=NONE, &block)
+    if pat != NONE
+      self.each{|*val| return true if pat === val.__svalue}
+    elsif block
+      self.each{|*val| return true if block.call(*val)}
+    else
+      self.each{|*val| return true if val.__svalue}
+    end
+    false
   end
 
   ##
@@ -707,5 +793,21 @@ module Enumerable
 
   def nil.to_h
     {}
+  end
+
+  def uniq(&block)
+    hash = {}
+    if block
+      self.each do|*v|
+        v = v.__svalue
+        hash[block.call(v)] ||= v
+      end
+    else
+      self.each do|*v|
+        v = v.__svalue
+        hash[v] ||= v
+      end
+    end
+    hash.values
   end
 end

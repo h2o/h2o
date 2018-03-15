@@ -28,6 +28,21 @@
 /* add -DMRB_USE_FLOAT to use float instead of double for floating point numbers */
 //#define MRB_USE_FLOAT
 
+/* exclude floating point numbers */
+//#define MRB_WITHOUT_FLOAT
+
+/* add -DMRB_METHOD_CACHE to use method cache to improve performance */
+//#define MRB_METHOD_CACHE
+/* size of the method cache (need to be the power of 2) */
+//#define MRB_METHOD_CACHE_SIZE (1<<7)
+
+/* add -DMRB_METHOD_TABLE_INLINE unless platform uses MSB of pointers */
+//#define MRB_METHOD_TABLE_INLINE
+/* turn MRB_METHOD_TABLE_INLINE on for linux by default */
+#if !defined(MRB_METHOD_TABLE_INLINE) && defined(__linux__)
+# define MRB_METHOD_TABLE_INLINE
+#endif
+
 /* add -DMRB_INT16 to use 16bit integer for mrb_int; conflict with MRB_INT64 */
 //#define MRB_INT16
 
@@ -45,7 +60,7 @@
 # endif
 #endif
 
-/* represent mrb_value in boxed double; conflict with MRB_USE_FLOAT */
+/* represent mrb_value in boxed double; conflict with MRB_USE_FLOAT and MRB_WITHOUT_FLOAT */
 //#define MRB_NAN_BOXING
 
 /* define on big endian machines; used by MRB_NAN_BOXING */
