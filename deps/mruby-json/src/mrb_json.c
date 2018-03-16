@@ -2,6 +2,7 @@
 #include <mruby/string.h>
 #include <mruby/array.h>
 #include <mruby/hash.h>
+#include <mruby/variable.h>
 #include <stdio.h>
 #include <math.h>
 #include "parson.h"
@@ -18,6 +19,8 @@
 #define ARENA_SAVE
 #define ARENA_RESTORE
 #endif
+
+#define E_PARSER_ERROR mrb_class_get_under(mrb, mrb_module_get(mrb, "JSON"), "ParserError")
 
 /*********************************************************
  * main
@@ -253,7 +256,7 @@ mrb_json_parse(mrb_state *mrb, mrb_value self)
 
   root_value = json_parse_string(mrb_str_to_cstr(mrb, json));
   if (!root_value) {
-    mrb_raise(mrb, E_ARGUMENT_ERROR, "invalid json");
+    mrb_raise(mrb, E_PARSER_ERROR, "invalid json");
   }
 
   value = json_value_to_mrb_value(mrb, root_value);
@@ -262,12 +265,23 @@ mrb_json_parse(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value
+mrb_json_dump(mrb_state *mrb, mrb_value self) {
+  mrb_value obj, io = mrb_nil_value(), out;
+  mrb_get_args(mrb, "o|o", &obj, &io);
+  out = mrb_value_to_string(mrb, obj, -1);
+  if (mrb_nil_p(io)) {
+    return out;
+  }
+  mrb_funcall(mrb, io, "write", 1, out);
+  return io;
+}
+
+static mrb_value
 mrb_json_generate(mrb_state *mrb, mrb_value self) {
   mrb_value obj;
   mrb_get_args(mrb, "o", &obj);
   return mrb_value_to_string(mrb, obj, -1);
 }
-
 
 static mrb_value
 mrb_json_pretty_generate(mrb_state *mrb, mrb_value self) {
@@ -287,8 +301,10 @@ mrb_json_to_json(mrb_state *mrb, mrb_value self) {
 void
 mrb_mruby_json_gem_init(mrb_state* mrb) {
   struct RClass *_class_json = mrb_define_module(mrb, "JSON");
+
   mrb_define_class_method(mrb, _class_json, "parse", mrb_json_parse, MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, _class_json, "stringify", mrb_json_generate, MRB_ARGS_REQ(1));
+  mrb_define_class_method(mrb, _class_json, "dump", mrb_json_dump, MRB_ARGS_REQ(1)|MRB_ARGS_OPT(1));
   mrb_define_class_method(mrb, _class_json, "generate", mrb_json_generate, MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, _class_json, "pretty_generate", mrb_json_pretty_generate, MRB_ARGS_REQ(1));
   mrb_define_class_method(mrb, mrb->object_class, "to_json", mrb_json_to_json, MRB_ARGS_NONE());
