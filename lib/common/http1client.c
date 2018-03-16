@@ -220,7 +220,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
 
 static void on_error_before_head(struct st_h2o_http1client_private_t *client, const char *errstr)
 {
-    assert(!client->_do_keepalive);
+    client->_do_keepalive = 0;
     client->_cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
     close_client(client);
 }

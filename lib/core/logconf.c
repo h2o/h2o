@@ -62,7 +62,7 @@ enum {
     ELEMENT_TYPE_REQUEST_TOTAL_TIME,            /* %{request-total-time}x */
     ELEMENT_TYPE_PROCESS_TIME,                  /* %{process-time}x */
     ELEMENT_TYPE_RESPONSE_TIME,                 /* %{response-total-time}x */
-    ELEMENT_TYPE_DURATION,                      /* %{duration}x */
+    ELEMENT_TYPE_TOTAL_TIME,                    /* %{total-time}x */
     ELEMENT_TYPE_ERROR,                         /* %{error}x */
     ELEMENT_TYPE_PROTOCOL_SPECIFIC,             /* %{protocol-specific...}x */
     NUM_ELEMENT_TYPES
@@ -245,7 +245,8 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("request-body-time", ELEMENT_TYPE_REQUEST_BODY_TIME);
                     MAP_EXT_TO_TYPE("process-time", ELEMENT_TYPE_PROCESS_TIME);
                     MAP_EXT_TO_TYPE("response-time", ELEMENT_TYPE_RESPONSE_TIME);
-                    MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_DURATION);
+                    MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_TOTAL_TIME);
+                    MAP_EXT_TO_TYPE("total-time", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
                     MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
                     MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
@@ -737,8 +738,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             APPEND_DURATION(pos, response_time);
             break;
 
-        case ELEMENT_TYPE_DURATION:
-            APPEND_DURATION(pos, duration);
+        case ELEMENT_TYPE_TOTAL_TIME:
+            APPEND_DURATION(pos, total_time);
             break;
 
         case ELEMENT_TYPE_ERROR: {

@@ -22,8 +22,6 @@ _do-check:
 	sudo make check-as-root
 
 _fuzz:
-	sudo ln -sf /usr/bin/clang-4.0 /usr/bin/clang
-	sudo ln -sf /usr/bin/clang++-4.0 /usr/bin/clang++
 	$(FUZZ_ASAN) CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON
 	$(FUZZ_ASAN) $(MAKE) -f $(CHECK_MK) -C build _do-fuzz-extra
 

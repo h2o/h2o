@@ -930,7 +930,8 @@ typedef struct st_h2o_req_overrides_t {
  * additional information for extension-based dynamic content
  */
 typedef struct st_h2o_filereq_t {
-    size_t url_path_len;
+    h2o_iovec_t script_name;
+    h2o_iovec_t path_info;
     h2o_iovec_t local_path;
 } h2o_filereq_t;
 
@@ -1102,6 +1103,10 @@ struct st_h2o_req_t {
      * set by the generator if the protocol handler should replay the request upon seeing 425
      */
     unsigned char reprocess_if_too_early : 1;
+    /**
+     * whether if the response should include server-timing
+     */
+    unsigned char send_server_timing : 1;
 
     unsigned char is_subrequest : 1;
 
@@ -1286,6 +1291,15 @@ int h2o_get_compressible_types(const h2o_headers_t *headers);
  * builds destination URL or path, by contatenating the prefix and path_info of the request
  */
 h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t prefix_len, int use_path_normalized);
+/**
+ * encodes the duration value of the `server-timing` header
+ */
+void h2o_add_server_timing_header(h2o_req_t *req);
+/**
+ * encodes the duration value of the `server-timing` trailer
+ */
+h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, size_t prefix_len, const char *suffix,
+                                            size_t suffix_len);
 /**
  * release all thread-local resources used by h2o
  */
@@ -1708,6 +1722,10 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
  * registers the chunked encoding output filter (added by default)
  */
 void h2o_chunked_register(h2o_pathconf_t *pathconf);
+
+/* lib/handler/server_timing.c */
+void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);
+void h2o_server_timing_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/compress.c */
 
@@ -2242,7 +2260,7 @@ COMPUTE_DURATION(body_time,
 COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
 COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
-COMPUTE_DURATION(duration, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
 
 #undef COMPUTE_DURATION
 

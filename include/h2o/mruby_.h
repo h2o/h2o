@@ -57,6 +57,7 @@ enum {
     H2O_MRUBY_PROC_EACH_TO_ARRAY,
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
+    H2O_MRUBY_H2O_MODULE,
     H2O_MRUBY_GENERATOR_CLASS,
     H2O_MRUBY_ERROR_STREAM_CLASS,
     H2O_MRUBY_APP_REQUEST_CLASS,
@@ -245,6 +246,9 @@ void h2o_mruby_sender_close_body(h2o_mruby_generator_t *generator);
 /* handler/mruby/http_request.c */
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx);
 h2o_mruby_sender_t *h2o_mruby_http_sender_create(h2o_mruby_generator_t *generator, mrb_value body);
+
+/* handler/mruby/redis.c */
+void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx);
 
 /* handler/mruby/sleep.c */
 void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
