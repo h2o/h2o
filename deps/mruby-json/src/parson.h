@@ -30,6 +30,9 @@ extern "C"
 #endif
 
 #include <stddef.h>   /* size_t */
+#ifdef JSON_FIXED_NUMBER
+#include <inttypes.h>
+#endif
 
 /* Types and enums */
 typedef struct json_object_t JSON_Object;
@@ -41,6 +44,9 @@ enum json_value_type {
     JSONNull    = 1,
     JSONString  = 2,
     JSONNumber  = 3,
+#ifdef JSON_FIXED_NUMBER
+    JSONFixed   = 7,
+#endif
     JSONObject  = 4,
     JSONArray   = 5,
     JSONBoolean = 6
@@ -111,6 +117,9 @@ const char  * json_object_get_string (const JSON_Object *object, const char *nam
 JSON_Object * json_object_get_object (const JSON_Object *object, const char *name);
 JSON_Array  * json_object_get_array  (const JSON_Object *object, const char *name);
 double        json_object_get_number (const JSON_Object *object, const char *name); /* returns 0 on fail */
+#ifdef JSON_FIXED_NUMBER
+intmax_t      json_object_get_fixed  (const JSON_Object *object, const char *name); /* returns 0 on fail */
+#endif
 int           json_object_get_boolean(const JSON_Object *object, const char *name); /* returns -1 on fail */
 
 /* dotget functions enable addressing values with dot notation in nested objects,
@@ -122,6 +131,9 @@ const char  * json_object_dotget_string (const JSON_Object *object, const char *
 JSON_Object * json_object_dotget_object (const JSON_Object *object, const char *name);
 JSON_Array  * json_object_dotget_array  (const JSON_Object *object, const char *name);
 double        json_object_dotget_number (const JSON_Object *object, const char *name); /* returns 0 on fail */
+#ifdef JSON_FIXED_NUMBER
+intmax_t      json_object_dotget_fixed  (const JSON_Object *object, const char *name);
+#endif
 int           json_object_dotget_boolean(const JSON_Object *object, const char *name); /* returns -1 on fail */
 
 /* Functions to get available names */
@@ -143,6 +155,9 @@ int json_object_dothas_value_of_type(const JSON_Object *object, const char *name
 JSON_Status json_object_set_value(JSON_Object *object, const char *name, JSON_Value *value);
 JSON_Status json_object_set_string(JSON_Object *object, const char *name, const char *string);
 JSON_Status json_object_set_number(JSON_Object *object, const char *name, double number);
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_object_set_fixed(JSON_Object *object, const char *name, intmax_t fixed);
+#endif
 JSON_Status json_object_set_boolean(JSON_Object *object, const char *name, int boolean);
 JSON_Status json_object_set_null(JSON_Object *object, const char *name);
 
@@ -151,6 +166,9 @@ JSON_Status json_object_set_null(JSON_Object *object, const char *name);
 JSON_Status json_object_dotset_value(JSON_Object *object, const char *name, JSON_Value *value);
 JSON_Status json_object_dotset_string(JSON_Object *object, const char *name, const char *string);
 JSON_Status json_object_dotset_number(JSON_Object *object, const char *name, double number);
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_object_dotset_fixed(JSON_Object *object, const char *name, intmax_t fixed);
+#endif
 JSON_Status json_object_dotset_boolean(JSON_Object *object, const char *name, int boolean);
 JSON_Status json_object_dotset_null(JSON_Object *object, const char *name);
 
@@ -171,6 +189,9 @@ const char  * json_array_get_string (const JSON_Array *array, size_t index);
 JSON_Object * json_array_get_object (const JSON_Array *array, size_t index);
 JSON_Array  * json_array_get_array  (const JSON_Array *array, size_t index);
 double        json_array_get_number (const JSON_Array *array, size_t index); /* returns 0 on fail */
+#ifdef JSON_FIXED_NUMBER
+intmax_t      json_array_get_fixed (const JSON_Array *array, size_t index);
+#endif
 int           json_array_get_boolean(const JSON_Array *array, size_t index); /* returns -1 on fail */
 size_t        json_array_get_count  (const JSON_Array *array);
 JSON_Value  * json_array_get_wrapping_value(const JSON_Array *array);
@@ -185,6 +206,9 @@ JSON_Status json_array_remove(JSON_Array *array, size_t i);
 JSON_Status json_array_replace_value(JSON_Array *array, size_t i, JSON_Value *value);
 JSON_Status json_array_replace_string(JSON_Array *array, size_t i, const char* string);
 JSON_Status json_array_replace_number(JSON_Array *array, size_t i, double number);
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_array_replace_fixed(JSON_Array *array, size_t i, intmax_t fixed);
+#endif
 JSON_Status json_array_replace_boolean(JSON_Array *array, size_t i, int boolean);
 JSON_Status json_array_replace_null(JSON_Array *array, size_t i);
 
@@ -196,6 +220,9 @@ JSON_Status json_array_clear(JSON_Array *array);
 JSON_Status json_array_append_value(JSON_Array *array, JSON_Value *value);
 JSON_Status json_array_append_string(JSON_Array *array, const char *string);
 JSON_Status json_array_append_number(JSON_Array *array, double number);
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_array_append_fixed(JSON_Array *array, intmax_t fixed);
+#endif
 JSON_Status json_array_append_boolean(JSON_Array *array, int boolean);
 JSON_Status json_array_append_null(JSON_Array *array);
 
@@ -206,6 +233,9 @@ JSON_Value * json_value_init_object (void);
 JSON_Value * json_value_init_array  (void);
 JSON_Value * json_value_init_string (const char *string); /* copies passed string */
 JSON_Value * json_value_init_number (double number);
+#ifdef JSON_FIXED_NUMBER
+JSON_Value * json_value_init_fixed  (intmax_t fixed);
+#endif
 JSON_Value * json_value_init_boolean(int boolean);
 JSON_Value * json_value_init_null   (void);
 JSON_Value * json_value_deep_copy   (const JSON_Value *value);
@@ -216,6 +246,9 @@ JSON_Object *   json_value_get_object (const JSON_Value *value);
 JSON_Array  *   json_value_get_array  (const JSON_Value *value);
 const char  *   json_value_get_string (const JSON_Value *value);
 double          json_value_get_number (const JSON_Value *value);
+#ifdef JSON_FIXED_NUMBER
+intmax_t        json_value_get_fixed  (const JSON_Value *value);
+#endif
 int             json_value_get_boolean(const JSON_Value *value);
 JSON_Value  *   json_value_get_parent (const JSON_Value *value);
 
@@ -225,6 +258,9 @@ JSON_Object *   json_object (const JSON_Value *value);
 JSON_Array  *   json_array  (const JSON_Value *value);
 const char  *   json_string (const JSON_Value *value);
 double          json_number (const JSON_Value *value);
+#ifdef JSON_FIXED_NUMBER
+intmax_t        json_fixed (const JSON_Value *value);
+#endif
 int             json_boolean(const JSON_Value *value);
 
 #ifdef __cplusplus
