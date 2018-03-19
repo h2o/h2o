@@ -128,11 +128,11 @@ It is turned on by default if the prerequisites (<a href="https://www.gnu.org/so
 <h3>Installing from Source, using OpenSSL</h3>
 
 <p>
-Generally speaking, we believe that using LibreSSL is a better choice for running H2O, since LibreSSL not only is considered to be more secure than OpenSSL but also provides support for new ciphersuites such as <code>chacha20-poly1305</code> which is the preferred method of Google Chrome<sup><a href="#note_4" id="#cite_4" title="ref: Do the ChaCha: better mobile performance with cryptography">4</sup></a></sup>.  However, it is also true that LibreSSL is slower than OpenSSL on some benchmarks.  So if you are interested in benchmark numbers, using OpenSSL is a reasonable choice.
+Generally speaking, we believe that using LibreSSL is a better choice for running H2O, since LibreSSL is considered to be more secure than OpenSSL.  However, it is also true that LibreSSL is slower than OpenSSL on some benchmarks.  So if you are interested in benchmark numbers, using OpenSSL is a reasonable choice.
 </p>
 
 <p>
-The difficulty in using OpenSSL is that the HTTP/2 specification requires the use of an extension to the TLS protocol named ALPN, which has only been supported since OpenSSL 1.0.2<sup><a href="#note_5" id="#cite_5" title="It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.">5</sup></a></sup>.  Therefore it is highly likely that you would need to manually install or upgrade OpenSSL on your system.
+The difficulty in using OpenSSL is that the HTTP/2 specification requires the use of an extension to the TLS protocol named ALPN, which has only been supported since OpenSSL 1.0.2<sup><a href="#note_4" id="#cite_4" title="It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.">4</sup></a></sup>.  Therefore it is highly likely that you would need to manually install or upgrade OpenSSL on your system.
 </p>
 
 <p>
@@ -156,7 +156,7 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 </code></pre>
 
 <p>
-In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<sup><a href="#note_6" id="#cite_6" title="ref: h2o issue #277, CMake issue 0015386">6</sup></a></sup>.
+In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<sup><a href="#note_5" id="#cite_5" title="ref: h2o issue #277, CMake issue 0015386">5</sup></a></sup>.
 </p>
 
 <pre><code>% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake -DWITH_BUNDLED_SSL=off
@@ -172,9 +172,8 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 <li id="note_1">Please open a new issue on <a href="https://github.com/h2o/h2o">Github</a> if you want a new package to get added.</li>
 <li id="note_2">CMake is a popular build tool that can be found as a binary package on most operating systems.</li>
 <li id="note_3"><code>mkmf</code> - a program for building ruby extensions is required.  In many distributions, the program is packaged as part of <code>ruby-dev<code> or <code>ruby-devel</code> package.</li>
-<li id="note_4">ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a></li>
-<li id="note_5">It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.</li>
-<li id="note_6">ref: <a href="https://github.com/h2o/h2o/issues/277">h2o issue #277</a>, <a href="http://public.kitware.com/Bug/view.php?id=15386">CMake issue 0015386</a></li>
+<li id="note_4">It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.</li>
+<li id="note_5">ref: <a href="https://github.com/h2o/h2o/issues/277">h2o issue #277</a>, <a href="http://public.kitware.com/Bug/view.php?id=15386">CMake issue 0015386</a></li>
 </ol>
 </div>
 

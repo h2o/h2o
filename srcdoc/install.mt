@@ -76,7 +76,7 @@ It is turned on by default if the prerequisites (<a href="https://www.gnu.org/so
 <h3>Installing from Source, using OpenSSL</h3>
 
 <p>
-Generally speaking, we believe that using LibreSSL is a better choice for running H2O, since LibreSSL not only is considered to be more secure than OpenSSL but also provides support for new ciphersuites such as <code>chacha20-poly1305</code> which is the preferred method of Google Chrome<?= $ctx->{note}->(q{ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a>}) ?>.  However, it is also true that LibreSSL is slower than OpenSSL on some benchmarks.  So if you are interested in benchmark numbers, using OpenSSL is a reasonable choice.
+Generally speaking, we believe that using LibreSSL is a better choice for running H2O, since LibreSSL is considered to be more secure than OpenSSL. However, it is also true that LibreSSL is slower than OpenSSL on some benchmarks.  So if you are interested in benchmark numbers, using OpenSSL is a reasonable choice.
 </p>
 
 <p>
