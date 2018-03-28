@@ -42,8 +42,7 @@ extern "C" {
 #include "h2o/memcached.h"
 #include "h2o/redis.h"
 #include "h2o/linklist.h"
-#include "h2o/http1client.h"
-#include "h2o/http2client.h"
+#include "h2o/httpclient.h"
 #include "h2o/memory.h"
 #include "h2o/multithread.h"
 #include "h2o/rand.h"
@@ -97,6 +96,7 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT (H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
+#define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
 
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
@@ -443,6 +443,10 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
+
+        struct {
+            uint32_t max_concurrent_streams;
+        } http2;
         /**
          * global socketpool
          */
@@ -1912,6 +1916,9 @@ typedef struct st_h2o_proxy_config_vars_t {
     } websocket;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
+    struct {
+        uint32_t max_concurrent_strams;
+    } http2;
 } h2o_proxy_config_vars_t;
 
 /**

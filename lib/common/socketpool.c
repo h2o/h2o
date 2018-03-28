@@ -40,6 +40,10 @@ struct pool_entry_t {
     h2o_linklist_t all_link;
     h2o_linklist_t target_link;
     uint64_t added_at;
+    struct {
+        void (*cb)(void *data);
+        void *data;
+    } expire;
 };
 
 struct st_h2o_socketpool_connect_request_t {
@@ -55,6 +59,7 @@ struct st_h2o_socketpool_connect_request_t {
     struct {
         char *tried;
     } lb;
+    h2o_iovec_t alpn_protos;
 };
 
 struct on_close_data_t {
@@ -277,7 +282,7 @@ void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
     pool->_interval_cb.loop = NULL;
 }
 
-static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *errstr)
+static void call_connect_cb(h2o_socketpool_connect_request_t *req, h2o_iovec_t alpn_proto, const char *errstr)
 {
     h2o_socketpool_connect_cb cb = req->cb;
     h2o_socket_t *sock = req->sock;
@@ -289,7 +294,7 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     }
 
     free(req);
-    cb(sock, errstr, data, &selected_target->url);
+    cb(sock, errstr, data, &selected_target->url, alpn_proto, 0); // FIXME
 }
 
 static void try_connect(h2o_socketpool_connect_request_t *req)
@@ -323,7 +328,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     }
 }
 
-static void on_handshake_complete(h2o_socket_t *sock, const char *err)
+static void on_handshake_complete(h2o_socket_t *sock, h2o_iovec_t alpn_proto, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
 
@@ -336,7 +341,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         req->sock = NULL;
     }
 
-    call_connect_cb(req, err);
+    call_connect_cb(req, alpn_proto, err);
 }
 
 static void on_connect(h2o_socket_t *sock, const char *err)
@@ -360,12 +365,12 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
         if (target_url->scheme->is_ssl) {
             assert(req->pool->_ssl_ctx != NULL && "h2o_socketpool_set_ssl_ctx must be called for a pool that contains SSL target");
-            h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, on_handshake_complete);
+            h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, req->alpn_protos, on_handshake_complete);
             return;
         }
     }
 
-    call_connect_cb(req, errstr);
+    call_connect_cb(req, h2o_iovec_init(NULL, 0), errstr);
 }
 
 static void on_close(void *data)
@@ -389,7 +394,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
             return;
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, "failed to connect to host");
+        call_connect_cb(req, h2o_iovec_init(NULL, 0), "failed to connect to host");
         return;
     }
     close_data = h2o_mem_alloc(sizeof(*close_data));
@@ -414,7 +419,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
             return;
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, errstr);
+        call_connect_cb(req, h2o_iovec_init(NULL, 0), errstr);
         return;
     }
 
@@ -440,7 +445,7 @@ static size_t lookup_target(h2o_socketpool_t *pool, h2o_url_t *url)
 }
 
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data)
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_iovec_t alpn_protos, h2o_socketpool_connect_cb cb, void *data)
 {
     struct pool_entry_t *entry = NULL;
     struct on_close_data_t *close_data;
@@ -492,7 +497,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             close_data->target = entry_target;
             sock->on_close.cb = on_close;
             sock->on_close.data = close_data;
-            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url);
+            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url, h2o_iovec_init(NULL, 0), 1);
             return;
         }
 
@@ -521,6 +526,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (_req != NULL)
         *_req = req;
     req->getaddr_receiver = getaddr_receiver;
+    req->alpn_protos = alpn_protos;
 
     req->selected_target = target;
     if (target == SIZE_MAX) {
@@ -546,7 +552,7 @@ void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req)
     free(req);
 }
 
-int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
+int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock, void (*expire_cb)(void *data), void *expire_data)
 {
     struct pool_entry_t *entry;
     struct on_close_data_t *close_data;
@@ -571,6 +577,8 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     memset(&entry->target_link, 0, sizeof(entry->target_link));
     entry->added_at = h2o_now(h2o_socket_get_loop(sock));
     entry->target = target;
+    entry->expire.cb = expire_cb;
+    entry->expire.data = expire_data;
 
     pthread_mutex_lock(&pool->_shared.mutex);
     destroy_expired(pool);

@@ -339,7 +339,7 @@ static void on_memcached_accept_timeout(h2o_timeout_entry_t *entry)
     accept_timeout(&data->super);
 }
 
-static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
+static void on_ssl_handshake_complete(h2o_socket_t *sock, h2o_iovec_t alpn_proto, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
     sock->data = NULL;
@@ -487,7 +487,7 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
     }
 
     if (data->ctx->ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, data->ctx->ssl_ctx, NULL, on_ssl_handshake_complete);
+        h2o_socket_ssl_handshake(sock, data->ctx->ssl_ctx, NULL, h2o_iovec_init(NULL, 0), on_ssl_handshake_complete);
     } else {
         struct st_h2o_accept_data_t *data = sock->data;
         sock->data = NULL;
@@ -505,7 +505,7 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
         if (ctx->expect_proxy_line) {
             h2o_socket_read_start(sock, on_read_proxy_line);
         } else {
-            h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, on_ssl_handshake_complete);
+            h2o_socket_ssl_handshake(sock, ctx->ssl_ctx, NULL, h2o_iovec_init(NULL, 0), on_ssl_handshake_complete);
         }
     } else {
         h2o_http1_accept(ctx, sock, connected_at);

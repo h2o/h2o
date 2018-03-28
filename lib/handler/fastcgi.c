@@ -472,7 +472,7 @@ static void do_send(struct st_fcgi_generator_t *generator)
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
 {
     if (generator->ctx->handler->config.keepalive_timeout != 0 && can_keepalive)
-        h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock);
+        h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock, NULL, NULL);
     else
         h2o_socket_close(generator->sock);
     generator->sock = NULL;
@@ -734,7 +734,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
-static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *_dummy)
+static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *_dummy, h2o_iovec_t alpn_proto, int pooled)
 {
     struct st_fcgi_generator_t *generator = data;
     iovec_vector_t vecs;
@@ -801,7 +801,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     set_timeout(generator, &generator->ctx->io_timeout, on_connect_timeout);
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
-                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
+                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, h2o_iovec_init(NULL, 0), on_connect, generator);
 
     return 0;
 }

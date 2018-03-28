@@ -64,7 +64,7 @@ struct st_h2o_socket_ssl_t {
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
-        h2o_socket_cb cb;
+        h2o_socket_handshake_cb cb;
         union {
             struct {
                 struct {
@@ -1008,12 +1008,20 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
-    h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
+    h2o_iovec_t alpn_proto = h2o_iovec_init(NULL, 0);
+    if (sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl)) {
+        alpn_proto.base = alloca(256);
+        SSL_get0_alpn_selected(sock->ssl->ossl, (const unsigned char **)&alpn_proto.base, (unsigned *)&alpn_proto.len);
+        if (alpn_proto.len == 0)
+            alpn_proto.base = NULL;
+    }
+
+    h2o_socket_handshake_cb handshake_cb = sock->ssl->handshake.cb;
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;
     if (err == NULL)
         decode_ssl_input(sock);
-    handshake_cb(sock, err);
+    handshake_cb(sock, alpn_proto, err);
 }
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
@@ -1174,7 +1182,7 @@ Complete:
     on_handshake_complete(sock, err);
 }
 
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb)
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_iovec_t alpn_protos, h2o_socket_handshake_cb handshake_cb)
 {
     sock->ssl = h2o_mem_alloc(sizeof(*sock->ssl));
     memset(sock->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
@@ -1202,6 +1210,8 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
         create_ossl(sock);
+        if (alpn_protos.base != NULL)
+            SSL_set_alpn_protos(sock->ssl->ossl, (const unsigned char *)alpn_protos.base, (unsigned)alpn_protos.len);
         h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(sock->ssl->ssl_ctx);
         if (session_cache != NULL) {
             struct sockaddr_storage sa;

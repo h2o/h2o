@@ -26,7 +26,7 @@
 #include "picohttpparser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
-#include "h2o/http1client.h"
+#include "h2o/httpclient.h"
 #include "h2o/tunnel.h"
 
 struct rp_generator_t {
@@ -264,7 +264,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
             h2o_add_header_by_str(&req->pool, headers, H2O_STRLIT("x-forwarded-proto"), 0, NULL, req->input.scheme->name.base,
                                   req->input.scheme->name.len);
         if (remote_addr_len != SIZE_MAX)
-            xff_buf = build_request_merge_headers(&req->pool, xff_buf, h2o_iovec_init(remote_addr, remote_addr_len), ',');
+            xff_buf = build_request_merge_headers(&req->pool, xff_buf, h2o_strdup(&req->pool, remote_addr, remote_addr_len), ',');
         if (xff_buf.len != 0)
             h2o_add_header(&req->pool, headers, H2O_TOKEN_X_FORWARDED_FOR, NULL, xff_buf.base, xff_buf.len);
     }
@@ -648,5 +648,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect);
+    h2o_httpclient_connect(&self->client, self, client_ctx, socketpool, target, on_connect);
 }
