@@ -76,6 +76,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
 {
     struct st_h2o_httpclient_private_t *client = data;
 
+
     client->super.conn.req = NULL;
 
     if (sock == NULL) {
@@ -86,14 +87,11 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     }
 
     if (alpn_proto.base == NULL) {
-        client->http1.client = &client->super;
         h2o_http1client_on_connect(&client->http1, sock, origin, pooled);
     } else {
         if (memcmp(alpn_proto.base, "h2", alpn_proto.len) == 0) {
-            client->http2.client = &client->super;
             h2o_http2client_on_connect(&client->http2, sock, origin, pooled);
         } else if (memcmp(alpn_proto.base, "http/1.1", alpn_proto.len) == 0) {
-            client->http1.client = &client->super;
             h2o_http1client_on_connect(&client->http1, sock, origin, pooled);
         } else {
             on_connect_error(client, "unknown alpn protocol");
@@ -114,7 +112,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     h2o_iovec_t alpn_protos = h2o_iovec_init(NULL, 0);
 
     struct st_h2o_httpclient_private_t *client = create_client(data, ctx, cb);
-    client->super.conn.pool = connpool; // FIXME
+    client->super.conn.pool = connpool;
     if (_client != NULL)
         *_client = &client->super;
 
@@ -130,7 +128,6 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
         double http1_ratio = (double)connpool->http1.num_inflight_connections / connpool->http1.num_pooled_connections;
         double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
         if (http2_ratio <= http1_ratio) {
-            client->http2.client = &client->super;
             fprintf(stderr, "##### both h1 and h2 has pooled connections, but h2 selected\n");
             h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, connpool, origin, cb);
             return;
@@ -144,7 +141,6 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     /* reuse idle h2 connection */
     if (http2_conn != NULL) {
         fprintf(stderr, "##### h2 has pooled connections\n");
-        client->http2.client = &client->super;
         h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, connpool, origin, cb);
         return;
     }

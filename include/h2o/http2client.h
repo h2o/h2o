@@ -87,7 +87,6 @@ struct st_h2o_http2client_conn_t {
 };
 
 struct st_h2o_http2client_stream_t {
-    h2o_httpclient_t *client;
     struct st_h2o_http2client_conn_t *conn;
     uint32_t stream_id;
     enum enum_stream_state_t state;
