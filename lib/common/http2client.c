@@ -225,6 +225,18 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         goto SendRSTStream;
     }
 
+    if (100 <= stream->input.res.status && stream->input.res.status <= 199) {
+        if (stream->input.res.status == 101) {
+            ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO is this alright?
+            goto SendRSTStream;
+        }
+        if (client->super.informational_cb != NULL && client->super.informational_cb(&client->super, 0, stream->input.res.status, h2o_iovec_init(NULL, 0), stream->input.res.headers.entries, stream->input.res.headers.size) != 0) {
+            ret = H2O_HTTP2_ERROR_INTERNAL;
+            goto SendRSTStream;
+        }
+        return 0;
+    }
+
     client->cb.on_body = client->cb.on_head(&client->super, NULL, 0, stream->input.res.status, h2o_iovec_init(NULL, 0),
                                             stream->input.res.headers.entries, stream->input.res.headers.size, (int)len);
     if (client->cb.on_body == NULL) {

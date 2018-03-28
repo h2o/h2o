@@ -50,7 +50,7 @@ typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *clien
 typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                                               h2o_headers_t *headers, h2o_iovec_t *body,
                                                               h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_features_t features, h2o_url_t *origin);
-typedef int (*h2o_http1client_informational_cb)(h2o_httpclient_t *client, int minor_version, int status, h2o_iovec_t msg,
+typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int minor_version, int status, h2o_iovec_t msg,
                                                 struct st_h2o_header_t *headers, size_t num_headers);
 
 typedef struct st_h2o_httpclient_connection_pool_t {
@@ -96,7 +96,7 @@ struct st_h2o_httpclient_t {
     } conn;
     h2o_buffer_t **buf;
     void *data;
-    h2o_http1client_informational_cb informational_cb;
+    h2o_httpclient_informational_cb informational_cb;
 
     void (*cancel)(h2o_httpclient_t *client);
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
