@@ -102,12 +102,6 @@ struct st_h2o_httpclient_t {
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
     void (*update_window)(h2o_httpclient_t *client);
     int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_stream);
-
-    union {
-        h2o_httpclient_connect_cb on_connect;
-        h2o_httpclient_head_cb on_head;
-        h2o_httpclient_body_cb on_body;
-    } _cb;
 };
 
 extern const char *const h2o_httpclient_error_is_eos;

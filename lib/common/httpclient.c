@@ -41,7 +41,7 @@ static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpcli
     client->super.steal_socket = NULL;
     client->super.update_window = NULL;
     client->super.write_req = NULL;
-    client->super._cb.on_connect = cb;
+    client->cb.on_connect = cb;
 
     return client;
 }
@@ -68,7 +68,7 @@ static void close_client(struct st_h2o_httpclient_private_t *client)
 static void on_connect_error(struct st_h2o_httpclient_private_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->super._cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, (h2o_httpclient_features_t){NULL}, NULL);
+    client->cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, (h2o_httpclient_features_t){NULL}, NULL);
     close_client(client);
 }
 

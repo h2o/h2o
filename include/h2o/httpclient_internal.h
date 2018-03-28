@@ -33,6 +33,11 @@ extern "C" {
 struct st_h2o_httpclient_private_t {
     h2o_httpclient_t super;
     union {
+        h2o_httpclient_connect_cb on_connect;
+        h2o_httpclient_head_cb on_head;
+        h2o_httpclient_body_cb on_body;
+    } cb;
+    union {
         struct st_h2o_http1client_private_t http1;
         struct st_h2o_http2client_stream_t http2;
     };
