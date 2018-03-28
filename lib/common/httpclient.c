@@ -90,7 +90,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
         h2o_http1client_on_connect(&client->http1, sock, origin, pooled);
     } else {
         if (memcmp(alpn_proto.base, "h2", alpn_proto.len) == 0) {
-            h2o_http2client_on_connect(&client->http2, sock, origin, pooled);
+            h2o_http2client_on_connect(&client->http2, sock, origin, 0);
         } else if (memcmp(alpn_proto.base, "http/1.1", alpn_proto.len) == 0) {
             h2o_http1client_on_connect(&client->http1, sock, origin, pooled);
         } else {
@@ -129,7 +129,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
         double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
         if (http2_ratio <= http1_ratio) {
             fprintf(stderr, "##### both h1 and h2 has pooled connections, but h2 selected\n");
-            h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, connpool, origin, cb);
+            h2o_http2client_on_connect(&client->http2, http2_conn->sock, &http2_conn->origin_url, 1);
             return;
         } else {
             fprintf(stderr, "##### both h1 and h2 has pooled connections, but h1 selected (if ssl is used)\n");
@@ -141,7 +141,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     /* reuse idle h2 connection */
     if (http2_conn != NULL) {
         fprintf(stderr, "##### h2 has pooled connections\n");
-        h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, connpool, origin, cb);
+        h2o_http2client_on_connect(&client->http2, http2_conn->sock, &http2_conn->origin_url, 1);
         return;
     }
 

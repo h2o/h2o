@@ -1198,29 +1198,24 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
     client->super.write_req = do_write_req;
 }
 
-void h2o_http2client_connect_unko(struct st_h2o_http2client_stream_t *stream, struct st_h2o_http2client_conn_t *conn, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb cb)
-{
-    assert(connpool != NULL);
-
-    setup_stream(stream);
-
-    on_connection_ready(stream, conn);
-}
-
 void h2o_http2client_on_connect(struct st_h2o_http2client_stream_t *stream, h2o_socket_t *sock, h2o_url_t *origin, int pooled)
 {
     struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http2, stream);
-    struct st_h2o_http2client_conn_t *conn = create_connection(client->super.ctx, sock, origin, client->super.conn.pool);
-    sock->data = conn;
+
+    struct st_h2o_http2client_conn_t *conn;
+    if (pooled) {
+        conn = sock->data;
+    } else {
+        conn = create_connection(client->super.ctx, sock, origin, client->super.conn.pool);
+        sock->data = conn;
+        /* send preface, settings, and connection-level window update */
+        send_client_preface(conn, client->super.ctx);
+        h2o_socket_read_start(conn->sock, on_read);
+    }
 
     setup_stream(stream);
 
-    /* send preface, settings, and connection-level window update */
-    send_client_preface(conn, client->super.ctx);
-
-    h2o_socket_read_start(conn->sock, on_read);
-
-    h2o_timeout_link(conn->ctx->loop, conn->ctx->io_timeout, &conn->io_timeout_entry);
-
+    if (!h2o_timeout_is_linked(&conn->io_timeout_entry))
+        h2o_timeout_link(conn->ctx->loop, conn->ctx->io_timeout, &conn->io_timeout_entry);
     on_connection_ready(stream, conn);
 }
