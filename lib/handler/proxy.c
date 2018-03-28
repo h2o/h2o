@@ -30,17 +30,23 @@ struct rp_handler_t {
     h2o_proxy_config_vars_t config;
 };
 
+struct rp_handler_context_t {
+    h2o_httpclient_connection_pool_t connpool;
+    h2o_httpclient_ctx_t *client_ctx;
+};
+
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
     h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, *overrides, 1);
+    struct rp_handler_context_t *handler_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
 
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
-    overrides->socketpool = self->sockpool;
+    overrides->connpool = &handler_ctx->connpool;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
-    overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
+    overrides->client_ctx = handler_ctx->client_ctx;
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
 
@@ -58,6 +64,11 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
     /* use the loop of first context for handling socketpool timeouts */
     h2o_socketpool_register_loop(self->sockpool, ctx->loop);
+
+    struct rp_handler_context_t *handler_ctx = h2o_mem_alloc(sizeof(*handler_ctx));
+    memset(handler_ctx, 0, sizeof(*handler_ctx));
+    h2o_httpclient_connection_pool_init(&handler_ctx->connpool, self->sockpool);
+    h2o_context_set_handler_context(ctx, &self->super, handler_ctx);
 
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
@@ -94,35 +105,34 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
     client_ctx->max_buffer_size = self->config.max_buffer_size;
 
-    h2o_linklist_init_anchor(&client_ctx->http2.conns);
-
-    h2o_context_set_handler_context(ctx, &self->super, client_ctx);
+    handler_ctx->client_ctx = client_ctx;
 }
 
 static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 {
     struct rp_handler_t *self = (void *)_self;
-    h2o_httpclient_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
+    struct rp_handler_context_t *handler_ctx = h2o_context_get_handler_context(ctx, &self->super);
 
-    if (client_ctx == NULL)
-        return;
-
+    if (handler_ctx->client_ctx != NULL) {
 #define FREE_TIMEOUT(to_)                                                                                                          \
-    if (client_ctx->to_ != &ctx->proxy.to_) {                                                                                      \
-        h2o_timeout_dispose(client_ctx->loop, client_ctx->to_);                                                                    \
-        free(client_ctx->to_);                                                                                                     \
-    }
-    FREE_TIMEOUT(io_timeout);
-    FREE_TIMEOUT(connect_timeout);
-    FREE_TIMEOUT(first_byte_timeout);
+        if (handler_ctx->client_ctx->to_ != &ctx->proxy.to_) {                                                                                      \
+            h2o_timeout_dispose(handler_ctx->client_ctx->loop, handler_ctx->client_ctx->to_);                                                                    \
+            free(handler_ctx->client_ctx->to_);                                                                                                     \
+        }
+        FREE_TIMEOUT(io_timeout);
+        FREE_TIMEOUT(connect_timeout);
+        FREE_TIMEOUT(first_byte_timeout);
 #undef FREE_TIMEOUT
 
-    if (client_ctx->websocket_timeout != NULL) {
-        h2o_timeout_dispose(client_ctx->loop, client_ctx->websocket_timeout);
-        free(client_ctx->websocket_timeout);
+        if (handler_ctx->client_ctx->websocket_timeout != NULL) {
+            h2o_timeout_dispose(handler_ctx->client_ctx->loop, handler_ctx->client_ctx->websocket_timeout);
+            free(handler_ctx->client_ctx->websocket_timeout);
+        }
+        h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
+        free(handler_ctx->client_ctx);
     }
-    h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
-    free(client_ctx);
+
+    free(handler_ctx);
 }
 
 static void on_handler_dispose(h2o_handler_t *_self)

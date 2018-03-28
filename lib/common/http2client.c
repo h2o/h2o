@@ -110,27 +110,30 @@ uint32_t h2o_http2client_get_max_concurrent_streams(struct st_h2o_http2client_co
     return conn->peer_settings.max_concurrent_streams < conn->ctx->http2.max_concurrent_streams ? conn->peer_settings.max_concurrent_streams : conn->ctx->http2.max_concurrent_streams;
 }
 
-static void adjust_conn_linkedlist(struct st_h2o_http2client_conn_t *conn, int forward)
+static void adjust_conn_linkedlist(h2o_httpclient_t *client, struct st_h2o_http2client_conn_t *conn, int forward)
 {
     double ratio = (double)conn->num_streams / h2o_http2client_get_max_concurrent_streams(conn);
 
     /* adjust connection linked list */
     h2o_linklist_t *node = forward ? conn->link.next : conn->link.prev;
-    while (node != &conn->ctx->http2.conns) {
+    while (node != &client->conn.pool->http2.conns) {
         struct st_h2o_http2client_conn_t *cur = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, link, node);
         double cur_ratio = (double)cur->num_streams / h2o_http2client_get_max_concurrent_streams(cur);
         if (forward ? (ratio <= cur_ratio) : (ratio >= cur_ratio))
             break;
         node = forward ? node->next : node->prev;
     }
-    if (!forward && node != &conn->ctx->http2.conns)
+    if (!forward && node != &client->conn.pool->http2.conns)
         node = node->next;
-    h2o_linklist_t *c = &conn->ctx->http2.conns;
+
+    // FIXME remove later
+    h2o_linklist_t *c = &client->conn.pool->http2.conns;
     do {
         fprintf(stderr, "%p -> ", c);
         c = c->next;
-    } while (c != &conn->ctx->http2.conns);
+    } while (c != &client->conn.pool->http2.conns);
     fprintf(stderr, "\n");
+
     h2o_linklist_unlink(&conn->link);
     h2o_linklist_insert(node, &conn->link);
 }
@@ -149,12 +152,13 @@ static void register_stream(struct st_h2o_http2client_stream_t *stream, struct s
     assert(iter != kh_end(conn->streams));
     kh_val(conn->streams, iter) = stream;
 
+
     ++conn->num_streams;
 
     if (h2o_timeout_is_linked(&conn->keepalive_timeout_entry))
         h2o_timeout_unlink(&conn->keepalive_timeout_entry);
 
-    adjust_conn_linkedlist(conn, 1);
+    adjust_conn_linkedlist(stream->client, conn, 1);
 }
 
 static void unregister_stream(struct st_h2o_http2client_stream_t *stream)
@@ -168,7 +172,7 @@ static void unregister_stream(struct st_h2o_http2client_stream_t *stream)
     if (stream->conn->num_streams == 0)
         h2o_timeout_link(stream->conn->ctx->loop, stream->conn->ctx->keepalive_timeout, &stream->conn->keepalive_timeout_entry);
 
-    adjust_conn_linkedlist(stream->conn, 0);
+    adjust_conn_linkedlist(stream->client, stream->conn, 0);
 }
 
 static void close_stream(struct st_h2o_http2client_stream_t *stream)
@@ -178,9 +182,9 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
     }
 
     // FIXME: socketpool?
-    if (stream->client->sockpool.connect_req != NULL) {
-        h2o_socketpool_cancel_connect(stream->client->sockpool.connect_req);
-        stream->client->sockpool.connect_req = NULL;
+    if (stream->client->conn.req != NULL) {
+        h2o_socketpool_cancel_connect(stream->client->conn.req);
+        stream->client->conn.req = NULL;
     }
 
     if (h2o_timeout_is_linked(&stream->timeout_entry))
@@ -1041,7 +1045,7 @@ static void emit_writereq(h2o_timeout_entry_t *entry)
 }
 
 static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_socket_t *sock, h2o_url_t *origin_url,
-                                                           h2o_socketpool_t *socketpool)
+                                                           h2o_httpclient_connection_pool_t *connpool)
 {
     struct st_h2o_http2client_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
     memset(conn, 0, sizeof(*conn));
@@ -1051,7 +1055,7 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(stream);
     h2o_url_copy(NULL, &conn->origin_url, origin_url);
-    h2o_linklist_insert(&ctx->http2.conns, &conn->link);
+    h2o_linklist_insert(&connpool->http2.conns, &conn->link);
     conn->io_timeout_entry.cb = on_io_timeout;
     conn->keepalive_timeout_entry.cb = on_keepalive_timeout;
 
@@ -1117,7 +1121,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     struct st_h2o_http2client_stream_t *stream = data;
 
     h2o_timeout_unlink(&stream->timeout_entry);
-    stream->client->sockpool.connect_req = NULL; // FIXME connect_req?
+    stream->client->conn.req = NULL; // FIXME connect_req?
 
     if (sock == NULL) {
         assert(errstr != NULL);
@@ -1125,7 +1129,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
         return;
     }
 
-    struct st_h2o_http2client_conn_t *conn = create_connection(stream->client->ctx, sock, origin_url, stream->client->sockpool.pool);
+    struct st_h2o_http2client_conn_t *conn = create_connection(stream->client->ctx, sock, origin_url, stream->client->conn.pool);
     sock->data = conn;
 
     /* send preface, settings, and connection-level window update */
@@ -1208,51 +1212,6 @@ static struct st_h2o_http2client_stream_t *create_stream_old(h2o_httpclient_t **
     return stream;
 }
 
-// FIXME remove later
-static struct st_h2o_http2client_conn_t *select_connection(h2o_httpclient_ctx_t *ctx)
-{
-    if (h2o_linklist_is_empty(&ctx->http2.conns))
-        return NULL;
-
-    /* select the connection and modify the list */
-    // TODO: temporary do the simple round-robin rotation, but should somehow consider least-streams algorithm
-    struct st_h2o_http2client_conn_t *conn;
-    h2o_linklist_t *node = ctx->http2.conns.next;
-    h2o_linklist_t *first = node;
-    while (node != &ctx->http2.conns) {
-        h2o_linklist_t *next = node->next;
-        conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, link, node);
-        h2o_linklist_unlink(ctx->http2.conns.next);
-        h2o_linklist_insert(&ctx->http2.conns, &conn->link);
-        if (conn->num_streams < conn->peer_settings.max_concurrent_streams)
-            return conn;
-        if (next == first)
-            break;
-        node = next;
-    }
-
-    return NULL;
-}
-
-void h2o_http2client_connect(h2o_httpclient_t **_client, void *data, h2o_httpclient_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *origin_url, h2o_httpclient_connect_cb cb)
-{
-    assert(socketpool != NULL);
-    struct st_h2o_http2client_stream_t *stream;
-
-    stream = create_stream_old(_client, data, ctx, cb);
-    stream->client->sockpool.pool = socketpool; // TODO is this needed?
-
-    struct st_h2o_http2client_conn_t *conn = select_connection(ctx);
-    if (conn == NULL) {
-        h2o_timeout_link(ctx->loop, ctx->connect_timeout, &stream->timeout_entry);
-        h2o_socketpool_connect(&stream->client->sockpool.connect_req, socketpool, origin_url, ctx->loop, ctx->getaddr_receiver,
-                               h2o_iovec_init(NULL, 0), on_pool_connect, stream);
-    } else {
-        on_connection_ready(stream, conn);
-    }
-}
-
 static void setup_stream(struct st_h2o_http2client_stream_t *stream)
 {
     memset(&stream->conn, 0, offsetof(struct st_h2o_http2client_stream_t, pool));
@@ -1270,13 +1229,13 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
     stream->client->write_req = do_write_req;
 }
 
-void h2o_http2client_connect_unko(struct st_h2o_http2client_stream_t *stream, struct st_h2o_http2client_conn_t *conn, void *data, h2o_httpclient_ctx_t *ctx, h2o_socketpool_t *socketpool, h2o_url_t *origin, h2o_httpclient_connect_cb cb)
+void h2o_http2client_connect_unko(struct st_h2o_http2client_stream_t *stream, struct st_h2o_http2client_conn_t *conn, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb cb)
 {
     assert(stream->client != NULL); // FIXME
-    assert(socketpool != NULL);
+    assert(connpool != NULL);
 
     //    stream = create_stream_old(_client, data, ctx, cb);
-    stream->client->sockpool.pool = socketpool; // TODO is this needed?
+    stream->client->conn.pool = connpool; // TODO is this needed?
 
     setup_stream(stream);
 
@@ -1286,7 +1245,7 @@ void h2o_http2client_connect_unko(struct st_h2o_http2client_stream_t *stream, st
 void h2o_http2client_on_connect(struct st_h2o_http2client_stream_t *stream, h2o_socket_t *sock, h2o_url_t *origin, int pooled)
 {
     assert(stream->client != NULL);
-    struct st_h2o_http2client_conn_t *conn = create_connection(stream->client->ctx, sock, origin, stream->client->sockpool.pool);
+    struct st_h2o_http2client_conn_t *conn = create_connection(stream->client->ctx, sock, origin, stream->client->conn.pool);
     sock->data = conn;
 
     setup_stream(stream);

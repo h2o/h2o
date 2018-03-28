@@ -658,6 +658,10 @@ struct st_h2o_context_t {
          */
         h2o_httpclient_ctx_t client_ctx;
         /**
+         * the default connection pool for proxy
+         */
+        h2o_httpclient_connection_pool_t connpool;
+        /**
          * timeout handler used by the default client context
          */
         h2o_timeout_t io_timeout;
@@ -881,9 +885,9 @@ typedef struct st_h2o_req_overrides_t {
      */
     h2o_httpclient_ctx_t *client_ctx;
     /**
-     * socketpool to be used when connecting to upstream (or NULL)
+     * connpool to be used when connecting to upstream (or NULL)
      */
-    h2o_socketpool_t *socketpool;
+    h2o_httpclient_connection_pool_t *connpool;
     /**
      * upstream to connect to (or NULL)
      */

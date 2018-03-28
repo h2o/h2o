@@ -114,10 +114,7 @@ struct st_h2o_http2client_stream_t {
     h2o_mem_pool_t pool;
 };
 
-void h2o_http2client_connect(h2o_httpclient_t **client, void *data, h2o_httpclient_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *target, h2o_httpclient_connect_cb cb);
-void h2o_http2client_connect_unko(struct st_h2o_http2client_stream_t *stream, struct st_h2o_http2client_conn_t *conn, void *data, h2o_httpclient_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                                  h2o_url_t *origin_url, h2o_httpclient_connect_cb cb); // FIXME
+void h2o_http2client_connect_unko(struct st_h2o_http2client_stream_t *stream, struct st_h2o_http2client_conn_t *conn, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin_url, h2o_httpclient_connect_cb cb); // FIXME
 
 void h2o_http2client_on_connect(struct st_h2o_http2client_stream_t *stream, h2o_socket_t *sock, h2o_url_t *origin, int pooled);
 

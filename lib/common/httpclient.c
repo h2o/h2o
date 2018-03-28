@@ -25,6 +25,12 @@
 #include "h2o/http2client.h"
 #include "h2o/httpclient_internal.h"
 
+void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
+{
+    connpool->socketpool = sockpool;
+    h2o_linklist_init_anchor(&connpool->http2.conns);
+}
+
 static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
 {
     struct st_h2o_httpclient_private_t *client = h2o_mem_alloc(sizeof(*client));
@@ -42,9 +48,9 @@ static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpcli
 
 static void close_client(struct st_h2o_httpclient_private_t *client)
 {
-    if (client->super.sockpool.connect_req != NULL) {
-        h2o_socketpool_cancel_connect(client->super.sockpool.connect_req);
-        client->super.sockpool.connect_req = NULL;
+    if (client->super.conn.req != NULL) {
+        h2o_socketpool_cancel_connect(client->super.conn.req);
+        client->super.conn.req = NULL;
     }
 
     // FIXME
@@ -70,7 +76,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
 {
     struct st_h2o_httpclient_private_t *client = data;
 
-    client->super.sockpool.connect_req = NULL;
+    client->super.conn.req = NULL;
 
     if (sock == NULL) {
         assert(errstr != NULL);
@@ -95,7 +101,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     }
 }
 
-void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclient_ctx_t *ctx, h2o_socketpool_t *socketpool,
+void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
                             h2o_url_t *origin, h2o_httpclient_connect_cb cb)
 {
     static const h2o_iovec_t both_protos = {H2O_STRLIT(
@@ -104,29 +110,29 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
                                                        "\x08"
                                                        "http/1.1"
                                                        )};
-    assert(socketpool != NULL);
+    assert(connpool != NULL);
     h2o_iovec_t alpn_protos = h2o_iovec_init(NULL, 0);
 
     struct st_h2o_httpclient_private_t *client = create_client(data, ctx, cb);
-    client->super.sockpool.pool = socketpool; // FIXME
+    client->super.conn.pool = connpool; // FIXME
     if (_client != NULL)
         *_client = &client->super;
 
     struct st_h2o_http2client_conn_t *http2_conn = NULL;
-    if (!h2o_linklist_is_empty(&ctx->http2.conns)) {
-        http2_conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, link, ctx->http2.conns.next);
+    if (!h2o_linklist_is_empty(&connpool->http2.conns)) {
+        http2_conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, link, connpool->http2.conns.next);
         if (http2_conn->num_streams >= h2o_http2client_get_max_concurrent_streams(http2_conn))
             http2_conn = NULL;
     }
 
     /* compare in-use ratio */
-    if (http2_conn != NULL && ctx->http1.num_pooled_connections != 0) {
-        double http1_ratio = (double)ctx->http1.num_inflight_connections / ctx->http1.num_pooled_connections;
+    if (http2_conn != NULL && connpool->http1.num_pooled_connections != 0) {
+        double http1_ratio = (double)connpool->http1.num_inflight_connections / connpool->http1.num_pooled_connections;
         double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
         if (http2_ratio <= http1_ratio) {
             client->http2.client = &client->super;
             fprintf(stderr, "##### both h1 and h2 has pooled connections, but h2 selected\n");
-            h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, socketpool, origin, cb);
+            h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, connpool, origin, cb);
             return;
         } else {
             fprintf(stderr, "##### both h1 and h2 has pooled connections, but h1 selected (if ssl is used)\n");
@@ -139,12 +145,12 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     if (http2_conn != NULL) {
         fprintf(stderr, "##### h2 has pooled connections\n");
         client->http2.client = &client->super;
-        h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, socketpool, origin, cb);
+        h2o_http2client_connect_unko(&client->http2, http2_conn, data, ctx, connpool, origin, cb);
         return;
     }
 
     /* reuse pooled h1 connection via socketpool */
-    if (ctx->http1.num_pooled_connections != 0) {
+    if (connpool->http1.num_pooled_connections != 0) {
         fprintf(stderr, "##### h1 has pooled connections\n");
         goto UseSocketPool;
     }
@@ -154,6 +160,6 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     fprintf(stderr, "##### no pooled connections, use ALPN\n");
 
 UseSocketPool:
-    h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos, on_pool_connect, client);
+    h2o_socketpool_connect(&client->super.conn.req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos, on_pool_connect, client);
 
 }

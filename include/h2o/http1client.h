@@ -56,20 +56,6 @@ struct st_h2o_http1client_private_t {
     h2o_mem_pool_t pool;
 };
 
-/**
- * connects to a HTTP/1.1 server
- * @param client
- * @param data
- * @param ctx
- * @param socketpool
- * @param target URL of the target to connect to (or NULL if relying on a non-global socket pool to connect and supply SNI value)
- * @param is_chunked
- * @param cb
- */
-
-void h2o_http1client_connect(h2o_httpclient_t **client, void *data, h2o_httpclient_ctx_t *ctx, h2o_socketpool_t *socketpool,
-                             h2o_url_t *target, h2o_httpclient_connect_cb cb);
-
 void h2o_http1client_on_connect(struct st_h2o_http1client_private_t *client, h2o_socket_t *sock, h2o_url_t *origin, int pooled);
 
 #ifdef __cplusplus
