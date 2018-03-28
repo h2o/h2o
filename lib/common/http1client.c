@@ -472,14 +472,6 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
     on_error_before_head(client, "I/O timeout");
 }
 
-static void on_connect_error(struct st_h2o_http1client_private_t *client, const char *errstr)
-{
-    assert(errstr != NULL);
-    struct st_h2o_httpclient_private_t *common = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http1, client);
-    common->cb.on_connect(&common->super, errstr, NULL, NULL, NULL, NULL, NULL, (h2o_httpclient_features_t){NULL}, client->_origin);
-    close_client(client);
-}
-
 static h2o_iovec_t build_request(struct st_h2o_http1client_private_t *client, h2o_iovec_t method, h2o_url_t url, h2o_headers_t headers)
 {
     h2o_iovec_t buf;
