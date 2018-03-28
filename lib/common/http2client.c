@@ -1234,7 +1234,6 @@ void h2o_http2client_connect_unko(struct st_h2o_http2client_stream_t *stream, st
     assert(stream->client != NULL); // FIXME
     assert(connpool != NULL);
 
-    //    stream = create_stream_old(_client, data, ctx, cb);
     stream->client->conn.pool = connpool; // TODO is this needed?
 
     setup_stream(stream);
