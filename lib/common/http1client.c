@@ -634,8 +634,6 @@ static void *setup_client(struct st_h2o_http1client_private_t *client, h2o_socke
     return client;
 }
 
-const char *const h2o_httpclient_error_is_eos = "end of stream";
-
 void h2o_http1client_on_connect(struct st_h2o_http1client_private_t *client, h2o_socket_t *sock, h2o_url_t *origin, int pooled)
 {
     struct st_h2o_httpclient_private_t *common = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http1, client);
