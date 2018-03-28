@@ -26,31 +26,22 @@
 extern "C" {
 #endif
 
-#include "h2o/httpclient.h"
-
-#include "h2o.h"
 #include "khash.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
 
-enum enum_stream_state_t {
-    STREAM_STATE_SEND_HEADERS,
-    STREAM_STATE_SEND_BODY,
-    STREAM_STATE_RECV_HEADERS,
-    STREAM_STATE_RECV_BODY,
+enum enum_h2o_http2client_stream_state {
+    H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS,
+    H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY,
+    H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS,
+    H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY,
 };
 
-enum enum_conn_state_t {
-    CONN_STATE_OPEN,
-    CONN_STATE_HALF_CLOSED,
-    CONN_STATE_IS_CLOSING,
+enum enum_h2o_http2client_conn_state {
+    H2O_HTTP2CLIENT_CONN_STATE_OPEN,
+    H2O_HTTP2CLIENT_CONN_STATE_HALF_CLOSED,
+    H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING,
 };
-
-#define H2O_HTTP2_SETTINGS_CLIENT_CONNECTION_WINDOW_SIZE 16777216
-#define H2O_HTTP2_SETTINGS_CLIENT_HEADER_TABLE_SIZE 4096
-
-#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
-static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 struct st_h2o_http2client_stream_t;
 KHASH_MAP_INIT_INT64(stream, struct st_h2o_http2client_stream_t *)
@@ -59,7 +50,7 @@ struct st_h2o_http2client_conn_t {
     h2o_httpclient_ctx_t *ctx;
     h2o_url_t origin_url;
     h2o_socket_t *sock;
-    enum enum_conn_state_t state;
+    enum enum_h2o_http2client_conn_state state;
     khash_t(stream) * streams;
     h2o_linklist_t link;
     h2o_http2_settings_t peer_settings;
@@ -89,7 +80,7 @@ struct st_h2o_http2client_conn_t {
 struct st_h2o_http2client_stream_t {
     struct st_h2o_http2client_conn_t *conn;
     uint32_t stream_id;
-    enum enum_stream_state_t state;
+    enum enum_h2o_http2client_stream_state state;
     h2o_timeout_entry_t timeout_entry;
 
     struct {

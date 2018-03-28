@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include "h2o.h"
 #include "h2o/httpclient.h"
 #include "h2o/http1client.h"
 #include "h2o/http2client.h"

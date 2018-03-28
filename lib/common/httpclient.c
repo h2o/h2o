@@ -20,9 +20,6 @@
  * IN THE SOFTWARE.
  */
 
-#include "h2o/httpclient.h"
-#include "h2o/http1client.h"
-#include "h2o/http2client.h"
 #include "h2o/httpclient_internal.h"
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)

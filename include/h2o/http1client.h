@@ -27,7 +27,6 @@ extern "C" {
 #endif
 
 #include "picohttpparser.h"
-#include "h2o/httpclient.h"
 
 struct st_h2o_http1client_private_t {
     h2o_socket_t *sock;

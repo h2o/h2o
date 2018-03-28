@@ -25,9 +25,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include "picohttpparser.h"
-#include "h2o.h"
-#include "h2o/http1client.h"
 #include "h2o/httpclient_internal.h"
 
 static void on_socketpool_expire(void *data)

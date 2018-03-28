@@ -25,16 +25,12 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include "h2o.h"
-#include "h2o/http2client.h"
 #include "h2o/httpclient_internal.h"
 
-#include "h2o/header.h"
-#include "h2o/memory.h"
-#include "h2o/socket.h"
-#include "h2o/socketpool.h"
-#include "h2o/timeout.h"
-#include "h2o/cache.h"
+#define H2O_HTTP2_SETTINGS_CLIENT_CONNECTION_WINDOW_SIZE 16777216
+#define H2O_HTTP2_SETTINGS_CLIENT_HEADER_TABLE_SIZE 4096
+
+static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 //#define UNUSED_FUNCTION(name)                                                                                                      \
 //    __attribute__((unused)) static void unused_function_##name(void)                                                               \
@@ -51,7 +47,7 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
 
 static void request_write(struct st_h2o_http2client_conn_t *conn)
 {
-    if (conn->state == CONN_STATE_IS_CLOSING)
+    if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING)
         return;
     if (conn->sock->_cb.write == NULL && !h2o_timeout_is_linked(&conn->output.defer_timeout_entry))
         h2o_timeout_link(conn->ctx->loop, conn->ctx->zero_timeout, &conn->output.defer_timeout_entry);
@@ -72,26 +68,26 @@ static void enqueue_window_update(struct st_h2o_http2client_conn_t *conn, uint32
 static void stream_send_error(struct st_h2o_http2client_conn_t *conn, uint32_t stream_id, int errnum)
 {
     assert(stream_id != 0);
-    assert(conn->state != CONN_STATE_IS_CLOSING);
+    assert(conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING);
 
     h2o_http2_encode_rst_stream_frame(&conn->output.buf, stream_id, -errnum);
     request_write(conn);
 }
 
-static void transition_state(struct st_h2o_http2client_stream_t *stream, enum enum_stream_state_t new_state)
+static void transition_state(struct st_h2o_http2client_stream_t *stream, enum enum_h2o_http2client_stream_state new_state)
 {
     switch (new_state) {
-    case STREAM_STATE_SEND_HEADERS:
+    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
         assert(!"FIXME");
         break;
-    case STREAM_STATE_SEND_BODY:
-        assert(stream->state == STREAM_STATE_SEND_HEADERS);
+    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
+        assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS);
         break;
-    case STREAM_STATE_RECV_HEADERS:
-        assert(stream->state == STREAM_STATE_SEND_BODY);
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
+        assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY);
         break;
-    case STREAM_STATE_RECV_BODY:
-        assert(stream->state == STREAM_STATE_RECV_HEADERS);
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
+        assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
         break;
     }
     stream->state = new_state;
@@ -209,7 +205,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http2, stream);
     int ret;
 
-    assert(stream->state == STREAM_STATE_RECV_HEADERS);
+    assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
     if ((ret = h2o_hpack_parse_response_headers(&stream->pool, &stream->input.res, &conn->input.header_table, src, len,
                                                 err_desc)) != 0) {
@@ -244,7 +240,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         goto SendRSTStream;
     }
 
-    transition_state(stream, STREAM_STATE_RECV_BODY);
+    transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY);
     if (stream->input.body == NULL) {
         close_stream(stream);
     }
@@ -274,12 +270,12 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
     }
 
     if ((stream = get_stream(conn, frame.stream_id)) == NULL ||
-        !(stream->state == STREAM_STATE_RECV_HEADERS || stream->state == STREAM_STATE_RECV_BODY)) {
+        !(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY)) {
         *err_desc = "unexpected stream id in CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    if (stream->state == STREAM_STATE_RECV_BODY) {
+    if (stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY) {
         /* is a trailer, do nothing */
         return ret;
     }
@@ -322,7 +318,7 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
         }
     }
 
-    if (stream->state != STREAM_STATE_RECV_BODY) {
+    if (stream->state != H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         close_stream(stream);
         return 0;
@@ -381,9 +377,9 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
     h2o_timeout_unlink(&stream->timeout_entry);
 
     switch (stream->state) {
-    case STREAM_STATE_RECV_HEADERS:
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
         break;
-    case STREAM_STATE_RECV_BODY:
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
         /* is a trailer (ignore after only validate it) */
         if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0) {
             *err_desc = "trailing HEADERS frame MUST have END_STREAM flag set";
@@ -619,7 +615,7 @@ static int handle_invalid_continuation_frame(struct st_h2o_http2client_conn_t *c
 
 ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc)
 {
-    assert(conn->state != CONN_STATE_IS_CLOSING);
+    assert(conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING);
 
     h2o_http2_frame_t frame;
     ssize_t ret;
@@ -652,7 +648,7 @@ ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *sr
 
 static ssize_t expect_settings(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc)
 {
-    assert(conn->state != CONN_STATE_IS_CLOSING);
+    assert(conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING);
 
     h2o_http2_frame_t frame;
     ssize_t ret;
@@ -713,9 +709,9 @@ static void close_connection_now(struct st_h2o_http2client_conn_t *conn)
 
 static int close_connection_if_necessary(struct st_h2o_http2client_conn_t *conn)
 {
-    if (conn->state == CONN_STATE_HALF_CLOSED && conn->num_streams == 0)
-        conn->state = CONN_STATE_IS_CLOSING;
-    if (conn->state == CONN_STATE_IS_CLOSING) {
+    if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_HALF_CLOSED && conn->num_streams == 0)
+        conn->state = H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING;
+    if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING) {
         close_connection_now(conn);
         return 1;
     }
@@ -724,7 +720,7 @@ static int close_connection_if_necessary(struct st_h2o_http2client_conn_t *conn)
 
 static int close_connection(struct st_h2o_http2client_conn_t *conn)
 {
-    conn->state = CONN_STATE_IS_CLOSING;
+    conn->state = H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING;
     h2o_socket_read_stop(conn->sock);
 
     if (conn->output.buf_in_flight != NULL || h2o_timeout_is_linked(&conn->output.defer_timeout_entry)) {
@@ -738,12 +734,12 @@ static int close_connection(struct st_h2o_http2client_conn_t *conn)
 
 static void enqueue_goaway(struct st_h2o_http2client_conn_t *conn, int errnum, h2o_iovec_t additional_data)
 {
-    if (conn->state == CONN_STATE_IS_CLOSING)
+    if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING)
         return;
 
     h2o_http2_encode_goaway_frame(&conn->output.buf, 0, errnum, additional_data);
     request_write(conn);
-    conn->state = CONN_STATE_HALF_CLOSED;
+    conn->state = H2O_HTTP2CLIENT_CONN_STATE_HALF_CLOSED;
 
     /* stop opening new streams */
     h2o_linklist_unlink(&conn->link);
@@ -765,14 +761,14 @@ static void do_stream_timeout(struct st_h2o_http2client_stream_t *stream)
         return;
     }
     switch (stream->state) {
-    case STREAM_STATE_SEND_HEADERS:
-    case STREAM_STATE_SEND_BODY:
+    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
+    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
         client->cb.on_head(&client->super, "I/O timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
         break;
-    case STREAM_STATE_RECV_HEADERS:
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
         client->cb.on_head(&client->super, "first byte timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
         break;
-    case STREAM_STATE_RECV_BODY:
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
         client->cb.on_body(&client->super, "I/O timeout");
         break;
     }
@@ -805,7 +801,7 @@ static void on_keepalive_timeout(h2o_timeout_entry_t *entry)
 static int parse_input(struct st_h2o_http2client_conn_t *conn)
 {
     /* handle the input */
-    while (conn->state != CONN_STATE_IS_CLOSING && conn->sock->input->size != 0) {
+    while (conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING && conn->sock->input->size != 0) {
         /* process a frame */
         const char *err_desc = NULL;
         ssize_t ret = conn->input.read_frame(conn, (uint8_t *)conn->sock->input->bytes, conn->sock->input->size, &err_desc);
@@ -870,7 +866,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, stream->stream_id, conn->peer_settings.max_frame_size,
                               method, &url, &headers, body.base == NULL);
-    transition_state(stream, STREAM_STATE_SEND_BODY);
+    transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY);
 
     if (body.base != NULL) {
         /* send body */
@@ -925,7 +921,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
-            transition_state(stream, STREAM_STATE_RECV_HEADERS);
+            transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
             h2o_timeout_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &stream->timeout_entry);
         }
     }
@@ -934,7 +930,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     h2o_buffer_dispose(&conn->output.buf_in_flight);
 
 #if !H2O_USE_LIBUV
-    if (conn->state == CONN_STATE_OPEN) {
+    if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_OPEN) {
         if (conn->output.buf->size != 0 || !h2o_linklist_is_empty(&conn->output.sending_streams))
             h2o_socket_notify_write(sock, on_notify_write);
         return;
@@ -1073,7 +1069,7 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
     memset(conn, 0, sizeof(*conn));
     conn->ctx = ctx;
     conn->sock = sock;
-    conn->state = CONN_STATE_OPEN;
+    conn->state = H2O_HTTP2CLIENT_CONN_STATE_OPEN;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(stream);
     h2o_url_copy(NULL, &conn->origin_url, origin_url);
@@ -1187,7 +1183,7 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
     h2o_mem_init_pool(&stream->pool);
 
     stream->input.res.content_length = SIZE_MAX;
-    stream->state = STREAM_STATE_SEND_HEADERS;
+    stream->state = H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS;
     stream->timeout_entry.cb = on_stream_timeout;
     h2o_http2_window_init(&stream->input.window, get_max_buffer_size(client->super.ctx));
 
