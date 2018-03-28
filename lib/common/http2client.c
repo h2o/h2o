@@ -1115,33 +1115,6 @@ static void send_client_preface(struct st_h2o_http2client_conn_t *conn, h2o_http
 #undef PREFIX
 }
 
-// FIXME
-static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin_url, h2o_iovec_t alpn_proto, int pooled)
-{
-    struct st_h2o_http2client_stream_t *stream = data;
-
-    h2o_timeout_unlink(&stream->timeout_entry);
-    stream->client->conn.req = NULL; // FIXME connect_req?
-
-    if (sock == NULL) {
-        assert(errstr != NULL);
-        on_connect_error(stream, errstr);
-        return;
-    }
-
-    struct st_h2o_http2client_conn_t *conn = create_connection(stream->client->ctx, sock, origin_url, stream->client->conn.pool);
-    sock->data = conn;
-
-    /* send preface, settings, and connection-level window update */
-    send_client_preface(conn, stream->client->ctx);
-
-    h2o_socket_read_start(conn->sock, on_read);
-
-    h2o_timeout_link(conn->ctx->loop, conn->ctx->io_timeout, &conn->io_timeout_entry);
-
-    on_connection_ready(stream, conn);
-}
-
 static void do_cancel(h2o_httpclient_t *client)
 {
     struct st_h2o_http2client_stream_t *stream = &((struct st_h2o_httpclient_private_t *)client)->http2;
@@ -1182,34 +1155,6 @@ static int do_write_req(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_
     }
 
     return 0;
-}
-
-static struct st_h2o_http2client_stream_t *create_stream_old(h2o_httpclient_t **client, void *data, h2o_httpclient_ctx_t *ctx,
-                                                         h2o_httpclient_connect_cb cb)
-{
-    struct st_h2o_http2client_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
-    memset(stream, 0, offsetof(struct st_h2o_http2client_stream_t, pool));
-    h2o_mem_init_pool(&stream->pool);
-
-    stream->client->ctx = ctx;
-    stream->client->data = data;
-    stream->client->buf = &stream->input.body;
-    stream->client->cancel = do_cancel;
-    stream->client->steal_socket = NULL;
-    stream->client->write_req = do_write_req;
-    stream->client->update_window = do_update_window;
-    stream->client->_cb.on_connect = cb;
-    stream->input.res.content_length = SIZE_MAX;
-    stream->state = STREAM_STATE_SEND_HEADERS;
-    stream->timeout_entry.cb = on_stream_timeout;
-    h2o_http2_window_init(&stream->input.window, get_max_buffer_size(ctx));
-
-    /* caller needs to setup _cb, timeout.cb, sock, and sock->data */
-
-    if (client != NULL)
-        *client = stream->client;
-
-    return stream;
 }
 
 static void setup_stream(struct st_h2o_http2client_stream_t *stream)
