@@ -787,7 +787,8 @@ static JSON_Value * parse_number_value(const char **string) {
     intmax_t fixed;
     errno = 0;
     fixed = strtoimax(*string, &end, 10);
-    if (errno == 0 && INT64_MIN <= fixed && fixed <= INT64_MAX) {
+    if (errno == 0 && INT64_MIN <= fixed && fixed <= INT64_MAX && end != NULL &&
+			(*end == 0x00 || (*end != '.' && *end != 'e' && *end != 'E'))) {
         *string = end;
         return json_value_init_fixed(fixed);
     }

@@ -10,6 +10,9 @@ end
 assert('parse multi-byte') do
   assert_equal({"あいうえお"=>"かきくけこ"}, JSON.parse('{"あいうえお": "かきくけこ"}'))
 end
+assert('parse object with numbers') do
+  assert_equal({"latitude"=>33.6526,"longitude"=>177.96063}, JSON.parse('{"latitude": 33.6526,"longitude": 177.96063}'))
+end
 assert('stringify boolean') do
   assert_equal "true", JSON.stringify(true)
 end
