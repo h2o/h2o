@@ -249,6 +249,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
     headers = h2o_mem_alloc_pool(&pool, *headers,  MAX_HEADERS);
     header_names = h2o_mem_alloc_pool(&pool, *header_names, MAX_HEADERS);
 
+ReparseHeaders:
     {
         struct phr_header src_headers[MAX_HEADERS];
         /* parse response */
@@ -291,6 +292,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
             goto Exit;
         }
         h2o_buffer_consume(&client->super.sock->input, rlen);
+        /* check if the rest of the buffer contains parsable headers */
+        if (client->super.sock->input->size > 0)
+            goto ReparseHeaders;
         h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
         goto Exit;
     }
