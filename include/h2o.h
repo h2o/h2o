@@ -107,6 +107,7 @@ typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
 typedef struct st_h2o_headers_command_t h2o_headers_command_t;
+typedef struct st_h2o_proxy_log_data_t h2o_proxy_log_data_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
@@ -795,6 +796,7 @@ typedef struct st_h2o_http2_debug_state_t {
     ssize_t conn_flow_out;
 } h2o_http2_debug_state_t;
 
+typedef h2o_iovec_t (*h2o_log_handler_callback_t)(h2o_req_t *);
 typedef struct st_h2o_conn_callbacks_t {
     /**
      * getsockname (return size of the obtained address, or 0 if failed)
@@ -1084,6 +1086,13 @@ struct st_h2o_req_t {
      * error logs
      */
     H2O_VECTOR(h2o_req_error_log_t) error_logs;
+
+    /**
+     * handler specific log data
+     */
+    struct {
+        h2o_proxy_log_data_t *proxy;
+    } handler_log_data;
 
     /* flags */
 
@@ -1636,6 +1645,8 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf);
  */
 char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char *buf);
 
+size_t h2o_log_stringify_duration(char *buf, int64_t usec);
+
 /* proxy */
 
 /**
@@ -1953,6 +1964,12 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 
+typedef struct st_h2o_proxy_log_data_t {
+    h2o_http1client_timings_t timings;
+} h2o_proxy_log_data_t;
+
+h2o_log_handler_callback_t h2o_proxy_get_logconf_callback(h2o_iovec_t name);
+
 /* lib/redirect.c */
 
 typedef struct st_h2o_redirect_handler_t h2o_redirect_handler_t;
@@ -2236,14 +2253,19 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
     db->_bytes_inflight = 0;
 }
 
+static inline int h2o_time_compute(struct timeval *from, struct timeval *until, int64_t *delta_usec)
+{
+    if (h2o_timeval_is_null((from)) || h2o_timeval_is_null((until))) {
+        return 0;
+    }
+    *delta_usec = h2o_timeval_subtract((from), (until));
+    return 1;
+}
+
 #define COMPUTE_DURATION(name, from, until)                                                                                        \
     static inline int h2o_time_compute_##name(struct st_h2o_req_t *req, int64_t *delta_usec)                                       \
     {                                                                                                                              \
-        if (h2o_timeval_is_null((from)) || h2o_timeval_is_null((until))) {                                                         \
-            return 0;                                                                                                              \
-        }                                                                                                                          \
-        *delta_usec = h2o_timeval_subtract((from), (until));                                                                       \
-        return 1;                                                                                                                  \
+        return h2o_time_compute(from, until, delta_usec);                                                                          \
     }
 
 COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);

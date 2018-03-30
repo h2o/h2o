@@ -65,6 +65,7 @@ enum {
     ELEMENT_TYPE_TOTAL_TIME,                    /* %{total-time}x */
     ELEMENT_TYPE_ERROR,                         /* %{error}x */
     ELEMENT_TYPE_PROTOCOL_SPECIFIC,             /* %{protocol-specific...}x */
+    ELEMENT_TYPE_HANDLER_SPECIFIC,              /* %{handler-specific...}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -75,6 +76,7 @@ struct log_element_t {
         const h2o_token_t *header_token;
         h2o_iovec_t name;
         size_t protocol_specific_callback_index;
+        h2o_log_handler_callback_t handler_cb;
     } data;
     unsigned magically_quoted_json : 1; /* whether to omit surrounding doublequotes when the output is null */
     unsigned original_response : 1;
@@ -262,6 +264,14 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
                     MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id);
+
+                    h2o_log_handler_callback_t cb;
+                    if ((cb = h2o_proxy_get_logconf_callback(h2o_iovec_init(pt, quote_end - pt))) != NULL) {
+                        NEW_ELEMENT(ELEMENT_TYPE_HANDLER_SPECIFIC);
+                        LAST_ELEMENT()->data.handler_cb = cb;
+                        goto MAP_EXT_Found;
+                    }
+
                     { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);
@@ -439,6 +449,24 @@ Fail:
     memcpy(pos, nullexpr.base, nullexpr.len);
     pos += nullexpr.len;
     return pos;
+}
+
+size_t h2o_log_stringify_duration(char *buf, int64_t usec)
+{
+    char *pos = buf;
+    int32_t sec = (int32_t)(usec / (1000 * 1000));
+    usec -= ((int64_t)sec * (1000 * 1000));
+    buf += sprintf(buf, "%" PRId32, sec);
+    if (usec != 0) {
+        int i;
+        *buf++ = '.';
+        for (i = 5; i >= 0; --i) {
+            buf[i] = '0' + usec % 10;
+            usec /= 10;
+        }
+        buf += 6;
+    }
+    return buf - pos;
 }
 
 #define APPEND_DURATION(pos, name)                                                                                                 \
@@ -767,6 +795,14 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             } else {
                 goto EmitNull;
             }
+        } break;
+
+        case ELEMENT_TYPE_HANDLER_SPECIFIC: {
+            h2o_iovec_t s = element->data.handler_cb(req);
+            if (s.base == NULL)
+                goto EmitNull;
+            RESERVE(s.len);
+            pos = append_unsafe_string(pos, s.base, s.len);
         } break;
 
         case ELEMENT_TYPE_LOGNAME:      /* %l */

@@ -29,6 +29,8 @@
 #include "h2o/http1client.h"
 #include "h2o/tunnel.h"
 
+struct st_h2o_proxy_log_data_private_t;
+
 struct rp_generator_t {
     h2o_generator_t super;
     h2o_req_t *src_req;
@@ -44,11 +46,27 @@ struct rp_generator_t {
     void (*await_send)(h2o_http1client_t *);
 };
 
+struct st_h2o_proxy_log_data_private_t {
+    h2o_proxy_log_data_t super;
+    struct rp_generator_t *generator;
+};
+
 struct rp_ws_upgrade_info_t {
     h2o_context_t *ctx;
     h2o_timeout_t *timeout;
     h2o_socket_t *upstream_sock;
 };
+
+static void copy_log_data(struct rp_generator_t *self)
+{
+    assert(self->client != NULL);
+    if (self->src_req->handler_log_data.proxy == NULL)
+        return;
+    struct st_h2o_proxy_log_data_private_t *log_data = (void *)self->src_req->handler_log_data.proxy;
+    if (log_data->generator != self)
+        return; /* already used by another subsequent request */
+    log_data->super.timings = self->client->timings;
+}
 
 static h2o_http1client_ctx_t *get_client_ctx(h2o_req_t *req)
 {
@@ -417,6 +435,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     h2o_req_overrides_t *overrides = self->src_req->overrides;
 
     if (errstr != NULL) {
+        copy_log_data(self);
+
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
@@ -456,6 +476,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     size_t i;
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int seen_date_header = 0;
+
+    copy_log_data(self);
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -600,6 +622,8 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     h2o_req_t *req = self->src_req;
     int use_proxy_protocol = 0, reprocess_if_too_early = 0;
 
+    copy_log_data(self);
+
     if (errstr != NULL) {
         self->client = NULL;
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
@@ -647,6 +671,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         }
     }
     self->client->informational_cb = on_1xx;
+
     return on_head;
 }
 
@@ -680,6 +705,18 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
+
+    /* setup log data */
+    struct st_h2o_proxy_log_data_private_t *log_data;
+    if (req->handler_log_data.proxy == NULL) {
+        log_data = h2o_mem_alloc_pool(&req->pool, struct st_h2o_proxy_log_data_private_t , 1);
+        memset(log_data, 0, sizeof(*log_data));
+        req->handler_log_data.proxy = &log_data->super;
+    } else {
+        log_data = (void *)req->handler_log_data.proxy;
+        log_data->super = (h2o_proxy_log_data_t){{0}}; /* clear */
+    }
+    log_data->generator = self;
 
     return self;
 }
@@ -715,4 +752,58 @@ void h2o__proxy_process_request(h2o_req_t *req)
      So I leave this as it is for the time being.
      */
     h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect);
+}
+
+#define DEFINE_LOG_PROXY_TIME_FUNC(type, from, until) \
+    static h2o_iovec_t log_proxy_##type(h2o_req_t *req) \
+    { \
+        h2o_proxy_log_data_t *log_data = req->handler_log_data.proxy; \
+        if (log_data == NULL) \
+            return h2o_iovec_init(NULL, 0); \
+        if ((from) == 0 || (until) == 0) \
+            return h2o_iovec_init(NULL, 0); \
+        int64_t delta_msec = (until) - (from); \
+        h2o_iovec_t buf; \
+        buf.base = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT32_LONGEST_STR ".999999") - 1); \
+        buf.len = h2o_log_stringify_duration(buf.base, delta_msec * 1000); \
+        return buf; \
+    }
+
+DEFINE_LOG_PROXY_TIME_FUNC(idle_time, req->timestamps.request_begin_at.tv_sec * 1000 + req->timestamps.request_begin_at.tv_usec / 1000, log_data->timings.start_at);
+DEFINE_LOG_PROXY_TIME_FUNC(connect_time, log_data->timings.start_at, log_data->timings.request_begin_at);
+DEFINE_LOG_PROXY_TIME_FUNC(request_header_time, log_data->timings.request_begin_at,
+                              log_data->timings.request_body_begin_at > log_data->timings.request_begin_at ? log_data->timings.request_body_begin_at
+                                                                                                             : log_data->timings.request_end_at);
+DEFINE_LOG_PROXY_TIME_FUNC(request_body_time,
+                              log_data->timings.request_body_begin_at == log_data->timings.request_begin_at ? log_data->timings.request_end_at
+                                                                                                              : log_data->timings.request_body_begin_at,
+                              log_data->timings.request_end_at);
+DEFINE_LOG_PROXY_TIME_FUNC(request_total_time, log_data->timings.request_begin_at, log_data->timings.request_end_at);
+DEFINE_LOG_PROXY_TIME_FUNC(first_byte_time, log_data->timings.request_end_at, log_data->timings.response_start_at);
+DEFINE_LOG_PROXY_TIME_FUNC(response_time, log_data->timings.response_start_at, log_data->timings.response_end_at);
+DEFINE_LOG_PROXY_TIME_FUNC(total_time, log_data->timings.request_begin_at, log_data->timings.response_end_at);
+
+#undef DEFINE_LOG_PROXY_TIME_FUNC
+
+h2o_log_handler_callback_t h2o_proxy_get_logconf_callback(h2o_iovec_t name)
+{
+#define PREFIX "proxy-"
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "idle-time")))
+        return log_proxy_idle_time;
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "connect-time")))
+        return log_proxy_connect_time;
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "request-header-time")))
+        return log_proxy_request_header_time;
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "request-body-time")))
+        return log_proxy_request_body_time;
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "request-total-time")))
+        return log_proxy_request_total_time;
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "first-byte-time")))
+        return log_proxy_first_byte_time;
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "response-time")))
+        return log_proxy_response_time;
+    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "total-time")))
+        return log_proxy_total_time;
+    return NULL;
+#undef PREFIX
 }
