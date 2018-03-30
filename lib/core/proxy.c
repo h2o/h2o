@@ -754,34 +754,26 @@ void h2o__proxy_process_request(h2o_req_t *req)
     h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect);
 }
 
-#define DEFINE_LOG_PROXY_TIME_FUNC(type, from, until) \
-    static h2o_iovec_t log_proxy_##type(h2o_req_t *req) \
+#define DEFINE_LOG_PROXY_TIME_FUNC(name) \
+    static h2o_iovec_t log_proxy_##name(h2o_req_t *req) \
     { \
-        h2o_proxy_log_data_t *log_data = req->handler_log_data.proxy; \
-        if (log_data == NULL) \
+        int64_t delta_usec; \
+        if (h2o_proxy_time_compute_##name(req, &delta_usec) == 0) \
             return h2o_iovec_init(NULL, 0); \
-        if ((from) == 0 || (until) == 0) \
-            return h2o_iovec_init(NULL, 0); \
-        int64_t delta_msec = (until) - (from); \
         h2o_iovec_t buf; \
         buf.base = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT32_LONGEST_STR ".999999") - 1); \
-        buf.len = h2o_log_stringify_duration(buf.base, delta_msec * 1000); \
+        buf.len = h2o_log_stringify_duration(buf.base, delta_usec); \
         return buf; \
-    }
+    } \
 
-DEFINE_LOG_PROXY_TIME_FUNC(idle_time, req->timestamps.request_begin_at.tv_sec * 1000 + req->timestamps.request_begin_at.tv_usec / 1000, log_data->timings.start_at);
-DEFINE_LOG_PROXY_TIME_FUNC(connect_time, log_data->timings.start_at, log_data->timings.request_begin_at);
-DEFINE_LOG_PROXY_TIME_FUNC(request_header_time, log_data->timings.request_begin_at,
-                              log_data->timings.request_body_begin_at > log_data->timings.request_begin_at ? log_data->timings.request_body_begin_at
-                                                                                                             : log_data->timings.request_end_at);
-DEFINE_LOG_PROXY_TIME_FUNC(request_body_time,
-                              log_data->timings.request_body_begin_at == log_data->timings.request_begin_at ? log_data->timings.request_end_at
-                                                                                                              : log_data->timings.request_body_begin_at,
-                              log_data->timings.request_end_at);
-DEFINE_LOG_PROXY_TIME_FUNC(request_total_time, log_data->timings.request_begin_at, log_data->timings.request_end_at);
-DEFINE_LOG_PROXY_TIME_FUNC(first_byte_time, log_data->timings.request_end_at, log_data->timings.response_start_at);
-DEFINE_LOG_PROXY_TIME_FUNC(response_time, log_data->timings.response_start_at, log_data->timings.response_end_at);
-DEFINE_LOG_PROXY_TIME_FUNC(total_time, log_data->timings.request_begin_at, log_data->timings.response_end_at);
+DEFINE_LOG_PROXY_TIME_FUNC(idle_time);
+DEFINE_LOG_PROXY_TIME_FUNC(connect_time);
+DEFINE_LOG_PROXY_TIME_FUNC(request_header_time);
+DEFINE_LOG_PROXY_TIME_FUNC(request_body_time);
+DEFINE_LOG_PROXY_TIME_FUNC(request_total_time);
+DEFINE_LOG_PROXY_TIME_FUNC(first_byte_time);
+DEFINE_LOG_PROXY_TIME_FUNC(response_time);
+DEFINE_LOG_PROXY_TIME_FUNC(total_time);
 
 #undef DEFINE_LOG_PROXY_TIME_FUNC
 
