@@ -65,8 +65,8 @@ EOT
             chomp $out;
             my @responses = split /\n/, $out;
             is scalar(@responses), 2, "2 responses";
-            like $responses[0], qr{\+[0-9]{1,2}\.[0-9]*ms .* /index.js$}, "index.js arrives < 100ms";
-            like $responses[1], qr{\+1\.[0-9]*s .* /1xx-push/$}, "/1xx-push/ arrives >= 1sec";
+            like $responses[0], qr{\+[0-9]{1,2}\.[0-9]*ms.*\s+200\s+[0-9]+\s+/index.js$}, "index.js arrives < 100ms";
+            like $responses[1], qr{\+1\.[0-9]*s.*\s+200\s+[0-9]+\s+/1xx-push/$}, "/1xx-push/ arrives >= 1sec";
         };
         subtest 'push-while-sleep' => sub {
             my $resp = `nghttp $opts -n --stat '$proto://127.0.0.1:$port/mruby/sleep-and-respond?sleep=1'`;
