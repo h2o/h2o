@@ -25,7 +25,7 @@
 #include <stdlib.h>
 
 /* backports for OpenSSL 1.0.2 */
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
 
 #define BIO_get_data(bio) ((bio)->ptr)
 #define BIO_set_data(bio, p) ((bio)->ptr = (p))
@@ -57,7 +57,7 @@ static inline BIO_METHOD *BIO_meth_new(int type, const char *name)
 #endif
 
 /* backports for OpenSSL 1.0.1 and LibreSSL */
-#if OPENSSL_VERSION_NUMBER < 0x10002000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10002000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
 
 #define SSL_is_server(ssl) ((ssl)->server)
 
