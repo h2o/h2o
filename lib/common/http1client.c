@@ -242,9 +242,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
     headers = h2o_mem_alloc_pool(&pool, sizeof(*headers) * MAX_HEADERS);
     header_names = h2o_mem_alloc_pool(&pool, sizeof(*header_names) * MAX_HEADERS);
 
-    {
-        struct phr_header src_headers[MAX_HEADERS];
+    /* continue parsing the responses until we see a final one */
+    while (1) {
         /* parse response */
+        struct phr_header src_headers[MAX_HEADERS];
         num_headers = MAX_HEADERS;
         rlen = phr_parse_response(sock->input->bytes, sock->input->size, &minor_version, &http_status, &msg, &msg_len, src_headers,
                                   &num_headers, 0);
@@ -256,12 +257,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
             h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
             goto Exit;
         }
-
+        /* fill-in the headers */
         for (i = 0; i != num_headers; ++i) {
             const h2o_token_t *token;
-            char *orig_name;
-
-            orig_name = h2o_strdup(&pool, src_headers[i].name, src_headers[i].name_len).base;
+            char *orig_name = h2o_strdup(&pool, src_headers[i].name, src_headers[i].name_len).base;
             h2o_strtolower((char *)src_headers[i].name, src_headers[i].name_len);
             token = h2o_lookup_token(src_headers[i].name, src_headers[i].name_len);
             if (token != NULL) {
@@ -273,10 +272,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
             headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
             headers[i].orig_name = orig_name;
         }
-    }
 
-    /* handle 1xx response (except 101, which is handled by on_head callback) */
-    if (100 <= http_status && http_status <= 199 && http_status != 101) {
+        if (!(100 <= http_status && http_status <= 199 && http_status != 101))
+            break;
+
         if (client->super.informational_cb != NULL &&
             client->super.informational_cb(&client->super, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                            num_headers) != 0) {
@@ -284,8 +283,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
             goto Exit;
         }
         h2o_buffer_consume(&client->super.sock->input, rlen);
-        h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
-        goto Exit;
+        if (client->super.sock->input->size == 0) {
+            h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
+            goto Exit;
+        }
     }
 
     /* parse the headers */
