@@ -44,8 +44,8 @@ struct rp_generator_t {
     void (*await_send)(h2o_http1client_t *);
 };
 
-struct st_h2o_proxy_log_data_private_t {
-    h2o_proxy_log_data_t super;
+struct st_proxy_timings_t {
+    h2o_http1client_timings_t super;
     struct rp_generator_t *generator;
 };
 
@@ -58,12 +58,12 @@ struct rp_ws_upgrade_info_t {
 static void copy_log_data(struct rp_generator_t *self)
 {
     assert(self->client != NULL);
-    if (self->src_req->proxy_log_data == NULL)
+    if (self->src_req->proxy_timings == NULL)
         return;
-    struct st_h2o_proxy_log_data_private_t *log_data = (void *)self->src_req->proxy_log_data;
-    if (log_data->generator != self)
+    struct st_proxy_timings_t *timings = (void *)self->src_req->proxy_timings;
+    if (timings->generator != self)
         return; /* already used by another subsequent request */
-    log_data->super.timings = self->client->timings;
+    timings->super = self->client->timings;
 }
 
 static h2o_http1client_ctx_t *get_client_ctx(h2o_req_t *req)
@@ -704,16 +704,16 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
 
     /* setup log data */
-    struct st_h2o_proxy_log_data_private_t *log_data;
-    if (req->proxy_log_data == NULL) {
-        log_data = h2o_mem_alloc_pool(&req->pool, struct st_h2o_proxy_log_data_private_t , 1);
-        memset(log_data, 0, sizeof(*log_data));
-        req->proxy_log_data = &log_data->super;
+    struct st_proxy_timings_t *timings;
+    if (req->proxy_timings == NULL) {
+        timings = h2o_mem_alloc_pool(&req->pool, struct st_proxy_timings_t , 1);
+        memset(timings, 0, sizeof(*timings));
+        req->proxy_timings = &timings->super;
     } else {
-        log_data = (void *)req->proxy_log_data;
-        log_data->super = (h2o_proxy_log_data_t){{0}}; /* clear */
+        timings = (void *)req->proxy_timings;
+        timings->super = (h2o_http1client_timings_t){0}; /* clear */
     }
-    log_data->generator = self;
+    timings->generator = self;
 
     return self;
 }
