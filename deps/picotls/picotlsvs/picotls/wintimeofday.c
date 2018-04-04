@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifdef WIN32
+#ifdef _WINDOWS
 #include "wincompat.h"
 
  /*
@@ -38,7 +38,7 @@ int wintimeofday(struct timeval* tv, struct timezone* tz)
 	 * Convert to plain 64 bit format, without making
 	 * assumptions about the FILETIME structure alignment.
 	 */
-	now |= ft.dwHighDateTime;
+	now = ft.dwHighDateTime;
 	now <<= 32;
 	now |= ft.dwLowDateTime;
 	/*

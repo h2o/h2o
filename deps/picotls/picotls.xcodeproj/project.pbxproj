@@ -90,6 +90,13 @@
 		10EACB121DCEAF0F00CA0341 /* gf128.h in Headers */ = {isa = PBXBuildFile; fileRef = 105900AB1DC941D700FB4085 /* gf128.h */; };
 		10EACB131DCEAF0F00CA0341 /* curve25519.h in Headers */ = {isa = PBXBuildFile; fileRef = 105900361DC8D44E00FB4085 /* curve25519.h */; };
 		10EACB1A1DCEC2A300CA0341 /* libpicotls-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 106530DA1D9B3E6F005B2C60 /* libpicotls-core.a */; };
+		E949EF282073629300511ECA /* minicrypto-pem.c in Sources */ = {isa = PBXBuildFile; fileRef = E949EF272073629300511ECA /* minicrypto-pem.c */; };
+		E99B75E01F5CDDB500CF503E /* asn1.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DE1F5CDDB500CF503E /* asn1.c */; };
+		E99B75E11F5CDDB500CF503E /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DF1F5CDDB500CF503E /* pembase64.c */; };
+		E99B75E21F5CE54D00CF503E /* asn1.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DE1F5CDDB500CF503E /* asn1.c */; };
+		E99B75E31F5CE54D00CF503E /* asn1.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DE1F5CDDB500CF503E /* asn1.c */; };
+		E99B75E41F5CE64E00CF503E /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DF1F5CDDB500CF503E /* pembase64.c */; };
+		E99B75E51F5CE64E00CF503E /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DF1F5CDDB500CF503E /* pembase64.c */; };
 		E9BC76CF1EF3A35E00EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76C61EF3A2F700EB7A09 /* chacha20.c */; };
 		E9BC76D21EF3A36A00EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76C61EF3A2F700EB7A09 /* chacha20.c */; };
 		E9BC76D41EF3A37200EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76C61EF3A2F700EB7A09 /* chacha20.c */; };
@@ -98,6 +105,9 @@
 		E9BC76DF1EF3CCD100EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76CC1EF3A31000EB7A09 /* salsa20.h */; };
 		E9BC76E01EF3CCDD00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
 		E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
+		E9E865EB203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
+		E9E865EC203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
+		E9E865ED203BD46700E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -196,10 +206,15 @@
 		106530FC1DAD8985005B2C60 /* cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = cli; sourceTree = BUILT_PRODUCTS_DIR; };
 		106530FE1DAD8A3C005B2C60 /* cli.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cli.c; sourceTree = "<group>"; };
 		10EACB171DCEAF0F00CA0341 /* libpicotls-minicrypto.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libpicotls-minicrypto.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E949EF272073629300511ECA /* minicrypto-pem.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "minicrypto-pem.c"; sourceTree = "<group>"; };
+		E99B75DE1F5CDDB500CF503E /* asn1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = asn1.c; sourceTree = "<group>"; };
+		E99B75DF1F5CDDB500CF503E /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E9BC76C61EF3A2F700EB7A09 /* chacha20.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = chacha20.c; path = src/chacha20.c; sourceTree = "<group>"; };
 		E9BC76CC1EF3A31000EB7A09 /* salsa20.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = salsa20.h; path = src/salsa20.h; sourceTree = "<group>"; };
 		E9BC76D61EF3C1C200EB7A09 /* poly1305.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = poly1305.c; path = src/poly1305.c; sourceTree = "<group>"; };
 		E9BC76D71EF3C1C200EB7A09 /* poly1305.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = poly1305.h; path = src/poly1305.h; sourceTree = "<group>"; };
+		E9E3849C1F0748DD00D50990 /* util.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = util.h; sourceTree = "<group>"; };
+		E9E865E9203BD45600E2FFCD /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = sha512.c; path = src/sha512.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -280,6 +295,7 @@
 				E9BC76CC1EF3A31000EB7A09 /* salsa20.h */,
 				1059005D1DC8DE3800FB4085 /* sha2.h */,
 				1059005F1DC8DE4400FB4085 /* sha256.c */,
+				E9E865E9203BD45600E2FFCD /* sha512.c */,
 				105900301DC8D3DF00FB4085 /* tassert.h */,
 			);
 			path = cifra;
@@ -332,10 +348,13 @@
 		106530BD1D998624005B2C60 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				E99B75DE1F5CDDB500CF503E /* asn1.c */,
+				E99B75DF1F5CDDB500CF503E /* pembase64.c */,
 				1059003F1DC8D53200FB4085 /* cifra.c */,
 				106530C21D9B004B005B2C60 /* openssl.c */,
 				106530BF1D998641005B2C60 /* picotls.c */,
 				105900C51DC9798800FB4085 /* uecc.c */,
+				E949EF272073629300511ECA /* minicrypto-pem.c */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -348,6 +367,7 @@
 				1059003D1DC8D4E300FB4085 /* minicrypto.c */,
 				106530C51D9B1A98005B2C60 /* openssl.c */,
 				106530E61D9B7AF6005B2C60 /* test.h */,
+				E9E3849C1F0748DD00D50990 /* util.h */,
 			);
 			path = t;
 			sourceTree = "<group>";
@@ -554,7 +574,7 @@
 		106530AA1D9985E0005B2C60 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0730;
+				LastUpgradeCheck = 0830;
 				ORGANIZATIONNAME = "DeNA Co., Ltd.";
 				TargetAttributes = {
 					106530CB1D9B3D45005B2C60 = {
@@ -593,12 +613,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				105900B61DC943D400FB4085 /* aes.c in Sources */,
+				E99B75E51F5CE64E00CF503E /* pembase64.c in Sources */,
 				105900431DC8D57000FB4085 /* picotls.c in Sources */,
 				105900C41DC96B2200FB4085 /* uECC.c in Sources */,
 				105900441DC8D57000FB4085 /* picotest.c in Sources */,
 				105900611DC8DF8C00FB4085 /* sha256.c in Sources */,
 				E9BC76D21EF3A36A00EB7A09 /* chacha20.c in Sources */,
 				1059004E1DC8D61800FB4085 /* minicrypto.c in Sources */,
+				E99B75E31F5CE54D00CF503E /* asn1.c in Sources */,
+				E9E865ED203BD46700E2FFCD /* sha512.c in Sources */,
 				10EACAF01DCC843A00CA0341 /* drbg.c in Sources */,
 				E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */,
 				1059006A1DC8DFE300FB4085 /* hmac.c in Sources */,
@@ -627,9 +650,11 @@
 				105900CF1DCBECFB00FB4085 /* modes.c in Sources */,
 				106530EA1D9B7C13005B2C60 /* picotls.c in Sources */,
 				105900CD1DCBECF400FB4085 /* gcm.c in Sources */,
+				E9E865EC203BD46600E2FFCD /* sha512.c in Sources */,
 				105900D01DCBECFE00FB4085 /* sha256.c in Sources */,
 				1059004C1DC8D5B700FB4085 /* openssl.c in Sources */,
 				105900D21DCBED0A00FB4085 /* uecc.c in Sources */,
+				E99B75E21F5CE54D00CF503E /* asn1.c in Sources */,
 				105900C81DCBECDD00FB4085 /* blockwise.c in Sources */,
 				105900D31DCBED1D00FB4085 /* uECC.c in Sources */,
 				105900C91DCBECE100FB4085 /* chash.c in Sources */,
@@ -641,6 +666,7 @@
 				E9BC76D41EF3A37200EB7A09 /* chacha20.c in Sources */,
 				105900CB1DCBECEA00FB4085 /* drbg.c in Sources */,
 				105900CA1DCBECE500FB4085 /* curve25519.c in Sources */,
+				E99B75E41F5CE64E00CF503E /* pembase64.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -648,6 +674,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E99B75E01F5CDDB500CF503E /* asn1.c in Sources */,
+				E99B75E11F5CDDB500CF503E /* pembase64.c in Sources */,
 				106530EB1D9B7C5C005B2C60 /* picotls.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -666,6 +694,7 @@
 			files = (
 				10EACAF31DCEAF0F00CA0341 /* uECC.c in Sources */,
 				10EACAF41DCEAF0F00CA0341 /* uecc.c in Sources */,
+				E949EF282073629300511ECA /* minicrypto-pem.c in Sources */,
 				10EACAF51DCEAF0F00CA0341 /* gf128.c in Sources */,
 				10EACAF61DCEAF0F00CA0341 /* gcm.c in Sources */,
 				10EACAF71DCEAF0F00CA0341 /* sha256.c in Sources */,
@@ -677,6 +706,7 @@
 				10EACAFC1DCEAF0F00CA0341 /* curve25519.c in Sources */,
 				10EACAFD1DCEAF0F00CA0341 /* hmac.c in Sources */,
 				10EACAFE1DCEAF0F00CA0341 /* drbg.c in Sources */,
+				E9E865EB203BD46600E2FFCD /* sha512.c in Sources */,
 				10EACAFF1DCEAF0F00CA0341 /* cifra.c in Sources */,
 				10EACB001DCEAF0F00CA0341 /* blockwise.c in Sources */,
 			);
@@ -756,8 +786,10 @@
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "-";
@@ -802,8 +834,10 @@
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "-";
