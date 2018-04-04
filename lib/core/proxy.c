@@ -29,8 +29,6 @@
 #include "h2o/http1client.h"
 #include "h2o/tunnel.h"
 
-struct st_h2o_proxy_log_data_private_t;
-
 struct rp_generator_t {
     h2o_generator_t super;
     h2o_req_t *src_req;
@@ -60,9 +58,9 @@ struct rp_ws_upgrade_info_t {
 static void copy_log_data(struct rp_generator_t *self)
 {
     assert(self->client != NULL);
-    if (self->src_req->handler_log_data.proxy == NULL)
+    if (self->src_req->proxy_log_data == NULL)
         return;
-    struct st_h2o_proxy_log_data_private_t *log_data = (void *)self->src_req->handler_log_data.proxy;
+    struct st_h2o_proxy_log_data_private_t *log_data = (void *)self->src_req->proxy_log_data;
     if (log_data->generator != self)
         return; /* already used by another subsequent request */
     log_data->super.timings = self->client->timings;
@@ -671,7 +669,6 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         }
     }
     self->client->informational_cb = on_1xx;
-
     return on_head;
 }
 
@@ -708,12 +705,12 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
 
     /* setup log data */
     struct st_h2o_proxy_log_data_private_t *log_data;
-    if (req->handler_log_data.proxy == NULL) {
+    if (req->proxy_log_data == NULL) {
         log_data = h2o_mem_alloc_pool(&req->pool, struct st_h2o_proxy_log_data_private_t , 1);
         memset(log_data, 0, sizeof(*log_data));
-        req->handler_log_data.proxy = &log_data->super;
+        req->proxy_log_data = &log_data->super;
     } else {
-        log_data = (void *)req->handler_log_data.proxy;
+        log_data = (void *)req->proxy_log_data;
         log_data->super = (h2o_proxy_log_data_t){{0}}; /* clear */
     }
     log_data->generator = self;
@@ -752,50 +749,4 @@ void h2o__proxy_process_request(h2o_req_t *req)
      So I leave this as it is for the time being.
      */
     h2o_http1client_connect(&self->client, self, client_ctx, socketpool, target, on_connect);
-}
-
-#define DEFINE_LOG_PROXY_TIME_FUNC(name) \
-    static h2o_iovec_t log_proxy_##name(h2o_req_t *req) \
-    { \
-        int64_t delta_usec; \
-        if (h2o_proxy_time_compute_##name(req, &delta_usec) == 0) \
-            return h2o_iovec_init(NULL, 0); \
-        h2o_iovec_t buf; \
-        buf.base = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT32_LONGEST_STR ".999999") - 1); \
-        buf.len = h2o_log_stringify_duration(buf.base, delta_usec); \
-        return buf; \
-    } \
-
-DEFINE_LOG_PROXY_TIME_FUNC(idle_time);
-DEFINE_LOG_PROXY_TIME_FUNC(connect_time);
-DEFINE_LOG_PROXY_TIME_FUNC(request_header_time);
-DEFINE_LOG_PROXY_TIME_FUNC(request_body_time);
-DEFINE_LOG_PROXY_TIME_FUNC(request_total_time);
-DEFINE_LOG_PROXY_TIME_FUNC(first_byte_time);
-DEFINE_LOG_PROXY_TIME_FUNC(response_time);
-DEFINE_LOG_PROXY_TIME_FUNC(total_time);
-
-#undef DEFINE_LOG_PROXY_TIME_FUNC
-
-h2o_log_handler_callback_t h2o_proxy_get_logconf_callback(h2o_iovec_t name)
-{
-#define PREFIX "proxy-"
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "idle-time")))
-        return log_proxy_idle_time;
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "connect-time")))
-        return log_proxy_connect_time;
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "request-header-time")))
-        return log_proxy_request_header_time;
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "request-body-time")))
-        return log_proxy_request_body_time;
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "request-total-time")))
-        return log_proxy_request_total_time;
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "first-byte-time")))
-        return log_proxy_first_byte_time;
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "response-time")))
-        return log_proxy_response_time;
-    if (h2o_lcstris(name.base, name.len, H2O_STRLIT(PREFIX "total-time")))
-        return log_proxy_total_time;
-    return NULL;
-#undef PREFIX
 }
