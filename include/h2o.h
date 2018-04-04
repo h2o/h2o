@@ -1958,28 +1958,29 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 
-#define DEFINE_PROXY_COMPUTE_DURATION_FUNC(name, from, until) \
-static inline int h2o_proxy_time_compute_##name(struct st_h2o_req_t *req, int64_t *delta_usec)                                 \
-{                                                                                                                              \
-    h2o_http1client_timings_t *timings = req->proxy_timings; \
-    if (timings == NULL) \
-        return 0; \
-    if ((from) == 0 || (until) == 0) \
-        return 0; \
-    *delta_usec = ((until) - (from)) * 1000; \
-    return 1; \
-}
+#define DEFINE_PROXY_COMPUTE_DURATION_FUNC(name, from, until)                                                                      \
+    static inline int h2o_proxy_time_compute_##name(struct st_h2o_req_t *req, int64_t *delta_usec)                                 \
+    {                                                                                                                              \
+        h2o_http1client_timings_t *timings = req->proxy_timings;                                                                   \
+        if (timings == NULL)                                                                                                       \
+            return 0;                                                                                                              \
+        if ((from) == 0 || (until) == 0)                                                                                           \
+            return 0;                                                                                                              \
+        *delta_usec = ((until) - (from)) * 1000;                                                                                   \
+        return 1;                                                                                                                  \
+    }
 
-
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(idle_time, req->timestamps.request_begin_at.tv_sec * 1000 + req->timestamps.request_begin_at.tv_usec / 1000, timings->start_at);
+DEFINE_PROXY_COMPUTE_DURATION_FUNC(idle_time,
+                                   req->timestamps.request_begin_at.tv_sec * 1000 + req->timestamps.request_begin_at.tv_usec / 1000,
+                                   timings->start_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(connect_time, timings->start_at, timings->request_begin_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_header_time, timings->request_begin_at,
-                           timings->request_body_begin_at > timings->request_begin_at ? timings->request_body_begin_at
-                           : timings->request_end_at);
+                                   timings->request_body_begin_at > timings->request_begin_at ? timings->request_body_begin_at
+                                                                                              : timings->request_end_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_body_time,
-                           timings->request_body_begin_at == timings->request_begin_at ? timings->request_end_at
-                           : timings->request_body_begin_at,
-                           timings->request_end_at);
+                                   timings->request_body_begin_at == timings->request_begin_at ? timings->request_end_at
+                                                                                               : timings->request_body_begin_at,
+                                   timings->request_end_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_total_time, timings->request_begin_at, timings->request_end_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(first_byte_time, timings->request_end_at, timings->response_start_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(response_time, timings->response_start_at, timings->response_end_at);

@@ -792,7 +792,7 @@ size_t stringify_duration(char *buf, int64_t usec)
 }
 
 #define DELIMITER ", "
-#define ELEMENT_LONGEST_STR(name) #name "; " SERVER_TIMING_DURATION_LONGEST_STR
+#define ELEMENT_LONGEST_STR(name) name "; " SERVER_TIMING_DURATION_LONGEST_STR
 
 static void emit_server_timing_element(h2o_req_t *req, h2o_iovec_t *dst, const char *name,
                                        int (*compute_func)(h2o_req_t *, int64_t *), size_t max_len)
@@ -828,15 +828,12 @@ void h2o_add_server_timing_header(h2o_req_t *req)
     h2o_iovec_t dst = {NULL};
 
 #define LONGEST_STR                                                                                                                \
-    ELEMENT_LONGEST_STR(connect)                                                                                                   \
-    DELIMITER ELEMENT_LONGEST_STR(header) DELIMITER ELEMENT_LONGEST_STR(body) DELIMITER ELEMENT_LONGEST_STR(request_total)         \
-        DELIMITER ELEMENT_LONGEST_STR(process) \
-        DELIMITER ELEMENT_LONGEST_STR(proxy-idle) \
-        DELIMITER ELEMENT_LONGEST_STR(proxy-connect) \
-        DELIMITER ELEMENT_LONGEST_STR(proxy-request-header) \
-        DELIMITER ELEMENT_LONGEST_STR(proxy-request-body) \
-        DELIMITER ELEMENT_LONGEST_STR(proxy-request-total) \
-        DELIMITER ELEMENT_LONGEST_STR(proxy-first-byte)
+    ELEMENT_LONGEST_STR("connect")                                                                                                 \
+    DELIMITER ELEMENT_LONGEST_STR("header") DELIMITER ELEMENT_LONGEST_STR("body") DELIMITER ELEMENT_LONGEST_STR("request_total")   \
+        DELIMITER ELEMENT_LONGEST_STR("process") DELIMITER ELEMENT_LONGEST_STR("proxy-idle")                                       \
+            DELIMITER ELEMENT_LONGEST_STR("proxy-connect") DELIMITER ELEMENT_LONGEST_STR("proxy-request-header")                   \
+                DELIMITER ELEMENT_LONGEST_STR("proxy-request-body") DELIMITER ELEMENT_LONGEST_STR("proxy-request-total")           \
+                    DELIMITER ELEMENT_LONGEST_STR("proxy-first-byte")
     size_t max_len = sizeof(LONGEST_STR);
 
     emit_server_timing_element(req, &dst, "connect", h2o_time_compute_connect_time, max_len);
@@ -865,9 +862,9 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
 {
     h2o_iovec_t value;
 
-    value.base =
-        h2o_mem_alloc_pool(&req->pool, *value.base,
-                           prefix_len + suffix_len + sizeof(ELEMENT_LONGEST_STR(response) DELIMITER ELEMENT_LONGEST_STR(total)));
+    value.base = h2o_mem_alloc_pool(&req->pool, *value.base,
+                                    prefix_len + suffix_len +
+                                        sizeof(ELEMENT_LONGEST_STR("response") DELIMITER ELEMENT_LONGEST_STR("total")));
     value.len = 0;
 
     if (prefix_len != 0) {

@@ -706,7 +706,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     /* setup log data */
     struct st_proxy_timings_t *timings;
     if (req->proxy_timings == NULL) {
-        timings = h2o_mem_alloc_pool(&req->pool, struct st_proxy_timings_t , 1);
+        timings = h2o_mem_alloc_pool(&req->pool, struct st_proxy_timings_t, 1);
         memset(timings, 0, sizeof(*timings));
         req->proxy_timings = &timings->super;
     } else {
