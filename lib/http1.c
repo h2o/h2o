@@ -543,14 +543,8 @@ static void on_send_next_pull(h2o_socket_t *sock, const char *err)
         proceed_pull(conn, 0);
 }
 
-static void on_send_complete(h2o_socket_t *sock, const char *err)
+static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
 {
-    struct st_h2o_http1_conn_t *conn = sock->data;
-
-    assert(conn->req._ostr_top == &conn->_ostr_final.super);
-
-    conn->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
-
     if (!conn->req.http1_is_persistent) {
         /* TODO use lingering close */
         close_connection(conn, 1);
@@ -563,6 +557,38 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     conn->_prevreqlen = 0;
     conn->_reqsize = 0;
     reqread_start(conn);
+}
+
+static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+
+    if (err != NULL)
+        conn->req.http1_is_persistent = 0;
+    cleanup_connection(conn);
+}
+
+static void on_send_complete(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+
+    assert(conn->req._ostr_top == &conn->_ostr_final.super);
+
+    conn->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+
+    if (err != NULL)
+        conn->req.http1_is_persistent = 0;
+
+    if (err == NULL && conn->req.send_server_timing) {
+        h2o_iovec_t trailer;
+        if ((trailer = h2o_build_server_timing_trailer(&conn->req, H2O_STRLIT("server-timing: "), H2O_STRLIT("\r\n\r\n"))).len !=
+            0) {
+            h2o_socket_write(conn->sock, &trailer, 1, on_send_complete_post_trailers);
+            return;
+        }
+    }
+
+    cleanup_connection(conn);
 }
 
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
@@ -655,6 +681,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         if (send_state == H2O_SEND_STATE_ERROR) {
             conn->req.http1_is_persistent = 0;
+            conn->req.send_server_timing = 0;
         }
         buf.len += cbuf.len;
         conn->req.bytes_sent += cbuf.len;
@@ -676,6 +703,8 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     assert(!conn->_ostr_final.sent_headers);
 
     conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+    if (conn->req.send_server_timing)
+        h2o_add_server_timing_header(&conn->req);
 
     /* register the pull callback */
     conn->_ostr_final.pull.cb = cb;
@@ -723,6 +752,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         conn->req.http1_is_persistent = 0;
+        conn->req.send_server_timing = 0;
         if (req->upstream_refused) {
             /* to let the client retry, immediately close the connection without sending any data */
             on_send_complete(conn->sock, NULL);
@@ -732,6 +762,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+        if (conn->req.send_server_timing)
+            h2o_add_server_timing_header(&conn->req);
         /* build headers and send */
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
         bufs[bufcnt].base = h2o_mem_alloc_pool(

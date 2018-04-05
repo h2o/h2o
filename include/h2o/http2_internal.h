@@ -74,6 +74,8 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
                                size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_headers_t *headers, int is_end_stream);
 int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, h2o_res_t *res, h2o_hpack_header_table_t *header_table,
                                      const uint8_t *src, size_t len, const char **err_desc);
+void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                                size_t max_frame_size, h2o_header_t *headers, size_t num_headers);
 static h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_header_table_t *table, size_t index);
 
 /* frames */
@@ -459,7 +461,6 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         assert(stream->state == H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         stream->state = new_state;
         ++stream->_num_streams_slot->send_body;
-        stream->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
         assert(stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY);

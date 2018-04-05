@@ -22,9 +22,30 @@
 #ifndef picotls_h
 #define picotls_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include <inttypes.h>
 #include <sys/types.h>
+
+#define PTLS_AES128_KEY_SIZE 16
+#define PTLS_AES256_KEY_SIZE 32
+#define PTLS_AES_IV_SIZE 16
+#define PTLS_AESGCM_IV_SIZE 12
+#define PTLS_AESGCM_TAG_SIZE 16
+
+#define PTLS_CHACHA20_KEY_SIZE 32
+#define PTLS_CHACHA20_IV_SIZE 16
+#define PTLS_CHACHA20POLY1305_IV_SIZE 12
+#define PTLS_CHACHA20POLY1305_TAG_SIZE 16
+
+#define PTLS_SHA256_BLOCK_SIZE 64
+#define PTLS_SHA256_DIGEST_SIZE 32
+
+#define PTLS_SHA384_BLOCK_SIZE 128
+#define PTLS_SHA384_DIGEST_SIZE 48
 
 #define PTLS_MAX_SECRET_SIZE 32
 #define PTLS_MAX_IV_SIZE 16
@@ -45,9 +66,9 @@
 #define PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256 0x0403
 #define PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384 0x0503
 #define PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512 0x0603
-#define PTLS_SIGNATURE_RSA_PSS_SHA256 0x0804
-#define PTLS_SIGNATURE_RSA_PSS_SHA384 0x0805
-#define PTLS_SIGNATURE_RSA_PSS_SHA512 0x0806
+#define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256 0x0804
+#define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384 0x0805
+#define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512 0x0806
 
 /* error classes and macros */
 #define PTLS_ERROR_CLASS_SELF_ALERT 0
@@ -64,7 +85,6 @@
 #define PTLS_ALERT_LEVEL_FATAL 2
 
 #define PTLS_ALERT_CLOSE_NOTIFY 0
-#define PTLS_ALERT_END_OF_EARLY_DATA 1
 #define PTLS_ALERT_UNEXPECTED_MESSAGE 10
 #define PTLS_ALERT_BAD_RECORD_MAC 20
 #define PTLS_ALERT_HANDSHAKE_FAILURE 40
@@ -88,8 +108,39 @@
 #define PTLS_ERROR_LIBRARY (PTLS_ERROR_CLASS_INTERNAL + 3)
 #define PTLS_ERROR_INCOMPATIBLE_KEY (PTLS_ERROR_CLASS_INTERNAL + 4)
 #define PTLS_ERROR_SESSION_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 5)
+#define PTLS_ERROR_STATELESS_RETRY (PTLS_ERROR_CLASS_INTERNAL + 6)
+
+#define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
+#define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
+#define PTLS_ERROR_BER_INCORRECT_ENCODING (PTLS_ERROR_CLASS_INTERNAL + 52)
+#define PTLS_ERROR_BER_MALFORMED_TYPE (PTLS_ERROR_CLASS_INTERNAL + 53)
+#define PTLS_ERROR_BER_MALFORMED_LENGTH (PTLS_ERROR_CLASS_INTERNAL + 54)
+#define PTLS_ERROR_BER_EXCESSIVE_LENGTH (PTLS_ERROR_CLASS_INTERNAL + 55)
+#define PTLS_ERROR_BER_ELEMENT_TOO_SHORT (PTLS_ERROR_CLASS_INTERNAL + 56)
+#define PTLS_ERROR_BER_UNEXPECTED_EOC (PTLS_ERROR_CLASS_INTERNAL + 57)
+#define PTLS_ERROR_DER_INDEFINITE_LENGTH (PTLS_ERROR_CLASS_INTERNAL + 58)
+#define PTLS_ERROR_INCORRECT_ASN1_SYNTAX (PTLS_ERROR_CLASS_INTERNAL + 59)
+#define PTLS_ERROR_INCORRECT_PEM_KEY_VERSION (PTLS_ERROR_CLASS_INTERNAL + 60)
+#define PTLS_ERROR_INCORRECT_PEM_ECDSA_KEY_VERSION (PTLS_ERROR_CLASS_INTERNAL + 61)
+#define PTLS_ERROR_INCORRECT_PEM_ECDSA_CURVE (PTLS_ERROR_CLASS_INTERNAL + 62)
+#define PTLS_ERROR_INCORRECT_PEM_ECDSA_KEYSIZE (PTLS_ERROR_CLASS_INTERNAL + 63)
+#define PTLS_ERROR_INCORRECT_ASN1_ECDSA_KEY_SYNTAX (PTLS_ERROR_CLASS_INTERNAL + 64)
+
+#define PTLS_ZERO_DIGEST_SHA256                                                                                                    \
+    {                                                                                                                              \
+        0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4,    \
+            0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55                                                 \
+    }
+
+#define PTLS_ZERO_DIGEST_SHA384                                                                                                    \
+    {                                                                                                                              \
+        0x38, 0xb0, 0x60, 0xa7, 0x51, 0xac, 0x96, 0x38, 0x4c, 0xd9, 0x32, 0x7e, 0xb1, 0xb1, 0xe3, 0x6a, 0x21, 0xfd, 0xb7, 0x11,    \
+            0x14, 0xbe, 0x07, 0x43, 0x4c, 0x0c, 0xc7, 0xbf, 0x63, 0xf6, 0xe1, 0xda, 0x27, 0x4e, 0xde, 0xbf, 0xe7, 0x6f, 0x65,      \
+            0xfb, 0xd5, 0x1a, 0xd2, 0xf1, 0x48, 0x98, 0xb9, 0x5b                                                                   \
+    }
 
 typedef struct st_ptls_t ptls_t;
+typedef struct st_ptls_context_t ptls_context_t;
 
 /**
  * represents a sequence of octets
@@ -140,6 +191,28 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
 } ptls_key_exchange_algorithm_t;
 
 /**
+ * context of a symmetric cipher
+ */
+typedef struct st_ptls_cipher_context_t {
+    const struct st_ptls_cipher_algorithm_t *algo;
+    /* field above this line must not be altered by the crypto binding */
+    void (*do_dispose)(struct st_ptls_cipher_context_t *ctx);
+    void (*do_init)(struct st_ptls_cipher_context_t *ctx, const void *iv);
+    void (*do_transform)(struct st_ptls_cipher_context_t *ctx, void *output, const void *input, size_t len);
+} ptls_cipher_context_t;
+
+/**
+ * a symmetric cipher
+ */
+typedef const struct st_ptls_cipher_algorithm_t {
+    const char *name;
+    size_t key_size;
+    size_t iv_size;
+    size_t context_size;
+    int (*setup_crypto)(ptls_cipher_context_t *ctx, int is_enc, const void *key);
+} ptls_cipher_algorithm_t;
+
+/**
  * AEAD context. AEAD implementations are allowed to stuff data at the end of the struct. The size of the memory allocated for the
  * struct is governed by ptls_aead_algorithm_t::context_size.
  */
@@ -163,6 +236,10 @@ typedef const struct st_ptls_aead_algorithm_t {
      * name (following the convention of `openssl ciphers -v ALL`)
      */
     const char *name;
+    /**
+     * the underlying key stream
+     */
+    ptls_cipher_algorithm_t *ctr_cipher;
     /**
      * key size
      */
@@ -238,6 +315,10 @@ typedef const struct st_ptls_hash_algorithm_t {
      * constructor that creates the hash context
      */
     ptls_hash_context_t *(*create)(void);
+    /**
+     * digest of zero-length octets
+     */
+    uint8_t empty_digest[PTLS_MAX_DIGEST_SIZE];
 } ptls_hash_algorithm_t;
 
 typedef const struct st_ptls_cipher_suite_t {
@@ -246,11 +327,20 @@ typedef const struct st_ptls_cipher_suite_t {
     ptls_hash_algorithm_t *hash;
 } ptls_cipher_suite_t;
 
+#define PTLS_CALLBACK_TYPE0(ret, name)                                                                                             \
+    typedef struct st_ptls_##name##_t {                                                                                            \
+        ret (*cb)(struct st_ptls_##name##_t * self);                                                                               \
+    } ptls_##name##_t
+
 #define PTLS_CALLBACK_TYPE(ret, name, ...)                                                                                         \
     typedef struct st_ptls_##name##_t {                                                                                            \
         ret (*cb)(struct st_ptls_##name##_t * self, __VA_ARGS__);                                                                  \
     } ptls_##name##_t
 
+/**
+ * returns current time in milliseconds (ptls_get_time can be used to return the physical time)
+ */
+PTLS_CALLBACK_TYPE0(uint64_t, get_time);
 /**
  * after receiving ClientHello, the core calls the optional callback to give a chance to the swap the context depending on the input
  * values. The callback is required to call `ptls_set_server_name` if an SNI extension needs to be sent to the client.
@@ -296,11 +386,15 @@ PTLS_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
 /**
  * the configuration
  */
-typedef struct st_ptls_context_t {
+struct st_ptls_context_t {
     /**
      * PRNG to be used
      */
     void (*random_bytes)(void *buf, size_t len);
+    /**
+     *
+     */
+    ptls_get_time_t *get_time;
     /**
      * list of supported key-exchange algorithms terminated by NULL
      */
@@ -349,6 +443,10 @@ typedef struct st_ptls_context_t {
      */
     unsigned use_exporter : 1;
     /**
+     * if ChangeCipherSpec message should be sent during handshake
+     */
+    unsigned send_change_cipher_spec : 1;
+    /**
      *
      */
     ptls_encrypt_ticket_t *encrypt_ticket;
@@ -364,7 +462,7 @@ typedef struct st_ptls_context_t {
      *
      */
     ptls_update_open_count_t *update_open_count;
-} ptls_context_t;
+};
 
 typedef struct st_ptls_raw_extension_t {
     uint16_t type;
@@ -374,6 +472,11 @@ typedef struct st_ptls_raw_extension_t {
 /**
  * optional arguments to client-driven handshake
  */
+#ifdef _WINDOWS
+/* suppress warning C4201: nonstandard extension used: nameless struct/union */
+#pragma warning(push)
+#pragma warning(disable : 4201)
+#endif
 typedef struct st_ptls_handshake_properties_t {
     union {
         struct {
@@ -409,6 +512,28 @@ typedef struct st_ptls_handshake_properties_t {
                 uint8_t base[PTLS_MAX_DIGEST_SIZE];
                 size_t len;
             } selected_psk_binder;
+            /**
+             * parameters related to use of the Cookie extension
+             */
+            struct {
+                /**
+                 * HMAC key to protect the integrity of the cookie. The key should be as long as the digest size of the first
+                 * ciphersuite specified in ptls_context_t (i.e. the hash algorithm of the best ciphersuite that can be chosen).
+                 */
+                const void *key;
+                /**
+                 * additional data to be used for verifying the cookie
+                 */
+                ptls_iovec_t additional_data;
+            } cookie;
+            /**
+             * if HRR should always be sent
+             */
+            unsigned enforce_retry : 1;
+            /**
+             * if retry should be stateless (cookie.key MUST be set when this option is used)
+             */
+            unsigned retry_uses_cookie : 1;
         } server;
     };
     /**
@@ -424,6 +549,9 @@ typedef struct st_ptls_handshake_properties_t {
      */
     int (*collected_extensions)(ptls_t *tls, struct st_ptls_handshake_properties_t *properties, ptls_raw_extension_t *extensions);
 } ptls_handshake_properties_t;
+#ifdef _WINDOWS
+#pragma warning(pop)
+#endif
 
 /**
  * builds a new ptls_iovec_t instance using the supplied parameters
@@ -544,7 +672,7 @@ int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
             goto Exit;                                                                                                             \
         }                                                                                                                          \
         do {                                                                                                                       \
-            const uint8_t *end = (src) + _block_size;                                                                              \
+            const uint8_t *const end = (src) + _block_size;                                                                        \
             do {                                                                                                                   \
                 block                                                                                                              \
             } while (0);                                                                                                           \
@@ -573,7 +701,7 @@ int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
  * create a object to handle new TLS connection. Client-side of a TLS connection is created if server_name is non-NULL. Otherwise,
  * a server-side connection is created.
  */
-ptls_t *ptls_new(ptls_context_t *ctx, int is_client);
+ptls_t *ptls_new(ptls_context_t *ctx, int is_server);
 /**
  * releases all resources associated to the object
  */
@@ -621,6 +749,10 @@ int ptls_handshake_is_complete(ptls_t *tls);
  */
 int ptls_is_psk_handshake(ptls_t *tls);
 /**
+ * returns a pointer to user data pointer (client is reponsible for freeing the associated data prior to calling ptls_free)
+ */
+void **ptls_get_data_ptr(ptls_t *tls);
+/**
  * proceeds with the handshake, optionally taking some input from peer. The function returns zero in case the handshake completed
  * successfully. PTLS_ERROR_IN_PROGRESS is returned in case the handshake is incomplete. Otherwise, an error value is returned. The
  * contents of sendbuf should be sent to the client, regardless of whether if an error is returned. inlen is an argument used for
@@ -648,7 +780,7 @@ int ptls_send_alert(ptls_t *tls, ptls_buffer_t *sendbuf, uint8_t level, uint8_t 
 /**
  *
  */
-int ptls_export_secret(ptls_t *tls, void *output, size_t outlen, const char *label, ptls_iovec_t context_value);
+int ptls_export_secret(ptls_t *tls, void *output, size_t outlen, const char *label, ptls_iovec_t context_value, int is_early);
 /**
  *
  */
@@ -662,6 +794,27 @@ int ptls_hkdf_extract(ptls_hash_algorithm_t *hash, void *output, ptls_iovec_t sa
  */
 int ptls_hkdf_expand(ptls_hash_algorithm_t *hash, void *output, size_t outlen, ptls_iovec_t prk, ptls_iovec_t info);
 /**
+ *
+ */
+int ptls_hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
+                           ptls_iovec_t hash_value, const char *base_label);
+/**
+ * instantiates a symmetric cipher
+ */
+ptls_cipher_context_t *ptls_cipher_new(ptls_cipher_algorithm_t *algo, int is_enc, const void *key);
+/**
+ * destroys a symmetric cipher
+ */
+void ptls_cipher_free(ptls_cipher_context_t *ctx);
+/**
+ * initializes the IV; this function must be called prior to calling ptls_cipher_encrypt
+ */
+static void ptls_cipher_init(ptls_cipher_context_t *ctx, const void *iv);
+/**
+ * encrypts given text
+ */
+static void ptls_cipher_encrypt(ptls_cipher_context_t *ctx, void *output, const void *input, size_t len);
+/**
  * instantiates an AEAD cipher given a secret, which is expanded using hkdf to a set of key and iv
  * @param aead
  * @param hash
@@ -669,7 +822,8 @@ int ptls_hkdf_expand(ptls_hash_algorithm_t *hash, void *output, size_t outlen, p
  * @param secret the secret. The size must be the digest length of the hash algorithm
  * @return pointer to an AEAD context if successful, otherwise NULL
  */
-ptls_aead_context_t *ptls_aead_new(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, int is_enc, const void *secret);
+ptls_aead_context_t *ptls_aead_new(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, int is_enc, const void *secret,
+                                   const char *base_label);
 /**
  * destroys an AEAD cipher context
  */
@@ -713,16 +867,21 @@ extern void (*volatile ptls_clear_memory)(void *p, size_t len);
 static ptls_iovec_t ptls_iovec_init(const void *p, size_t len);
 
 /* inline functions */
-
 inline ptls_iovec_t ptls_iovec_init(const void *p, size_t len)
 {
-    return (ptls_iovec_t){(uint8_t *)p, len};
+    /* avoid the "return (ptls_iovec_t){(uint8_t *)p, len};" construct because it requires C99
+     * and triggers a warning "C4204: nonstandard extension used: non-constant aggregate initializer"
+     * in Visual Studio */
+    ptls_iovec_t r;
+    r.base = (uint8_t *)p;
+    r.len = len;
+    return r;
 }
 
 inline void ptls_buffer_init(ptls_buffer_t *buf, void *smallbuf, size_t smallbuf_size)
 {
     assert(smallbuf != NULL);
-    buf->base = smallbuf;
+    buf->base = (uint8_t *)smallbuf;
     buf->off = 0;
     buf->capacity = smallbuf_size;
     buf->is_allocated = 0;
@@ -732,6 +891,16 @@ inline void ptls_buffer_dispose(ptls_buffer_t *buf)
 {
     ptls_buffer__release_memory(buf);
     *buf = (ptls_buffer_t){NULL};
+}
+
+inline void ptls_cipher_init(ptls_cipher_context_t *ctx, const void *iv)
+{
+    ctx->do_init(ctx, iv);
+}
+
+inline void ptls_cipher_encrypt(ptls_cipher_context_t *ctx, void *output, const void *input, size_t len)
+{
+    ctx->do_transform(ctx, output, input, len);
 }
 
 inline void ptls_aead_encrypt_init(ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen)
@@ -760,5 +929,70 @@ inline size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const vo
     ptls_aead__build_iv(ctx, iv, seq);
     return ctx->do_decrypt(ctx, output, input, inlen, iv, aad, aadlen);
 }
+
+int ptls_load_certificates(ptls_context_t *ctx, char *cert_pem_file);
+
+extern ptls_get_time_t ptls_get_time;
+
+#define ptls_define_hash(name, ctx_type, init_func, update_func, final_func)                                                       \
+                                                                                                                                   \
+    struct name##_context_t {                                                                                                      \
+        ptls_hash_context_t super;                                                                                                 \
+        ctx_type ctx;                                                                                                              \
+    };                                                                                                                             \
+                                                                                                                                   \
+    static void name##_update(ptls_hash_context_t *_ctx, const void *src, size_t len)                                              \
+    {                                                                                                                              \
+        struct name##_context_t *ctx = (struct name##_context_t *)_ctx;                                                            \
+        update_func(&ctx->ctx, src, len);                                                                                          \
+    }                                                                                                                              \
+                                                                                                                                   \
+    static void name##_final(ptls_hash_context_t *_ctx, void *md, ptls_hash_final_mode_t mode)                                     \
+    {                                                                                                                              \
+        struct name##_context_t *ctx = (struct name##_context_t *)_ctx;                                                            \
+        if (mode == PTLS_HASH_FINAL_MODE_SNAPSHOT) {                                                                               \
+            ctx_type copy = ctx->ctx;                                                                                              \
+            final_func(&copy, md);                                                                                                 \
+            ptls_clear_memory(&copy, sizeof(copy));                                                                                \
+            return;                                                                                                                \
+        }                                                                                                                          \
+        if (md != NULL)                                                                                                            \
+            final_func(&ctx->ctx, md);                                                                                             \
+        switch (mode) {                                                                                                            \
+        case PTLS_HASH_FINAL_MODE_FREE:                                                                                            \
+            ptls_clear_memory(&ctx->ctx, sizeof(ctx->ctx));                                                                        \
+            free(ctx);                                                                                                             \
+            break;                                                                                                                 \
+        case PTLS_HASH_FINAL_MODE_RESET:                                                                                           \
+            init_func(&ctx->ctx);                                                                                                  \
+            break;                                                                                                                 \
+        default:                                                                                                                   \
+            assert(!"FIXME");                                                                                                      \
+            break;                                                                                                                 \
+        }                                                                                                                          \
+    }                                                                                                                              \
+                                                                                                                                   \
+    static ptls_hash_context_t *name##_clone(ptls_hash_context_t *_src)                                                            \
+    {                                                                                                                              \
+        struct name##_context_t *dst, *src = (struct name##_context_t *)_src;                                                      \
+        if ((dst = malloc(sizeof(*dst))) == NULL)                                                                                  \
+            return NULL;                                                                                                           \
+        *dst = *src;                                                                                                               \
+        return &dst->super;                                                                                                        \
+    }                                                                                                                              \
+                                                                                                                                   \
+    static ptls_hash_context_t *name##_create(void)                                                                                \
+    {                                                                                                                              \
+        struct name##_context_t *ctx;                                                                                              \
+        if ((ctx = malloc(sizeof(*ctx))) == NULL)                                                                                  \
+            return NULL;                                                                                                           \
+        ctx->super = (ptls_hash_context_t){name##_update, name##_final, name##_clone};                                             \
+        init_func(&ctx->ctx);                                                                                                      \
+        return &ctx->super;                                                                                                        \
+    }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

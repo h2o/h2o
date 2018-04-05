@@ -256,6 +256,9 @@ builder {
             "HTTP/1.1 100 Continue",
             "link: </index.js>; rel=preload",
             "",
+            "HTTP/1.1 100 Continue",
+            "link: </index.js>; rel=preload",
+            "",
             "",
         );
         sleep 1.1;

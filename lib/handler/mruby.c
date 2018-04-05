@@ -90,12 +90,10 @@ void h2o_mruby_setup_globals(mrb_state *mrb)
     /* require core modules and include built-in libraries */
     h2o_mruby_eval_expr(mrb, "require \"#{$H2O_ROOT}/share/h2o/mruby/preloads.rb\"");
     if (mrb->exc != NULL) {
+        fprintf(stderr, "an error occurred while loading %s/%s: %s\n", root, "share/h2o/mruby/preloads.rb",
+                RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         if (mrb_obj_is_instance_of(mrb, mrb_obj_value(mrb->exc), mrb_class_get(mrb, "LoadError"))) {
-            fprintf(stderr, "file \"%s/%s\" not found. Did you forget to run `make install`?\n", root,
-                    "share/h2o/mruby/preloads.rb");
-        } else {
-            fprintf(stderr, "an error occurred while loading %s/%s: %s\n", root, "share/h2o/mruby/preloads.rb",
-                    RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+            fprintf(stderr, "Did you forget to run `make install`?\n");
         }
         abort();
     }
@@ -400,10 +398,12 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
 
     h2o_mruby_send_chunked_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
+    h2o_mruby_redis_init_context(shared_ctx);
     h2o_mruby_sleep_init_context(shared_ctx);
     h2o_mruby_channel_init_context(shared_ctx);
 
     struct RClass *module = mrb_define_module(shared_ctx->mrb, "H2O");
+    mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_H2O_MODULE, mrb_obj_value(module));
     struct RClass *generator_klass = mrb_define_class_under(shared_ctx->mrb, module, "Generator", shared_ctx->mrb->object_class);
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_GENERATOR_CLASS, mrb_obj_value(generator_klass));
 

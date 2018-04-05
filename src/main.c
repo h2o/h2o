@@ -475,6 +475,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     int ret;
 
     *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
+                                       &ptls_get_time,
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
                                        {NULL, 0},
@@ -1892,6 +1893,7 @@ static void setup_configurators(void)
     h2o_redirect_register_configurator(&conf.globalconf);
     h2o_status_register_configurator(&conf.globalconf);
     h2o_http2_debug_state_register_configurator(&conf.globalconf);
+    h2o_server_timing_register_configurator(&conf.globalconf);
 #if H2O_USE_MRUBY
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
