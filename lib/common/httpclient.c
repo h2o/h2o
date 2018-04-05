@@ -89,6 +89,8 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
         h2o_http1client_on_connect(&client->http1, sock, origin, pooled);
     } else {
         if (memcmp(alpn_proto.base, "h2", alpn_proto.len) == 0) {
+            /* detach this socket from the socketpool to count the number of h1 connections correctly */
+            h2o_socketpool_detach(client->super.conn.pool->socketpool, sock);
             h2o_http2client_on_connect(&client->http2, sock, origin, 0);
         } else if (memcmp(alpn_proto.base, "http/1.1", alpn_proto.len) == 0) {
             h2o_http1client_on_connect(&client->http1, sock, origin, pooled);
@@ -123,8 +125,8 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     }
 
     /* compare in-use ratio */
-    if (http2_conn != NULL && connpool->http1.num_pooled_connections != 0) {
-        double http1_ratio = (double)connpool->http1.num_inflight_connections / connpool->http1.num_pooled_connections;
+    if (http2_conn != NULL && connpool->socketpool->_shared.pooled_count != 0) {
+        double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) / connpool->socketpool->_shared.count;
         double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
         if (http2_ratio <= http1_ratio) {
             fprintf(stderr, "##### both h1 and h2 has pooled connections, but h2 selected\n");
@@ -145,7 +147,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     }
 
     /* reuse pooled h1 connection via socketpool */
-    if (connpool->http1.num_pooled_connections != 0) {
+    if (connpool->socketpool->_shared.pooled_count != 0) {
         fprintf(stderr, "##### h1 has pooled connections\n");
         goto UseSocketPool;
     }

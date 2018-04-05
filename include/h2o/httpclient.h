@@ -60,11 +60,6 @@ typedef struct st_h2o_httpclient_connection_pool_t {
     h2o_socketpool_t *socketpool;
 
     struct {
-        size_t num_pooled_connections;
-        size_t num_inflight_connections;
-    } http1;
-
-    struct {
         h2o_linklist_t conns;
     } http2;
 

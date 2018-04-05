@@ -27,13 +27,6 @@
 #include <sys/un.h>
 #include "h2o/httpclient_internal.h"
 
-static void on_socketpool_expire(void *data)
-{
-    struct st_h2o_http1client_private_t *client = data;
-    struct st_h2o_httpclient_private_t *common = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http1, client);
-    --common->super.conn.pool->http1.num_pooled_connections;
-}
-
 static void close_client(struct st_h2o_http1client_private_t *client)
 {
     struct st_h2o_httpclient_private_t *common = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http1, client);
@@ -41,8 +34,7 @@ static void close_client(struct st_h2o_http1client_private_t *client)
         if (common->super.conn.pool != NULL && client->_do_keepalive) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
             h2o_buffer_consume(&client->sock->input, client->sock->input->size);
-            h2o_socketpool_return(common->super.conn.pool->socketpool, client->sock, on_socketpool_expire, client);
-            ++common->super.conn.pool->http1.num_pooled_connections;
+            h2o_socketpool_return(common->super.conn.pool->socketpool, client->sock);
         } else {
             h2o_socket_close(client->sock);
         }
@@ -59,7 +51,6 @@ static void close_client(struct st_h2o_http1client_private_t *client)
     if (client->_body_buf_in_flight != NULL)
         h2o_buffer_dispose(&client->_body_buf_in_flight);
     h2o_mem_clear_pool(&client->pool);
-    --common->super.conn.pool->http1.num_inflight_connections;
     free(common);
 }
 
@@ -636,13 +627,9 @@ static void *setup_client(struct st_h2o_http1client_private_t *client, h2o_socke
 
 void h2o_http1client_on_connect(struct st_h2o_http1client_private_t *client, h2o_socket_t *sock, h2o_url_t *origin, int pooled)
 {
-    struct st_h2o_httpclient_private_t *common = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http1, client);
     setup_client(client, sock, origin);
 
     h2o_timeout_unlink(&client->_timeout); // FIXME
 
-    ++common->super.conn.pool->http1.num_inflight_connections;
-    if (pooled)
-        --common->super.conn.pool->http1.num_pooled_connections;
     on_connection_ready(client);
 }

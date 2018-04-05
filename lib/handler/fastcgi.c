@@ -472,7 +472,7 @@ static void do_send(struct st_fcgi_generator_t *generator)
 static void send_eos_and_close(struct st_fcgi_generator_t *generator, int can_keepalive)
 {
     if (generator->ctx->handler->config.keepalive_timeout != 0 && can_keepalive)
-        h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock, NULL, NULL);
+        h2o_socketpool_return(&generator->ctx->handler->sockpool, generator->sock);
     else
         h2o_socket_close(generator->sock);
     generator->sock = NULL;
