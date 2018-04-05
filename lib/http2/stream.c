@@ -126,7 +126,7 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
     }
     /* send a RST_STREAM if there's an error */
     if (send_state == H2O_SEND_STATE_ERROR) {
-        h2o_http2_encode_rst_stream_frame(outbuf, stream->stream_id, -H2O_HTTP2_ERROR_PROTOCOL);
+        h2o_http2_encode_rst_stream_frame(outbuf, stream->stream_id, -(stream->req.http2_send_refused_stream ? H2O_HTTP2_ERROR_REFUSED_STREAM : H2O_HTTP2_ERROR_PROTOCOL));
     }
 }
 
@@ -211,6 +211,13 @@ static int is_blocking_asset(h2o_req_t *req)
 
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    if (stream->req.http2_send_refused_stream) {
+        h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_INTERNAL);
+        h2o_http2_conn_request_write(conn);
+        h2o_http2_stream_close(conn, stream);
+        return -1;
+    }
+
     if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
         h2o_http2_conn_register_for_replay(conn, stream);
         return -1;

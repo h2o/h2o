@@ -401,7 +401,16 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         self->client = NULL;
         h2o_req_log_error(req, "lib/core/proxy.c", "%s", errstr);
-        h2o_send_error_502(req, "Gateway Error", errstr, 0);
+
+        if (errstr == h2o_httpclient_error_refused_stream) {
+            req->http2_send_refused_stream = 1;
+            static h2o_generator_t generator = {NULL, NULL};
+            h2o_start_response(req, &generator);
+            h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
+        } else {
+            h2o_send_error_502(req, "Gateway Error", errstr, 0);
+        }
+
         return NULL;
     }
 

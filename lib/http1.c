@@ -721,6 +721,14 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         }
     }
 
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        conn->req.http1_is_persistent = 0;
+        if (req->http2_send_refused_stream) {
+            on_send_complete(conn->sock, NULL);
+            return;
+        }
+    }
+
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
         /* build headers and send */
@@ -733,10 +741,6 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
     memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
     bufcnt += inbufcnt;
-
-    if (send_state == H2O_SEND_STATE_ERROR) {
-        conn->req.http1_is_persistent = 0;
-    }
 
     if (bufcnt != 0) {
         h2o_socket_write(conn->sock, bufs, bufcnt,

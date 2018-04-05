@@ -1100,6 +1100,8 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
 
+    unsigned char http2_send_refused_stream : 1;
+
     /**
      * Whether the producer of the response has explicitely disabled or
      * enabled compression. One of H2O_COMPRESS_HINT_*

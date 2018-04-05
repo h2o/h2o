@@ -100,6 +100,7 @@ struct st_h2o_httpclient_t {
 };
 
 extern const char *const h2o_httpclient_error_is_eos;
+extern const char *const h2o_httpclient_error_refused_stream;
 
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);

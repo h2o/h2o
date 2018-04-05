@@ -199,6 +199,21 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
     free(client);
 }
 
+static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
+{
+    struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http2, stream);
+    switch (stream->state) {
+    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
+    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
+        client->cb.on_head(&client->super, h2o_httpclient_error_refused_stream, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+        break;
+    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
+        client->cb.on_body(&client->super, h2o_httpclient_error_refused_stream);
+        break;
+    }
+}
+
 static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2client_stream_t *stream, const uint8_t *src,
                    size_t len, const char **err_desc)
 {
@@ -445,7 +460,7 @@ static int handle_rst_stream_frame(struct st_h2o_http2client_conn_t *conn, h2o_h
     stream = get_stream(conn, frame->stream_id);
     if (stream != NULL) {
         /* reset the stream */
-        // TODO: retry if REFUSED_STREAM flags is set
+        call_callback_with_error(stream, h2o_httpclient_error_refused_stream);
         close_stream(stream);
     }
 
@@ -556,7 +571,14 @@ static int handle_goaway_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2
     if ((ret = h2o_http2_decode_goaway_payload(&payload, frame, err_desc)) != 0)
         return ret;
 
-    // TODO: retry streams which can be retried
+    struct st_h2o_http2client_stream_t *stream;
+    kh_foreach_value(conn->streams, stream, {
+        if (stream->stream_id > payload.last_stream_id) {
+            call_callback_with_error(stream, h2o_httpclient_error_refused_stream);
+        } else {
+            call_callback_with_error(stream, "GOAWAY received");
+        }
+    });
 
     /* stop opening new streams */
     h2o_linklist_unlink(&conn->link);

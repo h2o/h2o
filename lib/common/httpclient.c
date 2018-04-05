@@ -23,6 +23,7 @@
 #include "h2o/httpclient_internal.h"
 
 const char *const h2o_httpclient_error_is_eos = "end of stream";
+const char *const h2o_httpclient_error_refused_stream = "refused stream";
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
 {
