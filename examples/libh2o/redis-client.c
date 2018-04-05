@@ -22,7 +22,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include "h2o/redis.h"
-#include "hiredis.h"
+#include "h2o/hiredis_.h"
 
 static h2o_loop_t *loop;
 static int exit_loop;

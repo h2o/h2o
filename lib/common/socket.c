@@ -53,7 +53,10 @@
 #endif
 
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshorten-64-to-32"
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
+#pragma clang diagnostic pop
 
 struct st_h2o_socket_ssl_t {
     SSL_CTX *ssl_ctx;
