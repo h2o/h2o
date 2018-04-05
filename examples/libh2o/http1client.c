@@ -28,7 +28,7 @@
 #define MIN(a, b) (((a) > (b)) ? (b) : (a))
 #endif
 
-static h2o_socketpool_t *sockpool;
+static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
 static const char *url;
 static char *method = "GET";
@@ -62,12 +62,14 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     cur_body_size = body_size;
 
     /* initiate the request */
-    if (sockpool == NULL) {
-        sockpool = h2o_mem_alloc(sizeof(*sockpool));
+    if (connpool == NULL) {
+        connpool = h2o_mem_alloc(sizeof(*connpool));
+        h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
         h2o_socketpool_target_t *target = h2o_socketpool_create_target(url_parsed, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, 5000 /* in msec */);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
+        h2o_httpclient_connection_pool_init(connpool, sockpool);
 
         SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
         SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
@@ -75,7 +77,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_http1client_connect(NULL, url_parsed, ctx, sockpool, url_parsed, on_connect);
+    h2o_httpclient_connect(NULL, url_parsed, ctx, connpool, url_parsed, on_connect);
 }
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
