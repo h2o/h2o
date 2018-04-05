@@ -32,18 +32,7 @@
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
-//#define UNUSED_FUNCTION(name)                                                                                                      \
-//    __attribute__((unused)) static void unused_function_##name(void)                                                               \
-//    {                                                                                                                              \
-//        (void)name;                                                                                                                \
-//    }
-//UNUSED_FUNCTION(kh_clear_stream)
-//UNUSED_FUNCTION(kh_destroy_stream)
-//#undef UNUSED_FUNCTION
-
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
-
-/////////////////////////////////////////////////////////////////////////////////////
 
 static void request_write(struct st_h2o_http2client_conn_t *conn)
 {
