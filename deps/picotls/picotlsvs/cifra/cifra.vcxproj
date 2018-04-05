@@ -77,8 +77,8 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\..\..\picotls;$(ProjectDir)\..\..\include;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\cifra\src\ext;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\deps\cifra\src;$(ProjectDir)..\..\deps\cifra\src\ext;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -90,7 +90,8 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\deps\cifra\src;$(ProjectDir)..\..\deps\cifra\src\ext;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -104,8 +105,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)\..\..\picotls;$(ProjectDir)\..\..\include;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\cifra\src\ext;$(ProjectDir)\..\..\deps\micro-ecc;$(OPENSSLDIR)\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\deps\cifra\src;$(ProjectDir)..\..\deps\cifra\src\ext;$(ProjectDir)\..\..\deps\micro-ecc;$(OPENSSLDIR)\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -121,7 +122,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\deps\cifra\src;$(ProjectDir)..\..\deps\cifra\src\ext;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -135,8 +137,6 @@
   <ItemGroup>
     <ClCompile Include="..\..\deps\cifra\src\aes.c" />
     <ClCompile Include="..\..\deps\cifra\src\blockwise.c" />
-    <ClCompile Include="..\..\deps\cifra\src\cbcmac.c" />
-    <ClCompile Include="..\..\deps\cifra\src\ccm.c" />
     <ClCompile Include="..\..\deps\cifra\src\chacha20.c" />
     <ClCompile Include="..\..\deps\cifra\src\chacha20poly1305.c" />
     <ClCompile Include="..\..\deps\cifra\src\chash.c" />
@@ -155,7 +155,6 @@
     <ClCompile Include="..\..\deps\cifra\src\salsa20.c" />
     <ClCompile Include="..\..\deps\cifra\src\sha1.c" />
     <ClCompile Include="..\..\deps\cifra\src\sha256.c" />
-    <ClCompile Include="..\..\deps\cifra\src\sha3.c" />
     <ClCompile Include="..\..\deps\cifra\src\sha512.c" />
   </ItemGroup>
   <ItemGroup>
