@@ -292,7 +292,9 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, h2o_iovec_t a
     }
 
     free(req);
-    sock->data = NULL;
+
+    if (sock != NULL)
+        sock->data = NULL;
     cb(sock, errstr, data, &selected_target->url, alpn_proto);
 }
 
