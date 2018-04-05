@@ -237,6 +237,7 @@
 		10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */ = {isa = PBXBuildFile; fileRef = 10FFEE081BB23A8C0087AD75 /* neverbleed.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
+		E927CD632074855D00D4797E /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E927CD612074855300D4797E /* sha512.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
 		E9708AE61E49A2420029E0A5 /* cifra.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD81E499E040029E0A5 /* cifra.c */; };
 		E9708AE71E49A2420029E0A5 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
@@ -769,6 +770,7 @@
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
+		E927CD612074855300D4797E /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha512.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
 		E9708AD91E499E040029E0A5 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
 		E9708ADA1E499E040029E0A5 /* picotls.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotls.c; sourceTree = "<group>"; };
@@ -1779,6 +1781,7 @@
 				E9BC76E41F00E70700EB7A09 /* salsa20.h */,
 				E9708B051E49A3130029E0A5 /* sha2.h */,
 				E9708B061E49A3130029E0A5 /* sha256.c */,
+				E927CD612074855300D4797E /* sha512.c */,
 				E9708B071E49A3130029E0A5 /* tassert.h */,
 			);
 			path = src;
@@ -2328,6 +2331,7 @@
 				E9708B491E52C7DF0029E0A5 /* memcached.c in Sources */,
 				10756E331AC1264D0009BF57 /* parser.c in Sources */,
 				E9708B761E52C8330029E0A5 /* headers.c in Sources */,
+				E927CD632074855D00D4797E /* sha512.c in Sources */,
 				E9708B871E52C8560029E0A5 /* hpack.c in Sources */,
 				E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */,
 				E9708B841E52C8560029E0A5 /* casper.c in Sources */,

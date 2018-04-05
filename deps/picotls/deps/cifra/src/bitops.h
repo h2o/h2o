@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#ifdef WIN32
+#ifdef _WINDOWS
 #include <intrin.h>
 #endif
 
@@ -298,7 +298,7 @@ static inline void copy_bytes_unaligned(uint8_t *out, const uint8_t *in, size_t 
 
 static inline uint32_t count_trailing_zeroes(uint32_t x)
 {
-#ifdef WIN32
+#ifdef _WINDOWS
   uint32_t r = 0;
   _BitScanReverse(&r, x);
   return (31 - r);

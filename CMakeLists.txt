@@ -221,6 +221,7 @@ SET(PICOTLS_SOURCE_FILES
     deps/picotls/deps/cifra/src/modes.c
     deps/picotls/deps/cifra/src/poly1305.c
     deps/picotls/deps/cifra/src/sha256.c
+    deps/picotls/deps/cifra/src/sha512.c
     deps/picotls/lib/picotls.c
     deps/picotls/lib/cifra.c
     deps/picotls/lib/uecc.c

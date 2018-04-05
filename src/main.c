@@ -477,6 +477,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     int ret;
 
     *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
+                                       &ptls_get_time,
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
                                        {NULL, 0},

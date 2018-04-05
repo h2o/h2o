@@ -34,12 +34,18 @@
 
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp256r1;
 extern ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[];
+extern ptls_cipher_algorithm_t ptls_openssl_aes128ctr;
 extern ptls_aead_algorithm_t ptls_openssl_aes128gcm;
+extern ptls_cipher_algorithm_t ptls_openssl_aes256ctr;
+extern ptls_aead_algorithm_t ptls_openssl_aes256gcm;
 extern ptls_hash_algorithm_t ptls_openssl_sha256;
+extern ptls_hash_algorithm_t ptls_openssl_sha384;
 extern ptls_cipher_suite_t ptls_openssl_aes128gcmsha256;
+extern ptls_cipher_suite_t ptls_openssl_aes256gcmsha384;
 extern ptls_cipher_suite_t *ptls_openssl_cipher_suites[];
 
 #if defined(PTLS_OPENSSL_HAVE_CHACHA20_POLY1305)
+extern ptls_cipher_algorithm_t ptls_openssl_chacha20;
 extern ptls_aead_algorithm_t ptls_openssl_chacha20poly1305;
 extern ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256;
 #endif
