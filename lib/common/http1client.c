@@ -620,7 +620,7 @@ static void *setup_client(struct st_h2o_http1client_private_t *client, h2o_socke
     return client;
 }
 
-void h2o_http1client_on_connect(struct st_h2o_http1client_private_t *client, h2o_socket_t *sock, h2o_url_t *origin, int pooled)
+void h2o_http1client_on_connect(struct st_h2o_http1client_private_t *client, h2o_socket_t *sock, h2o_url_t *origin)
 {
     setup_client(client, sock, origin);
     on_connection_ready(client);

@@ -134,7 +134,7 @@ typedef struct st_h2o_socketpool_t {
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
 
-typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *url, h2o_iovec_t alpn_proto, int pooled);
+typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *url, h2o_iovec_t alpn_proto);
 /**
  * initializes a specific socket pool
  */

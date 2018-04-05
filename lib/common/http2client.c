@@ -1202,14 +1202,12 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
     client->super.write_req = do_write_req;
 }
 
-void h2o_http2client_on_connect(struct st_h2o_http2client_stream_t *stream, h2o_socket_t *sock, h2o_url_t *origin, int pooled)
+void h2o_http2client_on_connect(struct st_h2o_http2client_stream_t *stream, h2o_socket_t *sock, h2o_url_t *origin)
 {
     struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http2, stream);
 
-    struct st_h2o_http2client_conn_t *conn;
-    if (pooled) {
-        conn = sock->data;
-    } else {
+    struct st_h2o_http2client_conn_t *conn = sock->data;
+    if (conn == NULL) {
         conn = create_connection(client->super.ctx, sock, origin, client->super.connpool);
         sock->data = conn;
         /* send preface, settings, and connection-level window update */

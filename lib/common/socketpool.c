@@ -292,7 +292,8 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, h2o_iovec_t a
     }
 
     free(req);
-    cb(sock, errstr, data, &selected_target->url, alpn_proto, 0);
+    sock->data = NULL;
+    cb(sock, errstr, data, &selected_target->url, alpn_proto);
 }
 
 static void try_connect(h2o_socketpool_connect_request_t *req)
@@ -497,7 +498,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             close_data->target = entry_target;
             sock->on_close.cb = on_close;
             sock->on_close.data = close_data;
-            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url, h2o_iovec_init(NULL, 0), 1);
+            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url, h2o_iovec_init(NULL, 0));
             return;
         }
 
