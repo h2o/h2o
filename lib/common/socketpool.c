@@ -292,7 +292,7 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, h2o_iovec_t a
     }
 
     free(req);
-    cb(sock, errstr, data, &selected_target->url, alpn_proto, 0); // FIXME
+    cb(sock, errstr, data, &selected_target->url, alpn_proto, 0);
 }
 
 static void try_connect(h2o_socketpool_connect_request_t *req)

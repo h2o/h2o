@@ -137,11 +137,9 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
         double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) / connpool->socketpool->_shared.count;
         double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
         if (http2_ratio <= http1_ratio) {
-            fprintf(stderr, "##### both h1 and h2 has pooled connections, but h2 selected\n");
             h2o_http2client_on_connect(&client->http2, http2_conn->sock, &http2_conn->origin_url, 1);
             return;
         } else {
-            fprintf(stderr, "##### both h1 and h2 has pooled connections, but h1 selected (if ssl is used)\n");
             alpn_protos = both_protos;
             goto UseSocketPool;
         }
@@ -149,20 +147,17 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
 
     /* reuse idle h2 connection */
     if (http2_conn != NULL) {
-        fprintf(stderr, "##### h2 has pooled connections\n");
         h2o_http2client_on_connect(&client->http2, http2_conn->sock, &http2_conn->origin_url, 1);
         return;
     }
 
     /* reuse pooled h1 connection via socketpool */
     if (connpool->socketpool->_shared.pooled_count != 0) {
-        fprintf(stderr, "##### h1 has pooled connections\n");
         goto UseSocketPool;
     }
 
     /* connect using ALPN */
     alpn_protos = both_protos;
-    fprintf(stderr, "##### no pooled connections, use ALPN\n");
 
 UseSocketPool:
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->connect_timeout, &client->connect_timeout_entry);

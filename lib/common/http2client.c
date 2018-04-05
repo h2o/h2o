@@ -122,14 +122,6 @@ static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, s
     if (!forward && node != &connpool->http2.conns)
         node = node->next;
 
-    // FIXME remove later
-    h2o_linklist_t *c = &connpool->http2.conns;
-    do {
-        fprintf(stderr, "%p -> ", c);
-        c = c->next;
-    } while (c != &connpool->http2.conns);
-    fprintf(stderr, "\n");
-
     h2o_linklist_unlink(&conn->link);
     h2o_linklist_insert(node, &conn->link);
 }
