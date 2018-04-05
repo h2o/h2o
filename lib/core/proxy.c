@@ -403,7 +403,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         h2o_req_log_error(req, "lib/core/proxy.c", "%s", errstr);
 
         if (errstr == h2o_httpclient_error_refused_stream) {
-            req->http2_send_refused_stream = 1;
+            req->upstream_refused = 1;
             static h2o_generator_t generator = {NULL, NULL};
             h2o_start_response(req, &generator);
             h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);

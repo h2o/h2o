@@ -1099,8 +1099,10 @@ struct st_h2o_req_t {
      * set by the generator if the protocol handler should replay the request upon seeing 425
      */
     unsigned char reprocess_if_too_early : 1;
-
-    unsigned char http2_send_refused_stream : 1;
+    /**
+     * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
+     */
+    unsigned char upstream_refused : 1;
 
     /**
      * Whether the producer of the response has explicitely disabled or

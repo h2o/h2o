@@ -723,7 +723,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         conn->req.http1_is_persistent = 0;
-        if (req->http2_send_refused_stream) {
+        if (req->upstream_refused) {
+            /* to let the client retry, immediately close the connection without sending any data */
             on_send_complete(conn->sock, NULL);
             return;
         }
