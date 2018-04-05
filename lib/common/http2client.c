@@ -154,7 +154,7 @@ static void register_stream(struct st_h2o_http2client_stream_t *stream, struct s
     if (h2o_timeout_is_linked(&conn->keepalive_timeout_entry))
         h2o_timeout_unlink(&conn->keepalive_timeout_entry);
 
-    adjust_conn_linkedlist(client->super.conn.pool, conn, 1);
+    adjust_conn_linkedlist(client->super.connpool, conn, 1);
 }
 
 static void unregister_stream(struct st_h2o_http2client_stream_t *stream)
@@ -170,7 +170,7 @@ static void unregister_stream(struct st_h2o_http2client_stream_t *stream)
     if (stream->conn->num_streams == 0)
         h2o_timeout_link(stream->conn->ctx->loop, stream->conn->ctx->keepalive_timeout, &stream->conn->keepalive_timeout_entry);
 
-    adjust_conn_linkedlist(client->super.conn.pool, stream->conn, 0);
+    adjust_conn_linkedlist(client->super.connpool, stream->conn, 0);
 }
 
 static void close_stream(struct st_h2o_http2client_stream_t *stream)
@@ -178,12 +178,6 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
     struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http2, stream);
     if (stream->conn != NULL) {
         unregister_stream(stream);
-    }
-
-    // FIXME: socketpool?
-    if (client->super.conn.req != NULL) {
-        h2o_socketpool_cancel_connect(client->super.conn.req);
-        client->super.conn.req = NULL;
     }
 
     if (h2o_timeout_is_linked(&stream->timeout_entry))
@@ -1224,7 +1218,7 @@ void h2o_http2client_on_connect(struct st_h2o_http2client_stream_t *stream, h2o_
     if (pooled) {
         conn = sock->data;
     } else {
-        conn = create_connection(client->super.ctx, sock, origin, client->super.conn.pool);
+        conn = create_connection(client->super.ctx, sock, origin, client->super.connpool);
         sock->data = conn;
         /* send preface, settings, and connection-level window update */
         send_client_preface(conn, client->super.ctx);

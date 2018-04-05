@@ -33,6 +33,8 @@ extern "C" {
 
 struct st_h2o_httpclient_private_t {
     h2o_httpclient_t super;
+    h2o_timeout_entry_t connect_timeout_entry;
+    h2o_socketpool_connect_request_t *connect_req;
     union {
         h2o_httpclient_connect_cb on_connect;
         h2o_httpclient_head_cb on_head;

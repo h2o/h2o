@@ -85,10 +85,7 @@ typedef struct st_h2o_httpclient_ctx_t {
 
 struct st_h2o_httpclient_t {
     h2o_httpclient_ctx_t *ctx;
-    struct {
-        h2o_httpclient_connection_pool_t *pool;
-        h2o_socketpool_connect_request_t *req;
-    } conn;
+    h2o_httpclient_connection_pool_t *connpool;
     h2o_buffer_t **buf;
     void *data;
     h2o_httpclient_informational_cb informational_cb;

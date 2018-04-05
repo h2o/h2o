@@ -31,37 +31,16 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
     h2o_linklist_init_anchor(&connpool->http2.conns);
 }
 
-static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
-{
-    struct st_h2o_httpclient_private_t *client = h2o_mem_alloc(sizeof(*client));
-    memset(client, 0, sizeof(*client));
-    client->super.ctx = ctx;
-    client->super.data = data;
-    client->super.cancel = NULL;
-    client->super.steal_socket = NULL;
-    client->super.update_window = NULL;
-    client->super.write_req = NULL;
-    client->cb.on_connect = cb;
-
-    return client;
-}
-
 static void close_client(struct st_h2o_httpclient_private_t *client)
 {
-    if (client->super.conn.req != NULL) {
-        h2o_socketpool_cancel_connect(client->super.conn.req);
-        client->super.conn.req = NULL;
+    if (client->connect_req != NULL) {
+        h2o_socketpool_cancel_connect(client->connect_req);
+        client->connect_req = NULL;
     }
 
-    // FIXME
-//    if (h2o_timeout_is_linked(&client->_timeout))
-//        h2o_timeout_unlink(&client->_timeout);
-//    if (client->_body_buf != NULL)
-//        h2o_buffer_dispose(&client->_body_buf);
-//    if (client->_body_buf_in_flight != NULL)
-//        h2o_buffer_dispose(&client->_body_buf_in_flight);
-//    h2o_mem_clear_pool(&client->pool);
-//    --client->super->ctx->http1.num_inflight_connections;
+    if (h2o_timeout_is_linked(&client->connect_timeout_entry))
+        h2o_timeout_unlink(&client->connect_timeout_entry);
+
     free(client);
 }
 
@@ -72,16 +51,44 @@ static void on_connect_error(struct st_h2o_httpclient_private_t *client, const c
     close_client(client);
 }
 
+static void on_connect_timeout(h2o_timeout_entry_t *entry)
+{
+    struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, connect_timeout_entry, entry);
+    on_connect_error(client, "connection timeout");
+}
+
+static void do_cancel(h2o_httpclient_t *_client)
+{
+    struct st_h2o_httpclient_private_t *client = (void *)_client;
+    close_client(client);
+}
+
+static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
+{
+    struct st_h2o_httpclient_private_t *client = h2o_mem_alloc(sizeof(*client));
+    memset(client, 0, sizeof(*client));
+    client->super.ctx = ctx;
+    client->super.data = data;
+    client->super.cancel = do_cancel;
+    client->super.steal_socket = NULL;
+    client->super.update_window = NULL;
+    client->super.write_req = NULL;
+    client->cb.on_connect = cb;
+    client->connect_timeout_entry.cb = on_connect_timeout;
+
+    return client;
+}
+
 static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin, h2o_iovec_t alpn_proto, int pooled)
 {
     struct st_h2o_httpclient_private_t *client = data;
 
+    h2o_timeout_unlink(&client->connect_timeout_entry);
 
-    client->super.conn.req = NULL;
+    client->connect_req = NULL;
 
     if (sock == NULL) {
         assert(errstr != NULL);
-//        h2o_timeout_unlink(&client->_timeout); // FIXME
         on_connect_error(client, errstr);
         return;
     }
@@ -91,7 +98,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     } else {
         if (memcmp(alpn_proto.base, "h2", alpn_proto.len) == 0) {
             /* detach this socket from the socketpool to count the number of h1 connections correctly */
-            h2o_socketpool_detach(client->super.conn.pool->socketpool, sock);
+            h2o_socketpool_detach(client->super.connpool->socketpool, sock);
             h2o_http2client_on_connect(&client->http2, sock, origin, 0);
         } else if (memcmp(alpn_proto.base, "http/1.1", alpn_proto.len) == 0) {
             h2o_http1client_on_connect(&client->http1, sock, origin, pooled);
@@ -114,7 +121,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     h2o_iovec_t alpn_protos = h2o_iovec_init(NULL, 0);
 
     struct st_h2o_httpclient_private_t *client = create_client(data, ctx, cb);
-    client->super.conn.pool = connpool;
+    client->super.connpool = connpool;
     if (_client != NULL)
         *_client = &client->super;
 
@@ -158,6 +165,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     fprintf(stderr, "##### no pooled connections, use ALPN\n");
 
 UseSocketPool:
-    h2o_socketpool_connect(&client->super.conn.req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos, on_pool_connect, client);
+    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->connect_timeout, &client->connect_timeout_entry);
+    h2o_socketpool_connect(&client->connect_req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos, on_pool_connect, client);
 
 }

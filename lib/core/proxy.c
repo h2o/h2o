@@ -577,7 +577,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     }
 
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
-    build_request(req, method, url, headers, features, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->conn.pool->socketpool),
+    build_request(req, method, url, headers, features, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool),
                   self->is_websocket_handshake, use_proxy_protocol, &reprocess_if_too_early, origin);
     if (reprocess_if_too_early)
         req->reprocess_if_too_early = 1;

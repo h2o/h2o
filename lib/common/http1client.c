@@ -31,17 +31,12 @@ static void close_client(struct st_h2o_http1client_private_t *client)
 {
     struct st_h2o_httpclient_private_t *common = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http1, client);
     if (client->sock != NULL) {
-        if (common->super.conn.pool != NULL && client->_do_keepalive) {
+        if (common->super.connpool != NULL && client->_do_keepalive) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
             h2o_buffer_consume(&client->sock->input, client->sock->input->size);
-            h2o_socketpool_return(common->super.conn.pool->socketpool, client->sock);
+            h2o_socketpool_return(common->super.connpool->socketpool, client->sock);
         } else {
             h2o_socket_close(client->sock);
-        }
-    } else {
-        if (common->super.conn.req != NULL) {
-            h2o_socketpool_cancel_connect(common->super.conn.req);
-            common->super.conn.req = NULL;
         }
     }
     if (h2o_timeout_is_linked(&client->_timeout))
@@ -628,8 +623,5 @@ static void *setup_client(struct st_h2o_http1client_private_t *client, h2o_socke
 void h2o_http1client_on_connect(struct st_h2o_http1client_private_t *client, h2o_socket_t *sock, h2o_url_t *origin, int pooled)
 {
     setup_client(client, sock, origin);
-
-    h2o_timeout_unlink(&client->_timeout); // FIXME
-
     on_connection_ready(client);
 }
