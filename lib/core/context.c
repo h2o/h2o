@@ -166,6 +166,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_timeout_dispose(ctx->loop, &ctx->proxy.io_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->proxy.connect_timeout);
     h2o_timeout_dispose(ctx->loop, &ctx->proxy.first_byte_timeout);
+    h2o_timeout_dispose(ctx->loop, &ctx->proxy.keepalive_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
     h2o_filecache_destroy(ctx->filecache);
