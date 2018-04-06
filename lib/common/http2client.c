@@ -183,10 +183,10 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
-        client->cb.on_head(&client->super, h2o_httpclient_error_refused_stream, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+        client->cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
-        client->cb.on_body(&client->super, h2o_httpclient_error_refused_stream);
+        client->cb.on_body(&client->super, errstr);
         break;
     }
 }
