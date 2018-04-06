@@ -205,6 +205,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto SendRSTStream;
         }
+        call_callback_with_error(stream, ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream protocol error" : "upstream compression error");
         return ret;
     }
     if (stream->input.res.status == 0) {
@@ -244,6 +245,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
 SendRSTStream:
     stream_send_error(conn, stream->stream_id, ret);
+    call_callback_with_error(stream, ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream error" : "internal error");
     close_stream(stream);
     return 0;
 }
