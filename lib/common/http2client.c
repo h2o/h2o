@@ -97,6 +97,9 @@ uint32_t h2o_http2client_get_max_concurrent_streams(struct st_h2o_http2client_co
 
 static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, struct st_h2o_http2client_conn_t *conn, int forward)
 {
+    if (!h2o_linklist_is_linked(&conn->link))
+        return;
+
     double ratio = (double)conn->num_streams / h2o_http2client_get_max_concurrent_streams(conn);
 
     /* adjust connection linked list */
