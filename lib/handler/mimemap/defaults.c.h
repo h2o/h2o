@@ -23,6 +23,7 @@ MIMEMAP("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.
 MIMEMAP("ear", "application/java-archive")
 MIMEMAP("eot", "application/vnd.ms-fontobject")
 MIMEMAP("eps", "application/postscript")
+MIMEMAP("epub", "application/epub+zip")
 MIMEMAP("exe", "application/octet-stream")
 MIMEMAP("flv", "video/x-flv")
 MIMEMAP("gif", "image/gif")
