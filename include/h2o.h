@@ -663,7 +663,6 @@ struct st_h2o_context_t {
     void **_module_configs;
 
     struct {
-        uint64_t uv_now_at;
         struct timeval tv_at;
         h2o_timestamp_string_t *value;
     } _timestamp_cache;
@@ -1517,6 +1516,7 @@ void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathc
  *
  */
 void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+
 /**
  * returns current timestamp
  * @param ctx the context
@@ -2129,11 +2129,7 @@ inline void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, 
 
 inline struct timeval *h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool, h2o_timestamp_t *ts)
 {
-    uint64_t now = h2o_now(ctx->loop);
-
-    if (ctx->_timestamp_cache.uv_now_at != now) {
-        h2o_context_update_timestamp_cache(ctx);
-    }
+    h2o_context_update_timestamp_cache(ctx);
 
     if (ts != NULL) {
         ts->at = ctx->_timestamp_cache.tv_at;

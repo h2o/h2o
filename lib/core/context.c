@@ -197,8 +197,7 @@ void h2o_context_request_shutdown(h2o_context_t *ctx)
 void h2o_context_update_timestamp_cache(h2o_context_t *ctx)
 {
     time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;
-    ctx->_timestamp_cache.uv_now_at = h2o_now(ctx->loop);
-    gettimeofday(&ctx->_timestamp_cache.tv_at, NULL);
+    ctx->_timestamp_cache.tv_at = h2o_gettimeofday(ctx->loop);
     if (ctx->_timestamp_cache.tv_at.tv_sec != prev_sec) {
         struct tm gmt;
         /* update the string cache */
