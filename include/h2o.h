@@ -1525,7 +1525,7 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
  * @return current time in UTC
  */
 static h2o_timestamp_t h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool);
-void h2o_context_update_timestamp_cache(h2o_context_t *ctx);
+void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
 /**
  * returns per-module context set
  */
@@ -2129,7 +2129,10 @@ inline void h2o_setup_next_prefilter(h2o_req_prefilter_t *self, h2o_req_t *req, 
 
 inline h2o_timestamp_t h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool)
 {
-    h2o_context_update_timestamp_cache(ctx);
+    time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;
+    ctx->_timestamp_cache.tv_at = h2o_gettimeofday(ctx->loop);
+    if (ctx->_timestamp_cache.tv_at.tv_sec != prev_sec)
+        h2o_context_update_timestamp_string_cache(ctx);
 
     h2o_timestamp_t ts;
     ts.at = ctx->_timestamp_cache.tv_at;
