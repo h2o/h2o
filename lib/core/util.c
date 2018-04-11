@@ -498,7 +498,7 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
 
 void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
-    struct timeval connected_at = *h2o_get_timestamp(ctx->ctx, NULL, NULL);
+    struct timeval connected_at = h2o_gettimeofday(ctx->ctx->loop);
 
     if (ctx->expect_proxy_line || ctx->ssl_ctx != NULL) {
         sock->data = accept_data_callbacks.create(ctx, sock, connected_at);
