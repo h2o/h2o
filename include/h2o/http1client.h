@@ -58,12 +58,11 @@ typedef struct st_h2o_http1client_ctx_t {
 } h2o_http1client_ctx_t;
 
 typedef struct st_h2o_http1client_timings_t {
-    uint64_t start_at;
-    uint64_t request_begin_at;
-    uint64_t request_body_begin_at;
-    uint64_t request_end_at;
-    uint64_t response_start_at;
-    uint64_t response_end_at;
+    struct timeval start_at;
+    struct timeval request_begin_at;
+    struct timeval request_end_at;
+    struct timeval response_start_at;
+    struct timeval response_end_at;
 } h2o_http1client_timings_t;
 
 struct st_h2o_http1client_t {

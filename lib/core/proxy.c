@@ -44,27 +44,11 @@ struct rp_generator_t {
     void (*await_send)(h2o_http1client_t *);
 };
 
-struct st_proxy_timings_t {
-    h2o_http1client_timings_t super;
-    struct rp_generator_t *generator;
-};
-
 struct rp_ws_upgrade_info_t {
     h2o_context_t *ctx;
     h2o_timeout_t *timeout;
     h2o_socket_t *upstream_sock;
 };
-
-static void copy_log_data(struct rp_generator_t *self)
-{
-    assert(self->client != NULL);
-    if (self->src_req->proxy_timings == NULL)
-        return;
-    struct st_proxy_timings_t *timings = (void *)self->src_req->proxy_timings;
-    if (timings->generator != self)
-        return; /* already used by another subsequent request */
-    timings->super = self->client->timings;
-}
 
 static h2o_http1client_ctx_t *get_client_ctx(h2o_req_t *req)
 {
@@ -433,7 +417,7 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     h2o_req_overrides_t *overrides = self->src_req->overrides;
 
     if (errstr != NULL) {
-        copy_log_data(self);
+        self->src_req->timestamps.proxy = self->client->timings;
 
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
@@ -475,7 +459,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int seen_date_header = 0;
 
-    copy_log_data(self);
+    self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -620,7 +604,7 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     h2o_req_t *req = self->src_req;
     int use_proxy_protocol = 0, reprocess_if_too_early = 0;
 
-    copy_log_data(self);
+    self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -702,18 +686,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
-
-    /* setup log data */
-    struct st_proxy_timings_t *timings;
-    if (req->proxy_timings == NULL) {
-        timings = h2o_mem_alloc_pool(&req->pool, struct st_proxy_timings_t, 1);
-        memset(timings, 0, sizeof(*timings));
-        req->proxy_timings = &timings->super;
-    } else {
-        timings = (void *)req->proxy_timings;
-        timings->super = (h2o_http1client_timings_t){0}; /* clear */
-    }
-    timings->generator = self;
+    req->timestamps.proxy = (h2o_http1client_timings_t){{0}};
 
     return self;
 }

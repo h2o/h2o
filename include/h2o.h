@@ -1056,6 +1056,7 @@ struct st_h2o_req_t {
         struct timeval request_body_begin_at;
         struct timeval response_start_at;
         struct timeval response_end_at;
+        h2o_http1client_timings_t proxy;
     } timestamps;
     /**
      * the response
@@ -1083,11 +1084,6 @@ struct st_h2o_req_t {
      * error logs
      */
     H2O_VECTOR(h2o_req_error_log_t) error_logs;
-
-    /**
-     * proxy log data
-     */
-    h2o_http1client_timings_t *proxy_timings;
 
     /* flags */
 
@@ -1958,29 +1954,6 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
 
-#define DEFINE_PROXY_COMPUTE_DURATION_FUNC(name, from, until)                                                                      \
-    static inline int h2o_proxy_time_compute_##name(struct st_h2o_req_t *req, int64_t *delta_usec)                                 \
-    {                                                                                                                              \
-        h2o_http1client_timings_t *timings = req->proxy_timings;                                                                   \
-        if (timings == NULL)                                                                                                       \
-            return 0;                                                                                                              \
-        if ((from) == 0 || (until) == 0)                                                                                           \
-            return 0;                                                                                                              \
-        *delta_usec = ((until) - (from)) * 1000;                                                                                   \
-        return 1;                                                                                                                  \
-    }
-
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(idle_time,
-                                   req->timestamps.request_begin_at.tv_sec * 1000 + req->timestamps.request_begin_at.tv_usec / 1000,
-                                   timings->start_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(connect_time, timings->start_at, timings->request_begin_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_time, timings->request_begin_at, timings->request_end_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(first_byte_time, timings->request_end_at, timings->response_start_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(response_time, timings->response_start_at, timings->response_end_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(total_time, timings->request_begin_at, timings->response_end_at);
-
-#undef DEFINE_PROXY_COMPUTE_DURATION_FUNC
-
 /* lib/redirect.c */
 
 typedef struct st_h2o_redirect_handler_t h2o_redirect_handler_t;
@@ -2284,6 +2257,13 @@ COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->pr
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
 COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
 COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+
+COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->timestamps.proxy.start_at);
+COMPUTE_DURATION(proxy_connect_time, &req->timestamps.proxy.start_at, &req->timestamps.proxy.request_begin_at);
+COMPUTE_DURATION(proxy_request_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.request_end_at);
+COMPUTE_DURATION(proxy_first_byte_time, &req->timestamps.proxy.request_end_at, &req->timestamps.proxy.response_start_at);
+COMPUTE_DURATION(proxy_response_time, &req->timestamps.proxy.response_start_at, &req->timestamps.proxy.response_end_at);
+COMPUTE_DURATION(proxy_total_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.response_end_at);
 
 #undef COMPUTE_DURATION
 
