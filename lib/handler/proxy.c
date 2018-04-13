@@ -44,6 +44,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->client_ctx = h2o_context_get_handler_context(req->conn->ctx, &self->super);
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
+    overrides->forward_early_hints = self->config.forward_early_hints;
 
     /* request reprocess (note: path may become an empty string, to which one of the target URL within the socketpool will be
      * right-padded when lib/core/proxy connects to upstream; see #1563) */

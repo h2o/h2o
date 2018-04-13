@@ -157,6 +157,7 @@ typedef struct st_h2o_filter_t {
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
+    void (*on_send_early_hints)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_headers_t *headers);
 } h2o_filter_t;
 
 /**
@@ -727,6 +728,11 @@ struct st_h2o_ostream_t {
      * whether if the ostream supports "pull" interface
      */
     void (*start_pull)(struct st_h2o_ostream_t *self, h2o_ostream_pull_cb cb);
+
+    /**
+     * called by the core via h2o_send_early_hints
+     */
+    void (*send_early_hints)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_headers_t *headers);
 };
 
 /**
@@ -892,6 +898,10 @@ typedef struct st_h2o_req_overrides_t {
      * whether the proxied request should preserve host
      */
     unsigned proxy_preserve_host : 1;
+    /**
+     * whether the proxy forward 103 response from upstream
+     */
+    unsigned forward_early_hints : 1;
     /**
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
@@ -1592,6 +1602,8 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status);
  * this returns a version of `value` that removes the links that had the `x-http2-push-only` attribute
  */
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
+
+void h2o_send_early_hints(h2o_req_t *req, h2o_headers_t *headers);
 /**
  * logs an error
  */
@@ -1920,6 +1932,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     } websocket;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
+    unsigned forward_early_hints : 1;
 } h2o_proxy_config_vars_t;
 
 /**

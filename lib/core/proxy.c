@@ -572,6 +572,11 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
             h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);
     }
 
+    if (self->src_req->overrides != NULL && self->src_req->overrides->forward_early_hints) {
+        h2o_headers_t headers_vec = (h2o_headers_t){headers, num_headers, num_headers};
+        h2o_send_early_hints(self->src_req, &headers_vec);
+    }
+
     return 0;
 }
 

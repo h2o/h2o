@@ -78,6 +78,7 @@ struct st_h2o_http1_chunked_entity_reader {
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
+static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req, h2o_headers_t *headers);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -106,6 +107,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     conn->req._ostr_top = &conn->_ostr_final.super;
     conn->_ostr_final.super.do_send = finalostream_send;
     conn->_ostr_final.super.start_pull = finalostream_start_pull;
+    conn->_ostr_final.super.send_early_hints = finalostream_send_early_hints;
     conn->_ostr_final.sent_headers = 0;
 }
 
@@ -623,6 +625,35 @@ static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_a
     return len;
 }
 
+static size_t flatten_normal_headers(char *buf, h2o_header_t *headers, size_t num_headers, int force_cache_control_private)
+{
+    char *dst = buf;
+    size_t i;
+    for (i = 0; i != num_headers; ++i) {
+        const h2o_header_t *header = headers + i;
+        if (header->name == &H2O_TOKEN_VARY->buf) {
+            /* replace Vary with Cache-Control: private; see the following URLs to understand why this is necessary
+             * - http://blogs.msdn.com/b/ieinternals/archive/2009/06/17/vary-header-prevents-caching-in-ie.aspx
+             * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
+             */
+            if (force_cache_control_private) {
+                static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, NULL, {H2O_STRLIT("private")}};
+                header = &cache_control_private;
+            }
+        }
+        memcpy(dst, header->orig_name ? header->orig_name : header->name->base, header->name->len);
+        dst += header->name->len;
+        *dst++ = ':';
+        *dst++ = ' ';
+        memcpy(dst, header->value.base, header->value.len);
+        dst += header->value.len;
+        *dst++ = '\r';
+        *dst++ = '\n';
+    }
+
+    return dst - buf;
+}
+
 static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
 {
     h2o_context_t *ctx = req->conn->ctx;
@@ -641,32 +672,9 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
         dst += sprintf(dst, "Server: %s\r\n", ctx->globalconf->server_name.base);
     }
 
-    { /* flatten the normal headers */
-        size_t i;
-        for (i = 0; i != req->res.headers.size; ++i) {
-            const h2o_header_t *header = req->res.headers.entries + i;
-            if (header->name == &H2O_TOKEN_VARY->buf) {
-                /* replace Vary with Cache-Control: private; see the following URLs to understand why this is necessary
-                 * - http://blogs.msdn.com/b/ieinternals/archive/2009/06/17/vary-header-prevents-caching-in-ie.aspx
-                 * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
-                 */
-                if (is_msie(req)) {
-                    static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, NULL, {H2O_STRLIT("private")}};
-                    header = &cache_control_private;
-                }
-            }
-            memcpy(dst, header->orig_name ? header->orig_name : header->name->base, header->name->len);
-            dst += header->name->len;
-            *dst++ = ':';
-            *dst++ = ' ';
-            memcpy(dst, header->value.base, header->value.len);
-            dst += header->value.len;
-            *dst++ = '\r';
-            *dst++ = '\n';
-        }
-        *dst++ = '\r';
-        *dst++ = '\n';
-    }
+    dst += flatten_normal_headers(dst, req->res.headers.entries, req->res.headers.size, is_msie(req));
+    *dst++ = '\r';
+    *dst++ = '\n';
 
     return dst - buf;
 }
@@ -776,6 +784,35 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     } else {
         set_timeout(conn, &conn->super.ctx->zero_timeout, on_delayed_send_complete);
     }
+}
+
+static void on_send_early_hints(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+    if (err != NULL)
+        close_connection(conn, 1);
+}
+
+static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req, h2o_headers_t *headers)
+{
+#define EARLY_HINTS_HEADER "HTTP/1.1 103 Early Hints\r\n"
+    struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
+
+    h2o_iovec_t buf = h2o_iovec_init(NULL, sizeof(EARLY_HINTS_HEADER) - 1 + 2);
+
+    int i;
+    for (i = 0; i != headers->size; ++i)
+        buf.len += headers->entries[i].name->len + headers->entries[i].value.len + 4;
+
+    buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
+    memcpy(buf.base, EARLY_HINTS_HEADER, sizeof(EARLY_HINTS_HEADER) - 1);
+    char *dst = buf.base + sizeof(EARLY_HINTS_HEADER) - 1;
+    dst += flatten_normal_headers(dst, headers->entries, headers->size, 0);
+    *dst = '\r';
+    *dst = '\n';
+
+    h2o_socket_write(conn->sock, &buf, 1, on_send_early_hints);
+#undef EARLY_HINTS_HEADER
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
