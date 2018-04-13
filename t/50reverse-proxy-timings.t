@@ -48,10 +48,11 @@ hosts:
               [399, {}, []]
             }
         - proxy.reverse.url: http://127.0.0.1:$upstream_port
+        - server-timing: ENFORCE
 access-log:
   path: $logfile
   format: "@{[
-    join("\\t", map { "$_:%{proxy-$_-time}x" }
+    join("\\t", map { "proxy-$_:%{proxy-$_-time}x" }
       qw(idle connect request process response total)
     )
   ]}"
@@ -66,29 +67,43 @@ run_with_curl($server, sub {
         Proto => 'tcp',
     ) or die "cannot create socket: $!";
 
-    open(CURL, "$curl --silent -kv $proto://127.0.0.1:$port/ 2>&1 |");
+    open(CURL, "$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/ |");
 
     sleep 0.2; # proxy-idle-time + proxy-connect-time
     $upstream->accept->close;
 
     do_upstream($upstream);
-    while (<CURL>) {}
+    my $resp = join('', <CURL>);
 
-    my @log = do {
-        open my $fh, "<", $logfile
-            or die "failed to open $logfile: $!";
-        map { my $l = $_; chomp $l; $l } <$fh>;
+    subtest 'access-log' => sub {
+        my @log = do {
+            open my $fh, "<", $logfile
+                or die "failed to open $logfile: $!";
+            map { my $l = $_; chomp $l; $l } <$fh>;
+        };
+        my $log = pop(@log);
+        my $timings = +{ map { split(':', $_, 2) } split("\t", $log) };
+        within_eps($timings, 'proxy-idle', 0.1);
+        within_eps($timings, 'proxy-connect', 0.1);
+        within_eps($timings, 'proxy-request', 0);
+        within_eps($timings, 'proxy-process', 0.1);
+        within_eps($timings, 'proxy-response', 0.1);
+        within_eps($timings, 'proxy-total', 0.2);
     };
-    my $log = pop(@log);
-    my $timings = +{ map { split(':', $_, 2) } split("\t", $log) };
-    within_eps($timings, 'idle', 0.1);
-    within_eps($timings, 'connect', 0.1);
-    within_eps($timings, 'request', 0);
-    within_eps($timings, 'process', 0.1);
-    within_eps($timings, 'response', 0.1);
-    within_eps($timings, 'total', 0.2);
-    pass;
-    
+
+    subtest 'server-timing' => sub {
+        like $resp, qr/^trailer: server-timing/mi;
+        my $st = +{};
+        while ($resp =~ /^server-timing: ([^\r\n]+)/mig) {
+            $st = +{ %$st, map { split ('; dur=', $_) } split(', ', $1) };
+        }
+        within_eps($st, 'proxy-idle', 100);
+        within_eps($st, 'proxy-connect', 100);
+        within_eps($st, 'proxy-request', 0);
+        within_eps($st, 'proxy-process', 100);
+        within_eps($st, 'proxy-response', 100);
+        within_eps($st, 'proxy-total', 200);
+    };
 });
 
 sub within_eps {
