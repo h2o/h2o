@@ -57,7 +57,7 @@ static void car25519(gf o)
   }
 }
 
-static void sel25519(gf p, gf q, int b)
+static void sel25519(gf p, gf q, int64_t b)
 {
   int64_t tmp, mask = ~(b-1);
   size_t i;
@@ -96,7 +96,7 @@ static void pack25519(uint8_t out[32], const gf n)
   for (i = 0; i < 16; i++)
   {
     out[2 * i] = t[i] & 0xff;
-    out[2 * i + 1] = t[i] >> 8;
+    out[2 * i + 1] = (uint8_t) (t[i] >> 8);
   }
 }
 
