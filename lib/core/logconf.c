@@ -68,7 +68,7 @@ enum {
     ELEMENT_TYPE_PROXY_IDLE_TIME,               /* %{proxy-idle-time}x */
     ELEMENT_TYPE_PROXY_CONNECT_TIME,            /* %{proxy-connect-time}x */
     ELEMENT_TYPE_PROXY_REQUEST_TIME,            /* %{proxy-request-time}x */
-    ELEMENT_TYPE_PROXY_FIRST_BYTE_TIME,         /* %{proxy-first-byte-time}x */
+    ELEMENT_TYPE_PROXY_PROCESS_TIME,            /* %{proxy-first-byte-time}x */
     ELEMENT_TYPE_PROXY_RESPONSE_TIME,           /* %{proxy-response-time}x */
     ELEMENT_TYPE_PROXY_TOTAL_TIME,              /* %{proxy-total-time}x */
     NUM_ELEMENT_TYPES
@@ -257,7 +257,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("proxy-idle-time", ELEMENT_TYPE_PROXY_IDLE_TIME);
                     MAP_EXT_TO_TYPE("proxy-connect-time", ELEMENT_TYPE_PROXY_CONNECT_TIME);
                     MAP_EXT_TO_TYPE("proxy-request-time", ELEMENT_TYPE_PROXY_REQUEST_TIME);
-                    MAP_EXT_TO_TYPE("proxy-first-byte-time", ELEMENT_TYPE_PROXY_FIRST_BYTE_TIME);
+                    MAP_EXT_TO_TYPE("proxy-process-time", ELEMENT_TYPE_PROXY_PROCESS_TIME);
                     MAP_EXT_TO_TYPE("proxy-response-time", ELEMENT_TYPE_PROXY_RESPONSE_TIME);
                     MAP_EXT_TO_TYPE("proxy-total-time", ELEMENT_TYPE_PROXY_TOTAL_TIME);
                     MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
@@ -780,8 +780,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             APPEND_DURATION(pos, proxy_request_time);
             break;
 
-        case ELEMENT_TYPE_PROXY_FIRST_BYTE_TIME:
-            APPEND_DURATION(pos, proxy_first_byte_time);
+        case ELEMENT_TYPE_PROXY_PROCESS_TIME:
+            APPEND_DURATION(pos, proxy_process_time);
             break;
 
         case ELEMENT_TYPE_PROXY_RESPONSE_TIME:

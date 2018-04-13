@@ -26,7 +26,7 @@ sub do_upstream {
     while (my $buf = <$client>) {
         last if $buf eq "\r\n";
     }
-    sleep 0.1; # proxy-first-byte-time
+    sleep 0.1; # proxy-process-time
     $client->send("HTTP/1.1 200 OK\r\nContent-Length:1\r\nConnection: close\r\n\r\n");
     $client->flush;
     sleep 0.1; # proxy-response-time
@@ -52,7 +52,7 @@ access-log:
   path: $logfile
   format: "@{[
     join("\\t", map { "$_:%{proxy-$_-time}x" }
-      qw(idle connect request first-byte response total)
+      qw(idle connect request process response total)
     )
   ]}"
 EOT
@@ -84,7 +84,7 @@ run_with_curl($server, sub {
     within_eps($timings, 'idle', 0.1);
     within_eps($timings, 'connect', 0.1);
     within_eps($timings, 'request', 0);
-    within_eps($timings, 'first-byte', 0.1);
+    within_eps($timings, 'process', 0.1);
     within_eps($timings, 'response', 0.1);
     within_eps($timings, 'total', 0.2);
     pass;

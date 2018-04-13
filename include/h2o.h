@@ -2261,7 +2261,7 @@ COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps
 COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->timestamps.proxy.start_at);
 COMPUTE_DURATION(proxy_connect_time, &req->timestamps.proxy.start_at, &req->timestamps.proxy.request_begin_at);
 COMPUTE_DURATION(proxy_request_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.request_end_at);
-COMPUTE_DURATION(proxy_first_byte_time, &req->timestamps.proxy.request_end_at, &req->timestamps.proxy.response_start_at);
+COMPUTE_DURATION(proxy_process_time, &req->timestamps.proxy.request_end_at, &req->timestamps.proxy.response_start_at);
 COMPUTE_DURATION(proxy_response_time, &req->timestamps.proxy.response_start_at, &req->timestamps.proxy.response_end_at);
 COMPUTE_DURATION(proxy_total_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.response_end_at);
 
