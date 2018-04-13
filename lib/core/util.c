@@ -845,9 +845,7 @@ void h2o_add_server_timing_header(h2o_req_t *req)
     if (req->proxy_timings != NULL) {
         emit_server_timing_element(req, &dst, "proxy-idle", h2o_proxy_time_compute_idle_time, max_len);
         emit_server_timing_element(req, &dst, "proxy-connect", h2o_proxy_time_compute_connect_time, max_len);
-        emit_server_timing_element(req, &dst, "proxy-request-header", h2o_proxy_time_compute_request_header_time, max_len);
-        emit_server_timing_element(req, &dst, "proxy-request-body", h2o_proxy_time_compute_request_body_time, max_len);
-        emit_server_timing_element(req, &dst, "proxy-request-total", h2o_proxy_time_compute_request_total_time, max_len);
+        emit_server_timing_element(req, &dst, "proxy-request", h2o_proxy_time_compute_request_time, max_len);
         emit_server_timing_element(req, &dst, "proxy-first-byte", h2o_proxy_time_compute_first_byte_time, max_len);
     }
 

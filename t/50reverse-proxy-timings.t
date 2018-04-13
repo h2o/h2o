@@ -52,7 +52,7 @@ access-log:
   path: $logfile
   format: "@{[
     join("\\t", map { "$_:%{proxy-$_-time}x" }
-      qw(idle connect request-header request-body request-total first-byte response total)
+      qw(idle connect request first-byte response total)
     )
   ]}"
 EOT
@@ -83,6 +83,7 @@ run_with_curl($server, sub {
     my $timings = +{ map { split(':', $_, 2) } split("\t", $log) };
     within_eps($timings, 'idle', 0.1);
     within_eps($timings, 'connect', 0.1);
+    within_eps($timings, 'request', 0);
     within_eps($timings, 'first-byte', 0.1);
     within_eps($timings, 'response', 0.1);
     within_eps($timings, 'total', 0.2);

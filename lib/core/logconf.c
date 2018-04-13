@@ -67,9 +67,7 @@ enum {
     ELEMENT_TYPE_PROTOCOL_SPECIFIC,             /* %{protocol-specific...}x */
     ELEMENT_TYPE_PROXY_IDLE_TIME,               /* %{proxy-idle-time}x */
     ELEMENT_TYPE_PROXY_CONNECT_TIME,            /* %{proxy-connect-time}x */
-    ELEMENT_TYPE_PROXY_REQUEST_HEADER_TIME,     /* %{proxy-request-header-time}x */
-    ELEMENT_TYPE_PROXY_REQUEST_BODY_TIME,       /* %{proxy-request-body-time}x */
-    ELEMENT_TYPE_PROXY_REQUEST_TOTAL_TIME,      /* %{proxy-request-total-time}x */
+    ELEMENT_TYPE_PROXY_REQUEST_TIME,            /* %{proxy-request-time}x */
     ELEMENT_TYPE_PROXY_FIRST_BYTE_TIME,         /* %{proxy-first-byte-time}x */
     ELEMENT_TYPE_PROXY_RESPONSE_TIME,           /* %{proxy-response-time}x */
     ELEMENT_TYPE_PROXY_TOTAL_TIME,              /* %{proxy-total-time}x */
@@ -258,9 +256,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
                     MAP_EXT_TO_TYPE("proxy-idle-time", ELEMENT_TYPE_PROXY_IDLE_TIME);
                     MAP_EXT_TO_TYPE("proxy-connect-time", ELEMENT_TYPE_PROXY_CONNECT_TIME);
-                    MAP_EXT_TO_TYPE("proxy-request-header-time", ELEMENT_TYPE_PROXY_REQUEST_HEADER_TIME);
-                    MAP_EXT_TO_TYPE("proxy-request-body-time", ELEMENT_TYPE_PROXY_REQUEST_BODY_TIME);
-                    MAP_EXT_TO_TYPE("proxy-request-total-time", ELEMENT_TYPE_PROXY_REQUEST_TOTAL_TIME);
+                    MAP_EXT_TO_TYPE("proxy-request-time", ELEMENT_TYPE_PROXY_REQUEST_TIME);
                     MAP_EXT_TO_TYPE("proxy-first-byte-time", ELEMENT_TYPE_PROXY_FIRST_BYTE_TIME);
                     MAP_EXT_TO_TYPE("proxy-response-time", ELEMENT_TYPE_PROXY_RESPONSE_TIME);
                     MAP_EXT_TO_TYPE("proxy-total-time", ELEMENT_TYPE_PROXY_TOTAL_TIME);
@@ -786,16 +782,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             APPEND_DURATION(pos, h2o_proxy_time_compute_connect_time);
             break;
 
-        case ELEMENT_TYPE_PROXY_REQUEST_HEADER_TIME:
-            APPEND_DURATION(pos, h2o_proxy_time_compute_request_header_time);
-            break;
-
-        case ELEMENT_TYPE_PROXY_REQUEST_BODY_TIME:
-            APPEND_DURATION(pos, h2o_proxy_time_compute_request_body_time);
-            break;
-
-        case ELEMENT_TYPE_PROXY_REQUEST_TOTAL_TIME:
-            APPEND_DURATION(pos, h2o_proxy_time_compute_request_total_time);
+        case ELEMENT_TYPE_PROXY_REQUEST_TIME:
+            APPEND_DURATION(pos, h2o_proxy_time_compute_request_time);
             break;
 
         case ELEMENT_TYPE_PROXY_FIRST_BYTE_TIME:

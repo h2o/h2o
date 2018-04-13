@@ -1974,14 +1974,7 @@ DEFINE_PROXY_COMPUTE_DURATION_FUNC(idle_time,
                                    req->timestamps.request_begin_at.tv_sec * 1000 + req->timestamps.request_begin_at.tv_usec / 1000,
                                    timings->start_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(connect_time, timings->start_at, timings->request_begin_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_header_time, timings->request_begin_at,
-                                   timings->request_body_begin_at > timings->request_begin_at ? timings->request_body_begin_at
-                                                                                              : timings->request_end_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_body_time,
-                                   timings->request_body_begin_at == timings->request_begin_at ? timings->request_end_at
-                                                                                               : timings->request_body_begin_at,
-                                   timings->request_end_at);
-DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_total_time, timings->request_begin_at, timings->request_end_at);
+DEFINE_PROXY_COMPUTE_DURATION_FUNC(request_time, timings->request_begin_at, timings->request_end_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(first_byte_time, timings->request_end_at, timings->response_start_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(response_time, timings->response_start_at, timings->response_end_at);
 DEFINE_PROXY_COMPUTE_DURATION_FUNC(total_time, timings->request_begin_at, timings->response_end_at);
