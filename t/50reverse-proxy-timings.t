@@ -61,16 +61,7 @@ EOT
 run_with_curl($server, sub {
     my ($proto, $port, $curl) = @_;
 
-    my $backlog_filler = IO::Socket::INET->new(
-        PeerHost => '127.0.0.1',
-        PeerPort => $upstream_port,
-        Proto => 'tcp',
-    ) or die "cannot create socket: $!";
-
     open(CURL, "$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/ |");
-
-    sleep 0.2; # proxy-idle-time + proxy-connect-time
-    $upstream->accept->close;
 
     do_upstream($upstream);
     my $resp = join('', <CURL>);
@@ -84,7 +75,7 @@ run_with_curl($server, sub {
         my $log = pop(@log);
         my $timings = +{ map { split(':', $_, 2) } split("\t", $log) };
         within_eps($timings, 'proxy-idle', 0.1);
-        within_eps($timings, 'proxy-connect', 0.1);
+        within_eps($timings, 'proxy-connect', 0, 0.01);
         within_eps($timings, 'proxy-request', 0);
         within_eps($timings, 'proxy-process', 0.1);
         within_eps($timings, 'proxy-response', 0.1);
@@ -98,7 +89,7 @@ run_with_curl($server, sub {
             $st = +{ %$st, map { split ('; dur=', $_) } split(', ', $1) };
         }
         within_eps($st, 'proxy-idle', 100);
-        within_eps($st, 'proxy-connect', 100);
+        within_eps($st, 'proxy-connect', 0, 10);
         within_eps($st, 'proxy-request', 0);
         within_eps($st, 'proxy-process', 100);
         within_eps($st, 'proxy-response', 100);
