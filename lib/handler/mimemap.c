@@ -242,7 +242,7 @@ void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
     });
 }
 
-#undef FOREACH_TYPES
+#undef FOREACH_TYPE
 
 int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap)
 {
