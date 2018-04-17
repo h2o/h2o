@@ -463,9 +463,9 @@ Fail:
         }                                                                                                                          \
     } while (0);
 
-static char *expand_line_buf(char *line, size_t cur_size, size_t required, int should_realloc)
+static char *expand_line_buf(char *line, size_t *cur_size, size_t required, int should_realloc)
 {
-    size_t new_size = cur_size;
+    size_t new_size = *cur_size;
 
     /* determine the new size */
     do {
@@ -475,11 +475,12 @@ static char *expand_line_buf(char *line, size_t cur_size, size_t required, int s
     /* reallocate */
     if (!should_realloc) {
         char *newpt = h2o_mem_alloc(new_size);
-        memcpy(newpt, line, cur_size);
+        memcpy(newpt, line, *cur_size);
         line = newpt;
     } else {
         line = h2o_mem_realloc(line, new_size);
     }
+    *cur_size = new_size;
 
     return line;
 }
@@ -517,8 +518,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
     do {                                                                                                                           \
         if ((capacity) + element->suffix.len > line_end - pos) {                                                                   \
             size_t off = pos - line;                                                                                               \
-            line = expand_line_buf(line, line_end - line, off + (capacity) + element->suffix.len, should_realloc_on_expand);       \
+            size_t size = line_end - line;                                                                                         \
+            line = expand_line_buf(line, &size, off + (capacity) + element->suffix.len, should_realloc_on_expand);                 \
             pos = line + off;                                                                                                      \
+            line_end = line + size;                                                                                                \
             should_realloc_on_expand = 1;                                                                                          \
         }                                                                                                                          \
     } while (0)
