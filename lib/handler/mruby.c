@@ -401,6 +401,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     h2o_mruby_redis_init_context(shared_ctx);
     h2o_mruby_sleep_init_context(shared_ctx);
     h2o_mruby_channel_init_context(shared_ctx);
+    h2o_mruby_socket_init_context(shared_ctx);
 
     struct RClass *module = mrb_define_module(shared_ctx->mrb, "H2O");
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_H2O_MODULE, mrb_obj_value(module));

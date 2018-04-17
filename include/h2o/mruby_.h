@@ -69,6 +69,9 @@ enum {
     /* used by channel.c */
     H2O_MRUBY_CHANNEL_CLASS,
 
+    /* used by socket.c */
+    H2O_MRUBY_TCP_SOCKET_CLASS,
+
     H2O_MRUBY_NUM_CONSTANTS
 };
 
@@ -193,6 +196,9 @@ void h2o_mruby_sleep_init_context(h2o_mruby_shared_context_t *ctx);
 
 /* handler/mruby/channel.c */
 void h2o_mruby_channel_init_context(h2o_mruby_shared_context_t *ctx);
+
+/* handler/mruby/socket.c */
+void h2o_mruby_socket_init_context(h2o_mruby_shared_context_t *ctx);
 
 /* handler/configurator/mruby.c */
 void h2o_mruby_register_configurator(h2o_globalconf_t *conf);
