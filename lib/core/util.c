@@ -26,10 +26,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include "hiredis.h"
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#include "h2o/hiredis_.h"
 
 struct st_h2o_accept_data_t {
     h2o_accept_ctx_t *ctx;
