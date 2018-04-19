@@ -105,8 +105,8 @@ h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mr
     if (!mrb_nil_p(body))
         mrb_gc_register(generator->ctx->shared->mrb, body);
     sender->bytes_left = h2o_memis(generator->req->method.base, generator->req->method.len, H2O_STRLIT("HEAD"))
-                          ? 0
-                          : generator->req->res.content_length;
+                             ? 0
+                             : generator->req->res.content_length;
     return sender;
 }
 
@@ -152,7 +152,8 @@ static void do_callback_sender_dispose(h2o_mruby_generator_t *generator)
 
 h2o_mruby_sender_t *callback_sender_create(h2o_mruby_generator_t *generator, mrb_value body)
 {
-    struct st_h2o_mruby_callback_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
+    struct st_h2o_mruby_callback_sender_t *sender =
+        (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
     h2o_doublebuffer_init(&sender->sending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&sender->receiving, &h2o_socket_buffer_prototype);
 
@@ -168,13 +169,13 @@ int h2o_mruby_init_sender(h2o_mruby_generator_t *generator, mrb_value body)
     mrb_state *mrb = generator->ctx->shared->mrb;
     h2o_mruby_sender_t *sender;
 
-#define TRY(func) \
-    do { \
-        sender = func(generator, body); \
-        if (mrb->exc != NULL) \
-            return -1; \
-        if (sender != NULL) \
-            goto Found; \
+#define TRY(func)                                                                                                                  \
+    do {                                                                                                                           \
+        sender = func(generator, body);                                                                                            \
+        if (mrb->exc != NULL)                                                                                                      \
+            return -1;                                                                                                             \
+        if (sender != NULL)                                                                                                        \
+            goto Found;                                                                                                            \
     } while (0)
 
     TRY(h2o_mruby_http_sender_create);
@@ -235,7 +236,7 @@ static mrb_value send_chunk_method(mrb_state *mrb, mrb_value self)
 }
 
 static mrb_value send_chunk_eos_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
-                                           int *run_again)
+                                         int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
@@ -257,7 +258,7 @@ static mrb_value send_chunk_eos_callback(h2o_mruby_context_t *mctx, mrb_value in
 }
 
 static mrb_value handle_error_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,
-                                         int *run_again)
+                                       int *run_again)
 {
     mrb_state *mrb = mctx->shared->mrb;
     mrb_value err = mrb_ary_entry(args, 0);

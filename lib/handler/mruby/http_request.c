@@ -231,7 +231,8 @@ h2o_mruby_sender_t *h2o_mruby_http_sender_create(h2o_mruby_generator_t *generato
     }
     ctx->consumed = 1;
 
-    struct st_h2o_mruby_http_sender_t *sender = (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
+    struct st_h2o_mruby_http_sender_t *sender =
+        (void *)h2o_mruby_sender_create(generator, body, H2O_ALIGNOF(*sender), sizeof(*sender));
     h2o_doublebuffer_init(&sender->sending, &h2o_socket_buffer_prototype);
     sender->client = ctx;
     sender->remaining = NULL;

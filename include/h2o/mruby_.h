@@ -123,11 +123,12 @@ typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_contex
 typedef struct st_h2o_mruby_channel_context_t h2o_mruby_channel_context_t;
 typedef struct st_h2o_mruby_generator_t h2o_mruby_generator_t;
 
-typedef int (*h2o_mruby_send_response_callback_t)(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate);
+typedef int (*h2o_mruby_send_response_callback_t)(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp,
+                                                  int *is_delegate);
 
 struct st_h2o_mruby_sender_t {
     mrb_value body_obj; /* becomes nil on eos */
-    size_t bytes_left; /* SIZE_MAX indicates that the number is undermined */
+    size_t bytes_left;  /* SIZE_MAX indicates that the number is undermined */
 
     /**
      * do initialization for each sender. called immediately after h2o_start_response is called
@@ -214,7 +215,8 @@ int h2o_mruby_iterate_headers_obj(h2o_mruby_shared_context_t *shared_ctx, mrb_va
 int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_value name, mrb_value value,
                                 int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data);
 int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
-                              int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data);
+                              int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *),
+                              void *cb_data);
 int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *req);
 
 mrb_value h2o_mruby_token_string(h2o_mruby_shared_context_t *shared, const h2o_token_t *token);

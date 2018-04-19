@@ -246,7 +246,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     h2o_mem_init_pool(&pool);
 
-    headers = h2o_mem_alloc_pool(&pool, *headers,  MAX_HEADERS);
+    headers = h2o_mem_alloc_pool(&pool, *headers, MAX_HEADERS);
     header_names = h2o_mem_alloc_pool(&pool, *header_names, MAX_HEADERS);
 
     {
