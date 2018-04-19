@@ -695,8 +695,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     if (! mrb_nil_p(rack_errors)) {
         subreq->error_stream = rack_errors;
         mrb_gc_register(mrb, rack_errors);
-        subreq->super.error_logger.cb = on_subreq_error_callback;
-        subreq->super.error_logger.data = subreq;
+        subreq->super.error_log_delegate.cb = on_subreq_error_callback;
+        subreq->super.error_log_delegate.data = subreq;
     }
 
     prepare_subreq_entity(&subreq->super, ctx, rack_input);

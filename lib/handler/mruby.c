@@ -414,7 +414,7 @@ static mrb_value error_stream_write(mrb_state *mrb, mrb_value self)
 
     if (error_stream->generator != NULL) {
         h2o_req_t *req = error_stream->generator->req;
-        req->error_logger.cb(req->error_logger.data, h2o_iovec_init(NULL, 0), msg);
+        req->error_log_delegate.cb(req->error_log_delegate.data, h2o_iovec_init(NULL, 0), msg);
     } else if (error_stream->ctx->handler->pathconf->error_log.emit_request_errors) {
         h2o_write_error_log(h2o_iovec_init(NULL, 0), msg);
     }

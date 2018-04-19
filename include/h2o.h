@@ -1074,23 +1074,18 @@ struct st_h2o_req_t {
     h2o_iovec_vector_t env;
 
     /**
-     * error logging
+     * error log for the request (`h2o_req_log_error` must be used for error logging)
+     */
+    h2o_buffer_t *error_logs;
+
+    /**
+     * error log redirection called by `h2o_req_log_error`. By default, the error is appended to `error_logs`. The callback is
+     * replaced by mruby middleware to send the error log to the rack handler.
      */
     struct {
-        /**
-         * actual struct that may hold the error log
-         */
-        h2o_buffer_t *buf;
-        /**
-         * called by `h2o_log_error` to emit error log; subrequests might replace this handler to change the destination of the
-         * error messages
-         */
         void (*cb)(void *data, h2o_iovec_t prefix, h2o_iovec_t msg);
-        /**
-         * arbitrary pointer to the error logging callback
-         */
         void *data;
-    } error_logger;
+    } error_log_delegate;
 
     /* flags */
 

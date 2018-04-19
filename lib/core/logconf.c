@@ -743,8 +743,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         case ELEMENT_TYPE_ERROR:
-            if (req->error_logger.buf != NULL)
-                pos = append_unsafe_string(pos, req->error_logger.buf->bytes, req->error_logger.buf->size);
+            if (req->error_logs != NULL)
+                pos = append_unsafe_string(pos, req->error_logs->bytes, req->error_logs->size);
             break;
 
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
