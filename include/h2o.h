@@ -1077,8 +1077,18 @@ struct st_h2o_req_t {
      * error logging
      */
     struct {
+        /**
+         * actual struct that may hold the error log
+         */
         h2o_buffer_t *buf;
+        /**
+         * called by `h2o_log_error` to emit error log; subrequests might replace this handler to change the destination of the
+         * error messages
+         */
         void (*cb)(void *data, h2o_iovec_t prefix, h2o_iovec_t msg);
+        /**
+         * arbitrary pointer to the error logging callback
+         */
         void *data;
     } error_logger;
 
