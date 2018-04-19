@@ -2,6 +2,8 @@
 Debug
 */Release
 Release
+*/x64
+x64
 */.vs
 .vs
 */Generated Files
@@ -19,3 +21,4 @@ Release
 */*.dll
 */*.xbf
 */*.ilk
+deps/picotest

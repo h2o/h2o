@@ -42,6 +42,11 @@
 #define STARTING_CAPACITY 16
 #define MAX_NESTING       2048
 #define FLOAT_FORMAT      "%1.17g"
+#ifdef PRId64
+#define FIXED_FORMAT      "%"PRId64
+#else
+#define FIXED_FORMAT      "%jd"
+#endif
 
 #define SIZEOF_TOKEN(a)       (sizeof(a) - 1)
 #define SKIP_CHAR(str)        ((*str)++)
@@ -60,6 +65,9 @@ static JSON_Free_Function parson_free = free;
 typedef union json_value_value {
     char        *string;
     double       number;
+#ifdef JSON_FIXED_NUMBER
+    intmax_t     fixed;
+#endif
     JSON_Object *object;
     JSON_Array  *array;
     int          boolean;
@@ -775,6 +783,16 @@ static JSON_Value * parse_boolean_value(const char **string) {
 static JSON_Value * parse_number_value(const char **string) {
     char *end;
     double number = 0;
+#ifdef JSON_FIXED_NUMBER
+    intmax_t fixed;
+    errno = 0;
+    fixed = strtoimax(*string, &end, 10);
+    if (errno == 0 && INT64_MIN <= fixed && fixed <= INT64_MAX && end != NULL &&
+			(*end == 0x00 || (*end != '.' && *end != 'e' && *end != 'E'))) {
+        *string = end;
+        return json_value_init_fixed(fixed);
+    }
+#endif
     errno = 0;
     number = strtod(*string, &end);
     if (errno || !is_decimal(*string, end - *string)) {
@@ -812,6 +830,9 @@ static int json_serialize_to_buffer_r(const JSON_Value *value, char *buf, int le
     JSON_Object *object = NULL;
     size_t i = 0, count = 0;
     double num = 0.0;
+#ifdef JSON_FIXED_NUMBER
+    intmax_t inum = 0;
+#endif
     int written = -1, written_total = 0;
 
     switch (json_value_get_type(value)) {
@@ -916,6 +937,22 @@ static int json_serialize_to_buffer_r(const JSON_Value *value, char *buf, int le
                 APPEND_STRING("false");
             }
             return written_total;
+#ifdef JSON_FIXED_NUMBER
+        case JSONFixed:
+            inum = json_value_get_fixed(value);
+            if (buf != NULL) {
+                num_buf = buf;
+            }
+            written = sprintf(num_buf, FIXED_FORMAT, inum);
+            if (written < 0) {
+                return -1;
+            }
+            if (buf != NULL) {
+                buf += written;
+            }
+            written_total += written;
+            return written_total;
+#endif
         case JSONNumber:
             num = json_value_get_number(value);
             if (buf != NULL) {
@@ -1085,6 +1122,12 @@ double json_object_get_number(const JSON_Object *object, const char *name) {
     return json_value_get_number(json_object_get_value(object, name));
 }
 
+#ifdef JSON_FIXED_NUMBER
+intmax_t json_object_get_fixed(const JSON_Object *object, const char *name) {
+    return json_value_get_fixed(json_object_get_value(object, name));
+}
+#endif
+
 JSON_Object * json_object_get_object(const JSON_Object *object, const char *name) {
     return json_value_get_object(json_object_get_value(object, name));
 }
@@ -1113,6 +1156,12 @@ const char * json_object_dotget_string(const JSON_Object *object, const char *na
 double json_object_dotget_number(const JSON_Object *object, const char *name) {
     return json_value_get_number(json_object_dotget_value(object, name));
 }
+
+#ifdef JSON_FIXED_NUMBER
+intmax_t json_object_dotget_fixed(const JSON_Object *object, const char *name) {
+    return json_value_get_fixed(json_object_dotget_value(object, name));
+}
+#endif
 
 JSON_Object * json_object_dotget_object(const JSON_Object *object, const char *name) {
     return json_value_get_object(json_object_dotget_value(object, name));
@@ -1182,6 +1231,12 @@ double json_array_get_number(const JSON_Array *array, size_t index) {
     return json_value_get_number(json_array_get_value(array, index));
 }
 
+#ifdef JSON_FIXED_NUMBER
+intmax_t json_array_get_fixed(const JSON_Array *array, size_t index) {
+    return json_value_get_fixed(json_array_get_value(array, index));
+}
+#endif
+
 JSON_Object * json_array_get_object(const JSON_Array *array, size_t index) {
     return json_value_get_object(json_array_get_value(array, index));
 }
@@ -1222,6 +1277,12 @@ const char * json_value_get_string(const JSON_Value *value) {
 double json_value_get_number(const JSON_Value *value) {
     return json_value_get_type(value) == JSONNumber ? value->value.number : 0;
 }
+
+#ifdef JSON_FIXED_NUMBER
+intmax_t json_value_get_fixed(const JSON_Value *value) {
+    return json_value_get_type(value) == JSONFixed ? value->value.fixed : 0;
+}
+#endif
 
 int json_value_get_boolean(const JSON_Value *value) {
     return json_value_get_type(value) == JSONBoolean ? value->value.boolean : -1;
@@ -1315,6 +1376,20 @@ JSON_Value * json_value_init_number(double number) {
     return new_value;
 }
 
+#ifdef JSON_FIXED_NUMBER
+JSON_Value * json_value_init_fixed(intmax_t fixed) {
+    JSON_Value *new_value = NULL;
+    new_value = (JSON_Value*)parson_malloc(sizeof(JSON_Value));
+    if (new_value == NULL) {
+        return NULL;
+    }
+    new_value->parent = NULL;
+    new_value->type = JSONFixed;
+    new_value->value.fixed = fixed;
+    return new_value;
+}
+#endif
+
 JSON_Value * json_value_init_boolean(int boolean) {
     JSON_Value *new_value = (JSON_Value*)parson_malloc(sizeof(JSON_Value));
     if (!new_value) {
@@ -1392,6 +1467,10 @@ JSON_Value * json_value_deep_copy(const JSON_Value *value) {
             return json_value_init_boolean(json_value_get_boolean(value));
         case JSONNumber:
             return json_value_init_number(json_value_get_number(value));
+#ifdef JSON_FIXED_NUMBER
+        case JSONFixed:
+            return json_value_init_fixed(json_value_get_fixed(value));
+#endif
         case JSONString:
             temp_string = json_value_get_string(value);
             if (temp_string == NULL) {
@@ -1585,6 +1664,20 @@ JSON_Status json_array_replace_number(JSON_Array *array, size_t i, double number
     return JSONSuccess;
 }
 
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_array_replace_fixed(JSON_Array *array, size_t i, intmax_t fixed) {
+    JSON_Value *value = json_value_init_fixed(fixed);
+    if (value == NULL) {
+        return JSONFailure;
+    }
+    if (json_array_replace_value(array, i, value) == JSONFailure) {
+        json_value_free(value);
+        return JSONFailure;
+    }
+    return JSONSuccess;
+}
+#endif
+
 JSON_Status json_array_replace_boolean(JSON_Array *array, size_t i, int boolean) {
     JSON_Value *value = json_value_init_boolean(boolean);
     if (value == NULL) {
@@ -1652,6 +1745,20 @@ JSON_Status json_array_append_number(JSON_Array *array, double number) {
     return JSONSuccess;
 }
 
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_array_append_fixed(JSON_Array *array, intmax_t fixed) {
+    JSON_Value *value = json_value_init_fixed(fixed);
+    if (value == NULL) {
+        return JSONFailure;
+    }
+    if (json_array_append_value(array, value) == JSONFailure) {
+        json_value_free(value);
+        return JSONFailure;
+    }
+    return JSONSuccess;
+}
+#endif
+
 JSON_Status json_array_append_boolean(JSON_Array *array, int boolean) {
     JSON_Value *value = json_value_init_boolean(boolean);
     if (value == NULL) {
@@ -1704,6 +1811,12 @@ JSON_Status json_object_set_string(JSON_Object *object, const char *name, const 
 JSON_Status json_object_set_number(JSON_Object *object, const char *name, double number) {
     return json_object_set_value(object, name, json_value_init_number(number));
 }
+
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_object_set_fixed(JSON_Object *object, const char *name, intmax_t fixed) {
+    return json_object_set_value(object, name, json_value_init_fixed(fixed));
+}
+#endif
 
 JSON_Status json_object_set_boolean(JSON_Object *object, const char *name, int boolean) {
     return json_object_set_value(object, name, json_value_init_boolean(boolean));
@@ -1768,6 +1881,20 @@ JSON_Status json_object_dotset_number(JSON_Object *object, const char *name, dou
     }
     return JSONSuccess;
 }
+
+#ifdef JSON_FIXED_NUMBER
+JSON_Status json_object_dotset_fixed(JSON_Object *object, const char *name, intmax_t fixed) {
+    JSON_Value *value = json_value_init_fixed(fixed);
+    if (value == NULL) {
+        return JSONFailure;
+    }
+    if (json_object_dotset_value(object, name, value) == JSONFailure) {
+        json_value_free(value);
+        return JSONFailure;
+    }
+    return JSONSuccess;
+}
+#endif
 
 JSON_Status json_object_dotset_boolean(JSON_Object *object, const char *name, int boolean) {
     JSON_Value *value = json_value_init_boolean(boolean);
@@ -1899,6 +2026,10 @@ JSON_Status json_validate(const JSON_Value *schema, const JSON_Value *value) {
             return JSONSuccess;
         case JSONString: case JSONNumber: case JSONBoolean: case JSONNull:
             return JSONSuccess; /* equality already tested before switch */
+#ifdef JSON_FIXED_NUMBER
+        case JSONFixed:
+            return JSONSuccess;
+#endif
         case JSONError: default:
             return JSONFailure;
     }
@@ -1959,6 +2090,10 @@ int json_value_equals(const JSON_Value *a, const JSON_Value *b) {
             return json_value_get_boolean(a) == json_value_get_boolean(b);
         case JSONNumber:
             return fabs(json_value_get_number(a) - json_value_get_number(b)) < 0.000001; /* EPSILON */
+#ifdef JSON_FIXED_NUMBER
+        case JSONFixed:
+            return json_value_get_fixed(a) == json_value_get_fixed(b);
+#endif
         case JSONError:
             return 1;
         case JSONNull:
@@ -1987,6 +2122,12 @@ const char * json_string (const JSON_Value *value) {
 double json_number (const JSON_Value *value) {
     return json_value_get_number(value);
 }
+
+#ifdef JSON_FIXED_NUMBER
+intmax_t json_fixed (const JSON_Value *value) {
+    return json_value_get_fixed(value);
+}
+#endif
 
 int json_boolean(const JSON_Value *value) {
     return json_value_get_boolean(value);

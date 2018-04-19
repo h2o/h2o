@@ -474,9 +474,8 @@ h2o_evloop_t *create_evloop(size_t sz)
 
 void update_now(h2o_evloop_t *loop)
 {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    loop->_now = (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    gettimeofday(&loop->_tv_at, NULL);
+    loop->_now = (uint64_t)loop->_tv_at.tv_sec * 1000 + loop->_tv_at.tv_usec / 1000;
 }
 
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)

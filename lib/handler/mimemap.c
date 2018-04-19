@@ -242,7 +242,7 @@ void h2o_mimemap_on_context_dispose(h2o_mimemap_t *mimemap, h2o_context_t *ctx)
     });
 }
 
-#undef FOREACH_TYPES
+#undef FOREACH_TYPE
 
 int h2o_mimemap_has_dynamic_type(h2o_mimemap_t *mimemap)
 {
@@ -412,27 +412,28 @@ HasAttributes:
     return NULL;
 }
 
-void h2o_mimemap_get_default_attributes(const char *_mime, h2o_mime_attributes_t *attr)
+void h2o_mimemap_get_default_attributes(const char *mime, h2o_mime_attributes_t *attr)
 {
-    char *mime = alloca(strlen(_mime) + 1);
-    strcpy(mime, _mime);
+    size_t mime_len;
 
-    const char *type_end_at;
-
-    if ((type_end_at = strchr(mime, ';')) == NULL)
-        type_end_at = mime + strlen(mime);
+    for (mime_len = 0; !(mime[mime_len] == '\0' || mime[mime_len] == ';'); ++mime_len)
+        ;
 
     *attr = (h2o_mime_attributes_t){0};
 
-    if (h2o_memis(mime, type_end_at - mime, H2O_STRLIT("text/css")) ||
-        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("application/ecmascript")) ||
-        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("application/javascript")) ||
-        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("text/ecmascript")) ||
-        h2o_memis(mime, type_end_at - mime, H2O_STRLIT("text/javascript"))) {
+#define MIME_IS(x) h2o_memis(mime, mime_len, H2O_STRLIT(x))
+#define MIME_STARTS_WITH(x) (mime_len >= sizeof(x) - 1 && memcmp(mime, x, sizeof(x) - 1) == 0)
+#define MIME_ENDS_WITH(x) (mime_len >= sizeof(x) - 1 && memcmp(mime + mime_len - (sizeof(x) - 1), x, sizeof(x) - 1) == 0)
+
+    if (MIME_IS("text/css") || MIME_IS("application/ecmascript") || MIME_IS("application/javascript") ||
+        MIME_IS("text/ecmascript") || MIME_IS("text/javascript")) {
         attr->is_compressible = 1;
         attr->priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
-    } else if (h2o_memis(mime, type_end_at - mime, H2O_STRLIT("application/json")) || strncmp(mime, "text/", 5) == 0 ||
-               h2o_strstr(mime, type_end_at - mime, H2O_STRLIT("+xml")) != SIZE_MAX) {
+    } else if (MIME_IS("application/json") || MIME_STARTS_WITH("text/") || MIME_ENDS_WITH("+json") || MIME_ENDS_WITH("+xml")) {
         attr->is_compressible = 1;
     }
+
+#undef MIME_IS
+#undef MIME_STARTS_WITH
+#undef MIME_ENDS_WITH
 }

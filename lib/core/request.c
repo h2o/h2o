@@ -116,7 +116,7 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
     h2o_context_t *ctx = req->conn->ctx;
     h2o_hostconf_t *hostconf;
 
-    h2o_get_timestamp(ctx, &req->pool, &req->processed_at);
+    req->processed_at = h2o_get_timestamp(ctx, &req->pool);
 
     /* find the host context */
     if (req->input.authority.base != NULL) {
@@ -757,7 +757,6 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
 
 void h2o_resp_add_date_header(h2o_req_t *req)
 {
-    h2o_timestamp_t ts;
-    h2o_get_timestamp(req->conn->ctx, &req->pool, &ts);
+    h2o_timestamp_t ts = h2o_get_timestamp(req->conn->ctx, &req->pool);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_DATE, NULL, ts.str->rfc1123, strlen(ts.str->rfc1123));
 }

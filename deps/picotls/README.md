@@ -5,7 +5,7 @@ picotls
 
 Picotls is a [TLS 1.3](https://tlswg.github.io/tls13-spec/) implementation written in C.
 
-At the moment, the library implements Draft 18 of the specification, including support 0-RTT resumption using PSK or PSK-DHE.
+At the moment, the library implements draft-22 of the specification, including support 0-RTT resumption using PSK or PSK-DHE.
 
 Primary goal of the project is to create a fast, tiny TLS 1.3 implementation that can be used with the HTTP/2 protocol stack and possibly the upcoming QUIC stack of the [H2O HTTP/2 server](https://h2o.examp1e.net).
 

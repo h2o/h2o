@@ -64,7 +64,7 @@ static void test_secp256r1_sign(void)
 static void test_hrr(void)
 {
     ptls_key_exchange_algorithm_t *client_keyex[] = {&ptls_minicrypto_x25519, &ptls_minicrypto_secp256r1, NULL};
-    ptls_context_t client_ctx = {ptls_minicrypto_random_bytes, client_keyex, ptls_minicrypto_cipher_suites};
+    ptls_context_t client_ctx = {ptls_minicrypto_random_bytes, &ptls_get_time, client_keyex, ptls_minicrypto_cipher_suites};
     ptls_t *client, *server;
     ptls_buffer_t cbuf, sbuf, decbuf;
     uint8_t cbuf_small[16384], sbuf_small[16384], decbuf_small[16384];
@@ -90,7 +90,7 @@ static void test_hrr(void)
     cbuf.off = 0;
 
     ok(sbuf.off > 5 + 4);
-    ok(sbuf.base[5] == 6 /* PTLS_HANDSHAKE_TYPE_HELLO_RETRY_REQUEST */);
+    ok(sbuf.base[5] == 2 /* PTLS_HANDSHAKE_TYPE_SERVER_HELLO (RETRY_REQUEST) */);
 
     consumed = sbuf.off;
     ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
@@ -147,9 +147,14 @@ int main(int argc, char **argv)
     ptls_minicrypto_init_secp256r1sha256_sign_certificate(&sign_certificate,
                                                           ptls_iovec_init(SECP256R1_PRIVATE_KEY, SECP256R1_PRIVATE_KEY_SIZE));
 
-    ptls_context_t ctxbuf = {
-        ptls_minicrypto_random_bytes, ptls_minicrypto_key_exchanges, ptls_minicrypto_cipher_suites, {&cert, 1}, NULL, NULL,
-        &sign_certificate.super};
+    ptls_context_t ctxbuf = {ptls_minicrypto_random_bytes,
+                             &ptls_get_time,
+                             ptls_minicrypto_key_exchanges,
+                             ptls_minicrypto_cipher_suites,
+                             {&cert, 1},
+                             NULL,
+                             NULL,
+                             &sign_certificate.super};
     ctx = ctx_peer = &ctxbuf;
 
     subtest("picotls", test_picotls);
