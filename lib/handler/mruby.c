@@ -1109,11 +1109,13 @@ int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_valu
                                 int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
 {
     mrb_state *mrb = shared_ctx->mrb;
+    h2o_iovec_t namevec;
 
     /* convert name and value to string */
     name = h2o_mruby_to_str(mrb, name);
     if (mrb->exc != NULL)
         return -1;
+    namevec = (h2o_iovec_init(RSTRING_PTR(name), RSTRING_LEN(name)));
     value = h2o_mruby_to_str(mrb, value);
     if (mrb->exc != NULL)
         return -1;
@@ -1124,7 +1126,6 @@ int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_valu
         for (eol = vstart; eol != vend; ++eol)
             if (*eol == '\n')
                 break;
-        h2o_iovec_t namevec = (h2o_iovec_init(RSTRING_PTR(name), RSTRING_LEN(name)));
         if (cb(shared_ctx, &namevec, h2o_iovec_init(vstart, eol - vstart), cb_data) != 0)
             return -1;
         if (eol == vend)
