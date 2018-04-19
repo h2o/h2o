@@ -173,7 +173,8 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     /* headers */
     {
         mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)req->res.headers.size);
-        h2o_mruby_iterate_headers(ctx->shared, &req->pool, &req->res.headers, iterate_headers_callback, mrb_obj_ptr(headers_hash));
+        h2o_mruby_iterate_native_headers(ctx->shared, &req->pool, &req->res.headers, iterate_headers_callback,
+                                         mrb_obj_ptr(headers_hash));
         if (req->res.content_length != SIZE_MAX) {
             h2o_token_t *token = H2O_TOKEN_CONTENT_LENGTH;
             mrb_value n = h2o_mruby_new_str(mrb, token->buf.base, token->buf.len);
@@ -592,7 +593,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
             mrb_value http_header = mrb_nil_value();
             RETRIEVE_ENV_STR(http_header);
             if (!mrb_nil_p(http_header))
-                h2o_mruby_split_header_pair(ctx->shared, key, http_header, handle_header_env_key, &subreq->super);
+                h2o_mruby_iterate_header_values(ctx->shared, key, http_header, handle_header_env_key, &subreq->super);
         } else if (keystr_len != 0) {
             /* set to req->env */
             mrb_value reqenv = mrb_nil_value();

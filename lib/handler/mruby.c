@@ -629,9 +629,9 @@ static mrb_value build_path_info(mrb_state *mrb, h2o_req_t *req, size_t confpath
     return h2o_mruby_new_str(mrb, req->path.base + path_info_start, path_info_end - path_info_start);
 }
 
-int h2o_mruby_iterate_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
-                              int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *),
-                              void *cb_data)
+int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
+                                     int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *),
+                                     void *cb_data)
 {
     h2o_header_t **sorted = alloca(sizeof(*sorted) * headers->size);
     size_t i, num_sorted = 0;
@@ -755,7 +755,8 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
 
     /* headers */
-    h2o_mruby_iterate_headers(shared, &generator->req->pool, &generator->req->headers, iterate_headers_callback, mrb_obj_ptr(env));
+    h2o_mruby_iterate_native_headers(shared, &generator->req->pool, &generator->req->headers, iterate_headers_callback,
+                                     mrb_obj_ptr(env));
     mrb_value early_data_key = h2o_mruby_token_env_key(shared, H2O_TOKEN_EARLY_DATA);
     int found_early_data = !mrb_nil_p(mrb_hash_fetch(mrb, env, early_data_key, mrb_nil_value()));
     if (!found_early_data && h2o_conn_is_early_data(generator->req->conn)) {
@@ -912,8 +913,8 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
     generator->req->res.status = (int)status;
 
     /* set headers */
-    if (h2o_mruby_iterate_headers_obj(generator->ctx->shared, mrb_ary_entry(resp, 1), h2o_mruby_set_response_header,
-                                      generator->req) != 0) {
+    if (h2o_mruby_iterate_rack_headers(generator->ctx->shared, mrb_ary_entry(resp, 1), h2o_mruby_set_response_header,
+                                       generator->req) != 0) {
         return -1;
     }
     /* add date: if it's missing from the response */
@@ -1105,8 +1106,8 @@ mrb_value h2o_mruby_each_to_array(h2o_mruby_shared_context_t *shared_ctx, mrb_va
                             shared_ctx->symbols.sym_call, 1, &src);
 }
 
-int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_value name, mrb_value value,
-                                int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
+int h2o_mruby_iterate_header_values(h2o_mruby_shared_context_t *shared_ctx, mrb_value name, mrb_value value,
+                                    int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
 {
     mrb_state *mrb = shared_ctx->mrb;
     h2o_iovec_t namevec;
@@ -1136,8 +1137,8 @@ int h2o_mruby_split_header_pair(h2o_mruby_shared_context_t *shared_ctx, mrb_valu
     return 0;
 }
 
-int h2o_mruby_iterate_headers_obj(h2o_mruby_shared_context_t *shared_ctx, mrb_value headers,
-                                  int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
+int h2o_mruby_iterate_rack_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_value headers,
+                                   int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data)
 {
     mrb_state *mrb = shared_ctx->mrb;
 
@@ -1154,7 +1155,7 @@ int h2o_mruby_iterate_headers_obj(h2o_mruby_shared_context_t *shared_ctx, mrb_va
         for (i = 0; i != len; ++i) {
             mrb_value k = mrb_ary_entry(keys, i);
             mrb_value v = mrb_hash_get(mrb, headers, k);
-            if (h2o_mruby_split_header_pair(shared_ctx, k, v, cb, cb_data) != 0)
+            if (h2o_mruby_iterate_header_values(shared_ctx, k, v, cb, cb_data) != 0)
                 return -1;
         }
     } else {
@@ -1166,7 +1167,7 @@ int h2o_mruby_iterate_headers_obj(h2o_mruby_shared_context_t *shared_ctx, mrb_va
                 mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "array element of headers MUST by an array"));
                 return -1;
             }
-            if (h2o_mruby_split_header_pair(shared_ctx, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1), cb, cb_data) != 0)
+            if (h2o_mruby_iterate_header_values(shared_ctx, mrb_ary_entry(pair, 0), mrb_ary_entry(pair, 1), cb, cb_data) != 0)
                 return -1;
         }
     }
