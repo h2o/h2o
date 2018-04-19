@@ -102,6 +102,7 @@ typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_ostream_t h2o_ostream_t;
 typedef struct st_h2o_configurator_command_t h2o_configurator_command_t;
 typedef struct st_h2o_configurator_t h2o_configurator_t;
+typedef struct st_h2o_pathconf_t h2o_pathconf_t;
 typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
@@ -123,8 +124,6 @@ typedef struct st_h2o_token_t {
 } h2o_token_t;
 
 #include "h2o/token.h"
-
-typedef struct st_h2o_pathconf_t h2o_pathconf_t;
 
 /**
  * basic structure of a handler (an object that MAY generate a response)
@@ -215,7 +214,7 @@ typedef struct st_h2o_envconf_t {
     h2o_iovec_vector_t sets;
 } h2o_envconf_t;
 
-typedef struct st_h2o_pathconf_t {
+struct st_h2o_pathconf_t {
     /**
      * globalconf to which the pathconf belongs
      */
@@ -253,7 +252,7 @@ typedef struct st_h2o_pathconf_t {
          */
         unsigned emit_request_errors : 1;
     } error_log;
-} h2o_pathconf_t;
+};
 
 struct st_h2o_hostconf_t {
     /**
