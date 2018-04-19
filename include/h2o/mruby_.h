@@ -158,7 +158,6 @@ struct st_h2o_mruby_sender_t {
 typedef struct st_h2o_mruby_error_stream_t {
     h2o_mruby_context_t *ctx;
     h2o_mruby_generator_t *generator;
-    h2o_iovec_t path;
 } h2o_mruby_error_stream_t;
 
 typedef struct st_h2o_mruby_generator_t {

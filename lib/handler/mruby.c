@@ -882,7 +882,6 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->error_stream = h2o_mem_alloc(sizeof(*generator->error_stream));
     generator->error_stream->ctx = ctx;
     generator->error_stream->generator = generator;
-    generator->error_stream->path = req->path;
 
     mrb_value env = build_env(generator);
 
