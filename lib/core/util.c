@@ -534,26 +534,6 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
     return p - dst;
 }
 
-int h2o_parse_protocol_version(h2o_iovec_t str)
-{
-    if (str.len < 6)
-        return -1;
-    if (!(str.base[0] == 'H' && str.base[1] == 'T' && str.base[2] == 'T' && str.base[3] == 'P' && str.base[4] == '/'))
-        return -1;
-    switch (str.base[5]) {
-        case '1':
-            if (str.len < 8)
-                return -1;
-            if (str.base[6] != '.' && ('0' <= str.base[7] && str.base[7] <= '9'))
-                return -1;
-            return 0x100 + (str.base[7] - '0');
-        case '2':
-            return 0x200;
-        default:
-            return -1;
-    }
-}
-
 size_t h2o_stringify_proxy_header(h2o_conn_t *conn, char *buf)
 {
     struct sockaddr_storage ss;

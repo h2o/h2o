@@ -432,6 +432,28 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
     }
 }
 
+/**
+ * relaxed parsing of HTTP version that defaults to 1.1
+ */
+static int parse_protocol_version(const char *s, size_t len)
+{
+    int ver;
+
+    if (len < 6)
+        goto Default;
+    if (memcmp(s, "HTTP/", 5) != 0)
+        goto Default;
+    if (!('0' <= s[5] && s[5] <= '9'))
+        goto Default;
+    ver = (s[5] - '0') * 0x100;
+    if (len >= 8 && s[6] == '.' && ('0' <= s[7] && s[7] <= '9'))
+        ver += s[7] - '0';
+
+    return ver;
+Default:
+    return 0x101;
+}
+
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env, int is_reprocess)
 {
     static const h2o_conn_callbacks_t callbacks = {
@@ -669,9 +691,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->super.hostconf = hostconf;
     subreq->super.pathconf = ctx->handler->pathconf;
     subreq->super.handler = &ctx->handler->super;
-    subreq->super.version = h2o_parse_protocol_version(STR_TO_IOVEC(server_protocol));
-    if (subreq->super.version == -1)
-        subreq->super.version = 0x101;
+    subreq->super.version = parse_protocol_version(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol));
 
     if (!mrb_nil_p(server_addr) && !mrb_nil_p(server_port)) {
         subreq->conn.server.host = h2o_strdup(&subreq->super.pool, RSTRING_PTR(server_addr), RSTRING_LEN(server_addr));

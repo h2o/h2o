@@ -1111,7 +1111,9 @@ struct st_h2o_req_t {
      * whether if the response should include server-timing
      */
     unsigned char send_server_timing : 1;
-
+    /**
+     * whether the request is a subrequest
+     */
     unsigned char is_subrequest : 1;
 
     /**
@@ -1270,7 +1272,6 @@ void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsi
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);
-int h2o_parse_protocol_version(h2o_iovec_t str);
 /**
  * builds the proxy header defined by the PROXY PROTOCOL
  */
