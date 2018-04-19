@@ -31,6 +31,8 @@
 #define H2O_MRUBY_MODULE_NAME "h2o_mruby"
 
 enum {
+    /* [0 .. H2O_MAX_TOKENS-1] are header names */
+    /* [H2O_MAX_TOKENS .. H2O_MAX_TOKENS*2-1] are header names in environment variable style (i.e, "HTTP_FOO_BAR") */
     H2O_MRUBY_LIT_REQUEST_METHOD = H2O_MAX_TOKENS * 2,
     H2O_MRUBY_LIT_SCRIPT_NAME,
     H2O_MRUBY_LIT_PATH_INFO,
