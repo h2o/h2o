@@ -129,24 +129,29 @@ typedef int (*h2o_mruby_send_response_callback_t)(h2o_mruby_generator_t *generat
                                                   int *is_delegate);
 
 struct st_h2o_mruby_sender_t {
-    mrb_value body_obj; /* becomes nil on eos */
-    size_t bytes_left;  /* SIZE_MAX indicates that the number is undermined */
-
     /**
-     * do initialization for each sender. called immediately after h2o_start_response is called
+     * The body object being sent to the native side. Becomes nil on eos.
+     */
+    mrb_value body_obj;
+    /**
+     * Size of the body being sent. SIZE_MAX indicates that the number is undetermined (i.e. no Content-Length).
+     */
+    size_t bytes_left;
+    /**
+     * Initializes the subclass. called immediately after h2o_start_response is called
      */
     void (*start)(h2o_mruby_generator_t *generator);
-
     /**
      * called directly by protocol handler
      */
     void (*proceed)(h2o_generator_t *generator, h2o_req_t *req);
-
     /**
      * called when the generator is disposed
      */
     void (*dispose)(h2o_mruby_generator_t *generator);
-
+    /**
+     * if `h2o_send` has been closed (by passing any other flag than in-progress
+     */
     unsigned char final_sent : 1;
 };
 
