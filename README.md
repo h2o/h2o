@@ -12,6 +12,16 @@ Copyright (c) 2014-2017 [DeNA Co., Ltd.](http://dena.com/), [Kazuho Oku](https:/
 Modified to enable PostgreSQL mruby module. Compile with `-DENABLE_MRUBY`,
 if necessary specifying also `-DPG_LIBRARY` and `-DPG_INCLUDE`
 
+### Install example, OSX
+
+```sh
+brew install libpq
+# --> installs sometimes to /usr/local/opt/libpq if you already have postgres installed (for example)
+cmake -DENABLE_MRUBY=true -DPG_LIBRARY=/usr/local/opt/libpq/lib/libpq.a -DPG_INCLUDE=/usr/local/opt/libpq/include/ .
+make
+sudo make install
+```
+
 H2O is a new generation HTTP server.
 Not only is it very fast, it also provides much quicker response to end-users when compared to older generations of HTTP servers.
 
