@@ -320,11 +320,9 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
     mrb_state *mrb = ctx->shared->mrb;
     assert(mrb->exc != NULL);
 
-    if (generator == NULL) {
+    if (generator == NULL || generator->req->_generator != NULL) {
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
     } else {
-        assert(generator->req != NULL);
-        assert(generator->req->_generator == NULL);
         h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n",
                           RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         h2o_send_error_500(generator->req, "Internal Server Error", "Internal Server Error", 0);
@@ -1061,11 +1059,6 @@ void h2o_mruby_run_fiber(h2o_mruby_context_t *ctx, mrb_value receiver, mrb_value
     generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(output, 1));
     if (generator == NULL)
         goto Exit; /* do nothing if req is already closed */
-    assert(generator->req != NULL);
-    if (generator->req->_generator != NULL) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "unexpectedly received a rack response"));
-        goto GotException;
-    }
 
     if (send_response_callback == NULL)
         send_response_callback = send_response;
