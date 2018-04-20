@@ -95,18 +95,6 @@ ENDIF ()
 OPTION(WITHOUT_LIBS "skip building libs even when possible" OFF)
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 
-IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-    EXECUTE_PROCESS(
-        COMMAND git log -1 --format=%h
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE GIT_REVISION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    IF (GIT_REVISION)
-        ADD_DEFINITIONS("-DH2O_GIT_REVISION=${GIT_REVISION}")
-    ENDIF ()
-ENDIF ()
-
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
 IF (RUBY AND BISON)
@@ -263,6 +251,7 @@ SET(PICOTLS_SOURCE_FILES
     deps/picotls/deps/cifra/src/modes.c
     deps/picotls/deps/cifra/src/poly1305.c
     deps/picotls/deps/cifra/src/sha256.c
+    deps/picotls/deps/cifra/src/sha512.c
     deps/picotls/lib/picotls.c
     deps/picotls/lib/cifra.c
     deps/picotls/lib/uecc.c
@@ -552,6 +541,7 @@ IF (WITH_MRUBY)
         lib/handler/mruby.c
         lib/handler/mruby/chunked.c
         lib/handler/mruby/http_request.c
+        lib/handler/mruby/redis.c
         lib/handler/mruby/sleep.c
         lib/handler/mruby/channel.c
         lib/handler/configurator/mruby.c)
@@ -743,3 +733,17 @@ ENDIF ()
 IF (NOT OSS_FUZZ)
     SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 ENDIF (NOT OSS_FUZZ)
+
+IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
+    ADD_CUSTOM_TARGET(gitrev ALL
+        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    ADD_DEPENDENCIES(libh2o gitrev)
+    ADD_DEPENDENCIES(libh2o-evloop gitrev)
+    ADD_DEPENDENCIES(h2o gitrev)
+    ADD_DEPENDENCIES(t-00unit-evloop.t gitrev)
+    IF (LIBUV_FOUND)
+        ADD_DEPENDENCIES(t-00unit-libuv.t gitrev)
+    ENDIF (LIBUV_FOUND)
+ENDIF ()

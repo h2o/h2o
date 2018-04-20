@@ -9,7 +9,7 @@ class InputStream
       block.call(self.read(pos+1))
     end
     rest = self.read()
-    if rest
+    unless rest.empty?
       block.call(rest)
     end
   end

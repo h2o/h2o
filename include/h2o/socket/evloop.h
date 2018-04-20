@@ -42,6 +42,7 @@ typedef struct st_h2o_evloop_t {
         struct st_h2o_evloop_socket_t **tail_ref;
     } _statechanged;
     uint64_t _now;
+    struct timeval _tv_at;
     h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
     h2o_sliding_counter_t exec_time_counter;
 } h2o_evloop_t;
@@ -60,6 +61,11 @@ void h2o_evloop_destroy(h2o_evloop_t *loop);
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
 
 /* inline definitions */
+
+static inline struct timeval h2o_gettimeofday(h2o_evloop_t *loop)
+{
+    return loop->_tv_at;
+}
 
 static inline uint64_t h2o_now(h2o_evloop_t *loop)
 {

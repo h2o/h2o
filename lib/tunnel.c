@@ -56,7 +56,7 @@ static inline void reset_timeout(struct st_h2o_tunnel_t *tunnel)
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 }
 
-static inline void on_read(h2o_socket_t *sock, const char *err)
+static void on_read(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_tunnel_t *tunnel = sock->data;
     h2o_socket_t *dst;
