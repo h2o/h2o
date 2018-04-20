@@ -28,7 +28,7 @@
 #include <mruby/variable.h>
 #include "h2o/mruby_.h"
 #include "h2o/redis.h"
-#include "hiredis.h"
+#include "h2o/hiredis_.h"
 
 struct st_h2o_mruby_redis_client_t {
     h2o_redis_client_t super;

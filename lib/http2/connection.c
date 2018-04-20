@@ -1050,7 +1050,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
         if (!h2o_socket_ssl_is_early_data(conn->sock)) {
             while (conn->early_data.blocked_streams.next != &conn->early_data.blocked_streams) {
                 h2o_http2_stream_t *stream =
-                    H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link,conn->early_data.blocked_streams.next);
+                    H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->early_data.blocked_streams.next);
                 h2o_linklist_unlink(&stream->_refs.link);
                 h2o_replay_request(&stream->req);
             }
