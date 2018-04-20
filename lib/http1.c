@@ -808,8 +808,8 @@ static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req)
     memcpy(buf.base, EARLY_HINTS_HEADER, sizeof(EARLY_HINTS_HEADER) - 1);
     char *dst = buf.base + sizeof(EARLY_HINTS_HEADER) - 1;
     dst += flatten_normal_headers(dst, req->res.headers.entries, req->res.headers.size, 0);
-    *dst = '\r';
-    *dst = '\n';
+    *dst++ = '\r';
+    *dst++ = '\n';
 
     h2o_socket_write(conn->sock, &buf, 1, on_send_early_hints);
 #undef EARLY_HINTS_HEADER
