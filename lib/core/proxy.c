@@ -467,6 +467,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     /* copy the response (note: all the headers must be copied; http1client discards the input once we return from this callback) */
     req->res.status = status;
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
+    req->res.headers = (h2o_headers_t){NULL, 0, 0};
     for (i = 0; i != num_headers; ++i) {
         if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
