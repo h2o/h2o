@@ -56,6 +56,15 @@ struct st_h2o_http1_conn_t {
         void *data;
         h2o_http1_upgrade_cb cb;
     } upgrade;
+    struct {
+        unsigned sending : 1;
+        unsigned has_pending_hints : 1;
+        struct {
+            h2o_iovec_t *inbufs;
+            size_t inbufcnt;
+            h2o_send_state_t send_state;
+        } pending_final;
+    } early_hints;
     /* the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor) */
     h2o_req_t req;
 };
@@ -751,6 +760,14 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     assert(self == &conn->_ostr_final);
 
+    if (conn->early_hints.sending) {
+        conn->early_hints.pending_final.inbufs = h2o_mem_alloc_pool(&req->pool, h2o_iovec_t, inbufcnt);
+        memcpy(conn->early_hints.pending_final.inbufs, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+        conn->early_hints.pending_final.inbufcnt = inbufcnt;
+        conn->early_hints.pending_final.send_state = send_state;
+        return;
+    }
+
     /* count bytes_sent if other ostreams haven't counted */
     if (req->bytes_counted_by_ostream == 0) {
         for (i = 0; i != inbufcnt; ++i) {
@@ -791,12 +808,30 @@ static void on_send_early_hints(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1_conn_t *conn = sock->data;
     if (err != NULL)
         close_connection(conn, 1);
+
+    conn->early_hints.sending = 0;
+
+    if (conn->early_hints.pending_final.inbufs != NULL) {
+        finalostream_send(&conn->_ostr_final.super, &conn->req, conn->early_hints.pending_final.inbufs, conn->early_hints.pending_final.inbufcnt, conn->early_hints.pending_final.send_state);
+        return;
+    }
+
+    if (conn->early_hints.has_pending_hints) {
+        conn->early_hints.has_pending_hints = 0;
+        finalostream_send_early_hints(&conn->_ostr_final.super, &conn->req);
+    }
 }
 
 static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req)
 {
 #define EARLY_HINTS_HEADER "HTTP/1.1 103 Early Hints\r\n"
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
+
+    if (conn->early_hints.sending) {
+        conn->early_hints.has_pending_hints = 1;
+        return;
+    }
+    conn->early_hints.sending = 1;
 
     h2o_iovec_t buf = h2o_iovec_init(NULL, sizeof(EARLY_HINTS_HEADER) - 1 + 2);
 
