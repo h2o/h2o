@@ -829,11 +829,10 @@ void h2o_add_server_timing_header(h2o_req_t *req)
 
 #define LONGEST_STR                                                                                                                \
     ELEMENT_LONGEST_STR("connect")                                                                                                 \
-    DELIMITER ELEMENT_LONGEST_STR("header") DELIMITER ELEMENT_LONGEST_STR("body") DELIMITER ELEMENT_LONGEST_STR("request_total")   \
-        DELIMITER ELEMENT_LONGEST_STR("process") DELIMITER ELEMENT_LONGEST_STR("proxy-idle")                                       \
-            DELIMITER ELEMENT_LONGEST_STR("proxy-connect") DELIMITER ELEMENT_LONGEST_STR("proxy-request-header")                   \
-                DELIMITER ELEMENT_LONGEST_STR("proxy-request-body") DELIMITER ELEMENT_LONGEST_STR("proxy-request-total")           \
-                    DELIMITER ELEMENT_LONGEST_STR("proxy-first-byte")
+    DELIMITER ELEMENT_LONGEST_STR("request-header") DELIMITER ELEMENT_LONGEST_STR("request-body")                                  \
+        DELIMITER ELEMENT_LONGEST_STR("request-total") DELIMITER ELEMENT_LONGEST_STR("process")                                    \
+            DELIMITER ELEMENT_LONGEST_STR("proxy-idle") DELIMITER ELEMENT_LONGEST_STR("proxy-connect")                             \
+                DELIMITER ELEMENT_LONGEST_STR("proxy-request") DELIMITER ELEMENT_LONGEST_STR("proxy-process")
     size_t max_len = sizeof(LONGEST_STR);
 
     emit_server_timing_element(req, &dst, "connect", h2o_time_compute_connect_time, max_len);
