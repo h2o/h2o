@@ -25,7 +25,7 @@
 
 static void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
-static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req, h2o_headers_t *headers);
+static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req);
 
 static size_t sz_min(size_t x, size_t y)
 {
@@ -388,18 +388,14 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     h2o_http2_conn_register_for_proceed_callback(conn, stream);
 }
 
-static void finalostream_send_early_hints(h2o_ostream_t *self, h2o_req_t *req, h2o_headers_t *headers)
+static void finalostream_send_early_hints(h2o_ostream_t *self, h2o_req_t *req)
 {
+    assert(req->res.status == 103);
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
 
-    h2o_res_t res;
-    res.status = 103;
-    res.headers = *headers;
-    static h2o_iovec_t dummy = (h2o_iovec_t){NULL, 0};
-
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                               conn->peer_settings.max_frame_size, &res, &dummy, SIZE_MAX);
+                               conn->peer_settings.max_frame_size, &req->res, NULL, SIZE_MAX);
     h2o_http2_conn_request_write(conn);
 }
 

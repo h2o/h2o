@@ -37,13 +37,13 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     h2o_setup_next_ostream(req, slot);
 }
 
-static void on_send_early_hints(h2o_filter_t *_self, h2o_req_t *req, h2o_headers_t *headers)
+static void on_send_early_hints(h2o_filter_t *_self, h2o_req_t *req)
 {
     struct st_headers_filter_t *self = (void *)_self;
     h2o_headers_command_t *cmd;
 
     for (cmd = self->cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
-        h2o_rewrite_headers(&req->pool, headers, cmd);
+        h2o_rewrite_headers(&req->pool, &req->res.headers, cmd);
 }
 
 void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)

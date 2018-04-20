@@ -78,7 +78,7 @@ struct st_h2o_http1_chunked_entity_reader {
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
-static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req, h2o_headers_t *headers);
+static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -793,7 +793,7 @@ static void on_send_early_hints(h2o_socket_t *sock, const char *err)
         close_connection(conn, 1);
 }
 
-static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req, h2o_headers_t *headers)
+static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req)
 {
 #define EARLY_HINTS_HEADER "HTTP/1.1 103 Early Hints\r\n"
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
@@ -801,13 +801,13 @@ static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req, 
     h2o_iovec_t buf = h2o_iovec_init(NULL, sizeof(EARLY_HINTS_HEADER) - 1 + 2);
 
     int i;
-    for (i = 0; i != headers->size; ++i)
-        buf.len += headers->entries[i].name->len + headers->entries[i].value.len + 4;
+    for (i = 0; i != req->res.headers.size; ++i)
+        buf.len += req->res.headers.entries[i].name->len + req->res.headers.entries[i].value.len + 4;
 
     buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
     memcpy(buf.base, EARLY_HINTS_HEADER, sizeof(EARLY_HINTS_HEADER) - 1);
     char *dst = buf.base + sizeof(EARLY_HINTS_HEADER) - 1;
-    dst += flatten_normal_headers(dst, headers->entries, headers->size, 0);
+    dst += flatten_normal_headers(dst, req->res.headers.entries, req->res.headers.size, 0);
     *dst = '\r';
     *dst = '\n';
 

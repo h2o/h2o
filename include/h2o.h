@@ -157,7 +157,7 @@ typedef struct st_h2o_filter_t {
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
-    void (*on_send_early_hints)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_headers_t *headers);
+    void (*on_send_early_hints)(struct st_h2o_filter_t *self, h2o_req_t *req);
 } h2o_filter_t;
 
 /**
@@ -732,7 +732,7 @@ struct st_h2o_ostream_t {
     /**
      * called by the core via h2o_send_early_hints
      */
-    void (*send_early_hints)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_headers_t *headers);
+    void (*send_early_hints)(struct st_h2o_ostream_t *self, h2o_req_t *req);
 };
 
 /**
@@ -1603,7 +1603,7 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status);
  */
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
 
-void h2o_send_early_hints(h2o_req_t *req, h2o_headers_t *headers);
+void h2o_send_early_hints(h2o_req_t *req);
 /**
  * logs an error
  */
