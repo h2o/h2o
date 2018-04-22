@@ -827,7 +827,6 @@
 		10FFEE081BB23A8C0087AD75 /* neverbleed.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = neverbleed.c; sourceTree = "<group>"; };
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
-		7D519F872080AA87000B5313 /* header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = header.h; sourceTree = "<group>"; };
 		7D9372FD202AC70F005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D937301202AC7BA005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
@@ -1525,7 +1524,6 @@
 				107923A319A3215F00C52AD6 /* websocket.h */,
 				104B9A2C1A4BE029009EEE64 /* version.h */,
 				08790DE11D8275C100A04BC1 /* redis.h */,
-				7D519F872080AA87000B5313 /* header.h */,
 				7DF88EF820761972005DB8D8 /* hiredis_.h */,
 			);
 			path = h2o;
