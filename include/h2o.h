@@ -1624,7 +1624,9 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status);
  * this returns a version of `value` that removes the links that had the `x-http2-push-only` attribute
  */
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
-
+/**
+ * sends 103 Early Hints
+ */
 void h2o_send_early_hints(h2o_req_t *req);
 /**
  * logs an error
