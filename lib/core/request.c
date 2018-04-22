@@ -743,8 +743,6 @@ void h2o_send_early_hints(h2o_req_t *req)
     assert(req->_generator == NULL);
     assert(req->_ostr_top->next == NULL && req->_ostr_top->send_early_hints != NULL);
 
-    req->res.status = 103;
-
     int i = 0;
     for (i = 0; i != req->pathconf->filters.size; ++i) {
         h2o_filter_t *filter = req->pathconf->filters.entries[i];

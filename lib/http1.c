@@ -826,6 +826,7 @@ static void on_send_early_hints(h2o_socket_t *sock, const char *err)
 static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req)
 {
 #define EARLY_HINTS_HEADER "HTTP/1.1 103 Early Hints\r\n"
+    assert(req->res.status == 103);
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
 
     if (conn->early_hints.sending) {
