@@ -42,7 +42,10 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->stream_id = stream_id;
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
-    stream->_ostr_final.send_early_hints = conn->super.ctx->globalconf->proxy.forward_early_hints == H2O_PROXY_FORWARD_EARLY_HINTS_NONE ? NULL : finalostream_send_early_hints;
+    stream->_ostr_final.send_early_hints =
+        conn->super.ctx->globalconf->proxy.forward_early_hints == H2O_PROXY_FORWARD_EARLY_HINTS_NONE
+            ? NULL
+            : finalostream_send_early_hints;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     h2o_http2_window_init(&stream->output_window, conn->peer_settings.initial_window_size);
     h2o_http2_window_init(&stream->input_window.window, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);

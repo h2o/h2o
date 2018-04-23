@@ -415,17 +415,17 @@ static int on_config_forward_early_hints(h2o_configurator_command_t *cmd, h2o_co
 {
     int value;
     switch (h2o_configurator_get_one_of(cmd, node, "none,except-h1,all")) {
-        case 0:
-            value = H2O_PROXY_FORWARD_EARLY_HINTS_NONE;
-            break;
-        case 1:
-            value = H2O_PROXY_FORWARD_EARLY_HINTS_EXCEPT_H1;
-            break;
-        case 2:
-            value = H2O_PROXY_FORWARD_EARLY_HINTS_ALL;
-            break;
-        default:
-            return -1;
+    case 0:
+        value = H2O_PROXY_FORWARD_EARLY_HINTS_NONE;
+        break;
+    case 1:
+        value = H2O_PROXY_FORWARD_EARLY_HINTS_EXCEPT_H1;
+        break;
+    case 2:
+        value = H2O_PROXY_FORWARD_EARLY_HINTS_ALL;
+        break;
+    default:
+        return -1;
     }
     ctx->globalconf->proxy.forward_early_hints = (int)value;
     return 0;

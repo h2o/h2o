@@ -754,5 +754,4 @@ void h2o_send_early_hints(h2o_req_t *req)
     }
     if (req->res.headers.size != 0)
         req->_ostr_top->send_early_hints(req->_ostr_top, req);
-
 }
