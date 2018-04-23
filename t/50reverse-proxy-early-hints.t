@@ -20,39 +20,59 @@ my $upstream = spawn_server(
     },
 );
 
-my $server = spawn_h2o(<< "EOT");
+subtest 'all' => sub {
+    my $server = spawn_h2o(<< "EOT");
+proxy.forward-early-hints: all
 hosts:
   default:
     paths:
-      /on:
-        proxy.reverse.url: http://127.0.0.1:$upstream_port
-        proxy.forward-early-hints: ON
-      /off:
+      /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
-
-subtest 'on' => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my $resp = `$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/on/early-hints`;
+        my $resp;
+        $resp = `$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/early-hints`;
         like $resp, qr{^HTTP/[\d.]+ 103}mi;
         (my $eh, $resp) = split(/\r\n\r\n/, $resp, 2);
         like $eh, qr{^link: </index.js>; rel=preload}mi;
+
+        $resp = `$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/early-hints?empty=1`;
+        unlike $resp, qr{^HTTP/[\d.]+ 103}mi, 'no hints received';
     });
 };
 
-subtest 'on but no hints' => sub {
+subtest 'except-h1 (default)' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my $resp = `$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/on/early-hints?empty=1`;
-        unlike $resp, qr{^HTTP/[\d.]+ 103}mi;
+        my $resp = `$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/early-hints`;
+        if ($curl =~ /http2/) {
+            like $resp, qr{^HTTP/[\d.]+ 103}mi;
+        } else {
+            unlike $resp, qr{^HTTP/[\d.]+ 103}mi;
+        }
     });
 };
 
-subtest 'off' => sub {
+subtest 'none' => sub {
+    my $server = spawn_h2o(<< "EOT");
+proxy.forward-early-hints: none
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        my $resp = `$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/off/early-hints`;
+        my $resp = `$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/early-hints`;
         unlike $resp, qr{^HTTP/[\d.]+ 103}mi;
     });
 };

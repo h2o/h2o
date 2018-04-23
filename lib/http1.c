@@ -116,7 +116,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     conn->req._ostr_top = &conn->_ostr_final.super;
     conn->_ostr_final.super.do_send = finalostream_send;
     conn->_ostr_final.super.start_pull = finalostream_start_pull;
-    conn->_ostr_final.super.send_early_hints = finalostream_send_early_hints;
+    conn->_ostr_final.super.send_early_hints = conn->super.ctx->globalconf->proxy.forward_early_hints == H2O_PROXY_FORWARD_EARLY_HINTS_ALL ? finalostream_send_early_hints : NULL;
     conn->_ostr_final.sent_headers = 0;
 }
 

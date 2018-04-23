@@ -415,6 +415,10 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
+         * enum indicating that the proxy forward 103 response from upstream
+         */
+        int forward_early_hints;
+        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -919,10 +923,6 @@ typedef struct st_h2o_req_overrides_t {
      * whether the proxied request should preserve host
      */
     unsigned proxy_preserve_host : 1;
-    /**
-     * whether the proxy forward 103 response from upstream
-     */
-    unsigned forward_early_hints : 1;
     /**
      * headers rewrite commands to be used when sending requests to upstream (or NULL)
      */
@@ -1628,6 +1628,7 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
  * sends 103 Early Hints
  */
 void h2o_send_early_hints(h2o_req_t *req);
+
 /**
  * logs an error
  */
@@ -1956,7 +1957,6 @@ typedef struct st_h2o_proxy_config_vars_t {
     } websocket;
     h2o_headers_command_t *headers_cmds;
     size_t max_buffer_size;
-    unsigned forward_early_hints : 1;
 } h2o_proxy_config_vars_t;
 
 /**
@@ -1967,6 +1967,8 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config
  * registers the configurator
  */
 void h2o_proxy_register_configurator(h2o_globalconf_t *conf);
+
+enum { H2O_PROXY_FORWARD_EARLY_HINTS_NONE, H2O_PROXY_FORWARD_EARLY_HINTS_EXCEPT_H1, H2O_PROXY_FORWARD_EARLY_HINTS_ALL };
 
 /* lib/redirect.c */
 

@@ -741,7 +741,10 @@ void h2o_send_early_hints(h2o_req_t *req)
 {
     /* 103 must be sent before h2o_start_response is called*/
     assert(req->_generator == NULL);
-    assert(req->_ostr_top->next == NULL && req->_ostr_top->send_early_hints != NULL);
+    assert(req->_ostr_top->next == NULL);
+
+    if (req->_ostr_top->send_early_hints == NULL)
+        return;
 
     int i = 0;
     for (i = 0; i != req->pathconf->filters.size; ++i) {
