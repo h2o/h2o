@@ -323,11 +323,11 @@ typedef struct st_h2o_status_handler_t {
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
 
-typedef enum h2o_forward_early_hint {
+typedef enum h2o_forward_early_hints {
     H2O_FORWARD_EARLY_HINTS_NONE,
     H2O_FORWARD_EARLY_HINTS_EXCEPT_H1,
     H2O_FORWARD_EARLY_HINTS_ALL
-} h2o_forward_early_hint_t;
+} h2o_forward_early_hints_t;
 
 struct st_h2o_globalconf_t {
     /**
@@ -424,7 +424,7 @@ struct st_h2o_globalconf_t {
         /**
          * enum indicating that the proxy forward 103 response from upstream
          */
-        h2o_forward_early_hint_t forward_early_hints;
+        h2o_forward_early_hints_t forward_early_hints;
         /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
