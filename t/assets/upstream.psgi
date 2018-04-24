@@ -290,23 +290,25 @@ builder {
             [ 'a' x ($query->{size} || 0) ],
         ];
     };
-    mount "/early-hints" => sub {
+    mount "/1xx" => sub {
         my $env = shift;
         my $query = Plack::Request->new($env)->query_parameters;
+        my $status = $query->get('status') || 100;
         my $fh = $env->{"psgix.io"};
         print $fh join(
             "\r\n",
-            "HTTP/1.1 103 Early Hints",
-            ($query->get('empty') ? () : (
+            "HTTP/1.1 $status OK",
+            ($query->get('link') ? (
                 "link: </index.js>; rel=preload",
-            )),
+            ) : ()),
             "",
-            "HTTP/1.1 103 Early Hints",
-            ($query->get('empty') ? () : (
-                "link: </index.js>; rel=preload",
-            )),
+            "HTTP/1.1 $status OK",
+            ($query->get('link') ? (
+                "link: </style.css>; rel=preload",
+            ) : ()),
             "",
             "HTTP/1.1 200 OK",
+            "connection: close",
             "content-type: text/plain",
             "content-length: 11",
             "",
