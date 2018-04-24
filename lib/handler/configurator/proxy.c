@@ -554,7 +554,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.max-buffer-size",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_max_buffer_size);
-    h2o_configurator_define_command(&c->super, "proxy.forward-early-hints",
+    h2o_configurator_define_command(&c->super, "proxy.forward-informational",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_forward_informational);
 }
