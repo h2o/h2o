@@ -64,7 +64,7 @@ struct st_h2o_http1_conn_t {
             size_t inbufcnt;
             h2o_send_state_t send_state;
         } pending_final;
-    } early_hints;
+    } informational;
     /* the HTTP request / response (intentionally placed at the last, since it is a large structure and has it's own ctor) */
     h2o_req_t req;
 };
@@ -87,7 +87,7 @@ struct st_h2o_http1_chunked_entity_reader {
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
-static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req);
+static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -116,9 +116,9 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     conn->req._ostr_top = &conn->_ostr_final.super;
     conn->_ostr_final.super.do_send = finalostream_send;
     conn->_ostr_final.super.start_pull = finalostream_start_pull;
-    conn->_ostr_final.super.send_early_hints = conn->super.ctx->globalconf->proxy.forward_early_hints == H2O_FORWARD_EARLY_HINTS_ALL
-                                                   ? finalostream_send_early_hints
-                                                   : NULL;
+    conn->_ostr_final.super.send_informational =
+        conn->super.ctx->globalconf->proxy.forward_informational == H2O_FORWARD_INFORMATIONAL_ALL ? finalostream_send_informational
+                                                                                                  : NULL;
     conn->_ostr_final.sent_headers = 0;
 }
 
@@ -762,11 +762,11 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     assert(self == &conn->_ostr_final);
 
-    if (conn->early_hints.sending) {
-        conn->early_hints.pending_final.inbufs = h2o_mem_alloc_pool(&req->pool, h2o_iovec_t, inbufcnt);
-        memcpy(conn->early_hints.pending_final.inbufs, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
-        conn->early_hints.pending_final.inbufcnt = inbufcnt;
-        conn->early_hints.pending_final.send_state = send_state;
+    if (conn->informational.sending) {
+        conn->informational.pending_final.inbufs = h2o_mem_alloc_pool(&req->pool, h2o_iovec_t, inbufcnt);
+        memcpy(conn->informational.pending_final.inbufs, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+        conn->informational.pending_final.inbufcnt = inbufcnt;
+        conn->informational.pending_final.send_state = send_state;
         return;
     }
 
@@ -806,53 +806,52 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
 }
 
-static void on_send_early_hints(h2o_socket_t *sock, const char *err)
+static void on_send_informational(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
     if (err != NULL)
         close_connection(conn, 1);
 
-    conn->early_hints.sending = 0;
+    conn->informational.sending = 0;
 
-    if (conn->early_hints.pending_final.inbufs != NULL) {
-        finalostream_send(&conn->_ostr_final.super, &conn->req, conn->early_hints.pending_final.inbufs,
-                          conn->early_hints.pending_final.inbufcnt, conn->early_hints.pending_final.send_state);
+    if (conn->informational.pending_final.inbufs != NULL) {
+        finalostream_send(&conn->_ostr_final.super, &conn->req, conn->informational.pending_final.inbufs,
+                          conn->informational.pending_final.inbufcnt, conn->informational.pending_final.send_state);
         return;
     }
 
-    if (conn->early_hints.has_pending_hints) {
-        conn->early_hints.has_pending_hints = 0;
-        finalostream_send_early_hints(&conn->_ostr_final.super, &conn->req);
+    if (conn->informational.has_pending_hints) {
+        conn->informational.has_pending_hints = 0;
+        finalostream_send_informational(&conn->_ostr_final.super, &conn->req);
     }
 }
 
-static void finalostream_send_early_hints(h2o_ostream_t *_self, h2o_req_t *req)
+static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req)
 {
-#define EARLY_HINTS_HEADER "HTTP/1.1 103 Early Hints\r\n"
-    assert(req->res.status == 103);
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
 
-    if (conn->early_hints.sending) {
-        conn->early_hints.has_pending_hints = 1;
+    if (conn->informational.sending) {
+        conn->informational.has_pending_hints = 1;
         return;
     }
-    conn->early_hints.sending = 1;
+    conn->informational.sending = 1;
 
-    h2o_iovec_t buf = h2o_iovec_init(NULL, sizeof(EARLY_HINTS_HEADER) - 1 + 2);
+    size_t len = sizeof("HTTP/1.1  \r\n\r\n") + 3 + strlen(req->res.reason) - 1;
+
+    h2o_iovec_t buf = h2o_iovec_init(NULL, len);
 
     int i;
     for (i = 0; i != req->res.headers.size; ++i)
         buf.len += req->res.headers.entries[i].name->len + req->res.headers.entries[i].value.len + 4;
 
     buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
-    memcpy(buf.base, EARLY_HINTS_HEADER, sizeof(EARLY_HINTS_HEADER) - 1);
-    char *dst = buf.base + sizeof(EARLY_HINTS_HEADER) - 1;
+    char *dst = buf.base;
+    dst += sprintf(dst, "HTTP/1.1 %d %s\r\n", req->res.status, req->res.reason);
     dst += flatten_normal_headers(dst, req->res.headers.entries, req->res.headers.size, 0);
     *dst++ = '\r';
     *dst++ = '\n';
 
-    h2o_socket_write(conn->sock, &buf, 1, on_send_early_hints);
-#undef EARLY_HINTS_HEADER
+    h2o_socket_write(conn->sock, &buf, 1, on_send_informational);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)

@@ -156,7 +156,7 @@ typedef struct st_h2o_filter_t {
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
-    void (*on_early_hints)(struct st_h2o_filter_t *self, h2o_req_t *req);
+    void (*on_informational)(struct st_h2o_filter_t *self, h2o_req_t *req);
 } h2o_filter_t;
 
 /**
@@ -323,11 +323,11 @@ typedef struct st_h2o_status_handler_t {
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
 
-typedef enum h2o_forward_early_hints {
-    H2O_FORWARD_EARLY_HINTS_NONE,
-    H2O_FORWARD_EARLY_HINTS_EXCEPT_H1,
-    H2O_FORWARD_EARLY_HINTS_ALL
-} h2o_forward_early_hints_t;
+typedef enum h2o_forward_informational {
+    H2O_FORWARD_INFORMATIONAL_NONE,
+    H2O_FORWARD_INFORMATIONAL_EXCEPT_H1,
+    H2O_FORWARD_INFORMATIONAL_ALL
+} h2o_forward_informational_t;
 
 struct st_h2o_globalconf_t {
     /**
@@ -422,9 +422,9 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
-         * enum indicating that the proxy forward 103 response from upstream
+         * enum indicating that the proxy forward 1xx response from upstream
          */
-        h2o_forward_early_hints_t forward_early_hints;
+        h2o_forward_informational_t forward_informational;
         /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
@@ -762,9 +762,9 @@ struct st_h2o_ostream_t {
     void (*start_pull)(struct st_h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 
     /**
-     * called by the core via h2o_send_early_hints
+     * called by the core via h2o_send_informational
      */
-    void (*send_early_hints)(struct st_h2o_ostream_t *self, h2o_req_t *req);
+    void (*send_informational)(struct st_h2o_ostream_t *self, h2o_req_t *req);
 };
 
 /**
@@ -1632,9 +1632,9 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status);
  */
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
 /**
- * sends 103 Early Hints
+ * sends 1xx response
  */
-void h2o_send_early_hints(h2o_req_t *req);
+void h2o_send_informational(h2o_req_t *req);
 
 /**
  * logs an error

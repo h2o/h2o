@@ -37,7 +37,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     h2o_setup_next_ostream(req, slot);
 }
 
-static void on_early_hints(h2o_filter_t *_self, h2o_req_t *req)
+static void on_informational(h2o_filter_t *_self, h2o_req_t *req)
 {
     struct st_headers_filter_t *self = (void *)_self;
     h2o_headers_command_t *cmd;
@@ -51,7 +51,7 @@ void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
     struct st_headers_filter_t *self = (void *)h2o_create_filter(pathconf, sizeof(*self));
 
     self->super.on_setup_ostream = on_setup_ostream;
-    self->super.on_early_hints = on_early_hints;
+    self->super.on_informational = on_informational;
     self->cmds = cmds;
 }
 

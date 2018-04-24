@@ -411,23 +411,23 @@ static int on_config_max_buffer_size(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%zu", &self->vars->conf.max_buffer_size);
 }
 
-static int on_config_forward_early_hints(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int on_config_forward_informational(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     int value;
     switch (h2o_configurator_get_one_of(cmd, node, "none,except-h1,all")) {
     case 0:
-        value = H2O_FORWARD_EARLY_HINTS_NONE;
+        value = H2O_FORWARD_INFORMATIONAL_NONE;
         break;
     case 1:
-        value = H2O_FORWARD_EARLY_HINTS_EXCEPT_H1;
+        value = H2O_FORWARD_INFORMATIONAL_EXCEPT_H1;
         break;
     case 2:
-        value = H2O_FORWARD_EARLY_HINTS_ALL;
+        value = H2O_FORWARD_INFORMATIONAL_ALL;
         break;
     default:
         return -1;
     }
-    ctx->globalconf->proxy.forward_early_hints = (int)value;
+    ctx->globalconf->proxy.forward_informational = (int)value;
     return 0;
 }
 
@@ -556,5 +556,5 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_max_buffer_size);
     h2o_configurator_define_command(&c->super, "proxy.forward-early-hints",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_forward_early_hints);
+                                    on_config_forward_informational);
 }
