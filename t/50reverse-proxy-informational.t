@@ -45,7 +45,9 @@ hosts:
           header: "link"
           when: early
         header.add:
-          header: "foo: bar"
+          header:
+            - "foo: FOO"
+            - "bar: BAR"
           when: early
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
@@ -64,7 +66,8 @@ EOT
                 $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/tweak-headers/1xx?status=$status'`;
                 (my $early, $resp) = split("\r\n\r\n", $resp, 2);
                 like $early, qr{^HTTP/[\d.]+ $status}mi;
-                like $early, qr{^foo: bar}mi;
+                like $early, qr{^foo: FOO}mi;
+                like $early, qr{^bar: BAR}mi;
                 unlike $early, qr{^link: }mi;
             }
         });

@@ -60,15 +60,25 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
     return 0;
 }
 
-static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t *node, yoml_t ***header_node, h2o_headers_command_when_t *when)
+static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t **node, yoml_t ***headers, size_t *num_headers, h2o_headers_command_when_t *when)
 {
-    if (node->type == YOML_TYPE_SCALAR) {
-        *header_node = &node;
+
+    if ((*node)->type == YOML_TYPE_SCALAR) {
+        *headers = node;
+        *num_headers = 1;
         *when = H2O_HEADERS_CMD_WHEN_FINAL;
     } else {
+        yoml_t **header_node;
         yoml_t **when_node = NULL;
-        if (h2o_configurator_parse_mapping(cmd, node, "header:s", "when:*", header_node, &when_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, *node, "header:sa", "when:*", &header_node, &when_node) != 0)
             return -1;
+        if ((*header_node)->type == YOML_TYPE_SEQUENCE) {
+            *headers = (*header_node)->data.sequence.elements;
+            *num_headers = (*header_node)->data.sequence.size;
+        } else {
+            *headers = header_node;
+            *num_headers = 1;
+        }
         if (when_node == NULL) {
             *when = H2O_HEADERS_CMD_WHEN_FINAL;
         } else {
@@ -94,44 +104,56 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
                                  h2o_headers_command_t **headers_cmds)
 {
     h2o_iovec_t *name, value;
-    yoml_t **header_node;
+    yoml_t **headers;
+    size_t num_headers;
     h2o_headers_command_when_t when;
 
-    if (parse_header_node(cmd, node, &header_node, &when) != 0)
+    if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
         return -1;
 
-    if (extract_name_value((*header_node)->data.scalar, &name, &value) != 0) {
-        h2o_configurator_errprintf(cmd, node, "failed to parse the value; should be in form of `name: value`");
-        return -1;
+    int i;
+    for (i = 0; i != num_headers; ++i) {
+        yoml_t *header = headers[i];
+        if (extract_name_value(header->data.scalar, &name, &value) != 0) {
+            h2o_configurator_errprintf(cmd, header, "failed to parse the value; should be in form of `name: value`");
+            return -1;
+        }
+        if (add_cmd(cmd, header, cmd_id, name, value, when, headers_cmds) != 0) {
+            if (!h2o_iovec_is_token(name))
+                free(name->base);
+            free(value.base);
+            return -1;
+        }
     }
-    if (add_cmd(cmd, node, cmd_id, name, value, when, headers_cmds) != 0) {
-        if (!h2o_iovec_is_token(name))
-            free(name->base);
-        free(value.base);
-        return -1;
-    }
+
     return 0;
 }
 
 static int on_config_header_unset(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     h2o_iovec_t *name;
-    yoml_t **header_node;
+    yoml_t **headers;
+    size_t num_headers;
     h2o_headers_command_when_t when;
     struct headers_util_configurator_t *self = (void *)cmd->configurator;
 
-    if (parse_header_node(cmd, node, &header_node, &when) != 0)
+    if (parse_header_node(cmd, &node, &headers, &num_headers, &when) != 0)
         return -1;
 
-    if (extract_name((*header_node)->data.scalar, strlen((*header_node)->data.scalar), &name) != 0) {
-        h2o_configurator_errprintf(cmd, node, "invalid header name");
-        return -1;
+    int i;
+    for (i = 0; i != num_headers; ++i) {
+        yoml_t *header = headers[i];
+        if (extract_name(header->data.scalar, strlen(header->data.scalar), &name) != 0) {
+            h2o_configurator_errprintf(cmd, header, "invalid header name");
+            return -1;
+        }
+        if (add_cmd(cmd, header, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){NULL}, when, self->get_commands(self->child)) != 0) {
+            if (!h2o_iovec_is_token(name))
+                free(name->base);
+            return -1;
+        }
     }
-    if (add_cmd(cmd, node, H2O_HEADERS_CMD_UNSET, name, (h2o_iovec_t){NULL}, when, self->get_commands(self->child)) != 0) {
-        if (!h2o_iovec_is_token(name))
-            free(name->base);
-        return -1;
-    }
+
     return 0;
 }
 
