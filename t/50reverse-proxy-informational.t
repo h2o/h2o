@@ -40,6 +40,14 @@ hosts:
     paths:
       /:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
+      /tweak-headers:
+        header.unset:
+          header: "link"
+          when: early
+        header.add:
+          header: "foo: bar"
+          when: early
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
@@ -52,6 +60,12 @@ EOT
             if ($status == 103) {
                 $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status'`;
                 unlike $resp, qr{^HTTP/[\d.]+ $status}mi, 'no hints received';
+
+                $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/tweak-headers/1xx?status=$status'`;
+                (my $early, $resp) = split("\r\n\r\n", $resp, 2);
+                like $early, qr{^HTTP/[\d.]+ $status}mi;
+                like $early, qr{^foo: bar}mi;
+                unlike $early, qr{^link: }mi;
             }
         });
     };
