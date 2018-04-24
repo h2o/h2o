@@ -422,10 +422,6 @@ struct st_h2o_globalconf_t {
          */
         uint64_t first_byte_timeout;
         /**
-         * enum indicating that the proxy forward 1xx response from upstream
-         */
-        h2o_forward_informational_t forward_informational;
-        /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
         unsigned preserve_x_forwarded_proto : 1;
@@ -450,6 +446,11 @@ struct st_h2o_globalconf_t {
          */
         h2o_socketpool_t global_socketpool;
     } proxy;
+
+    /**
+     * enum indicating that h2o forward 1xx response from upstream
+     */
+    h2o_forward_informational_t forward_informational;
 
     /**
      * mimemap
