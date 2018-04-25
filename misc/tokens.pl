@@ -55,10 +55,10 @@ my @hpack;
 
 while (my $line = <DATA>) {
     chomp $line;
-    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $name, $value) =
-        split /\s+/, $line, 8;
+    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress, $name, $value) =
+        split /\s+/, $line, 9;
     next unless $name ne '';
-    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request ]
+    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress ]
         unless defined $tokens{$name};
     if ($hpack_index != 0) {
         $hpack[$hpack_index - 1] = [ $name, $value ];
@@ -158,76 +158,77 @@ sub normalize_name {
 # - Is init header special
 # - HTTP/2 should reject
 # - Copy for push request
+# - Disable compression (non-zero)
 
 __DATA__
-1 0 0 0 0 0 :authority
-2 0 0 0 0 0 :method GET
-3 0 0 0 0 0 :method POST
-4 0 0 0 0 0 :path /
-5 0 0 0 0 0 :path /index.html
-6 0 0 0 0 0 :scheme http
-7 0 0 0 0 0 :scheme https
-8 0 0 0 0 0 :status 200
-9 0 0 0 0 0 :status 204
-10 0 0 0 0 0 :status 206
-11 0 0 0 0 0 :status 304
-12 0 0 0 0 0 :status 400
-13 0 0 0 0 0 :status 404
-14 0 0 0 0 0 :status 500
-15 0 0 0 0 1 accept-charset
-16 0 0 0 0 1 accept-encoding gzip, deflate
-17 0 0 0 0 1 accept-language
-18 0 0 0 0 0 accept-ranges
-19 0 0 0 0 1 accept
-20 0 0 0 0 0 access-control-allow-origin
-21 0 0 0 0 0 age
-22 0 0 0 0 0 allow
-23 0 0 0 0 0 authorization
-24 0 0 0 0 0 cache-control
-25 0 0 0 0 0 content-disposition
-26 0 0 0 0 0 content-encoding
-27 0 0 0 0 0 content-language
-28 0 0 1 0 0 content-length
-29 0 0 0 0 0 content-location
-30 0 0 0 0 0 content-range
-31 0 0 0 0 0 content-type
-32 0 0 0 0 0 cookie
-33 0 1 0 0 0 date
-34 0 0 0 0 0 etag
-35 0 0 1 0 0 expect
-36 0 0 0 0 0 expires
-37 0 0 0 0 0 from
-38 0 0 1 1 0 host
-39 0 0 0 0 0 if-match
-40 0 0 0 0 0 if-modified-since
-41 0 0 0 0 0 if-none-match
-42 0 0 0 0 0 if-range
-43 0 0 0 0 0 if-unmodified-since
-44 0 0 0 0 0 last-modified
-45 0 0 0 0 0 link
-46 0 0 0 0 0 location
-47 0 0 0 0 0 max-forwards
-48 1 0 0 0 0 proxy-authenticate
-49 1 0 0 0 0 proxy-authorization
-50 0 0 0 0 0 range
-51 0 0 0 0 0 referer
-52 0 0 0 0 0 refresh
-53 0 0 0 0 0 retry-after
-54 0 0 0 0 0 server
-55 0 0 0 0 0 set-cookie
-56 0 0 0 0 0 strict-transport-security
-57 1 1 1 1 0 transfer-encoding
-58 0 0 0 0 1 user-agent
-59 0 0 0 0 0 vary
-60 0 0 0 0 0 via
-61 0 0 0 0 0 www-authenticate
-0 1 1 0 1 0 connection
-0 0 0 0 0 0 x-reproxy-url
-0 1 1 1 1 0 upgrade
-0 1 0 0 1 0 http2-settings
-0 1 0 0 1 0 te
-0 1 1 0 0 0 keep-alive
-0 0 0 0 0 0 x-forwarded-for
-0 0 0 0 0 0 x-traffic
-0 0 0 0 0 0 cache-digest
-0 0 0 0 0 0 x-compress-hint
+1 0 0 0 0 0 0 :authority
+2 0 0 0 0 0 0 :method GET
+3 0 0 0 0 0 0 :method POST
+4 0 0 0 0 0 0 :path /
+5 0 0 0 0 0 0 :path /index.html
+6 0 0 0 0 0 0 :scheme http
+7 0 0 0 0 0 0 :scheme https
+8 0 0 0 0 0 0 :status 200
+9 0 0 0 0 0 0 :status 204
+10 0 0 0 0 0 0 :status 206
+11 0 0 0 0 0 0 :status 304
+12 0 0 0 0 0 0 :status 400
+13 0 0 0 0 0 0 :status 404
+14 0 0 0 0 0 0 :status 500
+15 0 0 0 0 1 0 accept-charset
+16 0 0 0 0 1 0 accept-encoding gzip, deflate
+17 0 0 0 0 1 0 accept-language
+18 0 0 0 0 0 0 accept-ranges
+19 0 0 0 0 1 0 accept
+20 0 0 0 0 0 0 access-control-allow-origin
+21 0 0 0 0 0 0 age
+22 0 0 0 0 0 0 allow
+23 0 0 0 0 0 0 authorization
+24 0 0 0 0 0 0 cache-control
+25 0 0 0 0 0 0 content-disposition
+26 0 0 0 0 0 0 content-encoding
+27 0 0 0 0 0 0 content-language
+28 0 0 1 0 0 0 content-length
+29 0 0 0 0 0 0 content-location
+30 0 0 0 0 0 0 content-range
+31 0 0 0 0 0 0 content-type
+32 0 0 0 0 0 1 cookie
+33 0 1 0 0 0 0 date
+34 0 0 0 0 0 0 etag
+35 0 0 1 0 0 0 expect
+36 0 0 0 0 0 0 expires
+37 0 0 0 0 0 0 from
+38 0 0 1 1 0 0 host
+39 0 0 0 0 0 0 if-match
+40 0 0 0 0 0 0 if-modified-since
+41 0 0 0 0 0 0 if-none-match
+42 0 0 0 0 0 0 if-range
+43 0 0 0 0 0 0 if-unmodified-since
+44 0 0 0 0 0 0 last-modified
+45 0 0 0 0 0 0 link
+46 0 0 0 0 0 0 location
+47 0 0 0 0 0 0 max-forwards
+48 1 0 0 0 0 0 proxy-authenticate
+49 1 0 0 0 0 0 proxy-authorization
+50 0 0 0 0 0 0 range
+51 0 0 0 0 0 0 referer
+52 0 0 0 0 0 0 refresh
+53 0 0 0 0 0 0 retry-after
+54 0 0 0 0 0 0 server
+55 0 0 0 0 0 1 set-cookie
+56 0 0 0 0 0 0 strict-transport-security
+57 1 1 1 1 0 0 transfer-encoding
+58 0 0 0 0 1 0 user-agent
+59 0 0 0 0 0 0 vary
+60 0 0 0 0 0 0 via
+61 0 0 0 0 0 0 www-authenticate
+0 1 1 0 1 0 0 connection
+0 0 0 0 0 0 0 x-reproxy-url
+0 1 1 1 1 0 0 upgrade
+0 1 0 0 1 0 0 http2-settings
+0 1 0 0 1 0 0 te
+0 1 1 0 0 0 0 keep-alive
+0 0 0 0 0 0 0 x-forwarded-for
+0 0 0 0 0 0 0 x-traffic
+0 0 0 0 0 0 0 cache-digest
+0 0 0 0 0 0 0 x-compress-hint
