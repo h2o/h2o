@@ -31,6 +31,7 @@ struct st_h2o_mruby_callback_sender_t {
     h2o_mruby_sender_t super;
     h2o_doublebuffer_t sending;
     h2o_buffer_t *receiving;
+    unsigned has_error : 1;
 };
 
 void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
@@ -100,7 +101,7 @@ void h2o_mruby_sender_close_body(h2o_mruby_generator_t *generator)
 h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mrb_value body, size_t alignment, size_t sz)
 {
     h2o_mruby_sender_t *sender = h2o_mem_alloc_pool_aligned(&generator->req->pool, alignment, sz);
-    memset(sender, 0, sizeof(*sender));
+    memset(sender, 0, sz);
     sender->body_obj = body;
     if (!mrb_nil_p(body))
         mrb_gc_register(generator->ctx->shared->mrb, body);
@@ -130,16 +131,17 @@ static void do_callback_proceed(h2o_generator_t *_generator, h2o_req_t *req)
 {
     h2o_mruby_generator_t *generator = (void *)_generator;
     struct st_h2o_mruby_callback_sender_t *sender = (void *)generator->sender;
-    h2o_buffer_t **input;
-    int is_final;
+
+    assert(!sender->super.final_sent);
 
     h2o_doublebuffer_consume(&sender->sending);
 
-    input = &sender->receiving;
-    is_final = mrb_nil_p(sender->super.body_obj);
-
-    if (!sender->super.final_sent && !sender->sending.inflight)
-        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, input, is_final);
+    if (sender->has_error) {
+        h2o_mruby_sender_do_send(generator, NULL, 0, H2O_SEND_STATE_ERROR);
+    } else {
+        int is_final = mrb_nil_p(sender->super.body_obj);
+        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &sender->receiving, is_final);
+    }
 }
 
 static void do_callback_sender_dispose(h2o_mruby_generator_t *generator)
@@ -265,22 +267,23 @@ static mrb_value handle_error_callback(h2o_mruby_context_t *mctx, mrb_value inpu
     mrb_value gen = mrb_ary_entry(args, 1);
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, gen);
 
-    { /* precond check */
-        mrb_value exc = check_precond(mrb, generator);
-        if (!mrb_nil_p(exc)) {
-            *run_again = 1;
-            return exc;
-        }
-    }
+    *run_again = 1;
 
-    h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, err)));
+    mrb_value exc = check_precond(mrb, generator);
+    if (!mrb_nil_p(exc))
+        return exc;
 
     struct st_h2o_mruby_callback_sender_t *sender = (void *)generator->sender;
-    if (!sender->super.final_sent && !sender->sending.inflight)
-        h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &sender->receiving, 1);
+    if (!sender->super.final_sent) {
+        if (sender->sending.inflight) {
+            sender->has_error = 1;
+        } else {
+            h2o_mruby_sender_do_send(generator, NULL, 0, H2O_SEND_STATE_ERROR);
+        }
+    }
     h2o_mruby_sender_close_body(generator);
 
-    return mrb_nil_value();
+    return err;
 }
 
 void h2o_mruby_sender_init_context(h2o_mruby_shared_context_t *shared_ctx)
