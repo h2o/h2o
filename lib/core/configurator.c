@@ -872,6 +872,12 @@ static int on_config_error_log_emit_request_errors(h2o_configurator_command_t *c
     return 0;
 }
 
+static int on_config_stash(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* do nothing */
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -974,6 +980,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "error-log.emit-request-errors",
                                         H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log_emit_request_errors);
+        h2o_configurator_define_command(&c->super, "stash", H2O_CONFIGURATOR_FLAG_ALL_LEVELS,
+                                        on_config_stash);
     }
 }
 
