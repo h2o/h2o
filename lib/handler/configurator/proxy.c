@@ -115,8 +115,14 @@ static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator
 
 static SSL_CTX *create_ssl_ctx(void)
 {
+    long options;
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
-    SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+    options = SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+#ifdef SSL_OP_NO_RENEGOTIATION
+    /* introduced in openssl 1.1.0h */
+    options |= SSL_OP_NO_RENEGOTIATION;
+#endif
+    SSL_CTX_set_options(ctx, options);
     return ctx;
 }
 
