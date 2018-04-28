@@ -111,8 +111,9 @@ static void sha512_update_block(void *vctx, const uint8_t *inp)
            g = ctx->H[6],
            h = ctx->H[7],
            Wt;
+  size_t t;
 
-  for (size_t t = 0; t < 80; t++)
+  for (t = 0; t < 80; t++)
   {
     if (t < 16)
     {
