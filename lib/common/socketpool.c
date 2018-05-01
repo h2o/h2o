@@ -492,6 +492,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             close_data->target = entry_target;
             sock->on_close.cb = on_close;
             sock->on_close.data = close_data;
+            __sync_add_and_fetch(&pool->targets.entries[entry_target]->_shared.leased_count, 1);
             cb(sock, NULL, data, &pool->targets.entries[entry_target]->url);
             return;
         }
@@ -541,8 +542,10 @@ void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req)
     }
     if (req->sock != NULL)
         h2o_socket_close(req->sock);
-    if (req->lb.tried != NULL)
+    if (req->lb.tried != NULL) {
         free(req->lb.tried);
+        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
+    }
     free(req);
 }
 
