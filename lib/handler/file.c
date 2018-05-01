@@ -619,7 +619,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
 {
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
     size_t if_modified_since_header_index, if_none_match_header_index;
-    size_t range_header_index;
+    size_t range_header_index, if_range_header_index;
 
     /* determine the method */
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
@@ -661,8 +661,28 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         return 0;
     }
 
-    /* if-range */
+    /* range request */
     if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
+        /* if range */
+        if ((if_range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_RANGE, SIZE_MAX)) != -1) {
+            h2o_iovec_t *if_range = &req->headers.entries[if_range_header_index].value;
+            if (if_range->base[0] == 'W' && if_range->base[1] == '/' && if_range->base[2] == '"') /* weak etag */
+                goto EntireFile;
+            else if (if_range->base[0] == '"') { /* etag */
+                char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
+                size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
+                if (!h2o_memis(if_range->base, if_range->len, etag, etag_len))
+                    goto EntireFile;
+            } else { /* date */
+                struct tm ir_tm, *last_modified_tm;
+                if (h2o_time_parse_rfc1123(if_range->base, if_range->len, &ir_tm) == 0) {
+                    last_modified_tm = h2o_filecache_get_last_modified(generator->file.ref, NULL);
+                    if (tm_is_lessthan(&ir_tm, last_modified_tm))
+                        goto EntireFile;
+                } else /* not a valid if-range, condition false */
+                    goto EntireFile;
+            }
+        }
         h2o_iovec_t *range = &req->headers.entries[range_header_index].value;
         size_t *range_infos, range_count;
         range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
@@ -724,6 +744,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         return 0;
     }
 
+EntireFile:
     /* return file */
     do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, &mime_type->data.attr, method_type == METHOD_IS_GET);
     return 0;
