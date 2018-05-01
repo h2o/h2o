@@ -654,7 +654,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         }
     }
 
-    /* only allow GET or POST for static files */
+    /* only allow GET or HEAD for static files */
     if (method_type == METHOD_IS_OTHER) {
         do_close(&generator->super, req);
         send_method_not_allowed(req);
