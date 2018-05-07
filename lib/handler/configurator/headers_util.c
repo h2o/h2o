@@ -60,7 +60,8 @@ static int add_cmd(h2o_configurator_command_t *cmd, yoml_t *node, int cmd_id, h2
     return 0;
 }
 
-static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t **node, yoml_t ***headers, size_t *num_headers, h2o_headers_command_when_t *when)
+static int parse_header_node(h2o_configurator_command_t *cmd, yoml_t **node, yoml_t ***headers, size_t *num_headers,
+                             h2o_headers_command_when_t *when)
 {
 
     if ((*node)->type == YOML_TYPE_SCALAR) {
@@ -194,7 +195,9 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
 #undef DEFINE_CMD_NAME
 
 #define DEFINE_CMD(name, cb)                                                                                                       \
-    h2o_configurator_define_command(&c->super, name, H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, cb)
+    h2o_configurator_define_command(                                                                                               \
+        &c->super, name,                                                                                                           \
+        H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING, cb)
     DEFINE_CMD(add_directive, on_config_header_add);
     DEFINE_CMD(append_directive, on_config_header_append);
     DEFINE_CMD(merge_directive, on_config_header_merge);
