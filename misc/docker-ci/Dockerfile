@@ -22,7 +22,7 @@ RUN (cd curl-7.57.0 && ./configure --prefix=/usr/local --with-nghttp2 --disable-
 RUN apt-get install --yes cpanminus
 RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-perl libjson-perl liblist-moreutils-perl libplack-perl libscope-guard-perl libtest-exception-perl libwww-perl libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN sudo cpanm --notest Starlet Test::TCP
+RUN sudo cpanm --notest Starlet Test::TCP Protocol::HTTP2
 
 # h2get
 RUN apt-get install --yes golang && mkdir -p /golang && ln -sf /usr/local/bin /golang/bin

@@ -892,6 +892,12 @@ static int on_config_forward_informational(h2o_configurator_command_t *cmd, h2o_
     return 0;
 }
 
+static int on_config_stash(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* do nothing */
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -997,6 +1003,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "forward-informational",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_forward_informational);
+        h2o_configurator_define_command(&c->super, "stash", H2O_CONFIGURATOR_FLAG_ALL_LEVELS,
+                                        on_config_stash);
     }
 }
 
