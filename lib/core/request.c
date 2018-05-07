@@ -742,7 +742,7 @@ void h2o_send_informational(h2o_req_t *req)
     /* 1xx must be sent before h2o_start_response is called*/
     assert(req->_generator == NULL);
     assert(req->_ostr_top->next == NULL);
-    assert(100 <= req->res.status && req->res.status <= 199);
+    assert(100 <= req->res.status && req->res.status <= 199 && req->res.status != 101);
 
     if (req->_ostr_top->send_informational == NULL)
         return;
