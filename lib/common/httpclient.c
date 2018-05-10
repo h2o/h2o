@@ -79,7 +79,7 @@ static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpcli
     return client;
 }
 
-static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin, h2o_iovec_t alpn_proto)
+static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin)
 {
     struct st_h2o_httpclient_private_t *client = data;
 
@@ -93,7 +93,8 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
         return;
     }
 
-    if (alpn_proto.base == NULL) {
+    h2o_iovec_t alpn_proto;
+    if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
         h2o_http1client_on_connect(&client->http1, sock, origin);
     } else {
         if (memcmp(alpn_proto.base, "h2", alpn_proto.len) == 0) {

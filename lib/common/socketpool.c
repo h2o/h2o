@@ -280,7 +280,7 @@ void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
     pool->_interval_cb.loop = NULL;
 }
 
-static void call_connect_cb(h2o_socketpool_connect_request_t *req, h2o_iovec_t alpn_proto, const char *errstr)
+static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *errstr)
 {
     h2o_socketpool_connect_cb cb = req->cb;
     h2o_socket_t *sock = req->sock;
@@ -295,7 +295,7 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, h2o_iovec_t a
 
     if (sock != NULL)
         sock->data = NULL;
-    cb(sock, errstr, data, &selected_target->url, alpn_proto);
+    cb(sock, errstr, data, &selected_target->url);
 }
 
 static void try_connect(h2o_socketpool_connect_request_t *req)
@@ -329,7 +329,7 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     }
 }
 
-static void on_handshake_complete(h2o_socket_t *sock, h2o_iovec_t alpn_proto, const char *err)
+static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
 
@@ -342,7 +342,7 @@ static void on_handshake_complete(h2o_socket_t *sock, h2o_iovec_t alpn_proto, co
         req->sock = NULL;
     }
 
-    call_connect_cb(req, alpn_proto, err);
+    call_connect_cb(req, err);
 }
 
 static void on_connect(h2o_socket_t *sock, const char *err)
@@ -371,7 +371,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         }
     }
 
-    call_connect_cb(req, h2o_iovec_init(NULL, 0), errstr);
+    call_connect_cb(req, errstr);
 }
 
 static void on_close(void *data)
@@ -395,7 +395,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
             return;
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, h2o_iovec_init(NULL, 0), "failed to connect to host");
+        call_connect_cb(req, "failed to connect to host");
         return;
     }
     close_data = h2o_mem_alloc(sizeof(*close_data));
@@ -420,7 +420,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
             return;
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, h2o_iovec_init(NULL, 0), errstr);
+        call_connect_cb(req, errstr);
         return;
     }
 
@@ -500,7 +500,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             close_data->target = entry_target;
             sock->on_close.cb = on_close;
             sock->on_close.data = close_data;
-            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url, h2o_iovec_init(NULL, 0));
+            cb(sock, NULL, data, &pool->targets.entries[entry_target]->url);
             return;
         }
 

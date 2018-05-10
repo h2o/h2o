@@ -339,7 +339,7 @@ static void on_memcached_accept_timeout(h2o_timeout_entry_t *entry)
     accept_timeout(&data->super);
 }
 
-static void on_ssl_handshake_complete(h2o_socket_t *sock, h2o_iovec_t alpn_proto, const char *err)
+static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
     sock->data = NULL;

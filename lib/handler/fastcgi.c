@@ -732,7 +732,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     /* do nothing else!  all the rest is handled by the on_read */
 }
 
-static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *_dummy, h2o_iovec_t alpn_proto)
+static void on_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *_dummy)
 {
     struct st_fcgi_generator_t *generator = data;
     iovec_vector_t vecs;

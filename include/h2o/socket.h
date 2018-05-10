@@ -74,7 +74,6 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
 typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
-typedef void (*h2o_socket_handshake_cb)(h2o_socket_t *sock, h2o_iovec_t alpn_proto, const char *err);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
@@ -286,7 +285,7 @@ int32_t h2o_socket_getport(struct sockaddr *sa);
  * @param ssl_ctx SSL context
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_iovec_t alpn_protos, h2o_socket_handshake_cb handshake_cb);
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_iovec_t alpn_protos, h2o_socket_cb handshake_cb);
 /**
  * resumes SSL handshake with given session data
  * @param sock the socket
