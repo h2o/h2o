@@ -225,7 +225,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         return -1;
     }
 
-    stream->req.timestamps.response_start_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+    stream->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
 
     /* cancel push with an error response */
     if (h2o_http2_stream_is_push(stream->stream_id)) {

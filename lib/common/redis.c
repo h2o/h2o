@@ -20,9 +20,8 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
-#include "async.h"
-#include "hiredis.h"
 #include "h2o/redis.h"
+#include "h2o/hiredis_.h"
 #include "h2o/socket.h"
 
 const char *const h2o_redis_error_connection = "Connection Error";

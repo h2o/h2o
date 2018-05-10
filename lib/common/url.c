@@ -76,7 +76,7 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t sr
 
     /* dst can be 1 byte more than src if src is missing the prefixing '/' */
     dst = h2o_mem_alloc_pool(pool, char, src_len + 1);
-    *norm_indexes = h2o_mem_alloc_pool(pool,  *norm_indexes[0], (src_len + 1));
+    *norm_indexes = h2o_mem_alloc_pool(pool, *norm_indexes[0], (src_len + 1));
 
     if (src[0] == '/')
         src_off++;

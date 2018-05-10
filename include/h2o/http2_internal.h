@@ -443,11 +443,11 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         else
             h2o_http2_stream_update_open_slot(stream, &conn->num_streams.pull);
         stream->state = new_state;
-        stream->req.timestamps.request_begin_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+        stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
         break;
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         stream->state = new_state;
-        stream->req.timestamps.request_body_begin_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+        stream->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
         break;
     case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
         stream->state = new_state;
@@ -487,7 +487,7 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
             break;
         }
         stream->state = new_state;
-        stream->req.timestamps.response_end_at = *h2o_get_timestamp(conn->super.ctx, NULL, NULL);
+        stream->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
         --stream->_num_streams_slot->open;
         stream->_num_streams_slot = NULL;
         if (stream->blocked_by_server)

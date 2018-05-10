@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2018 Fastly Inc, Ichito Nagata
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,34 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__uv_binding_h
-#define h2o__uv_binding_h
 
-#include <uv.h>
-
-#if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
-#error "libh2o (libuv binding) requires libuv version 1.x.y"
-#endif
-
-typedef uv_loop_t h2o_loop_t;
-
-struct st_h2o_timeout_backend_properties_t {
-    uv_timer_t timer;
-};
-
-h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb);
-h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb);
-
-static inline struct timeval h2o_gettimeofday(uv_loop_t *loop)
-{
-    struct timeval tv_at;
-    gettimeofday(&tv_at, NULL);
-    return tv_at;
-}
-
-static inline uint64_t h2o_now(uv_loop_t *loop)
-{
-    return uv_now(loop);
-}
-
-#endif
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshorten-64-to-32"
+#include "hiredis.h"
+#include "async.h"
+#pragma GCC diagnostic pop

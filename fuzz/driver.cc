@@ -289,7 +289,7 @@ static int create_accepted(int sfd, char *buf, size_t len, h2o_barrier_t **barri
 {
     int fd;
     h2o_socket_t *sock;
-    struct timeval connected_at = *h2o_get_timestamp(&ctx, NULL, NULL);
+    struct timeval connected_at = h2o_gettimeofday(ctx.loop);
 
     /* Create an HTTP[/2] client that will send the fuzzed request */
     fd = feeder(sfd, buf, len, barrier);

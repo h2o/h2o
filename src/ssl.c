@@ -28,7 +28,7 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
-#include "hiredis.h"
+#include "h2o/hiredis_.h"
 #include "yoml-parser.h"
 #include "yrmcds.h"
 #if H2O_USE_PICOTLS
