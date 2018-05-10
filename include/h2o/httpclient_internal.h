@@ -28,8 +28,8 @@ extern "C" {
 
 #include "h2o.h"
 #include "h2o/httpclient.h"
-#include "h2o/http1client.h"
-#include "h2o/http2client.h"
+#include "h2o/httpclient_internal_h1.h"
+#include "h2o/httpclient_internal_h2.h"
 
 struct st_h2o_httpclient_private_t {
     h2o_httpclient_t super;
