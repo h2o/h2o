@@ -456,7 +456,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
     on_error_before_head(client, "I/O timeout");
 }
 
-static h2o_iovec_t build_request(struct st_h2o_http1client_private_t *client, h2o_iovec_t method, h2o_url_t url, h2o_headers_t headers)
+static h2o_iovec_t build_request(struct st_h2o_http1client_private_t *client, h2o_iovec_t method, h2o_url_t url, h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
     size_t offset = 0;
@@ -493,7 +493,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_private_t *client, h2
     assert(offset <= buf.len);
 
     h2o_header_t *h, *h_end;
-    for (h = headers.entries, h_end = h + headers.size; h != h_end; ++h) {
+    for (h = (h2o_header_t*)headers, h_end = h + num_headers; h != h_end; ++h) {
         RESERVE(h->name->len + h->value.len + 4);
         APPEND(h->orig_name ? h->orig_name : h->name->base, h->name->len);
         buf.base[offset++] = ':';
@@ -530,10 +530,11 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
 
     h2o_iovec_t method = h2o_iovec_init(NULL, 0);
     h2o_url_t url = {NULL};
-    h2o_headers_t headers = {NULL};
+    h2o_header_t *headers = NULL;
+    size_t num_headers = 0;
     h2o_iovec_t body = h2o_iovec_init(NULL, 0);;
 
-    common->cb.on_head = common->cb.on_connect(&common->super, NULL, &method, &url, &headers, &body, &client->proceed_req, features, client->_origin);
+    common->cb.on_head = common->cb.on_connect(&common->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &client->proceed_req, features, client->_origin);
 
     if (common->cb.on_head == NULL) {
         close_client(client);
@@ -544,7 +545,7 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     size_t reqbufcnt = 0;
     if (proxy_protocol.base != NULL)
         reqbufs[reqbufcnt++] = proxy_protocol;
-    reqbufs[reqbufcnt++] = build_request(client, method, url, headers);
+    reqbufs[reqbufcnt++] = build_request(client, method, url, headers, num_headers);
 
     client->_is_chunked = *features.chunked;
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));

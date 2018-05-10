@@ -285,7 +285,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 }
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         h2o_headers_t *headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
                                          h2o_httpclient_features_t features, h2o_url_t *origin)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
@@ -303,7 +303,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     *method = ctx->req.method;
     *url = ctx->req.url;
-    *headers = ctx->req.headers;
+    *headers = ctx->req.headers.entries;
+    *num_headers = ctx->req.headers.size;
 
     if (ctx->req.body.base != NULL) {
         *body = ctx->req.body;

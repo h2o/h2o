@@ -751,7 +751,7 @@ static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const c
 {
     assert(errstr != NULL);
     struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http2, stream);
-    client->cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, (h2o_httpclient_features_t){NULL}, NULL);
+    client->cb.on_connect(&client->super, errstr, NULL, NULL, NULL, 0, NULL, NULL, (h2o_httpclient_features_t){NULL}, NULL);
     close_stream(stream);
 }
 
@@ -851,10 +851,11 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, http2, stream);
     h2o_iovec_t method;
     h2o_url_t url;
-    h2o_headers_t headers = (h2o_headers_t){NULL};
+    h2o_header_t *headers = NULL;
+    size_t num_headers = 0;
     h2o_iovec_t body = h2o_iovec_init(NULL, 0);
     client->cb.on_head =
-        client->cb.on_connect(&client->super, NULL, &method, &url, &headers, &body, &stream->streaming.proceed_req,
+        client->cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &stream->streaming.proceed_req,
                               (h2o_httpclient_features_t){NULL, NULL, 0}, &conn->origin_url);
     if (client->cb.on_head == NULL) {
         close_stream(stream);
@@ -866,8 +867,9 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* send headers */
+    h2o_headers_t headers_vec = (h2o_headers_t){headers, num_headers, num_headers};
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              method, &url, &headers, body.base == NULL);
+                              method, &url, &headers_vec, body.base == NULL);
     transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY);
 
     if (body.base != NULL) {

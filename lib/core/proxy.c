@@ -543,7 +543,7 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 }
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         h2o_headers_t *headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
                                          h2o_httpclient_features_t features, h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
@@ -577,8 +577,12 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     }
 
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
-    build_request(req, method, url, headers, features, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool),
+    h2o_headers_t headers_vec = (h2o_headers_t){NULL};
+    build_request(req, method, url, &headers_vec, features, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool),
                   self->is_websocket_handshake, use_proxy_protocol, &reprocess_if_too_early, origin);
+    *headers = headers_vec.entries;
+    *num_headers = headers_vec.size;
+
     if (reprocess_if_too_early)
         req->reprocess_if_too_early = 1;
 

@@ -40,7 +40,7 @@ static int delay_interval_ms = 0;
 static int cur_body_size;
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         h2o_headers_t *headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
                                          h2o_httpclient_features_t features, h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int rlen);
@@ -172,7 +172,7 @@ static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end
 }
 
 h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
-                                  h2o_headers_t *headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                  const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
                                   h2o_httpclient_features_t features, h2o_url_t *origin)
 {
     if (errstr != NULL) {
@@ -187,7 +187,10 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     if (cur_body_size > 0) {
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
         size_t clbuf_len = sprintf(clbuf, "%d", cur_body_size);
-        h2o_add_header(&pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
+        h2o_headers_t headers_vec = (h2o_headers_t){NULL};
+        h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
+        *headers = headers_vec.entries;
+        *num_headers = 1;
 
         *proceed_req_cb = proceed_request;
 

@@ -47,7 +47,7 @@ static void close_client(struct st_h2o_httpclient_private_t *client)
 static void on_connect_error(struct st_h2o_httpclient_private_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->cb.on_connect(&client->super, errstr, NULL, NULL, NULL, NULL, NULL, (h2o_httpclient_features_t){NULL}, NULL);
+    client->cb.on_connect(&client->super, errstr, NULL, NULL, NULL, 0, NULL, NULL, (h2o_httpclient_features_t){NULL}, NULL);
     close_client(client);
 }
 
