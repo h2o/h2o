@@ -185,7 +185,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *url = *((h2o_url_t *)client->data);
 
     if (cur_body_size > 0) {
-        char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT64_LONGEST_STR) - 1);
+        char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
         size_t clbuf_len = sprintf(clbuf, "%d", cur_body_size);
         h2o_add_header(&pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
 
@@ -230,6 +230,10 @@ int main(int argc, char **argv)
             break;
         case 'b':
             body_size = atoi(optarg);
+            if (body_size <= 0) {
+                fprintf(stderr, "body size must be greater than 0\n");
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'c':
             chunk_size = atoi(optarg);
