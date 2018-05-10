@@ -37,7 +37,6 @@ extern "C" {
 #include <unistd.h>
 #include <openssl/ssl.h>
 #include "h2o/filecache.h"
-#include "h2o/header.h"
 #include "h2o/hostinfo.h"
 #include "h2o/memcached.h"
 #include "h2o/redis.h"
@@ -697,6 +696,29 @@ struct st_h2o_context_t {
 
     H2O_VECTOR(h2o_pathconf_t *) _pathconfs_inited;
 };
+
+/**
+ * represents a HTTP header
+ */
+typedef struct st_h2o_header_t {
+    /**
+     * name of the header (may point to h2o_token_t which is an optimized subclass of h2o_iovec_t)
+     */
+    h2o_iovec_t *name;
+    /**
+     * The name of the header as originally received from the client, same length as `name`
+     */
+    const char *orig_name;
+    /**
+     * value of the header
+     */
+    h2o_iovec_t value;
+} h2o_header_t;
+
+/**
+ * list of headers
+ */
+typedef H2O_VECTOR(h2o_header_t) h2o_headers_t;
 
 /**
  * an object that generates a response.
