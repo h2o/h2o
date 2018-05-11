@@ -640,18 +640,18 @@ static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_a
     return len;
 }
 
-static size_t flatten_normal_headers(char *buf, h2o_header_t *headers, size_t num_headers, int force_cache_control_private)
+static size_t flatten_res_headers(char *buf, h2o_req_t *req, int replace_vary)
 {
     char *dst = buf;
     size_t i;
-    for (i = 0; i != num_headers; ++i) {
-        const h2o_header_t *header = headers + i;
+    for (i = 0; i != req->res.headers.size; ++i) {
+        const h2o_header_t *header = req->res.headers.entries + i;
         if (header->name == &H2O_TOKEN_VARY->buf) {
             /* replace Vary with Cache-Control: private; see the following URLs to understand why this is necessary
              * - http://blogs.msdn.com/b/ieinternals/archive/2009/06/17/vary-header-prevents-caching-in-ie.aspx
              * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
              */
-            if (force_cache_control_private) {
+            if (replace_vary && is_msie(req)) {
                 static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, NULL, {H2O_STRLIT("private")}};
                 header = &cache_control_private;
             }
@@ -687,7 +687,7 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
         dst += sprintf(dst, "Server: %s\r\n", ctx->globalconf->server_name.base);
     }
 
-    dst += flatten_normal_headers(dst, req->res.headers.entries, req->res.headers.size, is_msie(req));
+    dst += flatten_res_headers(dst, req, 1);
     *dst++ = '\r';
     *dst++ = '\n';
 
@@ -846,7 +846,7 @@ static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req
     buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
     char *dst = buf.base;
     dst += sprintf(dst, "HTTP/1.1 %d %s\r\n", req->res.status, req->res.reason);
-    dst += flatten_normal_headers(dst, req->res.headers.entries, req->res.headers.size, 0);
+    dst += flatten_res_headers(dst, req, 0);
     *dst++ = '\r';
     *dst++ = '\n';
 
