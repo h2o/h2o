@@ -59,17 +59,25 @@ EOT
             (my $eh, $resp) = split(/\r\n\r\n/, $resp, 2);
             like $eh, qr{^link: </index.js>; rel=preload}mi if $link;
     
-            if ($status == 103) {
+            subtest '103 with no hints' => sub {
                 $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status'`;
-                unlike $resp, qr{^HTTP/[\d.]+ $status}mi, 'no hints received';
+                unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
+            } if $status == 103;
 
-                $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/tweak-headers/1xx?status=$status'`;
+            subtest 'tweak headers' => sub {
+                $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/tweak-headers/1xx?status=$status&link=1'`;
                 (my $early, $resp) = split("\r\n\r\n", $resp, 2);
                 like $early, qr{^HTTP/[\d.]+ $status}mi;
-                like $early, qr{^foo: FOO}mi;
-                like $early, qr{^bar: BAR}mi;
-                unlike $early, qr{^link: }mi;
-            }
+                if ($status == 103) {
+                    like $early, qr{^foo: FOO}mi;
+                    like $early, qr{^bar: BAR}mi;
+                    unlike $early, qr{^link: }mi;
+                } else {
+                    unlike $early, qr{^foo: FOO}mi;
+                    unlike $early, qr{^bar: BAR}mi;
+                    like $early, qr{^link: }mi;
+                }
+            };
         });
     };
     
