@@ -117,6 +117,8 @@ IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
                 "   *************************************************************************\n")
 ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
 
+OPTION(FILEBACKED_BUFFER "if needed, resort to a file-backed buffer for large memory allocations" ON)
+
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
@@ -730,6 +732,13 @@ ENDIF ()
 IF (NOT OSS_FUZZ)
     SET(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS}")
 ENDIF (NOT OSS_FUZZ)
+
+# If enabled (which is the default), allows h2o to resort to a file-backed buffer (mmap)
+# in order to satisfy a large memory allocation for processing a request.  For more details,
+# see https://github.com/h2o/h2o/issues/1585.
+IF (FILEBACKED_BUFFER)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DFILEBACKED_BUFFER")
+ENDIF (FILEBACKED_BUFFER)
 
 IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
     ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
