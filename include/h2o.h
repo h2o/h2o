@@ -324,8 +324,8 @@ typedef struct st_h2o_status_handler_t {
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
 
 typedef enum h2o_send_informational_mode {
-    H2O_SEND_INFORMATIONAL_MODE_NONE,
     H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1,
+    H2O_SEND_INFORMATIONAL_MODE_NONE,
     H2O_SEND_INFORMATIONAL_MODE_ALL
 } h2o_send_informational_mode_t;
 
