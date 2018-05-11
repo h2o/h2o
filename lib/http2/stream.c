@@ -42,7 +42,7 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->stream_id = stream_id;
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
-    stream->_ostr_final.send_informational = conn->super.ctx->globalconf->forward_informational == H2O_FORWARD_INFORMATIONAL_NONE
+    stream->_ostr_final.send_informational = conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_NONE
                                                  ? NULL
                                                  : finalostream_send_informational;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;

@@ -34,7 +34,7 @@ sub doit {
 
     subtest 'all' => sub {
         my $server = spawn_h2o(<< "EOT");
-forward-informational: all
+send-informational: all
 hosts:
   default:
     paths:
@@ -94,7 +94,7 @@ EOT
     
     subtest 'none' => sub {
         my $server = spawn_h2o(<< "EOT");
-forward-informational: none
+send-informational: none
 hosts:
   default:
     paths:

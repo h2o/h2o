@@ -323,11 +323,11 @@ typedef struct st_h2o_status_handler_t {
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
 
-typedef enum h2o_forward_informational {
-    H2O_FORWARD_INFORMATIONAL_NONE,
-    H2O_FORWARD_INFORMATIONAL_EXCEPT_H1,
-    H2O_FORWARD_INFORMATIONAL_ALL
-} h2o_forward_informational_t;
+typedef enum h2o_send_informational_mode {
+    H2O_SEND_INFORMATIONAL_MODE_NONE,
+    H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1,
+    H2O_SEND_INFORMATIONAL_MODE_ALL
+} h2o_send_informational_mode_t;
 
 struct st_h2o_globalconf_t {
     /**
@@ -448,9 +448,9 @@ struct st_h2o_globalconf_t {
     } proxy;
 
     /**
-     * enum indicating that h2o forward 1xx response from upstream
+     * enum indicating to what clients h2o sends 1xx response
      */
-    h2o_forward_informational_t forward_informational;
+    h2o_send_informational_mode_t send_informational_mode;
 
     /**
      * mimemap
