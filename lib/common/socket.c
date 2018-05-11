@@ -129,7 +129,11 @@ h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
 __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     {16},                                       /* keep 16 recently used chunks */
     {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
+#if FILEBACKED_BUFFER
     &h2o_socket_buffer_mmap_settings};
+#else
+    NULL}; /* disallow the use of a file-backed buffer for large memory allocations */
+#endif
 
 const char *h2o_socket_error_out_of_memory = "out of memory";
 const char *h2o_socket_error_io = "I/O error";
