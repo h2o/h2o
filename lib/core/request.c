@@ -758,4 +758,8 @@ void h2o_send_informational(h2o_req_t *req)
         return;
 
     req->_ostr_top->send_informational(req->_ostr_top, req);
+
+    /* clear status and headers */
+    req->res.status = 0;
+    req->res.headers = (h2o_headers_t){NULL, 0, 0};
 }
