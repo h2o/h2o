@@ -255,7 +255,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
             do {
                 new_capacity *= 2;
             } while (new_capacity - inbuf->size < min_guarantee);
-            if (inbuf->_prototype->mmap_settings != NULL && inbuf->_prototype->mmap_settings->threshold <= new_capacity) {
+            if (inbuf->_prototype->mmap_settings != NULL && inbuf->_prototype->mmap_settings->threshold > 0 && inbuf->_prototype->mmap_settings->threshold <= new_capacity) {
                 size_t new_allocsize = topagesize(new_capacity);
                 int fd;
                 h2o_buffer_t *newp;
