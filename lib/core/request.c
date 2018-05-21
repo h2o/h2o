@@ -481,6 +481,7 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_
     ostr->do_send = NULL;
     ostr->stop = NULL;
     ostr->start_pull = NULL;
+    ostr->send_informational = NULL;
 
     *slot = ostr;
 
@@ -734,4 +735,31 @@ void h2o_resp_add_date_header(h2o_req_t *req)
 {
     h2o_timestamp_t ts = h2o_get_timestamp(req->conn->ctx, &req->pool);
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_DATE, NULL, ts.str->rfc1123, strlen(ts.str->rfc1123));
+}
+
+void h2o_send_informational(h2o_req_t *req)
+{
+    /* 1xx must be sent before h2o_start_response is called*/
+    assert(req->_generator == NULL);
+    assert(req->_ostr_top->next == NULL);
+    assert(100 <= req->res.status && req->res.status <= 199 && req->res.status != 101);
+
+    if (req->_ostr_top->send_informational == NULL)
+        return;
+
+    int i = 0;
+    for (i = 0; i != req->pathconf->filters.size; ++i) {
+        h2o_filter_t *filter = req->pathconf->filters.entries[i];
+        if (filter->on_informational != NULL)
+            filter->on_informational(filter, req);
+    }
+
+    if (req->res.status == 103 && req->res.headers.size == 0)
+        return;
+
+    req->_ostr_top->send_informational(req->_ostr_top, req);
+
+    /* clear status and headers */
+    req->res.status = 0;
+    req->res.headers = (h2o_headers_t){NULL, 0, 0};
 }

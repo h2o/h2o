@@ -25,6 +25,7 @@
 
 static void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
 
 static size_t sz_min(size_t x, size_t y)
 {
@@ -41,6 +42,9 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->stream_id = stream_id;
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
+    stream->_ostr_final.send_informational = conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_NONE
+                                                 ? NULL
+                                                 : finalostream_send_informational;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     h2o_http2_window_init(&stream->output_window, conn->peer_settings.initial_window_size);
     h2o_http2_window_init(&stream->input_window.window, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
@@ -384,6 +388,16 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
     }
 
     h2o_http2_conn_register_for_proceed_callback(conn, stream);
+}
+
+static void finalostream_send_informational(h2o_ostream_t *self, h2o_req_t *req)
+{
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _ostr_final, self);
+    h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
+
+    h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
+                               conn->peer_settings.max_frame_size, &req->res, NULL, SIZE_MAX);
+    h2o_http2_conn_request_write(conn);
 }
 
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)

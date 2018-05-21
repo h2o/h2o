@@ -885,7 +885,7 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
     capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
 #ifndef H2O_UNITTEST
-    if (server_name->len) {
+    if (server_name != NULL && server_name->len) {
         capacity += 5 + server_name->len; /* for Server: */
     }
 #endif
@@ -899,7 +899,7 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     dst = encode_status(dst, res->status);
 #ifndef H2O_UNITTEST
     /* TODO keep some kind of reference to the indexed Server header, and reuse it */
-    if (server_name->len) {
+    if (server_name != NULL && server_name->len) {
         dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
     }
 #endif

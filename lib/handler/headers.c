@@ -31,10 +31,26 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     struct st_headers_filter_t *self = (void *)_self;
     h2o_headers_command_t *cmd;
 
-    for (cmd = self->cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd)
-        h2o_rewrite_headers(&req->pool, &req->res.headers, cmd);
+    for (cmd = self->cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd) {
+        if (cmd->when != H2O_HEADERS_CMD_WHEN_EARLY)
+            h2o_rewrite_headers(&req->pool, &req->res.headers, cmd);
+    }
 
     h2o_setup_next_ostream(req, slot);
+}
+
+static void on_informational(h2o_filter_t *_self, h2o_req_t *req)
+{
+    struct st_headers_filter_t *self = (void *)_self;
+    h2o_headers_command_t *cmd;
+
+    if (req->res.status != 103)
+        return;
+
+    for (cmd = self->cmds; cmd->cmd != H2O_HEADERS_CMD_NULL; ++cmd) {
+        if (cmd->when != H2O_HEADERS_CMD_WHEN_FINAL)
+            h2o_rewrite_headers(&req->pool, &req->res.headers, cmd);
+    }
 }
 
 void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
@@ -42,6 +58,7 @@ void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
     struct st_headers_filter_t *self = (void *)h2o_create_filter(pathconf, sizeof(*self));
 
     self->super.on_setup_ostream = on_setup_ostream;
+    self->super.on_informational = on_informational;
     self->cmds = cmds;
 }
 

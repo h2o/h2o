@@ -156,6 +156,7 @@ typedef struct st_h2o_filter_t {
     void (*on_context_dispose)(struct st_h2o_filter_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_filter_t *self);
     void (*on_setup_ostream)(struct st_h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot);
+    void (*on_informational)(struct st_h2o_filter_t *self, h2o_req_t *req);
 } h2o_filter_t;
 
 /**
@@ -321,6 +322,13 @@ typedef struct st_h2o_status_handler_t {
 } h2o_status_handler_t;
 
 typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
+
+typedef enum h2o_send_informational_mode {
+    H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1,
+    H2O_SEND_INFORMATIONAL_MODE_NONE,
+    H2O_SEND_INFORMATIONAL_MODE_ALL
+} h2o_send_informational_mode_t;
+
 struct st_h2o_globalconf_t {
     /**
      * a NULL-terminated list of host contexts (h2o_hostconf_t)
@@ -438,6 +446,11 @@ struct st_h2o_globalconf_t {
          */
         h2o_socketpool_t global_socketpool;
     } proxy;
+
+    /**
+     * enum indicating to what clients h2o sends 1xx response
+     */
+    h2o_send_informational_mode_t send_informational_mode;
 
     /**
      * mimemap
@@ -748,6 +761,11 @@ struct st_h2o_ostream_t {
      * whether if the ostream supports "pull" interface
      */
     void (*start_pull)(struct st_h2o_ostream_t *self, h2o_ostream_pull_cb cb);
+
+    /**
+     * called by the core via h2o_send_informational
+     */
+    void (*send_informational)(struct st_h2o_ostream_t *self, h2o_req_t *req);
 };
 
 /**
@@ -1615,6 +1633,11 @@ h2o_iovec_t h2o_get_redirect_method(h2o_iovec_t method, int status);
  */
 h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size_t value_len);
 /**
+ * sends 1xx response
+ */
+void h2o_send_informational(h2o_req_t *req);
+
+/**
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
@@ -1909,10 +1932,17 @@ enum {
     H2O_HEADERS_CMD_UNSET       /* removes the named header(s) */
 };
 
+typedef enum h2o_headers_command_when {
+    H2O_HEADERS_CMD_WHEN_FINAL,
+    H2O_HEADERS_CMD_WHEN_EARLY,
+    H2O_HEADERS_CMD_WHEN_ALL,
+} h2o_headers_command_when_t;
+
 struct st_h2o_headers_command_t {
     int cmd;
     h2o_iovec_t *name; /* maybe a token */
     h2o_iovec_t value;
+    h2o_headers_command_when_t when;
 };
 
 /**
@@ -2003,7 +2033,8 @@ void h2o_status_register_configurator(h2o_globalconf_t *conf);
 /**
  * appends a headers command to the list
  */
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value);
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value,
+                                h2o_headers_command_when_t when);
 /**
  * rewrite headers by the command provided
  */

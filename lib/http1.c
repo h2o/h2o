@@ -38,6 +38,15 @@ struct st_h2o_http1_finalostream_t {
         void *buf;
         h2o_ostream_pull_cb cb;
     } pull;
+    struct {
+        h2o_iovec_vector_t bufs;
+        unsigned sending : 1;
+        struct {
+            h2o_iovec_t *inbufs;
+            size_t inbufcnt;
+            h2o_send_state_t send_state;
+        } pending_final;
+    } informational;
 };
 
 struct st_h2o_http1_conn_t {
@@ -78,6 +87,7 @@ struct st_h2o_http1_chunked_entity_reader {
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled);
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb);
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
+static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -106,6 +116,9 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
     conn->req._ostr_top = &conn->_ostr_final.super;
     conn->_ostr_final.super.do_send = finalostream_send;
     conn->_ostr_final.super.start_pull = finalostream_start_pull;
+    conn->_ostr_final.super.send_informational = conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_ALL
+                                                     ? finalostream_send_informational
+                                                     : NULL;
     conn->_ostr_final.sent_headers = 0;
 }
 
@@ -330,6 +343,10 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
 
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | (minor_version != 0);
+
+    /* RFC 7541 6.2: a server MUST NOT send a 1xx response to an HTTP/1.0 client */
+    if (conn->req.version < 0x101)
+        conn->_ostr_final.super.send_informational = NULL;
 
     /* init headers */
     entity_header_index =
@@ -623,6 +640,35 @@ static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_a
     return len;
 }
 
+static size_t flatten_res_headers(char *buf, h2o_req_t *req, int replace_vary)
+{
+    char *dst = buf;
+    size_t i;
+    for (i = 0; i != req->res.headers.size; ++i) {
+        const h2o_header_t *header = req->res.headers.entries + i;
+        if (header->name == &H2O_TOKEN_VARY->buf) {
+            /* replace Vary with Cache-Control: private; see the following URLs to understand why this is necessary
+             * - http://blogs.msdn.com/b/ieinternals/archive/2009/06/17/vary-header-prevents-caching-in-ie.aspx
+             * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
+             */
+            if (replace_vary && is_msie(req)) {
+                static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, NULL, {H2O_STRLIT("private")}};
+                header = &cache_control_private;
+            }
+        }
+        memcpy(dst, header->orig_name ? header->orig_name : header->name->base, header->name->len);
+        dst += header->name->len;
+        *dst++ = ':';
+        *dst++ = ' ';
+        memcpy(dst, header->value.base, header->value.len);
+        dst += header->value.len;
+        *dst++ = '\r';
+        *dst++ = '\n';
+    }
+
+    return dst - buf;
+}
+
 static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
 {
     h2o_context_t *ctx = req->conn->ctx;
@@ -641,32 +687,9 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
         dst += sprintf(dst, "Server: %s\r\n", ctx->globalconf->server_name.base);
     }
 
-    { /* flatten the normal headers */
-        size_t i;
-        for (i = 0; i != req->res.headers.size; ++i) {
-            const h2o_header_t *header = req->res.headers.entries + i;
-            if (header->name == &H2O_TOKEN_VARY->buf) {
-                /* replace Vary with Cache-Control: private; see the following URLs to understand why this is necessary
-                 * - http://blogs.msdn.com/b/ieinternals/archive/2009/06/17/vary-header-prevents-caching-in-ie.aspx
-                 * - https://www.igvita.com/2013/05/01/deploying-webp-via-accept-content-negotiation/
-                 */
-                if (is_msie(req)) {
-                    static h2o_header_t cache_control_private = {&H2O_TOKEN_CACHE_CONTROL->buf, NULL, {H2O_STRLIT("private")}};
-                    header = &cache_control_private;
-                }
-            }
-            memcpy(dst, header->orig_name ? header->orig_name : header->name->base, header->name->len);
-            dst += header->name->len;
-            *dst++ = ':';
-            *dst++ = ' ';
-            memcpy(dst, header->value.base, header->value.len);
-            dst += header->value.len;
-            *dst++ = '\r';
-            *dst++ = '\n';
-        }
-        *dst++ = '\r';
-        *dst++ = '\n';
-    }
+    dst += flatten_res_headers(dst, req, 1);
+    *dst++ = '\r';
+    *dst++ = '\n';
 
     return dst - buf;
 }
@@ -743,6 +766,14 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     assert(self == &conn->_ostr_final);
 
+    if (self->informational.sending) {
+        self->informational.pending_final.inbufs = h2o_mem_alloc_pool(&req->pool, h2o_iovec_t, inbufcnt);
+        memcpy(self->informational.pending_final.inbufs, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+        self->informational.pending_final.inbufcnt = inbufcnt;
+        self->informational.pending_final.send_state = send_state;
+        return;
+    }
+
     /* count bytes_sent if other ostreams haven't counted */
     if (req->bytes_counted_by_ostream == 0) {
         for (i = 0; i != inbufcnt; ++i) {
@@ -776,6 +807,56 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
                          h2o_send_state_is_in_progress(send_state) ? on_send_next_push : on_send_complete);
     } else {
         set_timeout(conn, &conn->super.ctx->zero_timeout, on_delayed_send_complete);
+    }
+}
+
+static void on_send_informational(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1_conn_t *conn = sock->data;
+    struct st_h2o_http1_finalostream_t *self = (struct st_h2o_http1_finalostream_t *)conn->req._ostr_top;
+    if (err != NULL)
+        close_connection(conn, 1);
+
+    self->informational.sending = 0;
+
+    if (self->informational.pending_final.inbufs != NULL) {
+        finalostream_send(&self->super, &conn->req, self->informational.pending_final.inbufs,
+                          self->informational.pending_final.inbufcnt, self->informational.pending_final.send_state);
+        return;
+    }
+
+    if (self->informational.bufs.size != 0) {
+        self->informational.sending = 1;
+        h2o_socket_write(sock, self->informational.bufs.entries, self->informational.bufs.size, on_send_informational);
+    }
+}
+
+static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_http1_finalostream_t *self = (void *)_self;
+    struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
+
+    size_t len = sizeof("HTTP/1.1  \r\n\r\n") + 3 + strlen(req->res.reason) - 1;
+    h2o_iovec_t buf = h2o_iovec_init(NULL, len);
+
+    int i;
+    for (i = 0; i != req->res.headers.size; ++i)
+        buf.len += req->res.headers.entries[i].name->len + req->res.headers.entries[i].value.len + 4;
+
+    buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
+    char *dst = buf.base;
+    dst += sprintf(dst, "HTTP/1.1 %d %s\r\n", req->res.status, req->res.reason);
+    dst += flatten_res_headers(dst, req, 0);
+    *dst++ = '\r';
+    *dst++ = '\n';
+
+    h2o_vector_reserve(&req->pool, &self->informational.bufs, self->informational.bufs.size + 1);
+    self->informational.bufs.entries[self->informational.bufs.size++] = buf;
+
+    if (!self->informational.sending) {
+        self->informational.sending = 1;
+        h2o_socket_write(conn->sock, self->informational.bufs.entries, self->informational.bufs.size, on_send_informational);
+        self->informational.bufs.size = 0;
     }
 }
 

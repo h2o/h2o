@@ -872,6 +872,24 @@ static int on_config_error_log_emit_request_errors(h2o_configurator_command_t *c
     return 0;
 }
 
+static int on_config_send_informational(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "except-h1,none,all")) {
+    case 0:
+        ctx->globalconf->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
+        break;
+    case 1:
+        ctx->globalconf->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_NONE;
+        break;
+    case 2:
+        ctx->globalconf->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_ALL;
+        break;
+    default:
+        return -1;
+    }
+    return 0;
+}
+
 static int on_config_stash(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     /* do nothing */
@@ -980,6 +998,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "error-log.emit-request-errors",
                                         H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log_emit_request_errors);
+        h2o_configurator_define_command(&c->super, "send-informational",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_send_informational);
         h2o_configurator_define_command(&c->super, "stash", H2O_CONFIGURATOR_FLAG_ALL_LEVELS,
                                         on_config_stash);
     }
