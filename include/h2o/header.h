@@ -22,6 +22,8 @@
 #ifndef h2o__header_h
 #define h2o__header_h
 
+#include "h2o/memory.h"
+
 /**
  * represents a HTTP header
  */
