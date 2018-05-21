@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 #include "khash.h"
+#include "h2o/httpclient_internal.h"
 #include "h2o/http2_common.h"
 
 enum enum_h2o_http2client_stream_state {

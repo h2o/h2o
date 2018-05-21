@@ -25,7 +25,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include "h2o/httpclient_internal.h"
 #include "h2o/httpclient_internal_h1.h"
 #include "h2o/token.h"
 

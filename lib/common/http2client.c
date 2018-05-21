@@ -25,7 +25,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include "h2o/httpclient_internal.h"
 #include "h2o/httpclient_internal_h2.h"
 
 #define H2O_HTTP2_SETTINGS_CLIENT_CONNECTION_WINDOW_SIZE 16777216
