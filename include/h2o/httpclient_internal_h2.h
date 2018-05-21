@@ -27,8 +27,7 @@ extern "C" {
 #endif
 
 #include "khash.h"
-#include "h2o/http2.h"
-#include "h2o/http2_internal.h"
+#include "h2o/http2_common.h"
 
 enum enum_h2o_http2client_stream_state {
     H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS,
@@ -92,7 +91,8 @@ struct st_h2o_http2client_stream_t {
 
     struct {
         h2o_http2_window_t window;
-        h2o_res_t res;
+        int status;
+        h2o_headers_t headers;
         h2o_buffer_t *body;
     } input;
 

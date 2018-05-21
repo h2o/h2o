@@ -29,12 +29,6 @@
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
-const h2o_http2_priority_t h2o_http2_default_priority = {
-    0, /* exclusive */
-    0, /* dependency */
-    16 /* weight */
-};
-
 #define LIT16(x) ((uint32_t)(x) >> 16) & 0xff, (x)&0xff
 #define LIT24(x) LIT16((x) >> 8), (x)&0xff
 #define LIT32(x) LIT24((x) >> 8), (x)&0xff
@@ -425,8 +419,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     header_exists_map = 0;
-    if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, &header_exists_map,
-                                       &stream->req.content_length, &stream->cache_digests, err_desc)) != 0) {
+    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme, &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path, &stream->req.headers, &header_exists_map, &stream->req.content_length, &stream->cache_digests, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -474,8 +467,7 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     size_t dummy_content_length;
     int ret;
 
-    if ((ret = h2o_hpack_parse_headers(&stream->req, &conn->_input_header_table, src, len, NULL, &dummy_content_length, NULL,
-                                       err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, NULL, &stream->req.input.scheme, &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
@@ -488,7 +480,7 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
     h2o_http2_stream_t *stream;
     int hret;
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE, err_desc)) < 0)
         return ret;
     if (frame.type != H2O_HTTP2_FRAME_TYPE_CONTINUATION) {
         *err_desc = "expected CONTINUATION frame";
@@ -977,7 +969,7 @@ ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, c
         handle_invalid_continuation_frame /* CONTINUATION */
     };
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE, err_desc)) < 0)
         return ret;
 
     if (frame.type < sizeof(FRAME_HANDLERS) / sizeof(FRAME_HANDLERS[0])) {

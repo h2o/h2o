@@ -229,19 +229,20 @@
 		7D0285C91EF422D40094292B /* sleep.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0285C81EF422D40094292B /* sleep.c */; };
 		7D0341FB1FE4D5B60052E0A1 /* http2client.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0341FA1FE4D5B60052E0A1 /* http2client.c */; };
 		7D0341FC1FE4D5BD0052E0A1 /* http2client.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0341FA1FE4D5B60052E0A1 /* http2client.c */; };
+		7D0E5D5A20761BD800DA3E5A /* hiredis_.h in Headers */ = {isa = PBXBuildFile; fileRef = 7DF88EF820761972005DB8D8 /* hiredis_.h */; };
 		7D10CC6B205D0F950054A8E2 /* httpclient_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D10CC6A205D0F8E0054A8E2 /* httpclient_internal.h */; };
+		7D25E33C20B288710092C982 /* http2_common.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D25E33B20B270BA0092C982 /* http2_common.h */; };
+		7D2DF4EE20297EEF004AD361 /* header.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D2DF4ED20297EE0004AD361 /* header.h */; };
 		7D519F8A20A3ECEC000B5313 /* httpclient_internal_h1.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D519F8820A3ECEC000B5313 /* httpclient_internal_h1.h */; };
 		7D519F8B20A3ECEC000B5313 /* httpclient_internal_h2.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D519F8920A3ECEC000B5313 /* httpclient_internal_h2.h */; };
 		7D67C721204F8C0E0049E935 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D67C720204F8C0E0049E935 /* httpclient.c */; };
 		7D67C722204F8C0E0049E935 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D67C720204F8C0E0049E935 /* httpclient.c */; };
 		7D67C724204F8CA50049E935 /* httpclient.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D67C723204F8C9B0049E935 /* httpclient.h */; };
-		7D0E5D5A20761BD800DA3E5A /* hiredis_.h in Headers */ = {isa = PBXBuildFile; fileRef = 7DF88EF820761972005DB8D8 /* hiredis_.h */; };
 		7D9372FE202AC70F005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9372FD202AC70F005FE6AB /* server_timing.c */; };
 		7D9372FF202AC717005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9372FD202AC70F005FE6AB /* server_timing.c */; };
 		7D937300202AC717005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9372FD202AC70F005FE6AB /* server_timing.c */; };
 		7D937302202AC7BA005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D937301202AC7BA005FE6AB /* server_timing.c */; };
 		7D937303202AC7BA005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D937301202AC7BA005FE6AB /* server_timing.c */; };
-		7D2DF4EE20297EEF004AD361 /* header.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D2DF4ED20297EE0004AD361 /* header.h */; };
 		7D9FA53A1FC323B200189F88 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FA5381FC323AC00189F88 /* channel.c */; };
 		D081373A1FD400F4004679DF /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
 		D081373B1FD400F4004679DF /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
@@ -836,13 +837,14 @@
 		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
 		7D0341FA1FE4D5B60052E0A1 /* http2client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2client.c; sourceTree = "<group>"; };
 		7D10CC6A205D0F8E0054A8E2 /* httpclient_internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = httpclient_internal.h; sourceTree = "<group>"; };
+		7D25E33B20B270BA0092C982 /* http2_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http2_common.h; sourceTree = "<group>"; };
+		7D2DF4ED20297EE0004AD361 /* header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = header.h; sourceTree = "<group>"; };
 		7D519F8820A3ECEC000B5313 /* httpclient_internal_h1.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = httpclient_internal_h1.h; sourceTree = "<group>"; };
 		7D519F8920A3ECEC000B5313 /* httpclient_internal_h2.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = httpclient_internal_h2.h; sourceTree = "<group>"; };
 		7D67C720204F8C0E0049E935 /* httpclient.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = httpclient.c; sourceTree = "<group>"; };
 		7D67C723204F8C9B0049E935 /* httpclient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = httpclient.h; sourceTree = "<group>"; };
 		7D9372FD202AC70F005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D937301202AC7BA005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
-		7D2DF4ED20297EE0004AD361 /* header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = header.h; sourceTree = "<group>"; };
 		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
 		7DF88EF820761972005DB8D8 /* hiredis_.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hiredis_.h; sourceTree = "<group>"; };
 		D08137381FD400F4004679DF /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
@@ -1521,6 +1523,7 @@
 				7D519F8820A3ECEC000B5313 /* httpclient_internal_h1.h */,
 				7D519F8920A3ECEC000B5313 /* httpclient_internal_h2.h */,
 				107923A119A3215F00C52AD6 /* http2.h */,
+				7D25E33B20B270BA0092C982 /* http2_common.h */,
 				10AAAC621B6C7A7D004487C3 /* http2_casper.h */,
 				10AA2EB61A970EFC004322AC /* http2_internal.h */,
 				10AA2EB81A971280004322AC /* http2_scheduler.h */,
@@ -2197,6 +2200,7 @@
 				107D4D531B5B2412004A9B21 /* file.h in Headers */,
 				E9708AE01E49A2120029E0A5 /* picotls.h in Headers */,
 				105534ED1A42AD5E00627ECB /* templates.c.h in Headers */,
+				7D25E33C20B288710092C982 /* http2_common.h in Headers */,
 				10AA2EB91A971280004322AC /* http2_scheduler.h in Headers */,
 				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,

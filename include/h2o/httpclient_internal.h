@@ -26,7 +26,6 @@
 extern "C" {
 #endif
 
-#include "h2o.h"
 #include "h2o/httpclient.h"
 
 struct st_h2o_httpclient_private_t {

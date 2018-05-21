@@ -300,9 +300,7 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
                               H2O_STRLIT("pushed"));
     if (stream->req.send_server_timing)
         h2o_add_server_timing_header(&stream->req);
-    h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                               conn->peer_settings.max_frame_size, &stream->req.res, &conn->super.ctx->globalconf->server_name,
-                               stream->req.res.content_length);
+    h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size, stream->req.res.status, stream->req.res.headers, &conn->super.ctx->globalconf->server_name, stream->req.res.content_length);
     h2o_http2_conn_request_write(conn);
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
 

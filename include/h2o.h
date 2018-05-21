@@ -50,9 +50,11 @@ extern "C" {
 #include "h2o/string_.h"
 #include "h2o/time_.h"
 #include "h2o/timeout.h"
+#include "h2o/token.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
 #include "h2o/balancer.h"
+#include "h2o/http2_common.h"
 
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
@@ -64,10 +66,6 @@ extern "C" {
 #endif
 #ifndef H2O_MAX_REQLEN
 #define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
-#endif
-
-#ifndef H2O_MAX_TOKENS
-#define H2O_MAX_TOKENS 100
 #endif
 
 #ifndef H2O_SOMAXCONN
@@ -109,22 +107,6 @@ typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
 typedef struct st_h2o_logconf_t h2o_logconf_t;
 typedef struct st_h2o_headers_command_t h2o_headers_command_t;
-
-/**
- * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
- */
-typedef struct st_h2o_token_t {
-    h2o_iovec_t buf;
-    char http2_static_table_name_index; /* non-zero if any */
-    unsigned char proxy_should_drop_for_req : 1;
-    unsigned char proxy_should_drop_for_res : 1;
-    unsigned char is_init_header_special : 1;
-    unsigned char http2_should_reject : 1;
-    unsigned char copy_for_push_request : 1;
-    unsigned char dont_compress : 1;
-} h2o_token_t;
-
-#include "h2o/token.h"
 
 /**
  * basic structure of a handler (an object that MAY generate a response)
@@ -509,27 +491,6 @@ typedef struct st_h2o_mimemap_type_t {
         } dynamic;
     } data;
 } h2o_mimemap_type_t;
-
-/* defined as negated form of the error codes defined in HTTP2-spec section 7 */
-#define H2O_HTTP2_ERROR_NONE 0
-#define H2O_HTTP2_ERROR_PROTOCOL -1
-#define H2O_HTTP2_ERROR_INTERNAL -2
-#define H2O_HTTP2_ERROR_FLOW_CONTROL -3
-#define H2O_HTTP2_ERROR_SETTINGS_TIMEOUT -4
-#define H2O_HTTP2_ERROR_STREAM_CLOSED -5
-#define H2O_HTTP2_ERROR_FRAME_SIZE -6
-#define H2O_HTTP2_ERROR_REFUSED_STREAM -7
-#define H2O_HTTP2_ERROR_CANCEL -8
-#define H2O_HTTP2_ERROR_COMPRESSION -9
-#define H2O_HTTP2_ERROR_CONNECT -10
-#define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
-#define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
-#define H2O_HTTP2_ERROR_MAX 13
-/* end of the HTT2-spec defined errors */
-#define H2O_HTTP2_ERROR_INVALID_HEADER_CHAR                                                                                        \
-    -254 /* an internal value indicating that invalid characters were found in the header name or value */
-#define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
-#define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 
 enum {
     /* http1 protocol errors */
@@ -1166,70 +1127,6 @@ static void h2o_doublebuffer_dispose(h2o_doublebuffer_t *db);
 static h2o_iovec_t h2o_doublebuffer_prepare(h2o_doublebuffer_t *db, h2o_buffer_t **receiving, size_t max_bytes);
 static void h2o_doublebuffer_prepare_empty(h2o_doublebuffer_t *db);
 static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
-
-/* token */
-
-extern h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
-extern size_t h2o__num_tokens;
-
-/**
- * returns a token (an optimized subclass of h2o_iovec_t) containing given string, or NULL if no such thing is available
- */
-const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
-/**
- * returns an boolean value if given buffer is a h2o_token_t.
- */
-int h2o_iovec_is_token(const h2o_iovec_t *buf);
-
-/* headers */
-
-static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y);
-/**
- * searches for a header of given name (fast, by comparing tokens)
- * @param headers header list
- * @param token name of the header to search for
- * @param cursor index of the last match (or set SIZE_MAX to start a new search)
- * @return index of the found header (or SIZE_MAX if not found)
- */
-ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor);
-/**
- * searches for a header of given name (slow, by comparing strings)
- * @param headers header list
- * @param name name of the header to search for
- * @param name_len length of the name
- * @param cursor index of the last match (or set SIZE_MAX to start a new search)
- * @return index of the found header (or SIZE_MAX if not found)
- */
-ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, ssize_t cursor);
-/**
- * adds a header to list
- */
-void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
-                    const char *value, size_t value_len);
-/**
- * adds a header to list
- */
-void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *orig_name, const char *value, size_t value_len);
-/**
- * adds or replaces a header into the list
- */
-void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
-                    int overwrite_if_exists);
-/**
- * adds or replaces a header into the list
- */
-void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *value, size_t value_len, int overwrite_if_exists);
-/**
- * sets a header token
- */
-void h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
-                          size_t value_len);
-/**
- * deletes a header from list
- */
-ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 
 /* util */
 
@@ -2028,15 +1925,6 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 #ifdef H2O_NO_64BIT_ATOMICS
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
-
-inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y)
-{
-    if (x->name == y->name) {
-        return 1;
-    } else {
-        return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
-    }
-}
 
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks)

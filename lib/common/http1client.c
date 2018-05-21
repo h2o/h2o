@@ -27,6 +27,7 @@
 #include <sys/un.h>
 #include "h2o/httpclient_internal.h"
 #include "h2o/httpclient_internal_h1.h"
+#include "h2o/token.h"
 
 static void close_client(struct st_h2o_http1client_private_t *client)
 {

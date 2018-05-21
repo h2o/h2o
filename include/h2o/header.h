@@ -23,6 +23,7 @@
 #define h2o__header_h
 
 #include "h2o/memory.h"
+#include "h2o/token.h"
 
 /**
  * represents a HTTP header
@@ -46,5 +47,62 @@ typedef struct st_h2o_header_t {
  * list of headers
  */
 typedef H2O_VECTOR(h2o_header_t) h2o_headers_t;
+
+static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y);
+/**
+ * searches for a header of given name (fast, by comparing tokens)
+ * @param headers header list
+ * @param token name of the header to search for
+ * @param cursor index of the last match (or set SIZE_MAX to start a new search)
+ * @return index of the found header (or SIZE_MAX if not found)
+ */
+ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor);
+/**
+ * searches for a header of given name (slow, by comparing strings)
+ * @param headers header list
+ * @param name name of the header to search for
+ * @param name_len length of the name
+ * @param cursor index of the last match (or set SIZE_MAX to start a new search)
+ * @return index of the found header (or SIZE_MAX if not found)
+ */
+ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, ssize_t cursor);
+/**
+ * adds a header to list
+ */
+void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
+                    const char *value, size_t value_len);
+/**
+ * adds a header to list
+ */
+void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                           const char *orig_name, const char *value, size_t value_len);
+/**
+ * adds or replaces a header into the list
+ */
+void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
+                    int overwrite_if_exists);
+/**
+ * adds or replaces a header into the list
+ */
+void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                           const char *value, size_t value_len, int overwrite_if_exists);
+/**
+ * sets a header token
+ */
+void h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
+                          size_t value_len);
+/**
+ * deletes a header from list
+ */
+ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
+
+inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y)
+{
+    if (x->name == y->name) {
+        return 1;
+    } else {
+        return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
+    }
+}
 
 #endif

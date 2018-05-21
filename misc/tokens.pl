@@ -77,6 +77,36 @@ print $fh render_mt(<< 'EOT', \@tokens, LICENSE)->as_string;
 #ifndef h2o__token_h
 #define h2o__token_h
 
+/**
+ * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
+ */
+typedef struct st_h2o_token_t {
+    h2o_iovec_t buf;
+    char http2_static_table_name_index; /* non-zero if any */
+    unsigned char proxy_should_drop_for_req : 1;
+    unsigned char proxy_should_drop_for_res : 1;
+    unsigned char is_init_header_special : 1;
+    unsigned char http2_should_reject : 1;
+    unsigned char copy_for_push_request : 1;
+    unsigned char dont_compress : 1;
+} h2o_token_t;
+
+#ifndef H2O_MAX_TOKENS
+#define H2O_MAX_TOKENS 100
+#endif
+
+extern h2o_token_t h2o__tokens[H2O_MAX_TOKENS];
+extern size_t h2o__num_tokens;
+
+/**
+ * returns a token (an optimized subclass of h2o_iovec_t) containing given string, or NULL if no such thing is available
+ */
+const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
+/**
+ * returns an boolean value if given buffer is a h2o_token_t.
+ */
+int h2o_iovec_is_token(const h2o_iovec_t *buf);
+
 ? for my $i (0..$#$tokens) {
 #define <?= normalize_name($tokens->[$i][0]) ?> (h2o__tokens + <?= $i ?>)
 ? }

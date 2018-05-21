@@ -30,6 +30,7 @@
 
 #define H2O_HTTP2_SETTINGS_CLIENT_CONNECTION_WINDOW_SIZE 16777216
 #define H2O_HTTP2_SETTINGS_CLIENT_HEADER_TABLE_SIZE 4096
+#define H2O_HTTP2_SETTINGS_CLIENT_MAX_FRAME_SIZE 16384
 
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
@@ -194,7 +195,8 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
     assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
-    if ((ret = h2o_hpack_parse_response_headers(&stream->pool, &stream->input.res, &conn->input.header_table, src, len,
+    size_t dummy_content_length = SIZE_MAX;
+    if ((ret = h2o_hpack_parse_response_headers(&stream->pool, &stream->input.status, &stream->input.headers, &dummy_content_length, &conn->input.header_table, src, len,
                                                 err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
@@ -203,26 +205,26 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         call_callback_with_error(stream, ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream protocol error" : "upstream compression error");
         return ret;
     }
-    if (stream->input.res.status == 0) {
+    if (stream->input.status == 0) {
         /* couldn't find :status pseudo header */
         ret = H2O_HTTP2_ERROR_PROTOCOL;
         goto SendRSTStream;
     }
 
-    if (100 <= stream->input.res.status && stream->input.res.status <= 199) {
-        if (stream->input.res.status == 101) {
+    if (100 <= stream->input.status && stream->input.status <= 199) {
+        if (stream->input.status == 101) {
             ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO is this alright?
             goto SendRSTStream;
         }
-        if (stream->super.super.informational_cb != NULL && stream->super.super.informational_cb(&stream->super.super, 0, stream->input.res.status, h2o_iovec_init(NULL, 0), stream->input.res.headers.entries, stream->input.res.headers.size) != 0) {
+        if (stream->super.super.informational_cb != NULL && stream->super.super.informational_cb(&stream->super.super, 0, stream->input.status, h2o_iovec_init(NULL, 0), stream->input.headers.entries, stream->input.headers.size) != 0) {
             ret = H2O_HTTP2_ERROR_INTERNAL;
             goto SendRSTStream;
         }
         return 0;
     }
 
-    stream->super.cb.on_body = stream->super.cb.on_head(&stream->super.super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0, stream->input.res.status, h2o_iovec_init(NULL, 0),
-                                            stream->input.res.headers.entries, stream->input.res.headers.size, (int)len);
+    stream->super.cb.on_body = stream->super.cb.on_head(&stream->super.super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0, stream->input.status, h2o_iovec_init(NULL, 0),
+                                            stream->input.headers.entries, stream->input.headers.size, (int)len);
 
     if (is_end_stream) {
         close_stream(stream);
@@ -254,7 +256,7 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
     struct st_h2o_http2client_stream_t *stream;
     int hret;
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_CLIENT_MAX_FRAME_SIZE, err_desc)) < 0)
         return ret;
     if (frame.type != H2O_HTTP2_FRAME_TYPE_CONTINUATION) {
         *err_desc = "expected CONTINUATION frame";
@@ -628,7 +630,7 @@ ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *sr
         handle_invalid_continuation_frame /* CONTINUATION */
     };
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_CLIENT_MAX_FRAME_SIZE, err_desc)) < 0)
         return ret;
 
     if (frame.type < sizeof(FRAME_HANDLERS) / sizeof(FRAME_HANDLERS[0])) {
@@ -649,7 +651,7 @@ static ssize_t expect_settings(struct st_h2o_http2client_conn_t *conn, const uin
     h2o_http2_frame_t frame;
     ssize_t ret;
 
-    if ((ret = h2o_http2_decode_frame(&frame, src, len, err_desc)) < 0)
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_CLIENT_MAX_FRAME_SIZE, err_desc)) < 0)
         return ret;
 
     if (frame.type != H2O_HTTP2_FRAME_TYPE_SETTINGS)
@@ -1174,7 +1176,6 @@ static void setup_stream(struct st_h2o_http2client_stream_t *stream)
     memset(&stream->conn, 0, offsetof(struct st_h2o_http2client_stream_t, pool) - offsetof(struct st_h2o_http2client_stream_t, conn));
     h2o_mem_init_pool(&stream->pool);
 
-    stream->input.res.content_length = SIZE_MAX;
     stream->state = H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS;
     stream->timeout_entry.cb = on_stream_timeout;
     h2o_http2_window_init(&stream->input.window, get_max_buffer_size(stream->super.super.ctx));
