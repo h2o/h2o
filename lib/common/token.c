@@ -19,7 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "h2o.h"
+#include "h2o/token.h"
 #include "token_table.h"
 
 int h2o_iovec_is_token(const h2o_iovec_t *buf)

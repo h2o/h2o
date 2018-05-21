@@ -24,6 +24,8 @@
 #ifndef h2o__token_h
 #define h2o__token_h
 
+#include "h2o/string_.h"
+
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
  */
