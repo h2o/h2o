@@ -1123,6 +1123,8 @@
 				10AA2EAB1A8DE0AE004322AC /* multithread.c */,
 				104B9A241A4A4FEE009EEE64 /* serverutil.c */,
 				101788B119B561AA0084C6D8 /* socket.c */,
+				107923BF19A3217300C52AD6 /* token.c */,
+				1079245319A32C0800C52AD6 /* token_table.h */,
 				1065E70919BF18A600686E72 /* socket */,
 				10EC2A371A0B4DC70083514F /* socketpool.c */,
 				10D0905A19F230280043D458 /* string.c */,
@@ -1174,8 +1176,6 @@
 				10835E001C9A6C2400197E59 /* logconf.c */,
 				10AA2EBB1A9EEDF8004322AC /* proxy.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
-				107923BF19A3217300C52AD6 /* token.c */,
-				1079245319A32C0800C52AD6 /* token_table.h */,
 				107923C019A3217300C52AD6 /* util.c */,
 			);
 			path = core;
