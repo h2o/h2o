@@ -290,6 +290,7 @@ SET(LIB_SOURCE_FILES
     lib/common/string.c
     lib/common/time.c
     lib/common/timeout.c
+    lib/common/token.c
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
@@ -301,7 +302,6 @@ SET(LIB_SOURCE_FILES
     lib/core/logconf.c
     lib/core/proxy.c
     lib/core/request.c
-    lib/core/token.c
     lib/core/util.c
 
     lib/handler/access_log.c
