@@ -68,7 +68,7 @@ static void do_cancel(h2o_httpclient_t *_client)
 static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
 {
 #define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
-    size_t sz = SZ_MAX(sizeof(struct st_h2o_http1client_private_t), sizeof(struct st_h2o_http2client_stream_t));
+    size_t sz = SZ_MAX(sizeof(struct st_h2o_http1client_t), sizeof(struct st_h2o_http2client_stream_t));
 #undef SZ_MAX
     struct st_h2o_httpclient_private_t *client = h2o_mem_alloc(sz);
     memset(client, 0, sizeof(*client));
