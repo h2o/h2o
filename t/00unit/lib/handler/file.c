@@ -912,7 +912,7 @@ void test_lib__handler__file_c()
     subtest("process_range()", test_process_range);
     subtest("range request", test_range_req);
     subtest("if-range", test_if_range);
-    subtest("strong etag comparsion", test_strong_etag_cmp);
+    subtest("strong etag comparison", test_strong_etag_cmp);
 
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&globalconf);
