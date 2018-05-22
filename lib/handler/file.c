@@ -642,7 +642,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
         size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
-        if (h2o_memis(if_none_match->base, if_none_match->len, etag, etag_len))
+        if (h2o_filecache_compare_etag_strong(if_none_match->base, if_none_match->len, etag, etag_len))
             goto NotModified;
     } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
         h2o_iovec_t *ims_vec = &req->headers.entries[if_modified_since_header_index].value;
@@ -666,20 +666,16 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         /* if range */
         if ((if_range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_RANGE, SIZE_MAX)) != -1) {
             h2o_iovec_t *if_range = &req->headers.entries[if_range_header_index].value;
-            if (if_range->base[0] == 'W' && if_range->base[1] == '/' && if_range->base[2] == '"') /* weak etag */
-                goto EntireFile;
-            else if (if_range->base[0] == '"') { /* etag */
+            /* first try parse if-range as http-date */
+            struct tm ir_tm, *last_modified_tm;
+            if (h2o_time_parse_rfc1123(if_range->base, if_range->len, &ir_tm) == 0) {
+                last_modified_tm = h2o_filecache_get_last_modified(generator->file.ref, NULL);
+                if (tm_is_lessthan(&ir_tm, last_modified_tm))
+                    goto EntireFile;
+            } else { /* treat it as an e-tag */
                 char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
                 size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
-                if (!h2o_memis(if_range->base, if_range->len, etag, etag_len))
-                    goto EntireFile;
-            } else { /* date */
-                struct tm ir_tm, *last_modified_tm;
-                if (h2o_time_parse_rfc1123(if_range->base, if_range->len, &ir_tm) == 0) {
-                    last_modified_tm = h2o_filecache_get_last_modified(generator->file.ref, NULL);
-                    if (tm_is_lessthan(&ir_tm, last_modified_tm))
-                        goto EntireFile;
-                } else /* not a valid if-range, condition false */
+                if (!h2o_filecache_compare_etag_strong(if_range->base, if_range->len, etag, etag_len))
                     goto EntireFile;
             }
         }

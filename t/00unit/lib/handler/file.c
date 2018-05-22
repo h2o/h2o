@@ -431,7 +431,7 @@ static void test_if_range(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, NULL, lm_date, H2O_TIMESTR_RFC1123_LEN);
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_RANGE, NULL, lm_date, H2O_TIMESTR_RFC1123_LEN);
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=0-10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);
@@ -473,7 +473,7 @@ static void test_if_range(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, NULL,
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_RANGE, NULL,
                        H2O_STRLIT("Sun, 06 Nov 1994 08:49:37 GMT"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=0-10"));
         h2o_loopback_run_loop(conn);
@@ -487,7 +487,7 @@ static void test_if_range(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_MODIFIED_SINCE, NULL,
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_RANGE, NULL,
                        H2O_STRLIT("Wed, 18 May 2033 12:33:20 GMT"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=0-10"));
         h2o_loopback_run_loop(conn);
@@ -739,6 +739,23 @@ static void test_range_req(void)
     }
 }
 
+static void test_strong_etag_cmp()
+{
+    /* example from RFC 7232 */
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("W/\"1\""), H2O_STRLIT("W/\"1\"")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("W/\"1\""), H2O_STRLIT("W/\"2\"")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("W/\"1\""), H2O_STRLIT("\"1\"")));
+    ok(h2o_filecache_compare_etag_strong(H2O_STRLIT("\"1\""), H2O_STRLIT("\"1\"")));
+    /* illegal etags */
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("\"1"), H2O_STRLIT("\"1\"")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("\"1\""), H2O_STRLIT("\"1")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("\"1"), H2O_STRLIT("\"1")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("1\""), H2O_STRLIT("\"1\"")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("\"1\""), H2O_STRLIT("1\"")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT("1\""), H2O_STRLIT("1\"")));
+    ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT(""), H2O_STRLIT("")));
+}
+
 void test_lib__handler__file_c()
 {
     h2o_globalconf_t globalconf;
@@ -894,6 +911,8 @@ void test_lib__handler__file_c()
     subtest("if-match", test_if_match);
     subtest("process_range()", test_process_range);
     subtest("range request", test_range_req);
+    subtest("if-range", test_if_range);
+    subtest("strong etag comparsion", test_strong_etag_cmp);
 
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&globalconf);
