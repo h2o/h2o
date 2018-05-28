@@ -22,49 +22,63 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "h2o.h"
-#include "h2o/http1.h"
 #include "h2o/tunnel.h"
 
 struct st_h2o_tunnel_t {
     h2o_context_t *ctx;
     h2o_timeout_entry_t timeout_entry;
     h2o_timeout_t *timeout;
-    h2o_socket_t *sock[2];
+    h2o_tunnel_end_t down;
+    h2o_tunnel_end_t up;
 };
 
-static void on_write_complete(h2o_socket_t *sock, const char *err);
-
-static void close_connection(struct st_h2o_tunnel_t *tunnel)
+void h2o_tunnel_break(h2o_tunnel_t *tunnel)
 {
     h2o_timeout_unlink(&tunnel->timeout_entry);
 
-    h2o_socket_close(tunnel->sock[0]);
-    h2o_socket_close(tunnel->sock[1]);
+    tunnel->down.close(tunnel, &tunnel->down);
+    tunnel->up.close(tunnel, &tunnel->up);
 
     free(tunnel);
 }
 
-static void on_timeout(h2o_timeout_entry_t *entry)
-{
-    struct st_h2o_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_tunnel_t, timeout_entry, entry);
-    close_connection(tunnel);
-}
-
-static inline void reset_timeout(struct st_h2o_tunnel_t *tunnel)
+void h2o_tunnel_reset_timeout(h2o_tunnel_t *tunnel)
 {
     h2o_timeout_unlink(&tunnel->timeout_entry);
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 }
 
-static void on_read(h2o_socket_t *sock, const char *err)
+static void on_timeout(h2o_timeout_entry_t *entry)
 {
-    struct st_h2o_tunnel_t *tunnel = sock->data;
-    h2o_socket_t *dst;
-    assert(tunnel != NULL);
-    assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
+    h2o_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_tunnel_t, timeout_entry, entry);
+    h2o_tunnel_break(tunnel);
+}
+
+h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_tunnel_end_t down, h2o_tunnel_end_t up, h2o_timeout_t *timeout)
+{
+    h2o_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
+    tunnel->ctx = ctx;
+    tunnel->timeout = timeout;
+    tunnel->timeout_entry = (h2o_timeout_entry_t){0};
+    tunnel->timeout_entry.cb = on_timeout;
+    tunnel->down = down;
+    tunnel->up = up;
+    h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
+
+    tunnel->up.open(tunnel, &tunnel->up);
+    tunnel->down.open(tunnel, &tunnel->down);
+
+    return tunnel;
+}
+
+/* simple socket end */
+
+static void on_socket_read(h2o_socket_t *sock, const char *err)
+{
+    h2o_tunnel_t *tunnel = sock->data;
 
     if (err != NULL) {
-        close_connection(tunnel);
+        h2o_tunnel_break(tunnel);
         return;
     }
 
@@ -72,67 +86,54 @@ static void on_read(h2o_socket_t *sock, const char *err)
         return;
 
     h2o_socket_read_stop(sock);
-    reset_timeout(tunnel);
-
-    if (tunnel->sock[0] == sock)
-        dst = tunnel->sock[1];
-    else
-        dst = tunnel->sock[0];
+    h2o_tunnel_reset_timeout(tunnel);
 
     h2o_iovec_t buf;
     buf.base = sock->input->bytes;
     buf.len = sock->input->size;
-    h2o_socket_write(dst, &buf, 1, on_write_complete);
+    h2o_tunnel_end_t *peer = tunnel->down.data == sock ? &tunnel->down : &tunnel->up;
+    peer->write(tunnel, peer, &buf, 1);
 }
 
-static void on_write_complete(h2o_socket_t *sock, const char *err)
+static void on_socket_write_complete(h2o_socket_t *sock, const char *err)
 {
-    struct st_h2o_tunnel_t *tunnel = sock->data;
-    h2o_socket_t *peer;
-    assert(tunnel != NULL);
-    assert(tunnel->sock[0] == sock || tunnel->sock[1] == sock);
+    h2o_tunnel_t *tunnel = sock->data;
 
     if (err != NULL) {
-        close_connection(tunnel);
+        h2o_tunnel_break(tunnel);
         return;
     }
 
-    reset_timeout(tunnel);
+    h2o_tunnel_reset_timeout(tunnel);
 
-    if (tunnel->sock[0] == sock)
-        peer = tunnel->sock[1];
-    else
-        peer = tunnel->sock[0];
+    h2o_tunnel_end_t *peer = tunnel->down.data == sock ? &tunnel->down : &tunnel->up;
+    h2o_socket_t *peersock = peer->data;
 
-    h2o_buffer_consume(&peer->input, peer->input->size);
-    h2o_socket_read_start(peer, on_read);
+    h2o_buffer_consume(&peersock->input, peersock->input->size);
+    h2o_socket_read_start(peersock, on_socket_read);
 }
 
-h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_socket_t *sock1, h2o_socket_t *sock2, h2o_timeout_t *timeout)
+static void on_socket_end_open(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end)
 {
-    h2o_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
-    tunnel->ctx = ctx;
-    tunnel->timeout = timeout;
-    tunnel->timeout_entry = (h2o_timeout_entry_t){0};
-    tunnel->timeout_entry.cb = on_timeout;
-    tunnel->sock[0] = sock1;
-    tunnel->sock[1] = sock2;
-    sock1->data = tunnel;
-    sock2->data = tunnel;
-    h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
+    h2o_socket_t *sock = end->data;
+    sock->data = tunnel;
+    if (sock->input->size)
+        on_socket_read(sock, NULL);
+    h2o_socket_read_start(sock, on_socket_read);
+}
+static void on_socket_end_write(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_iovec_t *bufs, size_t bufcnt)
+{
+    h2o_socket_t *sock = end->data;
+    h2o_socket_write(sock, bufs, bufcnt, on_socket_write_complete);
 
-    /* Bring up the tunnel. Note. Upstream always ready first. */
-    if (sock2->input->size)
-        on_read(sock2, NULL);
-    if (sock1->input->size)
-        on_read(sock1, NULL);
-    h2o_socket_read_start(sock2, on_read);
-    h2o_socket_read_start(sock1, on_read);
-
-    return tunnel;
+}
+static void on_socket_end_close(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end)
+{
+    h2o_socket_t *sock = end->data;
+    h2o_socket_close(sock);
 }
 
-void h2o_tunnel_break(h2o_tunnel_t *tunnel)
+h2o_tunnel_end_t h2o_tunnel_socket_end_init(h2o_socket_t *sock)
 {
-    close_connection(tunnel);
+    return (h2o_tunnel_end_t){on_socket_end_open, on_socket_end_write, on_socket_end_close, sock};
 }

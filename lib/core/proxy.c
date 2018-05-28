@@ -386,7 +386,7 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
 
     if (sock != NULL) {
         h2o_buffer_consume(&sock->input, reqsize); // It is detached from conn. Let's trash unused data.
-        h2o_tunnel_establish(info->ctx, sock, info->upstream_sock, info->timeout);
+        h2o_tunnel_establish(info->ctx, h2o_tunnel_socket_end_init(sock), h2o_tunnel_socket_end_init(info->upstream_sock), info->timeout);
     } else {
         h2o_socket_close(info->upstream_sock);
     }
