@@ -810,6 +810,17 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
 }
 
+static void on_send_informational(h2o_socket_t *sock, const char *err);
+static void do_send_informational(struct st_h2o_http1_finalostream_t *self, h2o_socket_t *sock)
+{
+    if (self->informational.sending || self->informational.bufs.size == 0)
+        return;
+
+    self->informational.sending = 1;
+    h2o_socket_write(sock, self->informational.bufs.entries, self->informational.bufs.size, on_send_informational);
+    self->informational.bufs.size = 0;
+}
+
 static void on_send_informational(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
@@ -825,10 +836,7 @@ static void on_send_informational(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (self->informational.bufs.size != 0) {
-        self->informational.sending = 1;
-        h2o_socket_write(sock, self->informational.bufs.entries, self->informational.bufs.size, on_send_informational);
-    }
+    do_send_informational(self, sock);
 }
 
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req)
@@ -853,11 +861,7 @@ static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req
     h2o_vector_reserve(&req->pool, &self->informational.bufs, self->informational.bufs.size + 1);
     self->informational.bufs.entries[self->informational.bufs.size++] = buf;
 
-    if (!self->informational.sending) {
-        self->informational.sending = 1;
-        h2o_socket_write(conn->sock, self->informational.bufs.entries, self->informational.bufs.size, on_send_informational);
-        self->informational.bufs.size = 0;
-    }
+    do_send_informational(self, conn->sock);
 }
 
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
