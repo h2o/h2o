@@ -66,7 +66,8 @@ static void on_informational(h2o_filter_t *_self, h2o_req_t *req)
 
 static void on_sender_deferred_timeout(h2o_timeout_entry_t *entry)
 {
-    struct st_headers_early_hints_sender_t *sender = H2O_STRUCT_FROM_MEMBER(struct st_headers_early_hints_sender_t, deferred_timeout_entry, entry);
+    struct st_headers_early_hints_sender_t *sender =
+        H2O_STRUCT_FROM_MEMBER(struct st_headers_early_hints_sender_t, deferred_timeout_entry, entry);
 
     if (sender->req->res.status != 0)
         return;
@@ -122,7 +123,8 @@ void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
         handler->super.on_req = on_req;
 
         /* move this handler to first */
-        memmove(pathconf->handlers.entries + 1, pathconf->handlers.entries, sizeof(h2o_handler_t *) * (pathconf->handlers.size - 1));
+        memmove(pathconf->handlers.entries + 1, pathconf->handlers.entries,
+                sizeof(h2o_handler_t *) * (pathconf->handlers.size - 1));
         pathconf->handlers.entries[0] = &handler->super;
     }
 }
