@@ -634,4 +634,30 @@ EOT
     });
 };
 
+subtest 'rack.early_hints' => sub {
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            env['rack.early_hints'].call({ 'link' => '</index.js>; rel=preload' })
+            env['rack.early_hints'].call({ 'link' => '</style.css>; rel=preload' })
+            sleep 0.1
+            env['rack.early_hints'].call({ :foo => 'bar' })
+            [200, {}, ['hello']]
+          }
+EOT
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($headers) = run_prog("$curl --silent --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/");
+        like $headers, qr{^link: </index.js>; rel=preload\r$}m;
+        like $headers, qr{^link: </style.css>; rel=preload\r$}m;
+        like $headers, qr{^foo: bar\r$}m;
+    });
+};
+
 done_testing();
