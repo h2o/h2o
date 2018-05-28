@@ -229,10 +229,16 @@ mrb_value send_early_hints_proc(mrb_state *mrb, mrb_value self)
         mrb_value value = h2o_mruby_to_str(mrb, kh_value(h, k).v);
         if (mrb->exc != NULL)
             goto Failed;
-        if (RSTRING_LEN(name) == 0 || RSTRING_LEN(value) == 0)
-            continue;
-        h2o_add_header_by_str(&generator->req->pool, &generator->req->res.headers, RSTRING_PTR(name), RSTRING_LEN(name), 1, NULL,
-                              RSTRING_PTR(value), RSTRING_LEN(value));
+
+        char *pos = RSTRING_PTR(value), *end = pos + RSTRING_LEN(value);
+        while (pos < end) {
+            char *found = memchr(pos, '\n', end - pos);
+            if (found == NULL)
+                found = end;
+            h2o_add_header_by_str(&generator->req->pool, &generator->req->res.headers, RSTRING_PTR(name), RSTRING_LEN(name), 1, NULL,
+                                  pos, found - pos);
+            pos = found + 1;
+        }
     }
 
     generator->req->res.status = 103;

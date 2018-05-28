@@ -644,8 +644,7 @@ hosts:
       /:
         mruby.handler: |
           proc {|env|
-            env['rack.early_hints'].call({ 'link' => '</index.js>; rel=preload' })
-            env['rack.early_hints'].call({ 'link' => '</style.css>; rel=preload' })
+            env['rack.early_hints'].call({ 'link' => "</index.js>; rel=preload\\n</style.css>; rel=preload" })
             sleep 0.1
             env['rack.early_hints'].call({ :foo => 'bar' })
             [200, {}, ['hello']]
