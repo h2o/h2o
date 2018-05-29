@@ -221,6 +221,7 @@ builder {
             or return [400, [], ["no Sec-WebSocket-Key"]];
         $key .= "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         my $accept_key = sha1_base64($key);
+        $accept_key .= '=' while length($accept_key) % 4;
         my $fh = $env->{"psgix.io"};
         print $fh join(
             "\r\n",
@@ -234,8 +235,8 @@ builder {
             my $rfds = '';
             vec($rfds, fileno($fh), 1) = 1;
             next if select($rfds, undef, undef, undef) <= 0;
-            $fh->sysread(my $data, 65536) <= 0
-                and last;
+            my $rlen = $fh->sysread(my $data, 65536);
+            ($rlen || 0) <= 0 and last;
             while (length($data) != 0) {
                 my $wfds = '';
                 vec($wfds, fileno($fh), 1) = 1;
