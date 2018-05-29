@@ -30,17 +30,28 @@ typedef struct st_h2o_tunnel_t h2o_tunnel_t;
 typedef struct st_h2o_tunnel_end_t h2o_tunnel_end_t;
 typedef void (*h2o_tunnel_end_open_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end);
 typedef void (*h2o_tunnel_end_write_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_iovec_t *bufs, size_t bufcnt);
-typedef void (*h2o_tunnel_end_close_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end);
+typedef void (*h2o_tunnel_end_peer_write_complete_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_tunnel_end_t *peer);
+typedef void (*h2o_tunnel_end_close_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, const char *err);
+
 struct st_h2o_tunnel_end_t {
     h2o_tunnel_end_open_cb open;
     h2o_tunnel_end_write_cb write;
+    h2o_tunnel_end_peer_write_complete_cb peer_write_complete;
     h2o_tunnel_end_close_cb close;
     void *data;
 };
 
+struct st_h2o_tunnel_t {
+    h2o_context_t *ctx;
+    h2o_timeout_entry_t timeout_entry;
+    h2o_timeout_t *timeout;
+    h2o_tunnel_end_t down;
+    h2o_tunnel_end_t up;
+};
+
 h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_tunnel_end_t down, h2o_tunnel_end_t up, h2o_timeout_t *timeout);
 void h2o_tunnel_reset_timeout(h2o_tunnel_t *tunnel);
-void h2o_tunnel_break(h2o_tunnel_t *tunnel);
+void h2o_tunnel_break(h2o_tunnel_t *tunnel, const char *err);
 
 h2o_tunnel_end_t h2o_tunnel_socket_end_init(h2o_socket_t *sock);
 
