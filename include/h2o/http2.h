@@ -26,6 +26,8 @@
 extern "C" {
 #endif
 
+#include "h2o/tunnel.h"
+
 extern const char *h2o_http2_npn_protocols;
 extern const h2o_iovec_t *h2o_http2_alpn_protocols;
 
@@ -67,6 +69,9 @@ extern __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
 int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at);
+
+typedef h2o_tunnel_t *(*h2o_http2_tunnel_cb)(void *data, h2o_req_t *req);
+void h2o_http2_tunnel(h2o_req_t *req, h2o_http2_tunnel_cb on_complete, void *data);
 
 #ifdef __cplusplus
 }

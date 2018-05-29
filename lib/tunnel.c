@@ -104,7 +104,6 @@ static void on_socket_write_complete(h2o_socket_t *sock, const char *err)
     h2o_tunnel_end_t *end = tunnel->down.data == sock ? &tunnel->down : &tunnel->up;
     if (peer->peer_write_complete != NULL)
         peer->peer_write_complete(tunnel, peer, end);
-
 }
 
 static void on_socket_end_open(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end)
@@ -119,7 +118,6 @@ static void on_socket_end_write(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o
 {
     h2o_socket_t *sock = end->data;
     h2o_socket_write(sock, bufs, bufcnt, on_socket_write_complete);
-
 }
 static void on_socket_end_peer_write_complete(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_tunnel_end_t *peer)
 {
@@ -135,5 +133,6 @@ static void on_socket_end_close(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, con
 
 h2o_tunnel_end_t h2o_tunnel_socket_end_init(h2o_socket_t *sock)
 {
-    return (h2o_tunnel_end_t){on_socket_end_open, on_socket_end_write, on_socket_end_peer_write_complete, on_socket_end_close, sock};
+    return (h2o_tunnel_end_t){on_socket_end_open, on_socket_end_write, on_socket_end_peer_write_complete, on_socket_end_close,
+                              sock};
 }

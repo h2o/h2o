@@ -29,6 +29,7 @@
 #include "h2o/http2_casper.h"
 #include "h2o/cache_digests.h"
 #include "h2o/http2_scheduler.h"
+#include "h2o/tunnel.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
@@ -60,6 +61,7 @@ typedef struct st_h2o_hpack_header_table_entry_t {
 #define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
 #define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
+#define H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS 16
 
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
@@ -215,6 +217,8 @@ struct st_h2o_http2_stream_t {
         h2o_buffer_t *body; /* NULL unless request body IS expected */
         size_t bytes_received;
     } _req_body;
+
+    h2o_tunnel_t *tunnel;
 
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;

@@ -24,6 +24,7 @@
 h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT(":method")}, 2, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT(":path")}, 4, 0, 0, 0, 0, 0, 0},
+                             {{H2O_STRLIT(":protocol")}, 0, 1, 1, 0, 0, 0, 0},
                              {{H2O_STRLIT(":scheme")}, 6, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT(":status")}, 8, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("accept")}, 19, 0, 0, 0, 0, 1, 0},
@@ -84,7 +85,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, 1, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-forwarded-for")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-reproxy-url")}, 0, 0, 0, 0, 0, 0, 0},
                              {{H2O_STRLIT("x-traffic")}, 0, 0, 0, 0, 0, 0, 0}};
-size_t h2o__num_tokens = 63;
+size_t h2o__num_tokens = 64;
 
 const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 {
@@ -220,6 +221,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 'c':
             if (memcmp(name, "x-traffi", 8) == 0)
                 return H2O_TOKEN_X_TRAFFIC;
+            break;
+        case 'l':
+            if (memcmp(name, ":protoco", 8) == 0)
+                return H2O_TOKEN_PROTOCOL;
             break;
         }
         break;

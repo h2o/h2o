@@ -448,3 +448,47 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
         h2o_proceed_response(&stream->req);
     }
 }
+
+struct st_http2_tunnel_generator_t {
+    h2o_generator_t super;
+    h2o_http2_tunnel_cb cb;
+    void *data;
+};
+
+static void on_generator_proceed(h2o_generator_t *_generator, h2o_req_t *req)
+{
+    struct st_http2_tunnel_generator_t *generator = (void *)_generator;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    if (stream->tunnel == NULL) {
+        /* sent 200 response, start tunneling */
+        stream->tunnel = generator->cb(generator->data, req);
+    } else {
+        /* sent DATA frame */
+        h2o_tunnel_reset_timeout(stream->tunnel);
+        if (stream->tunnel->up.peer_write_complete != NULL)
+            stream->tunnel->up.peer_write_complete(stream->tunnel, &stream->tunnel->up, &stream->tunnel->down);
+    }
+}
+
+static void on_generator_stop(h2o_generator_t *_generator, h2o_req_t *req)
+{
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    if (stream->tunnel != NULL) {
+        h2o_tunnel_break(stream->tunnel, NULL);
+        stream->tunnel = NULL;
+    }
+}
+
+void h2o_http2_tunnel(h2o_req_t *req, h2o_http2_tunnel_cb on_complete, void *user_data)
+{
+    assert(req->version >= 0x200);
+    assert(req->res.status == 200);
+
+    struct st_http2_tunnel_generator_t *generator = h2o_mem_alloc_pool(&req->pool, *generator, 1);
+    generator->super.proceed = on_generator_proceed;
+    generator->super.stop = on_generator_stop;
+    generator->cb = on_complete;
+    generator->data = user_data;
+    h2o_start_response(req, &generator->super);
+    h2o_send(req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+}

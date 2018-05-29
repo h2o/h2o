@@ -417,6 +417,16 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 }
 
+static void handle_tunneled_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t payload, int is_end_stream)
+{
+    h2o_tunnel_reset_timeout(stream->tunnel);
+    if (is_end_stream) {
+        h2o_tunnel_break(stream->tunnel, NULL);
+    } else if (payload.len != 0) {
+        stream->tunnel->up.write(stream->tunnel, &stream->tunnel->up, &payload, 1);
+    }
+}
+
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
                                    const char **err_desc)
 {
@@ -440,6 +450,17 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 #undef EXPECTED_MAP
+
+    /* for websockets over h2 */
+    if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0) {
+        if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS) == 0 ||
+            (header_exists_map & H2O_HPACK_PARSE_HEADERS_PATH_EXISTS) == 0 || stream->req.input.method.base[0] != 'C' ||
+            !h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+            ret = H2O_HTTP2_ERROR_PROTOCOL;
+            goto SendRSTStream;
+        }
+    }
+
     if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
@@ -676,7 +697,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     }
-    if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) {
+    if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY && stream->tunnel == NULL) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         return 0;
@@ -689,9 +710,15 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         update_stream_input_window(conn, stream, frame->length - payload.length);
 
     /* actually handle the input */
-    if (payload.length != 0 || (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0)
-        handle_request_body_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
+    if (payload.length != 0 || (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
+        if (stream->tunnel == NULL) {
+            handle_request_body_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
+                                      (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+        } else {
+            handle_tunneled_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
                                   (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+        }
+    }
 
     return 0;
 }

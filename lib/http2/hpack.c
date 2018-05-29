@@ -535,6 +535,11 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                         req->input.scheme = &H2O_URL_SCHEME_HTTP;
                     }
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS;
+                } else if (r.name == &H2O_TOKEN_PROTOCOL->buf) {
+                    if (req->upgrade.base != NULL)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    req->upgrade = *r.value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS;
                 } else {
                     return H2O_HTTP2_ERROR_PROTOCOL;
                 }

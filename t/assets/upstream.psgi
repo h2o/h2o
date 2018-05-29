@@ -222,6 +222,10 @@ builder {
         $key .= "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         my $accept_key = sha1_base64($key);
         $accept_key .= '=' while length($accept_key) % 4;
+        print $env->{'QUERY_STRING'} . "\n";
+        if ($env->{'QUERY_STRING'} eq 'invalid_accept_key') {
+            $accept_key = 'invalid';
+        }
         my $fh = $env->{"psgix.io"};
         print $fh join(
             "\r\n",
