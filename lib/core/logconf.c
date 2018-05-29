@@ -65,6 +65,12 @@ enum {
     ELEMENT_TYPE_TOTAL_TIME,                    /* %{total-time}x */
     ELEMENT_TYPE_ERROR,                         /* %{error}x */
     ELEMENT_TYPE_PROTOCOL_SPECIFIC,             /* %{protocol-specific...}x */
+    ELEMENT_TYPE_PROXY_IDLE_TIME,               /* %{proxy-idle-time}x */
+    ELEMENT_TYPE_PROXY_CONNECT_TIME,            /* %{proxy-connect-time}x */
+    ELEMENT_TYPE_PROXY_REQUEST_TIME,            /* %{proxy-request-time}x */
+    ELEMENT_TYPE_PROXY_PROCESS_TIME,            /* %{proxy-first-byte-time}x */
+    ELEMENT_TYPE_PROXY_RESPONSE_TIME,           /* %{proxy-response-time}x */
+    ELEMENT_TYPE_PROXY_TOTAL_TIME,              /* %{proxy-total-time}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -248,6 +254,12 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("total-time", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
+                    MAP_EXT_TO_TYPE("proxy-idle-time", ELEMENT_TYPE_PROXY_IDLE_TIME);
+                    MAP_EXT_TO_TYPE("proxy-connect-time", ELEMENT_TYPE_PROXY_CONNECT_TIME);
+                    MAP_EXT_TO_TYPE("proxy-request-time", ELEMENT_TYPE_PROXY_REQUEST_TIME);
+                    MAP_EXT_TO_TYPE("proxy-process-time", ELEMENT_TYPE_PROXY_PROCESS_TIME);
+                    MAP_EXT_TO_TYPE("proxy-response-time", ELEMENT_TYPE_PROXY_RESPONSE_TIME);
+                    MAP_EXT_TO_TYPE("proxy-total-time", ELEMENT_TYPE_PROXY_TOTAL_TIME);
                     MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
                     MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
                     MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);
@@ -755,6 +767,30 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                 pos = append_unsafe_string(pos, log->msg.base, log->msg.len);
             }
         } break;
+
+        case ELEMENT_TYPE_PROXY_IDLE_TIME:
+            APPEND_DURATION(pos, proxy_idle_time);
+            break;
+
+        case ELEMENT_TYPE_PROXY_CONNECT_TIME:
+            APPEND_DURATION(pos, proxy_connect_time);
+            break;
+
+        case ELEMENT_TYPE_PROXY_REQUEST_TIME:
+            APPEND_DURATION(pos, proxy_request_time);
+            break;
+
+        case ELEMENT_TYPE_PROXY_PROCESS_TIME:
+            APPEND_DURATION(pos, proxy_process_time);
+            break;
+
+        case ELEMENT_TYPE_PROXY_RESPONSE_TIME:
+            APPEND_DURATION(pos, proxy_response_time);
+            break;
+
+        case ELEMENT_TYPE_PROXY_TOTAL_TIME:
+            APPEND_DURATION(pos, proxy_total_time);
+            break;
 
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
             h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];

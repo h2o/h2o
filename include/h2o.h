@@ -1074,6 +1074,7 @@ struct st_h2o_req_t {
         struct timeval request_body_begin_at;
         struct timeval response_start_at;
         struct timeval response_end_at;
+        h2o_http1client_timings_t proxy;
     } timestamps;
     /**
      * the response
@@ -2287,6 +2288,13 @@ COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->pr
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
 COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
 COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+
+COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->timestamps.proxy.start_at);
+COMPUTE_DURATION(proxy_connect_time, &req->timestamps.proxy.start_at, &req->timestamps.proxy.request_begin_at);
+COMPUTE_DURATION(proxy_request_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.request_end_at);
+COMPUTE_DURATION(proxy_process_time, &req->timestamps.proxy.request_end_at, &req->timestamps.proxy.response_start_at);
+COMPUTE_DURATION(proxy_response_time, &req->timestamps.proxy.response_start_at, &req->timestamps.proxy.response_end_at);
+COMPUTE_DURATION(proxy_total_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.response_end_at);
 
 #undef COMPUTE_DURATION
 

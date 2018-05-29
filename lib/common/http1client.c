@@ -103,6 +103,7 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
     h2o_timeout_unlink(&client->_timeout);
 
     if (err != NULL) {
+        client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
         client->_cb.on_body(&client->super, h2o_http1client_error_is_eos);
         close_client(client);
         return;
@@ -140,6 +141,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             }
             client->_body_decoder.content_length.bytesleft = 0;
             errstr = h2o_http1client_error_is_eos;
+            client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
         } else {
             client->_body_decoder.content_length.bytesleft -= sock->bytes_read;
             errstr = NULL;
@@ -173,6 +175,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
              * a missing 0\r\n chunk
              */
             client->_do_keepalive = 0;
+            client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
             client->_cb.on_body(&client->super, h2o_http1client_error_is_eos);
             close_client(client);
         } else {
@@ -201,6 +204,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
         /* fallthru */
         case 0: /* complete */
             errstr = h2o_http1client_error_is_eos;
+            client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
             break;
         }
         inbuf->size -= sock->bytes_read - newsz;
@@ -296,6 +300,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
         }
     }
 
+    client->super.timings.response_start_at = h2o_gettimeofday(client->super.ctx->loop);
+
     /* parse the headers */
     reader = on_body_until_close;
     client->_do_keepalive = minor_version >= 1;
@@ -331,6 +337,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
     /* RFC 2616 4.4 */
     if (client->_method_is_head || http_status == 101 || http_status == 204 || http_status == 304) {
         is_eos = 1;
+        client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
     } else {
         is_eos = 0;
         /* close the connection if impossible to determine the end of the response (RFC 7230 3.3.3) */
@@ -386,6 +393,8 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
         h2o_socket_write(client->super.sock, &last, 1, on_send_request);
         return;
     }
+
+    client->super.timings.request_end_at = h2o_gettimeofday(client->super.ctx->loop);
 
     h2o_socket_read_start(client->super.sock, on_head);
     client->_timeout.cb = on_head_timeout;
@@ -530,6 +539,8 @@ static void on_connection_ready(struct st_h2o_http1client_private_t *client)
     /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
     client->_timeout.cb = on_send_timeout;
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->_timeout);
+
+    client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
 }
 
 static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, h2o_url_t *origin)
@@ -589,6 +600,7 @@ void h2o_http1client_connect(h2o_http1client_t **_client, void *data, h2o_http1c
     h2o_timeout_link(ctx->loop, ctx->connect_timeout, &client->_timeout);
     client->super.sockpool.pool = socketpool;
 
+    client->super.timings.start_at = h2o_gettimeofday(client->super.ctx->loop);
     h2o_socketpool_connect(&client->super.sockpool.connect_req, socketpool, target, ctx->loop, ctx->getaddr_receiver,
                            on_pool_connect, client);
 }
