@@ -74,7 +74,6 @@ EOT
 };
 
 subtest 'mruby-http-chunked' => sub {
-    plan skip_all => 'TBD';
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -90,7 +89,6 @@ EOT
 };
 
 subtest 'mruby-callback-chunked' => sub {
-    plan skip_all => 'TBD';
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -109,6 +107,22 @@ hosts:
                 end
               end.new(resp[2])]
             }
+EOT
+    doit($server);
+};
+
+subtest 'mruby-middleware-chunked' => sub {
+    my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        - mruby.handler: |
+            proc {|env|
+              H2O.next.call(env)
+            }
+        - proxy.reverse.url: http://127.0.0.1:$upstream->{port}/
 EOT
     doit($server);
 };

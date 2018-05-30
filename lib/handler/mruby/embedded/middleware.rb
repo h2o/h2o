@@ -1,4 +1,4 @@
-# Copyright (c) 2014 DeNA Co., Ltd.
+# Copyright (c) 2017 Ichito Nagata, Fastly, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to
@@ -18,22 +18,46 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-module Kernel
+module H2O
 
-  def _h2o_chunked_proc_each_to_fiber()
-    Proc.new do |args|
-      src, generator = *args
-      fiber = Fiber.new do
-        begin
-          src.each do |chunk|
-            _h2o_send_chunk(chunk, generator)
-          end
-          _h2o_send_chunk_eos(generator)
-        rescue => e
-          _h2o__send_error(e, generator)
-        end
+  class App
+    def initialize(reprocess)
+      @reprocess = reprocess
+    end
+    def call(env)
+      request(env).join
+    end
+  end
+
+  def self.next
+    @@next ||= App.new(false)
+  end
+  def self.reprocess
+    @@reprocess ||= App.new(true)
+  end
+
+  class AppRequest
+    def join
+      if !@resp
+        _h2o_middleware_wait_response(self) unless _can_build_response?
+        @resp = _build_response
       end
-      fiber.resume
+      @resp
+    end
+  end
+
+  class AppInputStream
+    def each(&block)
+      while chunk = _h2o_middleware_wait_chunk(self)
+        yield chunk
+      end
+    end
+    def join
+      s = ""
+      each do |c|
+        s << c
+      end
+      s
     end
   end
 
