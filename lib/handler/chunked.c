@@ -74,6 +74,10 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
 {
     chunked_encoder_t *encoder;
 
+    /* TODO: make chunked filter a submodule of lib/http1.c so that we could eliminate this flag, protocol version checks, etc. */
+    if (req->is_subrequest)
+        goto Next;
+
     /* do nothing if not HTTP/1.1 or content-length is known */
     if (req->res.content_length != SIZE_MAX || req->version != 0x101)
         goto Next;

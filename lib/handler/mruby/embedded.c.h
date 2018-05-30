@@ -122,6 +122,23 @@
     "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
+    "end\n"                                                                                                                        \
+    "\n"                                                                                                                           \
+    "module H2O\n"                                                                                                                 \
+    "\n"                                                                                                                           \
+    "  class ErrorStream\n"                                                                                                        \
+    "\n"                                                                                                                           \
+    "    def puts(*msgs)\n"                                                                                                        \
+    "      msgs.each {|msg| write msg }\n"                                                                                         \
+    "      nil\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def flush\n"                                                                                                              \
+    "      self\n"                                                                                                                 \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "end\n"
 
 /* lib/handler/mruby/embedded/http_request.rb */
@@ -183,8 +200,8 @@
     "\n"                                                                                                                           \
     "end\n"
 
-/* lib/handler/mruby/embedded/chunked.rb */
-#define H2O_MRUBY_CODE_CHUNKED                                                                                                     \
+/* lib/handler/mruby/embedded/sender.rb */
+#define H2O_MRUBY_CODE_SENDER                                                                                                      \
     "# Copyright (c) 2014 DeNA Co., Ltd.\n"                                                                                        \
     "#\n"                                                                                                                          \
     "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
@@ -207,20 +224,87 @@
     "\n"                                                                                                                           \
     "module Kernel\n"                                                                                                              \
     "\n"                                                                                                                           \
-    "  def _h2o_chunked_proc_each_to_fiber()\n"                                                                                    \
+    "  def _h2o_sender_proc_each_to_fiber()\n"                                                                                     \
     "    Proc.new do |args|\n"                                                                                                     \
     "      src, generator = *args\n"                                                                                               \
     "      fiber = Fiber.new do\n"                                                                                                 \
     "        begin\n"                                                                                                              \
     "          src.each do |chunk|\n"                                                                                              \
-    "            _h2o_send_chunk(chunk, generator)\n"                                                                              \
+    "            _h2o_sender_send_chunk(chunk, generator)\n"                                                                       \
     "          end\n"                                                                                                              \
-    "          _h2o_send_chunk_eos(generator)\n"                                                                                   \
+    "          _h2o_sender_send_chunk_eos(generator)\n"                                                                            \
     "        rescue => e\n"                                                                                                        \
-    "          _h2o__send_error(e, generator)\n"                                                                                   \
+    "          _h2o_sender_handle_error(e, generator)\n"                                                                           \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
     "      fiber.resume\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "end\n"
+
+/* lib/handler/mruby/embedded/middleware.rb */
+#define H2O_MRUBY_CODE_MIDDLEWARE                                                                                                  \
+    "# Copyright (c) 2017 Ichito Nagata, Fastly, Inc.\n"                                                                           \
+    "#\n"                                                                                                                          \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "#\n"                                                                                                                          \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "#\n"                                                                                                                          \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
+    "module H2O\n"                                                                                                                 \
+    "\n"                                                                                                                           \
+    "  class App\n"                                                                                                                \
+    "    def initialize(reprocess)\n"                                                                                              \
+    "      @reprocess = reprocess\n"                                                                                               \
+    "    end\n"                                                                                                                    \
+    "    def call(env)\n"                                                                                                          \
+    "      request(env).join\n"                                                                                                    \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  def self.next\n"                                                                                                            \
+    "    @@next ||= App.new(false)\n"                                                                                              \
+    "  end\n"                                                                                                                      \
+    "  def self.reprocess\n"                                                                                                       \
+    "    @@reprocess ||= App.new(true)\n"                                                                                          \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  class AppRequest\n"                                                                                                         \
+    "    def join\n"                                                                                                               \
+    "      if !@resp\n"                                                                                                            \
+    "        _h2o_middleware_wait_response(self) unless _can_build_response?\n"                                                    \
+    "        @resp = _build_response\n"                                                                                            \
+    "      end\n"                                                                                                                  \
+    "      @resp\n"                                                                                                                \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  class AppInputStream\n"                                                                                                     \
+    "    def each(&block)\n"                                                                                                       \
+    "      while chunk = _h2o_middleware_wait_chunk(self)\n"                                                                       \
+    "        yield chunk\n"                                                                                                        \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "    def join\n"                                                                                                               \
+    "      s = \"\"\n"                                                                                                             \
+    "      each do |c|\n"                                                                                                          \
+    "        s << c\n"                                                                                                             \
+    "      end\n"                                                                                                                  \
+    "      s\n"                                                                                                                    \
     "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
