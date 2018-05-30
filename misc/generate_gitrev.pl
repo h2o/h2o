@@ -21,9 +21,6 @@ if ($content ne $current) {
 sub exec_git_command {
     my ($cmd) = @_;
     my $out = `$cmd`;
-    if ($? != 0) {
-        die "failed to execute `$cmd`: $!";
-    }
     chomp $out;
     $out;
 }
