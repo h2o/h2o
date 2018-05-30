@@ -209,6 +209,13 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 #undef KEY_PREFIX_LEN
 }
 
+static int handle_early_hints_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t name, h2o_iovec_t value, void *_req)
+{
+    h2o_req_t *req = _req;
+    h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 1, NULL, value.base, value.len);
+    return 0;
+}
+
 mrb_value send_early_hints_proc(mrb_state *mrb, mrb_value self)
 {
     mrb_value headers;
@@ -218,36 +225,12 @@ mrb_value send_early_hints_proc(mrb_state *mrb, mrb_value self)
     if (generator == NULL)
         return mrb_nil_value();
 
-    khiter_t k;
-    khash_t(ht) *h = mrb_hash_tbl(mrb, headers);
-    for (k = kh_begin(h); k != kh_end(h); ++k) {
-        if (!kh_exist(h, k))
-            continue;
-        mrb_value name = h2o_mruby_to_str(mrb, kh_key(h, k));
-        if (mrb->exc != NULL)
-            goto Failed;
-        mrb_value value = h2o_mruby_to_str(mrb, kh_value(h, k).v);
-        if (mrb->exc != NULL)
-            goto Failed;
-
-        char *pos = RSTRING_PTR(value), *end = pos + RSTRING_LEN(value);
-        while (pos < end) {
-            char *found = memchr(pos, '\n', end - pos);
-            if (found == NULL)
-                found = end;
-            h2o_add_header_by_str(&generator->req->pool, &generator->req->res.headers, RSTRING_PTR(name), RSTRING_LEN(name), 1, NULL,
-                                  pos, found - pos);
-            pos = found + 1;
-        }
-    }
-
+    if (h2o_mruby_iterate_headers(mrb->ud, headers, handle_early_hints_header, generator->req) == -1)
+        mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
     generator->req->res.status = 103;
     h2o_send_informational(generator->req);
 
     return mrb_nil_value();
-
-Failed:
-    mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
 }
 
 static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
