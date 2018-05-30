@@ -8,6 +8,9 @@ use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
 
+plan skip_all => 'cannot run perl -MPlack::Handler::FCGI'
+    if system("perl -MPlack::Handler::FCGI /dev/null > /dev/null 2>&1") != 0;
+
 my $tempdir = tempdir(CLEANUP => 1);
 my $upstream_port = empty_port();
 
