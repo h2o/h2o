@@ -737,6 +737,43 @@ This can be useful if you use a custom handler that inspects the dying
 process.</p>
 ? })
 
+<?
+$ctx->{directive}->(
+    name   => "stash",
+    levels => [ qw(global host path extensions) ],
+    desc   => q{Directive being used to store reusable YAML variables.},
+    since    => "2.3",
+)->(sub {
+?>
+<p>This directive does nothing itself, but can be used to store YAML variables and reuse those using <a href="configure/syntax_and_structure.html#yaml_alias">YAML Alias</a>.</p>
+
+<?= $ctx->{example}->('Reusing stashed variables across multiple hosts', <<'EOT')
+stash:
+  ssl: &ssl
+    port: 443
+  paths: &paths
+    /:
+      file.dir: /path/to/root
+hosts:
+  "example.com":
+    listen:
+      <<: &ssl
+      ssl:
+        certificate-file: /path/to/example.com.crt
+        key-file:         /path/to/example.com.key
+    paths: *paths
+  "example.org":
+    listen:
+      <<: &ssl
+      ssl:
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.key
+    paths: *paths
+EOT
+?>
+
+? })
+
 ? })
 
 ? })
