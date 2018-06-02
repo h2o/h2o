@@ -27,9 +27,9 @@
 #endif
 
 #ifdef H2O_GITREV
-#define H2O_VERSION "2.3.0-DEV@" H2O_TO_STR(H2O_GITREV)
+#define H2O_VERSION "2.3.0-beta1@" H2O_TO_STR(H2O_GITREV)
 #else
-#define H2O_VERSION "2.3.0-DEV"
+#define H2O_VERSION "2.3.0-beta1"
 #endif
 
 #define H2O_VERSION_MAJOR 2
@@ -37,7 +37,7 @@
 #define H2O_VERSION_PATCH 0
 
 #define H2O_LIBRARY_VERSION_MAJOR 0
-#define H2O_LIBRARY_VERSION_MINOR 14
+#define H2O_LIBRARY_VERSION_MINOR 15
 #define H2O_LIBRARY_VERSION_PATCH 0
 
 #endif

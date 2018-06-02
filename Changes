@@ -1,6 +1,6 @@
 Revision history for H2O.
 
-2.3.0-beta1 TBD
+2.3.0-beta1 2018-06-02 05:00:00+0000
 	- [core] forbid empty path string in configuration #1506 (Ichito Nagata)
 	- [core] use eventfd instead of pipe on linux #1533 (Baodong Chen)
 	- [core] remove redundancy #1568 #1569 #1584 #1596 (Baodong Chen)
