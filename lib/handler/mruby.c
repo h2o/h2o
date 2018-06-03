@@ -915,9 +915,6 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
                                        generator->req) != 0) {
         return -1;
     }
-    /* add date: if it's missing from the response */
-    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)
-        h2o_resp_add_date_header(generator->req);
 
     /* return without processing body, if status is fallthru */
     if (generator->req->res.status == STATUS_FALLTHRU) {
@@ -929,6 +926,10 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
         }
         return 0;
     }
+
+    /* add date: if it's missing from the response */
+    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)
+        h2o_resp_add_date_header(generator->req);
 
     /* obtain body */
     body = mrb_ary_entry(resp, 2);
