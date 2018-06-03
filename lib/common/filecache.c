@@ -169,14 +169,12 @@ size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf)
     return ref->_etag.len;
 }
 
-int h2o_filecache_compare_etag_strong(char *tag1, size_t tag1_len, char *tag2, size_t tag2_len)
+int h2o_filecache_compare_etag_strong(const char *tag1, size_t tag1_len, const char *tag2, size_t tag2_len)
 {
     size_t i;
 
     /* first check if tag1 a valid strong etag, then just strictly compare tag1 with tag2 */
-    if (tag1_len > strlen("W/\"\"") && memcmp(tag1, "W/\"", 3) == 0) /* at least a weak etag */
-        return 0;
-    if (tag1_len < sizeof("\"\"")) /* tag should be at least one character quoted */
+    if (tag1_len < sizeof("\"\"")) /* strong etag should be at least one character quoted */
         return 0;
     if (tag1[0] != '"' || tag1[tag1_len - 1] != '"') /* not a valid etag */
         return 0;
