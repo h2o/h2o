@@ -303,12 +303,12 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
             req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets, req->lb.tried);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
-            __sync_add_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         } else {
             req->selected_target = 0;
         }
     }
     target = req->pool->targets.entries[req->selected_target];
+    __sync_add_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
 
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
