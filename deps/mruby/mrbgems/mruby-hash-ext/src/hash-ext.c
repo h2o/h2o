@@ -72,6 +72,45 @@ hash_compact_bang(mrb_state *mrb, mrb_value hash)
   return hash;
 }
 
+/*
+ *  call-seq:
+ *     hsh.slice(*keys) -> a_hash
+ *
+ *  Returns a hash containing only the given keys and their values.
+ *
+ *     h = { a: 100, b: 200, c: 300 }
+ *     h.slice(:a)           #=> {:a=>100}
+ *     h.slice(:b, :c, :d)   #=> {:b=>200, :c=>300}
+ */
+static mrb_value
+hash_slice(mrb_state *mrb, mrb_value hash)
+{
+  khash_t(ht) *h = RHASH_TBL(hash);
+  mrb_value *argv, result;
+  mrb_int argc, i;
+  khiter_t k;
+  int ai;
+
+  mrb_get_args(mrb, "*", &argv, &argc);
+  if (argc == 0 || h == NULL) {
+    return mrb_hash_new_capa(mrb, argc);
+  }
+  result = mrb_hash_new_capa(mrb, argc);
+  ai = mrb_gc_arena_save(mrb);
+  for (i = 0; i < argc; i++) {
+    mrb_value key = argv[i];
+
+    k = kh_get(ht, mrb, h, key);
+    if (k != kh_end(h)) {
+      mrb_value val = kh_value(h, k).v;
+
+      mrb_hash_set(mrb, result, key, val);
+    }
+    mrb_gc_arena_restore(mrb, ai);
+  }
+  return result;
+}
+
 void
 mrb_mruby_hash_ext_gem_init(mrb_state *mrb)
 {
@@ -80,6 +119,7 @@ mrb_mruby_hash_ext_gem_init(mrb_state *mrb)
   h = mrb->hash_class;
   mrb_define_method(mrb, h, "values_at", hash_values_at, MRB_ARGS_ANY());
   mrb_define_method(mrb, h, "compact!",  hash_compact_bang, MRB_ARGS_NONE());
+  mrb_define_method(mrb, h, "slice",     hash_slice, MRB_ARGS_ANY());
 }
 
 void

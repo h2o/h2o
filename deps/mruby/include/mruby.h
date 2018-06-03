@@ -1,7 +1,7 @@
 /*
 ** mruby - An embeddable Ruby implementation
 **
-** Copyright (c) mruby developers 2010-2017
+** Copyright (c) mruby developers 2010-2018
 **
 ** Permission is hereby granted, free of charge, to any person obtaining
 ** a copy of this software and associated documentation files (the
@@ -65,6 +65,7 @@
 
 #include "mrbconf.h"
 
+#ifndef MRB_WITHOUT_FLOAT
 #ifndef FLT_EPSILON
 #define FLT_EPSILON (1.19209290e-07f)
 #endif
@@ -79,6 +80,7 @@
 #define MRB_FLOAT_EPSILON FLT_EPSILON
 #else
 #define MRB_FLOAT_EPSILON DBL_EPSILON
+#endif
 #endif
 
 #include "mruby/common.h"
@@ -168,11 +170,25 @@ struct mrb_context {
 # define MRB_METHOD_CACHE_SIZE (1<<7)
 #endif
 
+typedef mrb_value (*mrb_func_t)(struct mrb_state *mrb, mrb_value);
+
+#ifdef MRB_METHOD_TABLE_INLINE
+typedef uintptr_t mrb_method_t;
+#else
+typedef struct {
+  mrb_bool func_p;
+  union {
+    struct RProc *proc;
+    mrb_func_t func;
+  };
+} mrb_method_t;
+#endif
+
 #ifdef MRB_METHOD_CACHE
 struct mrb_cache_entry {
-  struct RClass *c;
+  struct RClass *c, *c0;
   mrb_sym mid;
-  struct RProc *m;
+  mrb_method_t m;
 };
 #endif
 
@@ -206,7 +222,9 @@ typedef struct mrb_state {
   struct RClass *hash_class;
   struct RClass *range_class;
 
+#ifndef MRB_WITHOUT_FLOAT
   struct RClass *float_class;
+#endif
   struct RClass *fixnum_class;
   struct RClass *true_class;
   struct RClass *false_class;
@@ -252,9 +270,6 @@ typedef struct mrb_state {
 #endif
   mrb_int atexit_stack_len;
 } mrb_state;
-
-
-typedef mrb_value (*mrb_func_t)(mrb_state *mrb, mrb_value);
 
 /**
  * Defines a new class.
@@ -858,11 +873,14 @@ mrb_get_mid(mrb_state *mrb) /* get method symbol */
   return mrb->c->ci->mid;
 }
 
-static inline int
-mrb_get_argc(mrb_state *mrb) /* get argc */
-{
-  return mrb->c->ci->argc;
-}
+/**
+ * Retrieve number of arguments from mrb_state.
+ *
+ * Correctly handles *splat arguments.
+ */
+MRB_API mrb_int mrb_get_argc(mrb_state *mrb);
+
+MRB_API mrb_value* mrb_get_argv(mrb_state *mrb);
 
 /* `strlen` for character string literals (use with caution or `strlen` instead)
     Adjacent string literals are concatenated in C/C++ in translation phase 6.
@@ -981,8 +999,8 @@ char* mrb_locale_from_utf8(const char *p, int len);
 #define mrb_locale_free(p) free(p)
 #define mrb_utf8_free(p) free(p)
 #else
-#define mrb_utf8_from_locale(p, l) (p)
-#define mrb_locale_from_utf8(p, l) (p)
+#define mrb_utf8_from_locale(p, l) ((char*)p)
+#define mrb_locale_from_utf8(p, l) ((char*)p)
 #define mrb_locale_free(p)
 #define mrb_utf8_free(p)
 #endif
@@ -1054,9 +1072,11 @@ MRB_API mrb_sym mrb_obj_to_sym(mrb_state *mrb, mrb_value name);
 MRB_API mrb_bool mrb_obj_eq(mrb_state*, mrb_value, mrb_value);
 MRB_API mrb_bool mrb_obj_equal(mrb_state*, mrb_value, mrb_value);
 MRB_API mrb_bool mrb_equal(mrb_state *mrb, mrb_value obj1, mrb_value obj2);
-MRB_API mrb_value mrb_convert_to_integer(mrb_state *mrb, mrb_value val, int base);
+MRB_API mrb_value mrb_convert_to_integer(mrb_state *mrb, mrb_value val, mrb_int base);
 MRB_API mrb_value mrb_Integer(mrb_state *mrb, mrb_value val);
+#ifndef MRB_WITHOUT_FLOAT
 MRB_API mrb_value mrb_Float(mrb_state *mrb, mrb_value val);
+#endif
 MRB_API mrb_value mrb_inspect(mrb_state *mrb, mrb_value obj);
 MRB_API mrb_bool mrb_eql(mrb_state *mrb, mrb_value obj1, mrb_value obj2);
 
@@ -1144,9 +1164,12 @@ MRB_API void mrb_print_error(mrb_state *mrb);
 #define E_SYNTAX_ERROR              (mrb_exc_get(mrb, "SyntaxError"))
 #define E_LOCALJUMP_ERROR           (mrb_exc_get(mrb, "LocalJumpError"))
 #define E_REGEXP_ERROR              (mrb_exc_get(mrb, "RegexpError"))
+#define E_FROZEN_ERROR              (mrb_exc_get(mrb, "FrozenError"))
 
 #define E_NOTIMP_ERROR              (mrb_exc_get(mrb, "NotImplementedError"))
+#ifndef MRB_WITHOUT_FLOAT
 #define E_FLOATDOMAIN_ERROR         (mrb_exc_get(mrb, "FloatDomainError"))
+#endif
 
 #define E_KEY_ERROR                 (mrb_exc_get(mrb, "KeyError"))
 
@@ -1230,7 +1253,7 @@ MRB_API mrb_value mrb_format(mrb_state *mrb, const char *format, ...);
 /* use naive memcpy and memset instead */
 #undef memcpy
 #undef memset
-static inline void*
+static void*
 mrbmemcpy(void *dst, const void *src, size_t n)
 {
   char *d = (char*)dst;
@@ -1241,7 +1264,7 @@ mrbmemcpy(void *dst, const void *src, size_t n)
 }
 #define memcpy(a,b,c) mrbmemcpy(a,b,c)
 
-static inline void*
+static void*
 mrbmemset(void *s, int c, size_t n)
 {
   char *t = (char*)s;

@@ -55,4 +55,12 @@ MRuby::Toolchain.new(:gcc) do |conf, _params|
       @header_search_paths
     end
   end
+  
+  def conf.enable_sanitizer(*opts)
+    fail 'sanitizer already set' if @sanitizer_list
+
+    @sanitizer_list = opts
+    flg = "-fsanitize=#{opts.join ','}"
+    [self.cc, self.cxx, self.linker].each{|cmd| cmd.flags << flg }
+  end
 end

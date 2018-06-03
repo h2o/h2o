@@ -42,7 +42,7 @@ MRB_BEGIN_DECL
 /*
  * Minor release version number.
  */
-#define MRUBY_RELEASE_MINOR 3
+#define MRUBY_RELEASE_MINOR 4
 
 /*
  * Tiny release version number.
@@ -62,17 +62,17 @@ MRB_BEGIN_DECL
 /*
  * Release year.
  */
-#define MRUBY_RELEASE_YEAR 2017
+#define MRUBY_RELEASE_YEAR 2018
 
 /*
  * Release month.
  */
-#define MRUBY_RELEASE_MONTH 7
+#define MRUBY_RELEASE_MONTH 1
 
 /*
  * Release day.
  */
-#define MRUBY_RELEASE_DAY 4
+#define MRUBY_RELEASE_DAY 16
 
 /*
  * Release date as a string.

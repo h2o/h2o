@@ -15,7 +15,7 @@ end
 
 assert('Float#div') do
   assert_float 52, 365.2425.div(7)
-end
+end if class_defined?("Float")
 
 assert('Integer#zero?') do
   assert_equal true, 0.zero?

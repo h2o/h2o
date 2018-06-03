@@ -10,7 +10,7 @@
 #include <mruby/class.h>
 #include <mruby/data.h>
 
-#ifndef DISABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 #include <stdio.h>
 #else
 #include <string.h>
@@ -173,7 +173,7 @@ static const mrb_timezone_name timezone_names[] = {
   { "LOCAL", sizeof("LOCAL") - 1 },
 };
 
-#ifndef DISABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 static const char mon_names[12][4] = {
   "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 };
@@ -369,7 +369,7 @@ time_mktime(mrb_state *mrb, mrb_int ayear, mrb_int amonth, mrb_int aday,
     mrb_raise(mrb, E_ARGUMENT_ERROR, "Not a valid time.");
   }
 
-  return time_alloc(mrb, (double)nowsecs, ausec, timezone);
+  return time_alloc(mrb, (double)nowsecs, (double)ausec, timezone);
 }
 
 /* 15.2.19.6.2 */
@@ -541,7 +541,7 @@ mrb_time_asctime(mrb_state *mrb, mrb_value self)
   struct tm *d = &tm->datetime;
   int len;
 
-#if defined(DISABLE_STDIO)
+#if defined(MRB_DISABLE_STDIO)
   char *s;
 # ifdef NO_ASCTIME_R
   s = asctime(d);
@@ -634,7 +634,7 @@ mrb_time_initialize(mrb_state *mrb, mrb_value self)
 {
   mrb_int ayear = 0, amonth = 1, aday = 1, ahour = 0,
   amin = 0, asec = 0, ausec = 0;
-  int n;
+  mrb_int n;
   struct mrb_time *tm;
 
   n = mrb_get_args(mrb, "|iiiiiii",
