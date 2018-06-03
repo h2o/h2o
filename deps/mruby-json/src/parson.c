@@ -42,8 +42,8 @@
 #define STARTING_CAPACITY 16
 #define MAX_NESTING       2048
 #define FLOAT_FORMAT      "%1.17g"
-#ifdef PRId64
-#define FIXED_FORMAT      "%"PRId64
+#ifdef PRIdMAX
+#define FIXED_FORMAT      "%" PRIdMAX
 #else
 #define FIXED_FORMAT      "%jd"
 #endif

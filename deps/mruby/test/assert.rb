@@ -20,7 +20,8 @@ end
 def assertion_string(err, str, iso=nil, e=nil, bt=nil)
   msg = "#{err}#{str}"
   msg += " [#{iso}]" if iso && iso != ''
-  msg += " => #{e.message}" if e
+  msg += " => #{e.cause}" if e && e.respond_to?(:cause)
+  msg += " => #{e.message}" if e && !e.respond_to?(:cause)
   msg += " (mrbgems: #{GEMNAME})" if Object.const_defined?(:GEMNAME)
   if $mrbtest_assert && $mrbtest_assert.size > 0
     $mrbtest_assert.each do |idx, assert_msg, diff|
@@ -56,7 +57,7 @@ def assert(str = 'Assertion failed', iso = '')
   rescue Exception => e
     bt = e.backtrace if $mrbtest_verbose
     if e.class.to_s == 'MRubyTestSkip'
-      $asserts.push "Skip: #{str} #{iso} #{e.cause}"
+      $asserts.push(assertion_string('Skip: ', str, iso, e, nil))
       t_print('?')
     else
       $asserts.push(assertion_string("#{e.class}: ", str, iso, e, bt))

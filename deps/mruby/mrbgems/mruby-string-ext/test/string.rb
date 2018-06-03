@@ -1,3 +1,4 @@
+# coding: utf-8
 ##
 # String(Ext) Test
 
@@ -665,3 +666,17 @@ assert('String#each_codepoint(UTF-8)') do
   end
   assert_equal expect, cp
 end if UTF8STRING
+
+assert('String#delete_prefix') do
+  assert_equal "llo", "hello".delete_prefix("he")
+  assert_equal "hello", "hello".delete_prefix("llo")
+  assert_equal "llo", "hello".delete_prefix!("he")
+  assert_nil "hello".delete_prefix!("llo")
+end
+
+assert('String#delete_suffix') do
+  assert_equal "he", "hello".delete_suffix("llo")
+  assert_equal "hello", "hello".delete_suffix("he")
+  assert_equal "he", "hello".delete_suffix!("llo")
+  assert_nil "hello".delete_suffix!("he")
+end

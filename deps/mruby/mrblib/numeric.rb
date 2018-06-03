@@ -104,7 +104,7 @@ module Integral
     raise ArgumentError, "step can't be 0" if step == 0
     return to_enum(:step, num, step) unless block
 
-    i = if num.kind_of? Float then self.to_f else self end
+    i = if class_defined?("Float") && num.kind_of?(Float) then self.to_f else self end
     if num == nil
       while true
         block.call(i)
@@ -160,14 +160,4 @@ class Integer
   #
   # ISO 15.2.8.3.26
   alias truncate floor
-end
-
-##
-# Float
-#
-# ISO 15.2.9
-class Float
-  # mruby special - since mruby integers may be upgraded to floats,
-  # floats should be compatible to integers.
-  include Integral
 end

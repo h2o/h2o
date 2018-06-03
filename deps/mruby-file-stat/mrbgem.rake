@@ -23,7 +23,7 @@ MRuby::Gem::Specification.new('mruby-file-stat') do |spec|
       end
     end
   end
-  file "#{dir}/src/file-stat.c" => config
+  file "#{build_dir}/src/file-stat.o" => [ "#{dir}/src/file-stat.c", config ]
   task :clean do
     FileUtils.rm_f config, :verbose => true
   end

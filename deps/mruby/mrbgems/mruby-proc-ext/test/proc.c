@@ -13,10 +13,13 @@ proc_new_cfunc_with_env(mrb_state *mrb, mrb_value self)
 {
   mrb_sym n;
   mrb_value n_val;
+  mrb_method_t m;
+  struct RProc *p;
   mrb_get_args(mrb, "n", &n);
   n_val = mrb_symbol_value(n);
-  mrb_define_method_raw(mrb, mrb_class_ptr(self), n,
-                        mrb_proc_new_cfunc_with_env(mrb, return_func_name, 1, &n_val));
+  p = mrb_proc_new_cfunc_with_env(mrb, return_func_name, 1, &n_val);
+  MRB_METHOD_FROM_PROC(m, p);
+  mrb_define_method_raw(mrb, mrb_class_ptr(self), n, m);
   return self;
 }
 
@@ -33,9 +36,12 @@ cfunc_env_get(mrb_state *mrb, mrb_value self)
 {
   mrb_sym n;
   mrb_value *argv; mrb_int argc;
+  mrb_method_t m;
+  struct RProc *p;
   mrb_get_args(mrb, "na", &n, &argv, &argc);
-  mrb_define_method_raw(mrb, mrb_class_ptr(self), n,
-                        mrb_proc_new_cfunc_with_env(mrb, return_env, argc, argv));
+  p = mrb_proc_new_cfunc_with_env(mrb, return_env, argc, argv);
+  MRB_METHOD_FROM_PROC(m, p);
+  mrb_define_method_raw(mrb, mrb_class_ptr(self), n, m);
   return self;
 }
 
