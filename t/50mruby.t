@@ -78,6 +78,8 @@ EOT
         ($headers, $body) = $fetch->("/fallthru/");
         like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
         is md5_hex($body), md5_file("t/50mruby/index.html");
+        my @dates = $headers =~ /^date: .+?\r$/img;
+        is scalar(@dates), 1, 'duplicate date header';
     };
     subtest "echo" => sub {
         ($headers, $body) = $fetch->("/echo/abc?def");
