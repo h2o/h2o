@@ -152,3 +152,6 @@ packtest   [1, 2], "\x01\x02", "CyC"
 
 packtest   [65], "A", 'U'
 packtest   [59411], "\xEE\xA0\x93", 'U'
+
+pptest     [1], "\x00\x01", "xC"
+unpacktest [2], "\xcc\x02", "xC"
