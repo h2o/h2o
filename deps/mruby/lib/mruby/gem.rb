@@ -176,6 +176,7 @@ module MRuby
             f.puts %Q[  mrb_load_irep(mrb, gem_mrblib_irep_#{funcname});]
             f.puts %Q[  if (mrb->exc) {]
             f.puts %Q[    mrb_print_error(mrb);]
+            f.puts %Q[    mrb_close(mrb);]
             f.puts %Q[    exit(EXIT_FAILURE);]
             f.puts %Q[  }]
           end
@@ -323,20 +324,22 @@ module MRuby
         @ary.empty?
       end
 
+      def default_gem_params dep
+        if dep[:default]; dep
+        elsif File.exist? "#{MRUBY_ROOT}/mrbgems/#{dep[:gem]}" # check core
+          { :gem => dep[:gem], :default => { :core => dep[:gem] } }
+        else # fallback to mgem-list
+          { :gem => dep[:gem], :default => { :mgem => dep[:gem] } }
+        end
+      end
+
       def generate_gem_table build
         gem_table = @ary.reduce({}) { |res,v| res[v.name] = v; res }
 
         default_gems = []
         each do |g|
           g.dependencies.each do |dep|
-            unless gem_table.key? dep[:gem]
-              if dep[:default]; default_gems << dep
-              elsif File.exist? "#{MRUBY_ROOT}/mrbgems/#{dep[:gem]}" # check core
-                default_gems << { :gem => dep[:gem], :default => { :core => dep[:gem] } }
-              else # fallback to mgem-list
-                default_gems << { :gem => dep[:gem], :default => { :mgem => dep[:gem] } }
-              end
-            end
+            default_gems << default_gem_params(dep) unless gem_table.key? dep[:gem]
           end
         end
 
@@ -348,11 +351,7 @@ module MRuby
           spec.setup
 
           spec.dependencies.each do |dep|
-            unless gem_table.key? dep[:gem]
-              if dep[:default]; default_gems << dep
-              else default_gems << { :gem => dep[:gem], :default => { :mgem => dep[:gem] } }
-              end
-            end
+            default_gems << default_gem_params(dep) unless gem_table.key? dep[:gem]
           end
           gem_table[spec.name] = spec
         end

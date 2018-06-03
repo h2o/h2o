@@ -20,6 +20,7 @@ assert('String#<=>', '15.2.10.5.1') do
   assert_equal  1, c
   assert_equal(-1, d)
   assert_equal  1, e
+  assert_nil 'a' <=> 1024
 end
 
 assert('String#==', '15.2.10.5.2') do
@@ -154,10 +155,11 @@ assert('String#[]=') do
     d[-10] = 'X'
   end
 
-  e = 'abc'
-  e[1.1] = 'X'
-  assert_equal 'aXc', e
-
+  if class_defined?("Float")
+   e = 'abc'
+   e[1.1] = 'X'
+   assert_equal 'aXc', e
+  end
 
   # length of args is 2
   a1 = 'abc'
@@ -366,9 +368,9 @@ assert('String#gsub', '15.2.10.5.18') do
   assert_equal('aBcaBc', 'abcabc'.gsub('b', 'B'), 'gsub without block')
   assert_equal('aBcaBc', 'abcabc'.gsub('b'){|w| w.capitalize }, 'gsub with block')
   assert_equal('$a$a$',  '#a#a#'.gsub('#', '$'), 'mruby/mruby#847')
-  assert_equal('$a$a$',  '#a#a#'.gsub('#'){|w| '$' }, 'mruby/mruby#847 with block')
+  assert_equal('$a$a$',  '#a#a#'.gsub('#'){|_w| '$' }, 'mruby/mruby#847 with block')
   assert_equal('$$a$$',  '##a##'.gsub('##', '$$'), 'mruby/mruby#847 another case')
-  assert_equal('$$a$$',  '##a##'.gsub('##'){|w| '$$' }, 'mruby/mruby#847 another case with block')
+  assert_equal('$$a$$',  '##a##'.gsub('##'){|_w| '$$' }, 'mruby/mruby#847 another case with block')
   assert_equal('A',      'a'.gsub('a', 'A'))
   assert_equal('A',      'a'.gsub('a'){|w| w.capitalize })
   assert_equal("<a><><>", 'a'.gsub('a', '<\0><\1><\2>'))
@@ -629,7 +631,7 @@ assert('String#to_f', '15.2.10.5.38') do
   assert_float(12345.6789, c)
   assert_float(0, d)
   assert_float(Float::INFINITY, e)
-end
+end if class_defined?("Float")
 
 assert('String#to_i', '15.2.10.5.39') do
   a = ''.to_i
@@ -684,7 +686,7 @@ assert('String#inspect', '15.2.10.5.46') do
   ("\1" * 100).inspect
   end
 
-  assert_equal "\"\\000\"", "\0".inspect
+  assert_equal "\"\\x00\"", "\0".inspect
 end
 
 # Not ISO specified

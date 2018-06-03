@@ -38,7 +38,7 @@ puts [1,2,3]
 3
 ```
 
-#### mruby [1.3.0 (2017-7-4)]
+#### mruby [1.4.1 (2018-4-27)]
 
 ```
 [1, 2, 3]
@@ -61,25 +61,9 @@ end
 
 ```ZeroDivisionError``` is raised.
 
-#### mruby [1.3.0 (2017-7-4)]
+#### mruby [1.4.1 (2018-4-27)]
 
 No exception is raised.
-
-## Check of infinite recursion
-
-mruby does not check infinite recursion across C extensions.
-
-```ruby
-def test; eval 'test'; end; test
-```
-
-#### Ruby [ruby 2.0.0p645 (2015-04-13 revision 50299)]
-
-```SystemStackError``` is raised.
-
-#### mruby [1.3.0 (2017-7-4)]
-
-Segmentation fault.
 
 ## Fiber execution can't cross C function boundary
 
@@ -105,7 +89,7 @@ p Liste.new "foobar"
 
 ``` [] ```
 
-#### mruby [1.3.0 (2017-7-4)]
+#### mruby [1.4.1 (2018-4-27)]
 
 ```ArgumentError``` is raised.
 
@@ -135,7 +119,7 @@ false
 true
 ```
 
-#### mruby [1.3.0 (2017-7-4)]
+#### mruby [1.4.1 (2018-4-27)]
 
 ```
 true
@@ -158,7 +142,7 @@ defined?(Foo)
 nil
 ```
 
-#### mruby [1.3.0 (2017-7-4)]
+#### mruby [1.4.1 (2018-4-27)]
 
 ```NameError``` is raised.
 
@@ -175,7 +159,7 @@ alias $a $__a__
 
 ``` nil ```
 
-#### mruby [1.3.0 (2017-7-4)]
+#### mruby [1.4.1 (2018-4-27)]
 
 Syntax error
 
@@ -197,12 +181,7 @@ end
 ```ArgumentError``` is raised.
 The re-defined ```+``` operator does not accept any arguments.
 
-#### mruby [1.3.0 (2017-7-4)]
+#### mruby [1.4.1 (2018-4-27)]
 
 ``` 'ab' ```
 Behavior of the operator wasn't changed.
-
-## ```Kernel.binding``` missing
-
-```Kernel.binding``` is not implemented as it is not in the
-ISO standard.

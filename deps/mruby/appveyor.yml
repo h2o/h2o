@@ -5,6 +5,10 @@ os: Visual Studio 2015
 clone_depth: 50
 
 
+cache:
+  - win_flex_bison-2.5.10.zip
+
+
 environment:
   matrix:
     # Visual Studio 2015 64bit
@@ -18,10 +22,17 @@ environment:
 
 init:
   - call "%visualcpp%" %machine%
-  # For using bison.exe
-  - set PATH=%PATH%;C:\cygwin\bin;
+  # For using Rubyinstaller's Ruby 2.4 64bit
+  - set PATH=C:\Ruby24-x64\bin;%PATH%
+  - ruby --version
+
+
+install:
+  - if not exist win_flex_bison-2.5.10.zip appveyor DownloadFile "https://github.com/lexxmark/winflexbison/releases/download/v.2.5.10/win_flex_bison-2.5.10.zip"
+  - 7z x -y -owin_flex_bison win_flex_bison-2.5.10.zip > nul
 
 
 build_script:
+  - set YACC=.\win_flex_bison\win_bison.exe
   - set MRUBY_CONFIG=appveyor_config.rb
-  - ruby .\minirake test
+  - ruby .\minirake test all
