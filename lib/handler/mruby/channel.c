@@ -68,7 +68,7 @@ static mrb_value channel_notify_method(mrb_state *mrb, mrb_value self)
 {
     struct st_h2o_mruby_channel_context_t *ctx;
 
-    if ((ctx = mrb_data_check_get_ptr(mrb_data_check_get_ptr(mrb, self, &channel_type)) == NULL)
+    if ((ctx = mrb_data_check_get_ptr(mrb, self, &channel_type)) == NULL)
         return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Channel#_notify wrong self");
 
     if (RARRAY_LEN(ctx->receivers) != 0) {
