@@ -814,8 +814,10 @@ static void on_send_informational(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
     struct st_h2o_http1_finalostream_t *self = (struct st_h2o_http1_finalostream_t *)conn->req._ostr_top;
-    if (err != NULL)
+    if (err != NULL) {
         close_connection(conn, 1);
+        return;
+    }
 
     self->informational.sending = 0;
 
