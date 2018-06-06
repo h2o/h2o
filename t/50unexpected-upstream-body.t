@@ -130,29 +130,7 @@ EOT
     doit($spawner, 0);
 };
 
-subtest 'mruby-shortcut' => sub {
-    plan skip_all => 'mruby support is off'
-        unless server_features()->{mruby};
-
-    my $spawner = sub {
-        my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
-        my $server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      /:
-        - mruby.handler: |
-            proc {|env|
-              path = "#{env['PATH_INFO']}?#{env['QUERY_STRING']}"
-              http_request("http://127.0.0.1:$upstream->{port}#{path}").join
-            }
-EOT
-        ($server, $upstream);
-    };
-    doit($spawner, 1);
-};
-
-subtest 'mruby-no-shortcut' => sub {
+subtest 'mruby-callback-chunked' => sub {
     plan skip_all => 'mruby support is off'
         unless server_features()->{mruby};
 
@@ -176,6 +154,50 @@ hosts:
                 end
               end.new(body)]
             }
+EOT
+        ($server, $upstream);
+    };
+    doit($spawner, 1);
+};
+
+subtest 'mruby-http-chunked' => sub {
+    plan skip_all => 'mruby support is off'
+        unless server_features()->{mruby};
+
+    my $spawner = sub {
+        my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
+        my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        - mruby.handler: |
+            proc {|env|
+              path = "#{env['PATH_INFO']}?#{env['QUERY_STRING']}"
+              http_request("http://127.0.0.1:$upstream->{port}#{path}").join
+            }
+EOT
+        ($server, $upstream);
+    };
+    doit($spawner, 1);
+};
+
+subtest 'mruby-middleware-chunked' => sub {
+    plan skip_all => 'mruby support is off'
+        unless server_features()->{mruby};
+
+    my $spawner = sub {
+        my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
+        my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        - mruby.handler: |
+            proc {|env|
+              H2O.next.call(env)
+            }
+        - proxy.reverse.url: http://127.0.0.1:$upstream->{port}
 EOT
         ($server, $upstream);
     };

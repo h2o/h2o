@@ -26,6 +26,7 @@ struct RString {
       union {
         mrb_int capa;
         struct mrb_shared_string *shared;
+        struct RString *fshared;
       } aux;
       char *ptr;
     } heap;
@@ -59,9 +60,16 @@ struct RString {
 #define RSTR_SET_SHARED_FLAG(s) ((s)->flags |= MRB_STR_SHARED)
 #define RSTR_UNSET_SHARED_FLAG(s) ((s)->flags &= ~MRB_STR_SHARED)
 
+#define RSTR_FSHARED_P(s) ((s)->flags & MRB_STR_FSHARED)
+#define RSTR_SET_FSHARED_FLAG(s) ((s)->flags |= MRB_STR_FSHARED)
+#define RSTR_UNSET_FSHARED_FLAG(s) ((s)->flags &= ~MRB_STR_FSHARED)
+
 #define RSTR_NOFREE_P(s) ((s)->flags & MRB_STR_NOFREE)
 #define RSTR_SET_NOFREE_FLAG(s) ((s)->flags |= MRB_STR_NOFREE)
 #define RSTR_UNSET_NOFREE_FLAG(s) ((s)->flags &= ~MRB_STR_NOFREE)
+
+#define RSTR_POOL_P(s) ((s)->flags & MRB_STR_POOL)
+#define RSTR_SET_POOL_FLAG(s) ((s)->flags |= MRB_STR_POOL)
 
 /*
  * Returns a pointer from a Ruby string
@@ -76,11 +84,13 @@ struct RString {
 MRB_API mrb_int mrb_str_strlen(mrb_state*, struct RString*);
 
 #define MRB_STR_SHARED    1
-#define MRB_STR_NOFREE    2
-#define MRB_STR_NO_UTF    8
-#define MRB_STR_EMBED    16
-#define MRB_STR_EMBED_LEN_MASK 0x3e0
-#define MRB_STR_EMBED_LEN_SHIFT 5
+#define MRB_STR_FSHARED   2
+#define MRB_STR_NOFREE    4
+#define MRB_STR_POOL      8
+#define MRB_STR_NO_UTF   16
+#define MRB_STR_EMBED    32
+#define MRB_STR_EMBED_LEN_MASK 0x7c0
+#define MRB_STR_EMBED_LEN_SHIFT 6
 
 void mrb_gc_free_str(mrb_state*, struct RString*);
 MRB_API void mrb_str_modify(mrb_state*, struct RString*);
@@ -409,7 +419,7 @@ MRB_API int mrb_str_cmp(mrb_state *mrb, mrb_value str1, mrb_value str2);
 MRB_API char *mrb_str_to_cstr(mrb_state *mrb, mrb_value str);
 
 mrb_value mrb_str_pool(mrb_state *mrb, mrb_value str);
-mrb_int mrb_str_hash(mrb_state *mrb, mrb_value str);
+uint32_t mrb_str_hash(mrb_state *mrb, mrb_value str);
 mrb_value mrb_str_dump(mrb_state *mrb, mrb_value str);
 
 /*

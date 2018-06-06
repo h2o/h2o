@@ -102,6 +102,7 @@ typedef struct st_h2o_req_t h2o_req_t;
 typedef struct st_h2o_ostream_t h2o_ostream_t;
 typedef struct st_h2o_configurator_command_t h2o_configurator_command_t;
 typedef struct st_h2o_configurator_t h2o_configurator_t;
+typedef struct st_h2o_pathconf_t h2o_pathconf_t;
 typedef struct st_h2o_hostconf_t h2o_hostconf_t;
 typedef struct st_h2o_globalconf_t h2o_globalconf_t;
 typedef struct st_h2o_mimemap_t h2o_mimemap_t;
@@ -214,7 +215,7 @@ typedef struct st_h2o_envconf_t {
     h2o_iovec_vector_t sets;
 } h2o_envconf_t;
 
-typedef struct st_h2o_pathconf_t {
+struct st_h2o_pathconf_t {
     /**
      * globalconf to which the pathconf belongs
      */
@@ -252,7 +253,7 @@ typedef struct st_h2o_pathconf_t {
          */
         unsigned emit_request_errors : 1;
     } error_log;
-} h2o_pathconf_t;
+};
 
 struct st_h2o_hostconf_t {
     /**
@@ -950,14 +951,6 @@ typedef struct st_h2o_filereq_t {
     h2o_iovec_t local_path;
 } h2o_filereq_t;
 
-/**
- * error message associated to a request
- */
-typedef struct st_h2o_req_error_log_t {
-    const char *module;
-    h2o_iovec_t msg;
-} h2o_req_error_log_t;
-
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 
@@ -1074,6 +1067,7 @@ struct st_h2o_req_t {
         struct timeval request_body_begin_at;
         struct timeval response_start_at;
         struct timeval response_end_at;
+        h2o_http1client_timings_t proxy;
     } timestamps;
     /**
      * the response
@@ -1084,13 +1078,13 @@ struct st_h2o_req_t {
      */
     size_t bytes_sent;
     /**
-     * counts the number of times the request has been reprocessed (excluding delegation)
+     * the number of times the request can be reprocessed (excluding delegation)
      */
-    unsigned num_reprocessed;
+    unsigned remaining_reprocesses;
     /**
-     * counts the number of times the request has been delegated
+     * the number of times the request can be delegated
      */
-    unsigned num_delegated;
+    unsigned remaining_delegations;
 
     /**
      * environment variables
@@ -1098,9 +1092,18 @@ struct st_h2o_req_t {
     h2o_iovec_vector_t env;
 
     /**
-     * error logs
+     * error log for the request (`h2o_req_log_error` must be used for error logging)
      */
-    H2O_VECTOR(h2o_req_error_log_t) error_logs;
+    h2o_buffer_t *error_logs;
+
+    /**
+     * error log redirection called by `h2o_req_log_error`. By default, the error is appended to `error_logs`. The callback is
+     * replaced by mruby middleware to send the error log to the rack handler.
+     */
+    struct {
+        void (*cb)(void *data, h2o_iovec_t prefix, h2o_iovec_t msg);
+        void *data;
+    } error_log_delegate;
 
     /* flags */
 
@@ -1126,6 +1129,10 @@ struct st_h2o_req_t {
      * whether if the response should include server-timing
      */
     unsigned char send_server_timing : 1;
+    /**
+     * whether the request is a subrequest
+     */
+    unsigned char is_subrequest : 1;
 
     /**
      * Whether the producer of the response has explicitely disabled or
@@ -1434,6 +1441,7 @@ void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *
  * called by the connection layer to request additional data to the generator
  */
 static void h2o_proceed_response(h2o_req_t *req);
+void h2o_proceed_response_deferred(h2o_req_t *req);
 /**
  * if NULL, supplements h2o_req_t::mime_attr
  */
@@ -1641,6 +1649,7 @@ void h2o_send_informational(h2o_req_t *req);
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
+void h2o_write_error_log(h2o_iovec_t prefix, h2o_iovec_t msg);
 
 /* log */
 
@@ -2287,6 +2296,13 @@ COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->pr
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
 COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
 COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+
+COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->timestamps.proxy.start_at);
+COMPUTE_DURATION(proxy_connect_time, &req->timestamps.proxy.start_at, &req->timestamps.proxy.request_begin_at);
+COMPUTE_DURATION(proxy_request_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.request_end_at);
+COMPUTE_DURATION(proxy_process_time, &req->timestamps.proxy.request_end_at, &req->timestamps.proxy.response_start_at);
+COMPUTE_DURATION(proxy_response_time, &req->timestamps.proxy.response_start_at, &req->timestamps.proxy.response_end_at);
+COMPUTE_DURATION(proxy_total_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.response_end_at);
 
 #undef COMPUTE_DURATION
 

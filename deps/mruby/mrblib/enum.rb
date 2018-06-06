@@ -325,7 +325,7 @@ module Enumerable
   #
   # ISO 15.3.2.2.19
   def sort(&block)
-    self.map{|*val| val.__svalue}.sort
+    self.map{|*val| val.__svalue}.sort(&block)
   end
 
   ##

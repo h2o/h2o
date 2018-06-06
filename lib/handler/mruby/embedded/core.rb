@@ -116,3 +116,20 @@ module Kernel
   end
 
 end
+
+module H2O
+
+  class ErrorStream
+
+    def puts(*msgs)
+      msgs.each {|msg| write msg }
+      nil
+    end
+
+    def flush
+      self
+    end
+
+  end
+
+end

@@ -358,7 +358,7 @@ assert('singleton tests') do
         7
       end
     end
-  end
+  end if class_defined?("Float")
 end
 
 assert('clone Class') do

@@ -64,5 +64,6 @@ h2o_filecache_ref_t *h2o_filecache_open_file(h2o_filecache_t *cache, const char 
 void h2o_filecache_close_file(h2o_filecache_ref_t *ref);
 struct tm *h2o_filecache_get_last_modified(h2o_filecache_ref_t *ref, char *outbuf);
 size_t h2o_filecache_get_etag(h2o_filecache_ref_t *ref, char *outbuf);
+int h2o_filecache_compare_etag_strong(const char *tag1, size_t tag1_len, const char *tag2, size_t tag2_len);
 
 #endif

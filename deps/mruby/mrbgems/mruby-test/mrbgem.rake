@@ -7,6 +7,10 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
   spec.add_dependency('mruby-compiler', :core => 'mruby-compiler')
 
   spec.test_rbfiles = Dir.glob("#{MRUBY_ROOT}/test/t/*.rb")
+  if build.cc.defines.flatten.include?("MRB_WITHOUT_FLOAT")
+    spec.test_rbfiles.delete("#{MRUBY_ROOT}/test/t/float.rb")
+  end
+
 
   clib = "#{build_dir}/mrbtest.c"
   mlib = clib.ext(exts.object)
@@ -97,6 +101,7 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
             end
             f.puts %Q[  if (mrb2->exc) {]
             f.puts %Q[    mrb_print_error(mrb2);]
+            f.puts %Q[    mrb_close(mrb2);]
             f.puts %Q[    exit(EXIT_FAILURE);]
             f.puts %Q[  }]
             f.puts %Q[  mrb_const_set(mrb2, mrb_obj_value(mrb2->object_class), mrb_intern_lit(mrb2, "GEMNAME"), mrb_str_new(mrb2, "#{g.name}", #{g.name.length}));]

@@ -57,6 +57,14 @@ typedef struct st_h2o_http1client_ctx_t {
     h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
 } h2o_http1client_ctx_t;
 
+typedef struct st_h2o_http1client_timings_t {
+    struct timeval start_at;
+    struct timeval request_begin_at;
+    struct timeval request_end_at;
+    struct timeval response_start_at;
+    struct timeval response_end_at;
+} h2o_http1client_timings_t;
+
 struct st_h2o_http1client_t {
     h2o_http1client_ctx_t *ctx;
     struct {
@@ -66,6 +74,7 @@ struct st_h2o_http1client_t {
     h2o_socket_t *sock;
     void *data;
     h2o_http1client_informational_cb informational_cb;
+    h2o_http1client_timings_t timings;
 };
 
 extern const char *const h2o_http1client_error_is_eos;

@@ -509,6 +509,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     h2o_req_overrides_t *overrides = self->src_req->overrides;
 
     if (errstr != NULL) {
+        self->src_req->timestamps.proxy = self->client->timings;
+
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
@@ -548,6 +550,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     size_t i;
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int seen_date_header = 0;
+
+    self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -697,6 +701,8 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
     h2o_req_t *req = self->src_req;
     int use_proxy_protocol = 0, reprocess_if_too_early = 0;
 
+    self->src_req->timestamps.proxy = self->client->timings;
+
     if (errstr != NULL) {
         self->client = NULL;
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
@@ -779,6 +785,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
     self->websocket_key = NULL;
+    req->timestamps.proxy = (h2o_http1client_timings_t){{0}};
 
     return self;
 }

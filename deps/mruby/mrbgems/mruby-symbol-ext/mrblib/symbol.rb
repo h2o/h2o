@@ -48,8 +48,21 @@ class Symbol
   def casecmp(other)
     return nil unless other.kind_of?(Symbol)
     lhs =  self.to_s; lhs.upcase!
-    rhs = other.to_s; rhs.upcase!
+    rhs = other.to_s.upcase
     lhs <=> rhs
+  end
+
+  ##
+  # call-seq:
+  #   sym.casecmp?(other)  -> true, false, or nil
+  #
+  # Returns true if sym and other_sym are equal after case folding,
+  # false if they are not equal, and nil if other_sym is not a string.
+
+  def casecmp?(sym)
+    c = self.casecmp(sym)
+    return nil if c.nil?
+    return c == 0
   end
 
   #

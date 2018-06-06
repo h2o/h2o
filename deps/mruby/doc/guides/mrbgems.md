@@ -26,6 +26,11 @@ conf.gem :github => 'masuidrive/mrbgems-example', :branch => 'master'
 conf.gem :bitbucket => 'mruby/mrbgems-example', :branch => 'master'
 ```
 
+You can specify the sub directory of the repository with `:path` option:
+```ruby
+conf.gem github: 'mruby/mruby', path: 'mrbgems/mruby-socket'
+```
+
 To use mrbgem from [mgem-list](https://github.com/mruby/mgem-list) use `:mgem` option:
 ```ruby
 conf.gem :mgem => 'mruby-yaml'

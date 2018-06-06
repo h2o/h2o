@@ -17,7 +17,7 @@ of the Ministry of Economy, Trade and Industry of Japan.
 
 ## How to get mruby
 
-The stable version 1.3.0 of mruby can be downloaded via the following URL: [https://github.com/mruby/mruby/archive/1.3.0.zip](https://github.com/mruby/mruby/archive/1.3.0.zip)
+The stable version 1.4.1 of mruby can be downloaded via the following URL: [https://github.com/mruby/mruby/archive/1.4.1.zip](https://github.com/mruby/mruby/archive/1.4.1.zip)
 
 The latest development version of mruby can be downloaded via the following URL: [https://github.com/mruby/mruby/zipball/master](https://github.com/mruby/mruby/zipball/master)
 

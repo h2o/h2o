@@ -22,19 +22,20 @@ struct tmpl {
 };
 
 enum {
-  PACK_DIR_CHAR,	/* C */
-  PACK_DIR_SHORT,	/* S */
-  PACK_DIR_LONG,	/* L */
-  PACK_DIR_QUAD,	/* Q */
-  //PACK_DIR_INT,	/* i */
+  PACK_DIR_CHAR,      /* C */
+  PACK_DIR_SHORT,     /* S */
+  PACK_DIR_LONG,      /* L */
+  PACK_DIR_QUAD,      /* Q */
+  //PACK_DIR_INT,     /* i */
   //PACK_DIR_VAX,
-  PACK_DIR_UTF8,  /* U */
+  PACK_DIR_UTF8,      /* U */
   //PACK_DIR_BER,
-  PACK_DIR_DOUBLE,	/* E */
-  PACK_DIR_FLOAT,	/* f */
-  PACK_DIR_STR,		/* A */
-  PACK_DIR_HEX,		/* h */
-  PACK_DIR_BASE64,	/* m */
+  PACK_DIR_DOUBLE,    /* E */
+  PACK_DIR_FLOAT,     /* f */
+  PACK_DIR_STR,       /* A */
+  PACK_DIR_HEX,       /* h */
+  PACK_DIR_BASE64,    /* m */
+  PACK_DIR_NUL,       /* x */
   PACK_DIR_INVALID
 };
 
@@ -76,7 +77,7 @@ check_little_endian(void)
 static unsigned int
 hex2int(unsigned char ch)
 {
-  if (ch >= '0' && ch <= '9') 
+  if (ch >= '0' && ch <= '9')
     return ch - '0';
   else if (ch >= 'A' && ch <= 'F')
     return 10 + (ch - 'A');
@@ -413,8 +414,12 @@ pack_utf8(mrb_state *mrb, mrb_value o, mrb_value str, mrb_int sidx, long count, 
 {
   char utf8[4];
   int len;
-  
-  unsigned long c = mrb_fixnum(o);
+  unsigned long c = 0;
+
+  if (mrb_float_p(o)) {
+    goto range_error;
+  }
+  c = mrb_fixnum(o);
 
   /* Unicode character */
   /* from mruby-compiler gem */
@@ -433,18 +438,96 @@ pack_utf8(mrb_state *mrb, mrb_value o, mrb_value str, mrb_int sidx, long count, 
     utf8[2] = (char)(0x80 | ( c        & 0x3F));
     len = 3;
   }
-  else {
+  else if (c < 0x200000) {
     utf8[0] = (char)(0xF0 |  (c >> 18)        );
     utf8[1] = (char)(0x80 | ((c >> 12) & 0x3F));
     utf8[2] = (char)(0x80 | ((c >>  6) & 0x3F));
     utf8[3] = (char)(0x80 | ( c        & 0x3F));
     len = 4;
   }
-  
+  else {
+range_error:
+    mrb_raise(mrb, E_RANGE_ERROR, "pack(U): value out of range");
+  }
+
   str = str_len_ensure(mrb, str, sidx + len);
   memcpy(RSTRING_PTR(str) + sidx, utf8, len);
-  
+
   return len;
+}
+
+static const unsigned long utf8_limits[] = {
+  0x0,        /* 1 */
+  0x80,       /* 2 */
+  0x800,      /* 3 */
+  0x10000,    /* 4 */
+  0x200000,   /* 5 */
+  0x4000000,  /* 6 */
+  0x80000000, /* 7 */
+};
+
+static unsigned long
+utf8_to_uv(mrb_state *mrb, const char *p, long *lenp)
+{
+  int c = *p++ & 0xff;
+  unsigned long uv = c;
+  long n;
+
+  if (!(uv & 0x80)) {
+    *lenp = 1;
+    return uv;
+  }
+  if (!(uv & 0x40)) {
+    *lenp = 1;
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character");
+  }
+
+  if      (!(uv & 0x20)) { n = 2; uv &= 0x1f; }
+  else if (!(uv & 0x10)) { n = 3; uv &= 0x0f; }
+  else if (!(uv & 0x08)) { n = 4; uv &= 0x07; }
+  else if (!(uv & 0x04)) { n = 5; uv &= 0x03; }
+  else if (!(uv & 0x02)) { n = 6; uv &= 0x01; }
+  else {
+    *lenp = 1;
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character");
+  }
+  if (n > *lenp) {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character (expected %S bytes, given %S bytes)",
+    mrb_fixnum_value(n), mrb_fixnum_value(*lenp));
+  }
+  *lenp = n--;
+  if (n != 0) {
+    while (n--) {
+      c = *p++ & 0xff;
+      if ((c & 0xc0) != 0x80) {
+        *lenp -= n + 1;
+        mrb_raisef(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character");
+      }
+      else {
+        c &= 0x3f;
+        uv = uv << 6 | c;
+      }
+    }
+  }
+  n = *lenp - 1;
+  if (uv < utf8_limits[n]) {
+    mrb_raisef(mrb, E_ARGUMENT_ERROR, "redundant UTF-8 sequence");
+  }
+  return uv;
+}
+
+static int
+unpack_utf8(mrb_state *mrb, const unsigned char * src, int srclen, mrb_value ary, unsigned int flags)
+{
+  unsigned long uv;
+  long lenp = srclen;
+
+  if (srclen == 0) {
+    return 1;
+  }
+  uv = utf8_to_uv(mrb, (const char *)src, &lenp);
+  mrb_ary_push(mrb, ary, mrb_fixnum_value((mrb_int)uv));
+  return (int)lenp;
 }
 
 static int
@@ -481,7 +564,7 @@ pack_a(mrb_state *mrb, mrb_value src, mrb_value dst, mrb_int didx, long count, u
   while (padlen-- > 0) {
     *dptr++ = pad;
   }
- 
+
   return dptr - dptr0;
 }
 
@@ -540,7 +623,7 @@ pack_h(mrb_state *mrb, mrb_value src, mrb_value dst, mrb_int didx, long count, u
   } else if (slen > count) {
     slen = count;
   }
-    
+
   dst = str_len_ensure(mrb, dst, didx + count);
   dptr = RSTRING_PTR(dst) + didx;
 
@@ -731,6 +814,26 @@ done:
   return sptr - sptr0;
 }
 
+static int
+pack_x(mrb_state *mrb, mrb_value src, mrb_value dst, mrb_int didx, long count, unsigned int flags)
+{
+  long i;
+
+  dst = str_len_ensure(mrb, dst, didx + count);
+  for (i = 0; i < count; i++) {
+    RSTRING_PTR(dst)[didx] = '\0';
+  }
+  return count;
+}
+
+static int
+unpack_x(mrb_state *mrb, const void *src, int slen, mrb_value ary, int count, unsigned int flags)
+{
+  if (slen < count) {
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "x outside of string");
+  }
+  return count;
+}
 
 static void
 prepare_tmpl(mrb_state *mrb, struct tmpl *tmpl)
@@ -911,6 +1014,10 @@ alias:
     size = 2;
     flags |= PACK_FLAG_LT;
     break;
+  case 'x':
+    dir = PACK_DIR_NUL;
+    type = PACK_TYPE_NONE;
+    break;
   case 'Z':
     dir = PACK_DIR_STR;
     type = PACK_TYPE_STRING;
@@ -982,6 +1089,10 @@ mrb_pack_pack(mrb_state *mrb, mrb_value ary)
 
     if (dir == PACK_DIR_INVALID)
       continue;
+    else if (dir == PACK_DIR_NUL) {
+        ridx += pack_x(mrb, mrb_nil_value(), result, ridx, count, flags);
+        continue;
+    }
 
     for (; aidx < RARRAY_LEN(ary); aidx++) {
       if (count == 0 && !(flags & PACK_FLAG_WIDTH))
@@ -989,11 +1100,7 @@ mrb_pack_pack(mrb_state *mrb, mrb_value ary)
 
       o = mrb_ary_ref(mrb, ary, aidx);
       if (type == PACK_TYPE_INTEGER) {
-        if (mrb_float_p(o)) {
-          o = mrb_funcall(mrb, o, "to_i", 0);
-        } else if (!mrb_fixnum_p(o)) {
-          mrb_raisef(mrb, E_TYPE_ERROR, "can't convert %S into Integer", mrb_class_path(mrb, mrb_obj_class(mrb, o)));
-        }
+        o = mrb_to_int(mrb, o);
       } else if (type == PACK_TYPE_FLOAT) {
         if (!mrb_float_p(o)) {
           o = mrb_funcall(mrb, o, "to_f", 0);
@@ -1073,6 +1180,10 @@ mrb_pack_unpack(mrb_state *mrb, mrb_value str)
 
     if (dir == PACK_DIR_INVALID)
       continue;
+    else if (dir == PACK_DIR_NUL) {
+      srcidx += unpack_x(mrb, sptr, srclen - srcidx, result, count, flags);
+      continue;
+    }
 
     if (flags & PACK_FLAG_COUNT2) {
       sptr = (const unsigned char *)RSTRING_PTR(str) + srcidx;
@@ -1118,6 +1229,11 @@ mrb_pack_unpack(mrb_state *mrb, mrb_value str)
       case PACK_DIR_DOUBLE:
         srcidx += unpack_double(mrb, sptr, srclen - srcidx, result, flags);
         break;
+      case PACK_DIR_UTF8:
+        srcidx += unpack_utf8(mrb, sptr, srclen - srcidx, result, flags);
+        break;
+      default:
+        mrb_raise(mrb, E_RUNTIME_ERROR, "mruby-pack's bug");
       }
       if (count > 0) {
         count--;

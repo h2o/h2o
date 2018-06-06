@@ -158,6 +158,21 @@ class Enumerator
       }
     end
 
+    def uniq(&block)
+      hash = {}
+      Lazy.new(self){|yielder, val|
+        if block
+          v = block.call(val)
+        else
+          v = val
+        end
+        unless hash.include?(v)
+          yielder << val
+          hash[v] = val
+        end
+      }
+    end
+
     alias force to_a
   end
 end

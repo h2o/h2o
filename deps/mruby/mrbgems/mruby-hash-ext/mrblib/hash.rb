@@ -165,7 +165,7 @@ class Hash
       elsif none != NONE
         none
       else
-        raise KeyError, "Key not found: #{key}"
+        raise KeyError, "Key not found: #{key.inspect}"
       end
     else
       self[key]
@@ -473,5 +473,30 @@ class Hash
       self[k] = yield(self[k])
     end
     self
+  end
+
+  def to_proc
+    ->x{self[x]}
+  end
+
+  ##
+  # call-seq:
+  #   hsh.fetch_values(key, ...)                 -> array
+  #   hsh.fetch_values(key, ...) { |key| block } -> array
+  #
+  # Returns an array containing the values associated with the given keys
+  # but also raises <code>KeyError</code> when one of keys can't be found.
+  # Also see <code>Hash#values_at</code> and <code>Hash#fetch</code>.
+  #
+  #   h = { "cat" => "feline", "dog" => "canine", "cow" => "bovine" }
+  #
+  #   h.fetch_values("cow", "cat")                   #=> ["bovine", "feline"]
+  #   h.fetch_values("cow", "bird")                  # raises KeyError
+  #   h.fetch_values("cow", "bird") { |k| k.upcase } #=> ["bovine", "BIRD"]
+  #
+  def fetch_values(*keys, &block)
+    keys.map do |k|
+      self.fetch(k, &block)
+    end
   end
 end
