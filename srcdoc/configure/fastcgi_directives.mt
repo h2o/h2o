@@ -10,6 +10,8 @@ The configuration directives of the FastCGI handler can be categorized into two 
 Other directives customize how the connections to the FastCGI processes should be maintained.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name      => "fastcgi.connect",
@@ -109,6 +111,8 @@ $ctx->{directive}->(
 In H2O, it is possible to perform internal redirects (a.k.a. delegations or URL rewrites) using <a href="configure/redirect_directives.html">the <code>redirect</code> directive</a> or <a href="configure/reproxy_directives.html">by returning <code>X-Reproxy-URL</code> headers</a> from web applications.
 The directive specifies whether to send the original values to the FastCGI process (default), or if the rewritten values should be sent.
 </p>
+? })
+
 ? })
 
 ? })

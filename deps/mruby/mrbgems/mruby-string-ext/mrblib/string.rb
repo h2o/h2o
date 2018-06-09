@@ -95,7 +95,7 @@ class String
   #    "hello".lstrip!      #=> nil
   #
   def lstrip!
-    raise RuntimeError, "can't modify frozen String" if frozen?
+    raise FrozenError, "can't modify frozen String" if frozen?
     s = self.lstrip
     (s == self) ? nil : self.replace(s)
   end
@@ -125,7 +125,7 @@ class String
   #  <code>nil</code> if <i>str</i> was not altered.
   #
   def strip!
-    raise RuntimeError, "can't modify frozen String" if frozen?
+    raise FrozenError, "can't modify frozen String" if frozen?
     s = self.strip
     (s == self) ? nil : self.replace(s)
   end
@@ -144,7 +144,20 @@ class String
   def casecmp(str)
     self.downcase <=> str.to_str.downcase
   rescue NoMethodError
-    raise TypeError, "no implicit conversion of #{str.class} into String"
+    nil
+  end
+
+  ##
+  # call-seq:
+  #   str.casecmp?(other)  -> true, false, or nil
+  #
+  # Returns true if str and other_str are equal after case folding,
+  # false if they are not equal, and nil if other_str is not a string.
+
+  def casecmp?(str)
+    c = self.casecmp(str)
+    return nil if c.nil?
+    return c == 0
   end
 
   def partition(sep)
@@ -186,7 +199,7 @@ class String
   #    string                  #=> "thsa sting"
   #
   def slice!(arg1, arg2=nil)
-    raise RuntimeError, "can't modify frozen String" if frozen?
+    raise FrozenError, "can't modify frozen String" if frozen?
     raise "wrong number of arguments (for 1..2)" if arg1.nil? && arg2.nil?
 
     if !arg1.nil? && !arg2.nil?

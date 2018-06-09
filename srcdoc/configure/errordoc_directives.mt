@@ -5,6 +5,8 @@
 This document describes the configuration directives of the errordoc handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "error-doc",
@@ -47,6 +49,8 @@ error-doc:
 EOT
 ?>
 </p>
+? })
+
 ? })
 
 ? })

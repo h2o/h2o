@@ -186,13 +186,17 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.first_byte_timeout = H2O_DEFAULT_PROXY_IO_TIMEOUT;
     config->proxy.emit_x_forwarded_headers = 1;
     config->proxy.emit_via_header = 1;
-    config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams;
+    config->proxy.emit_missing_date_header = 1;
+    config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
     config->http2.max_streams_for_priority = 16;
+    config->http2.active_stream_window_size = H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE;
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
+    config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
+    h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);
 
     h2o_configurator__init_core(config);
 }
@@ -281,6 +285,7 @@ void h2o_config_dispose(h2o_globalconf_t *config)
     }
     free(config->hosts);
 
+    h2o_socketpool_dispose(&config->proxy.global_socketpool);
     h2o_mem_release_shared(config->mimemap);
     h2o_configurator__dispose_configurators(config);
 }

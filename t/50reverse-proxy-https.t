@@ -67,4 +67,31 @@ EOT
     });
 };
 
+subtest "preserve.host" => sub {
+    my $doit = sub {
+        my $flag = shift;
+        my $server = spawn_h2o(<< "EOT");
+proxy.ssl.verify-peer: OFF
+proxy.preserve-host: @{[ $flag ? "ON" : "OFF" ]}
+hosts:
+  default:
+    paths:
+      "/":
+        proxy.reverse.url: https://127.0.0.1:$upstream_port
+EOT
+
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my $resp = `$curl --silent $proto://2130706433:$port/sni-name`;
+            is $resp, "127.0.0.1";
+        });
+    };
+    subtest "off" => sub {
+        $doit->(0);
+    };
+    subtest "on" => sub {
+        $doit->(1);
+    };
+};
+
 done_testing();

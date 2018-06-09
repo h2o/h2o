@@ -306,6 +306,10 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
  */
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
 /**
+ * returns if the socket is in early-data state (i.e. have not yet seen ClientFinished)
+ */
+int h2o_socket_ssl_is_early_data(h2o_socket_t *sock);
+/**
  *
  */
 struct st_ptls_context_t *h2o_socket_ssl_get_picotls_context(SSL_CTX *ossl);

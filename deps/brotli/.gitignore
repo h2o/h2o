@@ -1,8 +1,17 @@
+# C
 *.o
-*.pyc
-*.txt.uncompressed
-*.bro
-*.unbro
-tools/bro
-build/
+bin/
+buildfiles/
+**/obj/
 dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+
+# Tests
+*.txt.uncompressed
+*.br
+*.unbr

@@ -31,8 +31,8 @@ assert('ObjectSpace.count_objects') do
   1000.times do
     objs << {}
   end
-  objs = nil
   ObjectSpace.count_objects(h)
+  objs = nil
   GC.start
   ObjectSpace.count_objects(h_after)
 

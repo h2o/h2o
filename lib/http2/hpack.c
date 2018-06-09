@@ -810,19 +810,20 @@ static size_t calc_headers_capacity(const h2o_header_t *headers, size_t num_head
     return capacity;
 }
 
-static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t type, uint32_t stream_id, size_t max_frame_size)
+static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t type, uint32_t stream_id, size_t max_frame_size,
+                                int flags)
 {
     /* try to fit all data into single frame, using the preallocated space for the frame header */
     size_t payload_size = (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
     if (payload_size <= max_frame_size) {
-        h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), payload_size, type, H2O_HTTP2_FRAME_FLAG_END_HEADERS,
-                                      stream_id);
+        h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), payload_size, type,
+                                      H2O_HTTP2_FRAME_FLAG_END_HEADERS | flags, stream_id);
         return;
     }
 
     /* need to setup continuation frames */
     size_t off;
-    h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), max_frame_size, type, 0, stream_id);
+    h2o_http2_encode_frame_header((uint8_t *)((*buf)->bytes + start_at), max_frame_size, type, flags, stream_id);
     off = start_at + H2O_HTTP2_FRAME_HEADER_SIZE + max_frame_size;
     while (1) {
         size_t left = (*buf)->size - off;
@@ -874,19 +875,17 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */
-    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_PUSH_PROMISE, parent_stream_id, max_frame_size);
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_PUSH_PROMISE, parent_stream_id, max_frame_size, 0);
 }
 
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, h2o_res_t *res, h2o_timestamp_t *ts, const h2o_iovec_t *server_name,
-                                size_t content_length)
+                                size_t max_frame_size, h2o_res_t *res, const h2o_iovec_t *server_name, size_t content_length)
 {
     size_t capacity = calc_headers_capacity(res->headers.entries, res->headers.size);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
     capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
 #ifndef H2O_UNITTEST
-    capacity += 2 + H2O_TIMESTR_RFC1123_LEN; /* for Date: */
-    if (server_name->len) {
+    if (server_name != NULL && server_name->len) {
         capacity += 5 + server_name->len; /* for Server: */
     }
 #endif
@@ -899,12 +898,10 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     /* encode */
     dst = encode_status(dst, res->status);
 #ifndef H2O_UNITTEST
-    /* TODO keep some kind of reference to the indexed headers of Server and Date, and reuse them */
-    if (server_name->len) {
+    /* TODO keep some kind of reference to the indexed Server header, and reuse it */
+    if (server_name != NULL && server_name->len) {
         dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
     }
-    h2o_iovec_t date_value = {ts->str->rfc1123, H2O_TIMESTR_RFC1123_LEN};
-    dst = encode_header(header_table, dst, &H2O_TOKEN_DATE->buf, &date_value);
 #endif
     size_t i;
     for (i = 0; i != res->headers.size; ++i)
@@ -914,5 +911,23 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */
-    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size);
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, 0);
+}
+
+void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
+                                size_t max_frame_size, h2o_header_t *headers, size_t num_headers)
+{
+    size_t capacity = calc_headers_capacity(headers, num_headers);
+    capacity += H2O_HTTP2_FRAME_HEADER_SIZE;
+
+    size_t start_at = (*buf)->size;
+    uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE); /* skip frame header */
+
+    size_t i;
+    for (i = 0; i != num_headers; ++i)
+        dst = encode_header(header_table, dst, headers[i].name, &headers[i].value);
+    (*buf)->size = (char *)dst - (*buf)->bytes;
+
+    /* setup the frame headers */
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, H2O_HTTP2_FRAME_FLAG_END_STREAM);
 }

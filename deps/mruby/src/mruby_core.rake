@@ -5,6 +5,7 @@ MRuby.each_target do
 
   objs = Dir.glob("#{current_dir}/*.c").map { |f|
     next nil if cxx_exception_enabled? and f =~ /(error|vm).c$/
+    next nil if self.cc.defines.flatten.include?("MRB_WITHOUT_FLOAT") and f =~ /fmt_fp.c$/
     objfile(f.pathmap("#{current_build_dir}/%n"))
   }.compact
 

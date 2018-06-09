@@ -49,6 +49,9 @@ EOT
         my %args = @_;
         $mt->wrapper_file("directive.mt", \%args);
     },
+    directive_list => sub {
+        sub { shift->(@_) } # do nothing itself
+    },
     mruby_method => sub {
         my %args = @_;
         $mt->wrapper_file("mruby_method.mt", \%args);

@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -79,7 +79,8 @@ It is also possible to run CGI scripts under different privileges by specifying 
 </div>
 
 
-The gateway also provides options to for tuning the behavior.  A full list of options can be obtained by running the gateway directly with <code>--help</code> option.
+The gateway also provides options to for tuning the behavior.
+A full list of options can be obtained by running the gateway directly with <code>--help</code> option.
 
 <div class="example">
 <div class="caption">Example. Output of <code>share/h2o/fastcgi-cgi --help</code></div>
@@ -95,6 +96,7 @@ Options:
                      connections.
   --max-workers=nnn  maximum number of CGI processes (default: unlimited)
   --pass-authz       if set, preserves HTTP_AUTHORIZATION parameter
+  --verbose          verbose mode
 </code></pre>
 </div>
 

@@ -1,0 +1,24 @@
+*/Debug
+Debug
+*/Release
+Release
+*/x64
+x64
+*/.vs
+.vs
+*/Generated Files
+*.sdf
+*/*.sdf
+*/*.user
+*.ipch
+*/*.ipch
+*.db
+*/*.db
+*/*.lib
+*/*.pdb
+*/AppX
+*/*.exe
+*/*.dll
+*/*.xbf
+*/*.ilk
+deps/picotest

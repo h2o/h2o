@@ -128,6 +128,8 @@ See also:
 The following describes the configuration directives for controlling the HTTP/2 protocol handler.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "http2-casper",
@@ -226,6 +228,20 @@ Timeout for idle connections in seconds.
 EOT
 )->(sub {});
 
+$ctx->{directive}->(
+    name    => "http2-input-window-size",
+    levels  => [ qw(global) ],
+    default => '16777216',
+    since   => '2.3',
+    desc    => <<'EOT',
+Default window size for HTTP request body.
+EOT
+)->(sub {
+?>
+The value is the maximum amount of request body (in bytes) that can be sent by the client in 1 RTT (round-trip time).
+? });
+
+<?
 $ctx->{directive}->(
     name    => "http2-max-concurrent-requests-per-connection",
     levels  => [ qw(global) ],
@@ -352,5 +368,7 @@ A timeout in seconds. How long to wait before closing the connection on graceful
 EOT
 )->(sub {});
 ?>
+
+? })
 
 ? })

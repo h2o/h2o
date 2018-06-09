@@ -90,30 +90,14 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "host")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`host` is not a string");
-                return -1;
-            }
-            hostname = t->data.scalar;
-        }
-        if ((t = yoml_get(node, "port")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
+        yoml_t **port_node, **host_node, **type_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s", &port_node, &host_node, &type_node) != 0)
             return -1;
-        }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "`port` is not a string");
-            return -1;
-        }
-        servname = t->data.scalar;
-        if ((t = yoml_get(node, "type")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`type` is not a string");
-                return -1;
-            }
-            type = t->data.scalar;
-        }
+        servname = (*port_node)->data.scalar;
+        if (host_node != NULL)
+            hostname = (*host_node)->data.scalar;
+        if (type_node != NULL)
+            type = (*type_node)->data.scalar;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node,
@@ -121,17 +105,17 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         return -1;
     }
 
+    h2o_url_t upstream;
+
     if (strcmp(type, "unix") == 0) {
         /* unix socket */
         struct sockaddr_un sa;
-        memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
             h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", servname);
             return -1;
         }
-        sa.sun_family = AF_UNIX;
-        strcpy(sa.sun_path, servname);
-        h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), self->vars);
+        h2o_url_init_with_sun_path(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(servname, strlen(servname)),
+                                   h2o_iovec_init(H2O_STRLIT("/")));
     } else if (strcmp(type, "tcp") == 0) {
         /* tcp socket */
         uint16_t port;
@@ -139,11 +123,15 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
             h2o_configurator_errprintf(cmd, node, "invalid port number:%s", servname);
             return -1;
         }
-        h2o_fastcgi_register_by_hostport(ctx->pathconf, hostname, port, self->vars);
+        h2o_url_init_with_hostport(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(hostname, strlen(hostname)), port,
+                                   h2o_iovec_init(H2O_STRLIT("/")));
     } else {
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
     }
+
+    h2o_fastcgi_register(ctx->pathconf, &upstream, self->vars);
+    free(upstream.authority.base);
 
     return 0;
 }
@@ -227,7 +215,7 @@ static void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
 static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    char *spawn_user = NULL, *spawn_cmd;
+    char *spawn_user = ctx->globalconf->user, *spawn_cmd;
     char *kill_on_close_cmd_path = NULL, *setuidgid_cmd_path = NULL;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
     char *argv[10];
@@ -242,28 +230,15 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        spawn_user = ctx->globalconf->user;
         spawn_cmd = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "command")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory attribute `command` does not exist");
+        yoml_t **command_node, **user_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "command:s", "user:s", &command_node, &user_node) != 0)
             return -1;
-        }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "attribute `command` must be scalar");
-            return -1;
-        }
-        spawn_cmd = t->data.scalar;
-        spawn_user = ctx->globalconf->user;
-        if ((t = yoml_get(node, "user")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "attribute `user` must be scalar");
-                return -1;
-            }
-            spawn_user = t->data.scalar;
-        }
+        spawn_cmd = (*command_node)->data.scalar;
+        if (user_node != NULL)
+            spawn_user = (*user_node)->data.scalar;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "argument must be scalar or mapping");
@@ -327,7 +302,12 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
     config_vars = *self->vars;
     config_vars.callbacks.dispose = spawnproc_on_dispose;
     config_vars.callbacks.data = (char *)NULL + spawner_fd;
-    h2o_fastcgi_register_by_address(ctx->pathconf, (void *)&sa, sizeof(sa), &config_vars);
+
+    h2o_url_t upstream;
+    h2o_url_init_with_sun_path(&upstream, NULL, &H2O_URL_SCHEME_FASTCGI, h2o_iovec_init(sa.sun_path, strlen(sa.sun_path)),
+                               h2o_iovec_init(H2O_STRLIT("/")));
+    h2o_fastcgi_register(ctx->pathconf, &upstream, &config_vars);
+    free(upstream.authority.base);
 
     ret = 0;
 Exit:

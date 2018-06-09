@@ -20,19 +20,52 @@ Support for HTTPS has been introduced in version 2.0.
 Following sections describe the configuration directives defined for the module.
 </p>
 
+? $ctx->{directive_list}->()->(sub {
+
 <?
 $ctx->{directive}->(
     name    => "proxy.reverse.url",
     levels  => [ qw(path) ],
-    desc    => q{Forwards the requests to the specified URL, and proxies the response.},
+    desc    => q{Forwards the requests to the specified backends, and proxies the response.},
 )->(sub {
 ?>
 <?= $ctx->{example}->(q{Forwarding the requests to application server running on <code>127.0.0.1:8080</code>}, <<'EOT')
 proxy.reverse.url: "http://127.0.0.1:8080/"
 EOT
 ?>
+<?= $ctx->{example}->(q{Forwarding the requests to multiple application server with different weight}, <<'EOT')
+proxy.reverse.url:
+  - http://10.0.0.1:8080/
+  - url: http://10.0.0.2:8080/different-path
+    weight: 2
+EOT
+?>
+<?= $ctx->{example}->(q{Forwarding the requests to multiple application server with least connection}, <<'EOT')
+proxy.reverse.url:
+  backends:
+    - http://10.0.0.1:8080/
+    - http://10.0.0.2:8080/
+  balancer: least-conn
+EOT
+?>
 <p>
-If you want load balancing multiple backends, replace 127.0.0.1 with hostname which returns IP addresses via DNS or /etc/hosts.
+When more than one backend is declared, the load is distributed among the backends using the strategy specified by the <code>balancer</code> property.
+Currently we support <code>round-robin</code> (the default) and <code>least-conn</code> as the value of the property.
+The strategies are applied when establishing a new connection becomes necessary (i.e. when no pooled connections exist).
+</p>
+<p>
+<code>weight</code> can be assigned to each backend as an integer between 1 and 256.
+The default value is 1.
+</p>
+<p>
+For the <code>round-robin</code> balancer, <code>weight</code> is respected in this way: each backend would be selected exactly <code>weight</code> times before next backend would be selected, except when the backend is not accessable.
+</p>
+<p>
+For <code>least-conn</code> balancer, <code>weight</code> is respected in this way: the selected backend should have the minimum value of (request count) / (<code>weight</code>).
+</p>
+<p>
+H2O will try to reconnect to different backends (in the order determined by the load balancing strategy) until it successfully establishes a connection.
+It returns an error when it fails to connect to all of the backends.
 </p>
 <p>
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
@@ -109,6 +142,16 @@ $ctx->{directive}->(
     see_also => render_mt(<<'EOT'),
 <a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers"><code>proxy.emit-x-forwarded-headers</code></a>
 EOT
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.emit-missing-date-header",
+    levels  => [ qw(global) ],
+    since   => "2.3",
+    default => q{proxy.emit-missing-date-header: ON},
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should add a <code>date</date> header to the response, if that header is missing from the upstream response.",
 )->(sub {})
 ?>
 
@@ -268,5 +311,7 @@ $ctx->{directive}->(
     desc    => q{Sets idle timeout of a WebSocket connection being proxied.},
 )->(sub {})
 ?>
+
+? })
 
 ? })

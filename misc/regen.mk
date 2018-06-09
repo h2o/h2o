@@ -13,7 +13,9 @@ tokens:
 lib/handler/mruby/embedded.c.h: misc/embed_mruby_code.pl \
                                 lib/handler/mruby/embedded/core.rb \
                                 lib/handler/mruby/embedded/http_request.rb \
-                                lib/handler/mruby/embedded/chunked.rb
+                                lib/handler/mruby/embedded/sender.rb \
+                                lib/handler/mruby/embedded/middleware.rb \
+                                lib/handler/mruby/embedded/channel.rb
 	misc/embed_mruby_code.pl $^ > $@
 	clang-format -i $@
 
@@ -26,6 +28,9 @@ lib/handler/file/templates.c.h: misc/picotemplate-conf.pl lib/handler/file/_temp
 
 clang-format-all:
 	misc/clang-format-all.sh
+
+clang-format-diff:
+	misc/clang-format-diff.sh
 
 share/h2o/start_server: FORCE
 	cd misc/p5-Server-Starter; \
