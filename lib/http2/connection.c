@@ -1000,7 +1000,6 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
     }
 
-
     { /* send SETTINGS and connection-level WINDOW_UPDATE */
         h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
         memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);

@@ -541,11 +541,11 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
         }
         size_t origin_len = strlen(origins[i]->data.scalar);
         lengths[i] = htons(origin_len);
-        elems[i*2].base = (char *)&lengths[i];
-        elems[i*2].len = 2;
-        elems[i*2 + 1].base = origins[i]->data.scalar;
-        elems[i*2 + 1].len = origin_len;
-        h2o_strtolower(elems[i*2 + 1].base, origin_len);
+        elems[i * 2].base = (char *)&lengths[i];
+        elems[i * 2].len = 2;
+        elems[i * 2 + 1].base = origins[i]->data.scalar;
+        elems[i * 2 + 1].len = origin_len;
+        h2o_strtolower(elems[i * 2 + 1].base, origin_len);
     }
     *http2_origin_frame = h2o_concat_list(NULL, elems, nr_origins * 2);
     return http2_origin_frame;
@@ -556,7 +556,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 {
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
-        **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node, **http2_origin_frame_node;
+        **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
+        **http2_origin_frame_node;
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
@@ -578,13 +579,14 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         return 0;
 
     /* parse */
-    if (h2o_configurator_parse_mapping(
-            cmd, *ssl_node, "certificate-file:s,key-file:s", "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
-                                                             "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
-                                                             "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                                             "http2-origin-frame:*",
-            &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version, &cipher_suite, &ocsp_update_cmd,
-            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node) != 0)
+    if (h2o_configurator_parse_mapping(cmd, *ssl_node, "certificate-file:s,key-file:s",
+                                       "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
+                                       "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
+                                       "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
+                                       "http2-origin-frame:*",
+                                       &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
+                                       &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
+                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node) != 0)
         return -1;
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
@@ -602,17 +604,19 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         return -1;
     if (http2_origin_frame_node != NULL) {
         switch ((*http2_origin_frame_node)->type) {
-            case YOML_TYPE_SCALAR:
-                if ((http2_origin_frame = build_http2_origin_frame(cmd, http2_origin_frame_node, 1)) == NULL)
-                    return -1;
-                break;
-            case YOML_TYPE_SEQUENCE:
-                if ((http2_origin_frame = build_http2_origin_frame(cmd, (*http2_origin_frame_node)->data.sequence.elements, (*http2_origin_frame_node)->data.sequence.size)) == NULL)
-                    return -1;
-                break;
-            default:
-                h2o_configurator_errprintf(cmd, *http2_origin_frame_node, "argument to `http2-origin-frame` must be either a scalar or a sequence");
+        case YOML_TYPE_SCALAR:
+            if ((http2_origin_frame = build_http2_origin_frame(cmd, http2_origin_frame_node, 1)) == NULL)
                 return -1;
+            break;
+        case YOML_TYPE_SEQUENCE:
+            if ((http2_origin_frame = build_http2_origin_frame(cmd, (*http2_origin_frame_node)->data.sequence.elements,
+                                                               (*http2_origin_frame_node)->data.sequence.size)) == NULL)
+                return -1;
+            break;
+        default:
+            h2o_configurator_errprintf(cmd, *http2_origin_frame_node,
+                                       "argument to `http2-origin-frame` must be either a scalar or a sequence");
+            return -1;
         }
     }
     if (min_version != NULL) {
