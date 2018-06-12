@@ -203,14 +203,27 @@ void h2o_config_init(h2o_globalconf_t *config)
 
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
-    h2o_pathconf_t *pathconf;
+    size_t pos;
 
+    if ((flags & H2O_CONFIG_REGISTER_PATH_FLAGS_SORT) != 0) {
+        size_t path_len = strlen(path);
+        for (pos = hostconf->paths.size; pos != 0; --pos) {
+            h2o_pathconf_t *prev = hostconf->paths.entries + pos - 1;
+            if (path_len < prev->path.len)
+                break;
+            if (path_len == prev->path.len && memcmp(path, prev->path.base, path_len) >= 0)
+                break;
+        }
+    } else {
+        pos = hostconf->paths.size;
+    }
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
-    pathconf = hostconf->paths.entries + hostconf->paths.size++;
+    memmove(hostconf->paths.entries + pos + 1, hostconf->paths.entries + pos,
+            (hostconf->paths.size - pos) * sizeof(hostconf->paths.entries[0]));
+    ++hostconf->paths.size;
 
-    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
-
-    return pathconf;
+    h2o_config_init_pathconf(hostconf->paths.entries + pos, hostconf->global, path, hostconf->mimemap);
+    return hostconf->paths.entries + pos;
 }
 
 void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t status_handler)

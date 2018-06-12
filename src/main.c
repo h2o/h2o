@@ -168,6 +168,8 @@ static struct {
     } state;
     char *crash_handler;
     int crash_handler_wait_pipe_close;
+    const char *default_cert_dir;
+    int needs_acme_challenge_dir;
 } conf = {
     {NULL},                                 /* globalconf */
     RUN_MODE_WORKER,                        /* dry-run */
@@ -186,6 +188,8 @@ static struct {
     {{0}},                                  /* state */
     "share/h2o/annotate-backtrace-symbols", /* crash_handler */
     0,                                      /* crash_handler_wait_pipe_close */
+    "/etc/letsencrypt/live",                /* default_cert_dir */
+    0                                       /* needs_acme_challenge_dir */
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -529,8 +533,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                               yoml_t **ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
+    yoml_t **certificate_file_node, **key_file_node, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node;
+    char *cert_path, *key_path;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
@@ -552,12 +557,43 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     /* parse */
     if (h2o_configurator_parse_mapping(
-            cmd, *ssl_node, "certificate-file:s,key-file:s", "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
-                                                             "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
-                                                             "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*",
-            &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version, &cipher_suite, &ocsp_update_cmd,
-            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node) != 0)
+            cmd, *ssl_node, NULL, "certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
+                                  "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-"
+                                  "preference:*,neverbleed:*",
+            &certificate_file_node, &key_file_node, &min_version, &min_version, &max_version, &max_version, &cipher_suite,
+            &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
+            &neverbleed_node) != 0)
         return -1;
+    if ((certificate_file_node != NULL) != (key_file_node != NULL)) {
+        h2o_configurator_errprintf(cmd, *ssl_node, "both `certificate-file` and `key-file` must be set, or both must be omitted");
+        return -1;
+    }
+    if (certificate_file_node != NULL) {
+        /* certificate and key files are manually set */
+        cert_path = (*certificate_file_node)->data.scalar;
+        key_path = (*key_file_node)->data.scalar;
+    } else {
+        if (ctx->hostconf != NULL) {
+            /* certbot mode, set to the host-level values; or start the server without associating a certificate */
+            cert_path = alloca(strlen(conf.default_cert_dir) + ctx->hostconf->authority.host.len + sizeof("//fullchain.pem"));
+            sprintf(cert_path, "%s/%.*s/fullchain.pem", conf.default_cert_dir, (int)ctx->hostconf->authority.host.len,
+                    ctx->hostconf->authority.host.base);
+            struct stat st;
+            if (stat(cert_path, &st) != 0 && errno == ENOENT) {
+                cert_path = NULL;
+                key_path = NULL;
+            } else {
+                key_path = alloca(strlen(conf.default_cert_dir) + ctx->hostconf->authority.host.len + sizeof("//privkey.pem"));
+                sprintf(key_path, "%s/%.*s/privkey.pem", conf.default_cert_dir, (int)ctx->hostconf->authority.host.len,
+                        ctx->hostconf->authority.host.base);
+            }
+        } else {
+            /* global-level configuration for certbot is remapped in exit phase */
+            cert_path = NULL;
+            key_path = NULL;
+        }
+        conf.needs_acme_challenge_dir = 1;
+    }
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
         case 0:
@@ -609,11 +645,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     /* add the host to the existing SSL config, if the certificate file is already registered */
-    if (ctx->hostconf != NULL) {
+    if (ctx->hostconf != NULL && cert_path != NULL) {
         size_t i;
         for (i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
-            if (strcmp(ssl_config->certificate_file, (*certificate_file)->data.scalar) == 0) {
+            if (strcmp(ssl_config->certificate_file, cert_path) == 0) {
                 listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
                 return 0;
             }
@@ -630,41 +666,46 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
     setup_ecc_key(ssl_ctx);
-    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
-                                   (*certificate_file)->data.scalar);
-        ERR_print_errors_cb(on_openssl_print_errors, stderr);
-        goto Error;
-    }
-    if (use_neverbleed) {
-        /* disable neverbleed in case the process is not going to serve requests */
-        switch (conf.run_mode) {
-        case RUN_MODE_DAEMON:
-        case RUN_MODE_MASTER:
-            use_neverbleed = 0;
-            break;
-        default:
-            break;
-        }
-    }
-    if (use_neverbleed) {
-        char errbuf[NEVERBLEED_ERRBUF_SIZE];
-        if (neverbleed == NULL) {
-            neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
-            if (neverbleed_init(neverbleed, errbuf) != 0) {
-                fprintf(stderr, "%s\n", errbuf);
-                abort();
-            }
-        }
-        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*key_file)->data.scalar, errbuf) != 1) {
-            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s:%s\n", (*key_file)->data.scalar, errbuf);
-            goto Error;
-        }
-    } else {
-        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, (*key_file)->data.scalar, SSL_FILETYPE_PEM) != 1) {
-            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s\n", (*key_file)->data.scalar);
+    if (cert_path != NULL) {
+        assert(key_path != NULL);
+        if (SSL_CTX_use_certificate_chain_file(ssl_ctx, cert_path) != 1) {
+            h2o_configurator_errprintf(cmd, certificate_file_node != NULL ? *certificate_file_node : *ssl_node,
+                                       "failed to load certificate file:%s\n", cert_path);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
+        }
+        if (use_neverbleed) {
+            /* disable neverbleed in case the process is not going to serve requests */
+            switch (conf.run_mode) {
+            case RUN_MODE_DAEMON:
+            case RUN_MODE_MASTER:
+                use_neverbleed = 0;
+                break;
+            default:
+                break;
+            }
+        }
+        if (use_neverbleed) {
+            char errbuf[NEVERBLEED_ERRBUF_SIZE];
+            if (neverbleed == NULL) {
+                neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
+                if (neverbleed_init(neverbleed, errbuf) != 0) {
+                    fprintf(stderr, "%s\n", errbuf);
+                    abort();
+                }
+            }
+            if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, key_path, errbuf) != 1) {
+                h2o_configurator_errprintf(cmd, key_file_node != NULL ? *key_file_node : *ssl_node,
+                                           "failed to load private key file:%s:%s\n", key_path, errbuf);
+                goto Error;
+            }
+        } else {
+            if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_path, SSL_FILETYPE_PEM) != 1) {
+                h2o_configurator_errprintf(cmd, key_file_node != NULL ? *key_file_node : *ssl_node,
+                                           "failed to load private key file:%s\n", key_path);
+                ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                goto Error;
+            }
         }
     }
     if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, (*cipher_suite)->data.scalar) != 1) {
@@ -714,7 +755,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
     }
     ssl_config->ctx = ssl_ctx;
-    ssl_config->certificate_file = h2o_strdup(NULL, (*certificate_file)->data.scalar, SIZE_MAX).base;
+    if (cert_path != NULL)
+        ssl_config->certificate_file = h2o_strdup(NULL, cert_path, SIZE_MAX).base;
 
 #if !H2O_USE_OCSP
     if (ocsp_update_interval != 0)
@@ -733,36 +775,40 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             ssl_config->ocsp_stapling.interval =
                 ocsp_update_interval; /* is also used as a flag for indicating if the updater thread was spawned */
             ssl_config->ocsp_stapling.max_failures = ocsp_max_failures;
-            h2o_multithread_create_thread(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
+            if (cert_path != NULL)
+                h2o_multithread_create_thread(&ssl_config->ocsp_stapling.updater_tid, NULL, ocsp_updater_thread, ssl_config);
             break;
         case RUN_MODE_MASTER:
         case RUN_MODE_DAEMON:
             /* nothing to do */
             break;
-        case RUN_MODE_TEST: {
-            h2o_buffer_t *respbuf;
-            fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", (*certificate_file)->data.scalar);
-            switch (get_ocsp_response((*certificate_file)->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
-            case 0:
-                h2o_buffer_dispose(&respbuf);
-                fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", (*certificate_file)->data.scalar);
-                break;
-            case EX_TEMPFAIL:
-                h2o_configurator_errprintf(cmd, *certificate_file, "[OCSP Stapling] temporary failed for file:%s\n",
-                                           (*certificate_file)->data.scalar);
-                break;
-            default:
-                h2o_configurator_errprintf(cmd, *certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n",
-                                           (*certificate_file)->data.scalar);
-                break;
+        case RUN_MODE_TEST:
+            if (certificate_file_node != NULL) {
+                h2o_buffer_t *respbuf;
+                fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", (*certificate_file_node)->data.scalar);
+                switch (get_ocsp_response(cert_path, ssl_config->ocsp_stapling.cmd, &respbuf)) {
+                case 0:
+                    h2o_buffer_dispose(&respbuf);
+                    fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", (*certificate_file_node)->data.scalar);
+                    break;
+                case EX_TEMPFAIL:
+                    h2o_configurator_errprintf(cmd, *certificate_file_node, "[OCSP Stapling] temporary failed for file:%s",
+                                               (*certificate_file_node)->data.scalar);
+                    break;
+                default:
+                    h2o_configurator_errprintf(cmd, *certificate_file_node,
+                                               "[OCSP Stapling] does not work, will be disabled for file:%s",
+                                               (*certificate_file_node)->data.scalar);
+                    break;
+                }
             }
-        } break;
+            break;
         }
     }
 #endif
 
 #if H2O_USE_PICOTLS
-    if (use_picotls) {
+    if (use_picotls && cert_path != NULL) {
         const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
         if (errstr != NULL)
             h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
@@ -2036,6 +2082,16 @@ int main(int argc, char **argv)
     }
     /* calculate defaults (note: open file cached is purged once every loop) */
     conf.globalconf.filecache.capacity = conf.globalconf.http2.max_concurrent_requests_per_connection * 2;
+    /* setup acme challenge dir for every host */
+    if (conf.needs_acme_challenge_dir) {
+        h2o_hostconf_t **hostconf;
+        for (hostconf = conf.globalconf.hosts; *hostconf != NULL; ++hostconf) {
+            h2o_pathconf_t *pathconf =
+                h2o_config_register_path(*hostconf, "/.well-known/acme-challenge", H2O_CONFIG_REGISTER_PATH_FLAGS_SORT);
+            h2o_file_register(pathconf, H2O_TO_STR(H2O_LOCALSTATE_DIR) "/h2o/acme-challenge/.well-known/acme-challenge", NULL, NULL,
+                              0);
+        }
+    }
 
     /* check if all the fds passed in by server::starter were bound */
     if (conf.server_starter.fds != NULL) {
