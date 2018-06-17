@@ -205,20 +205,76 @@ static int on_openssl_print_errors(const char *str, size_t len, void *fp)
     return (int)len;
 }
 
-static void setup_ecc_key(SSL_CTX *ssl_ctx)
+static void setup_ecc_key(SSL_CTX *ssl_ctx, const char *requested_curves)
 {
-#ifdef SSL_CTX_set_ecdh_auto
-    SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
-#else
-    int nid = NID_X9_62_prime256v1;
-    EC_KEY *key = EC_KEY_new_by_curve_name(nid);
-    if (key == NULL) {
-        fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
+    /* Only do ECC setup if possible. */
+    #ifndef OPENSSL_NO_ECDH
+
+    char * curves;
+    curves = (char *) requested_curves;
+
+    /* TODO: Use following? */
+    // SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_ECDH_USE);
+    /* It may improve security for a little performance degration. */
+    
+    #ifdef SSL_CTRL_SET_ECDH_AUTO
+        /* Setups most (OpenSSL) / a sane list (LibreSSL > 2.5.3)
+         * of elliptic-curves for Diffie-Hellman key exchange (ECDH).
+         *
+         * This call is not required and possible for OpenSSL >= 1.1.0
+         *
+         * TODO: Since when is the call possible?
+         *  Nginx behaviour: It seems auto is only possible if 
+         *  SSL_CTX_set1_curves_list is there. LEAVE FOR EVALUATION!
+         */
+        SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
+    #elif OPENSSL_VERSION_NUMBER < 0x10002000
+        /* Check if OpenSSL version is too old for ..._set_ecdh_auto(...),
+         * which should be available since OpenSSL 1.0.1 or OpenSSL 1.0.2(?).
+         * As call is not required on OpenSSL >= 1.1.0, actions are only
+         * required for old versions. 
+         */
+        if (strncmp("auto", curves, 4) == 0) {
+            
+            curves = "prime256v1";
+        }
+    #endif
+
+    if (strncmp("auto", curves, 4) == 0) {
+        /* Follow nginx behaviour. */
         return;
     }
+
+    #ifdef SSL_CTX_set1_curves_list
+        /* Set a list of curves (or a single one) on OpenSSL >= 1.1.0 */
+        if (SSL_CTX_set1_curves_list(ssl_ctx, curves) == 0) {
+            fprintf(stderr, "Failed to set multiple curves %s.\n", curves);
+            // TODO: Crash here?
+        }
+        return;
+    #endif
+
+    /* Only a single curve can be set. */
+    int nid;
+    EC_KEY *key;
+
+    nid = OBJ_sn2nid(curves);
+    if (nid == 0) {
+        fprintf(stderr, "Failed to get nid for curve \"%s\"\n", curves);
+        return;  // TODO: Crash here?
+    }
+
+    key = EC_KEY_new_by_curve_name(nid);
+
+    if (key == NULL) {
+        fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
+        return;  // TODO: Crash here?
+    }
+
     SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
     EC_KEY_free(key);
-#endif
+
+    #endif
 }
 
 static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
@@ -676,7 +732,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
-    setup_ecc_key(ssl_ctx);
+    setup_ecc_key(ssl_ctx, "auto");
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
                                    (*certificate_file)->data.scalar);
