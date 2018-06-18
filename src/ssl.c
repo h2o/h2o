@@ -273,7 +273,8 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
             ticket = temp_ticket = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), 0, UINT64_MAX, 1);
         }
         memcpy(key_name, ticket->name, sizeof(ticket->name));
-        EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
+        ret = EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
+        assert(ret);
         HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
         if (temp_ticket != NULL)
             free_ticket(ticket);
