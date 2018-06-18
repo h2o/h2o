@@ -275,7 +275,8 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
         memcpy(key_name, ticket->name, sizeof(ticket->name));
         ret = EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
         assert(ret);
-        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        ret = HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        assert(ret);
         if (temp_ticket != NULL)
             free_ticket(ticket);
         ret = 1;
@@ -291,8 +292,10 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
         ret = 0;
         goto Exit;
     Found:
-        EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
-        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        ret = EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
+        assert(ret);
+        ret = HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        assert(ret);
         /* Request renewal if the youngest key is active */
         if (i != 0 && session_tickets.tickets.entries[i - 1]->not_before <= time(NULL))
             ret = 2;
