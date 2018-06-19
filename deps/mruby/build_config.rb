@@ -8,7 +8,8 @@ MRuby::Build.new do |conf|
     toolchain :gcc
   end
 
-  enable_debug
+  # Uncomment enable_debug for development
+  # enable_debug
 
   # Use mrbgems
   # conf.gem 'examples/mrbgems/ruby_extension_example'
@@ -94,7 +95,8 @@ MRuby::Build.new('host-debug') do |conf|
     toolchain :gcc
   end
 
-  enable_debug
+  # Uncomment enable_debug for development
+  # enable_debug
 
   # include the default GEMs
   conf.gembox 'default'
@@ -117,7 +119,8 @@ MRuby::Build.new('test') do |conf|
     toolchain :gcc
   end
 
-  enable_debug
+  # Uncomment enable_debug for development
+  # enable_debug
   conf.enable_bintest
   conf.enable_test
 
