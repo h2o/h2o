@@ -63,6 +63,9 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (req->version == 0x200) {
         /* ok */
     } else if (0x101 <= req->version && req->version < 0x200) {
+        /* current chunking code disables chunking for non-200 statuses */
+        if (req->res.status != 200)
+            goto Next;
         if (self->enforce) {
             req->res.content_length = SIZE_MAX;
         } else {
