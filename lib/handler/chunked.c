@@ -89,7 +89,6 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     /* we cannot handle certain responses (like 101 switching protocols) */
     if (req->res.status != 200) {
         req->http1_is_persistent = 0;
-        goto Next;
     }
     /* skip if content-encoding header is being set */
     if (h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) != -1)
