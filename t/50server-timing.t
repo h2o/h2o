@@ -39,16 +39,16 @@ EOT
     };
 
     subtest 'http1' => sub {
-        my @sts = nc_get($server, '/', 1);
-        is scalar(@sts), 2, 'header and trailer';
-        $check->(@sts);
+        my ($sts) = nc_get($server, '/', 1);
+        is scalar(@$sts), 2, 'header and trailer';
+        $check->(@$sts);
     
     };
     
     subtest 'http2' => sub {
-        my @sts = nghttp_get($server, '/');
-        is scalar(@sts), 2, 'header and trailer';
-        $check->(@sts);
+        my ($sts) = nghttp_get($server, '/');
+        is scalar(@$sts), 2, 'header and trailer';
+        $check->(@$sts);
     };
 };
 
@@ -63,18 +63,18 @@ hosts:
 EOT
 
     subtest 'no te header' => sub {
-        my @sts = nc_get($server, '/');
-        is scalar(@sts), 0, 'no server timing';
+        my ($sts) = nc_get($server, '/');
+        is scalar(@$sts), 0, 'no server timing';
     };
 
     subtest 'not chunked encoding' => sub {
-        my @sts = nc_get($server, '/');
-        is scalar(@sts), 0, 'no server timing';
+        my ($sts) = nc_get($server, '/');
+        is scalar(@$sts), 0, 'no server timing';
     };
     
     subtest 'http2 is always ok' => sub {
-        my @sts = nghttp_get($server, '/');
-        is scalar(@sts), 2, 'header and trailer';
+        my ($sts) = nghttp_get($server, '/');
+        is scalar(@$sts), 2, 'header and trailer';
     };
 };
 
@@ -89,14 +89,35 @@ hosts:
 EOT
 
     subtest 'http1' => sub {
-        my @sts = nc_get($server, '/');
-        is scalar(@sts), 2, 'header and trailer';
+        my ($sts) = nc_get($server, '/');
+        is scalar(@$sts), 2, 'header and trailer';
     };
     
     subtest 'http2' => sub {
-        my @sts = nghttp_get($server, '/');
-        is scalar(@sts), 2, 'header and trailer';
+        my ($sts) = nghttp_get($server, '/');
+        is scalar(@$sts), 2, 'header and trailer';
     };
+};
+
+subtest 'broken trailers when status is other than 200 (#1790)' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        - server-timing: ON
+        - mruby.handler: |
+            proc {|env|
+              [404, {}, Class.new do
+                def each
+                  yield 'not found'
+                end
+              end.new]
+            }
+EOT
+    my ($sts, $raw) = nc_get($server, '/', 1);
+    is scalar(@$sts), 2;
+    unlike $raw, qr{not foundserver-timing}i;
 };
 
 done_testing;
@@ -107,13 +128,13 @@ sub nc_get {
     $req .= "TE: trailers\r\n" if $te_trailers;
     $req .= "\r\n";
     my $resp = `echo '$req' | nc 127.0.0.1 $server->{port}`;
-    map { parse_server_timing($_) } ($resp =~ /^server-timing: (.+)$/mg);
+    ([map { parse_server_timing($_) } ($resp =~ /^server-timing: (.+)$/mg)], $resp);
 }
 
 sub nghttp_get {
     my ($server, $path) = @_; 
     my $out = `nghttp -vn 'https://127.0.0.1:$server->{tls_port}$path'`;
-    map { parse_server_timing($_) } ($out =~ /recv \(stream_id=\d+\) server-timing: (.+)$/mg);
+    ([map { parse_server_timing($_) } ($out =~ /recv \(stream_id=\d+\) server-timing: (.+)$/mg)], $out);
 }
 
 sub parse_server_timing {
