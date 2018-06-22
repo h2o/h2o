@@ -303,6 +303,10 @@ struct st_h2o_hostconf_t {
          */
         unsigned push_preload : 1;
         /**
+         * if cross origin pushes should be authorized
+         */
+        unsigned allow_cross_origin_push : 1;
+        /**
          * casper settings
          */
         h2o_casper_conf_t casper;
@@ -1306,7 +1310,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
                                             const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
                                             const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                             void (*cb)(void *ctx, const char *path, size_t path_len, int is_critical), void *cb_ctx,
-                                            h2o_iovec_t *filtered_value);
+                                            h2o_iovec_t *filtered_value, int allow_cross_origin_push);
 /**
  * return a bitmap of compressible types, by parsing the `accept-encoding` header
  */

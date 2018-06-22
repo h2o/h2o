@@ -369,6 +369,19 @@ EOT
 )->(sub {});
 ?>
 
+<?
+$ctx->{directive}->(
+    name    => "http2-allow-cross-origin-push",
+    levels  => [ qw(global host) ],
+    since   => '2.3',
+    default => 'http2-allow-cross-origin-push: OFF',
+    desc    => << 'EOT',
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the server should push resources belonging to a different authority.
+EOT
+)->(sub {
+?>
+? })
+
 ? })
 
 ? })
