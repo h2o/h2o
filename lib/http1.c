@@ -726,8 +726,6 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     assert(!conn->_ostr_final.sent_headers);
 
     conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
-    if (conn->req.res.status != 200)
-        conn->req.http1_is_persistent = 0;
     if (conn->req.send_server_timing)
         h2o_add_server_timing_header(&conn->req);
 
@@ -785,8 +783,6 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
-        if (req->res.status != 200)
-            req->http1_is_persistent = 0;
         if (conn->req.send_server_timing)
             h2o_add_server_timing_header(&conn->req);
         /* build headers and send */
