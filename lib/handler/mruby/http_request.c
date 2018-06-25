@@ -297,7 +297,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (props.connection_header) {
         if (!ctx->req.can_keepalive) {
-            h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONNECTION, NULL, H2O_STRLIT("close"));
+            *props.connection_header = h2o_iovec_init(H2O_STRLIT("close"));
         }
     }
 

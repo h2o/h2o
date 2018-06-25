@@ -36,7 +36,7 @@ typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *proxy_protocol;
     int *chunked;
-    int connection_header;
+    h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);

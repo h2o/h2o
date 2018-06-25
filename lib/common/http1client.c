@@ -442,7 +442,7 @@ static void on_send_timeout(h2o_timeout_entry_t *entry)
     on_error_before_head(client, "I/O timeout");
 }
 
-static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_header_t *headers, size_t num_headers)
+static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection, h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
     size_t offset = 0;
@@ -468,6 +468,16 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
         offset += (l);                                                                                                             \
     } while (0)
 #define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
+#define APPEND_HEADER(h) \
+    do { \
+        RESERVE((h)->name->len + (h)->value.len + 4); \
+        APPEND((h)->orig_name ? (h)->orig_name : (h)->name->base, (h)->name->len); \
+        buf.base[offset++] = ':'; \
+        buf.base[offset++] = ' '; \
+        APPEND((h)->value.base, (h)->value.len); \
+        buf.base[offset++] = '\r'; \
+        buf.base[offset++] = '\n'; \
+    } while (0)
 
     APPEND(method.base, method.len);
     buf.base[offset++] = ' ';
@@ -478,16 +488,14 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
 
-    h2o_header_t *h, *h_end;
-    for (h = (h2o_header_t*)headers, h_end = h + num_headers; h != h_end; ++h) {
-        RESERVE(h->name->len + h->value.len + 4);
-        APPEND(h->orig_name ? h->orig_name : h->name->base, h->name->len);
-        buf.base[offset++] = ':';
-        buf.base[offset++] = ' ';
-        APPEND(h->value.base, h->value.len);
-        buf.base[offset++] = '\r';
-        buf.base[offset++] = '\n';
+    if (connection.base != NULL) {
+        h2o_header_t h = (h2o_header_t){&H2O_TOKEN_CONNECTION->buf, NULL, connection};
+        APPEND_HEADER(&h);
     }
+
+    h2o_header_t *h, *h_end;
+    for (h = (h2o_header_t*)headers, h_end = h + num_headers; h != h_end; ++h)
+        APPEND_HEADER(h);
 
     APPEND_STRLIT("\r\n");
 
@@ -506,10 +514,11 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 {
     h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
     int chunked = 0;
+    h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = {
         &proxy_protocol,
         &chunked,
-        1,
+        &connection_header,
     };
 
     h2o_iovec_t method = h2o_iovec_init(NULL, 0);
@@ -529,7 +538,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     size_t reqbufcnt = 0;
     if (props.proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props.proxy_protocol;
-    reqbufs[reqbufcnt++] = build_request(client, method, url, headers, num_headers);
+    reqbufs[reqbufcnt++] = build_request(client, method, url, *props.connection_header, headers, num_headers);
 
     client->_is_chunked = *props.chunked;
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));

@@ -167,12 +167,12 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
 
     if (props.connection_header) {
         if (is_websocket_handshake) {
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_CONNECTION, NULL, H2O_STRLIT("upgrade"));
+            *props.connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
             h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
         } else if (keepalive) {
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_CONNECTION, NULL, H2O_STRLIT("keep-alive"));
+            *props.connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
         } else {
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_CONNECTION, NULL, H2O_STRLIT("close"));
+            *props.connection_header = h2o_iovec_init(H2O_STRLIT("close"));
         }
     }
 
