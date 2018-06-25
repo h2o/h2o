@@ -417,7 +417,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     ctx->refs.request = h2o_mruby_create_data_instance(
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
 
-    h2o_httpclient_connect(&ctx->client, ctx, &shared_ctx->ctx->proxy.client_ctx,
+    h2o_httpclient_connect(&ctx->client, &ctx->pool, ctx, &shared_ctx->ctx->proxy.client_ctx,
                             &shared_ctx->ctx->proxy.connpool, &url, on_connect);
 
     return ctx->refs.request;

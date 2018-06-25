@@ -661,5 +661,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_httpclient_connect(&self->client, self, client_ctx, connpool, target, on_connect);
+    h2o_httpclient_connect(&self->client, &req->pool, self, client_ctx, connpool, target, on_connect);
 }

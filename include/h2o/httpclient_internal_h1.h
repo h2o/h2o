@@ -52,8 +52,6 @@ struct st_h2o_http1client_t {
     h2o_buffer_t *_body_buf_in_flight;
     unsigned _is_chunked : 1;
     unsigned _body_buf_is_done : 1;
-
-    h2o_mem_pool_t pool;
 };
 
 void h2o_http1client_on_connect(struct st_h2o_httpclient_private_t *client, h2o_socket_t *sock, h2o_url_t *origin);

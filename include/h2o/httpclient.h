@@ -81,6 +81,7 @@ typedef struct st_h2o_httpclient_ctx_t {
 } h2o_httpclient_ctx_t;
 
 struct st_h2o_httpclient_t {
+    h2o_mem_pool_t *pool;
     h2o_httpclient_ctx_t *ctx;
     h2o_httpclient_connection_pool_t *connpool;
     h2o_buffer_t **buf;
@@ -99,7 +100,7 @@ extern const char *const h2o_httpclient_error_refused_stream;
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
-void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
+void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
                             h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 #ifdef __cplusplus

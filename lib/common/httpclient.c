@@ -65,13 +65,14 @@ static void do_cancel(h2o_httpclient_t *_client)
     close_client(client);
 }
 
-static struct st_h2o_httpclient_private_t *create_client(void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
+static struct st_h2o_httpclient_private_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
 {
 #define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
     size_t sz = SZ_MAX(sizeof(struct st_h2o_http1client_t), sizeof(struct st_h2o_http2client_stream_t));
 #undef SZ_MAX
     struct st_h2o_httpclient_private_t *client = h2o_mem_alloc(sz);
     memset(client, 0, sizeof(*client));
+    client->super.pool = pool;
     client->super.ctx = ctx;
     client->super.data = data;
     client->super.cancel = do_cancel;
@@ -114,7 +115,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     }
 }
 
-void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
+void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
                             h2o_url_t *origin, h2o_httpclient_connect_cb cb)
 {
     static const h2o_iovec_t both_protos = {H2O_STRLIT(
@@ -126,7 +127,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, void *data, h2o_httpclie
     assert(connpool != NULL);
     h2o_iovec_t alpn_protos = h2o_iovec_init(NULL, 0);
 
-    struct st_h2o_httpclient_private_t *client = create_client(data, ctx, cb);
+    struct st_h2o_httpclient_private_t *client = create_client(pool, data, ctx, cb);
     client->super.connpool = connpool;
     if (_client != NULL)
         *_client = &client->super;
