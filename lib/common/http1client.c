@@ -506,7 +506,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 {
     h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
     int chunked = 0;
-    h2o_httpclient_features_t features = {
+    h2o_httpclient_properties_t props = {
         &proxy_protocol,
         &chunked,
         1,
@@ -518,7 +518,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     size_t num_headers = 0;
     h2o_iovec_t body = h2o_iovec_init(NULL, 0);;
 
-    client->super.cb.on_head = client->super.cb.on_connect(&client->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &client->proceed_req, features, client->_origin);
+    client->super.cb.on_head = client->super.cb.on_connect(&client->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &client->proceed_req, props, client->_origin);
 
     if (client->super.cb.on_head == NULL) {
         close_client(client);
@@ -527,11 +527,11 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 
     h2o_iovec_t reqbufs[3];
     size_t reqbufcnt = 0;
-    if (proxy_protocol.base != NULL)
-        reqbufs[reqbufcnt++] = proxy_protocol;
+    if (props.proxy_protocol->base != NULL)
+        reqbufs[reqbufcnt++] = *props.proxy_protocol;
     reqbufs[reqbufcnt++] = build_request(client, method, url, headers, num_headers);
 
-    client->_is_chunked = *features.chunked;
+    client->_is_chunked = *props.chunked;
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
     if (client->proceed_req != NULL) {

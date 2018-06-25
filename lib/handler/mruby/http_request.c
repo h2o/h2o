@@ -286,7 +286,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
-                                         h2o_httpclient_features_t features, h2o_url_t *origin)
+                                         h2o_httpclient_properties_t props, h2o_url_t *origin)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -295,7 +295,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         return NULL;
     }
 
-    if (features.connection_header) {
+    if (props.connection_header) {
         if (!ctx->req.can_keepalive) {
             h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONNECTION, NULL, H2O_STRLIT("close"));
         }

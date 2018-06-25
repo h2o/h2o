@@ -743,7 +743,7 @@ static void enqueue_goaway(struct st_h2o_http2client_conn_t *conn, int errnum, h
 static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
 {
     assert(errstr != NULL);
-    stream->super.cb.on_connect(&stream->super.super, errstr, NULL, NULL, NULL, 0, NULL, NULL, (h2o_httpclient_features_t){NULL}, NULL);
+    stream->super.cb.on_connect(&stream->super.super, errstr, NULL, NULL, NULL, 0, NULL, NULL, (h2o_httpclient_properties_t){NULL}, NULL);
     close_stream(stream);
 }
 
@@ -846,7 +846,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_iovec_t body = h2o_iovec_init(NULL, 0);
     stream->super.cb.on_head =
         stream->super.cb.on_connect(&stream->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &stream->streaming.proceed_req,
-                              (h2o_httpclient_features_t){NULL, NULL, 0}, &conn->origin_url);
+                              (h2o_httpclient_properties_t){NULL, NULL, 0}, &conn->origin_url);
     if (stream->super.cb.on_head == NULL) {
         close_stream(stream);
         return;

@@ -138,7 +138,7 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 }
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
-                          h2o_httpclient_features_t features, int keepalive, int is_websocket_handshake, int use_proxy_protocol,
+                          h2o_httpclient_properties_t props, int keepalive, int is_websocket_handshake, int use_proxy_protocol,
                           int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
@@ -154,9 +154,9 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
         remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
 
-    if (use_proxy_protocol && features.proxy_protocol != NULL) {
-        features.proxy_protocol->base = h2o_mem_alloc_pool(&req->pool, char, H2O_PROXY_HEADER_MAX_LENGTH);
-        features.proxy_protocol->len = h2o_stringify_proxy_header(req->conn, features.proxy_protocol->base);
+    if (use_proxy_protocol && props.proxy_protocol != NULL) {
+        props.proxy_protocol->base = h2o_mem_alloc_pool(&req->pool, char, H2O_PROXY_HEADER_MAX_LENGTH);
+        props.proxy_protocol->len = h2o_stringify_proxy_header(req->conn, props.proxy_protocol->base);
     }
 
     /* method */
@@ -165,7 +165,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     /* url */
     h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len));
 
-    if (features.connection_header) {
+    if (props.connection_header) {
         if (is_websocket_handshake) {
             h2o_add_header(&req->pool, headers, H2O_TOKEN_CONNECTION, NULL, H2O_STRLIT("upgrade"));
             h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
@@ -187,8 +187,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         if (req->content_length != SIZE_MAX) {
             h2o_iovec_t cl_buf = build_content_length(&req->pool, req->content_length);
             h2o_add_header(&req->pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
-        } else if (features.chunked != NULL) {
-            *(features.chunked) = 1;
+        } else if (props.chunked != NULL) {
+            *(props.chunked) = 1;
             h2o_add_header(&req->pool, headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
         }
     }
@@ -544,7 +544,7 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
-                                         h2o_httpclient_features_t features, h2o_url_t *origin)
+                                         h2o_httpclient_properties_t props, h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -578,7 +578,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
-    build_request(req, method, url, &headers_vec, features, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool),
+    build_request(req, method, url, &headers_vec, props, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool),
                   self->is_websocket_handshake, use_proxy_protocol, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
