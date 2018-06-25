@@ -244,6 +244,7 @@
 		7D937302202AC7BA005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D937301202AC7BA005FE6AB /* server_timing.c */; };
 		7D937303202AC7BA005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D937301202AC7BA005FE6AB /* server_timing.c */; };
 		7D9FA53A1FC323B200189F88 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FA5381FC323AC00189F88 /* channel.c */; };
+		7DA3F5AF20E0B0400000222F /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 7DA3F5AE20E0B03F0000222F /* token_table.h */; };
 		D081373A1FD400F4004679DF /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
 		D081373B1FD400F4004679DF /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 		D08137421FD408C2004679DF /* balancer.h in Headers */ = {isa = PBXBuildFile; fileRef = D08137411FD408C1004679DF /* balancer.h */; };
@@ -846,6 +847,7 @@
 		7D9372FD202AC70F005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D937301202AC7BA005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
+		7DA3F5AE20E0B03F0000222F /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
 		7DF88EF820761972005DB8D8 /* hiredis_.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hiredis_.h; sourceTree = "<group>"; };
 		D08137381FD400F4004679DF /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
 		D08137391FD400F4004679DF /* roundrobin.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = roundrobin.c; sourceTree = "<group>"; };
@@ -1542,6 +1544,7 @@
 				10AA2E931A80A592004322AC /* time_.h */,
 				10D0904019F0B9CD0043D458 /* timeout.h */,
 				107923A219A3215F00C52AD6 /* token.h */,
+				7DA3F5AE20E0B03F0000222F /* token_table.h */,
 				106C22F91C040F7800405689 /* tunnel.h */,
 				10AA2E9E1A8807CF004322AC /* url.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
@@ -2185,6 +2188,7 @@
 				08790DE21D8275DE00A04BC1 /* redis.h in Headers */,
 				0812AB211D7FCFEB00004F23 /* async.h in Headers */,
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
+				7DA3F5AF20E0B0400000222F /* token_table.h in Headers */,
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				1058F6ED1D7CC99B00FFFFA3 /* openssl_backport.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
