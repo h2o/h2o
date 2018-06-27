@@ -52,7 +52,8 @@ typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int min
 
 typedef struct st_h2o_httpclient_connection_pool_t {
     /**
-     * used to establish connections and pool those when h1 is used
+     * used to establish connections and pool those when h1 is used.
+     * socketpool is shared among multiple threads while connection pool is dedicated to each thread
      */
     h2o_socketpool_t *socketpool;
 
