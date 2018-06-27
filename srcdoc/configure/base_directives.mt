@@ -203,9 +203,8 @@ Use of the file is recommended for servers using Diffie-Hellman key agreement.
 <dd>
 colon seperated list of curves or a single curve for servers using Diffie-Hellman key exchange
 with elliptic curves (ECDH). Default is <code>auto</code> which offers a default set of curves
-set by the SSL library used or fallsback to secp256r1. 
-The usage of a curve list requires OpenSSL 1.0.2+ or LibreSSL 2.5+.
-(optional)
+set by the SSL library used. On older OpenSSL version it will fallback to secp256r1.<br>
+OpenSSL 1.0.2 / LibreSSL 2.5.1 or newer are required for this option.
 </dd>
 <dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>

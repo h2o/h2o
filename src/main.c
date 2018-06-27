@@ -222,11 +222,8 @@ static int setup_ecc_key(SSL_CTX *ssl_ctx, const char *requested_curves)
         /* Setups most (OpenSSL) / a sane list (LibreSSL > 2.5.3)
          * of elliptic-curves for Diffie-Hellman key exchange (ECDH).
          *
-         * This call is not required and possible for OpenSSL >= 1.1.0
-         *
-         * TODO: Since when is the call possible?
-         *  Nginx behaviour: It seems auto is only possible if
-         *  SSL_CTX_set1_curves_list is there. LEAVE FOR EVALUATION!
+         * This call is not required and not possible for OpenSSL >= 1.1.0,
+         * a noop macro may be defined.
          */
         SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
     #elif OPENSSL_VERSION_NUMBER < 0x10002000
@@ -236,7 +233,6 @@ static int setup_ecc_key(SSL_CTX *ssl_ctx, const char *requested_curves)
          * required for old versions.
          */
         if (strncmp("auto", curves, 4) == 0) {
-
             curves = "prime256v1";
         }
     #endif
@@ -254,6 +250,11 @@ static int setup_ecc_key(SSL_CTX *ssl_ctx, const char *requested_curves)
         }
         return 0;
     #endif
+
+    if (strncmp("auto", requested_curves, 4) != 0) {
+        fprintf(stderr, "Error: The linked Open-/LibreSSL version does not support SSL_CTX_set1_curves_list. Setting curves for ECDHE is not possible.\n");
+        return 1;
+    }
 
     /* Only a single curve can be set. */
     int nid;
