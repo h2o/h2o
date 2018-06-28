@@ -464,9 +464,7 @@ static void on_generator_proceed(h2o_generator_t *_generator, h2o_req_t *req)
         stream->tunnel = generator->cb(generator->data, req);
     } else {
         /* sent DATA frame */
-        h2o_tunnel_reset_timeout(stream->tunnel);
-        if (stream->tunnel->up.peer_write_complete != NULL)
-            stream->tunnel->up.peer_write_complete(stream->tunnel, &stream->tunnel->up, &stream->tunnel->down);
+        h2o_tunnel_notify_sent(stream->tunnel, &stream->tunnel->down);
     }
 }
 

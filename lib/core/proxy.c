@@ -435,10 +435,10 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     free(info);
 }
 
-static void on_h2_tunnel_end_write(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_iovec_t *bufs, size_t bufcnt)
+static void on_h2_tunnel_end_write(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     h2o_req_t *req = (void *)end->data;
-    h2o_send(req, bufs, bufcnt, H2O_SEND_STATE_IN_PROGRESS);
+    h2o_send(req, bufs, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static void on_h2_tunnel_end_close(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, const char *err)
@@ -450,10 +450,8 @@ static void on_h2_tunnel_end_close(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, 
 static h2o_tunnel_t *on_h2_tunnel_complete(void *_info, h2o_req_t *req)
 {
     struct rp_ws_upgrade_info_t *info = _info;
-    h2o_tunnel_end_t down;
-    down.open = NULL;
+    h2o_tunnel_end_t down = (h2o_tunnel_end_t){NULL};
     down.write = on_h2_tunnel_end_write;
-    down.peer_write_complete = NULL;
     down.close = on_h2_tunnel_end_close;
     down.data = req;
     h2o_tunnel_t *tunnel = h2o_tunnel_establish(info->ctx, down, h2o_tunnel_socket_end_init(info->upstream_sock), info->timeout);
