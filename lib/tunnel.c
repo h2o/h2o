@@ -24,14 +24,29 @@
 #include "h2o.h"
 #include "h2o/tunnel.h"
 
-void h2o_tunnel_break(h2o_tunnel_t *tunnel, const char *err)
+static void break_now(h2o_tunnel_t *tunnel)
 {
     h2o_timeout_unlink(&tunnel->timeout_entry);
-
-    tunnel->down.close(tunnel, &tunnel->down, err);
-    tunnel->up.close(tunnel, &tunnel->up, err);
-
+    tunnel->down.close(tunnel, &tunnel->down, tunnel->err);
+    tunnel->up.close(tunnel, &tunnel->up, tunnel->err);
     free(tunnel);
+}
+
+static int is_sending(h2o_tunnel_t *tunnel)
+{
+    return tunnel->down.sending == 1 || tunnel->up.sending == 1;
+}
+
+void h2o_tunnel_break(h2o_tunnel_t *tunnel, const char *err)
+{
+    tunnel->err = err;
+    tunnel->down.shutdowned = 1;
+    tunnel->up.shutdowned = 1;
+    if (!is_sending(tunnel)) {
+        break_now(tunnel);
+    } else {
+        /* wait h2o_tunnel_notify_sent to be called */
+    }
 }
 
 static void reset_timeout(h2o_tunnel_t *tunnel)
@@ -55,7 +70,12 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_tunnel_end_t down, h2
     tunnel->timeout_entry.cb = on_timeout;
     tunnel->down = down;
     tunnel->up = up;
+    tunnel->err = NULL;
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
+    tunnel->down.shutdowned = 0;
+    tunnel->down.sending = 0;
+    tunnel->up.shutdowned = 0;
+    tunnel->up.sending = 0;
 
     if (tunnel->up.open != NULL)
         tunnel->up.open(tunnel, &tunnel->up);
@@ -71,17 +91,21 @@ void h2o_tunnel_send(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *from, h2o_iovec_t *
     h2o_tunnel_end_t *to = from == &tunnel->down ? &tunnel->up : &tunnel->down;
     if (is_final)
         from->shutdowned = 1;
+    to->sending = 1;
     to->write(tunnel, to, bufs, bufcnt, is_final);
-    if (to->shutdowned)
-        h2o_tunnel_break(tunnel, NULL);
 }
 
 void h2o_tunnel_notify_sent(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end)
 {
+    assert(end->sending == 1);
     reset_timeout(tunnel);
+    end->sending = 0;
     h2o_tunnel_end_t *peer = end == &tunnel->down ? &tunnel->up : &tunnel->down;
     if (peer->peer_write_complete != NULL)
         peer->peer_write_complete(tunnel, peer, end);
+
+    if (!is_sending(tunnel) && tunnel->down.shutdowned && tunnel->up.shutdowned)
+        break_now(tunnel);
 }
 
 /* simple socket end */
@@ -93,6 +117,7 @@ static void on_socket_read(h2o_socket_t *sock, const char *err)
     h2o_tunnel_end_t *end = tunnel->down.data == sock ? &tunnel->down : &tunnel->up;
 
     if (err != NULL) {
+        h2o_socket_read_stop(sock);
         if (err == h2o_socket_error_closed) {
             h2o_tunnel_send(tunnel, end, NULL, 0, 1);
         } else {
@@ -141,6 +166,8 @@ static void on_socket_end_write(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o
         h2o_socket_write(sock, bufs, bufcnt, on_socket_write_complete);
     if (is_final)
         h2o_socket_shutdown(sock);
+    if (bufcnt == 0)
+        h2o_tunnel_notify_sent(tunnel, end);
 }
 static void on_socket_end_peer_write_complete(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_tunnel_end_t *peer)
 {
@@ -157,5 +184,5 @@ static void on_socket_end_close(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, con
 h2o_tunnel_end_t h2o_tunnel_socket_end_init(h2o_socket_t *sock)
 {
     return (h2o_tunnel_end_t){on_socket_end_open, on_socket_end_write, on_socket_end_peer_write_complete, on_socket_end_close,
-                              sock, 0};
+                              sock};
 }

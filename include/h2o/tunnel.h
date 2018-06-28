@@ -40,6 +40,7 @@ struct st_h2o_tunnel_end_t {
     h2o_tunnel_end_close_cb close;
     void *data;
     unsigned shutdowned : 1;
+    unsigned sending : 1;
 };
 
 struct st_h2o_tunnel_t {
@@ -48,6 +49,7 @@ struct st_h2o_tunnel_t {
     h2o_timeout_t *timeout;
     h2o_tunnel_end_t down;
     h2o_tunnel_end_t up;
+    const char *err;
 };
 
 h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_tunnel_end_t down, h2o_tunnel_end_t up, h2o_timeout_t *timeout);

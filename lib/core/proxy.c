@@ -435,42 +435,18 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     free(info);
 }
 
-static void on_h2_tunnel_end_write(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
-{
-    h2o_req_t *req = (void *)end->data;
-    h2o_send(req, bufs, bufcnt, is_final ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
-}
-
-static void on_h2_tunnel_end_close(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, const char *err)
-{
-    h2o_req_t *req = (void *)end->data;
-    h2o_send(req, NULL, 0, err == NULL ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_ERROR);
-}
-
-static h2o_tunnel_t *on_h2_tunnel_complete(void *_info, h2o_req_t *req)
-{
-    struct rp_ws_upgrade_info_t *info = _info;
-    h2o_tunnel_end_t down = (h2o_tunnel_end_t){NULL};
-    down.write = on_h2_tunnel_end_write;
-    down.close = on_h2_tunnel_end_close;
-    down.data = req;
-    h2o_tunnel_t *tunnel = h2o_tunnel_establish(info->ctx, down, h2o_tunnel_socket_end_init(info->upstream_sock), info->timeout);
-    free(info);
-    return tunnel;
-}
-
 static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout_t *timeout, int rlen)
 {
     h2o_req_t *req = self->src_req;
     h2o_socket_t *sock = h2o_http1client_steal_socket(self->client);
     h2o_buffer_consume(&sock->input, rlen); // trash data after stealing sock.
-    struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
-    info->upstream_sock = sock;
-    info->timeout = timeout;
-    info->ctx = req->conn->ctx;
 
     if (req->version < 0x200) {
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
+        struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
+        info->upstream_sock = sock;
+        info->timeout = timeout;
+        info->ctx = req->conn->ctx;
         h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
     } else {
         assert(self->websocket_key != NULL);
@@ -486,7 +462,7 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout
             goto OnInvalidResponse;
 
         req->res.status = 200;
-        h2o_http2_tunnel(req, on_h2_tunnel_complete, info);
+        h2o_http2_tunnel(req, h2o_tunnel_socket_end_init(sock), timeout);
         return;
 
     OnInvalidResponse:
