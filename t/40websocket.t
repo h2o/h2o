@@ -168,7 +168,6 @@ EOR
     };
     subtest 'invalid accept key' => sub {
         my $server = silent_server();
-        my $output = run_with_h2get_simple($server, $code);
         my $output = run_with_h2get_simple($server, $code->($server, '/websocket?invalid_accept_key'));
         like $output, qr{':status' => '502'}i;
     };
