@@ -467,7 +467,7 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     size_t dummy_content_length;
     int ret;
 
-    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, NULL, &stream->req.input.scheme, &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme, &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
