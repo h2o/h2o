@@ -104,6 +104,7 @@ struct st_h2o_ssl_context_t {
 };
 
 /* backend functions */
+static void do_shutdown_socket(h2o_socket_t *sock);
 static void do_dispose_socket(h2o_socket_t *sock);
 static void do_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
 static void do_read_start(h2o_socket_t *sock);
@@ -454,6 +455,11 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     sock->input = info->input;
     h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);
     return sock;
+}
+
+void h2o_socket_shutdown(h2o_socket_t *sock)
+{
+    do_shutdown_socket(sock);
 }
 
 void h2o_socket_close(h2o_socket_t *sock)

@@ -182,6 +182,10 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info);
  */
 void h2o_socket_dispose_export(h2o_socket_export_t *info);
 /**
+ * shutdown the write side of the socket
+ */
+void h2o_socket_shutdown(h2o_socket_t *sock);
+/**
  * closes the socket
  */
 void h2o_socket_close(h2o_socket_t *sock);
