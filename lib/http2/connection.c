@@ -692,7 +692,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     }
-    if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY && stream->tunnel == NULL) {
+    if ((stream->tunnel == NULL && stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) || (stream->tunnel != NULL && stream->state != H2O_HTTP2_STREAM_STATE_SEND_BODY)) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         return 0;
