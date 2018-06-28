@@ -457,7 +457,7 @@ struct st_http2_tunnel_generator_t {
     unsigned final_received : 1;
 };
 
-static void tunnel_end_write(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+static void tunnel_end_send(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     struct st_http2_tunnel_generator_t *generator = (void *)end->data;
     assert(!generator->final_received);
@@ -480,7 +480,7 @@ static void on_tunnel_generator_proceed(h2o_generator_t *_generator, h2o_req_t *
     if (stream->tunnel == NULL) {
         /* sent 200 response, start tunneling */
         h2o_tunnel_end_t down = (h2o_tunnel_end_t){NULL};
-        down.write = tunnel_end_write;
+        down.send = tunnel_end_send;
         down.close = tunnel_end_close;
         down.data = generator;
         stream->tunnel = h2o_tunnel_establish(req->conn->ctx, down, generator->upstream, generator->timeout);
