@@ -35,9 +35,21 @@ typedef void (*h2o_tunnel_end_on_peer_send_complete_cb)(h2o_tunnel_t *tunnel, h2
 typedef void (*h2o_tunnel_end_close_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_end_t *end, const char *err);
 
 struct st_h2o_tunnel_end_t {
+    /**
+     * called when tunnel is initialized
+     */
     h2o_tunnel_end_open_cb open;
+    /**
+     * called when the peer wants to send data to this end
+     */
     h2o_tunnel_end_send_cb send;
+    /**
+     * called when the peer completed to send the data (maybe NULL)
+     */
     h2o_tunnel_end_on_peer_send_complete_cb on_peer_send_complete;
+    /**
+     * called when tunnel gets broken
+     */
     h2o_tunnel_end_close_cb close;
     void *data;
     unsigned shutdowned : 1;
