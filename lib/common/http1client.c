@@ -190,7 +190,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
 static void on_error_before_head(struct st_h2o_http1client_t *client, const char *errstr)
 {
     client->_do_keepalive = 0;
-    client->super.cb.on_head(&client->super.super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+    client->super.cb.on_head(&client->super.super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
     close_client(client);
 }
 
@@ -306,7 +306,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* call the callback. sock may be stealed and stealed sock need rlen.*/
     client->super.cb.on_body = client->super.cb.on_head(&client->super.super, is_eos ? h2o_httpclient_error_is_eos : NULL, minor_version,
-                                              http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, rlen);
+                                              http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, rlen, 1);
 
     if (is_eos) {
         close_client(client);

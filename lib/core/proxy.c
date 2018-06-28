@@ -390,7 +390,7 @@ static char compress_hint_to_enum(const char *val, size_t len)
 }
 
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen)
+                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -466,13 +466,18 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             }
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
-            value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
+            if (header_requires_dup)
+                value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
         AddHeader:
             h2o_add_header(&req->pool, &req->res.headers, token, headers[i].orig_name, value.base, value.len);
         Skip:;
         } else {
-            h2o_iovec_t name = h2o_strdup(&req->pool, headers[i].name->base, headers[i].name->len);
-            h2o_iovec_t value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
+            h2o_iovec_t name = *headers[i].name;
+            h2o_iovec_t value = headers[i].value;
+            if (header_requires_dup) {
+                name = h2o_strdup(&req->pool, name.base, name.len);
+                value = h2o_strdup(&req->pool, value.base, value.len);
+            }
             h2o_add_header_by_str(&req->pool, &req->res.headers, name.base, name.len, 0, headers[i].orig_name, value.base,
                                   value.len);
         }

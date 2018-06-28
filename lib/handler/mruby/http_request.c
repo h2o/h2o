@@ -125,7 +125,7 @@ static void on_gc_dispose_input_stream(mrb_state *mrb, void *_ctx)
 const static struct mrb_data_type input_stream_type = {"http_input_stream", on_gc_dispose_input_stream};
 
 static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int status, const h2o_header_t *headers_sorted,
-                          size_t num_headers)
+                          size_t num_headers, int header_requires_dup)
 {
     mrb_state *mrb = ctx->ctx->shared->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
@@ -144,8 +144,14 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
             h2o_memis(headers_sorted[i].name, headers_sorted[i].name->len, H2O_STRLIT("transfer-encoding")))
             continue;
         /* build and set the hash entry */
-        mrb_value k = h2o_mruby_new_str(mrb, headers_sorted[i].name->base, headers_sorted[i].name->len);
-        mrb_value v = h2o_mruby_new_str(mrb, headers_sorted[i].value.base, headers_sorted[i].value.len);
+        mrb_value k, v;
+        if (header_requires_dup) {
+            k = h2o_mruby_new_str(mrb, headers_sorted[i].name->base, headers_sorted[i].name->len);
+            v = h2o_mruby_new_str(mrb, headers_sorted[i].value.base, headers_sorted[i].value.len);
+        } else {
+            k = h2o_mruby_new_str_static(mrb, headers_sorted[i].name->base, headers_sorted[i].name->len);
+            v = h2o_mruby_new_str_static(mrb, headers_sorted[i].value.base, headers_sorted[i].value.len);
+        }
         while (i + 1 < num_headers && h2o_memis(headers_sorted[i].name->base, headers_sorted[i].name->len,
                                                 headers_sorted[i + 1].name->base, headers_sorted[i + 1].name->len)) {
             ++i;
@@ -197,7 +203,7 @@ static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const ch
         {&H2O_TOKEN_CONTENT_TYPE->buf, NULL, h2o_iovec_init(H2O_STRLIT("text/plain; charset=utf-8"))},
     };
 
-    post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]));
+    post_response(ctx, 500, headers_sorted, sizeof(headers_sorted) / sizeof(headers_sorted[0]), 1);
 }
 
 static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
@@ -265,7 +271,7 @@ static int headers_sort_cb(const void *_x, const void *_y)
 }
 
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen)
+                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -280,7 +286,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     }
 
     qsort(headers, num_headers, sizeof(headers[0]), headers_sort_cb);
-    post_response(ctx, status, headers, num_headers);
+    post_response(ctx, status, headers, num_headers, header_requires_dup);
     return on_body;
 }
 

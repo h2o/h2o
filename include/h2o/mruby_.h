@@ -133,7 +133,8 @@ typedef struct st_h2o_mruby_generator_t {
             h2o_mruby__abort_exc(mrb, "unexpected ruby error", __FILE__, __LINE__);                                                \
     } while (0)
 
-#define h2o_mruby_new_str(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), __FILE__, __LINE__)
+#define h2o_mruby_new_str(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), 0, __FILE__, __LINE__)
+#define h2o_mruby_new_str_static(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), 1, __FILE__, __LINE__)
 
 /* source files using this macro should include mruby/throw.h */
 #define H2O_MRUBY_EXEC_GUARD(block)                                                                                                \
@@ -157,7 +158,7 @@ typedef struct st_h2o_mruby_generator_t {
 
 /* handler/mruby.c */
 void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, int line);
-mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const char *file, int line);
+mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, int is_static, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
 mrb_value h2o_mruby_eval_expr_location(mrb_state *mrb, const char *expr, const char *path, const int lineno);

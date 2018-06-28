@@ -177,7 +177,7 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
-        stream->super.cb.on_head(&stream->super.super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+        stream->super.cb.on_head(&stream->super.super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
         stream->super.cb.on_body(&stream->super.super, errstr);
@@ -221,7 +221,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     }
 
     stream->super.cb.on_body = stream->super.cb.on_head(&stream->super.super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0, stream->input.status, h2o_iovec_init(NULL, 0),
-                                            stream->input.headers.entries, stream->input.headers.size, (int)len);
+                                            stream->input.headers.entries, stream->input.headers.size, (int)len, 0);
 
     if (is_end_stream) {
         close_stream(stream);
@@ -756,10 +756,10 @@ static void do_stream_timeout(struct st_h2o_http2client_stream_t *stream)
     switch (stream->state) {
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
-        stream->super.cb.on_head(&stream->super.super, "I/O timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+        stream->super.cb.on_head(&stream->super.super, "I/O timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
-        stream->super.cb.on_head(&stream->super.super, "first byte timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+        stream->super.cb.on_head(&stream->super.super, "first byte timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
         stream->super.cb.on_body(&stream->super.super, "I/O timeout");
