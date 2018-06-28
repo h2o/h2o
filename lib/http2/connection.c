@@ -419,7 +419,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 static void handle_tunneled_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t payload, int is_end_stream)
 {
-    h2o_tunnel_send(stream->tunnel, &stream->tunnel->down , &payload, 1, is_end_stream);
+    h2o_tunnel_send(stream->tunnel, &stream->tunnel->down, &payload, 1, is_end_stream);
 }
 
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
@@ -692,7 +692,8 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     }
-    if ((stream->tunnel == NULL && stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) || (stream->tunnel != NULL && stream->state != H2O_HTTP2_STREAM_STATE_SEND_BODY)) {
+    if ((stream->tunnel == NULL && stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) ||
+        (stream->tunnel != NULL && stream->state != H2O_HTTP2_STREAM_STATE_SEND_BODY)) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         return 0;
