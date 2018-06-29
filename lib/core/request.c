@@ -770,7 +770,7 @@ void h2o_send_informational(h2o_req_t *req)
     assert(100 <= req->res.status && req->res.status <= 199 && req->res.status != 101);
 
     if (req->_ostr_top->send_informational == NULL)
-        return;
+        goto Clear;
 
     int i = 0;
     for (i = 0; i != req->pathconf->filters.size; ++i) {
@@ -780,10 +780,11 @@ void h2o_send_informational(h2o_req_t *req)
     }
 
     if (req->res.status == 103 && req->res.headers.size == 0)
-        return;
+        goto Clear;
 
     req->_ostr_top->send_informational(req->_ostr_top, req);
 
+Clear:
     /* clear status and headers */
     req->res.status = 0;
     req->res.headers = (h2o_headers_t){NULL, 0, 0};
