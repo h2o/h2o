@@ -69,7 +69,7 @@ extern __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
 
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
 int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at);
-void h2o_http2_tunnel(h2o_req_t *req, h2o_tunnel_end_t upstream, h2o_timeout_t *timeout);
+void h2o_http2_tunnel(h2o_req_t *req, h2o_tunnel_endpoint_t upstream, h2o_timeout_t *timeout);
 
 #ifdef __cplusplus
 }

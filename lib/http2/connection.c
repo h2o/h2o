@@ -419,7 +419,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 static void handle_tunneled_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t payload, int is_end_stream)
 {
-    h2o_tunnel_send(stream->tunnel, &stream->tunnel->down, &payload, 1, is_end_stream);
+    h2o_tunnel_send(stream->tunnel, &stream->tunnel->endpoints[0], &payload, 1, is_end_stream);
 }
 
 static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const uint8_t *src, size_t len,
