@@ -223,6 +223,8 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     buf.base[offset++] = ' ';
     APPEND(req->path.base, req->path.len);
     APPEND_STRLIT(" HTTP/1.1\r\nconnection: ");
+
+    *websocket_key = NULL;
     if (is_websocket_handshake) {
         if (req->version >= 0x200 && h2o_find_header_by_str(&req->headers, H2O_STRLIT("sec-websocket-key"), -1) == -1) {
             *websocket_key = h2o_mem_alloc_pool(&req->pool, char, 25);
