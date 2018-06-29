@@ -452,7 +452,10 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
 struct st_http2_tunnel_generator_t {
     h2o_generator_t super;
     h2o_req_t *req;
-    h2o_tunnel_endpoint_t peer;
+    struct {
+        const h2o_tunnel_endpoint_callbacks_t *cb;
+        void *data;
+    } peer;
     h2o_timeout_t *timeout;
     unsigned final_received : 1;
 };
@@ -479,11 +482,13 @@ static void on_tunnel_generator_proceed(h2o_generator_t *_generator, h2o_req_t *
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     if (stream->tunnel == NULL) {
         /* sent 200 response, start tunneling */
-        h2o_tunnel_endpoint_t ep = (h2o_tunnel_endpoint_t){NULL};
-        ep.send = tunnel_endpoint_send;
-        ep.close = tunnel_endpoint_close;
-        ep.data = generator;
-        stream->tunnel = h2o_tunnel_establish(req->conn->ctx, ep, generator->peer, generator->timeout);
+        static const h2o_tunnel_endpoint_callbacks_t callbacks = {
+            NULL,
+            tunnel_endpoint_send,
+            NULL,
+            tunnel_endpoint_close,
+        };
+        stream->tunnel = h2o_tunnel_establish(req->conn->ctx, &callbacks, generator, generator->peer.cb, generator->peer.data, generator->timeout);
     } else {
         /* sent DATA frame */
         h2o_tunnel_notify_sent(stream->tunnel, &stream->tunnel->endpoints[0]);
@@ -502,7 +507,7 @@ static void on_tunnel_generator_stop(h2o_generator_t *_generator, h2o_req_t *req
     }
 }
 
-void h2o_http2_tunnel(h2o_req_t *req, h2o_tunnel_endpoint_t peer, h2o_timeout_t *timeout)
+void h2o_http2_tunnel(h2o_req_t *req, const h2o_tunnel_endpoint_callbacks_t *peer_cb, void *peer_data, h2o_timeout_t *timeout)
 {
     assert(req->version >= 0x200);
     assert(req->res.status == 200);
@@ -511,7 +516,8 @@ void h2o_http2_tunnel(h2o_req_t *req, h2o_tunnel_endpoint_t peer, h2o_timeout_t 
     generator->super.proceed = on_tunnel_generator_proceed;
     generator->super.stop = on_tunnel_generator_stop;
     generator->req = req;
-    generator->peer = peer;
+    generator->peer.cb = peer_cb;
+    generator->peer.data = peer_data;
     generator->timeout = timeout;
     generator->final_received = 0;
     h2o_start_response(req, &generator->super);

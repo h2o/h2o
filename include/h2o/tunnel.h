@@ -34,7 +34,7 @@ typedef void (*h2o_tunnel_endpoint_send_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_end
 typedef void (*h2o_tunnel_endpoint_on_peer_send_complete_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer);
 typedef void (*h2o_tunnel_endpoint_close_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, const char *err);
 
-struct st_h2o_tunnel_endpoint_t {
+typedef struct st_h2o_tunnel_endpoint_callbacks_t {
     /**
      * called when tunnel is initialized
      */
@@ -51,6 +51,10 @@ struct st_h2o_tunnel_endpoint_t {
      * called when tunnel gets broken
      */
     h2o_tunnel_endpoint_close_cb close;
+} h2o_tunnel_endpoint_callbacks_t;
+
+struct st_h2o_tunnel_endpoint_t {
+    const h2o_tunnel_endpoint_callbacks_t *callbacks;
     void *data;
     unsigned shutdowned : 1;
     unsigned sending : 1;
@@ -64,12 +68,12 @@ struct st_h2o_tunnel_t {
     const char *err;
 };
 
-h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, h2o_tunnel_endpoint_t ep1, h2o_tunnel_endpoint_t ep2, h2o_timeout_t *timeout);
+h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, const h2o_tunnel_endpoint_callbacks_t *cb1, void *data1, const h2o_tunnel_endpoint_callbacks_t *cb2, void *data2, h2o_timeout_t *timeout);
 void h2o_tunnel_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *from, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 void h2o_tunnel_notify_sent(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *from);
 void h2o_tunnel_break(h2o_tunnel_t *tunnel, const char *err);
 
-h2o_tunnel_endpoint_t h2o_tunnel_socket_end_init(h2o_socket_t *sock);
+extern const h2o_tunnel_endpoint_callbacks_t h2o_tunnel_socket_endpoint_callbacks;
 
 #ifdef __cplusplus
 }
