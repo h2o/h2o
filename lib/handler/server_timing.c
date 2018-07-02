@@ -76,7 +76,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     }
 
     /* indicate the protocol handler to emit server timing */
-    req->send_server_timing = 1;
+    req->send_server_timing_header = 1;
+    req->send_server_timing_trailer = 1;
 
 Next:
     h2o_setup_next_ostream(req, slot);
