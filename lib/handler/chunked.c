@@ -89,13 +89,11 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         goto NextWithoutTrailer;
     else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
         goto NextWithoutTrailer;
+
     /* we cannot handle certain responses (like 101 switching protocols) */
     if (req->res.status != 200) {
         req->http1_is_persistent = 0;
     }
-    /* skip if content-encoding header is being set */
-    if (h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) != -1)
-        goto NextWithoutTrailer;
 
     /* set content-encoding header */
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
