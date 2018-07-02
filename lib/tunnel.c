@@ -27,8 +27,8 @@
 static void break_now(h2o_tunnel_t *tunnel)
 {
     h2o_timeout_unlink(&tunnel->timeout_entry);
-    tunnel->endpoints[0].callbacks->close(tunnel, &tunnel->endpoints[0], tunnel->err);
-    tunnel->endpoints[1].callbacks->close(tunnel, &tunnel->endpoints[1], tunnel->err);
+    tunnel->endpoints[0].callbacks->on_close(tunnel, &tunnel->endpoints[0], tunnel->err);
+    tunnel->endpoints[1].callbacks->on_close(tunnel, &tunnel->endpoints[1], tunnel->err);
     free(tunnel);
 }
 
@@ -37,7 +37,7 @@ static int is_sending(h2o_tunnel_t *tunnel)
     return tunnel->endpoints[0].sending == 1 || tunnel->endpoints[1].sending == 1;
 }
 
-void h2o_tunnel_break(h2o_tunnel_t *tunnel, const char *err)
+void h2o_tunnel_reset(h2o_tunnel_t *tunnel, const char *err)
 {
     tunnel->err = err;
     tunnel->endpoints[0].shutdowned = 1;
@@ -45,7 +45,7 @@ void h2o_tunnel_break(h2o_tunnel_t *tunnel, const char *err)
     if (!is_sending(tunnel)) {
         break_now(tunnel);
     } else {
-        /* wait h2o_tunnel_notify_sent to be called */
+        /* wait h2o_tunnel_on_send_complete to be called */
     }
 }
 
@@ -58,7 +58,7 @@ static void reset_timeout(h2o_tunnel_t *tunnel)
 static void on_timeout(h2o_timeout_entry_t *entry)
 {
     h2o_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_tunnel_t, timeout_entry, entry);
-    h2o_tunnel_break(tunnel, "tunnel timeout");
+    h2o_tunnel_reset(tunnel, "tunnel timeout");
 }
 
 h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, const h2o_tunnel_endpoint_callbacks_t *cb1, void *data1, const h2o_tunnel_endpoint_callbacks_t *cb2, void *data2, h2o_timeout_t *timeout)
@@ -73,10 +73,10 @@ h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, const h2o_tunnel_endpoint
     tunnel->err = NULL;
     h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 
-    if (tunnel->endpoints[1].callbacks->open != NULL)
-        tunnel->endpoints[1].callbacks->open(tunnel, &tunnel->endpoints[1]);
-    if (tunnel->endpoints[0].callbacks->open != NULL)
-        tunnel->endpoints[0].callbacks->open(tunnel, &tunnel->endpoints[0]);
+    if (tunnel->endpoints[1].callbacks->on_open != NULL)
+        tunnel->endpoints[1].callbacks->on_open(tunnel, &tunnel->endpoints[1]);
+    if (tunnel->endpoints[0].callbacks->on_open != NULL)
+        tunnel->endpoints[0].callbacks->on_open(tunnel, &tunnel->endpoints[0]);
 
     return tunnel;
 }
@@ -88,17 +88,17 @@ void h2o_tunnel_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *from, h2o_iove
     if (is_final)
         from->shutdowned = 1;
     to->sending = 1;
-    to->callbacks->send(tunnel, to, bufs, bufcnt, is_final);
+    to->callbacks->on_send(tunnel, to, bufs, bufcnt, is_final);
 }
 
-void h2o_tunnel_notify_sent(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end)
+void h2o_tunnel_on_send_complete(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end)
 {
     assert(end->sending == 1);
     reset_timeout(tunnel);
     end->sending = 0;
     h2o_tunnel_endpoint_t *peer = end == &tunnel->endpoints[0] ? &tunnel->endpoints[1] : &tunnel->endpoints[0];
-    if (peer->callbacks->on_peer_send_complete != NULL)
-        peer->callbacks->on_peer_send_complete(tunnel, peer, end);
+    if (peer->callbacks->on_send_complete != NULL)
+        peer->callbacks->on_send_complete(tunnel, peer, end);
 
     if (!is_sending(tunnel) && tunnel->endpoints[0].shutdowned && tunnel->endpoints[1].shutdowned)
         break_now(tunnel);
@@ -117,7 +117,7 @@ static void on_socket_read(h2o_socket_t *sock, const char *err)
         if (err == h2o_socket_error_closed) {
             h2o_tunnel_send(tunnel, end, NULL, 0, 1);
         } else {
-            h2o_tunnel_break(tunnel, err);
+            h2o_tunnel_reset(tunnel, err);
         }
         return;
     }
@@ -139,15 +139,15 @@ static void on_socket_write_complete(h2o_socket_t *sock, const char *err)
     h2o_tunnel_t *tunnel = sock->data;
 
     if (err != NULL) {
-        h2o_tunnel_break(tunnel, err);
+        h2o_tunnel_reset(tunnel, err);
         return;
     }
 
     h2o_tunnel_endpoint_t *end = tunnel->endpoints[0].data == sock ? &tunnel->endpoints[0] : &tunnel->endpoints[1];
-    h2o_tunnel_notify_sent(tunnel, end);
+    h2o_tunnel_on_send_complete(tunnel, end);
 }
 
-static void socket_endpoint_open(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end)
+static void socket_endpoint_on_open(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end)
 {
     h2o_socket_t *sock = end->data;
     sock->data = tunnel;
@@ -155,7 +155,7 @@ static void socket_endpoint_open(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *en
         on_socket_read(sock, NULL);
     h2o_socket_read_start(sock, on_socket_read);
 }
-static void socket_endpoint_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+static void socket_endpoint_on_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     h2o_socket_t *sock = end->data;
     if (bufcnt != 0)
@@ -163,23 +163,23 @@ static void socket_endpoint_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *en
     if (is_final)
         h2o_socket_shutdown(sock);
     if (bufcnt == 0)
-        h2o_tunnel_notify_sent(tunnel, end);
+        h2o_tunnel_on_send_complete(tunnel, end);
 }
-static void socket_endpoint_on_peer_send_complete(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer)
+static void socket_endpoint_on_send_complete(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer)
 {
     h2o_socket_t *sock = end->data;
     h2o_buffer_consume(&sock->input, sock->input->size);
     h2o_socket_read_start(sock, on_socket_read);
 }
-static void socket_endpoint_close(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, const char *err)
+static void socket_endpoint_on_close(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, const char *err)
 {
     h2o_socket_t *sock = end->data;
     h2o_socket_close(sock);
 }
 
 const h2o_tunnel_endpoint_callbacks_t h2o_tunnel_socket_endpoint_callbacks = {
-    socket_endpoint_open,
-    socket_endpoint_send,
-    socket_endpoint_on_peer_send_complete,
-    socket_endpoint_close,
+    socket_endpoint_on_open,
+    socket_endpoint_on_send,
+    socket_endpoint_on_send_complete,
+    socket_endpoint_on_close,
 };
