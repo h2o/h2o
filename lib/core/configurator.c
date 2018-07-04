@@ -979,7 +979,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_push_preload);
         h2o_configurator_define_command(&c->super, "http2-allow-cross-origin-push",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_PATH |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_allow_cross_origin_push);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,

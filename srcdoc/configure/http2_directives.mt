@@ -372,7 +372,7 @@ EOT
 <?
 $ctx->{directive}->(
     name    => "http2-allow-cross-origin-push",
-    levels  => [ qw(global host) ],
+    levels  => [ qw(global path) ],
     since   => '2.3',
     default => 'http2-allow-cross-origin-push: OFF',
     desc    => << 'EOT',
