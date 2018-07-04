@@ -1690,7 +1690,7 @@ static void on_tunnel_generator_proceed(h2o_generator_t *_generator, h2o_req_t *
         stream->req.proceed_req = proceed_request;
     } else {
         /* sent DATA frame */
-        h2o_tunnel_on_send_complete(stream->tunnel, &stream->tunnel->endpoints[0]);
+        h2o_tunnel_notify_sent(stream->tunnel, &stream->tunnel->endpoints[0]);
         if (generator->server_final_received)
             h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_FINAL);
     }
