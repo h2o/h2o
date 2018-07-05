@@ -527,7 +527,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     size_t num_headers = 0;
     h2o_iovec_t body = h2o_iovec_init(NULL, 0);;
 
-    client->super.cb.on_head = client->super.cb.on_connect(&client->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &client->proceed_req, props, client->_origin);
+    client->super.cb.on_head = client->super.cb.on_connect(&client->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &client->proceed_req, &props, client->_origin);
 
     if (client->super.cb.on_head == NULL) {
         close_client(client);
