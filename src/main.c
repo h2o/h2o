@@ -2040,7 +2040,7 @@ int main(int argc, char **argv)
                        "  -h, --help         print this help\n"
                        "\n"
                        "Please refer to the documentation under `share/doc/h2o` (or available online at\n"
-                       "http://h2o.examp1e.net/) for how to configure the server.\n"
+                       "https://h2o.examp1e.net/) for how to configure the server.\n"
                        "\n",
                        H2O_TO_STR(H2O_CONFIG_PATH));
                 exit(0);
