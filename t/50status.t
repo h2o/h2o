@@ -99,9 +99,17 @@ hosts:
 EOT
     });
 
-    my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status/json?show=durations,events,main' 2>&1 > /dev/null`;
-    is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
-    is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
+    {
+        my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status/json?show=durations,events,main' 2>&1 > /dev/null`;
+        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
+    }
+
+    {
+        my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status2/json?show=durations,events,main' 2>&1 > /dev/null`;
+        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
+    }
 };
 
 
