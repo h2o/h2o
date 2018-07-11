@@ -265,9 +265,10 @@ void h2o_status_register(h2o_pathconf_t *conf)
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.on_req = on_req;
-    if (!handler_registered++) {
+    if (!handler_registered) {
+        handler_registered++;
         h2o_config_register_status_handler(conf->global, requests_status_handler);
         h2o_config_register_status_handler(conf->global, events_status_handler);
         h2o_config_register_status_handler(conf->global, durations_status_handler);
-    }   
+    }
 }
