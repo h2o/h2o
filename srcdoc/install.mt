@@ -11,7 +11,7 @@ Therefore you may try to at first install the software using your favorite packa
 <p>
 At the time being, following packages are known to be actively maintained<?= $ctx->{note}->(q{Please open a new issue on <a href="https://github.com/h2o/h2o">Github</a> if you want a new package to get added.}) ?>:
 <ul>
-<li><a href="http://portsmon.freebsd.org/portoverview.py?category=www&portname=h2o">FreeBSD</a></li>
+<li><a href="https://www.freshports.org/www/h2o">FreeBSD h2o release</a> and <a href="https://www.freshports.org/www/h2o-devel">h2o betas</a></li>
 <li><a href="http://brewformulas.org/H2o">Homebrew (OS X)</a></li>
 <li><a href="https://github.com/tatsushid/h2o-rpm">RPM (Fedora, RHEL/CentOS, OpenSUSE)</a></li>
 <li><a href="https://hub.docker.com/r/lkwg82/h2o-http2-server/">Docker Image</a></li>
