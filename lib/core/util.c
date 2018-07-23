@@ -580,7 +580,8 @@ Unknown:
 }
 
 static h2o_iovec_t to_push_path(h2o_mem_pool_t *pool, h2o_iovec_t url, h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
-                                h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority)
+                                h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
+                                int allow_cross_origin_push)
 {
     h2o_url_t parsed, resolved;
 
@@ -602,7 +603,8 @@ static h2o_iovec_t to_push_path(h2o_mem_pool_t *pool, h2o_iovec_t url, h2o_iovec
     h2o_url_resolve(pool, &base, &parsed, &resolved);
     if (input_scheme != resolved.scheme)
         goto Invalid;
-    if (!h2o_lcstris(input_authority.base, input_authority.len, resolved.authority.base, resolved.authority.len))
+    if (!allow_cross_origin_push &&
+        !h2o_lcstris(input_authority.base, input_authority.len, resolved.authority.base, resolved.authority.len))
         goto Invalid;
 
     return resolved.path;
@@ -615,7 +617,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
                                             const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
                                             const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                             void (*cb)(void *ctx, const char *path, size_t path_len, int is_critical), void *cb_ctx,
-                                            h2o_iovec_t *filtered_value)
+                                            h2o_iovec_t *filtered_value, int allow_cross_origin_push)
 {
     h2o_iovec_t iter = h2o_iovec_init(value, value_len), token_value;
     const char *token;
@@ -658,7 +660,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
         /* push the path */
         if (!nopush && preload) {
             h2o_iovec_t path = to_push_path(pool, h2o_iovec_init(url_with_brackets.base + 1, url_with_brackets.len - 2), base_path,
-                                            input_scheme, input_authority, base_scheme, base_authority);
+                                            input_scheme, input_authority, base_scheme, base_authority, allow_cross_origin_push);
             if (path.len != 0)
                 (*cb)(cb_ctx, path.base, path.len, critical);
         }

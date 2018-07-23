@@ -30,6 +30,7 @@ struct st_core_config_vars_t {
     struct {
         unsigned reprioritize_blocking_assets : 1;
         unsigned push_preload : 1;
+        unsigned allow_cross_origin_push : 1;
         h2o_casper_conf_t casper;
     } http2;
     struct {
@@ -84,6 +85,7 @@ static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *c
         /* exitting from host-level configuration */
         ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
         ctx->hostconf->http2.push_preload = self->vars->http2.push_preload;
+        ctx->hostconf->http2.allow_cross_origin_push = self->vars->http2.allow_cross_origin_push;
         ctx->hostconf->http2.casper = self->vars->http2.casper;
     } else if (ctx->pathconf != NULL) {
         /* exitting from path or extension-level configuration */
@@ -497,6 +499,18 @@ static int on_config_http2_push_preload(h2o_configurator_command_t *cmd, h2o_con
     if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
     self->vars->http2.push_preload = (int)on;
+
+    return 0;
+}
+
+static int on_config_http2_allow_cross_origin_push(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    self->vars->http2.allow_cross_origin_push = (int)on;
 
     return 0;
 }
@@ -964,6 +978,10 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_push_preload);
+        h2o_configurator_define_command(&c->super, "http2-allow-cross-origin-push",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_PATH |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_allow_cross_origin_push);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
