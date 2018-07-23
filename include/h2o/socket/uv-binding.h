@@ -22,6 +22,7 @@
 #ifndef h2o__uv_binding_h
 #define h2o__uv_binding_h
 
+#include <sys/time.h>
 #include <uv.h>
 
 #if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
