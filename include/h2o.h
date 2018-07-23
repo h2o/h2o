@@ -475,9 +475,11 @@ struct st_h2o_globalconf_t {
 };
 
 enum {
-    H2O_COMPRESS_HINT_AUTO = 0, /* default: let h2o negociate compression based on the configuration */
-    H2O_COMPRESS_HINT_DISABLE,  /* compression was explicitely disabled for this request */
-    H2O_COMPRESS_HINT_ENABLE,   /* compression was explicitely enabled for this request */
+    H2O_COMPRESS_HINT_AUTO = 0,    /* default: let h2o negociate compression based on the configuration */
+    H2O_COMPRESS_HINT_DISABLE,     /* compression was explicitely disabled for this request */
+    H2O_COMPRESS_HINT_ENABLE,      /* compression was explicitely enabled for this request */
+    H2O_COMPRESS_HINT_ENABLE_GZIP, /* compression was explicitely enabled for this request, asking for gzip */
+    H2O_COMPRESS_HINT_ENABLE_BR,   /* compression was explicitely enabled for this request, asking for br */
 };
 
 /**
