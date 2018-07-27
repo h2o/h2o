@@ -78,9 +78,12 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     if (req->is_subrequest)
         goto Next;
 
-    /* do nothing if not HTTP/1.1 */
-    if (req->version != 0x101)
+    /* do nothing with HTTP/2 */
+    if (req->version >= 0x200)
         goto Next;
+    /* do nothing with HTTP/1.0, but drop trailer flag */
+    if (req->version != 0x101)
+        goto NextWithoutTrailer;
     /* do nothing if content-length is known */
     if (req->res.content_length != SIZE_MAX)
         goto NextWithoutTrailer;
