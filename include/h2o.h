@@ -1134,9 +1134,13 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
     /**
-     * whether if the response should include server-timing
+     * whether if the response should include server-timing header
      */
-    unsigned char send_server_timing : 1;
+    unsigned char send_server_timing_header : 1;
+    /**
+     * whether if the response should include server-timing trailer
+     */
+    unsigned char send_server_timing_trailer : 1;
     /**
      * whether the request is a subrequest
      */

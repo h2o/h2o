@@ -51,12 +51,12 @@ static void send_chunk(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         outbufcnt += inbufcnt;
         if (state != H2O_SEND_STATE_ERROR) {
             outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
-            outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? (req->send_server_timing ? 5 : 7) : 2;
+            outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? (req->send_server_timing_trailer ? 5 : 7) : 2;
             outbufcnt++;
         }
     } else if (state == H2O_SEND_STATE_FINAL) {
         outbufs[outbufcnt].base = "0\r\n\r\n";
-        outbufs[outbufcnt].len = req->send_server_timing ? 3 : 5;
+        outbufs[outbufcnt].len = req->send_server_timing_trailer ? 3 : 5;
         outbufcnt++;
     }
 
@@ -78,22 +78,25 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     if (req->is_subrequest)
         goto Next;
 
-    /* do nothing if not HTTP/1.1 or content-length is known */
-    if (req->res.content_length != SIZE_MAX || req->version != 0x101)
+    /* do nothing with HTTP/2 */
+    if (req->version >= 0x200)
         goto Next;
+    /* do nothing with HTTP/1.0, but drop trailer flag */
+    if (req->version != 0x101)
+        goto NextWithoutTrailer;
+    /* do nothing if content-length is known */
+    if (req->res.content_length != SIZE_MAX)
+        goto NextWithoutTrailer;
     /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
     if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
-        goto Next;
+        goto NextWithoutTrailer;
     else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
-        goto Next;
+        goto NextWithoutTrailer;
+
     /* we cannot handle certain responses (like 101 switching protocols) */
     if (req->res.status != 200) {
         req->http1_is_persistent = 0;
-        goto Next;
     }
-    /* skip if content-encoding header is being set */
-    if (h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) != -1)
-        goto Next;
 
     /* set content-encoding header */
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
@@ -105,7 +108,10 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     encoder = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*encoder), sizeof(*encoder), slot);
     encoder->super.do_send = send_chunk;
     slot = &encoder->super.next;
+    goto Next;
 
+NextWithoutTrailer:
+    req->send_server_timing_trailer = 0;
 Next:
     h2o_setup_next_ostream(req, slot);
 }

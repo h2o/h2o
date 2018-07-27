@@ -596,7 +596,7 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
     if (err != NULL)
         conn->req.http1_is_persistent = 0;
 
-    if (err == NULL && conn->req.send_server_timing) {
+    if (err == NULL && conn->req.send_server_timing_trailer) {
         h2o_iovec_t trailer;
         if ((trailer = h2o_build_server_timing_trailer(&conn->req, H2O_STRLIT("server-timing: "), H2O_STRLIT("\r\n\r\n"))).len !=
             0) {
@@ -704,7 +704,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         if (send_state == H2O_SEND_STATE_ERROR) {
             conn->req.http1_is_persistent = 0;
-            conn->req.send_server_timing = 0;
+            conn->req.send_server_timing_trailer = 0;
         }
         buf.len += cbuf.len;
         conn->req.bytes_sent += cbuf.len;
@@ -726,7 +726,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     assert(!conn->_ostr_final.sent_headers);
 
     conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
-    if (conn->req.send_server_timing)
+    if (conn->req.send_server_timing_header)
         h2o_add_server_timing_header(&conn->req);
 
     /* register the pull callback */
@@ -783,7 +783,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
-        if (conn->req.send_server_timing)
+        if (conn->req.send_server_timing_header)
             h2o_add_server_timing_header(&conn->req);
         /* build headers and send */
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
@@ -799,7 +799,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         conn->req.http1_is_persistent = 0;
-        conn->req.send_server_timing = 0;
+        conn->req.send_server_timing_trailer = 0;
     }
 
     if (bufcnt != 0) {

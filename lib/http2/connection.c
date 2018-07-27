@@ -1206,7 +1206,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
             *still_is_active = 1;
         }
     } else {
-        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->req.send_server_timing) {
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->req.send_server_timing_trailer) {
             h2o_header_t trailers[1];
             size_t num_trailers = 0;
             h2o_iovec_t server_timing;
