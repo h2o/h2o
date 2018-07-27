@@ -41,6 +41,8 @@ EOT
     subtest 'http1' => sub {
         my ($sts) = nc_get($server, '/', 1);
         is scalar(@$sts), 2, 'header and trailer';
+        ok defined($sts->[0]->{connect});
+        ok defined($sts->[1]->{total});
         $check->(@$sts);
     
     };
@@ -48,11 +50,13 @@ EOT
     subtest 'http2' => sub {
         my ($sts) = nghttp_get($server, '/');
         is scalar(@$sts), 2, 'header and trailer';
+        ok defined($sts->[0]->{connect});
+        ok defined($sts->[1]->{total});
         $check->(@$sts);
     };
 };
 
-subtest 'disabled' => sub {
+subtest 'disabled trailer' => sub {
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
@@ -63,18 +67,22 @@ hosts:
 EOT
 
     subtest 'no te header' => sub {
-        my ($sts) = nc_get($server, '/');
-        is scalar(@$sts), 0, 'no server timing';
+        my ($sts) = nc_get($server, '/', 0);
+        is scalar(@$sts), 1, 'no server timing trailer';
+        ok defined($sts->[0]->{connect});
     };
 
     subtest 'not chunked encoding' => sub {
-        my ($sts) = nc_get($server, '/');
-        is scalar(@$sts), 0, 'no server timing';
+        my ($sts) = nc_get($server, '/', 1);
+        is scalar(@$sts), 1, 'no server timing trailer';
+        ok defined($sts->[0]->{connect});
     };
     
     subtest 'http2 is always ok' => sub {
         my ($sts) = nghttp_get($server, '/');
         is scalar(@$sts), 2, 'header and trailer';
+        ok defined($sts->[0]->{connect});
+        ok defined($sts->[1]->{total});
     };
 };
 
@@ -89,7 +97,7 @@ hosts:
 EOT
 
     subtest 'http1' => sub {
-        my ($sts) = nc_get($server, '/');
+        my ($sts) = nc_get($server, '/', 0);
         is scalar(@$sts), 2, 'header and trailer';
     };
     
@@ -117,6 +125,8 @@ hosts:
 EOT
     my ($sts, $raw) = nc_get($server, '/', 1);
     is scalar(@$sts), 2;
+    ok defined($sts->[0]->{connect});
+    ok defined($sts->[1]->{total});
     unlike $raw, qr{not foundserver-timing}i;
 };
 
