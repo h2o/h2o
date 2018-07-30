@@ -139,32 +139,50 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
             http2_conn = NULL;
     }
 
-    /* compare in-use ratio */
-    if (http2_conn != NULL && connpool->socketpool->_shared.pooled_count != 0) {
-        double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) / connpool->socketpool->_shared.count;
-        double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
-        if (http2_ratio <= http1_ratio) {
+    if (ctx->http2.ratio < 0) {
+        /* mix mode */
+
+        if (http2_conn != NULL && connpool->socketpool->_shared.pooled_count != 0) {
+            /* both of h1 and h2 connections exist, compare in-use ratio */
+            double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) / connpool->socketpool->_shared.count;
+            double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
+            if (http2_ratio <= http1_ratio) {
+                h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
+            } else {
+                goto UseSocketPool;
+            }
+        } else if (http2_conn != NULL) {
+            /* h2 connection exists */
             h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
-            return;
+        } else if (connpool->socketpool->_shared.pooled_count != 0) {
+            /* h1 connection exists */
+            goto UseSocketPool;
         } else {
+            /* no connections, connect using ALPN */
             alpn_protos = both_protos;
+            goto UseSocketPool;
+        }
+    } else {
+        /* fixed ratio mode */
+
+        /* weighted fair queueing */
+        int use_h2 = ((int)ctx->http2.ratio * (ctx->http2.counter + 1) / 100) != ((int)ctx->http2.ratio * ctx->http2.counter / 100);
+        if (++ctx->http2.counter == 100)
+            ctx->http2.counter = 0;
+
+        if (use_h2) {
+            if (http2_conn != NULL) {
+                h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
+            } else {
+                alpn_protos = both_protos;
+                goto UseSocketPool;
+            }
+        } else {
             goto UseSocketPool;
         }
     }
 
-    /* reuse idle h2 connection */
-    if (http2_conn != NULL) {
-        h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
-        return;
-    }
-
-    /* reuse pooled h1 connection via socketpool */
-    if (connpool->socketpool->_shared.pooled_count != 0) {
-        goto UseSocketPool;
-    }
-
-    /* connect using ALPN */
-    alpn_protos = both_protos;
+    return;
 
 UseSocketPool:
     h2o_timeout_link(client->super.ctx->loop, client->super.ctx->connect_timeout, &client->connect_timeout_entry);

@@ -422,6 +422,19 @@ static int on_config_http2_max_concurrent_streams(h2o_configurator_command_t *cm
     return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.http2.max_concurrent_strams);
 }
 
+static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    int ret = h2o_configurator_scanf(cmd, node, "%" SCNd32, &self->vars->conf.http2.ratio);
+    if (ret < 0)
+        return ret;
+    if (self->vars->conf.http2.ratio < 0 || 100 < self->vars->conf.http2.ratio) {
+        h2o_configurator_errprintf(cmd, node, "proxy.http2.ratio must be between 0 and 100");
+        return -1;
+    }
+    return 0;
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)_self;
@@ -464,6 +477,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.keepalive_timeout = self->vars->conf.keepalive_timeout;
         ctx->globalconf->proxy.max_buffer_size = self->vars->conf.max_buffer_size;
         ctx->globalconf->proxy.http2.max_concurrent_streams = self->vars->conf.http2.max_concurrent_strams;
+        ctx->globalconf->proxy.http2.ratio = self->vars->conf.http2.ratio;
         h2o_socketpool_set_ssl_ctx(&ctx->globalconf->proxy.global_socketpool, self->vars->ssl_ctx);
         h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->conf.keepalive_timeout);
     }
@@ -495,6 +509,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->conf.websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
     c->vars->conf.max_buffer_size = SIZE_MAX;
     c->vars->conf.http2.max_concurrent_strams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS;
+    c->vars->conf.http2.ratio = -1;
     c->vars->conf.keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
 
     /* setup handlers */
@@ -552,4 +567,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.http2.max-concurrent_streams",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_http2_max_concurrent_streams);
+    h2o_configurator_define_command(&c->super, "proxy.http2.ratio",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_http2_ratio);
 }
