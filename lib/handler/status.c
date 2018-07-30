@@ -260,11 +260,15 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 
 void h2o_status_register(h2o_pathconf_t *conf)
 {
+    static int handler_registered = 0;
     struct st_h2o_root_status_handler_t *self = (void *)h2o_create_handler(conf, sizeof(*self));
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.on_req = on_req;
-    h2o_config_register_status_handler(conf->global, requests_status_handler);
-    h2o_config_register_status_handler(conf->global, events_status_handler);
-    h2o_config_register_status_handler(conf->global, durations_status_handler);
+    if (!handler_registered) {
+        handler_registered++;
+        h2o_config_register_status_handler(conf->global, requests_status_handler);
+        h2o_config_register_status_handler(conf->global, events_status_handler);
+        h2o_config_register_status_handler(conf->global, durations_status_handler);
+    }
 }
