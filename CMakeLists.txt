@@ -364,6 +364,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/balancer/roundrobin.c
     t/00unit/lib/common/cache.c
     t/00unit/lib/common/hostinfo.c
+    t/00unit/lib/common/httpclient.c
     t/00unit/lib/common/multithread.c
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/socket.c
@@ -391,6 +392,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/balancer/roundrobin.c
     lib/common/cache.c
     lib/common/hostinfo.c
+    lib/common/httpclient.c
     lib/common/multithread.c
     lib/common/serverutil.c
     lib/common/socket.c
