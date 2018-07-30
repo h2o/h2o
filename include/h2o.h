@@ -1897,6 +1897,36 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register_by_spawnproc(h2o_pathconf_t *pathcon
  */
 void h2o_fastcgi_register_configurator(h2o_globalconf_t *conf);
 
+
+/*  websocket.c */
+typedef struct st_h2o_websocket_handler_t h2o_websocket_handler_t;
+
+typedef struct st_h2o_websocket_config_vars_t {
+	uint64_t io_timeout;
+	h2o_iovec_t accept_protocol;
+    struct {
+        void (*dispose)(h2o_websocket_handler_t *handler, void *data);
+        void *data;
+    } callbacks;
+} h2o_websocket_config_vars_t;
+
+/**
+ * registers the websocket handler to the context
+ */
+h2o_websocket_handler_t *h2o_websocket_register_by_hostport(h2o_pathconf_t *pathconf, const char *host, uint16_t port,
+		h2o_websocket_config_vars_t *vars);
+/**
+ * registers the websocket handler to the context
+ */
+h2o_websocket_handler_t *h2o_websocket_register_by_address(h2o_pathconf_t *pathconf, struct sockaddr *sa, socklen_t salen,
+		h2o_websocket_config_vars_t *vars);
+
+/**
+ * registers the configurator
+ */
+void h2o_websocket_register_configurator(h2o_globalconf_t *conf);
+
+
 /* lib/file.c */
 
 enum {
