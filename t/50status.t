@@ -84,6 +84,33 @@ EOT
 };
 
 
+subtest "json internal request bug (duplication of durations and events)" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+duration-stats: ON
+hosts:
+  default:
+    paths:
+      /server-status:
+        status: ON
+      /server-status2:
+        status: ON
+EOT
+    });
+
+    {
+        my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status/json?show=durations,events,main' 2>&1 > /dev/null`;
+        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
+    }
+
+    {
+        my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status2/json?show=durations,events,main' 2>&1 > /dev/null`;
+        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
+    }
+};
 
 
 done_testing();
