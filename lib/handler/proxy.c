@@ -105,7 +105,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
 
     client_ctx->max_buffer_size = self->config.max_buffer_size;
     client_ctx->http2.ratio = self->config.http2.ratio;
-    client_ctx->http2.counter = 0;
+    client_ctx->http2.counter = -1;
 
     handler_ctx->client_ctx = client_ctx;
 }

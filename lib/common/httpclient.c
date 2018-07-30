@@ -115,6 +115,17 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     }
 }
 
+static int should_use_h2(int8_t ratio, int8_t *counter)
+{
+    /* weighted fair queueing */
+    if (*counter < 0)
+        *counter = ratio == 0 ? 0 : 50 / ratio; /* set initial counter value */
+    int use_h2 = (((int)ratio * *counter) % 100) + ratio >= 100;
+    if (++*counter == 100)
+        *counter = 0;
+    return use_h2;
+}
+
 void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
                             h2o_url_t *origin, h2o_httpclient_connect_cb cb)
 {
@@ -165,12 +176,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
     } else {
         /* fixed ratio mode */
 
-        /* weighted fair queueing */
-        int use_h2 = ((int)ctx->http2.ratio * (ctx->http2.counter + 1) / 100) != ((int)ctx->http2.ratio * ctx->http2.counter / 100);
-        if (++ctx->http2.counter == 100)
-            ctx->http2.counter = 0;
-
-        if (use_h2) {
+        if (should_use_h2(ctx->http2.ratio, &ctx->http2.counter)) {
             if (http2_conn != NULL) {
                 h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
             } else {
