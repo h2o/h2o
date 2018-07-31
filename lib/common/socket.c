@@ -123,7 +123,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err);
 #endif
 
 h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings = {
-    32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons; 0 disables temp buffers */
+    32 * 1024 * 1024, /* 32MB, should better be greater than max frame size of HTTP2 for performance reasons */
     "/tmp/h2o.b.XXXXXX"};
 
 __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {

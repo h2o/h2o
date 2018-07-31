@@ -1230,23 +1230,21 @@ static int on_config_temp_buffer_path(h2o_configurator_command_t *cmd, h2o_confi
 
 static int on_config_temp_buffer_threshold(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    size_t threshold = 0;
-
-    /* if "OFF", disable temp buffers by setting the threshold to zero */
-    if (strcasecmp(node->data.scalar, "OFF") == 0)
-        goto Set;
+    /* if "OFF", disable temp buffers by setting the threshold to SIZE_MAX */
+    if (strcasecmp(node->data.scalar, "OFF") == 0) {
+        h2o_socket_buffer_mmap_settings.threshold = SIZE_MAX;
+        return 0;
+    }
 
     /* if not "OFF", it could be a number */
-    if (h2o_configurator_scanf(cmd, node, "%zu", &threshold) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_socket_buffer_mmap_settings.threshold) != 0)
         return -1;
 
-    if (threshold < 1048576) {
+    if (h2o_socket_buffer_mmap_settings.threshold < 1048576) {
         h2o_configurator_errprintf(cmd, node, "threshold is too low (must be >= 1048576; OFF to disable)");
         return -1;
     }
 
-Set:
-    h2o_socket_buffer_mmap_settings.threshold = threshold;
     return 0;
 }
 
