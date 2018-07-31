@@ -295,6 +295,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     if (h2o_http2_stream_is_push(stream->stream_id))
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
                               H2O_STRLIT("pushed"));
+    if (stream->req.send_server_timing_trailer)
+        h2o_add_server_timing_trailer_header(&stream->req);
     if (stream->req.send_server_timing_header)
         h2o_add_server_timing_header(&stream->req);
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,

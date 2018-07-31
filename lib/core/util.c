@@ -817,14 +817,16 @@ static void emit_server_timing_element(h2o_req_t *req, h2o_iovec_t *dst, const c
     dst->len += stringify_duration(dst->base + dst->len, usec);
 }
 
+void h2o_add_server_timing_trailer_header(h2o_req_t *req)
+{
+    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("trailer"), 0, NULL, H2O_STRLIT("server-timing"));
+}
+
 void h2o_add_server_timing_header(h2o_req_t *req)
 {
     /* caller needs to make sure that trailers can be used */
     if (0x101 <= req->version && req->version < 0x200)
         assert(req->content_length == SIZE_MAX);
-
-    /* add trailer header */
-    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("trailer"), 0, NULL, H2O_STRLIT("server-timing"));
 
     /* emit timings */
     h2o_iovec_t dst = {NULL};
