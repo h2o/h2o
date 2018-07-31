@@ -1126,10 +1126,6 @@ struct st_h2o_req_t {
      */
     unsigned char res_is_delegated : 1;
     /**
-     * whether if the bytes sent is counted by ostreams other than final ostream
-     */
-    unsigned char bytes_counted_by_ostream : 1;
-    /**
      * set by the generator if the protocol handler should replay the request upon seeing 425
      */
     unsigned char reprocess_if_too_early : 1;
@@ -1757,13 +1753,6 @@ int h2o_access_log_open_log(const char *path);
 h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt, int escape);
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
-
-/* lib/chunked.c */
-
-/**
- * registers the chunked encoding output filter (added by default)
- */
-void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);
