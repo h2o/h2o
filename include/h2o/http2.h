@@ -40,6 +40,8 @@ extern const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS;
 #define H2O_HTTP2_SETTINGS_MAX_FRAME_SIZE 5
 #define H2O_HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE 6
 
+#define H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
+
 typedef struct st_h2o_http2_settings_t {
     uint32_t header_table_size;
     uint32_t enable_push;

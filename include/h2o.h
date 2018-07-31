@@ -443,6 +443,10 @@ struct st_h2o_globalconf_t {
          */
         unsigned emit_missing_date_header : 1;
         /**
+         * a boolean flag if set to true, instructs the proxy to accept extended CONNECT method (with :protocol header)
+         */
+        unsigned extended_connect : 1;
+        /**
          * global socketpool
          */
         h2o_socketpool_t global_socketpool;

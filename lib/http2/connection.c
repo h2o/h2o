@@ -45,12 +45,15 @@ static const uint8_t SERVER_PREFACE_BIN[] = {
     /* window_update frame */
     LIT_FRAME_HEADER(4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, 0),
     LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)};
+static const uint8_t EXTENDED_CONNECT_BIN[] = {
+    LIT_FRAME_HEADER(6, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), LIT16(H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL), LIT32(1)};
 #undef LIT16
 #undef LIT24
 #undef LIT32
 #undef LIT_FRAME_HEADER
 
 static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SERVER_PREFACE_BIN)};
+static const h2o_iovec_t EXTENDED_CONNECT = {(char *)EXTENDED_CONNECT_BIN, sizeof(EXTENDED_CONNECT_BIN)};
 
 __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
@@ -445,7 +448,8 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     /* for websockets over h2 */
     if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0) {
         if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS) == 0 ||
-            (header_exists_map & H2O_HPACK_PARSE_HEADERS_PATH_EXISTS) == 0 || stream->req.input.method.base[0] != 'C' ||
+            (header_exists_map & H2O_HPACK_PARSE_HEADERS_PATH_EXISTS) == 0 ||
+            !conn->super.ctx->globalconf->proxy.extended_connect ||
             !h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto SendRSTStream;
@@ -1019,9 +1023,14 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     }
 
     { /* send SETTINGS and connection-level WINDOW_UPDATE */
-        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
+        size_t len = SERVER_PREFACE.len;
+        if (conn->super.ctx->globalconf->proxy.extended_connect)
+            len += EXTENDED_CONNECT.len;
+        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, len);
         memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
-        conn->_write.buf->size += SERVER_PREFACE.len;
+        if (conn->super.ctx->globalconf->proxy.extended_connect)
+            memcpy(vec.base + SERVER_PREFACE.len, EXTENDED_CONNECT.base, EXTENDED_CONNECT.len);
+        conn->_write.buf->size += len;
         h2o_http2_conn_request_write(conn);
     }
 
@@ -1595,7 +1604,12 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req, (h2o_iovec_t *)&SERVER_PREFACE, 1, on_upgrade_complete, http2conn);
+    h2o_iovec_t bufs[2];
+    size_t bufcnt = 1;
+    bufs[0] = SERVER_PREFACE;
+    if (req->conn->ctx->globalconf->proxy.extended_connect)
+        bufs[++bufcnt] = EXTENDED_CONNECT;
+    h2o_http1_upgrade(req, bufs, bufcnt, on_upgrade_complete, http2conn);
 
     return 0;
 Error:
