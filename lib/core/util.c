@@ -839,16 +839,19 @@ void h2o_add_server_timing_header(h2o_req_t *req)
                 DELIMITER ELEMENT_LONGEST_STR("proxy-request") DELIMITER ELEMENT_LONGEST_STR("proxy-process")
     size_t max_len = sizeof(LONGEST_STR) - 1;
 
-    emit_server_timing_element(req, &dst, "connect", h2o_time_compute_connect_time, max_len);
-    emit_server_timing_element(req, &dst, "request-header", h2o_time_compute_header_time, max_len);
-    emit_server_timing_element(req, &dst, "request-body", h2o_time_compute_body_time, max_len);
-    emit_server_timing_element(req, &dst, "request-total", h2o_time_compute_request_total_time, max_len);
-    emit_server_timing_element(req, &dst, "process", h2o_time_compute_process_time, max_len);
-
-    emit_server_timing_element(req, &dst, "proxy-idle", h2o_time_compute_proxy_idle_time, max_len);
-    emit_server_timing_element(req, &dst, "proxy-connect", h2o_time_compute_proxy_connect_time, max_len);
-    emit_server_timing_element(req, &dst, "proxy-request", h2o_time_compute_proxy_request_time, max_len);
-    emit_server_timing_element(req, &dst, "proxy-process", h2o_time_compute_proxy_process_time, max_len);
+    if ((req->send_server_timing_header & H2O_SEND_SERVER_TIMING_BASIC) != 0) {
+        emit_server_timing_element(req, &dst, "connect", h2o_time_compute_connect_time, max_len);
+        emit_server_timing_element(req, &dst, "request-header", h2o_time_compute_header_time, max_len);
+        emit_server_timing_element(req, &dst, "request-body", h2o_time_compute_body_time, max_len);
+        emit_server_timing_element(req, &dst, "request-total", h2o_time_compute_request_total_time, max_len);
+        emit_server_timing_element(req, &dst, "process", h2o_time_compute_process_time, max_len);
+    }
+    if ((req->send_server_timing_header & H2O_SEND_SERVER_TIMING_PROXY) != 0) {
+        emit_server_timing_element(req, &dst, "proxy-idle", h2o_time_compute_proxy_idle_time, max_len);
+        emit_server_timing_element(req, &dst, "proxy-connect", h2o_time_compute_proxy_connect_time, max_len);
+        emit_server_timing_element(req, &dst, "proxy-request", h2o_time_compute_proxy_request_time, max_len);
+        emit_server_timing_element(req, &dst, "proxy-process", h2o_time_compute_proxy_process_time, max_len);
+    }
 
     if (dst.len != 0)
         h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("server-timing"), 0, NULL, dst.base, dst.len);
@@ -875,10 +878,15 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     }
 
     h2o_iovec_t dst = h2o_iovec_init(value.base + value.len, 0);
-    emit_server_timing_element(req, &dst, "response", h2o_time_compute_response_time, SIZE_MAX);
-    emit_server_timing_element(req, &dst, "total", h2o_time_compute_total_time, SIZE_MAX);
-    emit_server_timing_element(req, &dst, "proxy-response", h2o_time_compute_proxy_response_time, SIZE_MAX);
-    emit_server_timing_element(req, &dst, "proxy-total", h2o_time_compute_proxy_total_time, SIZE_MAX);
+
+    if ((req->send_server_timing_trailer & H2O_SEND_SERVER_TIMING_BASIC) != 0) {
+        emit_server_timing_element(req, &dst, "response", h2o_time_compute_response_time, SIZE_MAX);
+        emit_server_timing_element(req, &dst, "total", h2o_time_compute_total_time, SIZE_MAX);
+    }
+    if ((req->send_server_timing_header & H2O_SEND_SERVER_TIMING_PROXY) != 0) {
+        emit_server_timing_element(req, &dst, "proxy-response", h2o_time_compute_proxy_response_time, SIZE_MAX);
+        emit_server_timing_element(req, &dst, "proxy-total", h2o_time_compute_proxy_total_time, SIZE_MAX);
+    }
 
     if (dst.len == 0)
         return h2o_iovec_init(NULL, 0);
