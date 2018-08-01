@@ -36,7 +36,7 @@ struct st_h2o_http1_finalostream_t {
     int sent_headers;
     struct {
         unsigned char enabled : 1;
-        char buf[64];
+        char buf[sizeof(size_t) * 2 + sizeof("\r\n")];
     } chunked;
     struct {
         void *buf;
@@ -776,44 +776,37 @@ static int should_use_chunked_encoding(h2o_req_t *req)
     return 1;
 }
 
-static size_t encode_chunked(struct st_h2o_http1_finalostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_iovec_t *outbufs, h2o_send_state_t state, size_t chunk_size)
+static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_state_t state, size_t chunk_size,
+                           int send_server_timing_trailer, char *buffer)
 {
-    size_t outbufcnt = 0;
+    *prefix = h2o_iovec_init(NULL, 0);
+    *suffix = h2o_iovec_init(NULL, 0);
 
     /* create chunk header and output data */
     if (chunk_size != 0) {
-        outbufs[outbufcnt].base = self->chunked.buf;
-        outbufs[outbufcnt].len = sprintf(self->chunked.buf, "%zx\r\n", chunk_size);
-        assert(outbufs[outbufcnt].len < sizeof(self->chunked.buf));
-        outbufcnt++;
-        memcpy(outbufs + outbufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
-        outbufcnt += inbufcnt;
+        prefix->base = buffer;
+        prefix->len = sprintf(buffer, "%zx\r\n", chunk_size);
         if (state != H2O_SEND_STATE_ERROR) {
-            outbufs[outbufcnt].base = "\r\n0\r\n\r\n";
-            outbufs[outbufcnt].len = state == H2O_SEND_STATE_FINAL ? (req->send_server_timing_trailer ? 5 : 7) : 2; /* FIXME */
-            outbufcnt++;
+            suffix->base = "\r\n0\r\n\r\n";
+            suffix->len = state == H2O_SEND_STATE_FINAL ? (send_server_timing_trailer ? 5 : 7) : 2; /* FIXME */
         }
     } else if (state == H2O_SEND_STATE_FINAL) {
-        outbufs[outbufcnt].base = "0\r\n\r\n";
-        outbufs[outbufcnt].len = req->send_server_timing_trailer ? 3 : 5;
-        outbufcnt++;
+        suffix->base = "0\r\n\r\n";
+        suffix->len = send_server_timing_trailer ? 3 : 5;
     }
 
     /* if state is error, send a broken chunk to pass the error down to the browser */
     if (state == H2O_SEND_STATE_ERROR) {
-        outbufs[outbufcnt].base = "\r\n1\r\n";
-        outbufs[outbufcnt].len = 5;
-        outbufcnt++;
+        suffix->base = "\r\n1\r\n";
+        suffix->len = 5;
     }
-
-    return outbufcnt;
 }
 
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_finalostream_t *self = (void *)_self;
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
-    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1 + 2)); /* 1 for header, 2 for chunked encoding */
+    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1 + 2)) /* 1 for header, 2 for chunked encoding */, chunked_suffix;
     int i;
     int bufcnt = 0;
 
@@ -865,13 +858,15 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
 
     if (self->chunked.enabled) {
-        h2o_iovec_t *encoded = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 2));
-        inbufcnt = encode_chunked(self, req, inbufs, inbufcnt, encoded, send_state, bytes_to_be_sent);
-        inbufs = encoded;
+        encode_chunked(bufs + bufcnt, &chunked_suffix, send_state, bytes_to_be_sent, req->send_server_timing_trailer,
+                       self->chunked.buf);
+        if (bufs[bufcnt].len != 0)
+            ++bufcnt;
     }
-
     memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
     bufcnt += inbufcnt;
+    if (self->chunked.enabled && chunked_suffix.len != 0)
+        bufs[bufcnt++] = chunked_suffix;
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         conn->req.http1_is_persistent = 0;
