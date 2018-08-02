@@ -698,69 +698,6 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
     return dst - buf;
 }
 
-static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
-{
-    h2o_iovec_t buf = {conn->_ostr_final.pull.buf, nfilled};
-    h2o_send_state_t send_state;
-
-    if (buf.len < MAX_PULL_BUF_SZ) {
-        h2o_iovec_t cbuf = {buf.base + buf.len, MAX_PULL_BUF_SZ - buf.len};
-        send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
-        if (send_state == H2O_SEND_STATE_ERROR) {
-            conn->req.http1_is_persistent = 0;
-            conn->req.send_server_timing_trailer = 0;
-        }
-        buf.len += cbuf.len;
-        conn->req.bytes_sent += cbuf.len;
-    } else {
-        send_state = H2O_SEND_STATE_IN_PROGRESS;
-    }
-
-    /* write */
-    h2o_socket_write(conn->sock, &buf, 1, h2o_send_state_is_in_progress(send_state) ? on_send_next_pull : on_send_complete);
-}
-
-static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb)
-{
-    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _ostr_final.super, _self);
-    const char *connection = conn->req.http1_is_persistent ? "keep-alive" : "close";
-    size_t bufsz, headers_len;
-
-    assert(conn->req._ostr_top == &conn->_ostr_final.super);
-    assert(!conn->_ostr_final.sent_headers);
-    assert(conn->req.res.content_length != SIZE_MAX);
-
-    conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
-    if (conn->req.send_server_timing_header)
-        h2o_add_server_timing_header(&conn->req);
-
-    /* register the pull callback */
-    conn->_ostr_final.pull.cb = cb;
-
-    /* setup the buffer */
-    bufsz = flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
-    if (bufsz < MAX_PULL_BUF_SZ) {
-        if (MAX_PULL_BUF_SZ - bufsz < conn->req.res.content_length) {
-            bufsz = MAX_PULL_BUF_SZ;
-        } else {
-            bufsz += conn->req.res.content_length;
-        }
-    }
-    conn->_ostr_final.pull.buf = h2o_mem_alloc_pool(&conn->req.pool, char, bufsz);
-
-    /* fill-in the header */
-    headers_len = flatten_headers(conn->_ostr_final.pull.buf, &conn->req, connection);
-    conn->_ostr_final.sent_headers = 1;
-
-    proceed_pull(conn, headers_len);
-}
-
-static void on_delayed_send_complete(h2o_timeout_entry_t *entry)
-{
-    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
-    on_send_complete(conn->sock, 0);
-}
-
 static int should_use_chunked_encoding(h2o_req_t *req)
 {
     if (req->version != 0x101)
@@ -775,6 +712,25 @@ static int should_use_chunked_encoding(h2o_req_t *req)
         return 0;
 
     return 1;
+}
+
+static void setup_chunked(struct st_h2o_http1_finalostream_t *self, h2o_req_t *req)
+{
+    if (should_use_chunked_encoding(req)) {
+        self->chunked.enabled = 1;
+
+        /* TODO should this be move to somewhere? */
+        /* we cannot handle certain responses (like 101 switching protocols) */
+        if (req->res.status != 200) {
+            req->http1_is_persistent = 0;
+        }
+
+        /* set transfer-encoding header */
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+    } else {
+        self->chunked.enabled = 0;
+        req->send_server_timing_trailer = 0;
+    }
 }
 
 static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_state_t state, size_t chunk_size,
@@ -801,6 +757,83 @@ static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_st
         suffix->base = "\r\n1\r\n";
         suffix->len = 5;
     }
+}
+
+static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
+{
+    h2o_iovec_t bufs[4];
+    size_t bufcnt = 0;
+    h2o_send_state_t send_state;
+    h2o_iovec_t prefix = h2o_iovec_init(NULL, 0), suffix = h2o_iovec_init(NULL, 0);
+
+    if (nfilled != 0)
+        bufs[bufcnt++] = h2o_iovec_init(conn->_ostr_final.pull.buf, nfilled);
+
+    if (nfilled < MAX_PULL_BUF_SZ) {
+        h2o_iovec_t cbuf = {conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled};
+        send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
+        conn->req.bytes_sent += cbuf.len;
+
+        if (conn->_ostr_final.chunked.enabled)
+            encode_chunked(&prefix, &suffix, send_state, cbuf.len, conn->req.send_server_timing_trailer, conn->_ostr_final.chunked.buf);
+        if (prefix.len != 0)
+            bufs[bufcnt++] = prefix;
+        bufs[bufcnt++] = cbuf;
+        if (suffix.len != 0)
+            bufs[bufcnt++] = suffix;
+
+        if (send_state == H2O_SEND_STATE_ERROR) {
+            conn->req.http1_is_persistent = 0;
+            conn->req.send_server_timing_trailer = 0;
+        }
+    } else {
+        send_state = H2O_SEND_STATE_IN_PROGRESS;
+    }
+
+    /* write */
+    h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next_pull : on_send_complete);
+}
+
+static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _ostr_final.super, _self);
+    const char *connection = conn->req.http1_is_persistent ? "keep-alive" : "close";
+    size_t bufsz, headers_len;
+
+    assert(conn->req._ostr_top == &conn->_ostr_final.super);
+    assert(!conn->_ostr_final.sent_headers);
+
+    conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
+    if (conn->req.send_server_timing_header)
+        h2o_add_server_timing_header(&conn->req);
+
+    setup_chunked(&conn->_ostr_final, &conn->req);
+
+    /* register the pull callback */
+    conn->_ostr_final.pull.cb = cb;
+
+    /* setup the buffer */
+    bufsz = flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
+    if (bufsz < MAX_PULL_BUF_SZ) {
+        if (MAX_PULL_BUF_SZ - bufsz < conn->req.res.content_length) {
+            bufsz = MAX_PULL_BUF_SZ;
+        } else {
+            bufsz += conn->req.res.content_length;
+        }
+    }
+    conn->_ostr_final.pull.buf = h2o_mem_alloc_pool(&conn->req.pool, char, bufsz);
+
+    /* fill-in the header */
+    headers_len = flatten_headers(conn->_ostr_final.pull.buf, &conn->req, connection);
+    conn->_ostr_final.sent_headers = 1;
+
+    proceed_pull(conn, headers_len);
+}
+
+static void on_delayed_send_complete(h2o_timeout_entry_t *entry)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
+    on_send_complete(conn->sock, 0);
 }
 
 void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
@@ -833,21 +866,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         if (conn->req.send_server_timing_header)
             h2o_add_server_timing_header(&conn->req);
 
-        if (should_use_chunked_encoding(req)) {
-            self->chunked.enabled = 1;
-
-            /* TODO should this be move to somewhere? */
-            /* we cannot handle certain responses (like 101 switching protocols) */
-            if (req->res.status != 200) {
-                req->http1_is_persistent = 0;
-            }
-
-            /* set transfer-encoding header */
-            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
-        } else {
-            self->chunked.enabled = 0;
-            req->send_server_timing_trailer = 0;
-        }
+        setup_chunked(self, req);
 
         /* build headers and send */
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
