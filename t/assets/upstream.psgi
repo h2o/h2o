@@ -316,4 +316,26 @@ builder {
         );
         return sub {}; # do nothing
     };
+    mount "/early-hints" => sub {
+        my $env = shift;
+        my $fh = $env->{"psgix.io"};
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 103 Early Hints",
+            "link: </index.js>; rel=preload",
+            "",
+            "",
+        );
+        sleep 0.1 if $env->{'QUERY_STRING'} eq 'sleep';
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 200 OK",
+            "connection: close",
+            "content-type: text/plain",
+            "content-length: 11",
+            "",
+            "hello world",
+        );
+        return sub {};
+    };
 };
