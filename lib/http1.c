@@ -745,7 +745,7 @@ static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_st
         prefix->len = sprintf(buffer, "%zx\r\n", chunk_size);
         if (state != H2O_SEND_STATE_ERROR) {
             suffix->base = "\r\n0\r\n\r\n";
-            suffix->len = state == H2O_SEND_STATE_FINAL ? (send_server_timing_trailer ? 5 : 7) : 2; /* FIXME */
+            suffix->len = state == H2O_SEND_STATE_FINAL ? (send_server_timing_trailer ? 5 : 7) : 2;
         }
     } else if (state == H2O_SEND_STATE_FINAL) {
         suffix->base = "0\r\n\r\n";
