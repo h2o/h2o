@@ -169,7 +169,6 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
         conn->_req_entity_reader = NULL;                                                                                           \
         set_timeout(conn, NULL, NULL);                                                                                             \
         h2o_socket_read_stop(conn->sock);                                                                                          \
-        conn->req.http1_is_persistent = 0;                                                                                         \
         conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                       \
         h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                          \
     }
@@ -718,14 +717,6 @@ static void setup_chunked(struct st_h2o_http1_finalostream_t *self, h2o_req_t *r
 {
     if (should_use_chunked_encoding(req)) {
         self->chunked.enabled = 1;
-
-        /* TODO should this be move to somewhere? */
-        /* we cannot handle certain responses (like 101 switching protocols) */
-        if (req->res.status != 200) {
-            req->http1_is_persistent = 0;
-        }
-
-        /* set transfer-encoding header */
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
     } else {
         self->chunked.enabled = 0;
