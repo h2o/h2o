@@ -845,6 +845,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
             /* set transfer-encoding header */
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
         } else {
+            self->chunked.enabled = 0;
             req->send_server_timing_trailer = 0;
         }
 
