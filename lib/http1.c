@@ -728,6 +728,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 
     assert(conn->req._ostr_top == &conn->_ostr_final.super);
     assert(!conn->_ostr_final.sent_headers);
+    assert(conn->req.res.content_length != SIZE_MAX);
 
     conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
     if (conn->req.send_server_timing_header)
