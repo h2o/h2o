@@ -443,9 +443,9 @@ struct st_h2o_globalconf_t {
          */
         unsigned emit_missing_date_header : 1;
         /**
-         * a boolean flag if set to true, instructs the proxy to accept extended CONNECT method (with :protocol header)
+         * a boolean flag if set to true, instructs the proxy to accept extended CONNECT method (with :protocol header) for websocket
          */
-        unsigned extended_connect : 1;
+        unsigned websocket_http2 : 1;
         /**
          * global socketpool
          */

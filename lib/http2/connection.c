@@ -449,7 +449,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0) {
         if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS) == 0 ||
             (header_exists_map & H2O_HPACK_PARSE_HEADERS_PATH_EXISTS) == 0 ||
-            !conn->super.ctx->globalconf->proxy.extended_connect ||
+            !conn->super.ctx->globalconf->proxy.websocket_http2 ||
             !h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto SendRSTStream;
@@ -1024,11 +1024,11 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
 
     { /* send SETTINGS and connection-level WINDOW_UPDATE */
         size_t len = SERVER_PREFACE.len;
-        if (conn->super.ctx->globalconf->proxy.extended_connect)
+        if (conn->super.ctx->globalconf->proxy.websocket_http2)
             len += EXTENDED_CONNECT.len;
         h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, len);
         memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
-        if (conn->super.ctx->globalconf->proxy.extended_connect)
+        if (conn->super.ctx->globalconf->proxy.websocket_http2)
             memcpy(vec.base + SERVER_PREFACE.len, EXTENDED_CONNECT.base, EXTENDED_CONNECT.len);
         conn->_write.buf->size += len;
         h2o_http2_conn_request_write(conn);
@@ -1607,7 +1607,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     h2o_iovec_t bufs[2];
     size_t bufcnt = 1;
     bufs[0] = SERVER_PREFACE;
-    if (req->conn->ctx->globalconf->proxy.extended_connect)
+    if (req->conn->ctx->globalconf->proxy.websocket_http2)
         bufs[++bufcnt] = EXTENDED_CONNECT;
     h2o_http1_upgrade(req, bufs, bufcnt, on_upgrade_complete, http2conn);
 
