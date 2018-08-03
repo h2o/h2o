@@ -115,6 +115,22 @@ subtest 'upon http2' => sub {
     my $code = sub {
         my ($server, $path) = @_;
         return <<"EOR";
+        h2g = H2.new
+        host = ARGV[0]
+        h2g.connect(host)
+        h2g.send_prefix()
+        h2g.send_settings()
+        i = 0
+        while i < 3 do
+            f = h2g.read(-1)
+            if f.type == "SETTINGS" then
+                unless f.flags == ACK
+                    h2g.send_settings_ack()
+                    puts f.to_s
+                end
+                i += 1
+            end
+        end
         req = {
             ":method" => "CONNECT",
             ":authority" => "127.0.0.1:$server->{port}",
@@ -159,7 +175,8 @@ EOR
     };
     subtest 'basic' => sub {
         my $server = silent_server();
-        my $output = run_with_h2get_simple($server, $code->($server, '/websocket'));
+        my $output = run_with_h2get($server, $code->($server, '/websocket'));
+        like $output, qr{unknown frame type: 8};
         like $output, qr{':status' => '200'}i;
         unlike $output, qr{sec-websocket-accept}i;
         unlike $output, qr{RST_STREAM|GOAWAY};
@@ -168,7 +185,7 @@ EOR
     };
     subtest 'invalid accept key' => sub {
         my $server = silent_server();
-        my $output = run_with_h2get_simple($server, $code->($server, '/websocket?invalid_accept_key'));
+        my $output = run_with_h2get($server, $code->($server, '/websocket?invalid_accept_key'));
         like $output, qr{':status' => '502'}i;
     };
 };
