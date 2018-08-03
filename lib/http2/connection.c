@@ -1608,7 +1608,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     size_t bufcnt = 1;
     bufs[0] = SERVER_PREFACE;
     if (req->conn->ctx->globalconf->proxy.websocket_http2)
-        bufs[++bufcnt] = EXTENDED_CONNECT;
+        bufs[bufcnt++] = EXTENDED_CONNECT;
     h2o_http1_upgrade(req, bufs, bufcnt, on_upgrade_complete, http2conn);
 
     return 0;
