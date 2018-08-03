@@ -114,12 +114,15 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
 
     ++conn->_req_index;
     conn->req._ostr_top = &conn->_ostr_final.super;
-    conn->_ostr_final.super.do_send = finalostream_send;
-    conn->_ostr_final.super.start_pull = finalostream_start_pull;
-    conn->_ostr_final.super.send_informational = conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_ALL
-                                                     ? finalostream_send_informational
-                                                     : NULL;
-    conn->_ostr_final.sent_headers = 0;
+
+    conn->_ostr_final = (struct st_h2o_http1_finalostream_t){{
+        NULL,                    /* next */
+        finalostream_send,       /* do_send */
+        NULL,                    /* stop */
+        finalostream_start_pull, /* start_pull */
+        conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_ALL ? finalostream_send_informational
+                                                                                                : NULL, /* send_informational */
+    }};
 }
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
