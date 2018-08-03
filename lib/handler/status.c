@@ -21,9 +21,9 @@
  */
 #include "h2o.h"
 
-extern h2o_status_handler_t events_status_handler;
-extern h2o_status_handler_t requests_status_handler;
-extern h2o_status_handler_t durations_status_handler;
+extern h2o_status_handler_t h2o_events_status_handler;
+extern h2o_status_handler_t h2o_requests_status_handler;
+extern h2o_status_handler_t h2o_durations_status_handler;
 
 struct st_h2o_status_logger_t {
     h2o_logger_t super;
@@ -63,7 +63,7 @@ static void collect_reqs_of_context(struct st_h2o_status_collector_t *collector,
 
     for (i = 0; i < ctx->globalconf->statuses.size; i++) {
         struct st_status_ctx_t *sc = collector->status_ctx.entries + i;
-        h2o_status_handler_t *sh = ctx->globalconf->statuses.entries + i;
+        h2o_status_handler_t *sh = ctx->globalconf->statuses.entries[i];
         if (sc->active && sh->per_thread != NULL)
             sh->per_thread(sc->ctx, ctx);
     }
@@ -99,7 +99,7 @@ static void send_response(struct st_h2o_status_collector_t *collector)
 
     int coma_removed = 0;
     for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
-        h2o_status_handler_t *sh = &req->conn->ctx->globalconf->statuses.entries[i];
+        h2o_status_handler_t *sh = req->conn->ctx->globalconf->statuses.entries[i];
         if (!collector->status_ctx.entries[i].active) {
             continue;
         }
@@ -162,7 +162,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
             h2o_status_handler_t *sh;
 
             h2o_vector_reserve(&req->pool, &collector->status_ctx, collector->status_ctx.size + 1);
-            sh = &req->conn->ctx->globalconf->statuses.entries[i];
+            sh = req->conn->ctx->globalconf->statuses.entries[i];
 
             if (status_list.base) {
                 if (!h2o_contains_token(status_list.base, status_list.len, sh->name.base, sh->name.len, ',')) {
@@ -264,7 +264,7 @@ void h2o_status_register(h2o_pathconf_t *conf)
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
     self->super.on_req = on_req;
-    h2o_config_register_status_handler(conf->global, requests_status_handler);
-    h2o_config_register_status_handler(conf->global, events_status_handler);
-    h2o_config_register_status_handler(conf->global, durations_status_handler);
+    h2o_config_register_status_handler(conf->global, &h2o_requests_status_handler);
+    h2o_config_register_status_handler(conf->global, &h2o_events_status_handler);
+    h2o_config_register_status_handler(conf->global, &h2o_durations_status_handler);
 }

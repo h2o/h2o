@@ -1970,7 +1970,8 @@ static void setup_configurators(void)
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
 
-    h2o_config_register_simple_status_handler(&conf.globalconf, (h2o_iovec_t){H2O_STRLIT("main")}, on_extra_status);
+    static h2o_status_handler_t extra_status_handler = {{H2O_STRLIT("main")}, on_extra_status};
+    h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
 int main(int argc, char **argv)
