@@ -673,18 +673,42 @@ $ctx->{directive}->(
     since    => "2.0",
     see_also => render_mt(<<'EOT'),
 <a href="configure/base_directives.html#user"><code>user</code></a>
+<a href="configure/base_directives.html#temp-buffer-threshold"><code>temp-buffer-threshold</code></a>
 EOT
 )->(sub {
 ?>
 <p>
 H2O uses an internal structure called <code>h2o_buffer_t</code> for buffering various kinds of data (e.g. POST content, response from upstream HTTP or FastCGI server).
-When amount of the data allocated in the buffer exceeds 32MB, it starts allocating storage from the directory pointed to by the directive.
+When amount of the data allocated in the buffer exceeds the default value of 32MB, it starts allocating storage from the directory pointed to by the directive.
+The threshold can be tuned or disabled using the <code>temp-buffer-threshold</code> directive.
 </p>
 <p>
 By using the directive, users can set the directory to one within a memory-backed file system (e.g. <a href="https://en.wikipedia.org/wiki/Tmpfs">tmpfs</a>) for speed, or specify a disk-based file system to avoid memory pressure.
 </p>
 <p>
 Note that the directory must be writable by the running user of the server.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "temp-buffer-threshold",
+    levels   => [ qw(global) ],
+    desc     => q{Minimum size to offload a large memory allocation to a temporary buffer.},
+    default  => q{temp-buffer-threshold: "33554432"},
+    since    => "2.2.5",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#temp-buffer-path"><code>temp-buffer-path</code></a>
+EOT
+)->(sub {
+?>
+<p>
+Users can use this directive to tune the threshold for when the server should use temporary buffers.
+The minimum value accepted is 1MB (1048576) to avoid overusing these buffers, which will lead to performance degradation.
+If omitted, the default of 32MB is used.
+</p>
+<p>
+The user can disable temporary buffers altogether by setting this threshold to <code>OFF</code>.
 </p>
 ? })
 
