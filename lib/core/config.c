@@ -212,21 +212,16 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     return pathconf;
 }
 
-void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t status_handler)
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t *status_handler)
 {
+    /* check if the status handler is already registered */
+    size_t i;
+    for (i = 0; i != config->statuses.size; ++i)
+        if (config->statuses.entries[i] == status_handler)
+            return;
+    /* register the new handler */
     h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
     config->statuses.entries[config->statuses.size++] = status_handler;
-}
-
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler)
-{
-    h2o_status_handler_t *sh;
-
-    h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
-    sh = &config->statuses.entries[config->statuses.size++];
-    memset(sh, 0, sizeof(*sh));
-    sh->name = h2o_strdup(NULL, name.base, name.len);
-    sh->final = status_handler;
 }
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)
