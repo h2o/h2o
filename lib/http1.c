@@ -34,10 +34,7 @@
 struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
     int sent_headers;
-    struct {
-        unsigned char enabled : 1;
-        char buf[sizeof(size_t) * 2 + sizeof("\r\n")];
-    } chunked;
+    char *chunked_buf; /* buffer used for chunked-encoding (NULL unless chunked encoding is used) */
     struct {
         void *buf;
         h2o_ostream_pull_cb cb;
@@ -716,10 +713,9 @@ static int should_use_chunked_encoding(h2o_req_t *req)
 static void setup_chunked(struct st_h2o_http1_finalostream_t *self, h2o_req_t *req)
 {
     if (should_use_chunked_encoding(req)) {
-        self->chunked.enabled = 1;
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+        self->chunked_buf = h2o_mem_alloc_pool_aligned(&req->pool, 1, sizeof(size_t) * 2 + sizeof("\r\n"));
     } else {
-        self->chunked.enabled = 0;
         req->send_server_timing_trailer = 0;
     }
 }
@@ -764,8 +760,9 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         h2o_iovec_t cbuf = {conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled};
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         conn->req.bytes_sent += cbuf.len;
-        if (conn->_ostr_final.chunked.enabled) {
-            encode_chunked(&prefix, &suffix, send_state, cbuf.len, conn->req.send_server_timing_trailer, conn->_ostr_final.chunked.buf);
+        if (conn->_ostr_final.chunked_buf != NULL) {
+            encode_chunked(&prefix, &suffix, send_state, cbuf.len, conn->req.send_server_timing_trailer,
+                           conn->_ostr_final.chunked_buf);
             if (prefix.len != 0)
                 bufs[bufcnt++] = prefix;
             bufs[bufcnt++] = cbuf;
@@ -872,15 +869,15 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         self->sent_headers = 1;
     }
 
-    if (self->chunked.enabled) {
+    if (self->chunked_buf != NULL) {
         encode_chunked(bufs + bufcnt, &chunked_suffix, send_state, bytes_to_be_sent, req->send_server_timing_trailer,
-                       self->chunked.buf);
+                       self->chunked_buf);
         if (bufs[bufcnt].len != 0)
             ++bufcnt;
     }
     memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
     bufcnt += inbufcnt;
-    if (self->chunked.enabled && chunked_suffix.len != 0)
+    if (self->chunked_buf != NULL && chunked_suffix.len != 0)
         bufs[bufcnt++] = chunked_suffix;
 
     if (send_state == H2O_SEND_STATE_ERROR) {
