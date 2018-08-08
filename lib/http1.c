@@ -764,15 +764,18 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         h2o_iovec_t cbuf = {conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled};
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         conn->req.bytes_sent += cbuf.len;
-
-        if (conn->_ostr_final.chunked.enabled)
+        if (conn->_ostr_final.chunked.enabled) {
             encode_chunked(&prefix, &suffix, send_state, cbuf.len, conn->req.send_server_timing_trailer, conn->_ostr_final.chunked.buf);
-        if (prefix.len != 0)
-            bufs[bufcnt++] = prefix;
-        bufs[bufcnt++] = cbuf;
-        if (suffix.len != 0)
-            bufs[bufcnt++] = suffix;
-
+            if (prefix.len != 0)
+                bufs[bufcnt++] = prefix;
+            bufs[bufcnt++] = cbuf;
+            if (suffix.len != 0)
+                bufs[bufcnt++] = suffix;
+        } else if (nfilled != 0) {
+            bufs[bufcnt - 1].len += cbuf.len;
+        } else {
+            bufs[bufcnt++] = cbuf;
+        }
         if (send_state == H2O_SEND_STATE_ERROR) {
             conn->req.http1_is_persistent = 0;
             conn->req.send_server_timing_trailer = 0;
