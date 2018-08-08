@@ -22,7 +22,9 @@
 #ifndef h2o__uv_binding_h
 #define h2o__uv_binding_h
 
+#include <sys/time.h>
 #include <uv.h>
+#include <sys/time.h>
 
 #if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
 #error "libh2o (libuv binding) requires libuv version 1.x.y"

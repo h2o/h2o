@@ -146,6 +146,6 @@ static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2
     return ret;
 }
 
-h2o_status_handler_t requests_status_handler = {
-    {H2O_STRLIT("requests")}, requests_status_init, requests_status_per_thread, requests_status_final,
+h2o_status_handler_t h2o_requests_status_handler = {
+    {H2O_STRLIT("requests")}, requests_status_final, requests_status_init, requests_status_per_thread
 };

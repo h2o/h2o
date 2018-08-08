@@ -85,6 +85,14 @@ typedef struct st_h2o_httpclient_ctx_t {
 
 } h2o_httpclient_ctx_t;
 
+typedef struct st_h2o_httpclient_timings_t {
+    struct timeval start_at;
+    struct timeval request_begin_at;
+    struct timeval request_end_at;
+    struct timeval response_start_at;
+    struct timeval response_end_at;
+} h2o_httpclient_timings_t;
+
 struct st_h2o_httpclient_t {
     h2o_mem_pool_t *pool;
     h2o_httpclient_ctx_t *ctx;
@@ -92,6 +100,7 @@ struct st_h2o_httpclient_t {
     h2o_buffer_t **buf;
     void *data;
     h2o_httpclient_informational_cb informational_cb;
+    h2o_httpclient_timings_t timings;
 
     void (*cancel)(h2o_httpclient_t *client);
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);

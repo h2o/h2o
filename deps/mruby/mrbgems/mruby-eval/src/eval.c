@@ -12,29 +12,14 @@ mrb_value mrb_obj_instance_eval(mrb_state *mrb, mrb_value self);
 static struct mrb_irep *
 get_closure_irep(mrb_state *mrb, int level)
 {
-  struct mrb_context *c = mrb->c;
-  struct REnv *e = c->ci[-1].proc->env;
-  struct RProc *proc;
+  struct RProc *proc = mrb->c->ci[-1].proc;
 
-  if (level == 0) {
-    proc = c->ci[-1].proc;
-    if (MRB_PROC_CFUNC_P(proc)) {
-      return NULL;
-    }
-    return proc->body.irep;
+  while (level--) {
+    if (!proc) return NULL;
+    proc = proc->upper;
   }
-
-  while (--level) {
-    e = (struct REnv*)e->c;
-    if (!e) return NULL;
-  }
-
-  if (!e) return NULL;
-  if (!MRB_ENV_STACK_SHARED_P(e)) return NULL;
-  c = e->cxt.c;
-  proc = c->cibase[e->cioff].proc;
-
-  if (!proc || MRB_PROC_CFUNC_P(proc)) {
+  if (!proc) return NULL;
+  if (MRB_PROC_CFUNC_P(proc)) {
     return NULL;
   }
   return proc->body.irep;
@@ -67,7 +52,7 @@ search_variable(mrb_state *mrb, mrb_sym vsym, int bnest)
   int pos;
 
   for (level = 0; (virep = get_closure_irep(mrb, level)); level++) {
-    if (!virep || virep->lv == NULL) {
+    if (virep->lv == NULL) {
       continue;
     }
     for (pos = 0; pos < virep->nlocals - 1; pos++) {
@@ -130,7 +115,7 @@ patch_irep(mrb_state *mrb, mrb_irep *irep, int bnest, mrb_irep *top)
       if (GETARG_C(c) != 0) {
         break;
       }
-      {
+      else {
         mrb_code arg = search_variable(mrb, irep->syms[GETARG_B(c)], bnest);
         if (arg != 0) {
           /* must replace */
@@ -198,20 +183,22 @@ patch_irep(mrb_state *mrb, mrb_irep *irep, int bnest, mrb_irep *top)
 void mrb_codedump_all(mrb_state*, struct RProc*);
 
 static struct RProc*
-create_proc_from_string(mrb_state *mrb, char *s, int len, mrb_value binding, const char *file, mrb_int line)
+create_proc_from_string(mrb_state *mrb, char *s, mrb_int len, mrb_value binding, const char *file, mrb_int line)
 {
   mrbc_context *cxt;
   struct mrb_parser_state *p;
   struct RProc *proc;
   struct REnv *e;
-  struct mrb_context *c = mrb->c;
+  mrb_callinfo *ci = &mrb->c->ci[-1]; /* callinfo of eval caller */
+  struct RClass *target_class = NULL;
+  int bidx;
 
   if (!mrb_nil_p(binding)) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "Binding of eval must be nil.");
   }
 
   cxt = mrbc_context_new(mrb);
-  cxt->lineno = line;
+  cxt->lineno = (short)line;
 
   mrbc_filename(mrb, cxt, file ? file : "(eval)");
   cxt->capture_errors = TRUE;
@@ -251,19 +238,29 @@ create_proc_from_string(mrb_state *mrb, char *s, int len, mrb_value binding, con
     mrbc_context_free(mrb, cxt);
     mrb_raise(mrb, E_SCRIPT_ERROR, "codegen error");
   }
-  if (c->ci[-1].proc->target_class) {
-    proc->target_class = c->ci[-1].proc->target_class;
+  target_class = MRB_PROC_TARGET_CLASS(ci->proc);
+  if (!MRB_PROC_CFUNC_P(ci->proc)) {
+    if (ci->env) {
+      e = ci->env;
+    }
+    else {
+      e = (struct REnv*)mrb_obj_alloc(mrb, MRB_TT_ENV,
+                                      (struct RClass*)target_class);
+      e->mid = ci->mid;
+      e->stack = ci[1].stackent;
+      e->cxt = mrb->c;
+      MRB_ENV_SET_STACK_LEN(e, ci->proc->body.irep->nlocals);
+      bidx = ci->argc;
+      if (ci->argc < 0) bidx = 2;
+      else bidx += 1;
+      MRB_ENV_SET_BIDX(e, bidx);
+    }
+    proc->e.env = e;
+    proc->flags |= MRB_PROC_ENVSET;
+    mrb_field_write_barrier(mrb, (struct RBasic*)proc, (struct RBasic*)e);
   }
-  e = c->ci[-1].proc->env;
-  if (!e) e = c->ci[-1].env;
-  e = (struct REnv*)mrb_obj_alloc(mrb, MRB_TT_ENV, (struct RClass*)e);
-  e->cxt.c = c;
-  e->cioff = c->ci - c->cibase;
-  e->stack = c->ci->stackent;
-  MRB_SET_ENV_STACK_LEN(e, c->ci->proc->body.irep->nlocals);
-  c->ci->target_class = proc->target_class;
-  c->ci->env = 0;
-  proc->env = e;
+  proc->upper = ci->proc;
+  mrb->c->ci->target_class = target_class;
   patch_irep(mrb, proc->body.irep, 0, proc->body.irep);
   /* mrb_codedump_all(mrb, proc); */
 
@@ -276,13 +273,17 @@ create_proc_from_string(mrb_state *mrb, char *s, int len, mrb_value binding, con
 static mrb_value
 exec_irep(mrb_state *mrb, mrb_value self, struct RProc *proc)
 {
+  /* no argument passed from eval() */
+  mrb->c->ci->argc = 0;
   if (mrb->c->ci->acc < 0) {
-    mrb_value ret = mrb_top_run(mrb, proc, mrb->c->stack[0], 0);
+    mrb_value ret = mrb_top_run(mrb, proc, self, 0);
     if (mrb->exc) {
       mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
     }
     return ret;
   }
+  /* clear block */
+  mrb->c->stack[1] = mrb_nil_value();
   return mrb_exec_irep(mrb, self, proc);
 }
 
@@ -322,8 +323,7 @@ f_instance_eval(mrb_state *mrb, mrb_value self)
     mrb_get_args(mrb, "s|zi", &s, &len, &file, &line);
     cv = mrb_singleton_class(mrb, self);
     proc = create_proc_from_string(mrb, s, len, mrb_nil_value(), file, line);
-    proc->target_class = mrb_class_ptr(cv);
-    mrb->c->ci->env = NULL;
+    MRB_PROC_SET_TARGET_CLASS(proc, mrb_class_ptr(cv));
     mrb_assert(!MRB_PROC_CFUNC_P(proc));
     return exec_irep(mrb, self, proc);
   }

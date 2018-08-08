@@ -107,6 +107,6 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #undef H2_AGG_ERR
 }
 
-h2o_status_handler_t events_status_handler = {
-    {H2O_STRLIT("events")}, events_status_init, events_status_per_thread, events_status_final,
+h2o_status_handler_t h2o_events_status_handler = {
+    {H2O_STRLIT("events")}, events_status_final, events_status_init, events_status_per_thread
 };

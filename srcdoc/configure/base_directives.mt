@@ -673,18 +673,42 @@ $ctx->{directive}->(
     since    => "2.0",
     see_also => render_mt(<<'EOT'),
 <a href="configure/base_directives.html#user"><code>user</code></a>
+<a href="configure/base_directives.html#temp-buffer-threshold"><code>temp-buffer-threshold</code></a>
 EOT
 )->(sub {
 ?>
 <p>
 H2O uses an internal structure called <code>h2o_buffer_t</code> for buffering various kinds of data (e.g. POST content, response from upstream HTTP or FastCGI server).
-When amount of the data allocated in the buffer exceeds 32MB, it starts allocating storage from the directory pointed to by the directive.
+When amount of the data allocated in the buffer exceeds the default value of 32MB, it starts allocating storage from the directory pointed to by the directive.
+The threshold can be tuned or disabled using the <code>temp-buffer-threshold</code> directive.
 </p>
 <p>
 By using the directive, users can set the directory to one within a memory-backed file system (e.g. <a href="https://en.wikipedia.org/wiki/Tmpfs">tmpfs</a>) for speed, or specify a disk-based file system to avoid memory pressure.
 </p>
 <p>
 Note that the directory must be writable by the running user of the server.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "temp-buffer-threshold",
+    levels   => [ qw(global) ],
+    desc     => q{Minimum size to offload a large memory allocation to a temporary buffer.},
+    default  => q{temp-buffer-threshold: "33554432"},
+    since    => "2.2.5",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#temp-buffer-path"><code>temp-buffer-path</code></a>
+EOT
+)->(sub {
+?>
+<p>
+Users can use this directive to tune the threshold for when the server should use temporary buffers.
+The minimum value accepted is 1MB (1048576) to avoid overusing these buffers, which will lead to performance degradation.
+If omitted, the default of 32MB is used.
+</p>
+<p>
+The user can disable temporary buffers altogether by setting this threshold to <code>OFF</code>.
 </p>
 ? })
 
@@ -735,6 +759,43 @@ $ctx->{directive}->(
 for the pipe to the crash handler to be closed before exiting.
 This can be useful if you use a custom handler that inspects the dying
 process.</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "stash",
+    levels => [ qw(global host path extensions) ],
+    desc   => q{Directive being used to store reusable YAML variables.},
+    since    => "2.3",
+)->(sub {
+?>
+<p>This directive does nothing itself, but can be used to store YAML variables and reuse those using <a href="configure/syntax_and_structure.html#yaml_alias">YAML Alias</a>.</p>
+
+<?= $ctx->{example}->('Reusing stashed variables across multiple hosts', <<'EOT')
+stash:
+  ssl: &ssl
+    port: 443
+  paths: &paths
+    /:
+      file.dir: /path/to/root
+hosts:
+  "example.com":
+    listen:
+      <<: &ssl
+      ssl:
+        certificate-file: /path/to/example.com.crt
+        key-file:         /path/to/example.com.key
+    paths: *paths
+  "example.org":
+    listen:
+      <<: &ssl
+      ssl:
+        certificate-file: /path/to/example.org.crt
+        key-file:         /path/to/example.org.key
+    paths: *paths
+EOT
+?>
+
 ? })
 
 ? })

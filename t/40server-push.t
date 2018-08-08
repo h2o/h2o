@@ -253,4 +253,44 @@ EOT
     like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js\n.*\s/index.txt}is, "receives index.js then /index.txt";
 };
 
+subtest "cross-origin push" => sub {
+    sub test {
+        my ($allow_cross_origin, $must_match) = @_;
+        my $server = spawn_h2o(sub {
+            my ($port, $tls_port) = @_;
+            return << "EOT";
+http2-allow-cross-origin-push: $allow_cross_origin
+hosts:
+  "127.0.0.1:$tls_port":
+    paths:
+      /:
+        mruby.handler: |
+          Proc.new do |env|
+            case env["PATH_INFO"]
+            when "/index.txt"
+              push_paths = []
+              push_paths << "https://127.0.0.1.xip.io/index.js"
+              [399, push_paths.empty? ? {} : {"link" => push_paths.map{|p| "<#{p}>; rel=preload"}.join("\\n")}, []]
+            else
+              [399, {}, []]
+            end
+          end
+        file.dir: t/assets/doc_root
+  "127.0.0.1.xip.io:$tls_port":
+    paths:
+      /:
+        file.dir: t/assets/doc_root
+EOT
+        });
+        my $resp = `nghttp -v -m 2 -n --stat https://127.0.0.1:$server->{tls_port}/index.txt`;
+        if ($must_match) {
+            like $resp, qr{\s+200\s+16\s+/index\.js\n}is, "receives index.js";
+        } else {
+            unlike $resp, qr{\s+200\s+16\s+/index\.js\n}is, "does not receive index.js";
+        }
+    };
+    test("ON", 1);
+    test("OFF", 0);
+};
+
 done_testing;

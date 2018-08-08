@@ -1183,6 +1183,33 @@ process.
 .RE
 .RE
 
+.SS stash
+(since v2.3)
+Directive being used to store reusable YAML variables.
+
+.PP
+
+This directive does nothing itself, but can be used to store YAML variables and reuse those using YAML Alias.
+
+.PP
+.BR Example:\ 
+Reusing stashed variables across multiple hosts
+.PP
+.nf
+.RS
+stash:
+  ssl: &ssl
+    port: 443
+  paths: &paths
+    /:
+      file.dir: /path/to/root
+hosts:
+  "example.com":
+    listen:
+      <
+.RE
+.RE
+
 
 
 

@@ -31,8 +31,14 @@ typedef enum {
 MRB_API mrb_bool
 mrb_func_basic_p(mrb_state *mrb, mrb_value obj, mrb_sym mid, mrb_func_t func)
 {
-  struct RProc *me = mrb_method_search(mrb, mrb_class(mrb, obj), mid);
-  if (MRB_PROC_CFUNC_P(me) && (me->body.func == func))
+  mrb_method_t m = mrb_method_search(mrb, mrb_class(mrb, obj), mid);
+  struct RProc *p;
+
+  if (MRB_METHOD_UNDEF_P(m)) return FALSE;
+  if (MRB_METHOD_FUNC_P(m))
+    return MRB_METHOD_FUNC(m) == func;
+  p = MRB_METHOD_PROC(m);
+  if (MRB_PROC_CFUNC_P(p) && (MRB_PROC_CFUNC(p) == func))
     return TRUE;
   return FALSE;
 }
@@ -134,36 +140,52 @@ mrb_obj_id_m(mrb_state *mrb, mrb_value self)
 static mrb_value
 mrb_f_block_given_p_m(mrb_state *mrb, mrb_value self)
 {
-  mrb_callinfo *ci = mrb->c->ci;
+  mrb_callinfo *ci = &mrb->c->ci[-1];
+  mrb_callinfo *cibase = mrb->c->cibase;
   mrb_value *bp;
+  struct RProc *p;
 
-  bp = ci->stackent + 1;
-  ci--;
-  if (ci <= mrb->c->cibase) {
+  if (ci <= cibase) {
+    /* toplevel does not have block */
     return mrb_false_value();
   }
-  /* block_given? called within block; check upper scope */
-  if (ci->proc->env) {
-    struct REnv *e = ci->proc->env;
+  p = ci->proc;
+  /* search method/class/module proc */
+  while (p) {
+    if (MRB_PROC_SCOPE_P(p)) break;
+    p = p->upper;
+  }
+  if (p == NULL) return mrb_false_value();
+  /* search ci corresponding to proc */
+  while (cibase < ci) {
+    if (ci->proc == p) break;
+    ci--;
+  }
+  if (ci == cibase) {
+    return mrb_false_value();
+  }
+  else if (ci->env) {
+    struct REnv *e = ci->env;
+    int bidx;
 
-    while (e->c) {
-      e = (struct REnv*)e->c;
-    }
     /* top-level does not have block slot (always false) */
     if (e->stack == mrb->c->stbase)
       return mrb_false_value();
-    if (e->stack && e->cioff < 0) {
-      /* use saved block arg position */
-      bp = &e->stack[-e->cioff];
-      ci = 0;                 /* no callinfo available */
+    /* use saved block arg position */
+    bidx = MRB_ENV_BIDX(e);
+    /* bidx may be useless (e.g. define_method) */
+    if (bidx >= MRB_ENV_STACK_LEN(e))
+      return mrb_false_value();
+    bp = &e->stack[bidx];
+  }
+  else {
+    bp = ci[1].stackent+1;
+    if (ci->argc >= 0) {
+      bp += ci->argc;
     }
     else {
-      ci = e->cxt.c->cibase + e->cioff;
-      bp = ci[1].stackent + 1;
+      bp++;
     }
-  }
-  if (ci && ci->argc > 0) {
-    bp += ci->argc;
   }
   if (mrb_nil_p(*bp))
     return mrb_false_value();
@@ -426,7 +448,9 @@ mrb_obj_freeze(mrb_state *mrb, mrb_value self)
     case MRB_TT_TRUE:
     case MRB_TT_FIXNUM:
     case MRB_TT_SYMBOL:
+#ifndef MRB_WITHOUT_FLOAT
     case MRB_TT_FLOAT:
+#endif
       return self;
     default:
       break;
@@ -449,7 +473,9 @@ mrb_obj_frozen(mrb_state *mrb, mrb_value self)
     case MRB_TT_TRUE:
     case MRB_TT_FIXNUM:
     case MRB_TT_SYMBOL:
+#ifndef MRB_WITHOUT_FLOAT
     case MRB_TT_FLOAT:
+#endif
       return mrb_true_value();
     default:
       break;
@@ -655,9 +681,11 @@ method_entry_loop(mrb_state *mrb, struct RClass* klass, khash_t(st)* set)
   khint_t i;
 
   khash_t(mt) *h = klass->mt;
-  if (!h) return;
+  if (!h || kh_size(h) == 0) return;
   for (i=0;i<kh_end(h);i++) {
-    if (kh_exist(h, i) && kh_value(h, i)) {
+    if (kh_exist(h, i)) {
+      mrb_method_t m = kh_value(h, i);
+      if (MRB_METHOD_UNDEF_P(m)) continue;
       kh_put(st, mrb, set, kh_key(h, i));
     }
   }
@@ -690,7 +718,7 @@ mrb_class_instance_method_list(mrb_state *mrb, mrb_bool recur, struct RClass* kl
     klass = klass->super;
   }
 
-  ary = mrb_ary_new(mrb);
+  ary = mrb_ary_new_capa(mrb, kh_size(set));
   for (i=0;i<kh_end(set);i++) {
     if (kh_exist(set, i)) {
       mrb_ary_push(mrb, ary, mrb_symbol_value(kh_key(set, i)));
@@ -855,7 +883,7 @@ MRB_API mrb_value
 mrb_f_raise(mrb_state *mrb, mrb_value self)
 {
   mrb_value a[2], exc;
-  int argc;
+  mrb_int argc;
 
 
   argc = mrb_get_args(mrb, "|oo", &a[0], &a[1]);
@@ -877,6 +905,16 @@ mrb_f_raise(mrb_state *mrb, mrb_value self)
   }
   return mrb_nil_value();            /* not reached */
 }
+
+static mrb_value
+mrb_krn_class_defined(mrb_state *mrb, mrb_value self)
+{
+  mrb_value str;
+
+  mrb_get_args(mrb, "S", &str);
+  return mrb_bool_value(mrb_class_defined(mrb, RSTRING_PTR(str)));
+}
+
 
 /* 15.3.1.3.41 */
 /*
@@ -918,26 +956,7 @@ mrb_obj_remove_instance_variable(mrb_state *mrb, mrb_value self)
 void
 mrb_method_missing(mrb_state *mrb, mrb_sym name, mrb_value self, mrb_value args)
 {
-  mrb_sym inspect;
-  mrb_value repr;
-
-  inspect = mrb_intern_lit(mrb, "inspect");
-  if (mrb->c->ci > mrb->c->cibase && mrb->c->ci[-1].mid == inspect) {
-    /* method missing in inspect; avoid recursion */
-    repr = mrb_any_to_s(mrb, self);
-  }
-  else if (mrb_respond_to(mrb, self, inspect) && mrb->c->ci - mrb->c->cibase < 16) {
-    repr = mrb_funcall_argv(mrb, self, inspect, 0, 0);
-    if (mrb_string_p(repr) && RSTRING_LEN(repr) > 64) {
-      repr = mrb_any_to_s(mrb, self);
-    }
-  }
-  else {
-    repr = mrb_any_to_s(mrb, self);
-  }
-
-  mrb_no_method_error(mrb, name, args, "undefined method '%S' for %S",
-                      mrb_sym2str(mrb, name), repr);
+  mrb_no_method_error(mrb, name, args, "undefined method '%S'", mrb_sym2str(mrb, name));
 }
 
 /* 15.3.1.3.30 */
@@ -1104,6 +1123,7 @@ static mrb_value
 mod_define_singleton_method(mrb_state *mrb, mrb_value self)
 {
   struct RProc *p;
+  mrb_method_t m;
   mrb_sym mid;
   mrb_value blk = mrb_nil_value();
 
@@ -1114,7 +1134,8 @@ mod_define_singleton_method(mrb_state *mrb, mrb_value self)
   p = (struct RProc*)mrb_obj_alloc(mrb, MRB_TT_PROC, mrb->proc_class);
   mrb_proc_copy(p, mrb_proc_ptr(blk));
   p->flags |= MRB_PROC_STRICT;
-  mrb_define_method_raw(mrb, mrb_class_ptr(mrb_singleton_class(mrb, self)), mid, p);
+  MRB_METHOD_FROM_PROC(m, p);
+  mrb_define_method_raw(mrb, mrb_class_ptr(mrb_singleton_class(mrb, self)), mid, m);
   return mrb_symbol_value(mid);
 }
 
@@ -1161,16 +1182,19 @@ mrb_local_variables(mrb_state *mrb, mrb_value self)
     return mrb_ary_new(mrb);
   }
   vars = mrb_hash_new(mrb);
-  irep = proc->body.irep;
-  while (irep) {
+  while (proc) {
+    if (MRB_PROC_CFUNC_P(proc)) break;
+    irep = proc->body.irep;
     if (!irep->lv) break;
     for (i = 0; i + 1 < irep->nlocals; ++i) {
       if (irep->lv[i].name) {
         mrb_hash_set(mrb, vars, mrb_symbol_value(irep->lv[i].name), mrb_true_value());
       }
     }
-    if (!proc->env) break;
-    irep = irep->outer;
+    if (!MRB_PROC_ENV_P(proc)) break;
+    proc = proc->upper;
+    //if (MRB_PROC_SCOPE_P(proc)) break;
+    if (!proc->c) break;
   }
 
   return mrb_hash_keys(mrb, vars);
@@ -1232,6 +1256,8 @@ mrb_init_kernel(mrb_state *mrb)
   mrb_define_method(mrb, krn, "define_singleton_method",    mod_define_singleton_method,     MRB_ARGS_ANY());
   mrb_define_method(mrb, krn, "to_s",                       mrb_any_to_s,                    MRB_ARGS_NONE());    /* 15.3.1.3.46 */
   mrb_define_method(mrb, krn, "__case_eqq",                 mrb_obj_ceqq,                    MRB_ARGS_REQ(1));    /* internal */
+
+  mrb_define_method(mrb, krn, "class_defined?",             mrb_krn_class_defined,           MRB_ARGS_REQ(1));
 
   mrb_include_module(mrb, mrb->object_class, mrb->kernel_module);
   mrb_alias_method(mrb, mrb->module_class, mrb_intern_lit(mrb, "dup"), mrb_intern_lit(mrb, "clone"));

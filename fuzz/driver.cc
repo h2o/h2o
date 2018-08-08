@@ -157,6 +157,7 @@ static void write_fully(int fd, char *buf, size_t len, int abort_on_err)
     "Connection: Close\r\n\r\nOk"
 #define OK_RESP_LEN (sizeof(OK_RESP) - 1)
 
+static h2o_barrier_t init_barrier;
 void *upstream_thread(void *arg)
 {
     char *dirname = (char *)arg;
@@ -178,6 +179,7 @@ void *upstream_thread(void *arg)
         abort();
     }
 
+    h2o_barrier_wait(&init_barrier);
     while (1) {
         struct sockaddr_un caddr;
         socklen_t slen = 0;
@@ -339,6 +341,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         static char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
         char *dirname;
         h2o_url_t upstream;
+        h2o_barrier_init(&init_barrier, 2);
         signal(SIGPIPE, SIG_IGN);
 
         dirname = mkdtemp(tmpname);
@@ -382,6 +385,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         if (pthread_create(&tupstream, NULL, upstream_thread, dirname) != 0) {
             abort();
         }
+        h2o_barrier_wait(&init_barrier);
         init_done = 1;
     }
 

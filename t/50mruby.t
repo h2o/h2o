@@ -78,6 +78,8 @@ EOT
         ($headers, $body) = $fetch->("/fallthru/");
         like $headers, qr{^HTTP/1\.1 200 OK\r\n}is;
         is md5_hex($body), md5_file("t/50mruby/index.html");
+        my @dates = $headers =~ /^date: .+?\r$/img;
+        is scalar(@dates), 1, 'duplicate date header';
     };
     subtest "echo" => sub {
         ($headers, $body) = $fetch->("/echo/abc?def");
@@ -631,6 +633,31 @@ EOT
         ($headers, $body) = $fetch->('[200, {}, "abc"]');
         like $headers, qr{^HTTP/[0-9.]+ 200 }is, 'invalid body';
         is $body, "";
+    });
+};
+
+subtest 'rack.early_hints' => sub {
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+num-threads: 1
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          proc {|env|
+            env['rack.early_hints'].call({ 'link' => "</index.js>; rel=preload\\n</style.css>; rel=preload" })
+            sleep 0.1
+            env['rack.early_hints'].call({ :foo => 'bar' })
+            [200, {}, ['hello']]
+          }
+EOT
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($headers) = run_prog("$curl --silent --dump-header /dev/stderr -m 1 $proto://127.0.0.1:$port/");
+        like $headers, qr{^link: </index.js>; rel=preload\r$}m;
+        like $headers, qr{^link: </style.css>; rel=preload\r$}m;
+        like $headers, qr{^foo: bar\r$}m;
     });
 };
 

@@ -996,6 +996,10 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
         memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
         conn->_write.buf->size += SERVER_PREFACE.len;
+        if (conn->http2_origin_frame) {
+            /* write origin frame */
+            h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
+        }
         h2o_http2_conn_request_write(conn);
     }
 
@@ -1194,7 +1198,7 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
             *still_is_active = 1;
         }
     } else {
-        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->req.send_server_timing) {
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->req.send_server_timing_trailer) {
             h2o_header_t trailers[1];
             size_t num_trailers = 0;
             h2o_iovec_t server_timing;
@@ -1521,6 +1525,7 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock, connected_at);
+    conn->http2_origin_frame = ctx->http2_origin_frame;
     sock->data = conn;
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);

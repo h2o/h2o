@@ -15,16 +15,16 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
       linker.libraries = ['pthread']
     end
 
-    version = '6.1.1'
+    version = '6.1.2'
     oniguruma_dir = "#{build_dir}/onigmo-#{version}"
     oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonigmo"
     unless ENV['OS'] == 'Windows_NT'
       oniguruma_lib = libfile "#{oniguruma_dir}/.libs/libonigmo"
     else
       if ENV['PROCESSOR_ARCHITECTURE'] == 'AMD64'
-        oniguruma_lib = libfile "#{oniguruma_dir}/build-x86-64/onigmo"
+        oniguruma_lib = libfile "#{oniguruma_dir}/build_x86-64/libonigmo"
       else
-        oniguruma_lib = libfile "#{oniguruma_dir}/build-i686/onigmo"
+        oniguruma_lib = libfile "#{oniguruma_dir}/build_i686/libonigmo"
       end
     end
     header = "#{oniguruma_dir}/onigmo.h"
@@ -42,10 +42,8 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
     end
 
     def run_command(env, command)
-      STDOUT.sync = true
-      Open3.popen2e(env, command) do |stdin, stdout, thread|
-        print stdout.read
-        fail "#{command} failed" if thread.value != 0
+      unless system(env, command)
+        fail "#{command} failed"
       end
     end
 
@@ -96,16 +94,24 @@ MRuby::Gem::Specification.new('mruby-onig-regexp') do |spec|
 
     file libmruby_a => Dir.glob("#{libonig_objs_dir}/*#{objext}") if File.exists? oniguruma_lib
 
-    file "#{dir}/src/mruby_onig_regexp.c" => oniguruma_lib
-    cc.include_paths << oniguruma_dir
-    cc.defines += ['HAVE_ONIGMO_H']
+    task :mruby_onig_regexp_with_compile_option do
+      cc.include_paths << oniguruma_dir
+      cc.defines += ['HAVE_ONIGMO_H']
+    end
+    file "#{dir}/src/mruby_onig_regexp.c" => [:mruby_onig_regexp_with_compile_option, oniguruma_lib]
   end
 
   if spec.respond_to? :search_package and spec.search_package 'onigmo'
     spec.cc.defines += ['HAVE_ONIGMO_H']
+    spec.linker.libraries << 'onig'
   elsif spec.respond_to? :search_package and spec.search_package 'oniguruma'
     spec.cc.defines += ['HAVE_ONIGURUMA_H']
+    spec.linker.libraries << 'onig'
+  elsif build.cc.respond_to? :search_header_path and build.cc.search_header_path 'onigmo.h'
+    spec.cc.defines += ['HAVE_ONIGMO_H']
+    spec.linker.libraries << 'onigmo'
   elsif build.cc.respond_to? :search_header_path and build.cc.search_header_path 'oniguruma.h'
+    spec.cc.defines += ['HAVE_ONIGURUMA_H']
     spec.linker.libraries << 'onig'
   else
     spec.bundle_onigmo

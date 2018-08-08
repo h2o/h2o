@@ -1,5 +1,6 @@
 mruby-require
 =============
+[![Build Status](https://travis-ci.org/iij/mruby-require.svg?branch=master)](https://travis-ci.org/iij/mruby-require)
 
 "mruby-require" is a mrbgem, provides
 [require](http://docs.ruby-lang.org/ja/2.0.0/class/Kernel.html#M_REQUIRE) and

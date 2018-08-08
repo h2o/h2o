@@ -522,6 +522,8 @@ int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, const uint8_t *src, size_t len
                 } else if (r.name == &H2O_TOKEN_PATH->buf) {
                     if (path->base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
+                    if (r.value->len == 0)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                     *path = *r.value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
                 } else if (r.name == &H2O_TOKEN_SCHEME->buf) {
@@ -987,7 +989,7 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
     capacity += STATUS_HEADER_MAX_SIZE;      /* for :status: */
 #ifndef H2O_UNITTEST
-    if (server_name->len) {
+    if (server_name != NULL && server_name->len) {
         capacity += 5 + server_name->len; /* for Server: */
     }
 #endif
@@ -1001,7 +1003,7 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
     dst = encode_status(dst, status);
 #ifndef H2O_UNITTEST
     /* TODO keep some kind of reference to the indexed Server header, and reuse it */
-    if (server_name->len) {
+    if (server_name != NULL && server_name->len) {
         dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
     }
 #endif

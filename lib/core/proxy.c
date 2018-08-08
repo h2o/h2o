@@ -363,6 +363,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     struct rp_generator_t *self = client->data;
 
     if (errstr != NULL) {
+        self->src_req->timestamps.proxy = self->client->timings;
+
         /* detach the content */
         self->last_content_before_send = *self->client->buf;
         h2o_buffer_init(self->client->buf, &h2o_socket_buffer_prototype);
@@ -386,6 +388,12 @@ static char compress_hint_to_enum(const char *val, size_t len)
     if (h2o_lcstris(val, len, H2O_STRLIT("off"))) {
         return H2O_COMPRESS_HINT_DISABLE;
     }
+    if (h2o_lcstris(val, len, H2O_STRLIT("gzip"))) {
+        return H2O_COMPRESS_HINT_ENABLE_GZIP;
+    }
+    if (h2o_lcstris(val, len, H2O_STRLIT("br"))) {
+        return H2O_COMPRESS_HINT_ENABLE_BR;
+    }
     return H2O_COMPRESS_HINT_AUTO;
 }
 
@@ -397,6 +405,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     size_t i;
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int seen_date_header = 0;
+
+    self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         self->client = NULL;
@@ -527,6 +537,12 @@ static int on_1xx(h2o_httpclient_t *client, int minor_version, int status, h2o_i
             h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);
     }
 
+    if (status != 101) {
+        self->src_req->res.status = status;
+        self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
+        h2o_send_informational(self->src_req);
+    }
+
     return 0;
 }
 
@@ -554,6 +570,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
     int use_proxy_protocol = 0, reprocess_if_too_early = 0;
+
+    self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -632,6 +650,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
+    req->timestamps.proxy = (h2o_httpclient_timings_t){{0}};
 
     return self;
 }

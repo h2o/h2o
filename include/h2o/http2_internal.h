@@ -169,6 +169,7 @@ struct st_h2o_http2_conn_t {
     struct {
         h2o_linklist_t blocked_streams;
     } early_data;
+    h2o_iovec_t *http2_origin_frame;
 };
 
 /* connection */

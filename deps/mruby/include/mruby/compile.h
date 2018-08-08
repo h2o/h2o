@@ -165,7 +165,6 @@ struct mrb_parser_state {
 MRB_API struct mrb_parser_state* mrb_parser_new(mrb_state*);
 MRB_API void mrb_parser_free(struct mrb_parser_state*);
 MRB_API void mrb_parser_parse(struct mrb_parser_state*,mrbc_context*);
-MRB_API double mrb_float_read(const char*, char**);
 
 MRB_API void mrb_parser_set_filename(struct mrb_parser_state*, char const*);
 MRB_API char const* mrb_parser_get_filename(struct mrb_parser_state*, uint16_t idx);

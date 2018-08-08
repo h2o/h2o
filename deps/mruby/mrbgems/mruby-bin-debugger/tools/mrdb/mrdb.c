@@ -184,7 +184,7 @@ cleanup(mrb_state *mrb, struct _args *args)
 static mrb_debug_context*
 mrb_debug_context_new(mrb_state *mrb)
 {
-  mrb_debug_context *dbg = mrb_malloc(mrb, sizeof(mrb_debug_context));
+  mrb_debug_context *dbg = (mrb_debug_context*)mrb_malloc(mrb, sizeof(mrb_debug_context));
 
   memset(dbg, 0, sizeof(mrb_debug_context));
 
@@ -223,12 +223,12 @@ mrb_debug_context_free(mrb_state *mrb)
 static mrdb_state*
 mrdb_state_new(mrb_state *mrb)
 {
-  mrdb_state *mrdb = mrb_malloc(mrb, sizeof(mrdb_state));
+  mrdb_state *mrdb = (mrdb_state*)mrb_malloc(mrb, sizeof(mrdb_state));
 
   memset(mrdb, 0, sizeof(mrdb_state));
 
   mrdb->dbg = mrb_debug_context_get(mrb);
-  mrdb->command = mrb_malloc(mrb, MAX_COMMAND_LINE+1);
+  mrdb->command = (char*)mrb_malloc(mrb, MAX_COMMAND_LINE+1);
   mrdb->print_no = 1;
 
   return mrdb;

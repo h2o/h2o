@@ -24,8 +24,10 @@ mrb_obj_eq(mrb_state *mrb, mrb_value v1, mrb_value v2)
   case MRB_TT_SYMBOL:
     return (mrb_symbol(v1) == mrb_symbol(v2));
 
+#ifndef MRB_WITHOUT_FLOAT
   case MRB_TT_FLOAT:
     return (mrb_float(v1) == mrb_float(v2));
+#endif
 
   default:
     return (mrb_ptr(v1) == mrb_ptr(v2));
@@ -373,7 +375,9 @@ static const struct types {
   {MRB_TT_ICLASS, "iClass"},  /* internal use: mixed-in module holder */
   {MRB_TT_SCLASS, "SClass"},
   {MRB_TT_PROC,   "Proc"},
+#ifndef MRB_WITHOUT_FLOAT
   {MRB_TT_FLOAT,  "Float"},
+#endif
   {MRB_TT_ARRAY,  "Array"},
   {MRB_TT_HASH,   "Hash"},
   {MRB_TT_STRING, "String"},
@@ -523,7 +527,7 @@ mrb_to_int(mrb_state *mrb, mrb_value val)
 }
 
 MRB_API mrb_value
-mrb_convert_to_integer(mrb_state *mrb, mrb_value val, int base)
+mrb_convert_to_integer(mrb_state *mrb, mrb_value val, mrb_int base)
 {
   mrb_value tmp;
 
@@ -532,6 +536,7 @@ mrb_convert_to_integer(mrb_state *mrb, mrb_value val, int base)
       mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
   }
   switch (mrb_type(val)) {
+#ifndef MRB_WITHOUT_FLOAT
     case MRB_TT_FLOAT:
       if (base != 0) goto arg_error;
       else {
@@ -541,6 +546,7 @@ mrb_convert_to_integer(mrb_state *mrb, mrb_value val, int base)
         }
       }
       return mrb_flo_to_fixnum(mrb, val);
+#endif
 
     case MRB_TT_FIXNUM:
       if (base != 0) goto arg_error;
@@ -563,8 +569,8 @@ arg_error:
     mrb_raise(mrb, E_ARGUMENT_ERROR, "base specified for non string value");
   }
   tmp = convert_type(mrb, val, "Integer", "to_int", FALSE);
-  if (mrb_nil_p(tmp)) {
-    return mrb_to_integer(mrb, val, "to_i");
+  if (mrb_nil_p(tmp) || !mrb_fixnum_p(tmp)) {
+    tmp = mrb_to_integer(mrb, val, "to_i");
   }
   return tmp;
 }
@@ -575,6 +581,7 @@ mrb_Integer(mrb_state *mrb, mrb_value val)
   return mrb_convert_to_integer(mrb, val, 0);
 }
 
+#ifndef MRB_WITHOUT_FLOAT
 MRB_API mrb_value
 mrb_Float(mrb_state *mrb, mrb_value val)
 {
@@ -595,6 +602,7 @@ mrb_Float(mrb_state *mrb, mrb_value val)
       return mrb_convert_type(mrb, val, MRB_TT_FLOAT, "Float", "to_f");
   }
 }
+#endif
 
 MRB_API mrb_value
 mrb_inspect(mrb_state *mrb, mrb_value obj)

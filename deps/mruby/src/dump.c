@@ -15,10 +15,12 @@
 #define FLAG_BYTEORDER_NATIVE 2
 #define FLAG_BYTEORDER_NONATIVE 0
 
+#ifndef MRB_WITHOUT_FLOAT
 #ifdef MRB_USE_FLOAT
 #define MRB_FLOAT_FMT "%.8e"
 #else
 #define MRB_FLOAT_FMT "%.16e"
+#endif
 #endif
 
 static size_t get_irep_record_size_1(mrb_state *mrb, mrb_irep *irep);
@@ -131,6 +133,7 @@ get_pool_block_size(mrb_state *mrb, mrb_irep *irep)
       }
       break;
 
+#ifndef MRB_WITHOUT_FLOAT
     case MRB_TT_FLOAT:
       str = mrb_float_to_str(mrb, irep->pool[pool_no], MRB_FLOAT_FMT);
       {
@@ -139,6 +142,7 @@ get_pool_block_size(mrb_state *mrb, mrb_irep *irep)
         size += (size_t)len;
       }
       break;
+#endif
 
     case MRB_TT_STRING:
       {
@@ -177,10 +181,12 @@ write_pool_block(mrb_state *mrb, mrb_irep *irep, uint8_t *buf)
       str = mrb_fixnum_to_str(mrb, irep->pool[pool_no], 10);
       break;
 
+#ifndef MRB_WITHOUT_FLOAT
     case MRB_TT_FLOAT:
       cur += uint8_to_bin(IREP_TT_FLOAT, cur); /* data type */
       str = mrb_float_to_str(mrb, irep->pool[pool_no], MRB_FLOAT_FMT);
       break;
+#endif
 
     case MRB_TT_STRING:
       cur += uint8_to_bin(IREP_TT_STRING, cur); /* data type */
@@ -654,7 +660,7 @@ write_section_debug(mrb_state *mrb, mrb_irep *irep, uint8_t *cur, mrb_sym const 
   for (i = 0; i < filenames_len; ++i) {
     sym = mrb_sym2name_len(mrb, filenames[i], &sym_len);
     mrb_assert(sym);
-    cur += uint16_to_bin(sym_len, cur);
+    cur += uint16_to_bin((uint16_t)sym_len, cur);
     memcpy(cur, sym, sym_len);
     cur += sym_len;
     section_size += sizeof(uint16_t) + sym_len;
@@ -707,7 +713,7 @@ write_lv_sym_table(mrb_state *mrb, uint8_t **start, mrb_sym const *syms, uint32_
 
   for (i = 0; i < syms_len; ++i) {
     str = mrb_sym2name_len(mrb, syms[i], &str_len);
-    cur += uint16_to_bin(str_len, cur);
+    cur += uint16_to_bin((uint16_t)str_len, cur);
     memcpy(cur, str, str_len);
     cur += str_len;
   }

@@ -621,25 +621,40 @@ end
 
 module Enumerable
   # use Enumerator to use infinite sequence
-  def zip(*arg)
-    ary = []
-    arg = arg.map{|a|a.each}
-    i = 0
-    self.each do |*val|
-      a = []
-      a.push(val.__svalue)
-      idx = 0
-      while idx < arg.size
-        begin
-          a.push(arg[idx].next)
-        rescue StopIteration
-          a.push(nil)
-        end
-        idx += 1
+  def zip(*args, &block)
+    args = args.map do |a|
+      if a.respond_to?(:to_ary)
+        a.to_ary.to_enum(:each)
+      elsif a.respond_to?(:each)
+        a.to_enum(:each)
+      else
+        raise TypeError, "wrong argument type #{a.class} (must respond to :each)"
       end
-      ary.push(a)
-      i += 1
     end
-    ary
+
+    result = block ? nil : []
+
+    each do |*val|
+      tmp = [val.__svalue]
+      args.each do |arg|
+        v = if arg.nil?
+          nil
+        else
+          begin
+            arg.next
+          rescue StopIteration
+            nil
+          end
+        end
+        tmp.push(v)
+      end
+      if result.nil?
+        block.call(tmp)
+      else
+        result.push(tmp)
+      end
+    end
+
+    result
   end
 end
