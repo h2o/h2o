@@ -143,6 +143,8 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
     if (_client != NULL)
         *_client = &client->super;
 
+    client->super.timings.start_at = h2o_gettimeofday(ctx->loop);
+
     struct st_h2o_http2client_conn_t *http2_conn = NULL;
     if (!h2o_linklist_is_empty(&connpool->http2.conns)) {
         http2_conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, link, connpool->http2.conns.next);
