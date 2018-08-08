@@ -428,9 +428,9 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     req->res.status = status;
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
+        h2o_iovec_t value = headers[i].value;
         if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
-            h2o_iovec_t value;
             if (token->proxy_should_drop_for_res) {
                 goto Skip;
             }
@@ -451,25 +451,24 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                     return NULL;
                 }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
-                    value = rewrite_location(&req->pool, headers[i].value.base, headers[i].value.len,
-                                             req->overrides->location_rewrite.match, req->input.scheme, req->input.authority,
-                                             req->overrides->location_rewrite.path_prefix);
-                    if (value.base != NULL)
+                    h2o_iovec_t new_value = rewrite_location(&req->pool, value.base, value.len,
+                                                             req->overrides->location_rewrite.match, req->input.scheme, req->input.authority,
+                                                             req->overrides->location_rewrite.path_prefix);
+                    if (new_value.base != NULL) {
+                        value = new_value;
                         goto AddHeader;
+                    }
                 }
                 goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
-                h2o_iovec_t new_value;
-                new_value = h2o_push_path_in_link_header(req, headers[i].value.base, headers[i].value.len);
-                if (!new_value.len)
+                value = h2o_push_path_in_link_header(req, value.base, value.len);
+                if (!value.len)
                     goto Skip;
-                headers[i].value.base = new_value.base;
-                headers[i].value.len = new_value.len;
             } else if (token == H2O_TOKEN_SERVER) {
                 if (!req->conn->ctx->globalconf->proxy.preserve_server_header)
                     goto Skip;
             } else if (token == H2O_TOKEN_X_COMPRESS_HINT) {
-                req->compress_hint = compress_hint_to_enum(headers[i].value.base, headers[i].value.len);
+                req->compress_hint = compress_hint_to_enum(value.base, value.len);
                 goto Skip;
             } else if (token == H2O_TOKEN_DATE) {
                 seen_date_header = 1;
@@ -477,13 +476,12 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         /* default behaviour, transfer the header downstream */
         AddHeaderDuped:
             if (header_requires_dup)
-                value = h2o_strdup(&req->pool, headers[i].value.base, headers[i].value.len);
+                value = h2o_strdup(&req->pool, value.base, value.len);
         AddHeader:
             h2o_add_header(&req->pool, &req->res.headers, token, headers[i].orig_name, value.base, value.len);
         Skip:;
         } else {
             h2o_iovec_t name = *headers[i].name;
-            h2o_iovec_t value = headers[i].value;
             if (header_requires_dup) {
                 name = h2o_strdup(&req->pool, name.base, name.len);
                 value = h2o_strdup(&req->pool, value.base, value.len);
