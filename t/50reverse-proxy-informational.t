@@ -67,6 +67,22 @@ EOT
     };
 };
 
+subtest 'broken memory issue when keepalive is used' => sub {
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    my $resp;
+    my $url = "http://127.0.0.1:$server->{port}/early-hints";
+    $resp = `curl --http1.1 --silent --dump-header /dev/stdout '$url' '$url?sleep'`;
+    my @m = $resp =~ m{HTTP/1.1 200 OK}g;
+    is(scalar(@m), 2) or diag $resp;
+};
+
 done_testing();
 
 sub do_forward {
