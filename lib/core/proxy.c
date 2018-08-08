@@ -459,7 +459,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                         goto AddHeader;
                     }
                 }
-                goto AddHeaderDuped;
             } else if (token == H2O_TOKEN_LINK) {
                 value = h2o_push_path_in_link_header(req, value.base, value.len);
                 if (!value.len)
@@ -473,8 +472,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             } else if (token == H2O_TOKEN_DATE) {
                 seen_date_header = 1;
             }
-        /* default behaviour, transfer the header downstream */
-        AddHeaderDuped:
             if (header_requires_dup)
                 value = h2o_strdup(&req->pool, value.base, value.len);
         AddHeader:
