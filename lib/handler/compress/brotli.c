@@ -120,8 +120,8 @@ h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quali
         self->buf_capacity = estimated_content_length;
     if (self->buf_capacity > 65536)
         self->buf_capacity = 65536;
-    if (self->buf_capacity < BUFSIZ)
-        self->buf_capacity = BUFSIZ;
+    if (self->buf_capacity < 1024)
+        self->buf_capacity = 1024;
     expand_buf(self);
 
     BrotliEncoderSetParameter(self->state, BROTLI_PARAM_QUALITY, quality);
