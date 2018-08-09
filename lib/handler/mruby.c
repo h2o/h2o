@@ -234,6 +234,30 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 #undef KEY_PREFIX_LEN
 }
 
+static int handle_early_hints_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_req)
+{
+    h2o_req_t *req = _req;
+    h2o_add_header_by_str(&req->pool, &req->res.headers, name->base, name->len, 1, NULL, value.base, value.len);
+    return 0;
+}
+
+mrb_value send_early_hints_proc(mrb_state *mrb, mrb_value self)
+{
+    mrb_value headers;
+    mrb_get_args(mrb, "H", &headers);
+
+    h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_proc_cfunc_env_get(mrb, 0));
+    if (generator == NULL)
+        return mrb_nil_value();
+
+    if (h2o_mruby_iterate_rack_headers(mrb->ud, headers, handle_early_hints_header, generator->req) == -1)
+        mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
+    generator->req->res.status = 103;
+    h2o_send_informational(generator->req);
+
+    return mrb_nil_value();
+}
+
 static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t server_name_len)
 {
     mrb_value ary = mrb_ary_new_capa(mrb, H2O_MRUBY_NUM_CONSTANTS);
@@ -296,6 +320,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
     SET_LITERAL(H2O_MRUBY_LIT_RACK_HIJACK_, "rack.hijack?");
     SET_LITERAL(H2O_MRUBY_LIT_RACK_INPUT, "rack.input");
     SET_LITERAL(H2O_MRUBY_LIT_RACK_ERRORS, "rack.errors");
+    SET_LITERAL(H2O_MRUBY_LIT_RACK_EARLY_HINTS, "rack.early_hints");
     SET_LITERAL(H2O_MRUBY_LIT_SERVER_SOFTWARE, "SERVER_SOFTWARE");
     SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS, "h2o.remaining_delegations");
     SET_LITERAL(H2O_MRUBY_LIT_H2O_REMAINING_REPROCESSES, "h2o.remaining_reprocesses");
@@ -771,11 +796,12 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_MULTIPROCESS), mrb_true_value());
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_RUN_ONCE), mrb_false_value());
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_HIJACK_), mrb_false_value());
-
     mrb_value error_stream = h2o_mruby_create_data_instance(
         shared->mrb, mrb_ary_entry(shared->constants, H2O_MRUBY_ERROR_STREAM_CLASS), generator->error_stream, &error_stream_type);
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_ERRORS), error_stream);
     generator->refs.error_stream = error_stream;
+    mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_EARLY_HINTS),
+                 mrb_obj_value(mrb_proc_new_cfunc_with_env(mrb, send_early_hints_proc, 1, &generator->refs.generator)));
 
     /* server name */
     mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_SERVER_SOFTWARE),
@@ -882,11 +908,11 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->error_stream->ctx = ctx;
     generator->error_stream->generator = generator;
 
-    mrb_value env = build_env(generator);
-
     mrb_value gen = h2o_mruby_create_data_instance(shared->mrb, mrb_ary_entry(shared->constants, H2O_MRUBY_GENERATOR_CLASS),
                                                    generator, &generator_type);
     generator->refs.generator = gen;
+
+    mrb_value env = build_env(generator);
 
     mrb_value args = mrb_ary_new(shared->mrb);
     mrb_ary_set(shared->mrb, args, 0, env);

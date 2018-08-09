@@ -108,6 +108,12 @@ void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id
     dst = h2o_http2_encode32u(dst, window_size_increment);
 }
 
+void h2o_http2_encode_origin_frame(h2o_buffer_t **buf, h2o_iovec_t payload)
+{
+    uint8_t *dst = allocate_frame(buf, payload.len, H2O_HTTP2_FRAME_TYPE_ORIGIN, 0, 0);
+    memcpy(dst, payload.base, payload.len);
+}
+
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const char **err_desc)
 {
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)

@@ -751,7 +751,8 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
 
     h2o_extract_push_path_from_link_header(&req->pool, value, value_len, req->path_normalized, req->input.scheme,
                                            req->input.authority, req->res_is_delegated ? req->scheme : NULL,
-                                           req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret);
+                                           req->res_is_delegated ? &req->authority : NULL, do_push_path, req, &ret,
+                                           req->hostconf->http2.allow_cross_origin_push);
 
     return ret;
 }
@@ -770,7 +771,7 @@ void h2o_send_informational(h2o_req_t *req)
     assert(100 <= req->res.status && req->res.status <= 199 && req->res.status != 101);
 
     if (req->_ostr_top->send_informational == NULL)
-        return;
+        goto Clear;
 
     int i = 0;
     for (i = 0; i != req->pathconf->filters.size; ++i) {
@@ -780,10 +781,11 @@ void h2o_send_informational(h2o_req_t *req)
     }
 
     if (req->res.status == 103 && req->res.headers.size == 0)
-        return;
+        goto Clear;
 
     req->_ostr_top->send_informational(req->_ostr_top, req);
 
+Clear:
     /* clear status and headers */
     req->res.status = 0;
     req->res.headers = (h2o_headers_t){NULL, 0, 0};

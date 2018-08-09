@@ -20,15 +20,72 @@ my $upstream = spawn_server(
     },
 );
 
-subtest '100 Continue' => sub {
-    doit(100);
+subtest 'forward' => sub {
+    subtest '100 Continue' => sub {
+        do_forward(100);
+    };
+    subtest '103 Early Hints' => sub {
+        do_forward(103);
+    };
 };
-subtest '103 Early Hints' => sub {
-    doit(103);
+
+subtest 'send 103' => sub {
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      stash: &header
+        header.add:
+          header:
+            - "foo: FOO"
+          when: early
+      /async:
+        <<: *header
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+      /sync:
+        <<: *header
+        file.dir: @{[DOC_ROOT]}
+EOT
+    subtest 'async' => sub {
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my $resp;
+            $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/async'`;
+            like $resp, qr{^HTTP/[\d.]+ 103}mi;
+            (my $eh, $resp) = split(/\r\n\r\n/, $resp, 2);
+            like $eh, qr{^foo: FOO}mi;
+        });
+    };
+    subtest 'sync' => sub {
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            my $resp;
+            $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/sync'`;
+            unlike $resp, qr{^HTTP/[\d.]+ 103}mi;
+        });
+    };
 };
+
+subtest 'broken memory issue when keepalive is used' => sub {
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    my $resp;
+    my $url = "http://127.0.0.1:$server->{port}/early-hints";
+    $resp = `curl --http1.1 --silent --dump-header /dev/stdout '$url' '$url?sleep'`;
+    my @m = $resp =~ m{HTTP/1.1 200 OK}g;
+    is(scalar(@m), 2) or diag $resp;
+};
+
 done_testing();
 
-sub doit {
+sub do_forward {
     my ($status) = @_;
     my $link = $status == 103 ? 1 : 0;
 
@@ -66,16 +123,18 @@ EOT
 
             subtest 'tweak headers' => sub {
                 $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/tweak-headers/1xx?status=$status&link=1'`;
-                (my $early, $resp) = split("\r\n\r\n", $resp, 2);
-                like $early, qr{^HTTP/[\d.]+ $status}mi;
+                my ($early, $info, $resp) = split("\r\n\r\n", $resp, 3);
+                like $early, qr{^foo: FOO}mi;
+                like $early, qr{^bar: BAR}mi;
+                like $info, qr{^HTTP/[\d.]+ $status}mi;
                 if ($status == 103) {
-                    like $early, qr{^foo: FOO}mi;
-                    like $early, qr{^bar: BAR}mi;
-                    unlike $early, qr{^link: }mi;
+                    like $info, qr{^foo: FOO}mi;
+                    like $info, qr{^bar: BAR}mi;
+                    unlike $info, qr{^link: }mi;
                 } else {
-                    unlike $early, qr{^foo: FOO}mi;
-                    unlike $early, qr{^bar: BAR}mi;
-                    like $early, qr{^link: }mi;
+                    unlike $info, qr{^foo: FOO}mi;
+                    unlike $info, qr{^bar: BAR}mi;
+                    like $info, qr{^link: }mi;
                 }
             };
         });

@@ -303,6 +303,10 @@ struct st_h2o_hostconf_t {
          */
         unsigned push_preload : 1;
         /**
+         * if cross origin pushes should be authorized
+         */
+        unsigned allow_cross_origin_push : 1;
+        /**
          * casper settings
          */
         h2o_casper_conf_t casper;
@@ -315,14 +319,14 @@ typedef struct st_h2o_protocol_callbacks_t {
 } h2o_protocol_callbacks_t;
 
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
-typedef struct st_h2o_status_handler_t {
+typedef const struct st_h2o_status_handler_t {
     h2o_iovec_t name;
+    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
-    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
 } h2o_status_handler_t;
 
-typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
+typedef H2O_VECTOR(h2o_status_handler_t *) h2o_status_callbacks_t;
 
 typedef enum h2o_send_informational_mode {
     H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1,
@@ -407,6 +411,8 @@ struct st_h2o_globalconf_t {
          * list of callbacks
          */
         h2o_protocol_callbacks_t callbacks;
+        /* */
+        h2o_iovec_t origin_frame;
     } http2;
 
     struct {
@@ -477,9 +483,11 @@ struct st_h2o_globalconf_t {
 };
 
 enum {
-    H2O_COMPRESS_HINT_AUTO = 0, /* default: let h2o negociate compression based on the configuration */
-    H2O_COMPRESS_HINT_DISABLE,  /* compression was explicitely disabled for this request */
-    H2O_COMPRESS_HINT_ENABLE,   /* compression was explicitely enabled for this request */
+    H2O_COMPRESS_HINT_AUTO = 0,    /* default: let h2o negociate compression based on the configuration */
+    H2O_COMPRESS_HINT_DISABLE,     /* compression was explicitely disabled for this request */
+    H2O_COMPRESS_HINT_ENABLE,      /* compression was explicitely enabled for this request */
+    H2O_COMPRESS_HINT_ENABLE_GZIP, /* compression was explicitely enabled for this request, asking for gzip */
+    H2O_COMPRESS_HINT_ENABLE_BR,   /* compression was explicitely enabled for this request, asking for br */
 };
 
 /**
@@ -1122,17 +1130,17 @@ struct st_h2o_req_t {
      */
     unsigned char res_is_delegated : 1;
     /**
-     * whether if the bytes sent is counted by ostreams other than final ostream
-     */
-    unsigned char bytes_counted_by_ostream : 1;
-    /**
      * set by the generator if the protocol handler should replay the request upon seeing 425
      */
     unsigned char reprocess_if_too_early : 1;
     /**
-     * whether if the response should include server-timing
+     * whether if the response should include server-timing header
      */
-    unsigned char send_server_timing : 1;
+    unsigned char send_server_timing_header : 1;
+    /**
+     * whether if the response should include server-timing trailer
+     */
+    unsigned char send_server_timing_trailer : 1;
     /**
      * whether the request is a subrequest
      */
@@ -1181,6 +1189,7 @@ typedef struct st_h2o_accept_ctx_t {
     h2o_context_t *ctx;
     h2o_hostconf_t **hosts;
     SSL_CTX *ssl_ctx;
+    h2o_iovec_t *http2_origin_frame;
     int expect_proxy_line;
     h2o_multithread_receiver_t *libmemcached_receiver;
 } h2o_accept_ctx_t;
@@ -1307,7 +1316,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
                                             const h2o_url_scheme_t *input_scheme, h2o_iovec_t input_authority,
                                             const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                             void (*cb)(void *ctx, const char *path, size_t path_len, int is_critical), void *cb_ctx,
-                                            h2o_iovec_t *filtered_value);
+                                            h2o_iovec_t *filtered_value, int allow_cross_origin_push);
 /**
  * return a bitmap of compressible types, by parsing the `accept-encoding` header
  */
@@ -1505,8 +1514,7 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
 /**
  * registers an extra status handler
  */
-void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t);
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler);
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t *status_handler);
 /**
  * disposes of the resources allocated for the global configuration
  */
@@ -1748,13 +1756,6 @@ int h2o_access_log_open_log(const char *path);
 h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt, int escape);
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
-
-/* lib/chunked.c */
-
-/**
- * registers the chunked encoding output filter (added by default)
- */
-void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);

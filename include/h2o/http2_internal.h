@@ -90,6 +90,7 @@ static h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_head
 #define H2O_HTTP2_FRAME_TYPE_GOAWAY 7
 #define H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE 8
 #define H2O_HTTP2_FRAME_TYPE_CONTINUATION 9
+#define H2O_HTTP2_FRAME_TYPE_ORIGIN 12
 
 #define H2O_HTTP2_FRAME_FLAG_END_STREAM 0x1
 #define H2O_HTTP2_FRAME_FLAG_ACK 0x1
@@ -277,6 +278,7 @@ struct st_h2o_http2_conn_t {
     struct {
         h2o_linklist_t blocked_streams;
     } early_data;
+    h2o_iovec_t *http2_origin_frame;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);
@@ -291,6 +293,7 @@ void h2o_http2__encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, 
 void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data);
 void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, int errnum, h2o_iovec_t additional_data);
 void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment);
+void h2o_http2_encode_origin_frame(h2o_buffer_t **buf, h2o_iovec_t payload);
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const char **err_desc);
 int h2o_http2_decode_data_payload(h2o_http2_data_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc);
 int h2o_http2_decode_headers_payload(h2o_http2_headers_payload_t *payload, const h2o_http2_frame_t *frame, const char **err_desc);

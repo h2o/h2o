@@ -523,6 +523,8 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                 } else if (r.name == &H2O_TOKEN_PATH->buf) {
                     if (req->input.path.base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
+                    if (r.value->len == 0)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
                     req->input.path = *r.value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
                 } else if (r.name == &H2O_TOKEN_SCHEME->buf) {

@@ -303,7 +303,6 @@ SET(LIB_SOURCE_FILES
     lib/core/util.c
 
     lib/handler/access_log.c
-    lib/handler/chunked.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
     lib/handler/errordoc.c

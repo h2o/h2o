@@ -318,6 +318,7 @@ static socklen_t parse_hostport(h2o_mem_pool_t *pool, h2o_iovec_t host, h2o_iove
             parsed_len == host.len && d1 <= UCHAR_MAX && d2 <= UCHAR_MAX && d3 <= UCHAR_MAX && d4 <= UCHAR_MAX) {
             if (sscanf(port.base, "%" SCNd32 "%n", &_port, &parsed_len) == 1 && parsed_len == port.len && _port <= USHRT_MAX) {
                 struct sockaddr_in sin;
+                memset(&sin, 0, sizeof(sin));
                 sin.sin_family = AF_INET;
                 sin.sin_port = htons(_port);
                 sin.sin_addr.s_addr = ntohl((d1 << 24) + (d2 << 16) + (d3 << 8) + d4);
