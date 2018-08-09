@@ -39,7 +39,7 @@ EOT
     };
 
     subtest 'http1' => sub {
-        my ($sts) = nc_get($server, '/', 1);
+        my ($sts) = nc_get($server, '/');
         is scalar(@$sts), 2, 'header and trailer';
         ok defined($sts->[0]->{connect});
         ok defined($sts->[1]->{total});
@@ -66,14 +66,8 @@ hosts:
         - file.dir: t/assets/doc_root
 EOT
 
-    subtest 'no te header' => sub {
-        my ($sts) = nc_get($server, '/', 0);
-        is scalar(@$sts), 1, 'no server timing trailer';
-        ok defined($sts->[0]->{connect});
-    };
-
     subtest 'not chunked encoding' => sub {
-        my ($sts) = nc_get($server, '/', 1);
+        my ($sts) = nc_get($server, '/');
         is scalar(@$sts), 1, 'no server timing trailer';
         ok defined($sts->[0]->{connect});
     };
@@ -97,7 +91,7 @@ hosts:
 EOT
 
     subtest 'http1' => sub {
-        my ($sts) = nc_get($server, '/', 0);
+        my ($sts) = nc_get($server, '/');
         is scalar(@$sts), 2, 'header and trailer';
     };
     
@@ -123,7 +117,7 @@ hosts:
               end.new]
             }
 EOT
-    my ($sts, $raw) = nc_get($server, '/', 1);
+    my ($sts, $raw) = nc_get($server, '/');
     is scalar(@$sts), 2;
     ok defined($sts->[0]->{connect});
     ok defined($sts->[1]->{total});
@@ -133,10 +127,8 @@ EOT
 done_testing;
 
 sub nc_get {
-    my ($server, $path, $te_trailers) = @_;
-    my $req = "GET $path HTTP/1.1\\r\\n";
-    $req .= "TE: trailers\r\n" if $te_trailers;
-    $req .= "\r\n";
+    my ($server, $path) = @_;
+    my $req = "GET $path HTTP/1.1\r\n\r\n";
     my $resp = `echo '$req' | nc 127.0.0.1 $server->{port}`;
     ([map { parse_server_timing($_) } ($resp =~ /^server-timing: (.+)$/mg)], $resp);
 }
