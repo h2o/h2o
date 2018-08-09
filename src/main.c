@@ -1839,11 +1839,14 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                                           " \"current-time\": \"%s\",\n"
                                           " \"restart-time\": \"%s\",\n"
                                           " \"uptime\": %" PRIu64 ",\n"
+                                          " \"uptime-type\": \"gauge\",\n"
                                           " \"generation\": %s,\n"
                                           " \"connections\": %d,\n"
+                                          " \"connections-type\": \"gauge\",\n"
                                           " \"max-connections\": %d,\n"
                                           " \"listeners\": %zu,\n"
                                           " \"worker-threads\": %zu,\n"
+                                          " \"num-sessions-type\": \"gauge\",\n"
                                           " \"num-sessions\": %lu",
                        SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
                        num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads, num_sessions(0));
