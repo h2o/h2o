@@ -37,19 +37,9 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     /* indicate the protocol handler to emit server timing header (basic and proxy properties) */
     req->send_server_timing = H2O_SEND_SERVER_TIMING_BASIC | H2O_SEND_SERVER_TIMING_PROXY;
 
-    /* some checks before adding server-timing trailer */
-    if (req->version == 0x200) {
-        /* ok */
-    } else if (0x101 <= req->version && req->version < 0x200) {
-        if (self->enforce) {
-            req->res.content_length = SIZE_MAX;
-        } else if (req->res.content_length != SIZE_MAX) {
-            goto Next;
-        }
-    } else {
-        goto Next;
-    }
-    req->send_server_timing_trailer = 1;
+    /* force chunked encoding for HTTP/1.1 if enforce flag is set */
+    if (0x101 <= req->version && req->version < 0x200 && self->enforce)
+        req->res.content_length = SIZE_MAX;
 
 Next:
     h2o_setup_next_ostream(req, slot);
