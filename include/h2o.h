@@ -319,14 +319,14 @@ typedef struct st_h2o_protocol_callbacks_t {
 } h2o_protocol_callbacks_t;
 
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
-typedef struct st_h2o_status_handler_t {
+typedef const struct st_h2o_status_handler_t {
     h2o_iovec_t name;
+    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
-    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
 } h2o_status_handler_t;
 
-typedef H2O_VECTOR(h2o_status_handler_t) h2o_status_callbacks_t;
+typedef H2O_VECTOR(h2o_status_handler_t *) h2o_status_callbacks_t;
 
 typedef enum h2o_send_informational_mode {
     H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1,
@@ -1129,10 +1129,6 @@ struct st_h2o_req_t {
      */
     unsigned char res_is_delegated : 1;
     /**
-     * whether if the bytes sent is counted by ostreams other than final ostream
-     */
-    unsigned char bytes_counted_by_ostream : 1;
-    /**
      * set by the generator if the protocol handler should replay the request upon seeing 425
      */
     unsigned char reprocess_if_too_early : 1;
@@ -1522,8 +1518,7 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
 /**
  * registers an extra status handler
  */
-void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t);
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler);
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t *status_handler);
 /**
  * disposes of the resources allocated for the global configuration
  */
@@ -1765,13 +1760,6 @@ int h2o_access_log_open_log(const char *path);
 h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt, int escape);
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
-
-/* lib/chunked.c */
-
-/**
- * registers the chunked encoding output filter (added by default)
- */
-void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);
