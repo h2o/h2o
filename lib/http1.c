@@ -799,11 +799,8 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 
     setup_chunked(&conn->_ostr_final, &conn->req);
 
-    if (conn->req.send_server_timing) {
-        if (conn->_ostr_final.chunked_buf != NULL)
-            h2o_add_server_timing_trailer_header(&conn->req);
-        h2o_add_server_timing_header(&conn->req);
-    }
+    if (conn->req.send_server_timing)
+        h2o_add_server_timing_header(&conn->req, conn->_ostr_final.chunked_buf != NULL);
 
     /* register the pull callback */
     conn->_ostr_final.pull.cb = cb;
@@ -860,11 +857,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
         setup_chunked(self, req);
-        if (conn->req.send_server_timing) {
-            if (conn->_ostr_final.chunked_buf != NULL)
-                h2o_add_server_timing_trailer_header(&conn->req);
-            h2o_add_server_timing_header(&conn->req);
-        }
+        if (conn->req.send_server_timing)
+            h2o_add_server_timing_header(&conn->req, conn->_ostr_final.chunked_buf != NULL);
 
         /* build headers and send */
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";

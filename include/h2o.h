@@ -1326,11 +1326,7 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
 /**
  * encodes the duration value of the `server-timing` header
  */
-void h2o_add_server_timing_header(h2o_req_t *req);
-/**
- * add trailer: server-timing header
- */
-void h2o_add_server_timing_trailer_header(h2o_req_t *req);
+void h2o_add_server_timing_header(h2o_req_t *req, int uses_trailer);
 /**
  * encodes the duration value of the `server-timing` trailer
  */

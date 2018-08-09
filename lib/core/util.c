@@ -817,12 +817,7 @@ static void emit_server_timing_element(h2o_req_t *req, h2o_iovec_t *dst, const c
     dst->len += stringify_duration(dst->base + dst->len, usec);
 }
 
-void h2o_add_server_timing_trailer_header(h2o_req_t *req)
-{
-    h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("trailer"), 0, NULL, H2O_STRLIT("server-timing"));
-}
-
-void h2o_add_server_timing_header(h2o_req_t *req)
+void h2o_add_server_timing_header(h2o_req_t *req, int uses_trailer)
 {
     /* caller needs to make sure that trailers can be used */
     if (0x101 <= req->version && req->version < 0x200)
@@ -853,10 +848,12 @@ void h2o_add_server_timing_header(h2o_req_t *req)
         emit_server_timing_element(req, &dst, "proxy-process", h2o_time_compute_proxy_process_time, max_len);
     }
 
+#undef LONGEST_STR
+
+    if (uses_trailer)
+        h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("trailer"), 0, NULL, H2O_STRLIT("server-timing"));
     if (dst.len != 0)
         h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("server-timing"), 0, NULL, dst.base, dst.len);
-
-#undef LONGEST_STR
 }
 
 h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, size_t prefix_len, const char *suffix,
