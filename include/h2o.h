@@ -1136,15 +1136,15 @@ struct st_h2o_req_t {
      * whether the request is a subrequest
      */
     unsigned char is_subrequest : 1;
+    /**
+     * whether if the response should include server-timing trailer
+     */
+    unsigned char send_server_timing_trailer : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
      */
-    int send_server_timing_header;
-    /**
-     * whether if the response should include server-timing trailer
-     */
-    int send_server_timing_trailer;
+    unsigned send_server_timing;
 
     /**
      * Whether the producer of the response has explicitely disabled or

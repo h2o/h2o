@@ -798,10 +798,11 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     assert(!conn->_ostr_final.sent_headers);
 
     conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
-    if (conn->req.send_server_timing_trailer)
-        h2o_add_server_timing_trailer_header(&conn->req);
-    if (conn->req.send_server_timing_header)
+    if (conn->req.send_server_timing) {
+        if (conn->req.send_server_timing_trailer)
+            h2o_add_server_timing_trailer_header(&conn->req);
         h2o_add_server_timing_header(&conn->req);
+    }
 
     setup_chunked(&conn->_ostr_final, &conn->req);
 
@@ -859,10 +860,11 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
-        if (conn->req.send_server_timing_trailer)
-            h2o_add_server_timing_trailer_header(&conn->req);
-        if (conn->req.send_server_timing_header)
+        if (conn->req.send_server_timing) {
+            if (conn->req.send_server_timing_trailer)
+                h2o_add_server_timing_trailer_header(&conn->req);
             h2o_add_server_timing_header(&conn->req);
+        }
 
         setup_chunked(self, req);
 
