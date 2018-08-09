@@ -883,7 +883,7 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
         emit_server_timing_element(req, &dst, "response", h2o_time_compute_response_time, SIZE_MAX);
         emit_server_timing_element(req, &dst, "total", h2o_time_compute_total_time, SIZE_MAX);
     }
-    if ((req->send_server_timing_header & H2O_SEND_SERVER_TIMING_PROXY) != 0) {
+    if ((req->send_server_timing_trailer & H2O_SEND_SERVER_TIMING_PROXY) != 0) {
         emit_server_timing_element(req, &dst, "proxy-response", h2o_time_compute_proxy_response_time, SIZE_MAX);
         emit_server_timing_element(req, &dst, "proxy-total", h2o_time_compute_proxy_total_time, SIZE_MAX);
     }
