@@ -34,6 +34,7 @@
 struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
     int sent_headers;
+    char *chunked_buf; /* buffer used for chunked-encoding (NULL unless chunked encoding is used) */
     struct {
         void *buf;
         h2o_ostream_pull_cb cb;
@@ -168,7 +169,6 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
         conn->_req_entity_reader = NULL;                                                                                           \
         set_timeout(conn, NULL, NULL);                                                                                             \
         h2o_socket_read_stop(conn->sock);                                                                                          \
-        conn->req.http1_is_persistent = 0;                                                                                         \
         conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                       \
         h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                          \
     }
@@ -697,26 +697,95 @@ static size_t flatten_headers(char *buf, h2o_req_t *req, const char *connection)
     return dst - buf;
 }
 
+static int should_use_chunked_encoding(h2o_req_t *req)
+{
+    if (req->version != 0x101)
+        return 0;
+    /* do nothing if content-length is known */
+    if (req->res.content_length != SIZE_MAX)
+        return 0;
+    /* RFC 2616 4.4 states that the following status codes (and response to a HEAD method) should not include message body */
+    if ((100 <= req->res.status && req->res.status <= 199) || req->res.status == 204 || req->res.status == 304)
+        return 0;
+    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("HEAD")))
+        return 0;
+
+    return 1;
+}
+
+static void setup_chunked(struct st_h2o_http1_finalostream_t *self, h2o_req_t *req)
+{
+    if (should_use_chunked_encoding(req)) {
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+        self->chunked_buf = h2o_mem_alloc_pool_aligned(&req->pool, 1, sizeof(size_t) * 2 + sizeof("\r\n"));
+    } else {
+        req->send_server_timing_trailer = 0;
+    }
+}
+
+static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_state_t state, size_t chunk_size,
+                           int send_server_timing_trailer, char *buffer)
+{
+    *prefix = h2o_iovec_init(NULL, 0);
+    *suffix = h2o_iovec_init(NULL, 0);
+
+    /* create chunk header and output data */
+    if (chunk_size != 0) {
+        prefix->base = buffer;
+        prefix->len = sprintf(buffer, "%zx\r\n", chunk_size);
+        if (state != H2O_SEND_STATE_ERROR) {
+            suffix->base = "\r\n0\r\n\r\n";
+            suffix->len = state == H2O_SEND_STATE_FINAL ? (send_server_timing_trailer ? 5 : 7) : 2;
+        }
+    } else if (state == H2O_SEND_STATE_FINAL) {
+        suffix->base = "0\r\n\r\n";
+        suffix->len = send_server_timing_trailer ? 3 : 5;
+    }
+
+    /* if state is error, send a broken chunk to pass the error down to the browser */
+    if (state == H2O_SEND_STATE_ERROR) {
+        suffix->base = "\r\n1\r\n";
+        suffix->len = 5;
+    }
+}
+
 static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
 {
-    h2o_iovec_t buf = {conn->_ostr_final.pull.buf, nfilled};
+    h2o_iovec_t bufs[4];
+    size_t bufcnt = 0;
     h2o_send_state_t send_state;
+    h2o_iovec_t prefix = h2o_iovec_init(NULL, 0), suffix = h2o_iovec_init(NULL, 0);
 
-    if (buf.len < MAX_PULL_BUF_SZ) {
-        h2o_iovec_t cbuf = {buf.base + buf.len, MAX_PULL_BUF_SZ - buf.len};
+    if (nfilled != 0)
+        bufs[bufcnt++] = h2o_iovec_init(conn->_ostr_final.pull.buf, nfilled);
+
+    if (nfilled < MAX_PULL_BUF_SZ) {
+        h2o_iovec_t cbuf = {conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled};
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
+        conn->req.bytes_sent += cbuf.len;
+        if (conn->_ostr_final.chunked_buf != NULL) {
+            encode_chunked(&prefix, &suffix, send_state, cbuf.len, conn->req.send_server_timing_trailer,
+                           conn->_ostr_final.chunked_buf);
+            if (prefix.len != 0)
+                bufs[bufcnt++] = prefix;
+            bufs[bufcnt++] = cbuf;
+            if (suffix.len != 0)
+                bufs[bufcnt++] = suffix;
+        } else if (nfilled != 0) {
+            bufs[bufcnt - 1].len += cbuf.len;
+        } else {
+            bufs[bufcnt++] = cbuf;
+        }
         if (send_state == H2O_SEND_STATE_ERROR) {
             conn->req.http1_is_persistent = 0;
             conn->req.send_server_timing_trailer = 0;
         }
-        buf.len += cbuf.len;
-        conn->req.bytes_sent += cbuf.len;
     } else {
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
     /* write */
-    h2o_socket_write(conn->sock, &buf, 1, h2o_send_state_is_in_progress(send_state) ? on_send_next_pull : on_send_complete);
+    h2o_socket_write(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next_pull : on_send_complete);
 }
 
 static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb)
@@ -731,6 +800,8 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
     if (conn->req.send_server_timing_header)
         h2o_add_server_timing_header(&conn->req);
+
+    setup_chunked(&conn->_ostr_final, &conn->req);
 
     /* register the pull callback */
     conn->_ostr_final.pull.cb = cb;
@@ -763,7 +834,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
 {
     struct st_h2o_http1_finalostream_t *self = (void *)_self;
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)req->conn;
-    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1));
+    h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1 + 2)) /* 1 for header, 2 for chunked encoding */, chunked_suffix;
     int i;
     int bufcnt = 0;
 
@@ -778,16 +849,19 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
 
     /* count bytes_sent if other ostreams haven't counted */
-    if (req->bytes_counted_by_ostream == 0) {
-        for (i = 0; i != inbufcnt; ++i) {
-            req->bytes_sent += inbufs[i].len;
-        }
+    size_t bytes_to_be_sent = 0;
+    for (i = 0; i != inbufcnt; ++i) {
+        bytes_to_be_sent += inbufs[i].len;
     }
+    req->bytes_sent += bytes_to_be_sent;
 
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
         if (conn->req.send_server_timing_header)
             h2o_add_server_timing_header(&conn->req);
+
+        setup_chunked(self, req);
+
         /* build headers and send */
         const char *connection = req->http1_is_persistent ? "keep-alive" : "close";
         bufs[bufcnt].base = h2o_mem_alloc_pool(
@@ -797,8 +871,17 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         ++bufcnt;
         self->sent_headers = 1;
     }
+
+    if (self->chunked_buf != NULL) {
+        encode_chunked(bufs + bufcnt, &chunked_suffix, send_state, bytes_to_be_sent, req->send_server_timing_trailer,
+                       self->chunked_buf);
+        if (bufs[bufcnt].len != 0)
+            ++bufcnt;
+    }
     memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
     bufcnt += inbufcnt;
+    if (self->chunked_buf != NULL && chunked_suffix.len != 0)
+        bufs[bufcnt++] = chunked_suffix;
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         conn->req.http1_is_persistent = 0;
