@@ -51,6 +51,9 @@ end
 class NotImplementedError < ScriptError
 end
 
+class FrozenError < RuntimeError
+end
+
 class StopIteration < IndexError
   attr_accessor :result
 end

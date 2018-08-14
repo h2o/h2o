@@ -12,6 +12,7 @@
 #include <mruby/variable.h>
 #include <mruby/hash.h>
 #include <mruby/range.h>
+#include <mruby/proc.h>
 
 #define RSTRUCT_LEN(st) RARRAY_LEN(st)
 #define RSTRUCT_PTR(st) RARRAY_PTR(st)
@@ -88,7 +89,7 @@ static void
 mrb_struct_modify(mrb_state *mrb, mrb_value strct)
 {
   if (MRB_FROZEN_P(mrb_basic_ptr(strct))) {
-    mrb_raise(mrb, E_RUNTIME_ERROR, "can't modify frozen struct");
+    mrb_raise(mrb, E_FROZEN_ERROR, "can't modify frozen struct");
   }
 
   mrb_write_barrier(mrb, mrb_basic_ptr(strct));
@@ -113,12 +114,14 @@ mrb_struct_members(mrb_state *mrb, mrb_value obj)
   return mrb_struct_s_members_m(mrb, mrb_obj_value(mrb_obj_class(mrb, obj)));
 }
 
-static mrb_value struct_aref_sym(mrb_state *mrb, mrb_value obj, mrb_sym id);
-
 static mrb_value
 mrb_struct_ref(mrb_state *mrb, mrb_value obj)
 {
-  return struct_aref_sym(mrb, obj, mrb->c->ci->mid);
+  mrb_int i = mrb_fixnum(mrb_proc_cfunc_env_get(mrb, 0));
+  mrb_value *ptr = RSTRUCT_PTR(obj);
+
+  if (!ptr) return mrb_nil_value();
+  return ptr[i];
 }
 
 static mrb_sym
@@ -140,24 +143,23 @@ mrb_id_attrset(mrb_state *mrb, mrb_sym id)
   return mid;
 }
 
-static mrb_value mrb_struct_aset_sym(mrb_state *mrb, mrb_value s, mrb_sym id, mrb_value val);
-
 static mrb_value
 mrb_struct_set_m(mrb_state *mrb, mrb_value obj)
 {
+  mrb_int i = mrb_fixnum(mrb_proc_cfunc_env_get(mrb, 0));
+  mrb_value *ptr;
   mrb_value val;
 
-  const char *name;
-  mrb_int slen;
-  mrb_sym mid;
-
   mrb_get_args(mrb, "o", &val);
-
-  /* get base id */
-  name = mrb_sym2name_len(mrb, mrb->c->ci->mid, &slen);
-  mid = mrb_intern(mrb, name, slen-1); /* omit last "=" */
-
-  return mrb_struct_aset_sym(mrb, obj, mid, val);
+  mrb_struct_modify(mrb, obj);
+  ptr = RSTRUCT_PTR(obj);
+  if (ptr == NULL || i >= RSTRUCT_LEN(obj)) {
+    mrb_ary_set(mrb, obj, i, val);
+  }
+  else {
+    ptr[i] = val;
+  }
+  return val;
 }
 
 static mrb_bool
@@ -187,15 +189,21 @@ make_struct_define_accessors(mrb_state *mrb, mrb_value members, struct RClass *c
     const char *name = mrb_sym2name_len(mrb, id, NULL);
 
     if (is_local_id(mrb, name) || is_const_id(mrb, name)) {
-      mrb_define_method_id(mrb, c, id, mrb_struct_ref, MRB_ARGS_NONE());
-      mrb_define_method_id(mrb, c, mrb_id_attrset(mrb, id), mrb_struct_set_m, MRB_ARGS_REQ(1));
+      mrb_method_t m;
+      mrb_value at = mrb_fixnum_value(i);
+      struct RProc *aref = mrb_proc_new_cfunc_with_env(mrb, mrb_struct_ref, 1, &at);
+      struct RProc *aset = mrb_proc_new_cfunc_with_env(mrb, mrb_struct_set_m, 1, &at);
+      MRB_METHOD_FROM_PROC(m, aref);
+      mrb_define_method_raw(mrb, c, id, m);
+      MRB_METHOD_FROM_PROC(m, aset);
+      mrb_define_method_raw(mrb, c, mrb_id_attrset(mrb, id), m);
       mrb_gc_arena_restore(mrb, ai);
     }
   }
 }
 
 static mrb_value
-make_struct(mrb_state *mrb, mrb_value name, mrb_value members, struct RClass * klass)
+make_struct(mrb_state *mrb, mrb_value name, mrb_value members, struct RClass *klass)
 {
   mrb_value nstr;
   mrb_sym id;
@@ -278,17 +286,21 @@ mrb_struct_s_def(mrb_state *mrb, mrb_value klass)
   name = mrb_nil_value();
   mrb_get_args(mrb, "*&", &argv, &argc, &b);
   if (argc == 0) { /* special case to avoid crash */
-    rest = mrb_ary_new(mrb);
+    mrb_raise(mrb, E_ARGUMENT_ERROR, "wrong number of arguments");
   }
   else {
-    if (argc > 0) name = argv[0];
-    pargv = &argv[1];
-    argcnt = argc-1;
-    if (!mrb_nil_p(name) && mrb_symbol_p(name)) {
-      /* 1stArgument:symbol -> name=nil rest=argv[0]-[n] */
-      name = mrb_nil_value();
-      pargv = &argv[0];
-      argcnt++;
+    pargv = argv;
+    argcnt = argc;
+    if (argc > 0) {
+      name = argv[0];
+      if (mrb_symbol_p(name)) {
+        /* 1stArgument:symbol -> name=nil rest=argv[0..n] */
+        name = mrb_nil_value();
+      }
+      else {
+        pargv++;
+        argcnt--;
+      }
     }
     rest = mrb_ary_new_from_values(mrb, argcnt, pargv);
     for (i=0; i<RARRAY_LEN(rest); i++) {

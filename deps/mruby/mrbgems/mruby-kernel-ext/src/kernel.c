@@ -114,6 +114,7 @@ mrb_f_integer(mrb_state *mrb, mrb_value self)
   return mrb_convert_to_integer(mrb, arg, base);
 }
 
+#ifndef MRB_WITHOUT_FLOAT
 /*
  *  call-seq:
  *     Float(arg)    -> float
@@ -134,6 +135,7 @@ mrb_f_float(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "o", &arg);
   return mrb_Float(mrb, arg);
 }
+#endif
 
 /*
  *  call-seq:
@@ -222,6 +224,22 @@ mrb_f_hash(mrb_state *mrb, mrb_value self)
   return tmp;
 }
 
+/*
+ *  call-seq:
+ *     obj.itself -> an_object
+ *
+ *  Returns <i>obj</i>.
+ *
+ *      string = 'my string' #=> "my string"
+ *      string.itself.object_id == string.object_id #=> true
+ *
+ */
+static mrb_value
+mrb_f_itself(mrb_state *mrb, mrb_value self)
+{
+  return self;
+}
+
 void
 mrb_mruby_kernel_ext_gem_init(mrb_state *mrb)
 {
@@ -231,10 +249,13 @@ mrb_mruby_kernel_ext_gem_init(mrb_state *mrb)
   mrb_define_module_function(mrb, krn, "caller", mrb_f_caller, MRB_ARGS_OPT(2));
   mrb_define_method(mrb, krn, "__method__", mrb_f_method, MRB_ARGS_NONE());
   mrb_define_module_function(mrb, krn, "Integer", mrb_f_integer, MRB_ARGS_ANY());
+#ifndef MRB_WITHOUT_FLOAT
   mrb_define_module_function(mrb, krn, "Float", mrb_f_float, MRB_ARGS_REQ(1));
+#endif
   mrb_define_module_function(mrb, krn, "String", mrb_f_string, MRB_ARGS_REQ(1));
   mrb_define_module_function(mrb, krn, "Array", mrb_f_array, MRB_ARGS_REQ(1));
   mrb_define_module_function(mrb, krn, "Hash", mrb_f_hash, MRB_ARGS_REQ(1));
+  mrb_define_module_function(mrb, krn, "itself", mrb_f_itself, MRB_ARGS_NONE());
 }
 
 void

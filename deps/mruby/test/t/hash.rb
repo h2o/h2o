@@ -8,7 +8,7 @@ end
 assert('Hash#==', '15.2.13.4.1') do
   assert_true({ 'abc' => 'abc' } == { 'abc' => 'abc' })
   assert_false({ 'abc' => 'abc' } ==  { 'cba' => 'cba' })
-  assert_true({ :equal => 1 } == { :equal => 1.0 })
+  assert_true({ :equal => 1 } == { :equal => 1.0 }) if class_defined?("Float")
   assert_false({ :a => 1 } == true)
 end
 

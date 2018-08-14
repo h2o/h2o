@@ -122,7 +122,7 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     if (H2O_UNLIKELY((traffic_limit = h2o_strtosizefwd(&buf, traffic_header_value.len)) == SIZE_MAX))
         goto Next;
 
-    throttle = (void *)h2o_add_ostream(req, sizeof(throttle_resp_t), slot);
+    throttle = (void *)h2o_add_ostream(req, H2O_ALIGNOF(*throttle), sizeof(*throttle), slot);
 
     /* calculate the token increment per 100ms */
     throttle->token_inc = traffic_limit * HUNDRED_MS / ONE_SECOND;

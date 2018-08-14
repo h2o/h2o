@@ -82,6 +82,7 @@ static mrb_value sleep_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_
     ctx->ctx = mctx;
     ctx->receiver = *receiver;
     h2o_timeout_init(&ctx->timeout_entry, on_sleep_timeout);
+    /* FIXME timerwheel */
     h2o_timeout_link(ctx->ctx->shared->ctx->loop, msec, &ctx->timeout_entry);
 
     ctx->started_at = h2o_now(ctx->ctx->shared->ctx->loop);

@@ -19,6 +19,12 @@
 #include <readline/history.h>
 #define MIRB_ADD_HISTORY(line) add_history(line)
 #define MIRB_READLINE(ch) readline(ch)
+#if !defined(RL_READLINE_VERSION) || RL_READLINE_VERSION < 0x600
+/* libedit & older readline do not have rl_free() */
+#define MIRB_LINE_FREE(line) free(line)
+#else
+#define MIRB_LINE_FREE(line) rl_free(line)
+#endif
 #define MIRB_WRITE_HISTORY(path) write_history(path)
 #define MIRB_READ_HISTORY(path) read_history(path)
 #define MIRB_USING_HISTORY() using_history()
@@ -27,6 +33,7 @@
 #include <linenoise.h>
 #define MIRB_ADD_HISTORY(line) linenoiseHistoryAdd(line)
 #define MIRB_READLINE(ch) linenoise(ch)
+#define MIRB_LINE_FREE(line) linenoiseFree(line)
 #define MIRB_WRITE_HISTORY(path) linenoiseHistorySave(path)
 #define MIRB_READ_HISTORY(path) linenoiseHistoryLoad(history_path)
 #define MIRB_USING_HISTORY()
@@ -88,6 +95,7 @@ static void
 p(mrb_state *mrb, mrb_value obj, int prompt)
 {
   mrb_value val;
+  char* msg;
 
   val = mrb_funcall(mrb, obj, "inspect", 0);
   if (prompt) {
@@ -101,7 +109,9 @@ p(mrb_state *mrb, mrb_value obj, int prompt)
   if (!mrb_string_p(val)) {
     val = mrb_obj_as_string(mrb, obj);
   }
-  fwrite(RSTRING_PTR(val), RSTRING_LEN(val), 1, stdout);
+  msg = mrb_locale_from_utf8(RSTRING_PTR(val), RSTRING_LEN(val));
+  fwrite(msg, strlen(msg), 1, stdout);
+  mrb_locale_free(msg);
   putc('\n', stdout);
 }
 
@@ -489,7 +499,7 @@ main(int argc, char **argv)
     strcpy(last_code_line, line);
     strcat(last_code_line, "\n");
     MIRB_ADD_HISTORY(line);
-    free(line);
+    MIRB_LINE_FREE(line);
 #endif
 
 done:
@@ -528,9 +538,17 @@ done:
       /* no evaluation of code */
     }
     else {
+      if (0 < parser->nwarn) {
+        /* warning */
+        char* msg = mrb_locale_from_utf8(parser->warn_buffer[0].message, -1);
+        printf("line %d: %s\n", parser->warn_buffer[0].lineno, msg);
+        mrb_utf8_free(msg);
+      }
       if (0 < parser->nerr) {
         /* syntax error */
-        printf("line %d: %s\n", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
+        char* msg = mrb_locale_from_utf8(parser->error_buffer[0].message, -1);
+        printf("line %d: %s\n", parser->error_buffer[0].lineno, msg);
+        mrb_utf8_free(msg);
       }
       else {
         /* generate bytecode */
@@ -543,6 +561,13 @@ done:
 
         if (args.verbose) {
           mrb_codedump_all(mrb, proc);
+        }
+        /* adjust stack length of toplevel environment */
+        if (mrb->c->cibase->env) {
+          struct REnv *e = mrb->c->cibase->env;
+          if (e && MRB_ENV_STACK_LEN(e) < proc->body.irep->nlocals) {
+            MRB_ENV_SET_STACK_LEN(e, proc->body.irep->nlocals);
+          }
         }
         /* pass a proc for evaluation */
         /* evaluate the bytecode */
@@ -577,6 +602,8 @@ done:
   mrb_free(mrb, history_path);
 #endif
 
+  if (args.rfp) fclose(args.rfp);
+  mrb_free(mrb, args.argv);
   mrbc_context_free(mrb, cxt);
   mrb_close(mrb);
 

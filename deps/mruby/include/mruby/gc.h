@@ -33,6 +33,13 @@ typedef enum {
   MRB_GC_STATE_SWEEP
 } mrb_gc_state;
 
+/* Disable MSVC warning "C4200: nonstandard extension used: zero-sized array
+ * in struct/union" when in C++ mode */
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4200)
+#endif
+
 typedef struct mrb_heap_page {
   struct RBasic *freelist;
   struct mrb_heap_page *prev;
@@ -42,6 +49,10 @@ typedef struct mrb_heap_page {
   mrb_bool old:1;
   void *objects[];
 } mrb_heap_page;
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 typedef struct mrb_gc {
   mrb_heap_page *heaps;                /* heaps for GC */

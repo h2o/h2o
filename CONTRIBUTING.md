@@ -180,31 +180,37 @@ void f(struct st_mycontext_t *mc)
 # Tests
 
 H2O uses two main facilities for tests: unit tests in C and
-integration tests written in perl. Both tests can be run with `make
-check`. Some tests require to be run as root, and can be run with `make
-check-as-root`. Please note that some tests need dependencies such as
-curl or nghttp2, or some perl modules. You can refer to the `.travis.yml`
-file for an example of how to install the dependencies.
+integration tests written mostly in perl.
 
-Both kind of tests can be found under the `t/` directory.
+Unit tests are found under `t/00unit` directory, and use `picotest`
+[as a testing framework](https://github.com/h2o/picotest).
 
-## Unit tests
-
-They are written an C and are found under the `t/00unit/` directory. They
-use `picotest` [as a testing framework](https://github.com/h2o/picotest).
-
-## Integration tests
-
-Integration tests are found under the `t/` directory, and
-are any file ending with `.t` extension. The test suite uses
-[`Test::More`](https://perldoc.perl.org/Test/More.html) as a testing
+Integration tests are found under the `t/` directory, and are any file
+ending with `.t` extension. The test suite uses [`Test::More`](https://perldoc.perl.org/Test/More.html) as a testing
 framework. `t/Util.pm` offers facilities like running curl for all
 supported protocols, spawning H2O or instantiating a backend server using
 [Plackup](https://search.cpan.org/perldoc?plackup).
 
+## Running the tests using Docker
+
+The easiest way of running the tests is to use the  pre-built Docker image. The following command pulls the image from Docker Hub, and runs the tests using the h2o source repository in the current directory.
+
+```
+make -f misc/docker-ci/check.mk pull all
+```
+
+## Running the tests manually
+
+Both tests can be run with `make
+check`. Some tests require to be run as root, and can be run with `make
+check-as-root`. You might need dependencies such as curl or nghttp2, or
+some perl modules. You can refer to the `misc/docker-ci/Dockerfile`
+file for an example of how to install the dependencies.
+
 Single tests can be run manually by running `perl t/<test>.t`, in which
 case, you might have to set the environment variable `H2O_ROOT` to the
-root of the H2O repository, since some tests rely on it.
+root of the H2O repository since some tests rely on it, and also
+`BINARY_DIR` to the binary directory if you are building them off-the-source.
 
 ## Fuzzers
 

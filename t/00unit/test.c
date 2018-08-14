@@ -59,9 +59,14 @@ static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
     return sizeof(*sin);
 }
 
+static h2o_socket_t *get_socket(h2o_conn_t *conn)
+{
+    return NULL;
+}
+
 h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
 {
-    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername};
+    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername, NULL, get_socket};
     h2o_loopback_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, (struct timeval){0}, &callbacks);
 
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_loopback_conn_t, req) - sizeof(conn->super));
@@ -151,6 +156,8 @@ int main(int argc, char **argv)
     init_openssl();
 
     { /* library tests */
+        subtest("lib/common/balancer/least_conn.c", test_lib__common__balancer__least_conn_c);
+        subtest("lib/common/balancer/roundrobin.c", test_lib__common__balancer__roundrobin_c);
         subtest("lib/cache.c", test_lib__common__cache_c);
         subtest("lib/common/multithread.c", test_lib__common__multithread_c);
         subtest("lib/common/hostinfo.c", test_lib__common__hostinfo_c);

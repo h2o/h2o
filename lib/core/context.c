@@ -169,19 +169,13 @@ void h2o_context_request_shutdown(h2o_context_t *ctx)
         ctx->globalconf->http2.callbacks.request_shutdown(ctx);
 }
 
-void h2o_context_update_timestamp_cache(h2o_context_t *ctx)
+void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
 {
-    time_t prev_sec = ctx->_timestamp_cache.tv_at.tv_sec;
-    ctx->_timestamp_cache.uv_now_at = h2o_now(ctx->loop);
-    gettimeofday(&ctx->_timestamp_cache.tv_at, NULL);
-    if (ctx->_timestamp_cache.tv_at.tv_sec != prev_sec) {
-        struct tm gmt;
-        /* update the string cache */
-        if (ctx->_timestamp_cache.value != NULL)
-            h2o_mem_release_shared(ctx->_timestamp_cache.value);
-        ctx->_timestamp_cache.value = h2o_mem_alloc_shared(NULL, sizeof(h2o_timestamp_string_t), NULL);
-        gmtime_r(&ctx->_timestamp_cache.tv_at.tv_sec, &gmt);
-        h2o_time2str_rfc1123(ctx->_timestamp_cache.value->rfc1123, &gmt);
-        h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
-    }
+    struct tm gmt;
+    if (ctx->_timestamp_cache.value != NULL)
+        h2o_mem_release_shared(ctx->_timestamp_cache.value);
+    ctx->_timestamp_cache.value = h2o_mem_alloc_shared(NULL, sizeof(h2o_timestamp_string_t), NULL);
+    gmtime_r(&ctx->_timestamp_cache.tv_at.tv_sec, &gmt);
+    h2o_time2str_rfc1123(ctx->_timestamp_cache.value->rfc1123, &gmt);
+    h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
 }

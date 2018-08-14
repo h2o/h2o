@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -63,6 +63,16 @@ Status Directives
 The status handler exposes the current states of the HTTP server.
 This document describes the configuration directives of the handler.
 </p>
+
+<ul>
+<li><a href="configure/status_directives.html#status">
+<code>status</code>
+</a></li>
+<li><a href="configure/status_directives.html#duration-stats">
+<code>duration-stats</code>
+</a></li>
+</ul>
+
 
 <div id="status" class="directive-head">
 <div class="directive-since">since v2.0</div>
@@ -135,6 +145,8 @@ Note that the time spent while processing a request in a blocking manner (such a
 <dt>Default:</dt>
 <dd><code><pre>duration-stats: OFF</pre></code>
 </dl>
+
+
 
 
 

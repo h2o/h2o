@@ -28,7 +28,7 @@ module Kernel
 
   def _h2o_define_callback(name, callback_id)
     Kernel.define_method(name) do |*args|
-      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ])
+      ret = Fiber.yield([ callback_id, _h2o_create_resumer(), args ], nil)
       if ret.kind_of? Exception
         raise ret
       end
@@ -67,7 +67,7 @@ module Kernel
             while 1
               resp = app.call(req)
               cached = self_fiber
-              (req, generator) = Fiber.yield(*resp, generator)
+              (req, generator) = Fiber.yield(resp, generator)
             end
           rescue => e
             cached = self_fiber
@@ -113,6 +113,23 @@ module Kernel
       _h2o__finish_child_fiber()
     end
     _h2o__run_child_fiber(proc { fiber.resume })
+  end
+
+end
+
+module H2O
+
+  class ErrorStream
+
+    def puts(*msgs)
+      msgs.each {|msg| write msg }
+      nil
+    end
+
+    def flush
+      self
+    end
+
   end
 
 end

@@ -23,6 +23,7 @@
 #define h2o__uv_binding_h
 
 #include <string.h>
+#include <sys/time.h>
 #include <uv.h>
 
 #if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
@@ -47,6 +48,13 @@ int h2o_timeout_is_linked(h2o_timeout_t *timer);
 void h2o_timeout_unlink(h2o_timeout_t *timer);
 
 /* inline definitions */
+
+static inline struct timeval h2o_gettimeofday(uv_loop_t *loop)
+{
+    struct timeval tv_at;
+    gettimeofday(&tv_at, NULL);
+    return tv_at;
+}
 
 static inline uint64_t h2o_now(h2o_loop_t *loop)
 {

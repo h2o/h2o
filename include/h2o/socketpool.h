@@ -40,6 +40,18 @@ typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
+/**
+ * TODO: support subclassing for adding balancer-specific properties
+ */
+typedef struct st_h2o_socketpool_target_conf_t {
+    /**
+     * weight - 1 for load balancer, where weight is an integer within range [1, 256]
+     */
+    uint8_t weight_m1;
+} h2o_socketpool_target_conf_t;
+
+#define H2O_SOCKETPOOL_TARGET_MAX_WEIGHT 256
+
 typedef struct st_h2o_socketpool_target_t {
     /**
      * target URL
@@ -61,20 +73,27 @@ typedef struct st_h2o_socketpool_target_t {
             socklen_t len;
         } sockaddr;
     } peer;
+    /**
+     * per-target lb configuration
+     */
+    h2o_socketpool_target_conf_t conf;
 
+    /**
+     * the per-target portion of h2o_socketpool_t::_shared
+     */
     struct {
         h2o_linklist_t sockets;
+        /**
+         * number of connections being _leased_ to the applications (i.e. not including the number of connections being pooled).
+         * Synchronous operation must be used to access the variable.
+         */
+        size_t leased_count;
     } _shared;
-
 } h2o_socketpool_target_t;
 
 typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
 
-typedef size_t (*h2o_socketpool_lb_selector)(h2o_socketpool_target_vector_t *targets, void *data, int *tried);
-
-typedef void (*h2o_socketpool_lb_initializer)(h2o_socketpool_target_vector_t *targets, void **data);
-
-typedef void (*h2o_socketpool_lb_dispose_cb)(void *data);
+typedef struct st_h2o_balancer_t h2o_balancer_t;
 
 typedef struct st_h2o_socketpool_t {
 
@@ -89,19 +108,24 @@ typedef struct st_h2o_socketpool_t {
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
 
-    /* vars that are modified by multiple threads */
+    /**
+     * variables shared between threads. Unless otherwise noted, the mutex should be acquired before accessing them.
+     */
     struct {
-        size_t count; /* synchronous operations should be used to access the variable */
         pthread_mutex_t mutex;
-        h2o_linklist_t sockets; /* guarded by the mutex; list of struct pool_entry_t defined in socket/pool.c */
+        /**
+         * list of struct pool_entry_t
+         */
+        h2o_linklist_t sockets;
+        /**
+         * number of connections governed by the pool, includes sockets being pool and the ones trying to connect. Synchronous
+         * operation must be used to access the variable.
+         */
+        size_t count;
     } _shared;
 
-    /* vars used by load balancing, modified by multiple threads */
-    struct {
-        h2o_socketpool_lb_selector selector;
-        h2o_socketpool_lb_dispose_cb dispose;
-        void *data;
-    } _lb;
+    /* load balancer */
+    h2o_balancer_t *balancer;
 } h2o_socketpool_t;
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
@@ -110,7 +134,8 @@ typedef void (*h2o_socketpool_connect_cb)(h2o_socket_t *sock, const char *errstr
 /**
  * initializes a specific socket pool
  */
-void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len);
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t num_targets,
+                                  h2o_balancer_t *balancer);
 /**
  * initializes a global socket pool
  */
@@ -119,6 +144,14 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
  * disposes of a socket loop
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
+/**
+ * create a target. If lb_target_conf is NULL, a default target conf would be created.
+ */
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+/**
+ * destroy a target
+ */
+void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target);
 /**
  *
  */
@@ -142,7 +175,6 @@ void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
 /**
  * connects to the peer (or returns a pooled connection)
  */
-
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
                             h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
 /**

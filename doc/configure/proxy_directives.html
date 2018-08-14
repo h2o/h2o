@@ -44,7 +44,7 @@
 <tr>
 <td><a href="index.html">Top</a></td>
 <td><a href="install.html">Install</a></td>
-<td class="selected">Configure</td>
+<td class="selected"><a href="configure.html">Configure</a></td>
 <td><a href="faq.html">FAQ</a></td>
 <td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
 <td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
@@ -78,6 +78,79 @@ Support for HTTPS has been introduced in version 2.0.
 Following sections describe the configuration directives defined for the module.
 </p>
 
+<ul>
+<li><a href="configure/proxy_directives.html#proxy.reverse.url">
+<code>proxy.reverse.url</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.preserve-host">
+<code>proxy.preserve-host</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.preserve-x-forwarded-proto">
+<code>proxy.preserve-x-forwarded-proto</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.proxy-protocol">
+<code>proxy.proxy-protocol</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.emit-x-forwarded-headers">
+<code>proxy.emit-x-forwarded-headers</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.emit-via-header">
+<code>proxy.emit-via-header</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.emit-missing-date-header">
+<code>proxy.emit-missing-date-header</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.add">
+<code>proxy.header.add</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.append">
+<code>proxy.header.append</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.merge">
+<code>proxy.header.merge</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.set">
+<code>proxy.header.set</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.setifempty">
+<code>proxy.header.setifempty</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.header.unset">
+<code>proxy.header.unset</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.ssl.cafile">
+<code>proxy.ssl.cafile</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.ssl.session-cache">
+<code>proxy.ssl.session-cache</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.ssl.verify-peer">
+<code>proxy.ssl.verify-peer</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.io">
+<code>proxy.timeout.io</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.connect">
+<code>proxy.timeout.connect</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.first_byte">
+<code>proxy.timeout.first_byte</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.io">
+<code>proxy.timeout.io</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.timeout.keepalive">
+<code>proxy.timeout.keepalive</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.websocket">
+<code>proxy.websocket</code>
+</a></li>
+<li><a href="configure/proxy_directives.html#proxy.websocket.timeout">
+<code>proxy.websocket.timeout</code>
+</a></li>
+</ul>
+
+
 <div id="proxy.reverse.url" class="directive-head">
 <h3><a href="configure/proxy_directives.html#proxy.reverse.url"><code>"proxy.reverse.url"</code></a></h3>
 </div>
@@ -86,7 +159,7 @@ Following sections describe the configuration directives defined for the module.
 <dt>Description:</dt>
 <dd>
 <p>
-Forwards the requests to the specified URL, and proxies the response.
+Forwards the requests to the specified backends, and proxies the response.
 </p>
 
 <div class="example">
@@ -95,8 +168,43 @@ Forwards the requests to the specified URL, and proxies the response.
 </code></pre>
 </div>
 
+<div class="example">
+<div class="caption">Example. Forwarding the requests to multiple application server with different weight</div>
+<pre><code>proxy.reverse.url:
+  - http://10.0.0.1:8080/
+  - url: http://10.0.0.2:8080/different-path
+    weight: 2
+</code></pre>
+</div>
+
+<div class="example">
+<div class="caption">Example. Forwarding the requests to multiple application server with least connection</div>
+<pre><code>proxy.reverse.url:
+  backends:
+    - http://10.0.0.1:8080/
+    - http://10.0.0.2:8080/
+  balancer: least-conn
+</code></pre>
+</div>
+
 <p>
-If you want load balancing multiple backends, replace 127.0.0.1 with hostname which returns IP addresses via DNS or /etc/hosts.
+When more than one backend is declared, the load is distributed among the backends using the strategy specified by the <code>balancer</code> property.
+Currently we support <code>round-robin</code> (the default) and <code>least-conn</code> as the value of the property.
+The strategies are applied when establishing a new connection becomes necessary (i.e. when no pooled connections exist).
+</p>
+<p>
+<code>weight</code> can be assigned to each backend as an integer between 1 and 256.
+The default value is 1.
+</p>
+<p>
+For the <code>round-robin</code> balancer, <code>weight</code> is respected in this way: each backend would be selected exactly <code>weight</code> times before next backend would be selected, except when the backend is not accessable.
+</p>
+<p>
+For <code>least-conn</code> balancer, <code>weight</code> is respected in this way: the selected backend should have the minimum value of (request count) / (<code>weight</code>).
+</p>
+<p>
+H2O will try to reconnect to different backends (in the order determined by the load balancing strategy) until it successfully establishes a connection.
+It returns an error when it fails to connect to all of the backends.
 </p>
 <p>
 In addition to TCP/IP over IPv4 and IPv6, the proxy handler can also connect to an HTTP server listening to a Unix socket.
@@ -603,6 +711,8 @@ Sets idle timeout of a WebSocket connection being proxied.
 <dt>Default:</dt>
 <dd><code><pre>proxy.websocket.timeout: 300000</pre></code>
 </dl>
+
+
 
 
 

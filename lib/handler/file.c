@@ -187,7 +187,7 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
     vec[0].base = self->buf;
     vec[0].len = rret + used_buf;
     if (self->ranged.current_range == self->ranged.range_count && self->bytesleft == 0) {
-        vec[1].base = h2o_mem_alloc_pool(&req->pool, sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n"));
+        vec[1].base = h2o_mem_alloc_pool(&req->pool, char, sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n"));
         vec[1].len = sprintf(vec[1].base, "\r\n--%s--\r\n", self->ranged.boundary.base);
         vecarrsize = 2;
         send_state = H2O_SEND_STATE_FINAL;
@@ -245,7 +245,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     if ((flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0 && req->version >= 0x101) {
         int compressible_types = h2o_get_compressible_types(&req->headers);
         if (compressible_types != 0) {
-            char *variant_path = h2o_mem_alloc_pool(&req->pool, path_len + sizeof(".gz"));
+            char *variant_path = h2o_mem_alloc_pool(&req->pool, *variant_path, path_len + sizeof(".gz"));
             memcpy(variant_path, path, path_len);
 #define TRY_VARIANT(mask, enc, ext)                                                                                                \
     if ((compressible_types & mask) != 0) {                                                                                        \
@@ -264,7 +264,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
         goto Opened;
     }
     if ((flags & H2O_FILE_FLAG_GUNZIP) != 0 && req->version >= 0x101) {
-        char *variant_path = h2o_mem_alloc_pool(&req->pool, path_len + sizeof(".gz"));
+        char *variant_path = h2o_mem_alloc_pool(&req->pool, *variant_path, path_len + sizeof(".gz"));
         memcpy(variant_path, path, path_len);
         strcpy(variant_path + path_len, ".gz");
         if ((fileref = h2o_filecache_open_file(req->conn->ctx->filecache, variant_path, O_RDONLY | O_CLOEXEC)) != NULL) {
@@ -281,7 +281,7 @@ Opened:
         return NULL;
     }
 
-    self = h2o_mem_alloc_pool(&req->pool, sizeof(*self));
+    self = h2o_mem_alloc_pool(&req->pool, *self, 1);
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
     self->file.ref = fileref;
@@ -314,6 +314,11 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
 
 static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
+    if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
+        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
+        return;
+    }
+
     struct st_gzip_decompress_t *self = (void *)_self;
     h2o_iovec_t *outbufs;
     size_t outbufcnt;
@@ -335,7 +340,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     req->res.mime_attr = mime_attr;
 
     if (self->ranged.range_count > 1) {
-        mime_type.base = h2o_mem_alloc_pool(&req->pool, 52);
+        mime_type.base = h2o_mem_alloc_pool(&req->pool, char, 52);
         mime_type.len = sprintf(mime_type.base, "multipart/byteranges; boundary=%s", self->ranged.boundary.base);
     }
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_TYPE, NULL, mime_type.base, mime_type.len);
@@ -350,7 +355,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_ACCEPT_RANGES, NULL, H2O_STRLIT("bytes"));
     else if (self->ranged.range_count == 1) {
         h2o_iovec_t content_range;
-        content_range.base = h2o_mem_alloc_pool(&req->pool, 128);
+        content_range.base = h2o_mem_alloc_pool(&req->pool, char, 128);
         content_range.len = sprintf(content_range.base, "bytes %zd-%zd/%zd", self->ranged.range_infos[0],
                                     self->ranged.range_infos[0] + self->ranged.range_infos[1] - 1, self->ranged.filesize);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, NULL, content_range.base, content_range.len);
@@ -370,7 +375,8 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
 
     /* dynamically setup gzip decompress ostream */
     if (self->gunzip) {
-        struct st_gzip_decompress_t *decoder = (void *)h2o_add_ostream(req, sizeof(struct st_gzip_decompress_t), &req->_ostr_top);
+        struct st_gzip_decompress_t *decoder =
+            (void *)h2o_add_ostream(req, H2O_ALIGNOF(*decoder), sizeof(*decoder), &req->_ostr_top);
         decoder->decompressor = h2o_compress_gunzip_open(&req->pool);
         decoder->super.do_send = send_decompressed;
     }
@@ -383,7 +389,7 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         size_t bufsz = MAX_BUF_SIZE;
         if (self->bytesleft < bufsz)
             bufsz = self->bytesleft;
-        self->buf = h2o_mem_alloc_pool(&req->pool, bufsz);
+        self->buf = h2o_mem_alloc_pool(&req->pool, char, bufsz);
         if (self->ranged.range_count < 2)
             do_proceed(&self->super, req);
         else {
@@ -542,16 +548,17 @@ static void gen_rand_string(h2o_iovec_t *s)
     s->base[s->len] = 0;
 }
 
-static int delegate_dynamic_request(h2o_req_t *req, size_t url_path_len, const char *local_path, size_t local_path_len,
-                                    h2o_mimemap_type_t *mime_type)
+static int delegate_dynamic_request(h2o_req_t *req, h2o_iovec_t script_name, h2o_iovec_t path_info, const char *local_path,
+                                    size_t local_path_len, h2o_mimemap_type_t *mime_type)
 {
     h2o_filereq_t *filereq;
     h2o_handler_t *handler;
 
     assert(mime_type->data.dynamic.pathconf.handlers.size == 1);
 
-    filereq = h2o_mem_alloc_pool(&req->pool, sizeof(*filereq));
-    filereq->url_path_len = url_path_len;
+    filereq = h2o_mem_alloc_pool(&req->pool, *filereq, 1);
+    filereq->script_name = script_name;
+    filereq->path_info = path_info;
     filereq->local_path = h2o_strdup(&req->pool, local_path, local_path_len);
 
     h2o_req_bind_conf(req, req->hostconf, &mime_type->data.dynamic.pathconf);
@@ -590,8 +597,12 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
     switch (mime_type->type) {
     case H2O_MIMEMAP_TYPE_MIMETYPE:
         return -1;
-    case H2O_MIMEMAP_TYPE_DYNAMIC:
-        return delegate_dynamic_request(req, self->conf_path.len + slash_at - self->real_path.len, rpath, slash_at, mime_type);
+    case H2O_MIMEMAP_TYPE_DYNAMIC: {
+        h2o_iovec_t script_name = h2o_iovec_init(req->path_normalized.base, self->conf_path.len + slash_at - self->real_path.len);
+        h2o_iovec_t path_info =
+            h2o_iovec_init(req->path_normalized.base + script_name.len, req->path_normalized.len - script_name.len);
+        return delegate_dynamic_request(req, script_name, path_info, rpath, slash_at, mime_type);
+    }
     }
     fprintf(stderr, "unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
     abort();
@@ -603,12 +614,12 @@ static void send_method_not_allowed(h2o_req_t *req)
     h2o_send_error_405(req, "Method Not Allowed", "method not allowed", H2O_SEND_ERROR_KEEP_HEADERS);
 }
 
-static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, const char *rpath, size_t rpath_len,
-                                h2o_mimemap_type_t *mime_type)
+static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, h2o_iovec_t resolved_path,
+                                const char *rpath, size_t rpath_len, h2o_mimemap_type_t *mime_type)
 {
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
     size_t if_modified_since_header_index, if_none_match_header_index;
-    size_t range_header_index;
+    size_t range_header_index, if_range_header_index;
 
     /* determine the method */
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
@@ -622,7 +633,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
     /* obtain mime type */
     if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
         do_close(&generator->super, req);
-        return delegate_dynamic_request(req, req->path_normalized.len, rpath, rpath_len, mime_type);
+        return delegate_dynamic_request(req, resolved_path, h2o_iovec_init(NULL, 0), rpath, rpath_len, mime_type);
     }
     assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
 
@@ -631,7 +642,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
         size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
-        if (h2o_memis(if_none_match->base, if_none_match->len, etag, etag_len))
+        if (h2o_filecache_compare_etag_strong(if_none_match->base, if_none_match->len, etag, etag_len))
             goto NotModified;
     } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
         h2o_iovec_t *ims_vec = &req->headers.entries[if_modified_since_header_index].value;
@@ -643,21 +654,37 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         }
     }
 
-    /* only allow GET or POST for static files */
+    /* only allow GET or HEAD for static files */
     if (method_type == METHOD_IS_OTHER) {
         do_close(&generator->super, req);
         send_method_not_allowed(req);
         return 0;
     }
 
-    /* if-range */
+    /* range request */
     if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
+        /* if range */
+        if ((if_range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_RANGE, SIZE_MAX)) != -1) {
+            h2o_iovec_t *if_range = &req->headers.entries[if_range_header_index].value;
+            /* first try parse if-range as http-date */
+            struct tm ir_tm, *last_modified_tm;
+            if (h2o_time_parse_rfc1123(if_range->base, if_range->len, &ir_tm) == 0) {
+                last_modified_tm = h2o_filecache_get_last_modified(generator->file.ref, NULL);
+                if (tm_is_lessthan(&ir_tm, last_modified_tm))
+                    goto EntireFile;
+            } else { /* treat it as an e-tag */
+                char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
+                size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
+                if (!h2o_filecache_compare_etag_strong(if_range->base, if_range->len, etag, etag_len))
+                    goto EntireFile;
+            }
+        }
         h2o_iovec_t *range = &req->headers.entries[range_header_index].value;
         size_t *range_infos, range_count;
         range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
         if (range_infos == NULL) {
             h2o_iovec_t content_range;
-            content_range.base = h2o_mem_alloc_pool(&req->pool, 32);
+            content_range.base = h2o_mem_alloc_pool(&req->pool, char, 32);
             content_range.len = sprintf(content_range.base, "bytes */%zu", generator->bytesleft);
             h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_RANGE, NULL, content_range.base, content_range.len);
             h2o_send_error_416(req, "Request Range Not Satisfiable", "requested range not satisfiable",
@@ -675,7 +702,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         else {
             generator->ranged.mimetype = h2o_strdup(&req->pool, mime_type->data.mimetype.base, mime_type->data.mimetype.len);
             size_t final_content_len = 0, size_tmp = 0, size_fixed_each_part, i;
-            generator->ranged.boundary.base = h2o_mem_alloc_pool(&req->pool, BOUNDARY_SIZE + 1);
+            generator->ranged.boundary.base = h2o_mem_alloc_pool(&req->pool, char, BOUNDARY_SIZE + 1);
             generator->ranged.boundary.len = BOUNDARY_SIZE;
             gen_rand_string(&generator->ranged.boundary);
             i = generator->bytesleft;
@@ -713,6 +740,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         return 0;
     }
 
+EntireFile:
     /* return file */
     do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, &mime_type->data.attr, method_type == METHOD_IS_GET);
     return 0;
@@ -754,6 +782,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     h2o_resp_add_date_header(req);
 
+    h2o_iovec_t resolved_path = req->path_normalized;
+
     /* build generator (as well as terminating the rpath and its length upon success) */
     if (rpath[rpath_len - 1] == '/') {
         h2o_iovec_t *index_file;
@@ -762,6 +792,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             rpath[rpath_len + index_file->len] = '\0';
             if ((generator = create_generator(req, rpath, rpath_len + index_file->len, &is_dir, self->flags)) != NULL) {
                 rpath_len += index_file->len;
+                resolved_path = h2o_concat(&req->pool, req->path_normalized, *index_file);
                 goto Opened;
             }
             if (is_dir) {
@@ -820,7 +851,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 
 Opened:
-    return serve_with_generator(generator, req, rpath, rpath_len,
+    return serve_with_generator(generator, req, resolved_path, rpath, rpath_len,
                                 h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len)));
 }
 
@@ -939,7 +970,7 @@ static int specific_handler_on_req(h2o_handler_t *_self, h2o_req_t *req)
         return 0;
     }
 
-    return serve_with_generator(generator, req, self->real_path.base, self->real_path.len, self->mime_type);
+    return serve_with_generator(generator, req, req->path_normalized, self->real_path.base, self->real_path.len, self->mime_type);
 }
 
 h2o_handler_t *h2o_file_register_file(h2o_pathconf_t *pathconf, const char *real_path, h2o_mimemap_type_t *mime_type, int flags)

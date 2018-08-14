@@ -69,7 +69,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #define H1_AGG_ERR(status_) esc->emitted_status_errors[H2O_STATUS_ERROR_##status_]
 #define H2_AGG_ERR(err_) esc->h2_protocol_level_errors[-H2O_HTTP2_ERROR_##err_]
 #define BUFSIZE (2 * 1024)
-    ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
+    ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(ret.base, BUFSIZE, ",\n"
                                           " \"status-errors.400\": %" PRIu64 ",\n"
                                           " \"status-errors.403\": %" PRIu64 ",\n"
@@ -107,6 +107,6 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #undef H2_AGG_ERR
 }
 
-h2o_status_handler_t events_status_handler = {
-    {H2O_STRLIT("events")}, events_status_init, events_status_per_thread, events_status_final,
+h2o_status_handler_t h2o_events_status_handler = {
+    {H2O_STRLIT("events")}, events_status_final, events_status_init, events_status_per_thread
 };

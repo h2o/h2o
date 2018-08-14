@@ -133,7 +133,6 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
 {
     memset(pathconf, 0, sizeof(*pathconf));
     pathconf->global = globalconf;
-    h2o_chunked_register(pathconf);
     if (path != NULL)
         pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
     h2o_mem_addref_shared(mimemap);
@@ -187,12 +186,14 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.emit_x_forwarded_headers = 1;
     config->proxy.emit_via_header = 1;
     config->proxy.emit_missing_date_header = 1;
-    config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST.max_concurrent_streams;
+    config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
     config->http2.max_streams_for_priority = 16;
+    config->http2.active_stream_window_size = H2O_DEFAULT_HTTP2_ACTIVE_STREAM_WINDOW_SIZE;
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
     config->http2.callbacks = H2O_HTTP2_CALLBACKS;
+    config->send_informational_mode = H2O_SEND_INFORMATIONAL_MODE_EXCEPT_H1;
     config->mimemap = h2o_mimemap_create();
     h2o_socketpool_init_global(&config->proxy.global_socketpool, SIZE_MAX);
 
@@ -211,21 +212,16 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     return pathconf;
 }
 
-void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t status_handler)
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t *status_handler)
 {
+    /* check if the status handler is already registered */
+    size_t i;
+    for (i = 0; i != config->statuses.size; ++i)
+        if (config->statuses.entries[i] == status_handler)
+            return;
+    /* register the new handler */
     h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
     config->statuses.entries[config->statuses.size++] = status_handler;
-}
-
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler)
-{
-    h2o_status_handler_t *sh;
-
-    h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
-    sh = &config->statuses.entries[config->statuses.size++];
-    memset(sh, 0, sizeof(*sh));
-    sh->name = h2o_strdup(NULL, name.base, name.len);
-    sh->final = status_handler;
 }
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)

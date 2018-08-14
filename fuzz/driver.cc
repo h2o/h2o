@@ -157,6 +157,7 @@ static void write_fully(int fd, char *buf, size_t len, int abort_on_err)
     "Connection: Close\r\n\r\nOk"
 #define OK_RESP_LEN (sizeof(OK_RESP) - 1)
 
+static h2o_barrier_t init_barrier;
 void *upstream_thread(void *arg)
 {
     char *dirname = (char *)arg;
@@ -178,6 +179,7 @@ void *upstream_thread(void *arg)
         abort();
     }
 
+    h2o_barrier_wait(&init_barrier);
     while (1) {
         struct sockaddr_un caddr;
         socklen_t slen = 0;
@@ -289,7 +291,7 @@ static int create_accepted(int sfd, char *buf, size_t len, h2o_barrier_t **barri
 {
     int fd;
     h2o_socket_t *sock;
-    struct timeval connected_at = *h2o_get_timestamp(&ctx, NULL, NULL);
+    struct timeval connected_at = h2o_gettimeofday(ctx.loop);
 
     /* Create an HTTP[/2] client that will send the fuzzed request */
     fd = feeder(sfd, buf, len, barrier);
@@ -339,6 +341,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         static char tmpname[] = "/tmp/h2o-fuzz-XXXXXX";
         char *dirname;
         h2o_url_t upstream;
+        h2o_barrier_init(&init_barrier, 2);
         signal(SIGPIPE, SIG_IGN);
 
         dirname = mkdtemp(tmpname);
@@ -363,8 +366,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT(unix_listener)), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
         h2o_url_parse(unix_listener, strlen(unix_listener), &upstream);
-        h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &upstream, 1, 2000, NULL,
-                                         &proxy_config);
+        h2o_socketpool_t *sockpool = new h2o_socketpool_t();
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(&upstream, NULL);
+        h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, &target, 1, NULL);
+        h2o_socketpool_set_timeout(sockpool, 2000);
+        h2o_socketpool_set_ssl_ctx(sockpool, NULL);
+        h2o_proxy_register_reverse_proxy(h2o_config_register_path(hostconf, "/reproxy-test", 0), &proxy_config, sockpool);
         h2o_file_register(h2o_config_register_path(hostconf, "/", 0), "./examples/doc_root", NULL, NULL, 0);
 
         loop = h2o_evloop_create();
@@ -383,6 +390,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         if (pthread_create(&tupstream, NULL, upstream_thread, dirname) != 0) {
             abort();
         }
+        h2o_barrier_wait(&init_barrier);
         init_done = 1;
     }
 

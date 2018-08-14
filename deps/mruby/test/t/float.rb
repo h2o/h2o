@@ -1,6 +1,8 @@
 ##
 # Float ISO Test
 
+if class_defined?("Float")
+
 assert('Float', '15.2.9') do
   assert_equal Class, Float.class
 end
@@ -203,3 +205,5 @@ assert('Float#>>') do
   # Don't raise on large Right Shift
   assert_equal(-1, -23.0 >> 128)
 end
+
+end # class_defined?("Float")

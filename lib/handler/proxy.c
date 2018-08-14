@@ -22,21 +22,22 @@
 #include <sys/un.h>
 #include "h2o.h"
 #include "h2o/socketpool.h"
+#include "h2o/balancer.h"
 
 struct rp_handler_t {
     h2o_handler_t super;
-    h2o_socketpool_t sockpool;
+    h2o_socketpool_t *sockpool;
     h2o_proxy_config_vars_t config;
 };
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct rp_handler_t *self = (void *)_self;
-    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, sizeof(*overrides));
+    h2o_req_overrides_t *overrides = h2o_mem_alloc_pool(&req->pool, *overrides, 1);
 
     /* setup overrides */
     *overrides = (h2o_req_overrides_t){NULL};
-    overrides->socketpool = &self->sockpool;
+    overrides->socketpool = self->sockpool;
     overrides->location_rewrite.path_prefix = req->pathconf->path;
     overrides->use_proxy_protocol = self->config.use_proxy_protocol;
     overrides->max_buffer_size = self->config.max_buffer_size;
@@ -44,9 +45,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
 
-    /* request reprocess */
-    h2o_reprocess_request(req, req->method, req->scheme, req->authority, h2o_build_destination(req, H2O_STRLIT("/"), 0), overrides,
-                          0);
+    /* request reprocess (note: path may become an empty string, to which one of the target URL within the socketpool will be
+     * right-padded when lib/core/proxy connects to upstream; see #1563) */
+    h2o_iovec_t path = h2o_build_destination(req, NULL, 0, 0);
+    h2o_reprocess_request(req, req->method, req->scheme, req->authority, path, overrides, 0);
 
     return 0;
 }
@@ -56,7 +58,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
 
     /* use the loop of first context for handling socketpool timeouts */
-    h2o_socketpool_register_loop(&self->sockpool, ctx->loop);
+    h2o_socketpool_register_loop(self->sockpool, ctx->loop);
 
     /* setup a specific client context only if we need to */
     if (ctx->globalconf->proxy.io_timeout == self->config.io_timeout &&
@@ -88,7 +90,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     if (client_ctx == NULL)
         return;
 
-    h2o_socketpool_unregister_loop(&self->sockpool, ctx->loop);
+    h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
     free(client_ctx);
 }
 
@@ -96,14 +98,12 @@ static void on_handler_dispose(h2o_handler_t *_self)
 {
     struct rp_handler_t *self = (void *)_self;
 
-    h2o_socketpool_dispose(&self->sockpool);
+    h2o_socketpool_dispose(self->sockpool);
+    free(self->sockpool);
 }
 
-void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstreams, size_t num_upstreams,
-                                      h2o_timer_tick_t keepalive_timeout, SSL_CTX *ssl_ctx, h2o_proxy_config_vars_t *config)
+void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool)
 {
-    assert(num_upstreams != 0);
-
     struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
 
     self->super.on_context_init = on_context_init;
@@ -112,9 +112,5 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_url_t *upstr
     self->super.on_req = on_req;
     self->super.supports_request_streaming = 1;
     self->config = *config;
-
-    /* init socket pool */
-    h2o_socketpool_init_specific(&self->sockpool, SIZE_MAX /* FIXME */, upstreams, num_upstreams);
-    h2o_socketpool_set_timeout(&self->sockpool, keepalive_timeout);
-    h2o_socketpool_set_ssl_ctx(&self->sockpool, ssl_ctx);
+    self->sockpool = sockpool;
 }

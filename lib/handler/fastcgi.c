@@ -116,7 +116,7 @@ static void encode_begin_request(void *p, uint16_t reqId, uint16_t role, uint8_t
 
 static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId, uint16_t role, uint8_t flags)
 {
-    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE),
+    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, char, FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE),
                                      FCGI_RECORD_HEADER_SIZE + FCGI_BEGIN_REQUEST_BODY_SIZE);
     encode_begin_request(rec.base, reqId, role, flags);
     return rec;
@@ -124,7 +124,7 @@ static h2o_iovec_t create_begin_request(h2o_mem_pool_t *pool, uint16_t reqId, ui
 
 static h2o_iovec_t create_header(h2o_mem_pool_t *pool, uint8_t type, uint16_t reqId, uint16_t sz)
 {
-    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, FCGI_RECORD_HEADER_SIZE), FCGI_RECORD_HEADER_SIZE);
+    h2o_iovec_t rec = h2o_iovec_init(h2o_mem_alloc_pool(pool, char, FCGI_RECORD_HEADER_SIZE), FCGI_RECORD_HEADER_SIZE);
     encode_record_header(rec.base, type, reqId, sz);
     return rec;
 }
@@ -143,7 +143,7 @@ static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s,
     if (blocks->entries[blocks->size - 1].len + len > APPEND_BLOCKSIZE) {
         h2o_vector_reserve(pool, blocks, blocks->size + 1);
         slot = blocks->entries + blocks->size++;
-        slot->base = h2o_mem_alloc_pool(pool, len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
+        slot->base = h2o_mem_alloc_pool(pool, char, len < APPEND_BLOCKSIZE ? APPEND_BLOCKSIZE : len);
         slot->len = 0;
     } else {
         slot = blocks->entries + blocks->size - 1;
@@ -232,10 +232,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     if (req->filereq != NULL) {
         h2o_filereq_t *filereq = req->filereq;
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_FILENAME"), filereq->local_path.base, filereq->local_path.len);
-        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), req->path_normalized.base, filereq->url_path_len);
-        if (req->path_normalized.len != filereq->url_path_len)
-            path_info =
-                h2o_iovec_init(req->path_normalized.base + filereq->url_path_len, req->path_normalized.len - filereq->url_path_len);
+        append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), filereq->script_name.base, filereq->script_name.len);
+        path_info = filereq->path_info;
     } else {
         append_pair(&req->pool, vecs, H2O_STRLIT("SCRIPT_NAME"), NULL, 0);
         path_info = req->path_normalized;
@@ -296,6 +294,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     { /* headers */
         const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
         size_t cookie_length = 0;
+        int found_early_data = 0;
         for (; h != h_end; ++h) {
             if (h->name == &H2O_TOKEN_CONTENT_TYPE->buf) {
                 append_pair(&req->pool, vecs, H2O_STRLIT("CONTENT_TYPE"), h->value.base, h->value.len);
@@ -303,6 +302,8 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 /* accumulate the length of the cookie, together with the separator */
                 cookie_length += h->value.len + 1;
             } else {
+                if (h->name == &H2O_TOKEN_EARLY_DATA->buf)
+                    found_early_data = 1;
                 size_t i;
                 for (i = 0; i != req->env.size; i += 2) {
                     h2o_iovec_t *envname = req->env.entries + i;
@@ -337,6 +338,10 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
                 }
             }
             memcpy(dst, h->value.base, h->value.len);
+        }
+        if (!found_early_data && h2o_conn_is_early_data(req->conn)) {
+            append_pair(&req->pool, vecs, H2O_STRLIT("HTTP_EARLY_DATA"), H2O_STRLIT("1"));
+            req->reprocess_if_too_early = 1;
         }
     }
 }
@@ -545,7 +550,7 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
     }
 
     /* add date: if it's missing from the response */
-    if (h2o_find_header(&req->res.headers, H2O_TOKEN_DATE, 0) == -1)
+    if (h2o_find_header(&req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)
         h2o_resp_add_date_header(req);
 
     return 0;
@@ -842,7 +847,9 @@ h2o_fastcgi_handler_t *h2o_fastcgi_register(h2o_pathconf_t *pathconf, h2o_url_t 
     if (vars->document_root.base != NULL)
         handler->config.document_root = h2o_strdup(NULL, vars->document_root.base, vars->document_root.len);
 
-    h2o_socketpool_init_specific(&handler->sockpool, SIZE_MAX /* FIXME */, upstream, 1);
+    h2o_socketpool_target_t *target = h2o_socketpool_create_target(upstream, NULL);
+    h2o_socketpool_target_t **targets = &target;
+    h2o_socketpool_init_specific(&handler->sockpool, SIZE_MAX /* FIXME */, targets, 1, NULL);
     h2o_socketpool_set_timeout(&handler->sockpool, handler->config.keepalive_timeout);
     return handler;
 }

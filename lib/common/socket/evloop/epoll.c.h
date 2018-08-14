@@ -185,6 +185,11 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
         fprintf(stderr, "socket_export: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
 }
 
+static void evloop_do_dispose(h2o_evloop_t *_loop)
+{
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
+    close(loop->ep);
+}
 h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));

@@ -45,9 +45,6 @@ typedef struct mrb_irep {
   struct mrb_irep_debug_info* debug_info;
 
   int ilen, plen, slen, rlen, refcnt;
-
-  struct mrb_irep *outer;       /* Refers outer scope */
-  struct RClass *target_class;
 } mrb_irep;
 
 #define MRB_ISEQ_NO_FREE 1
@@ -58,6 +55,7 @@ MRB_API mrb_value mrb_load_irep_cxt(mrb_state*, const uint8_t*, mrbc_context*);
 void mrb_irep_free(mrb_state*, struct mrb_irep*);
 void mrb_irep_incref(mrb_state*, struct mrb_irep*);
 void mrb_irep_decref(mrb_state*, struct mrb_irep*);
+void mrb_irep_cutref(mrb_state*, struct mrb_irep*);
 
 MRB_END_DECL
 

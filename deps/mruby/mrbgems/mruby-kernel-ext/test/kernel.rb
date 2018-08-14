@@ -49,7 +49,7 @@ assert('Kernel#__method__') do
 end
 
 assert('Kernel#Integer') do
-  assert_equal(123, Integer(123.999))
+  assert_equal(123, Integer(123.999)) if class_defined?("Float")
   assert_equal(26, Integer("0x1a"))
   assert_equal(930, Integer("0930", 10))
   assert_equal(7, Integer("111", 2))
@@ -63,7 +63,7 @@ assert('Kernel#Float') do
   assert_equal(123.456, Float(123.456))
   assert_equal(123.456, Float("123.456"))
   assert_raise(TypeError) { Float(nil) }
-end
+end if class_defined?("Float")
 
 assert('Kernel#String') do
   assert_equal("main", String(self))

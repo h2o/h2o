@@ -93,7 +93,7 @@ static void test_extract_push_path_from_link_header(void)
         h2o_iovec_t input = h2o_iovec_init(_input, strlen(_input)), filtered;                                                      \
         struct expected_t expected[] = {__VA_ARGS__, {NULL}}, *e = expected;                                                       \
         h2o_extract_push_path_from_link_header(&pool, input.base, input.len, base_path, &H2O_URL_SCHEME_HTTP, input_authority,     \
-                                               _base_scheme, _base_authority, check_path, &e, &filtered);                          \
+                                               _base_scheme, _base_authority, check_path, &e, &filtered, 0);                       \
         ok(e->path == NULL);                                                                                                       \
         if (_filtered_expected != NULL) {                                                                                          \
             ok(h2o_memis(filtered.base, filtered.len, _filtered_expected, strlen(_filtered_expected)));                            \

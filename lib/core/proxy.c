@@ -91,7 +91,7 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
         return added;
 
     size_t newlen = merged.len + 2 + added.len;
-    char *buf = h2o_mem_alloc_pool(pool, newlen);
+    char *buf = h2o_mem_alloc_pool(pool, *buf, newlen);
     memcpy(buf, merged.base, merged.len);
     buf[merged.len] = seperator;
     buf[merged.len + 1] = ' ';
@@ -130,7 +130,8 @@ static int req_requires_content_length(h2o_req_t *req)
     return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
 }
 
-static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake, int use_proxy_protocol, int *te_chunked)
+static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket_handshake, int use_proxy_protocol, int *te_chunked,
+                                 int *reprocess_if_too_early)
 {
     h2o_iovec_t buf;
     size_t offset = 0, remote_addr_len = SIZE_MAX;
@@ -149,7 +150,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
     buf.len = req->method.len + req->path.len + req->authority.len + 512;
     if (use_proxy_protocol)
         buf.len += H2O_PROXY_HEADER_MAX_LENGTH;
-    buf.base = h2o_mem_alloc_pool(&req->pool, buf.len);
+    buf.base = h2o_mem_alloc_pool(&req->pool, char, buf.len);
 
 #define RESERVE(sz)                                                                                                                \
     do {                                                                                                                           \
@@ -158,7 +159,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             do {                                                                                                                   \
                 buf.len *= 2;                                                                                                      \
             } while (required > buf.len);                                                                                          \
-            char *newp = h2o_mem_alloc_pool(&req->pool, buf.len);                                                                  \
+            char *newp = h2o_mem_alloc_pool(&req->pool, char, buf.len);                                                            \
             memcpy(newp, buf.base, offset);                                                                                        \
             buf.base = newp;                                                                                                       \
         }                                                                                                                          \
@@ -235,6 +236,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
 
     {
         const h2o_header_t *h, *h_end;
+        int found_early_data = 0;
         for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
             if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
@@ -257,6 +259,9 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
                     }
                     xff_buf = build_request_merge_headers(&req->pool, xff_buf, h->value, ',');
                     continue;
+                } else if (token == H2O_TOKEN_EARLY_DATA) {
+                    found_early_data = 1;
+                    goto AddHeader;
                 }
             }
             if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
@@ -269,6 +274,13 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
             APPEND(h->value.base, h->value.len);
             buf.base[offset++] = '\r';
             buf.base[offset++] = '\n';
+        }
+        if (found_early_data) {
+            *reprocess_if_too_early = 0;
+        } else if (*reprocess_if_too_early) {
+            static const h2o_iovec_t h = {H2O_STRLIT("early-data: 1\r\n")};
+            RESERVE(h.len);
+            APPEND(h.base, h.len);
         }
     }
 
@@ -405,6 +417,8 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     h2o_req_overrides_t *overrides = self->src_req->overrides;
 
     if (errstr != NULL) {
+        self->src_req->timestamps.proxy = self->client->timings;
+
         /* detach the content */
         self->last_content_before_send = self->client->sock->input;
         h2o_buffer_init(&self->client->sock->input, &h2o_socket_buffer_prototype);
@@ -433,6 +447,12 @@ static char compress_hint_to_enum(const char *val, size_t len)
     if (h2o_lcstris(val, len, H2O_STRLIT("off"))) {
         return H2O_COMPRESS_HINT_DISABLE;
     }
+    if (h2o_lcstris(val, len, H2O_STRLIT("gzip"))) {
+        return H2O_COMPRESS_HINT_ENABLE_GZIP;
+    }
+    if (h2o_lcstris(val, len, H2O_STRLIT("br"))) {
+        return H2O_COMPRESS_HINT_ENABLE_BR;
+    }
     return H2O_COMPRESS_HINT_AUTO;
 }
 
@@ -444,6 +464,8 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     size_t i;
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int seen_date_header = 0;
+
+    self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
         self->client = NULL;
@@ -559,6 +581,12 @@ static int on_1xx(h2o_http1client_t *client, int minor_version, int status, h2o_
             h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);
     }
 
+    if (status != 101) {
+        self->src_req->res.status = status;
+        self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
+        h2o_send_informational(self->src_req);
+    }
+
     return 0;
 }
 
@@ -584,9 +612,10 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
                                           h2o_iovec_t *cur_body, int *req_is_chunked, h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
-    int use_proxy_protocol = 0;
-
     h2o_req_t *req = self->src_req;
+    int use_proxy_protocol = 0, reprocess_if_too_early = 0;
+
+    self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -613,8 +642,12 @@ static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char 
         req->path_normalized =
             h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
     }
+
+    reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
     self->up_req.bufs[0] = build_request(req, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->sockpool.pool),
-                                         self->is_websocket_handshake, use_proxy_protocol, req_is_chunked);
+                                         self->is_websocket_handshake, use_proxy_protocol, req_is_chunked, &reprocess_if_too_early);
+    if (reprocess_if_too_early)
+        req->reprocess_if_too_early = 1;
 
     *reqbufs = self->up_req.bufs;
     *reqbufcnt = 1;
@@ -664,6 +697,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
+    req->timestamps.proxy = (h2o_http1client_timings_t){{0}};
 
     return self;
 }

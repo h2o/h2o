@@ -1,0 +1,6 @@
+*.swp
+*.old
+*/*.dSYM/
+.DS_Store
+mruby/
+tmp/
