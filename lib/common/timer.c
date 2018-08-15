@@ -101,31 +101,37 @@ static int timer_slot(int wheel, uint64_t expire)
 
 uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
 {
-    int i, j;
-    uint64_t ret;
+    size_t wheel_index, slot_index;
+    uint64_t time_base = w->last_run;
 
-    for (i = 0; i < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; i++) {
-        int real_slot = (w->last_run + i) & H2O_TIMERWHEEL_SLOTS_MASK;
-        h2o_timer_wheel_slot_t *slot = &w->wheel[0][real_slot];
-        if (!h2o_linklist_is_empty(slot)) {
-            return w->last_run + i;
-        }
-    }
-    ret = w->last_run;
-    for (i = 1; i < w->num_wheels; i++) {
-        for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++) {
-            h2o_timer_wheel_slot_t *slot = &w->wheel[i][j];
-            if (!h2o_linklist_is_empty(slot)) {
-                /* return an approximation for the expiry */
-                ret = (1 << ((i - 1) * H2O_TIMERWHEEL_BITS_PER_WHEEL));
-                while (--i > 0) {
-                    ret -= (1 << ((i - 1) * H2O_TIMERWHEEL_BITS_PER_WHEEL));
+    for (wheel_index = 0; wheel_index < w->num_wheels; ++wheel_index, time_base >>= H2O_TIMERWHEEL_BITS_PER_WHEEL) {
+        size_t slot_base = time_base & H2O_TIMERWHEEL_SLOTS_MASK;
+        time_base -= slot_base;
+        for (slot_index = slot_base; slot_index < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot_index)
+            if (!h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index]))
+                goto Found;
+        if (slot_base != 0) {
+            if (wheel_index + 1 < w->num_wheels) {
+                slot_index = (time_base >> H2O_TIMERWHEEL_BITS_PER_WHEEL) & H2O_TIMERWHEEL_SLOTS_MASK;
+                if (!h2o_linklist_is_empty(&w->wheel[wheel_index + 1][slot_index])) {
+                    wheel_index += 1;
+                    time_base += H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
+                    goto Found;
                 }
-                return ret;
+            }
+            for (slot_index = 0; slot_index < slot_base; ++slot_index) {
+                if (!h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index])) {
+                    time_base += H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
+                    goto Found;
+                }
             }
         }
     }
+
+    /* not found */
     return UINT64_MAX;
+Found:
+    return (time_base + slot_index) << (wheel_index * H2O_TIMERWHEEL_BITS_PER_WHEEL);
 }
 
 static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
