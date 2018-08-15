@@ -214,6 +214,54 @@ static void test_exhaustive(void)
     h2o_timer_destroy_wheel(wheel);
 }
 
+static void test_get_wake_at(void)
+{
+#define OK(cond)                                                                                                                   \
+    do {                                                                                                                           \
+        if ((cond))                                                                                                                \
+            break;                                                                                                                 \
+        note("delta=%" PRIu64 ",base=%" PRIu64, delta, base);                                                                      \
+        ok(0);                                                                                                                     \
+        return;                                                                                                                    \
+    } while (0)
+
+    h2o_timer_t timer;
+    uint64_t delta, base;
+
+    h2o_timer_init(&timer, my_callback);
+
+    for (delta = 0; delta < H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL * 3;
+         delta = delta < 200 ? delta + 1 : delta * 1.1) {
+        for (base = 0; base <= H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++base) {
+            uint64_t now = base;
+            h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(3, now);
+            invokes = 0;
+            h2o_timer_link(wheel, &timer, now + delta);
+            if (delta == 0) {
+                OK(h2o_timer_get_wake_at(wheel) == now);
+                h2o_timer_run_wheel(wheel, now);
+                OK(invokes == 1);
+            } else {
+                int cnt = 0;
+                do {
+                    uint64_t wake_at = h2o_timer_get_wake_at(wheel);
+                    OK(wake_at > now);
+                    now = wake_at;
+                    h2o_timer_run_wheel(wheel, now);
+                    ++cnt;
+                } while (invokes != 1);
+                OK(cnt <= 3);
+            }
+            OK(h2o_timer_get_wake_at(wheel) == UINT64_MAX);
+            h2o_timer_destroy_wheel(wheel);
+        }
+    }
+
+#undef OK
+
+    ok(1);
+}
+
 void test_lib__common__timerwheel_c()
 {
     subtest("add fixed timers", test_add_fixed_timers);
@@ -221,4 +269,5 @@ void test_lib__common__timerwheel_c()
     subtest("del fixed timers", test_del_timers);
     subtest("test out-of-range timer", test_invalid_timer);
     subtest("exhaustive", test_exhaustive);
+    subtest("get_wake_at", test_get_wake_at);
 }
