@@ -83,7 +83,7 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
 
 /* timer APIs */
 
-static int timer_wheel(size_t num_wheels, uint64_t delta)
+static size_t timer_wheel(size_t num_wheels, uint64_t delta)
 {
     delta &= H2O_TIMERWHEEL_MAX_TIMER(num_wheels);
     if (delta == 0)
@@ -94,7 +94,7 @@ static int timer_wheel(size_t num_wheels, uint64_t delta)
 }
 
 /* calculate slot number based on the absolute expiration time */
-static int timer_slot(int wheel, uint64_t expire)
+static size_t timer_slot(size_t wheel, uint64_t expire)
 {
     return H2O_TIMERWHEEL_SLOTS_MASK & (expire >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL));
 }
@@ -137,7 +137,7 @@ Found:
 static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
 {
     h2o_timer_wheel_slot_t *slot;
-    int wid, sid;
+    size_t wid, sid;
 
     if (abs_expire < w->last_run)
         abs_expire = w->last_run;
@@ -146,7 +146,7 @@ static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t
 
     wid = timer_wheel(w->num_wheels, abs_expire - w->last_run);
     sid = timer_slot(wid, abs_expire);
-    slot = &(w->wheel[wid][sid]);
+    slot = &w->wheel[wid][sid];
 
     WHEEL_DEBUG("timer(expire_at %" PRIu64 ") added: wheel %d, slot %d, now:%" PRIu64 "\n", abs_expire, wid, sid, w->last_run);
 
@@ -202,19 +202,24 @@ void h2o_timer_destroy_wheel(h2o_timer_wheel_t *w)
  * cascading happens when the lower wheel wraps around and ticks the next
  * higher wheel
  */
-static void cascade(h2o_timer_wheel_t *w, int wheel, int slot)
+static int cascade(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
 {
-    /* cannot cascade timers on wheel 0 */
     assert(wheel > 0);
 
     WHEEL_DEBUG("cascade timers on wheel %d slot %d\n", wheel, slot);
     h2o_timer_wheel_slot_t *s = &w->wheel[wheel][slot];
-    while (!h2o_linklist_is_empty(s)) {
+
+    if (h2o_linklist_is_empty(s))
+        return 0;
+
+    do {
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
         h2o_linklist_unlink(&entry->_link);
         link_timer(w, entry, entry->expire_at);
         assert(&entry->_link != s->prev); /* detect the entry reassigned to the same slot */
-    }
+    } while (!h2o_linklist_is_empty(s));
+
+    return 1;
 }
 
 int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
@@ -231,29 +236,49 @@ int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
 
 size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
 {
-    size_t count = 0;
     h2o_linklist_t todo;
+    size_t wheel_index = 0, slot_index, slot_start, count = 0;
 
     assert(w->last_run <= now);
-
     h2o_linklist_init_anchor(&todo);
 
-    while (1) {
-        /* collect slots on the first wheel */
-        int slot = w->last_run & H2O_TIMERWHEEL_SLOTS_MASK;
-        do {
-            h2o_linklist_insert_list(&todo, &w->wheel[0][slot]);
+Redo:
+    /* collect from the first slot */
+    slot_start = timer_slot(wheel_index, w->last_run);
+    for (slot_index = slot_start; slot_index < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot_index) {
+        if (wheel_index == 0) {
+            h2o_linklist_insert_list(&todo, w->wheel[wheel_index] + slot_index);
             if (w->last_run == now)
                 goto Collected;
             ++w->last_run;
-        } while (++slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL);
-        /* cascade */
-        int wheel = 1;
-        do {
-            slot = timer_slot(wheel, w->last_run);
-            cascade(w, wheel, slot);
-        } while (slot == 0 && ++wheel < w->num_wheels);
+        } else {
+            if (cascade(w, wheel_index, slot_index)) {
+                wheel_index = 0;
+                goto Redo;
+            }
+            w->last_run += 1 << (wheel_index * H2O_TIMERWHEEL_BITS_PER_WHEEL);
+            if (w->last_run > now) {
+                w->last_run = now;
+                goto Collected;
+            }
+        }
     }
+    { /* cascade next level */
+        int cascaded = 0;
+        size_t i = wheel_index + 1;
+        do {
+            slot_index = timer_slot(i, w->last_run);
+            if (cascade(w, i, slot_index))
+                cascaded = 1;
+        } while (slot_index == 0 && ++i < w->num_wheels);
+        if (cascaded) {
+            wheel_index = 0;
+            goto Redo;
+        }
+    }
+    if (slot_start != 0 || ++wheel_index < w->num_wheels)
+        goto Redo;
+
 Collected:
 
     /* expiration processing */
