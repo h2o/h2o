@@ -279,15 +279,16 @@ Redo:
     if (slot_start != 0 || ++wheel_index < w->num_wheels)
         goto Redo;
 
-Collected:
-
-    /* expiration processing */
+Collected: /* expiration processing */
     while (!h2o_linklist_is_empty(&todo)) {
-        h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, todo.next);
-        /* remove this timer from todo list */
-        h2o_linklist_unlink(&timer->_link);
-        timer->cb(timer);
-        count++;
+        do {
+            h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, todo.next);
+            /* remove this timer from todo list */
+            h2o_linklist_unlink(&timer->_link);
+            timer->cb(timer);
+            count++;
+        } while (!h2o_linklist_is_empty(&todo));
+        h2o_linklist_insert_list(&todo, w->wheel[0] + timer_slot(0, w->last_run));
     }
 
     return count;
