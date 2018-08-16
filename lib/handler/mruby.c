@@ -833,7 +833,7 @@ int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     }
 
     if (token != NULL) {
-        if (token->proxy_should_drop_for_res) {
+        if (token->flags.proxy_should_drop_for_res) {
             /* skip */
         } else if (token == H2O_TOKEN_CONTENT_LENGTH) {
             req->res.content_length = h2o_strtosize(value.base, value.len);

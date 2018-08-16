@@ -303,7 +303,7 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
             /* convert to lower-case in-place */
             h2o_strtolower((char *)src[i].name, src[i].name_len);
             if ((name_token = h2o_lookup_token(src[i].name, src[i].name_len)) != NULL) {
-                if (name_token->is_init_header_special) {
+                if (name_token->flags.is_init_header_special) {
                     if (name_token == H2O_TOKEN_HOST) {
                         host->base = (char *)src[i].value;
                         host->len = src[i].value_len;

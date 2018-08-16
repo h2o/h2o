@@ -290,6 +290,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
                 *dst_header->name = h2o_strdup(&req->pool, src_header->name->base, src_header->name->len);
             }
             dst_header->value = h2o_strdup(&req->pool, src_header->value.base, src_header->value.len);
+            dst_header->flags = src_header->flags;
             if (!src_header->orig_name)
                 dst_header->orig_name = NULL;
             else

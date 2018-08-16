@@ -552,7 +552,7 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
                         return H2O_HTTP2_ERROR_PROTOCOL;
                 } else {
                     /* reject headers as defined in draft-16 8.1.2.2 */
-                    if (token->http2_should_reject) {
+                    if (token->flags.http2_should_reject) {
                         if (token == H2O_TOKEN_HOST) {
                             /* just skip (and :authority is used) */
                             goto Next;
@@ -669,10 +669,10 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
     return encode_as_is(dst, s, len);
 }
 
-static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
-                              const h2o_iovec_t *value)
+static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
+                              const h2o_iovec_t *value, int name_index, int dont_compress)
 {
-    int name_index = 0, dont_compress = 0, name_is_token = h2o_iovec_is_token(name);
+    int name_is_token = h2o_iovec_is_token(name);
 
     /* try to send as indexed */
     {
@@ -702,11 +702,8 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
         }
     }
 
-    if (name_is_token) {
-        const h2o_token_t *name_token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
-        name_index = name_token->http2_static_table_name_index;
-        dont_compress = (name_token->dont_compress == 1 && value->len < 20) ? 1 : 0;
-    }
+    if (value->len >= 20)
+        dont_compress = 0;
 
     if (name_index != 0) {
         /* literal header field with indexing (indexed name). */
@@ -750,6 +747,16 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return dst;
 }
 
+static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_header_t *header)
+{
+    return do_encode_header(header_table, dst, header->name, &header->value, header->flags.http2_static_table_name_index, header->flags.dont_compress);
+}
+
+static uint8_t *encode_header_token(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_token_t *token, const h2o_iovec_t *value)
+{
+    return do_encode_header(header_table, dst, &token->buf, value, token->flags.http2_static_table_name_index, token->flags.dont_compress);
+}
+
 static uint8_t *encode_method(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_iovec_t value)
 {
     if (h2o_memis(value.base, value.len, H2O_STRLIT("GET"))) {
@@ -760,7 +767,7 @@ static uint8_t *encode_method(h2o_hpack_header_table_t *header_table, uint8_t *d
         *dst++ = 0x83;
         return dst;
     }
-    return encode_header(header_table, dst, &H2O_TOKEN_METHOD->buf, &value);
+    return encode_header_token(header_table, dst, H2O_TOKEN_METHOD, &value);
 }
 
 static uint8_t *encode_scheme(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_url_scheme_t *scheme)
@@ -773,7 +780,7 @@ static uint8_t *encode_scheme(h2o_hpack_header_table_t *header_table, uint8_t *d
         *dst++ = 0x86;
         return dst;
     }
-    return encode_header(header_table, dst, &H2O_TOKEN_SCHEME->buf, &scheme->name);
+    return encode_header_token(header_table, dst, H2O_TOKEN_SCHEME, &scheme->name);
 }
 
 static uint8_t *encode_path(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_iovec_t value)
@@ -786,7 +793,7 @@ static uint8_t *encode_path(h2o_hpack_header_table_t *header_table, uint8_t *dst
         *dst++ = 0x85;
         return dst;
     }
-    return encode_header(header_table, dst, &H2O_TOKEN_PATH->buf, &value);
+    return encode_header_token(header_table, dst, H2O_TOKEN_PATH, &value);
 }
 
 static uint8_t *encode_literal_header_without_indexing(uint8_t *dst, const h2o_iovec_t *name, const h2o_iovec_t *value)
@@ -862,16 +869,16 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     dst = h2o_http2_encode32u(dst, stream_id);
     dst = encode_method(header_table, dst, req->input.method);
     dst = encode_scheme(header_table, dst, req->input.scheme);
-    dst = encode_header(header_table, dst, &H2O_TOKEN_AUTHORITY->buf, &req->input.authority);
+    dst = encode_header_token(header_table, dst, H2O_TOKEN_AUTHORITY, &req->input.authority);
     dst = encode_path(header_table, dst, req->input.path);
     size_t i;
     for (i = 0; i != req->headers.size; ++i) {
-        const h2o_header_t *header = req->headers.entries + i;
+        h2o_header_t *header = req->headers.entries + i;
         if (header->name == &H2O_TOKEN_ACCEPT_ENCODING->buf &&
             h2o_memis(header->value.base, header->value.len, H2O_STRLIT("gzip, deflate"))) {
             *dst++ = 0x90;
         } else {
-            dst = encode_header(header_table, dst, header->name, &header->value);
+            dst = encode_header(header_table, dst, header);
         }
     }
     (*buf)->size = (char *)dst - (*buf)->bytes;
@@ -902,12 +909,12 @@ void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
 #ifndef H2O_UNITTEST
     /* TODO keep some kind of reference to the indexed Server header, and reuse it */
     if (server_name != NULL && server_name->len) {
-        dst = encode_header(header_table, dst, &H2O_TOKEN_SERVER->buf, server_name);
+        dst = encode_header_token(header_table, dst, H2O_TOKEN_SERVER, server_name);
     }
 #endif
     size_t i;
     for (i = 0; i != res->headers.size; ++i)
-        dst = encode_header(header_table, dst, res->headers.entries[i].name, &res->headers.entries[i].value);
+        dst = encode_header(header_table, dst, res->headers.entries + i);
     if (content_length != SIZE_MAX)
         dst = encode_content_length(dst, content_length);
     (*buf)->size = (char *)dst - (*buf)->bytes;
@@ -927,7 +934,7 @@ void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *he
 
     size_t i;
     for (i = 0; i != num_headers; ++i)
-        dst = encode_header(header_table, dst, headers[i].name, &headers[i].value);
+        dst = encode_header(header_table, dst, headers + i);
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */

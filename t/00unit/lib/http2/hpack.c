@@ -444,16 +444,16 @@ static void test_hpack_dynamic_table(void)
     /* expected: literal header with incremental indexing (name not indexed) */
     n = h2o_iovec_init(H2O_STRLIT("x-name"));
     v = h2o_iovec_init(H2O_STRLIT("v1"));
-    p = encode_header(&header_table, p, &n, &v);
+    p = do_encode_header(&header_table, p, &n, &v, 0, 0);
     /* expected: literal header with incremental indexing (name indexed) */
     v = h2o_iovec_init(H2O_STRLIT("v2"));
-    p = encode_header(&header_table, p, &n, &v);
+    p = do_encode_header(&header_table, p, &n, &v, 0, 0);
     /* expected: literal header with incremental indexing (name indexed, referring to the name associated with v2) */
     v = h2o_iovec_init(H2O_STRLIT("v3"));
-    p = encode_header(&header_table, p, &n, &v);
+    p = do_encode_header(&header_table, p, &n, &v, 0, 0);
     /* expected: indexed header field */
     v = h2o_iovec_init(H2O_STRLIT("v1"));
-    p = encode_header(&header_table, p, &n, &v);
+    p = do_encode_header(&header_table, p, &n, &v, 0, 0);
 
     const h2o_iovec_t expected = h2o_iovec_init(
         H2O_STRLIT("\x40\x85"             /* literal header with incremental indexing (name not indexed, 5 bytes, huffman coded) */
