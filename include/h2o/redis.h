@@ -67,7 +67,6 @@ typedef struct st_h2o_redis_command_t {
     h2o_redis_command_cb cb;
     void *data;
     h2o_redis_command_type_t type;
-    h2o_timeout_t _defer_timeout;
     h2o_timeout_t _command_timeout;
 } h2o_redis_command_t;
 

@@ -175,12 +175,7 @@ void h2o_redis_disconnect(h2o_redis_client_t *client)
 
 static void dispose_command(h2o_redis_command_t *command)
 {
-    if (h2o_timeout_is_linked(&command->_defer_timeout))
-        h2o_timeout_unlink(&command->_defer_timeout);
-
-    if (h2o_timeout_is_linked(&command->_command_timeout))
-        h2o_timeout_unlink(&command->_command_timeout);
-
+    h2o_timeout_unlink(&command->_command_timeout);
     free(command);
 }
 
@@ -218,18 +213,12 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
     handle_reply(command, reply, errstr);
 }
 
-static void on_command_timeout_deferred(h2o_timeout_t *entry)
-{
-    h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _defer_timeout, entry);
-    disconnect(command->client, h2o_redis_error_command_timeout);
-}
-
 static void on_command_timeout(h2o_timeout_t *entry)
 {
     h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _command_timeout, entry);
 
     /* invoke disconnect to finalize inflight commands */
-    invoke_deferred(command->client, 0, &command->_defer_timeout, on_command_timeout_deferred);
+    disconnect(command->client, h2o_redis_error_command_timeout);
 }
 
 static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis_command_cb cb, void *cb_data,
@@ -241,7 +230,6 @@ static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis
     command->cb = cb;
     command->data = cb_data;
     command->type = type;
-    h2o_timeout_init(&command->_defer_timeout, NULL);
     h2o_timeout_init(&command->_command_timeout, on_command_timeout);
 
     if (client->command_timeout != 0 && (type == H2O_REDIS_COMMAND_TYPE_NORMAL || type == H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE ||
