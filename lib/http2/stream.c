@@ -123,7 +123,7 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
     if (length || send_state == H2O_SEND_STATE_FINAL) {
         h2o_http2_encode_frame_header(
             (void *)((*outbuf)->bytes + (*outbuf)->size), length, H2O_HTTP2_FRAME_TYPE_DATA,
-            (send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing_trailer) ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0,
+            (send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing) ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0,
             stream->stream_id);
         h2o_http2_window_consume_window(&conn->_write.window, length);
         h2o_http2_window_consume_window(&stream->output_window, length);
@@ -295,8 +295,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     if (h2o_http2_stream_is_push(stream->stream_id))
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
                               H2O_STRLIT("pushed"));
-    if (stream->req.send_server_timing_header)
-        h2o_add_server_timing_header(&stream->req);
+    if (stream->req.send_server_timing)
+        h2o_add_server_timing_header(&stream->req, 1);
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                conn->peer_settings.max_frame_size, &stream->req.res, &conn->super.ctx->globalconf->server_name,
                                stream->req.res.content_length);
@@ -434,7 +434,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     }
 
     if (send_state == H2O_SEND_STATE_ERROR) {
-        stream->req.send_server_timing_trailer = 0;
+        stream->req.send_server_timing = 0; /* suppress sending trailers */
     }
 }
 

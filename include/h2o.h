@@ -966,6 +966,9 @@ typedef struct st_h2o_filereq_t {
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 
+#define H2O_SEND_SERVER_TIMING_BASIC 1
+#define H2O_SEND_SERVER_TIMING_PROXY 2
+
 /**
  * a HTTP request
  */
@@ -1134,17 +1137,14 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
     /**
-     * whether if the response should include server-timing header
-     */
-    unsigned char send_server_timing_header : 1;
-    /**
-     * whether if the response should include server-timing trailer
-     */
-    unsigned char send_server_timing_trailer : 1;
-    /**
      * whether the request is a subrequest
      */
     unsigned char is_subrequest : 1;
+
+    /**
+     * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
+     */
+    unsigned send_server_timing;
 
     /**
      * Whether the producer of the response has explicitely disabled or
@@ -1330,7 +1330,7 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
 /**
  * encodes the duration value of the `server-timing` header
  */
-void h2o_add_server_timing_header(h2o_req_t *req);
+void h2o_add_server_timing_header(h2o_req_t *req, int uses_trailer);
 /**
  * encodes the duration value of the `server-timing` trailer
  */
