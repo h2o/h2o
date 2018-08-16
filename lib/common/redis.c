@@ -123,19 +123,13 @@ static void on_disconnect(const redisAsyncContext *redis, int status)
     close_and_detach_connection(client, get_error(redis));
 }
 
-static void on_connect_timeout_deferred(h2o_timeout_t *entry)
-{
-    h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _defer_timeout, entry);
-    disconnect(client, h2o_redis_error_connect_timeout);
-}
-
 static void on_connect_timeout(h2o_timeout_t *entry)
 {
     h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _connect_timeout, entry);
     assert((client->_redis->c.flags & REDIS_CONNECTED) == 0);
     assert(client->state != H2O_REDIS_CONNECTION_STATE_CLOSED);
 
-    invoke_deferred(client, 0, &client->_defer_timeout, on_connect_timeout_deferred);
+    disconnect(client, h2o_redis_error_connect_timeout);
 }
 
 h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz)
