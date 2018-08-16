@@ -32,7 +32,7 @@
 struct st_h2o_timer_wheel_t {
     uint64_t last_run; /* the last time h2o_timer_run_wheel was called */
     size_t num_wheels;
-    h2o_timer_wheel_slot_t wheel[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
+    h2o_linklist_t wheel[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
 };
 
 /* debug macros and functions */
@@ -57,7 +57,7 @@ static void h2o_timer_show(h2o_timer_t *timer, int wid, int sid)
 #endif
 }
 
-static void h2o_timer_slot_show_wheel(h2o_timer_wheel_slot_t *slot, int wid, int sid)
+static void h2o_timer_slot_show_wheel(h2o_linklist_t *slot, int wid, int sid)
 {
     h2o_linklist_t *node;
 
@@ -73,13 +73,11 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
 
     for (i = 0; i < w->num_wheels; i++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
-            h2o_timer_wheel_slot_t *s = &(w->wheel[i][slot]);
+            h2o_linklist_t *s = &(w->wheel[i][slot]);
             h2o_timer_slot_show_wheel(s, i, slot);
         }
     }
 }
-
-
 
 /* timer APIs */
 
@@ -136,7 +134,7 @@ Found:
 
 static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
 {
-    h2o_timer_wheel_slot_t *slot;
+    h2o_linklist_t *slot;
     size_t wid, sid;
 
     if (abs_expire < w->last_run)
@@ -151,13 +149,6 @@ static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t
     WHEEL_DEBUG("timer(expire_at %" PRIu64 ") added: wheel %d, slot %d, now:%" PRIu64 "\n", abs_expire, wid, sid, w->last_run);
 
     h2o_linklist_insert(slot, &timer->_link);
-}
-
-void h2o_timer_unlink(h2o_timer_t *timer)
-{
-    if (h2o_linklist_is_linked(&timer->_link)) {
-        h2o_linklist_unlink(&timer->_link);
-    }
 }
 
 /* timer wheel APIs */
@@ -207,7 +198,7 @@ static int cascade(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
     assert(wheel > 0);
 
     WHEEL_DEBUG("cascade timers on wheel %d slot %d\n", wheel, slot);
-    h2o_timer_wheel_slot_t *s = &w->wheel[wheel][slot];
+    h2o_linklist_t *s = &w->wheel[wheel][slot];
 
     if (h2o_linklist_is_empty(s))
         return 0;

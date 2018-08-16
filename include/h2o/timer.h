@@ -24,24 +24,23 @@
 
 #include "h2o/linklist.h"
 
-/* link list of h2o_timer_t */
-typedef h2o_linklist_t h2o_timer_wheel_slot_t;
-
 #define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
 #define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
 
 typedef struct st_h2o_timer_wheel_t h2o_timer_wheel_t;
 
-typedef struct st_h2o_timer_t h2o_timer_t;
-typedef void (*h2o_timer_cb)(h2o_timer_t *timer);
-typedef uint32_t h2o_timer_tick_t;
-typedef uint64_t h2o_timer_abs_t;
+struct st_h2o_timer_t;
 
-struct st_h2o_timer_t {
+typedef void (*h2o_timer_cb)(struct st_h2o_timer_t *timer);
+
+typedef struct st_h2o_timer_t {
     h2o_linklist_t _link;
     uint64_t expire_at; /* absolute expiration time*/
     h2o_timer_cb cb;
-};
+} h2o_timer_t;
+
+typedef uint32_t h2o_timer_tick_t;
+typedef uint64_t h2o_timer_abs_t;
 
 /**
  * initializes a timer
@@ -54,7 +53,7 @@ void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t ab
 /**
  * disactivates a timer
  */
-void h2o_timer_unlink(h2o_timer_t *timer);
+static void h2o_timer_unlink(h2o_timer_t *timer);
 /**
  * returns whether a timer is active
  */
@@ -83,16 +82,18 @@ size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now);
 
 inline void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb)
 {
-    *timer = (h2o_timer_t){
-        {NULL},
-        0,
-        cb,
-    };
+    *timer = (h2o_timer_t){{NULL}, 0, cb};
 }
 
 inline int h2o_timer_is_linked(h2o_timer_t *entry)
 {
     return h2o_linklist_is_linked(&entry->_link);
+}
+
+inline void h2o_timer_unlink(h2o_timer_t *timer)
+{
+    if (h2o_linklist_is_linked(&timer->_link))
+        h2o_linklist_unlink(&timer->_link);
 }
 
 #endif
