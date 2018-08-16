@@ -362,7 +362,7 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
         conn->req.input.path = h2o_strdup(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len);
         for (i = 0; i != conn->req.headers.size; ++i) {
             h2o_header_t *header = conn->req.headers.entries + i;
-            if (!header->flags.is_token) {
+            if (!h2o_header_is_token(header)) {
                 *header->name = h2o_strdup(&conn->req.pool, header->name->base, header->name->len);
             }
             header->value = h2o_strdup(&conn->req.pool, header->value.base, header->value.len);

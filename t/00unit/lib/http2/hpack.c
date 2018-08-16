@@ -444,16 +444,16 @@ static void test_hpack_dynamic_table(void)
     /* expected: literal header with incremental indexing (name not indexed) */
     n = h2o_iovec_init(H2O_STRLIT("x-name"));
     v = h2o_iovec_init(H2O_STRLIT("v1"));
-    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){0});
+    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){H2O_HEADER_NOT_TOKEN_INDEX});
     /* expected: literal header with incremental indexing (name indexed) */
     v = h2o_iovec_init(H2O_STRLIT("v2"));
-    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){0});
+    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){H2O_HEADER_NOT_TOKEN_INDEX});
     /* expected: literal header with incremental indexing (name indexed, referring to the name associated with v2) */
     v = h2o_iovec_init(H2O_STRLIT("v3"));
-    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){0});
+    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){H2O_HEADER_NOT_TOKEN_INDEX});
     /* expected: indexed header field */
     v = h2o_iovec_init(H2O_STRLIT("v1"));
-    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){0});
+    p = do_encode_header(&header_table, p, &n, &v, (h2o_header_flags_t){H2O_HEADER_NOT_TOKEN_INDEX});
 
     const h2o_iovec_t expected = h2o_iovec_init(
         H2O_STRLIT("\x40\x85"             /* literal header with incremental indexing (name not indexed, 5 bytes, huffman coded) */

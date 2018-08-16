@@ -110,6 +110,7 @@ typedef struct st_h2o_logconf_t h2o_logconf_t;
 typedef struct st_h2o_headers_command_t h2o_headers_command_t;
 
 typedef struct st_h2o_header_flags_t {
+    unsigned char token_index; /* 0xff means not token */
     char http2_static_table_name_index; /* non-zero if any */
     unsigned char proxy_should_drop_for_req : 1;
     unsigned char proxy_should_drop_for_res : 1;
@@ -117,7 +118,6 @@ typedef struct st_h2o_header_flags_t {
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
     unsigned char dont_compress : 1;
-    unsigned char is_token : 1;
 } h2o_header_flags_t;
 
 /**
@@ -1227,7 +1227,14 @@ int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 /* headers */
 
+#define H2O_HEADER_NOT_TOKEN_INDEX 0xff
+
 static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y);
+static int h2o_header_validate(const h2o_header_t *header);
+/**
+ * returns an boolean value if given header's name is a token, with validation
+ */
+static int h2o_header_is_token(const h2o_header_t *header);
 /**
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
@@ -2083,6 +2090,17 @@ inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y
     } else {
         return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
     }
+}
+
+inline int h2o_header_validate(const h2o_header_t *header)
+{
+    return header->flags.token_index == H2O_HEADER_NOT_TOKEN_INDEX || header->name == &h2o__tokens[header->flags.token_index].buf;
+}
+
+inline int h2o_header_is_token(const h2o_header_t *header)
+{
+    assert(h2o_header_validate(header));
+    return header->flags.token_index == H2O_HEADER_NOT_TOKEN_INDEX;
 }
 
 inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,

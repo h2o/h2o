@@ -688,7 +688,7 @@ static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_
 {
     mrb_value env = mrb_obj_value(cb_data);
     mrb_value n;
-    if (header->flags.is_token) {
+    if (h2o_header_is_token(header)) {
         const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
         n = h2o_mruby_token_env_key(shared_ctx, token);
     } else {

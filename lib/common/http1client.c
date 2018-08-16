@@ -280,7 +280,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
             } else {
                 header_names[i] = h2o_iovec_init(src_headers[i].name, src_headers[i].name_len);
                 headers[i].name = &header_names[i];
-                headers[i].flags = (h2o_header_flags_t){0};
+                headers[i].flags = (h2o_header_flags_t){H2O_HEADER_NOT_TOKEN_INDEX};
             }
             headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
             headers[i].orig_name = orig_name;
