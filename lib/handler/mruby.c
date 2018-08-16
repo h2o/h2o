@@ -653,7 +653,7 @@ static mrb_value build_path_info(mrb_state *mrb, h2o_req_t *req, size_t confpath
 }
 
 int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
-                                     int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *),
+                                     int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_header_t *, void *),
                                      void *cb_data)
 {
     h2o_header_t **sorted = alloca(sizeof(*sorted) * headers->size);
@@ -674,8 +674,9 @@ int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o
             values[num_values++] = h2o_iovec_init(sorted[i]->name == &H2O_TOKEN_COOKIE->buf ? "; " : ", ", 2);
             values[num_values++] = sorted[i]->value;
         }
-        h2o_iovec_t flattened_values = num_values == 1 ? values[0] : h2o_concat_list(pool, values, num_values);
-        if (cb(shared_ctx, pool, sorted[i]->name, flattened_values, cb_data) != 0) {
+        h2o_header_t h = *sorted[i];
+        h.value = num_values == 1 ? values[0] : h2o_concat_list(pool, values, num_values);
+        if (cb(shared_ctx, pool, &h, cb_data) != 0) {
             assert(shared_ctx->mrb->exc != NULL);
             return -1;
         }
@@ -683,19 +684,18 @@ int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o
     return 0;
 }
 
-static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_iovec_t *name,
-                                    h2o_iovec_t value, void *cb_data)
+static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_header_t *header, void *cb_data)
 {
     mrb_value env = mrb_obj_value(cb_data);
     mrb_value n;
-    if (h2o_iovec_is_token(name)) {
-        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+    if (header->flags.is_token) {
+        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
         n = h2o_mruby_token_env_key(shared_ctx, token);
     } else {
-        h2o_iovec_t vec = convert_header_name_to_env(pool, name->base, name->len);
+        h2o_iovec_t vec = convert_header_name_to_env(pool, header->name->base, header->name->len);
         n = h2o_mruby_new_str(shared_ctx->mrb, vec.base, vec.len);
     }
-    mrb_value v = h2o_mruby_new_str(shared_ctx->mrb, value.base, value.len);
+    mrb_value v = h2o_mruby_new_str(shared_ctx->mrb, header->value.base, header->value.len);
     mrb_hash_set(shared_ctx->mrb, env, n, v);
     return 0;
 }

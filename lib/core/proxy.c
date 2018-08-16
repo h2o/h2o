@@ -240,7 +240,7 @@ static h2o_iovec_t build_request(h2o_req_t *req, int keepalive, int is_websocket
         for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
             if (h->flags.proxy_should_drop_for_req)
                 continue;
-            if (h2o_iovec_is_token(h->name)) {
+            if (h->flags.is_token) {
                 const h2o_token_t *token = (void *)h->name;
                 if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
@@ -480,7 +480,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
     for (i = 0; i != num_headers; ++i) {
         if (headers[i].flags.proxy_should_drop_for_res)
             continue;
-        if (h2o_iovec_is_token(headers[i].name)) {
+        if (headers[i].flags.is_token) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
             h2o_iovec_t value;
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
