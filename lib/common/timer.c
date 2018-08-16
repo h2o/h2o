@@ -222,18 +222,6 @@ static int cascade(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
     return 1;
 }
 
-int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w)
-{
-    int i, slot;
-
-    for (i = 0; i < w->num_wheels; i++)
-        for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++)
-            if (!h2o_linklist_is_empty(&w->wheel[i][slot]))
-                return 0;
-
-    return 1;
-}
-
 size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
 {
     h2o_linklist_t todo;

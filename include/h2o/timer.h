@@ -78,7 +78,6 @@ void h2o_timer_show_wheel(h2o_timer_wheel_t *wheel);
 uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *wheel);
 
 size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now);
-int h2o_timer_wheel_is_empty(h2o_timer_wheel_t *w);
 
 /* inline definitions */
 
