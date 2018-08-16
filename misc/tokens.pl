@@ -1,4 +1,6 @@
-#! /usr/bin/env perl
+#! /bin/sh
+exec perl -x $0 "$@"
+#! perl
 
 # Copyright (c) 2014 DeNA Co., Ltd.
 #
