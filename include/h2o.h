@@ -117,6 +117,7 @@ typedef struct st_h2o_header_flags_t {
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
     unsigned char dont_compress : 1;
+    unsigned char is_token : 1;
 } h2o_header_flags_t;
 
 /**

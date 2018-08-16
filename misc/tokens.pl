@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#! /usr/bin/env perl
 
 # Copyright (c) 2014 DeNA Co., Ltd.
 #
@@ -65,7 +65,7 @@ while (my $line = <DATA>) {
     }
 }
 
-my @tokens = map { [ $_, @{$tokens{$_}} ] } uniq sort keys %tokens;
+my @tokens = map { [ $_, @{$tokens{$_}}, 1 ] } uniq sort keys %tokens;
 
 # generate token.h
 open my $fh, '>', 'include/h2o/token.h'
