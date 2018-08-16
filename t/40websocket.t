@@ -121,7 +121,7 @@ subtest 'upon http2' => sub {
         h2g.send_prefix()
         h2g.send_settings()
         i = 0
-        while i < 3 do
+        while i < 2 do
             f = h2g.read(-1)
             if f.type == "SETTINGS" then
                 unless f.flags == ACK
@@ -133,8 +133,8 @@ subtest 'upon http2' => sub {
         end
         req = {
             ":method" => "CONNECT",
-            ":authority" => "127.0.0.1:$server->{port}",
-            ":scheme" => "http",
+            ":authority" => "127.0.0.1:$server->{tls_port}",
+            ":scheme" => "https",
             ":path" => "$path",
             ":protocol" => "websocket",
         }
