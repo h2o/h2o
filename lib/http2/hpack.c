@@ -670,8 +670,10 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
 }
 
 static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
-                              const h2o_iovec_t *value, int name_index, h2o_header_flags_t flags)
+                              const h2o_iovec_t *value, h2o_header_flags_t flags)
 {
+    int name_index = flags.http2_static_table_name_index;
+
     /* try to send as indexed */
     {
         size_t header_table_index = header_table->entry_start_index, n;
@@ -746,12 +748,12 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
 
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_header_t *header)
 {
-    return do_encode_header(header_table, dst, header->name, &header->value, header->flags.http2_static_table_name_index, header->flags);
+    return do_encode_header(header_table, dst, header->name, &header->value, header->flags);
 }
 
 static uint8_t *encode_header_token(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_token_t *token, const h2o_iovec_t *value)
 {
-    return do_encode_header(header_table, dst, &token->buf, value, token->flags.http2_static_table_name_index, token->flags);
+    return do_encode_header(header_table, dst, &token->buf, value, token->flags);
 }
 
 static uint8_t *encode_method(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_iovec_t value)
