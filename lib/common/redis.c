@@ -43,12 +43,6 @@ static void invoke_deferred(h2o_redis_client_t *client, h2o_timer_tick_t tick, h
     h2o_timeout_link(client->loop, tick, entry);
 }
 
-static void dispose_connect_timeout(h2o_redis_client_t *client)
-{
-    if (h2o_timeout_is_linked(&client->_connect_timeout))
-        h2o_timeout_unlink(&client->_connect_timeout);
-}
-
 static void close_and_detach_connection(h2o_redis_client_t *client, const char *errstr)
 {
     assert(client->_redis != NULL);
@@ -58,7 +52,7 @@ static void close_and_detach_connection(h2o_redis_client_t *client, const char *
 
     client->_redis->data = NULL;
     client->_redis = NULL;
-    dispose_connect_timeout(client);
+    h2o_timeout_unlink(&client->_timeout_entry);
 }
 
 static void disconnect(h2o_redis_client_t *client, const char *errstr)
@@ -107,7 +101,7 @@ static void on_connect(const redisAsyncContext *redis, int status)
         close_and_detach_connection(client, h2o_redis_error_connection);
         return;
     }
-    dispose_connect_timeout(client);
+    h2o_timeout_unlink(&client->_timeout_entry);
 
     client->state = H2O_REDIS_CONNECTION_STATE_CONNECTED;
     if (client->on_connect != NULL)
@@ -125,7 +119,7 @@ static void on_disconnect(const redisAsyncContext *redis, int status)
 
 static void on_connect_timeout(h2o_timeout_t *entry)
 {
-    h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _connect_timeout, entry);
+    h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _timeout_entry, entry);
     assert((client->_redis->c.flags & REDIS_CONNECTED) == 0);
     assert(client->state != H2O_REDIS_CONNECTION_STATE_CLOSED);
 
@@ -139,7 +133,7 @@ h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz)
 
     client->loop = loop;
     client->state = H2O_REDIS_CONNECTION_STATE_CLOSED;
-    h2o_timeout_init(&client->_connect_timeout, on_connect_timeout);
+    h2o_timeout_init(&client->_timeout_entry, on_connect_timeout);
 
     return client;
 }
@@ -170,7 +164,7 @@ void h2o_redis_connect(h2o_redis_client_t *client, const char *host, uint16_t po
     }
 
     if (client->connect_timeout != 0)
-        h2o_timeout_link(client->loop, client->connect_timeout, &client->_connect_timeout);
+        h2o_timeout_link(client->loop, client->connect_timeout, &client->_timeout_entry);
 }
 
 void h2o_redis_disconnect(h2o_redis_client_t *client)
@@ -359,10 +353,7 @@ void h2o_redis_free(h2o_redis_client_t *client)
 {
     if (client->state != H2O_REDIS_CONNECTION_STATE_CLOSED)
         disconnect(client, NULL);
-
-    if (h2o_timeout_is_linked(&client->_defer_timeout))
-        h2o_timeout_unlink(&client->_defer_timeout);
-
+    h2o_timeout_unlink(&client->_timeout_entry);
     free(client);
 }
 
