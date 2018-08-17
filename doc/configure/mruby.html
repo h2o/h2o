@@ -109,9 +109,9 @@ The example below restricts access to requests from <code>192.168.</code> privat
     mruby.handler: |
       lambda do |env|
         if /\A192\.168\./.match(env[&quot;REMOTE_ADDR&quot;])
-          return [399, {}, []]
+          return [403, {&#39;content-type&#39; =&gt; &#39;text/plain&#39;}, [&quot;access forbidden\n&quot;]]          
         end
-        [403, {&#39;content-type&#39; =&gt; &#39;text/plain&#39;}, [&quot;access forbidden\n&quot;]]
+        return [399, {}, []]
       end
 </code></pre>
 </div>
