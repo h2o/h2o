@@ -679,7 +679,7 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
         size_t header_table_index = header_table->entry_start_index, n;
         for (n = header_table->num_entries; n != 0; --n) {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + header_table_index;
-            if (flags.token_index != 0) {
+            if (flags.token_index_plus1 != 0) {
                 if (name != entry->name)
                     goto Next;
             } else {
@@ -730,7 +730,7 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
         struct st_h2o_hpack_header_table_entry_t *entry =
             header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (entry != NULL) {
-            if (flags.token_index != 0) {
+            if (flags.token_index_plus1 != 0) {
                 entry->name = (h2o_iovec_t *)name;
             } else {
                 entry->name = alloc_buf(NULL, name->len);
@@ -748,7 +748,7 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
 
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_header_t *header)
 {
-    assert(h2o_header_validate(header));
+    h2o_header_validate(header);
     return do_encode_header(header_table, dst, header->name, &header->value, header->flags);
 }
 
