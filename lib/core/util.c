@@ -354,11 +354,14 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     for (ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
         if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
             /* connect as http2 */
+            ++data->ctx->ctx->ssl.events.alpn_h2;
             h2o_http2_accept(data->ctx, sock, data->connected_at);
             goto Exit;
         }
     }
     /* connect as http1 */
+    if (proto.len != 0)
+        ++data->ctx->ctx->ssl.events.alpn_h1;
     h2o_http1_accept(data->ctx, sock, data->connected_at);
 
 Exit:

@@ -684,6 +684,16 @@ struct st_h2o_context_t {
         h2o_timeout_t first_byte_timeout;
     } proxy;
 
+    struct {
+        struct {
+            /**
+             * counter for selected ALPN protocols
+             */
+            uint64_t alpn_h1;
+            uint64_t alpn_h2;
+        } events;
+    } ssl;
+
     /**
      * pointer to per-module configs
      */
