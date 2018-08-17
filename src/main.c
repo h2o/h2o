@@ -739,9 +739,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
 /* setup protocol negotiation methods */
-#if H2O_USE_NPN
-    h2o_ssl_register_npn_protocols(ssl_ctx, h2o_npn_protocols);
-#endif
 #if H2O_USE_ALPN
     h2o_ssl_register_alpn_protocols(ssl_ctx, h2o_alpn_protocols);
 #endif

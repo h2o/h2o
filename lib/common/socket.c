@@ -100,7 +100,6 @@ struct st_h2o_socket_ssl_t {
 struct st_h2o_ssl_context_t {
     SSL_CTX *ctx;
     const h2o_iovec_t *protocols;
-    h2o_iovec_t _npn_list_of_protocols;
 };
 
 /* backend functions */
@@ -1352,10 +1351,6 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
     if (len == 0)
         SSL_get0_alpn_selected(sock->ssl->ossl, &data, &len);
 #endif
-#if H2O_USE_NPN
-    if (len == 0)
-        SSL_get0_next_proto_negotiated(sock->ssl->ossl, &data, &len);
-#endif
 
     return h2o_iovec_init(data, len);
 }
@@ -1405,22 +1400,6 @@ Found:
 void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
 {
     SSL_CTX_set_alpn_select_cb(ctx, on_alpn_select, (void *)protocols);
-}
-
-#endif
-
-#if H2O_USE_NPN
-
-static int on_npn_advertise(SSL *ssl, const unsigned char **out, unsigned *outlen, void *protocols)
-{
-    *out = protocols;
-    *outlen = (unsigned)strlen(protocols);
-    return SSL_TLSEXT_ERR_OK;
-}
-
-void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols)
-{
-    SSL_CTX_set_next_protos_advertised_cb(ctx, on_npn_advertise, (void *)protocols);
 }
 
 #endif

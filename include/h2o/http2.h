@@ -26,7 +26,6 @@
 extern "C" {
 #endif
 
-extern const char *h2o_http2_npn_protocols;
 extern const h2o_iovec_t *h2o_http2_alpn_protocols;
 
 extern const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS;

@@ -1282,8 +1282,6 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 
 /* util */
 
-extern const char *h2o_http2_npn_protocols;
-extern const char *h2o_npn_protocols;
 extern const h2o_iovec_t *h2o_http2_alpn_protocols;
 extern const h2o_iovec_t *h2o_alpn_protocols;
 

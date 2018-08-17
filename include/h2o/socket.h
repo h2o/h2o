@@ -44,13 +44,8 @@ extern "C" {
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
 #define H2O_USE_ALPN 1
-#define H2O_USE_NPN 1
-#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
-#define H2O_USE_ALPN 0
-#define H2O_USE_NPN 1
 #else
 #define H2O_USE_ALPN 0
-#define H2O_USE_NPN 0
 #endif
 
 typedef struct st_h2o_sliding_counter_t {
@@ -301,7 +296,7 @@ void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb
  */
 void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
 /**
- * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
+ * returns the name of the protocol selected using ALPN
  * @param sock the socket
  */
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
@@ -333,10 +328,6 @@ void h2o_socket_ssl_destroy_session_cache_entry(h2o_iovec_t value);
  * registers the protocol list to be used for ALPN
  */
 void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols);
-/**
- * registers the protocol list to be used for NPN
- */
-void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
