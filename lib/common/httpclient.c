@@ -103,7 +103,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
         h2o_http1client_on_connect(client, sock, origin);
     } else {
-        if (memcmp(alpn_proto.base, "h2", alpn_proto.len) == 0) {
+        if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h2"))) {
             /* detach this socket from the socketpool to count the number of h1 connections correctly */
             h2o_socketpool_detach(client->super.connpool->socketpool, sock);
             h2o_http2client_on_connect(client, sock, origin);
