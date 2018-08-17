@@ -43,7 +43,7 @@ struct st_h2o_timeout_t {
     h2o_timeout_cb cb;
 };
 
-void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, h2o_timeout_t *timer);
+void h2o_timeout_link(h2o_loop_t *l, uint64_t ticks, h2o_timeout_t *timer);
 int h2o_timeout_is_linked(h2o_timeout_t *timer);
 void h2o_timeout_unlink(h2o_timeout_t *timer);
 

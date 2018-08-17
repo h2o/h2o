@@ -132,7 +132,7 @@ Found:
     return (time_base + slot_index) << (wheel_index * H2O_TIMERWHEEL_BITS_PER_WHEEL);
 }
 
-static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
+static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t abs_expire)
 {
     h2o_linklist_t *slot;
     size_t wid, sid;
@@ -273,7 +273,7 @@ Collected: /* expiration processing */
     return count;
 }
 
-void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire)
+void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t abs_expire)
 {
     link_timer(w, timer, abs_expire);
 }

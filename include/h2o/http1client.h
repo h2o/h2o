@@ -50,10 +50,10 @@ typedef int (*h2o_http1client_informational_cb)(h2o_http1client_t *client, int m
 typedef struct st_h2o_http1client_ctx_t {
     h2o_loop_t *loop;
     h2o_multithread_receiver_t *getaddr_receiver;
-    h2o_timer_tick_t io_timeout;
-    h2o_timer_tick_t connect_timeout;
-    h2o_timer_tick_t first_byte_timeout;
-    h2o_timer_tick_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
+    uint64_t io_timeout;
+    uint64_t connect_timeout;
+    uint64_t first_byte_timeout;
+    uint64_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
 } h2o_http1client_ctx_t;
 
 typedef struct st_h2o_http1client_timings_t {

@@ -334,11 +334,11 @@ static void on_timeout(uv_timer_t *uv_timer)
     timer->cb(timer);
 }
 
-void h2o_timeout_link(h2o_loop_t *l, h2o_timer_tick_t rel_expire, h2o_timeout_t *timer)
+void h2o_timeout_link(h2o_loop_t *l, uint64_t ticks, h2o_timeout_t *timer)
 {
     timer->is_linked = 1;
     uv_timer_init(l, &timer->uv_timer);
-    uv_timer_start(&timer->uv_timer, on_timeout, h2o_now(l) + rel_expire, 0);
+    uv_timer_start(&timer->uv_timer, on_timeout, h2o_now(l) + ticks, 0);
 }
 
 void h2o_timeout_unlink(h2o_timeout_t *timer)

@@ -138,7 +138,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 /**
  * timer is activated if cb != NULL, disactivated otherwise
  */
-static void set_timeout(struct st_h2o_http1_conn_t *conn, h2o_timer_tick_t timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timeout_cb cb)
 {
     if (conn->_timeout_entry.cb != NULL)
         h2o_timeout_unlink(&conn->_timeout_entry);
@@ -165,7 +165,7 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
     static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
     {                                                                                                                              \
         conn->_req_entity_reader = NULL;                                                                                           \
-        set_timeout(conn, 0, NULL);                                                                                             \
+        set_timeout(conn, 0, NULL);                                                                                                \
         h2o_socket_read_stop(conn->sock);                                                                                          \
         conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                       \
         h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                          \
@@ -719,8 +719,8 @@ static void setup_chunked(struct st_h2o_http1_finalostream_t *self, h2o_req_t *r
     }
 }
 
-static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_state_t state, size_t chunk_size,
-                           int send_trailers, char *buffer)
+static void encode_chunked(h2o_iovec_t *prefix, h2o_iovec_t *suffix, h2o_send_state_t state, size_t chunk_size, int send_trailers,
+                           char *buffer)
 {
     *prefix = h2o_iovec_init(NULL, 0);
     *suffix = h2o_iovec_init(NULL, 0);

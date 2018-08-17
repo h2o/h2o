@@ -37,7 +37,7 @@ struct st_redis_socket_data_t {
 
 static void attach_loop(redisAsyncContext *ac, h2o_loop_t *loop);
 
-static void invoke_deferred(h2o_redis_client_t *client, h2o_timer_tick_t tick, h2o_timeout_t *entry, h2o_timeout_cb cb)
+static void invoke_deferred(h2o_redis_client_t *client, uint64_t tick, h2o_timeout_t *entry, h2o_timeout_cb cb)
 {
     entry->cb = cb;
     h2o_timeout_link(client->loop, tick, entry);

@@ -166,7 +166,7 @@ static void test_exhaustive_on_expire(h2o_timer_t *timer)
 static void test_exhaustive(void)
 {
     h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(2, 0);
-    h2o_timer_abs_t max_interval = H2O_TIMERWHEEL_SLOTS_PER_WHEEL * (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1) + 1;
+    uint64_t max_interval = H2O_TIMERWHEEL_SLOTS_PER_WHEEL * (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1) + 1;
     h2o_timer_t *timer_buf;
     size_t timer_buf_size = max_interval * (max_interval + 1) / 2;
 
@@ -184,7 +184,7 @@ static void test_exhaustive(void)
     }
 
     for (; test_exhaustive_data.now < max_interval * 2; ++test_exhaustive_data.now) {
-        h2o_timer_abs_t i;
+        uint64_t i;
         for (i = 0; i < max_interval; ++i) {
             assert(!h2o_linklist_is_empty(&test_exhaustive_data.unused));
             h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, test_exhaustive_data.unused.next);

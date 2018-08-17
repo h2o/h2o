@@ -63,7 +63,7 @@ void h2o_evloop_run_pending(h2o_evloop_t *loop);
 
 #define h2o_timeout_init h2o_timer_init
 #define h2o_timeout_is_linked h2o_timer_is_linked
-static void h2o_timeout_link(h2o_evloop_t *loop, h2o_timer_tick_t rel_expire, h2o_timeout_t *timer);
+static void h2o_timeout_link(h2o_evloop_t *loop, uint64_t rel_expire, h2o_timeout_t *timer);
 #define h2o_timeout_unlink h2o_timer_unlink
 
 /* inline definitions */
@@ -83,9 +83,9 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
     return loop->exec_time_counter.average;
 }
 
-inline void h2o_timeout_link(h2o_evloop_t *loop, h2o_timer_tick_t rel_expire, h2o_timeout_t *timer)
+inline void h2o_timeout_link(h2o_evloop_t *loop, uint64_t ticks, h2o_timeout_t *timer)
 {
-    h2o_timer_link(loop->_timerwheel, timer, loop->_now + rel_expire);
+    h2o_timer_link(loop->_timerwheel, timer, loop->_now + ticks);
 }
 
 #endif

@@ -39,9 +39,6 @@ typedef struct st_h2o_timer_t {
     h2o_timer_cb cb;
 } h2o_timer_t;
 
-typedef uint32_t h2o_timer_tick_t;
-typedef uint64_t h2o_timer_abs_t;
-
 /**
  * initializes a timer
  */
@@ -49,7 +46,7 @@ static void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb);
 /**
  * activates a timer
  */
-void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, h2o_timer_abs_t abs_expire);
+void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t expires_at);
 /**
  * disactivates a timer
  */

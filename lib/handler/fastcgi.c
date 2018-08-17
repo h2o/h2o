@@ -411,7 +411,7 @@ static void build_request(h2o_req_t *req, iovec_vector_t *vecs, unsigned request
     vecs->entries[vecs->size++] = create_header(&req->pool, FCGI_STDIN, request_id, 0);
 }
 
-static void set_timeout(struct st_fcgi_generator_t *generator, h2o_timer_tick_t timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_fcgi_generator_t *generator, uint64_t timeout, h2o_timeout_cb cb)
 {
     if (h2o_timeout_is_linked(&generator->timeout))
         h2o_timeout_unlink(&generator->timeout);

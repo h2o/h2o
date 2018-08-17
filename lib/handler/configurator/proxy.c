@@ -31,7 +31,7 @@
 
 struct proxy_config_vars_t {
     h2o_proxy_config_vars_t conf;
-    h2o_timer_tick_t keepalive_timeout; /* in milliseconds */
+    uint64_t keepalive_timeout; /* in milliseconds */
     SSL_CTX *ssl_ctx;
 };
 
@@ -47,7 +47,7 @@ static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurato
 {
     int ret;
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    ret = h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.io_timeout);
+    ret = h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.io_timeout);
     if (ret < 0)
         return ret;
     if (!self->connect_timeout_set)
@@ -61,20 +61,20 @@ static int on_config_timeout_connect(h2o_configurator_command_t *cmd, h2o_config
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     self->connect_timeout_set = 1;
-    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.connect_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.connect_timeout);
 }
 
 static int on_config_timeout_first_byte(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     self->first_byte_timeout_set = 1;
-    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.first_byte_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.first_byte_timeout);
 }
 
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -100,7 +100,7 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
 static int on_config_websocket_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.websocket.timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.websocket.timeout);
 }
 
 static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
