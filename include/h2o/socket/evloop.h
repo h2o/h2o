@@ -85,7 +85,7 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 
 inline void h2o_timeout_link(h2o_evloop_t *loop, uint64_t ticks, h2o_timeout_t *timer)
 {
-    h2o_timer_link(loop->_timerwheel, timer, loop->_now + ticks);
+    h2o_timer_link_abs(loop->_timerwheel, timer, loop->_now + ticks);
 }
 
 #endif

@@ -46,7 +46,7 @@ static void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb);
 /**
  * activates a timer
  */
-void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t expires_at);
+void h2o_timer_link_abs(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t at);
 /**
  * disactivates a timer
  */

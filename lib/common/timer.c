@@ -30,7 +30,18 @@
 #define H2O_TIMERWHEEL_MAX_TIMER(num_wheels) ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * (num_wheels))) - 1)
 
 struct st_h2o_timer_wheel_t {
-    uint64_t last_run; /* the last time h2o_timer_run_wheel was called */
+    /**
+     * the last time h2o_timer_run_wheel was called
+     */
+    uint64_t last_run;
+    /**
+     * maximum ticks that can be retained safely in the structure. Objects that need to be retained longer will be re-registered at
+     * the highest wheel.
+     */
+    uint64_t max_ticks;
+    /**
+     * number of wheels and the wheel
+     */
     size_t num_wheels;
     h2o_linklist_t wheel[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
 };
@@ -132,18 +143,19 @@ Found:
     return (time_base + slot_index) << (wheel_index * H2O_TIMERWHEEL_BITS_PER_WHEEL);
 }
 
-static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t abs_expire)
+static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer)
 {
     h2o_linklist_t *slot;
     size_t wid, sid;
+    uint64_t wheel_abs = timer->expire_at;
 
-    if (abs_expire < w->last_run)
-        abs_expire = w->last_run;
+    if (wheel_abs < w->last_run)
+        wheel_abs = w->last_run;
+    if (wheel_abs > w->last_run + w->max_ticks)
+        wheel_abs = w->last_run + w->max_ticks;
 
-    timer->expire_at = abs_expire;
-
-    wid = timer_wheel(w->num_wheels, abs_expire - w->last_run);
-    sid = timer_slot(wid, abs_expire);
+    wid = timer_wheel(w->num_wheels, wheel_abs - w->last_run);
+    sid = timer_slot(wid, wheel_abs);
     slot = &w->wheel[wid][sid];
 
     WHEEL_DEBUG("timer(expire_at %" PRIu64 ") added: wheel %d, slot %d, now:%" PRIu64 "\n", abs_expire, wid, sid, w->last_run);
@@ -162,13 +174,12 @@ h2o_timer_wheel_t *h2o_timer_create_wheel(size_t num_wheels, uint64_t now)
     size_t i, j;
 
     w->last_run = now;
+    /* max_ticks cannot be so large that the entry will be linked once more to the same slot, see the assert in `cascade` */
+    w->max_ticks = ((uint64_t)1 << (H2O_TIMERWHEEL_BITS_PER_WHEEL * (num_wheels - 1))) * (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1);
     w->num_wheels = num_wheels;
-    for (i = 0; i < w->num_wheels; i++) {
-        memset(&w->wheel[i], 0, sizeof(w->wheel[i]));
-        for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++) {
+    for (i = 0; i < w->num_wheels; i++)
+        for (j = 0; j < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; j++)
             h2o_linklist_init_anchor(&w->wheel[i][j]);
-        }
-    }
 
     return w;
 }
@@ -206,7 +217,7 @@ static int cascade(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
     do {
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
         h2o_linklist_unlink(&entry->_link);
-        link_timer(w, entry, entry->expire_at);
+        link_timer(w, entry);
         assert(&entry->_link != s->prev); /* detect the entry reassigned to the same slot */
     } while (!h2o_linklist_is_empty(s));
 
@@ -259,21 +270,27 @@ Redo:
         goto Redo;
 
 Collected: /* expiration processing */
+    assert(w->last_run == now);
     while (!h2o_linklist_is_empty(&todo)) {
         do {
             h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, todo.next);
             /* remove this timer from todo list */
             h2o_linklist_unlink(&timer->_link);
-            timer->cb(timer);
-            count++;
+            if (timer->expire_at <= now) {
+                timer->cb(timer);
+                count++;
+            } else {
+                link_timer(w, timer);
+            }
         } while (!h2o_linklist_is_empty(&todo));
-        h2o_linklist_insert_list(&todo, w->wheel[0] + timer_slot(0, w->last_run));
+        h2o_linklist_insert_list(&todo, w->wheel[0] + timer_slot(0, now));
     }
 
     return count;
 }
 
-void h2o_timer_link(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t abs_expire)
+void h2o_timer_link_abs(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t at)
 {
-    link_timer(w, timer, abs_expire);
+    timer->expire_at = at < w->last_run ? w->last_run : at;
+    link_timer(w, timer);
 }

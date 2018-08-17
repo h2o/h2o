@@ -49,7 +49,7 @@ void test_add_fixed_timers()
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
         h2o_timer_init(&timers[i], my_callback);
-        h2o_timer_link(testwheel, &timers[i], expiry);
+        h2o_timer_link_abs(testwheel, &timers[i], expiry);
     }
 
     /* run the wheel */
@@ -70,7 +70,7 @@ void test_del_timers()
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + i + 5;
         h2o_timer_init(&timers[i], my_callback);
-        h2o_timer_link(testwheel, &timers[i], expiry);
+        h2o_timer_link_abs(testwheel, &timers[i], expiry);
     }
 
     /* delete N-1 timers, so there should be 1 timer left */
@@ -98,7 +98,7 @@ void test_add_rand_timers()
     for (i = 0; i < N; i++) {
         uint32_t expiry = abs_wtime + lcg_rand() % N;
         h2o_timer_init(&timers[i], my_callback);
-        h2o_timer_link(testwheel, &timers[i], expiry);
+        h2o_timer_link_abs(testwheel, &timers[i], expiry);
     }
 
     int start = invokes;
@@ -123,7 +123,7 @@ void test_invalid_timer()
     int i;
     for (i = 0; i < NTIMERS; i++) {
         arr[i].cb = my_callback;
-        h2o_timer_link(testwheel, &arr[i], expiry);
+        h2o_timer_link_abs(testwheel, &arr[i], expiry);
         h2o_timer_show_wheel(testwheel);
         expiry++;
     }
@@ -189,7 +189,7 @@ static void test_exhaustive(void)
             assert(!h2o_linklist_is_empty(&test_exhaustive_data.unused));
             h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, test_exhaustive_data.unused.next);
             h2o_linklist_unlink(&timer->_link);
-            h2o_timer_link(wheel, timer, test_exhaustive_data.now + i);
+            h2o_timer_link_abs(wheel, timer, test_exhaustive_data.now + i);
             ++test_exhaustive_data.num_linked;
         }
         h2o_timer_run_wheel(wheel, test_exhaustive_data.now);
@@ -236,7 +236,7 @@ static void test_get_wake_at(void)
             uint64_t now = base;
             h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(3, now);
             invokes = 0;
-            h2o_timer_link(wheel, &timer, now + delta);
+            h2o_timer_link_abs(wheel, &timer, now + delta);
             if (delta == 0) {
                 OK(h2o_timer_get_wake_at(wheel) == now);
                 h2o_timer_run_wheel(wheel, now);
@@ -262,6 +262,31 @@ static void test_get_wake_at(void)
     ok(1);
 }
 
+static void test_overflow(void)
+{
+    uint64_t now = 1234, ticks;
+    h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(2, now);
+
+    for (ticks = 0; ticks < INT32_MAX; ticks = ticks < H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL * 3 ? ticks + 1 : ticks * 1.1) {
+        h2o_timer_t timer;
+        uint64_t expected_at = now + ticks;
+        h2o_timer_init(&timer, my_callback);
+        h2o_timer_link_abs(wheel, &timer, expected_at);
+        invokes = 0;
+        do {
+            now = h2o_timer_get_wake_at(wheel);
+            h2o_timer_run_wheel(wheel, now);
+        } while (invokes == 0);
+        if (now != expected_at) {
+            note("ticks=%" PRIu64, ticks);
+            ok(0);
+            return;
+        }
+    }
+
+    ok(1);
+}
+
 void test_lib__common__timerwheel_c()
 {
     subtest("add fixed timers", test_add_fixed_timers);
@@ -269,5 +294,6 @@ void test_lib__common__timerwheel_c()
     subtest("del fixed timers", test_del_timers);
     subtest("test out-of-range timer", test_invalid_timer);
     subtest("exhaustive", test_exhaustive);
+    subtest("overflow", test_overflow);
     subtest("get_wake_at", test_get_wake_at);
 }
