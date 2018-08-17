@@ -215,15 +215,15 @@ static int is_blocking_asset(h2o_req_t *req)
     return req->res.mime_attr->priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 }
 
+static void send_refused_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_REFUSED_STREAM);
+    h2o_http2_conn_request_write(conn);
+    h2o_http2_stream_close(conn, stream);
+}
+
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    if (stream->req.upstream_refused) {
-        h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_INTERNAL);
-        h2o_http2_conn_request_write(conn);
-        h2o_http2_stream_close(conn, stream);
-        return -1;
-    }
-
     if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
         h2o_http2_conn_register_for_replay(conn, stream);
         return -1;
@@ -333,6 +333,11 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
     assert(stream->blocked_by_server);
     h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
 
+    if (stream->req.upstream_refused) {
+        send_refused_stream(conn, stream);
+        return;
+    }
+
     /* register the pull callback */
     stream->_pull_cb = cb;
 
@@ -370,6 +375,10 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
+        if (stream->req.upstream_refused) {
+            send_refused_stream(conn, stream);
+            return;
+        }
         if (send_headers(conn, stream) != 0)
             return;
     /* fallthru */
