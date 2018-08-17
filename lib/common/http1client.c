@@ -276,9 +276,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
             token = h2o_lookup_token(src_headers[i].name, src_headers[i].name_len);
             if (token != NULL) {
                 headers[i].name = (h2o_iovec_t *)&token->buf;
+                headers[i].flags = token->flags;
             } else {
                 header_names[i] = h2o_iovec_init(src_headers[i].name, src_headers[i].name_len);
                 headers[i].name = &header_names[i];
+                headers[i].flags = (h2o_header_flags_t){0};
             }
             headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
             headers[i].orig_name = orig_name;
