@@ -149,8 +149,6 @@ static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer)
     size_t wid, sid;
     uint64_t wheel_abs = timer->expire_at;
 
-    if (wheel_abs < w->last_run)
-        wheel_abs = w->last_run;
     if (wheel_abs > w->last_run + w->max_ticks)
         wheel_abs = w->last_run + w->max_ticks;
 
@@ -216,6 +214,7 @@ static int cascade_one(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
 
     do {
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
+        assert(w->last_run <= entry->expire_at);
         h2o_linklist_unlink(&entry->_link);
         link_timer(w, entry);
         assert(&entry->_link != s->prev); /* detect the entry reassigned to the same slot */
