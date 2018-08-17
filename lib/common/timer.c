@@ -204,7 +204,7 @@ void h2o_timer_destroy_wheel(h2o_timer_wheel_t *w)
  * cascading happens when the lower wheel wraps around and ticks the next
  * higher wheel
  */
-static int cascade(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
+static int cascade_one(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
 {
     assert(wheel > 0);
 
@@ -222,6 +222,21 @@ static int cascade(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
     } while (!h2o_linklist_is_empty(s));
 
     return 1;
+}
+
+static int cascade_all(h2o_timer_wheel_t *w, size_t wheel)
+{
+    int cascaded = 0;
+
+    for (; wheel < w->num_wheels; ++wheel) {
+        size_t slot = timer_slot(wheel, w->last_run);
+        if (cascade_one(w, wheel, slot))
+            cascaded = 1;
+        if (slot != 0)
+            break;
+    }
+
+    return cascaded;
 }
 
 size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
@@ -242,7 +257,7 @@ Redo:
                 goto Collected;
             ++w->last_run;
         } else {
-            if (cascade(w, wheel_index, slot_index)) {
+            if (cascade_one(w, wheel_index, slot_index)) {
                 wheel_index = 0;
                 goto Redo;
             }
@@ -253,18 +268,10 @@ Redo:
             }
         }
     }
-    { /* cascade next level */
-        int cascaded = 0;
-        size_t i = wheel_index + 1;
-        do {
-            slot_index = timer_slot(i, w->last_run);
-            if (cascade(w, i, slot_index))
-                cascaded = 1;
-        } while (slot_index == 0 && ++i < w->num_wheels);
-        if (cascaded) {
-            wheel_index = 0;
-            goto Redo;
-        }
+    /* carry */
+    if (cascade_all(w, wheel_index + 1)) {
+        wheel_index = 0;
+        goto Redo;
     }
     if (slot_start != 0 || ++wheel_index < w->num_wheels)
         goto Redo;
