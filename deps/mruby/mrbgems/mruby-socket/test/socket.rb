@@ -5,7 +5,7 @@ assert('Socket.gethostname') do
 end
 
 assert('Socket::getaddrinfo') do
-  ret = Socket.getaddrinfo("localhost", "domain", Socket::AF_INET, Socket::SOCK_DGRAM)
+  ret = Socket.getaddrinfo("localhost", 53, Socket::AF_INET, Socket::SOCK_DGRAM)
   assert_true ret.size >= 1
   a = ret[0]
   assert_equal "AF_INET",           a[0]

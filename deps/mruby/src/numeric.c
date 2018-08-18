@@ -23,9 +23,9 @@
 #define floor(f) floorf(f)
 #define ceil(f) ceilf(f)
 #define fmod(x,y) fmodf(x,y)
-#define MRB_FLO_TO_STR_FMT "%.7g"
+#define MRB_FLO_TO_STR_FMT "%.8g"
 #else
-#define MRB_FLO_TO_STR_FMT "%.14g"
+#define MRB_FLO_TO_STR_FMT "%.16g"
 #endif
 #endif
 

@@ -510,7 +510,7 @@ utf8_to_uv(mrb_state *mrb, const char *p, long *lenp)
   }
   if (n > *lenp) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "malformed UTF-8 character (expected %S bytes, given %S bytes)",
-    mrb_fixnum_value(n), mrb_fixnum_value(*lenp));
+               mrb_fixnum_value(n), mrb_fixnum_value(*lenp));
   }
   *lenp = n--;
   if (n != 0) {
@@ -1055,7 +1055,7 @@ alias:
       while (tmpl->idx < tlen && isdigit(tptr[tmpl->idx])) {
         count = count * 10 + (tptr[tmpl->idx++] - '0');
         if (count < 0) {
-          mrb_raisef(mrb, E_RUNTIME_ERROR, "too big template length");
+          mrb_raise(mrb, E_RUNTIME_ERROR, "too big template length");
         }
       }
       continue;  /* special case */

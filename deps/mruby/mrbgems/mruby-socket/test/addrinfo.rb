@@ -7,7 +7,7 @@ assert('super class of Addrinfo') do
 end
 
 assert('Addrinfo.getaddrinfo') do
-  ary = Addrinfo.getaddrinfo("localhost", "domain", Socket::AF_INET, Socket::SOCK_STREAM)
+  ary = Addrinfo.getaddrinfo("localhost", 53, Socket::AF_INET, Socket::SOCK_STREAM)
   assert_true(ary.size >= 1)
   ai = ary[0]
   assert_equal(ai.afamily, Socket::AF_INET)
@@ -19,9 +19,9 @@ end
 
 assert('Addrinfo.foreach') do
   # assume Addrinfo.getaddrinfo works well
-  a = Addrinfo.getaddrinfo("localhost", "domain")
+  a = Addrinfo.getaddrinfo("localhost", 80)
   b = []
-  Addrinfo.foreach("localhost", "domain") { |ai| b << ai }
+  Addrinfo.foreach("localhost", 80) { |ai| b << ai }
   assert_equal(a.size, b.size)
 end
 
@@ -35,7 +35,7 @@ assert('Addrinfo.ip') do
 end
 
 assert('Addrinfo.tcp') do
-  ai = Addrinfo.tcp('127.0.0.1', 'smtp')
+  ai = Addrinfo.tcp('127.0.0.1', 25)
   assert_equal('127.0.0.1', ai.ip_address)
   assert_equal(Socket::AF_INET, ai.afamily)
   assert_equal(25, ai.ip_port)
@@ -44,7 +44,7 @@ assert('Addrinfo.tcp') do
 end
 
 assert('Addrinfo.udp') do
-  ai = Addrinfo.udp('127.0.0.1', 'domain')
+  ai = Addrinfo.udp('127.0.0.1', 53)
   assert_equal('127.0.0.1', ai.ip_address)
   assert_equal(Socket::AF_INET, ai.afamily)
   assert_equal(53, ai.ip_port)

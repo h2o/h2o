@@ -53,7 +53,9 @@
 #include <mruby/array.h>
 #include <mruby/proc.h>
 #include <mruby/compile.h>
+#include <mruby/dump.h>
 #include <mruby/string.h>
+#include <mruby/variable.h>
 
 #ifdef ENABLE_READLINE
 
@@ -219,8 +221,11 @@ is_code_block_open(struct mrb_parser_state *parser)
 struct _args {
   FILE *rfp;
   mrb_bool verbose      : 1;
+  mrb_bool debug        : 1;
   int argc;
   char** argv;
+  int libc;
+  char **libv;
 };
 
 static void
@@ -228,6 +233,8 @@ usage(const char *name)
 {
   static const char *const usage_msg[] = {
   "switches:",
+  "-d           set $DEBUG to true (same as `mruby -d`)"
+  "-r library   same as `mruby -r`",
   "-v           print version number, then run in verbose mode",
   "--verbose    run in verbose mode",
   "--version    print the version",
@@ -241,9 +248,19 @@ usage(const char *name)
     printf("  %s\n", *p++);
 }
 
+static char *
+dup_arg_item(mrb_state *mrb, const char *item)
+{
+  size_t buflen = strlen(item) + 1;
+  char *buf = (char*)mrb_malloc(mrb, buflen);
+  memcpy(buf, item, buflen);
+  return buf;
+}
+
 static int
 parse_args(mrb_state *mrb, int argc, char **argv, struct _args *args)
 {
+  char **origargv = argv;
   static const struct _args args_zero = { 0 };
 
   *args = args_zero;
@@ -254,6 +271,26 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct _args *args)
 
     item = argv[0] + 1;
     switch (*item++) {
+    case 'd':
+      args->debug = TRUE;
+      break;
+    case 'r':
+      if (!item[0]) {
+        if (argc <= 1) {
+          printf("%s: No library specified for -r\n", *origargv);
+          return EXIT_FAILURE;
+        }
+        argc--; argv++;
+        item = argv[0];
+      }
+      if (args->libc == 0) {
+        args->libv = (char**)mrb_malloc(mrb, sizeof(char*));
+      }
+      else {
+        args->libv = (char**)mrb_realloc(mrb, args->libv, sizeof(char*) * (args->libc + 1));
+      }
+      args->libv[args->libc++] = dup_arg_item(mrb, item);
+      break;
     case 'v':
       if (!args->verbose) mrb_show_version(mrb);
       args->verbose = TRUE;
@@ -299,6 +336,12 @@ cleanup(mrb_state *mrb, struct _args *args)
   if (args->rfp)
     fclose(args->rfp);
   mrb_free(mrb, args->argv);
+  if (args->libc) {
+    while (args->libc--) {
+      mrb_free(mrb, args->libv[args->libc]);
+    }
+    mrb_free(mrb, args->libv);
+  }
   mrb_close(mrb);
 }
 
@@ -413,6 +456,7 @@ main(int argc, char **argv)
     }
   }
   mrb_define_global_const(mrb, "ARGV", ARGV);
+  mrb_gv_set(mrb, mrb_intern_lit(mrb, "$DEBUG"), mrb_bool_value(args.debug));
 
 #ifdef ENABLE_READLINE
   history_path = get_history_path(mrb);
@@ -429,6 +473,19 @@ main(int argc, char **argv)
   print_hint();
 
   cxt = mrbc_context_new(mrb);
+
+  /* Load libraries */
+  for (i = 0; i < args.libc; i++) {
+    FILE *lfp = fopen(args.libv[i], "r");
+    if (lfp == NULL) {
+      printf("Cannot open library file. (%s)\n", args.libv[i]);
+      cleanup(mrb, &args);
+      return EXIT_FAILURE;
+    }
+    mrb_load_file_cxt(mrb, lfp, cxt);
+    fclose(lfp);
+  }
+
   cxt->capture_errors = TRUE;
   cxt->lineno = 1;
   mrbc_filename(mrb, cxt, "(mirb)");
@@ -542,13 +599,13 @@ done:
         /* warning */
         char* msg = mrb_locale_from_utf8(parser->warn_buffer[0].message, -1);
         printf("line %d: %s\n", parser->warn_buffer[0].lineno, msg);
-        mrb_utf8_free(msg);
+        mrb_locale_free(msg);
       }
       if (0 < parser->nerr) {
         /* syntax error */
         char* msg = mrb_locale_from_utf8(parser->error_buffer[0].message, -1);
         printf("line %d: %s\n", parser->error_buffer[0].lineno, msg);
-        mrb_utf8_free(msg);
+        mrb_locale_free(msg);
       }
       else {
         /* generate bytecode */
@@ -604,6 +661,12 @@ done:
 
   if (args.rfp) fclose(args.rfp);
   mrb_free(mrb, args.argv);
+  if (args.libv) {
+    for (i = 0; i < args.libc; ++i) {
+      mrb_free(mrb, args.libv[i]);
+    }
+    mrb_free(mrb, args.libv);
+  }
   mrbc_context_free(mrb, cxt);
   mrb_close(mrb);
 

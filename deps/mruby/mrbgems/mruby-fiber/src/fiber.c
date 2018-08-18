@@ -175,6 +175,9 @@ fiber_check_cfunc(mrb_state *mrb, struct mrb_context *c)
 static void
 fiber_switch_context(mrb_state *mrb, struct mrb_context *c)
 {
+  if (mrb->c->fib) {
+    mrb_write_barrier(mrb, (struct RBasic*)mrb->c->fib);
+  }
   c->status = MRB_FIBER_RUNNING;
   mrb->c = c;
 }
@@ -184,26 +187,30 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
 {
   struct mrb_context *c = fiber_check(mrb, self);
   struct mrb_context *old_c = mrb->c;
+  enum mrb_fiber_state status;
   mrb_value value;
 
   fiber_check_cfunc(mrb, c);
-  if (resume && c->status == MRB_FIBER_TRANSFERRED) {
+  status = c->status;
+  if (resume && status == MRB_FIBER_TRANSFERRED) {
     mrb_raise(mrb, E_FIBER_ERROR, "resuming transferred fiber");
   }
-  if (c->status == MRB_FIBER_RUNNING || c->status == MRB_FIBER_RESUMED) {
-    mrb_raise(mrb, E_FIBER_ERROR, "double resume (fib)");
+  if (status == MRB_FIBER_RUNNING || status == MRB_FIBER_RESUMED) {
+    mrb_raise(mrb, E_FIBER_ERROR, "double resume");
   }
-  if (c->status == MRB_FIBER_TERMINATED) {
+  if (status == MRB_FIBER_TERMINATED) {
     mrb_raise(mrb, E_FIBER_ERROR, "resuming dead fiber");
   }
-  mrb->c->status = resume ? MRB_FIBER_RESUMED : MRB_FIBER_TRANSFERRED;
+  old_c->status = resume ? MRB_FIBER_RESUMED : MRB_FIBER_TRANSFERRED;
   c->prev = resume ? mrb->c : (c->prev ? c->prev : mrb->root_c);
-  if (c->status == MRB_FIBER_CREATED) {
+  fiber_switch_context(mrb, c);
+  if (status == MRB_FIBER_CREATED) {
     mrb_value *b, *e;
 
-    if (len >= c->stend - c->stack) {
-      mrb_raise(mrb, E_FIBER_ERROR, "too many arguments to fiber");
+    if (!c->ci->proc) {
+      mrb_raise(mrb, E_FIBER_ERROR, "double resume (current)");
     }
+    mrb_stack_extend(mrb, len+2); /* for receiver and (optional) block */
     b = c->stack+1;
     e = b + len;
     while (b<e) {
@@ -215,7 +222,6 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
   else {
     value = fiber_result(mrb, a, len);
   }
-  fiber_switch_context(mrb, c);
 
   if (vmexec) {
     c->vmexec = TRUE;

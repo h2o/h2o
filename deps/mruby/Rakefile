@@ -118,10 +118,21 @@ task :all => depfiles do
 end
 
 desc "run all mruby tests"
-task :test => ["all"] do
-  MRuby.each_target do
-    run_test if test_enabled?
+MRuby.each_target do
+  next unless test_enabled?
+
+  t = :"test_#{self.name}"
+  task t => ["all"] do
+    run_test
   end
+  task :test => t
+
+  next unless bintest_enabled?
+  t = :"bintest_#{self.name}"
+  task t => ["all"] do
+    run_bintest
+  end
+  task :test => t
 end
 
 desc "clean all built and in-repo installed artifacts"

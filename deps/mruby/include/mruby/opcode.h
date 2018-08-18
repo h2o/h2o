@@ -120,7 +120,7 @@ enum {
   OP_ARYPUSH,/*   A B     ary_push(R(A),R(B))                             */
   OP_AREF,/*      A B C   R(A) := R(B)[C]                                 */
   OP_ASET,/*      A B C   R(B)[C] := R(A)                                 */
-  OP_APOST,/*     A B C   *R(A),R(A+1)..R(A+C) := R(A)                    */
+  OP_APOST,/*     A B C   *R(A),R(A+1)..R(A+C) := R(A)[B..]               */
 
   OP_STRING,/*    A Bx    R(A) := str_dup(Lit(Bx))                        */
   OP_STRCAT,/*    A B     str_cat(R(A),R(B))                              */

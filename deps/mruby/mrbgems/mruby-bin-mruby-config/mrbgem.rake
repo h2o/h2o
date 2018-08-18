@@ -19,9 +19,10 @@ MRuby.each_target do
   mruby_config_path = "#{build_dir}/bin/#{mruby_config}"
   @bins << mruby_config
 
-  file mruby_config_path => libfile("#{build_dir}/lib/libmruby") do |t|
+  make_cfg = "#{build_dir}/lib/libmruby.flags.mak"
+  file mruby_config_path => [libfile("#{build_dir}/lib/libmruby"), make_cfg] do |t|
     FileUtils.copy "#{File.dirname(__FILE__)}/#{mruby_config}", t.name
-    config = Hash[open("#{build_dir}/lib/libmruby.flags.mak").read.split("\n").map {|x| a = x.split(/\s*=\s*/, 2); [a[0], a[1].gsub('\\"', '"') ]}]
+    config = Hash[open(make_cfg).read.split("\n").map {|x| a = x.split(/\s*=\s*/, 2); [a[0], a[1].gsub('\\"', '"') ]}]
     IO.write(t.name, File.open(t.name) {|f|
       f.read.gsub (/echo (MRUBY_CFLAGS|MRUBY_LIBS|MRUBY_LDFLAGS_BEFORE_LIBS|MRUBY_LDFLAGS|MRUBY_LIBMRUBY_PATH)/) {|x| config[$1].empty? ? '' : "echo #{config[$1]}"}
     })
