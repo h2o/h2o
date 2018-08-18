@@ -39,7 +39,7 @@ The feature can be used to implement access control and response header modifier
 
 <p>
 By using the <code>399</code> status code, it is possible to implement access control using mruby.
-The example below restricts access to requests from <code>192.168.</code> private address.
+The example below restricts access to requests by allowing access for addresses that begin with <code>192.168.</code> only.
 </p>
 
 <?= $ctx->{example}->('Restricting access to 192.168.', <<'EOT')
