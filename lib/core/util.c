@@ -345,6 +345,7 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     sock->data = NULL;
 
     if (err != NULL) {
+        ++data->ctx->ctx->ssl.events.errors;
         h2o_socket_close(sock);
         goto Exit;
     }

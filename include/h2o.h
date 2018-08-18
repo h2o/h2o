@@ -687,6 +687,10 @@ struct st_h2o_context_t {
     struct {
         struct {
             /**
+             * counter for SSL errors
+             */
+            uint64_t errors;
+            /**
              * counter for selected ALPN protocols
              */
             uint64_t alpn_h1;
