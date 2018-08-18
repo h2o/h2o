@@ -468,7 +468,8 @@ h2o_evloop_t *create_evloop(size_t sz)
 
     update_now(loop);
 
-    loop->_timerwheel = h2o_timer_create_wheel(6 /* TODO adjust num_wheels */, loop->_now);
+    /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
+    loop->_timerwheel = h2o_timer_create_wheel(3, loop->_now);
     h2o_timer_run_wheel(loop->_timerwheel, loop->_now); /* FIXME remove this? */
     h2o_evloop_run_pending(loop);
 

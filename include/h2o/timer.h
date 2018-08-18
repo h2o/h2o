@@ -24,7 +24,7 @@
 
 #include "h2o/linklist.h"
 
-#define H2O_TIMERWHEEL_BITS_PER_WHEEL 6
+#define H2O_TIMERWHEEL_BITS_PER_WHEEL 5
 #define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
 
 typedef struct st_h2o_timer_wheel_t h2o_timer_wheel_t;
