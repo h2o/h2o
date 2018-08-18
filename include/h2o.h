@@ -1003,6 +1003,10 @@ struct st_h2o_req_t {
          */
         h2o_iovec_t path;
         /**
+         * status
+         */
+        h2o_iovec_t status;
+        /**
          * offset of '?' within path, or SIZE_MAX if not found
          */
         size_t query_at;
