@@ -114,11 +114,13 @@ mrb_file_s_unlink(mrb_state *mrb, mrb_value obj)
 
   mrb_get_args(mrb, "*", &argv, &argc);
   for (i = 0; i < argc; i++) {
+    const char *utf8_path;
     pathv = mrb_convert_type(mrb, argv[i], MRB_TT_STRING, "String", "to_str");
-    path = mrb_locale_from_utf8(mrb_string_value_cstr(mrb, &pathv), -1);
+    utf8_path = mrb_string_value_cstr(mrb, &pathv);
+    path = mrb_locale_from_utf8(utf8_path, -1);
     if (UNLINK(path) < 0) {
       mrb_locale_free(path);
-      mrb_sys_fail(mrb, path);
+      mrb_sys_fail(mrb, utf8_path);
     }
     mrb_locale_free(path);
   }
@@ -310,7 +312,7 @@ mrb_file__gethome(mrb_state *mrb, mrb_value klass)
   }
   home = mrb_locale_from_utf8(home, -1);
   path = mrb_str_new_cstr(mrb, home);
-  mrb_utf8_free(home);
+  mrb_locale_free(home);
   return path;
 #else
   argc = mrb_get_argc(mrb);
@@ -327,7 +329,7 @@ mrb_file__gethome(mrb_state *mrb, mrb_value klass)
   }
   home = mrb_locale_from_utf8(home, -1);
   path = mrb_str_new_cstr(mrb, home);
-  mrb_utf8_free(home);
+  mrb_locale_free(home);
   return path;
 #endif
 }
@@ -343,7 +345,11 @@ mrb_file_mtime(mrb_state *mrb, mrb_value self)
   fd = (int)mrb_fixnum(mrb_io_fileno(mrb, self));
   if (fstat(fd, &st) == -1)
     return mrb_false_value();
+#ifndef MRB_WITHOUT_FLOAT
   return mrb_funcall(mrb, obj, "at", 1, mrb_float_value(mrb, st.st_mtime));
+#else
+  return mrb_funcall(mrb, obj, "at", 1, mrb_fixnum_value(st.st_mtime));
+#endif
 }
 
 mrb_value
@@ -415,10 +421,11 @@ mrb_file_s_chmod(mrb_state *mrb, mrb_value klass) {
 
   mrb_get_args(mrb, "i*", &mode, &filenames, &argc);
   for (i = 0; i < argc; i++) {
-    char *path = mrb_locale_from_utf8(mrb_str_to_cstr(mrb, filenames[i]), -1);
+    const char *utf8_path = mrb_str_to_cstr(mrb, filenames[i]);
+    char *path = mrb_locale_from_utf8(utf8_path, -1);
     if (CHMOD(path, mode) == -1) {
       mrb_locale_free(path);
-      mrb_sys_fail(mrb, path);
+      mrb_sys_fail(mrb, utf8_path);
     }
     mrb_locale_free(path);
   }

@@ -7,6 +7,7 @@ class MRuby::Toolchain::Android
   DEFAULT_NDK_HOMES = %w{
     /usr/local/opt/android-sdk/ndk-bundle
     /usr/local/opt/android-ndk
+    ~/Android/Sdk/ndk-bundle
     %LOCALAPPDATA%/Android/android-sdk/ndk-bundle
     %LOCALAPPDATA%/Android/android-ndk
     ~/Library/Android/sdk/ndk-bundle

@@ -128,8 +128,13 @@ read_irep_record_1(mrb_state *mrb, const uint8_t *bin, size_t *len, uint8_t flag
       switch (tt) { /* pool data */
       case IREP_TT_FIXNUM: {
         mrb_value num = mrb_str_to_inum(mrb, s, 10, FALSE);
+#ifdef MRB_WITHOUT_FLOAT
+        irep->pool[i] = num;
+#else
         irep->pool[i] = mrb_float_p(num)? mrb_float_pool(mrb, mrb_float(num)) : num;
-      } break;
+#endif
+        }
+        break;
 
 #ifndef MRB_WITHOUT_FLOAT
       case IREP_TT_FLOAT:

@@ -56,6 +56,7 @@ void mrb_irep_free(mrb_state*, struct mrb_irep*);
 void mrb_irep_incref(mrb_state*, struct mrb_irep*);
 void mrb_irep_decref(mrb_state*, struct mrb_irep*);
 void mrb_irep_cutref(mrb_state*, struct mrb_irep*);
+void mrb_irep_remove_lv(mrb_state *mrb, mrb_irep *irep);
 
 MRB_END_DECL
 
