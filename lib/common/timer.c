@@ -274,6 +274,9 @@ Redo:
     }
     if (slot_start != 0 || ++wheel_index < w->num_wheels)
         goto Redo;
+    /* all the wheels were empty, and they all belonged to the past */
+    if (w->last_run < now)
+        w->last_run = now;
 
 Collected: /* expiration processing */
     assert(w->last_run == now);
