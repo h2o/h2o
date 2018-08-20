@@ -64,20 +64,20 @@ static h2o_iovec_t ssl_status_final(void *_ssc, h2o_globalconf_t *globalconf, h2
 
 #define BUFSIZE (1024)
     buf.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
-    buf.len = snprintf(buf.base, BUFSIZE, ",\n"
+    buf.len = snprintf(buf.base, BUFSIZE,
+                       ",\n"
                        " \"ssl.alpn.h1\": %" PRIu64 ",\n"
                        " \"ssl.alpn.h2\": %" PRIu64 ",\n"
                        " \"ssl.handshake.full\": %" PRIu64 ",\n"
                        " \"ssl.handshake.resume\": %" PRIu64 ",\n"
                        " \"ssl.handshake.full.latency\": %" PRIu64 ",\n"
                        " \"ssl.handshake.resume.latency\": %" PRIu64 "\n",
-                       ssc->alpn_h1, ssc->alpn_h2, ssc->handshake_full, ssc->handshake_resume, ssc->handshake_full_latency, ssc->handshake_resume_latency);
+                       ssc->alpn_h1, ssc->alpn_h2, ssc->handshake_full, ssc->handshake_resume, ssc->handshake_full_latency,
+                       ssc->handshake_resume_latency);
     pthread_mutex_destroy(&ssc->mutex);
     free(ssc);
     return buf;
 #undef BUFSIZE
 }
 
-h2o_status_handler_t h2o_ssl_status_handler = {
-    {H2O_STRLIT("ssl")}, ssl_status_final, ssl_status_init, ssl_status_per_thread
-};
+h2o_status_handler_t h2o_ssl_status_handler = {{H2O_STRLIT("ssl")}, ssl_status_final, ssl_status_init, ssl_status_per_thread};
