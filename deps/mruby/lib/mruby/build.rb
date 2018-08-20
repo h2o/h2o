@@ -298,7 +298,6 @@ EOS
       mrbtest = exefile("#{build_dir}/bin/mrbtest")
       sh "#{filename mrbtest.relative_path}#{$verbose ? ' -v' : ''}"
       puts
-      run_bintest if bintest_enabled?
     end
 
     def run_bintest

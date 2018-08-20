@@ -119,13 +119,11 @@ mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
 #define FPREC0 128
 
 #define CHECK(l) do {\
-/*  int cr = ENC_CODERANGE(result);*/\
   while ((l) >= bsiz - blen) {\
+    if (bsiz > MRB_INT_MAX/2) mrb_raise(mrb, E_ARGUMENT_ERROR, "too big specifier"); \
     bsiz*=2;\
-    if (bsiz < 0) mrb_raise(mrb, E_ARGUMENT_ERROR, "too big specifier"); \
   }\
   mrb_str_resize(mrb, result, bsiz);\
-/*  ENC_CODERANGE_SET(result, cr);*/\
   buf = RSTRING_PTR(result);\
 } while (0)
 
@@ -202,11 +200,10 @@ check_name_arg(mrb_state *mrb, int posarg, const char *name, mrb_int len)
 
 #define GETNUM(n, val) \
   for (; p < end && ISDIGIT(*p); p++) {\
-    mrb_int next_n = 10 * n + (*p - '0'); \
-    if (next_n / 10 != n) {\
+    if (n > MRB_INT_MAX/10) {\
       mrb_raise(mrb, E_ARGUMENT_ERROR, #val " too big"); \
     } \
-    n = next_n; \
+    n = 10 * n + (*p - '0'); \
   } \
   if (p >= end) { \
     mrb_raise(mrb, E_ARGUMENT_ERROR, "malformed format string - %*[0-9]"); \
