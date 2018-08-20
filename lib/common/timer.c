@@ -122,25 +122,28 @@ uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
                 goto Found;
             at += at_incr;
         }
-        /* handle carry */
-        if (wheel_index + 1 < w->num_wheels) {
-            size_t wi;
-            for (wi = wheel_index + 1; wi < w->num_wheels; ++wi) {
-                size_t si = timer_slot(wi, at);
-                if (!h2o_linklist_is_empty(&w->wheel[wi][si]))
-                    goto Found;
-                if (si != 0)
-                    break;
+        while (1) {
+            /* handle carry */
+            if (wheel_index + 1 < w->num_wheels) {
+                size_t wi;
+                for (wi = wheel_index + 1; wi < w->num_wheels; ++wi) {
+                    size_t si = timer_slot(wi, at);
+                    if (!h2o_linklist_is_empty(&w->wheel[wi][si]))
+                        goto Found;
+                    if (si != 0)
+                        break;
+                }
             }
-        }
-        /* check current wheel from 0 to slot_base */
-        if (slot_base != 0) {
+            /* check current wheel from 0 to slot_base */
+            if (slot_base == 0)
+                break;
             for (slot_index = 0; slot_index < slot_base; ++slot_index) {
                 if (!h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index]))
                     goto Found;
                 at += at_incr;
             }
             at += at_incr * (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - slot_base);
+            slot_base = 0;
         }
     }
 
