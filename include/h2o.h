@@ -695,6 +695,16 @@ struct st_h2o_context_t {
              */
             uint64_t alpn_h1;
             uint64_t alpn_h2;
+            /**
+             * counter for handshakes
+             */
+            uint64_t handshake_full;
+            uint64_t handshake_resume;
+            /**
+             * summations of handshake latency in microsecond
+             */
+            uint64_t handshake_full_latency;
+            uint64_t handshake_resume_latency;
         } events;
     } ssl;
 

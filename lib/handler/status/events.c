@@ -28,6 +28,10 @@ struct st_events_status_ctx_t {
     uint64_t ssl_errors;
     uint64_t ssl_alpn_h1;
     uint64_t ssl_alpn_h2;
+    uint64_t ssl_handshake_full;
+    uint64_t ssl_handshake_resume;
+    uint64_t ssl_handshake_full_latency;
+    uint64_t ssl_handshake_resume_latency;
     uint64_t h2_protocol_level_errors[H2O_HTTP2_ERROR_MAX];
     uint64_t h2_read_closed;
     uint64_t h2_write_closed;
@@ -47,6 +51,10 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     esc->ssl_errors += ctx->ssl.events.errors;
     esc->ssl_alpn_h1 += ctx->ssl.events.alpn_h1;
     esc->ssl_alpn_h2 += ctx->ssl.events.alpn_h2;
+    esc->ssl_handshake_full += ctx->ssl.events.handshake_full;
+    esc->ssl_handshake_resume += ctx->ssl.events.handshake_resume;
+    esc->ssl_handshake_full_latency += ctx->ssl.events.handshake_full_latency;
+    esc->ssl_handshake_resume_latency += ctx->ssl.events.handshake_resume_latency;
     for (i = 0; i < H2O_HTTP2_ERROR_MAX; i++) {
         esc->h2_protocol_level_errors[i] += ctx->http2.events.protocol_level_errors[i];
     }
@@ -89,6 +97,10 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                                           " \"ssl-errors\": %" PRIu64 ",\n"
                                           " \"ssl.alpn.h1\": %" PRIu64 ",\n"
                                           " \"ssl.alpn.h2\": %" PRIu64 ",\n"
+                                          " \"ssl.handshake.full\": %" PRIu64 ",\n"
+                                          " \"ssl.handshake.resume\": %" PRIu64 ",\n"
+                                          " \"ssl.handshake.full.latency\": %" PRIu64 ",\n"
+                                          " \"ssl.handshake.resume.latency\": %" PRIu64 ",\n"
                                           " \"http2-errors.protocol\": %" PRIu64 ", \n"
                                           " \"http2-errors.internal\": %" PRIu64 ", \n"
                                           " \"http2-errors.flow-control\": %" PRIu64 ", \n"
@@ -104,7 +116,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                                           " \"http2.read-closed\": %" PRIu64 ", \n"
                                           " \"http2.write-closed\": %" PRIu64 "\n",
                        H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
-                       H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503), esc->ssl_errors, esc->ssl_alpn_h1, esc->ssl_alpn_h2, H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL),
+                       H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503), esc->ssl_errors, esc->ssl_alpn_h1, esc->ssl_alpn_h2, esc->ssl_handshake_full, esc->ssl_handshake_resume, esc->ssl_handshake_full_latency, esc->ssl_handshake_resume_latency,  H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL),
                        H2_AGG_ERR(FLOW_CONTROL), H2_AGG_ERR(SETTINGS_TIMEOUT), H2_AGG_ERR(STREAM_CLOSED), H2_AGG_ERR(FRAME_SIZE),
                        H2_AGG_ERR(REFUSED_STREAM), H2_AGG_ERR(CANCEL), H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT),
                        H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY), esc->h2_read_closed, esc->h2_write_closed);
