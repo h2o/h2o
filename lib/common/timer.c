@@ -111,36 +111,43 @@ static size_t timer_slot(size_t wheel, uint64_t expire)
 uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
 {
     size_t wheel_index, slot_index;
-    uint64_t time_base = w->last_run;
+    uint64_t at = w->last_run;
 
-    for (wheel_index = 0; wheel_index < w->num_wheels; ++wheel_index, time_base >>= H2O_TIMERWHEEL_BITS_PER_WHEEL) {
-        size_t slot_base = time_base & H2O_TIMERWHEEL_SLOTS_MASK;
-        time_base -= slot_base;
-        for (slot_index = slot_base; slot_index < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot_index)
+    for (wheel_index = 0; wheel_index < w->num_wheels; ++wheel_index) {
+        uint64_t at_incr = (uint64_t)1 << (wheel_index * H2O_TIMERWHEEL_BITS_PER_WHEEL);
+        size_t slot_base = timer_slot(wheel_index, at);
+        /* check current wheel from slot_base */
+        for (slot_index = slot_base; slot_index < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot_index) {
             if (!h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index]))
                 goto Found;
+            at += at_incr;
+        }
+        /* handle carry */
+        if (wheel_index + 1 < w->num_wheels) {
+            size_t wi;
+            for (wi = wheel_index + 1; wi < w->num_wheels; ++wi) {
+                size_t si = timer_slot(wi, at);
+                if (!h2o_linklist_is_empty(&w->wheel[wi][si]))
+                    goto Found;
+                if (si != 0)
+                    break;
+            }
+        }
+        /* check current wheel from 0 to slot_base */
         if (slot_base != 0) {
-            if (wheel_index + 1 < w->num_wheels) {
-                slot_index = (time_base >> H2O_TIMERWHEEL_BITS_PER_WHEEL) & H2O_TIMERWHEEL_SLOTS_MASK;
-                if (!h2o_linklist_is_empty(&w->wheel[wheel_index + 1][slot_index])) {
-                    wheel_index += 1;
-                    time_base += H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
-                    goto Found;
-                }
-            }
             for (slot_index = 0; slot_index < slot_base; ++slot_index) {
-                if (!h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index])) {
-                    time_base += H2O_TIMERWHEEL_SLOTS_PER_WHEEL;
+                if (!h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index]))
                     goto Found;
-                }
+                at += at_incr;
             }
+            at += at_incr * (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - slot_base);
         }
     }
 
     /* not found */
     return UINT64_MAX;
 Found:
-    return (time_base + slot_index) << (wheel_index * H2O_TIMERWHEEL_BITS_PER_WHEEL);
+    return at;
 }
 
 static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer)
