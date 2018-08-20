@@ -265,7 +265,7 @@ static void test_get_wake_at(void)
 static void test_overflow(void)
 {
     uint64_t now = 1234, ticks;
-    h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(2, now);
+    h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(3, now);
 
     for (ticks = 0; ticks < INT32_MAX; ticks = ticks < H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL * 3 ? ticks + 1 : ticks * 1.1) {
         h2o_timer_t timer;
