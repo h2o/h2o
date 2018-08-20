@@ -233,6 +233,8 @@
 		7D937303202AC7BA005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D937301202AC7BA005FE6AB /* server_timing.c */; };
 		7D9FA53A1FC323B200189F88 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FA5381FC323AC00189F88 /* channel.c */; };
 		7DC64F541FEB78B000587150 /* sender.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DC64F521FEB78AD00587150 /* sender.c */; };
+		7DE1DB37212B1CC00055F500 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DE1DB35212B1CC00055F500 /* ssl.c */; };
+		7DE1DB38212B1CC00055F500 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DE1DB35212B1CC00055F500 /* ssl.c */; };
 		7DF26B091FBC020600FBE2E7 /* middleware.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DF26B071FBC020600FBE2E7 /* middleware.c */; };
 		D081373A1FD400F4004679DF /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
 		D081373B1FD400F4004679DF /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
@@ -827,6 +829,7 @@
 		7D937301202AC7BA005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
 		7DC64F521FEB78AD00587150 /* sender.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sender.c; sourceTree = "<group>"; };
+		7DE1DB35212B1CC00055F500 /* ssl.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ssl.c; sourceTree = "<group>"; };
 		7DF26B071FBC020600FBE2E7 /* middleware.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = middleware.c; sourceTree = "<group>"; };
 		7DF88EF820761972005DB8D8 /* hiredis_.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hiredis_.h; sourceTree = "<group>"; };
 		D08137381FD400F4004679DF /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
@@ -1704,6 +1707,7 @@
 				10FEF2491D6FC6F600E11B1D /* durations.c */,
 				10C45D531CFE9B300096DB06 /* events.c */,
 				10C45D541CFE9B300096DB06 /* requests.c */,
+				7DE1DB35212B1CC00055F500 /* ssl.c */,
 			);
 			path = status;
 			sourceTree = "<group>";
@@ -2476,6 +2480,7 @@
 				084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */,
 				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
 				08790DE51D82782900A04BC1 /* redis.c in Sources */,
+				7DE1DB37212B1CC00055F500 /* ssl.c in Sources */,
 				106C23011C0544CE00405689 /* errordoc.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
@@ -2622,6 +2627,7 @@
 				E987E5EA1FD7EBD100DE4346 /* dictionary.c in Sources */,
 				E9708B1D1E49BABC0029E0A5 /* aes.c in Sources */,
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
+				7DE1DB38212B1CC00055F500 /* ssl.c in Sources */,
 				7D937303202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E9708B531E52C7EE0029E0A5 /* config.c in Sources */,
 				08F320E11E7A9CBF0038FA5A /* read.c in Sources */,

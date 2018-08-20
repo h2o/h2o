@@ -685,27 +685,25 @@ struct st_h2o_context_t {
     } proxy;
 
     struct {
-        struct {
-            /**
-             * counter for SSL errors
-             */
-            uint64_t errors;
-            /**
-             * counter for selected ALPN protocols
-             */
-            uint64_t alpn_h1;
-            uint64_t alpn_h2;
-            /**
-             * counter for handshakes
-             */
-            uint64_t handshake_full;
-            uint64_t handshake_resume;
-            /**
-             * summations of handshake latency in microsecond
-             */
-            uint64_t handshake_full_latency;
-            uint64_t handshake_resume_latency;
-        } events;
+        /**
+         * counter for SSL errors
+         */
+        uint64_t errors;
+        /**
+         * counter for selected ALPN protocols
+         */
+        uint64_t alpn_h1;
+        uint64_t alpn_h2;
+        /**
+         * counter for handshakes
+         */
+        uint64_t handshake_full;
+        uint64_t handshake_resume;
+        /**
+         * summations of handshake latency in microsecond
+         */
+        uint64_t handshake_full_latency;
+        uint64_t handshake_resume_latency;
     } ssl;
 
     /**
