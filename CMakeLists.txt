@@ -38,6 +38,7 @@ SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
+INCLUDE(ExternalProject)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -596,14 +597,20 @@ SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 
-IF(EXISTS deps/theft/Makefile)
+IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile)
+    ExternalProject_Add(build-theft
+                        SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft"
+                        BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/theft"
+                        CONFIGURE_COMMAND "true"
+                        BUILD_COMMAND cd "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft" && make "BUILD=${CMAKE_CURRENT_BINARY_DIR}/theft"
+                        INSTALL_COMMAND "true")
+    SET_TARGET_PROPERTIES(build-theft PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    LINK_DIRECTORIES("${CMAKE_CURRENT_BINARY_DIR}/theft")
     ADD_EXECUTABLE(t-00property-testing.t t/00prop/prop.c)
-    ADD_CUSTOM_TARGET(build-theft ${CMAKE_MAKE_PROGRAM} WORKING_DIRECTORY deps/theft)
     ADD_DEPENDENCIES(t-00property-testing.t build-theft)
-    TARGET_INCLUDE_DIRECTORIES(t-00property-testing.t BEFORE PUBLIC deps/theft/inc)
+    TARGET_INCLUDE_DIRECTORIES(t-00property-testing.t BEFORE PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/inc")
     TARGET_LINK_LIBRARIES(t-00property-testing.t theft libh2o-evloop ${EXTRA_LIBS})
     SET_TARGET_PROPERTIES(t-00property-testing.t PROPERTIES EXCLUDE_FROM_ALL TRUE)
-    SET_TARGET_PROPERTIES(t-00property-testing.t PROPERTIES LINK_FLAGS "-Ldeps/theft/build")
     SET(OPTIONAL_TEST "t-00property-testing.t")
 ENDIF ()
 
@@ -637,7 +644,6 @@ ADD_CUSTOM_TARGET(doc-publish make -f ../misc/doc.mk publish BINARY_DIR=${CMAKE_
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
     DEPENDS h2o)
 
-INCLUDE(ExternalProject)
 GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} DIRECTORY)
 
 IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
