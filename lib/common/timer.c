@@ -253,7 +253,10 @@ size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
     h2o_linklist_t todo;
     size_t wheel_index = 0, slot_index, slot_start, count = 0;
 
-    assert(w->last_run <= now);
+    /* time might rewind if the clock is reset */
+    if (now < w->last_run)
+        return 0;
+
     h2o_linklist_init_anchor(&todo);
 
 Redo:
