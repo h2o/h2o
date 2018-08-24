@@ -101,7 +101,7 @@ The <code>server-timing</code> header and trailer includes the following metrics
     </tr>
     <tr>
         <td><code>total</code></td>
-        <td><? $access_log_ext_link->('total') ?> / <? $access_log_ext_link->('duration') ?></td>
+        <td><? $access_log_ext_link->('total-time') ?> / <? $access_log_ext_link->('duration') ?></td>
     </tr>
     <tr>
         <td><code>proxy-response</code></td>

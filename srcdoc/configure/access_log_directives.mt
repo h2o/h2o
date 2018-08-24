@@ -102,7 +102,7 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr id="process-time"><td><code>process-time</code><td>time spent after receiving request, before starting to send response
 <tr id="response-time"><td><code>response-time</code><td>time spent sending response
 <tr id="duration"><td><code>duration</code><td>sum of <code>request-total-time</code>, <code>process-time</code>, <code>response-time</code>
-<tr id="total"><td><code>total</code><td>same as <code>duration</code> (since v2.3)
+<tr id="total-time"><td><code>total-time</code><td>same as <code>duration</code> (since v2.3)
 </table>
 <table>
 <caption>Proxy Timings (since v2.3)</caption>
