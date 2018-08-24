@@ -28,8 +28,8 @@ struct st_ssl_status_ctx_t {
     uint64_t alpn_h2;
     uint64_t handshake_full;
     uint64_t handshake_resume;
-    uint64_t handshake_latency_full;
-    uint64_t handshake_latency_resume;
+    uint64_t handshake_accum_time_full;
+    uint64_t handshake_accum_time_resume;
     pthread_mutex_t mutex;
 };
 
@@ -43,8 +43,8 @@ static void ssl_status_per_thread(void *_ssc, h2o_context_t *ctx)
     ssc->alpn_h2 += ctx->ssl.alpn_h2;
     ssc->handshake_full += ctx->ssl.handshake_full;
     ssc->handshake_resume += ctx->ssl.handshake_resume;
-    ssc->handshake_latency_full += ctx->ssl.handshake_latency_full;
-    ssc->handshake_latency_resume += ctx->ssl.handshake_latency_resume;
+    ssc->handshake_accum_time_full += ctx->ssl.handshake_accum_time_full;
+    ssc->handshake_accum_time_resume += ctx->ssl.handshake_accum_time_resume;
 
     pthread_mutex_unlock(&ssc->mutex);
 }
@@ -70,10 +70,10 @@ static h2o_iovec_t ssl_status_final(void *_ssc, h2o_globalconf_t *globalconf, h2
                        " \"ssl.alpn.h2\": %" PRIu64 ",\n"
                        " \"ssl.handshake.full\": %" PRIu64 ",\n"
                        " \"ssl.handshake.resume\": %" PRIu64 ",\n"
-                       " \"ssl.handshake.latency.full\": %" PRIu64 ",\n"
-                       " \"ssl.handshake.latency.resume\": %" PRIu64 "\n",
-                       ssc->alpn_h1, ssc->alpn_h2, ssc->handshake_full, ssc->handshake_resume, ssc->handshake_latency_full,
-                       ssc->handshake_latency_resume);
+                       " \"ssl.handshake.accumulated-time.full\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.accumulated-time.resume\": %" PRIu64 "\n",
+                       ssc->alpn_h1, ssc->alpn_h2, ssc->handshake_full, ssc->handshake_resume, ssc->handshake_accum_time_full,
+                       ssc->handshake_accum_time_resume);
     pthread_mutex_destroy(&ssc->mutex);
     free(ssc);
     return buf;

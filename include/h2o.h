@@ -702,8 +702,8 @@ struct st_h2o_context_t {
         /**
          * summations of handshake latency in microsecond
          */
-        uint64_t handshake_latency_full;
-        uint64_t handshake_latency_resume;
+        uint64_t handshake_accum_time_full;
+        uint64_t handshake_accum_time_resume;
     } ssl;
 
     /**

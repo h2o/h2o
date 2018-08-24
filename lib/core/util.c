@@ -352,13 +352,13 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
 
     /* stats for handshake */
     struct timeval handshake_completed_at = h2o_gettimeofday(data->ctx->ctx->loop);
-    int64_t handshake_latency = h2o_timeval_subtract(&data->connected_at, &handshake_completed_at);
+    int64_t handshake_time = h2o_timeval_subtract(&data->connected_at, &handshake_completed_at);
     if (h2o_socket_get_ssl_session_reused(sock)) {
         ++data->ctx->ctx->ssl.handshake_resume;
-        data->ctx->ctx->ssl.handshake_latency_resume += handshake_latency;
+        data->ctx->ctx->ssl.handshake_accum_time_resume += handshake_time;
     } else {
         ++data->ctx->ctx->ssl.handshake_full;
-        data->ctx->ctx->ssl.handshake_latency_full += handshake_latency;
+        data->ctx->ctx->ssl.handshake_accum_time_full += handshake_time;
     }
 
     h2o_iovec_t proto = h2o_socket_ssl_get_selected_protocol(sock);
