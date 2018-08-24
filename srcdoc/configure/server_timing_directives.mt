@@ -27,7 +27,7 @@ EOT
 ?>
 
 <p>
-If the argument is <code>ON</code>, H2O adds the <code>server-timing</code> header and trailer (if possible) to the response. The header is always added, but the trailer isn't if all of the following conditions are met.
+If the value is <code>ON</code>, H2O adds the <code>server-timing</code> header and trailer (if possible) to the response. The header is always added, but the trailer isn't if all of the following conditions are met.
 <ul>
 <li>The protocol used for the request is HTTP/1.1</li>
 <li><code>transfer encoding</code> of the response is not <code>chunked</code></li>
@@ -43,7 +43,7 @@ If the value is <code>OFF</code>, the feature is disabled.
 </p>
 
 <p>
-The <code>server-timing</code> header and trailer include the following metrics. For now, all metrics have the <code>dur</code> attribute whose values are exactly equal to one of Access Log Extensions with similar names. To get the meaning of each <code>dur</code> attribute, see <a href="https://h2o.examp1e.net/configure/access_log_directives.html#access-log"><code>access-log</code></a>.
+The <code>server-timing</code> header and trailer includes the following metrics. For now, all metrics have the <code>dur</code> attribute whose values are exactly equal to one of the Access Log Extensions with similar names. To get the meaning of each <code>dur</code> attribute, see <a href="https://h2o.examp1e.net/configure/access_log_directives.html#access-log"><code>access-log</code></a>.
 
 <table>
     <caption>Header Metrics</caption>
