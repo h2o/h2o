@@ -142,8 +142,8 @@ EOT
         my $jresp = decode_json($resp);
         is $jresp->{'ssl.handshake.full'}, 1, 'ssl.handshake.full';
         is $jresp->{'ssl.handshake.resume'}, 1, 'ssl.handshake.resume';
-        ok $jresp->{'ssl.handshake.full.latency'}, 'ssl.handshake.full.latency';
-        ok $jresp->{'ssl.handshake.resume.latency'}, 'ssl.handshake.resume.latency';
+        ok $jresp->{'ssl.handshake.accumulated-time.full'}, 'ssl.handshake.accumulated-time.full';
+        ok $jresp->{'ssl.handshake.accumulated-time.resume'}, 'ssl.handshake.accumulated-time.resume';
     };
 };
 
