@@ -355,10 +355,10 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     int64_t handshake_latency = h2o_timeval_subtract(&data->connected_at, &handshake_completed_at);
     if (h2o_socket_get_ssl_session_reused(sock)) {
         ++data->ctx->ctx->ssl.handshake_resume;
-        data->ctx->ctx->ssl.handshake_resume_latency += handshake_latency;
+        data->ctx->ctx->ssl.handshake_latency_resume += handshake_latency;
     } else {
         ++data->ctx->ctx->ssl.handshake_full;
-        data->ctx->ctx->ssl.handshake_full_latency += handshake_latency;
+        data->ctx->ctx->ssl.handshake_latency_full += handshake_latency;
     }
 
     h2o_iovec_t proto = h2o_socket_ssl_get_selected_protocol(sock);
