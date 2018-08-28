@@ -396,6 +396,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/socket.c
     lib/common/string.c
     lib/common/time.c
+    lib/common/timer.c
     lib/common/url.c
     lib/core/headers.c
     lib/core/proxy.c

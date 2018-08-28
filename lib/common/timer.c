@@ -29,6 +29,10 @@
 #define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
 #define H2O_TIMERWHEEL_MAX_TIMER(num_wheels) ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * (num_wheels))) - 1)
 
+#ifndef H2O_TIMER_VALIDATE
+#define H2O_TIMER_VALIDATE 0
+#endif
+
 struct st_h2o_timer_wheel_t {
     /**
      * the last time h2o_timer_run_wheel was called
@@ -108,8 +112,77 @@ static size_t timer_slot(size_t wheel, uint64_t expire)
     return H2O_TIMERWHEEL_SLOTS_MASK & (expire >> (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL));
 }
 
+/**
+ * returned at_max is inclusive
+ */
+static void calc_expire_for_slot(size_t num_wheels, uint64_t last_run, size_t wheel_index, size_t slot_index, uint64_t *at_min,
+                                 uint64_t *at_max)
+{
+#define SPAN(i) ((uint64_t)1 << (H2O_TIMERWHEEL_BITS_PER_WHEEL * (i))) /* returns the span of time for given wheel index */
+
+    int adj_at_min = 0;
+
+    *at_min = (last_run & ~(SPAN(wheel_index + 1) - 1)) + slot_index * SPAN(wheel_index);
+
+    if (wheel_index == 0) {
+        if (*at_min < last_run)
+            adj_at_min = 1;
+    } else {
+        if (*at_min <= last_run)
+            adj_at_min = 1;
+    }
+    if (adj_at_min)
+        *at_min += SPAN(wheel_index + 1);
+
+    if (wheel_index == num_wheels - 1) {
+        *at_max = UINT64_MAX;
+    } else {
+        *at_max = *at_min + SPAN(wheel_index) - 1;
+    }
+
+#undef SPAN
+}
+
+static int validate_slot(h2o_timer_wheel_t *wheel, size_t wheel_index, size_t slot_index)
+{
+    h2o_linklist_t *anchor = &wheel->wheel[wheel_index][slot_index], *link;
+    uint64_t at_min, at_max;
+    int success = 1;
+
+    calc_expire_for_slot(wheel->num_wheels, wheel->last_run, wheel_index, slot_index, &at_min, &at_max);
+
+    for (link = anchor->next; link != anchor; link = link->next) {
+        h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, link);
+        if (!(at_min <= timer->expire_at && timer->expire_at <= at_max)) {
+            fprintf(stderr, "invalid entry at %zu,%zu; last_run=%" PRIu64 ", expire_at=%" PRIu64 " (expected range: [%" PRIu64
+                            ",%" PRIu64 "])\n",
+                    wheel_index, slot_index, wheel->last_run, timer->expire_at, at_min, at_max);
+            success = 0;
+        }
+    }
+
+    return success;
+}
+
+int h2o_timer_validate_wheel(h2o_timer_wheel_t *wheel)
+{
+    size_t wheel_index, slot_index;
+    int success = 1;
+
+    for (wheel_index = 0; wheel_index < wheel->num_wheels; ++wheel_index)
+        for (slot_index = 0; slot_index < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot_index)
+            if (!validate_slot(wheel, wheel_index, slot_index))
+                success = 0;
+
+    return success;
+}
+
 uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *w)
 {
+#if H2O_TIMER_VALIDATE
+    assert(h2o_timer_validate_wheel(w));
+#endif
+
     size_t wheel_index, slot_index;
     uint64_t at = w->last_run;
 
@@ -164,6 +237,15 @@ static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer)
 
     wid = timer_wheel(w->num_wheels, wheel_abs - w->last_run);
     sid = timer_slot(wid, wheel_abs);
+    {
+        uint64_t at_min, at_max;
+        calc_expire_for_slot(w->num_wheels, w->last_run, wid, sid, &at_min, &at_max);
+        if (!(at_min <= timer->expire_at && timer->expire_at <= at_max)) {
+            fprintf(stderr, "%s:last_run=%" PRIu64 ",expire_at=%" PRIu64 ",wid=%zu,sid=%zu,at_min=%" PRIu64 ",at_max=%" PRIu64 "\n",
+                    __FUNCTION__, w->last_run, timer->expire_at, wid, sid, at_min, at_max);
+            abort();
+        }
+    }
     slot = &w->wheel[wid][sid];
 
     WHEEL_DEBUG("timer(expire_at %" PRIu64 ") added: wheel %d, slot %d, now:%" PRIu64 "\n", abs_expire, wid, sid, w->last_run);
@@ -212,25 +294,20 @@ void h2o_timer_destroy_wheel(h2o_timer_wheel_t *w)
  * cascading happens when the lower wheel wraps around and ticks the next
  * higher wheel
  */
-static int cascade_one(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
+static void cascade_one(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
 {
     assert(wheel > 0);
 
     WHEEL_DEBUG("cascade timers on wheel %d slot %d\n", wheel, slot);
     h2o_linklist_t *s = &w->wheel[wheel][slot];
 
-    if (h2o_linklist_is_empty(s))
-        return 0;
-
-    do {
+    while (!h2o_linklist_is_empty(s)) {
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
         assert(w->last_run <= entry->expire_at);
         h2o_linklist_unlink(&entry->_link);
         link_timer(w, entry);
         assert(&entry->_link != s->prev); /* detect the entry reassigned to the same slot */
-    } while (!h2o_linklist_is_empty(s));
-
-    return 1;
+    }
 }
 
 static int cascade_all(h2o_timer_wheel_t *w, size_t wheel)
@@ -239,8 +316,9 @@ static int cascade_all(h2o_timer_wheel_t *w, size_t wheel)
 
     for (; wheel < w->num_wheels; ++wheel) {
         size_t slot = timer_slot(wheel, w->last_run);
-        if (cascade_one(w, wheel, slot))
+        if (!h2o_linklist_is_empty(&w->wheel[wheel][slot]))
             cascaded = 1;
+        cascade_one(w, wheel, slot);
         if (slot != 0)
             break;
     }
@@ -252,6 +330,11 @@ size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
 {
     h2o_linklist_t todo;
     size_t wheel_index = 0, slot_index, slot_start, count = 0;
+
+#if H2O_TIMER_VALIDATE
+    assert(h2o_timer_validate_wheel(w));
+#endif
+
 
     /* time might rewind if the clock is reset */
     if (now < w->last_run)
@@ -269,7 +352,9 @@ Redo:
                 goto Collected;
             ++w->last_run;
         } else {
-            if (cascade_one(w, wheel_index, slot_index)) {
+            if (!h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index])) {
+                cascade_one(w, wheel_index, slot_index);
+                assert(h2o_linklist_is_empty(&w->wheel[wheel_index][slot_index]));
                 wheel_index = 0;
                 goto Redo;
             }
@@ -307,6 +392,10 @@ Collected: /* expiration processing */
         } while (!h2o_linklist_is_empty(&todo));
         h2o_linklist_insert_list(&todo, w->wheel[0] + timer_slot(0, now));
     }
+
+#if H2O_TIMER_VALIDATE
+    assert(h2o_timer_validate_wheel(w));
+#endif
 
     return count;
 }

@@ -22,7 +22,7 @@
 #include <inttypes.h>
 #include <sys/mman.h>
 #include "../../test.h"
-#include "../../../../include/h2o/timer.h"
+#include "../../../../lib/common/timer.c"
 
 static int invokes = 0;
 static void my_callback(h2o_timer_t *timer)
@@ -35,6 +35,37 @@ static int rseed = 13;
 static inline int lcg_rand()
 {
     return rseed = (rseed * 1103515245 + 12345) & RAND_MAX;
+}
+
+static void test_slot_calc(void)
+{
+    static const size_t num_wheels = 3;
+    uint64_t last_run, delta;
+
+    for (last_run = 0; last_run < 2 * (1 << (H2O_TIMERWHEEL_BITS_PER_WHEEL * num_wheels)); ++last_run) {
+        delta = 0;
+        while (delta < 1 << (H2O_TIMERWHEEL_BITS_PER_WHEEL * num_wheels)) {
+            size_t wi, si;
+            uint64_t at_min, at_max;
+            wi = timer_wheel(num_wheels, delta);
+            si = timer_slot(wi, last_run + delta);
+            calc_expire_for_slot(num_wheels, last_run, wi, si, &at_min, &at_max);
+            if (!(at_min <= last_run + delta && last_run + delta <= at_max)) {
+                fprintf(stderr, "%s:last_run=%" PRIu64 ",delta=%" PRIu64 "\n", __FUNCTION__, last_run, delta);
+                ok(0);
+                return;
+            }
+            if ((delta & H2O_TIMERWHEEL_SLOTS_MASK) < 2) {
+                ++delta;
+            } else if ((delta & H2O_TIMERWHEEL_SLOTS_MASK) < H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 2) {
+                delta = (delta & ~(uint64_t)H2O_TIMERWHEEL_SLOTS_MASK) | (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 2);
+            } else {
+                ++delta;
+            }
+        }
+    }
+
+    ok(1);
 }
 
 #define N 14000
@@ -267,7 +298,8 @@ static void test_overflow(void)
     uint64_t now = 1234, ticks;
     h2o_timer_wheel_t *wheel = h2o_timer_create_wheel(3, now);
 
-    for (ticks = 0; ticks < INT32_MAX; ticks = ticks < H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL * 3 ? ticks + 1 : ticks * 1.1) {
+    for (ticks = 0; ticks < INT32_MAX;
+         ticks = ticks < H2O_TIMERWHEEL_SLOTS_PER_WHEEL * H2O_TIMERWHEEL_SLOTS_PER_WHEEL * 3 ? ticks + 1 : ticks * 1.1) {
         h2o_timer_t timer;
         uint64_t expected_at = now + ticks;
         h2o_timer_init(&timer, my_callback);
@@ -289,6 +321,7 @@ static void test_overflow(void)
 
 void test_lib__common__timerwheel_c()
 {
+    subtest("slot calculation", test_slot_calc);
     subtest("add fixed timers", test_add_fixed_timers);
     subtest("add random timers", test_add_rand_timers);
     subtest("del fixed timers", test_del_timers);

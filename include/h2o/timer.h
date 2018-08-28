@@ -69,6 +69,10 @@ void h2o_timer_destroy_wheel(h2o_timer_wheel_t *wheel);
  */
 void h2o_timer_show_wheel(h2o_timer_wheel_t *wheel);
 /**
+ * validates the timerwheel and returns the result as a boolean value
+ */
+int h2o_timer_validate_wheel(h2o_timer_wheel_t *wheel);
+/**
  * find out the time ramaining until the next timer triggers
  */
 uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *wheel);
