@@ -28,13 +28,13 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
     struct test_input *input = input_;
     uint64_t i;
     size_t events_run;
-    h2o_timer_wheel_t *w;
+    h2o_timer_context_t *w;
     size_t slices = 1;
     uint64_t wake_time;
     struct test_timer t;
 
-    w = h2o_timer_create_wheel(6, input->init_time);
-    h2o_timer_run_wheel(w, input->init_time);
+    w = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(w, input->init_time);
     wake_time = h2o_timer_get_wake_at(w);
     if (wake_time != UINT64_MAX) {
         return THEFT_TRIAL_FAIL;
@@ -51,7 +51,7 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
 
     slices = input->second_time / 100;
     for (i = input->init_time; i < input->first_time; i += theft_random_choice(theft, slices)) {
-        events_run = h2o_timer_run_wheel(w, i);
+        events_run = h2o_timer_run(w, i);
         if (events_run != 0)
             return THEFT_TRIAL_FAIL;
         if (t.called != 0)
@@ -65,7 +65,7 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
         }
     }
 
-    events_run = h2o_timer_run_wheel(w, i);
+    events_run = h2o_timer_run(w, i);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;
@@ -78,22 +78,22 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
     if (wake_time != UINT64_MAX) {
         return THEFT_TRIAL_FAIL;
     }
-    h2o_timer_destroy_wheel(w);
+    h2o_timer_destroy(w);
 }
 
 static enum theft_trial_res prop_inserted_timer_should_run_at_expiry(struct theft *theft, void *input_)
 {
     struct test_input *input = input_;
     size_t events_run;
-    h2o_timer_wheel_t *w;
-    w = h2o_timer_create_wheel(6, input->init_time);
-    h2o_timer_run_wheel(w, input->init_time);
+    h2o_timer_context_t *w;
+    w = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(w, input->init_time);
 
     struct test_timer t;
     h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
     h2o_timer_link_abs(w, &t.t, input->first_time);
-    events_run = h2o_timer_run_wheel(w, input->second_time);
+    events_run = h2o_timer_run(w, input->second_time);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;
@@ -101,7 +101,7 @@ static enum theft_trial_res prop_inserted_timer_should_run_at_expiry(struct thef
         return THEFT_TRIAL_FAIL;
     if (h2o_timer_get_wake_at(w) != UINT64_MAX)
         return THEFT_TRIAL_FAIL;
-    h2o_timer_destroy_wheel(w);
+    h2o_timer_destroy_context(w);
     return THEFT_TRIAL_PASS;
 }
 
@@ -109,15 +109,15 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_expiry(str
 {
     struct test_input *input = input_;
     size_t events_run;
-    h2o_timer_wheel_t *w;
-    w = h2o_timer_create_wheel(6, input->init_time);
-    h2o_timer_run_wheel(w, input->init_time);
+    h2o_timer_context_t *w;
+    w = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(w, input->init_time);
 
     struct test_timer t;
     h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
     h2o_timer_link_abs(w, &t.t, input->second_time);
-    events_run = h2o_timer_run_wheel(w, input->first_time);
+    events_run = h2o_timer_run(w, input->first_time);
 
     if (events_run != 0)
         return THEFT_TRIAL_FAIL;
@@ -125,7 +125,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_expiry(str
         return THEFT_TRIAL_FAIL;
     if (h2o_timer_get_wake_at(w) == UINT64_MAX)
         return THEFT_TRIAL_FAIL;
-    h2o_timer_destroy_wheel(w);
+    h2o_timer_destroy_context(w);
     return THEFT_TRIAL_PASS;
 }
 
@@ -134,9 +134,9 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
     struct test_input *input = input_;
     uint64_t i;
     size_t events_run;
-    h2o_timer_wheel_t *w;
-    w = h2o_timer_create_wheel(6, input->init_time);
-    h2o_timer_run_wheel(w, input->init_time);
+    h2o_timer_context_t *w;
+    w = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(w, input->init_time);
     size_t slices = 1;
 
     struct test_timer t;
@@ -146,7 +146,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
 
     slices = input->second_time / 100;
     for (i = input->init_time; i < input->first_time; i += theft_random_choice(theft, slices)) {
-        events_run = h2o_timer_run_wheel(w, i);
+        events_run = h2o_timer_run(w, i);
         if (events_run != 0)
             return THEFT_TRIAL_FAIL;
         if (t.called != 0)
@@ -155,7 +155,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
             return THEFT_TRIAL_FAIL;
     }
 
-    events_run = h2o_timer_run_wheel(w, i);
+    events_run = h2o_timer_run(w, i);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;
@@ -163,7 +163,7 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
         return THEFT_TRIAL_FAIL;
     if (h2o_timer_get_wake_at(w) != UINT64_MAX)
         return THEFT_TRIAL_FAIL;
-    h2o_timer_destroy_wheel(w);
+    h2o_timer_destroy_context(w);
     return THEFT_TRIAL_PASS;
 }
 
