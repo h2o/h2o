@@ -600,10 +600,23 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 
     /* run the pending callbacks */
     run_pending(loop);
-    h2o_timer_run(loop->_timeouts, loop->_now);
-    run_pending(loop);
 
-    /* assert h2o_timer_run_wheel has called run_pending */
+    /* run the expired timers at the same time invoking pending callbacks for every timer callback. This is an locality
+     * optimization; handles things like timeout -> write -> on_write_complete for each object. */
+    while (1) {
+        h2o_linklist_t expired;
+        h2o_linklist_init_anchor(&expired);
+        h2o_timer_get_expired(loop->_timeouts, loop->_now, &expired);
+        if (h2o_linklist_is_empty(&expired))
+            break;
+        do {
+            h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, expired.next);
+            h2o_linklist_unlink(&timer->_link);
+            timer->cb(timer);
+            run_pending(loop);
+        } while (!h2o_linklist_is_empty(&expired));
+    }
+
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
 

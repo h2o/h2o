@@ -76,7 +76,13 @@ int h2o_timer_validate_context(h2o_timer_context_t *ctx);
  * find out the time ramaining until the next timer triggers
  */
 uint64_t h2o_timer_get_wake_at(h2o_timer_context_t *ctx);
-
+/**
+ * collects the expired entries and returns them back to `expired`. Application must call h2o_timer_run to fire them.
+ */
+void h2o_timer_get_expired(h2o_timer_context_t *ctx, uint64_t now, h2o_linklist_t *expired);
+/**
+ * runs the expired timers
+ */
 size_t h2o_timer_run(h2o_timer_context_t *ctx, uint64_t now);
 
 /* inline definitions */

@@ -300,10 +300,10 @@ static int cascade_all(h2o_timer_context_t *ctx, size_t wheel)
     return cascaded;
 }
 
-size_t h2o_timer_run(h2o_timer_context_t *ctx, uint64_t now)
+void h2o_timer_get_expired(h2o_timer_context_t *ctx, uint64_t now, h2o_linklist_t *expired)
 {
     h2o_linklist_t todo;
-    size_t wheel = 0, slot, slot_start, count = 0;
+    size_t wheel = 0, slot, slot_start;
 
 #if H2O_TIMER_VALIDATE
     assert(h2o_timer_validate_wheel(w));
@@ -312,7 +312,7 @@ size_t h2o_timer_run(h2o_timer_context_t *ctx, uint64_t now)
     /* time might rewind if the clock is reset */
     if (now < ctx->last_run) {
         fprintf(stderr, "%s:detected rewind; last_run=%" PRIu64 ", now=%" PRIu64 "\n", __FUNCTION__, ctx->last_run, now);
-        return 0;
+        return;
     }
 
     h2o_linklist_init_anchor(&todo);
@@ -359,8 +359,7 @@ Collected: /* expiration processing */
             /* remove this timer from todo list */
             h2o_linklist_unlink(&timer->_link);
             if (timer->expire_at <= now) {
-                timer->cb(timer);
-                count++;
+                h2o_linklist_insert(expired, &timer->_link);
             } else {
                 link_timer(ctx, timer);
             }
@@ -371,6 +370,21 @@ Collected: /* expiration processing */
 #if H2O_TIMER_VALIDATE
     assert(h2o_timer_validate_wheel(w));
 #endif
+}
+
+size_t h2o_timer_run(h2o_timer_context_t *ctx, uint64_t now)
+{
+    h2o_linklist_t expired;
+    size_t count = 0;
+
+    h2o_linklist_init_anchor(&expired);
+    h2o_timer_get_expired(ctx, now, &expired);
+    while (!h2o_linklist_is_empty(&expired)) {
+        h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, expired.next);
+        h2o_linklist_unlink(&timer->_link);
+        timer->cb(timer);
+        ++count;
+    }
 
     return count;
 }
