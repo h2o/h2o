@@ -28,14 +28,14 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
     struct test_input *input = input_;
     uint64_t i;
     size_t events_run;
-    h2o_timer_context_t *w;
+    h2o_timer_context_t *ctx;
     size_t slices = 1;
     uint64_t wake_time;
     struct test_timer t;
 
-    w = h2o_timer_create_context(6, input->init_time);
-    h2o_timer_run(w, input->init_time);
-    wake_time = h2o_timer_get_wake_at(w);
+    ctx = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(ctx, input->init_time);
+    wake_time = h2o_timer_get_wake_at(ctx);
     if (wake_time != UINT64_MAX) {
         return THEFT_TRIAL_FAIL;
     }
@@ -43,65 +43,65 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
     h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
 
-    h2o_timer_link_abs(w, &t.t, input->first_time);
-    wake_time = h2o_timer_get_wake_at(w);
+    h2o_timer_link_abs(ctx, &t.t, input->first_time);
+    wake_time = h2o_timer_get_wake_at(ctx);
     if (wake_time > input->first_time) {
         return THEFT_TRIAL_FAIL;
     }
 
     slices = input->second_time / 100;
     for (i = input->init_time; i < input->first_time; i += theft_random_choice(theft, slices)) {
-        events_run = h2o_timer_run(w, i);
+        events_run = h2o_timer_run(ctx, i);
         if (events_run != 0)
             return THEFT_TRIAL_FAIL;
         if (t.called != 0)
             return THEFT_TRIAL_FAIL;
-        if (h2o_timer_get_wake_at(w) == UINT64_MAX)
+        if (h2o_timer_get_wake_at(ctx) == UINT64_MAX)
             return THEFT_TRIAL_FAIL;
 
-        wake_time = h2o_timer_get_wake_at(w);
+        wake_time = h2o_timer_get_wake_at(ctx);
         if (wake_time > input->first_time) {
             return THEFT_TRIAL_FAIL;
         }
     }
 
-    events_run = h2o_timer_run(w, i);
+    events_run = h2o_timer_run(ctx, i);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;
     if (t.called != 1)
         return THEFT_TRIAL_FAIL;
-    if (h2o_timer_get_wake_at(w) != UINT64_MAX)
+    if (h2o_timer_get_wake_at(ctx) != UINT64_MAX)
         return THEFT_TRIAL_FAIL;
     return THEFT_TRIAL_PASS;
-    wake_time = h2o_timer_get_wake_at(w);
+    wake_time = h2o_timer_get_wake_at(ctx);
     if (wake_time != UINT64_MAX) {
         return THEFT_TRIAL_FAIL;
     }
-    h2o_timer_destroy(w);
+    h2o_timer_destroy(ctx);
 }
 
 static enum theft_trial_res prop_inserted_timer_should_run_at_expiry(struct theft *theft, void *input_)
 {
     struct test_input *input = input_;
     size_t events_run;
-    h2o_timer_context_t *w;
-    w = h2o_timer_create_context(6, input->init_time);
-    h2o_timer_run(w, input->init_time);
+    h2o_timer_context_t *ctx;
+    ctx = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(ctx, input->init_time);
 
     struct test_timer t;
     h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
-    h2o_timer_link_abs(w, &t.t, input->first_time);
-    events_run = h2o_timer_run(w, input->second_time);
+    h2o_timer_link_abs(ctx, &t.t, input->first_time);
+    events_run = h2o_timer_run(ctx, input->second_time);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;
     if (t.called != 1)
         return THEFT_TRIAL_FAIL;
-    if (h2o_timer_get_wake_at(w) != UINT64_MAX)
+    if (h2o_timer_get_wake_at(ctx) != UINT64_MAX)
         return THEFT_TRIAL_FAIL;
-    h2o_timer_destroy_context(w);
+    h2o_timer_destroy_context(ctx);
     return THEFT_TRIAL_PASS;
 }
 
@@ -109,23 +109,23 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_expiry(str
 {
     struct test_input *input = input_;
     size_t events_run;
-    h2o_timer_context_t *w;
-    w = h2o_timer_create_context(6, input->init_time);
-    h2o_timer_run(w, input->init_time);
+    h2o_timer_context_t *ctx;
+    ctx = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(ctx, input->init_time);
 
     struct test_timer t;
     h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
-    h2o_timer_link_abs(w, &t.t, input->second_time);
-    events_run = h2o_timer_run(w, input->first_time);
+    h2o_timer_link_abs(ctx, &t.t, input->second_time);
+    events_run = h2o_timer_run(ctx, input->first_time);
 
     if (events_run != 0)
         return THEFT_TRIAL_FAIL;
     if (t.called != 0)
         return THEFT_TRIAL_FAIL;
-    if (h2o_timer_get_wake_at(w) == UINT64_MAX)
+    if (h2o_timer_get_wake_at(ctx) == UINT64_MAX)
         return THEFT_TRIAL_FAIL;
-    h2o_timer_destroy_context(w);
+    h2o_timer_destroy_context(ctx);
     return THEFT_TRIAL_PASS;
 }
 
@@ -134,36 +134,36 @@ static enum theft_trial_res prop_inserted_timer_should_not_run_before_reaching_e
     struct test_input *input = input_;
     uint64_t i;
     size_t events_run;
-    h2o_timer_context_t *w;
-    w = h2o_timer_create_context(6, input->init_time);
-    h2o_timer_run(w, input->init_time);
+    h2o_timer_context_t *ctx;
+    ctx = h2o_timer_create_context(6, input->init_time);
+    h2o_timer_run(ctx, input->init_time);
     size_t slices = 1;
 
     struct test_timer t;
     h2o_timer_init(&t.t, timer_cb);
     t.called = 0;
-    h2o_timer_link_abs(w, &t.t, input->first_time);
+    h2o_timer_link_abs(ctx, &t.t, input->first_time);
 
     slices = input->second_time / 100;
     for (i = input->init_time; i < input->first_time; i += theft_random_choice(theft, slices)) {
-        events_run = h2o_timer_run(w, i);
+        events_run = h2o_timer_run(ctx, i);
         if (events_run != 0)
             return THEFT_TRIAL_FAIL;
         if (t.called != 0)
             return THEFT_TRIAL_FAIL;
-        if (h2o_timer_get_wake_at(w) == UINT64_MAX)
+        if (h2o_timer_get_wake_at(ctx) == UINT64_MAX)
             return THEFT_TRIAL_FAIL;
     }
 
-    events_run = h2o_timer_run(w, i);
+    events_run = h2o_timer_run(ctx, i);
 
     if (events_run != 1)
         return THEFT_TRIAL_FAIL;
     if (t.called != 1)
         return THEFT_TRIAL_FAIL;
-    if (h2o_timer_get_wake_at(w) != UINT64_MAX)
+    if (h2o_timer_get_wake_at(ctx) != UINT64_MAX)
         return THEFT_TRIAL_FAIL;
-    h2o_timer_destroy_context(w);
+    h2o_timer_destroy_context(ctx);
     return THEFT_TRIAL_PASS;
 }
 
