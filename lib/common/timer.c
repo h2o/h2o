@@ -50,46 +50,19 @@ struct st_h2o_timer_wheel_t {
     h2o_linklist_t wheel[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
 };
 
-/* debug macros and functions */
-//#define WANT_DEBUG
-#ifdef WANT_DEBUG
-#define WHEEL_DEBUG(fmt, args...)                                                                                                  \
-    do {                                                                                                                           \
-        fprintf(stderr, "[%s:%d %s]:" fmt, __FILE__, __LINE__, __FUNCTION__, ##args);                                              \
-    } while (0)
-
-#else
-#define WHEEL_DEBUG(...)
-#endif
-
-static void h2o_timer_show(h2o_timer_t *timer, int wid, int sid)
+void h2o_timer_dump_wheel(h2o_timer_wheel_t *w)
 {
-    WHEEL_DEBUG("timer with expire_at %" PRIu64 ", wid: %d, sid: %d\n", timer->expire_at, wid, sid);
-#ifdef TW_DEBUG_VERBOSE
-    WHEEL_DEBUG("_link.next: %p\n", timer->_link.next);
-    WHEEL_DEBUG("_link.prev: %p\n", timer->_link.prev);
-    WHEEL_DEBUG("callback: %p\n", timer->cb);
-#endif
-}
+    size_t wheel, slot;
 
-static void h2o_timer_slot_show_wheel(h2o_linklist_t *slot, int wid, int sid)
-{
-    h2o_linklist_t *node;
-
-    for (node = slot->next; node != slot; node = node->next) {
-        h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, node);
-        h2o_timer_show(entry, wid, sid);
-    }
-}
-
-void h2o_timer_show_wheel(h2o_timer_wheel_t *w)
-{
-    int i, slot;
-
-    for (i = 0; i < w->num_wheels; i++) {
+    fprintf(stderr, "%s(%p):\n", __FUNCTION__, w);
+    for (wheel = 0; wheel < w->num_wheels; wheel++) {
         for (slot = 0; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; slot++) {
-            h2o_linklist_t *s = &(w->wheel[i][slot]);
-            h2o_timer_slot_show_wheel(s, i, slot);
+            h2o_linklist_t *anchor = &w->wheel[wheel][slot], *l;
+            for (l = anchor->next; l != anchor; l = l->next) {
+                h2o_timer_t *t = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, l);
+                fprintf(stderr, "  - {wheel: %zu, slot: %zu, expires:%" PRIu64 ", self: %p, cb:%p}\n", wheel, slot, t->expire_at, t,
+                        t->cb);
+            }
         }
     }
 }
@@ -248,8 +221,6 @@ static void link_timer(h2o_timer_wheel_t *w, h2o_timer_t *timer)
     }
     slot = &w->wheel[wid][sid];
 
-    WHEEL_DEBUG("timer(expire_at %" PRIu64 ") added: wheel %d, slot %d, now:%" PRIu64 "\n", abs_expire, wid, sid, w->last_run);
-
     h2o_linklist_insert(slot, &timer->_link);
 }
 
@@ -298,7 +269,6 @@ static void cascade_one(h2o_timer_wheel_t *w, size_t wheel, size_t slot)
 {
     assert(wheel > 0);
 
-    WHEEL_DEBUG("cascade timers on wheel %d slot %d\n", wheel, slot);
     h2o_linklist_t *s = &w->wheel[wheel][slot];
 
     while (!h2o_linklist_is_empty(s)) {
@@ -334,7 +304,6 @@ size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now)
 #if H2O_TIMER_VALIDATE
     assert(h2o_timer_validate_wheel(w));
 #endif
-
 
     /* time might rewind if the clock is reset */
     if (now < w->last_run)

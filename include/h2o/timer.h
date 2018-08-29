@@ -67,7 +67,7 @@ void h2o_timer_destroy_wheel(h2o_timer_wheel_t *wheel);
 /**
  * display the contents of the timerwheel
  */
-void h2o_timer_show_wheel(h2o_timer_wheel_t *wheel);
+void h2o_timer_dump_wheel(h2o_timer_wheel_t *wheel);
 /**
  * validates the timerwheel and returns the result as a boolean value
  */

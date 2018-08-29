@@ -24,6 +24,12 @@
 #include "../../test.h"
 #include "../../../../lib/common/timer.c"
 
+#if 0
+#define DUMP_WHEEL(w) h2o_timer_dump_wheel(w)
+#else
+#define DUMP_WHEEL(w) ((void)w)
+#endif
+
 static int invokes = 0;
 static void my_callback(h2o_timer_t *timer)
 {
@@ -85,7 +91,7 @@ void test_add_fixed_timers()
 
     /* run the wheel */
     ok(h2o_timer_run_wheel(testwheel, 139) == 132);
-    h2o_timer_show_wheel(testwheel);
+    DUMP_WHEEL(testwheel);
 
     h2o_timer_destroy_wheel(testwheel);
 }
@@ -111,9 +117,9 @@ void test_del_timers()
 
     /* run the wheel */
     ok(h2o_timer_run_wheel(testwheel, N + 6) == 0);
-    h2o_timer_show_wheel(testwheel);
+    DUMP_WHEEL(testwheel);
     ok(h2o_timer_run_wheel(testwheel, N + 7) == 1);
-    h2o_timer_show_wheel(testwheel);
+    DUMP_WHEEL(testwheel);
 
     h2o_timer_destroy_wheel(testwheel);
 }
@@ -136,7 +142,7 @@ void test_add_rand_timers()
     /* run the wheel: the timers has a max expiry N-1 + abs_wtime  */
     ok(h2o_timer_run_wheel(testwheel, N - 1 + abs_wtime) == N);
     ok(invokes - start == N);
-    h2o_timer_show_wheel(testwheel);
+    DUMP_WHEEL(testwheel);
 
     h2o_timer_destroy_wheel(testwheel);
 }
@@ -155,17 +161,17 @@ void test_invalid_timer()
     for (i = 0; i < NTIMERS; i++) {
         arr[i].cb = my_callback;
         h2o_timer_link_abs(testwheel, &arr[i], expiry);
-        h2o_timer_show_wheel(testwheel);
+        DUMP_WHEEL(testwheel);
         expiry++;
     }
 
-    h2o_timer_show_wheel(testwheel);
     expiry = 11;
     for (i = 0; i < NTIMERS; i++) {
-        h2o_timer_show_wheel(testwheel);
+        DUMP_WHEEL(testwheel);
         size_t ret = h2o_timer_run_wheel(testwheel, expiry);
         if (ret != 1) {
-            h2o_timer_show_wheel(testwheel);
+            fprintf(stderr, "%s:%d:%d\n", __FUNCTION__, __LINE__, i);
+            h2o_timer_dump_wheel(testwheel);
             abort();
         }
         expiry++;
