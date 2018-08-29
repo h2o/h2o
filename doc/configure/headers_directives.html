@@ -60,7 +60,10 @@ Headers Directives
 
 
 <p>
-This document describes the configuration directives of the headers handler.
+Headers directives can be used to manipulate response headers.
+</p>
+<p>
+This document describes the following configuration directives as well as <a href="configure/headers_directives.html#timing-of-application">when they are applied</a>.
 </p>
 
 <ul>
@@ -214,6 +217,41 @@ Removes headers with given name.
 </dl>
 
 
+
+<h3 id="timing-of-application">Timing of Application</h3>
+
+<p>
+Starting from v2.3, it is possible to specify the timing when the headers directives is applied.
+All of the header directives can take either of the following two forms.
+</p>
+
+<div class="example">
+<div class="caption">Example. Scalar Form</div>
+<pre><code>header.add: &quot;X-Foo: FOO&quot;:
+</code></pre>
+</div>
+
+
+<div class="example">
+<div class="caption">Example. Mapping Form</div>
+<pre><code>header.add:
+  header: &quot;X-Foo: FOO&quot;:
+  when: final
+</code></pre>
+</div>
+
+
+<p>
+The above two are identical.
+</p>
+<p>
+<code>when</code> can be either of: <code>final</code>, <code>early</code>, <code>all</code>. Default is <code>final</code>.
+</p>
+<p>
+If the value is <code>final</code>, the header directive is only applied to final (i.e. non-1xx) response.
+If the value is <code>early</code>, it's only applied to 1xx informational responses.
+If <code>all</code> is set, it's applied to both of final and 1xx responses.
+</p>
 
 
 
