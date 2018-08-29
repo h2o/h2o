@@ -237,6 +237,20 @@
 		D08137421FD408C2004679DF /* balancer.h in Headers */ = {isa = PBXBuildFile; fileRef = D08137411FD408C1004679DF /* balancer.h */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
+		E918FC322136583F00CCB252 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
+		E918FC8721365AB700CCB252 /* theft_autoshrink.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC542136598400CCB252 /* theft_autoshrink.c */; };
+		E918FC8821365AB700CCB252 /* theft_aux_builtin.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC452136598300CCB252 /* theft_aux_builtin.c */; };
+		E918FC8921365AB700CCB252 /* theft_aux.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC4B2136598300CCB252 /* theft_aux.c */; };
+		E918FC8A21365AB700CCB252 /* theft_bloom.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC532136598400CCB252 /* theft_bloom.c */; };
+		E918FC8B21365AB700CCB252 /* theft_call.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC4F2136598400CCB252 /* theft_call.c */; };
+		E918FC8C21365AB700CCB252 /* theft_hash.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC4D2136598400CCB252 /* theft_hash.c */; };
+		E918FC8D21365AB700CCB252 /* theft_random.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC462136598300CCB252 /* theft_random.c */; };
+		E918FC8E21365AB700CCB252 /* theft_rng.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC502136598400CCB252 /* theft_rng.c */; };
+		E918FC8F21365AB700CCB252 /* theft_run.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC512136598400CCB252 /* theft_run.c */; };
+		E918FC9021365AB700CCB252 /* theft_shrink.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC4E2136598400CCB252 /* theft_shrink.c */; };
+		E918FC9121365AB700CCB252 /* theft_trial.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC552136598400CCB252 /* theft_trial.c */; };
+		E918FC9221365AB700CCB252 /* theft.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC492136598300CCB252 /* theft.c */; };
+		E918FC9321365ABC00CCB252 /* prop.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC3B213658BE00CCB252 /* prop.c */; };
 		E927CD632074855D00D4797E /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E927CD612074855300D4797E /* sha512.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
 		E9708AE61E49A2420029E0A5 /* cifra.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD81E499E040029E0A5 /* cifra.c */; };
@@ -415,6 +429,13 @@
 			remoteGlobalIDString = 1079231419A320A700C52AD6;
 			remoteInfo = h2o;
 		};
+		E918FC8521365A8C00CCB252 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1079231419A320A700C52AD6;
+			remoteInfo = h2o;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -482,6 +503,15 @@
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 		10F417CD19C1907B00B6E31A /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		E918FC332136583F00CCB252 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -834,6 +864,36 @@
 		D08137411FD408C1004679DF /* balancer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balancer.h; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
+		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
+		E918FC412136597200CCB252 /* theft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft.h; sourceTree = "<group>"; };
+		E918FC422136597200CCB252 /* theft_types.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_types.h; sourceTree = "<group>"; };
+		E918FC452136598300CCB252 /* theft_aux_builtin.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_aux_builtin.c; sourceTree = "<group>"; };
+		E918FC462136598300CCB252 /* theft_random.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_random.c; sourceTree = "<group>"; };
+		E918FC472136598300CCB252 /* theft_random.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_random.h; sourceTree = "<group>"; };
+		E918FC482136598300CCB252 /* theft_run_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_run_internal.h; sourceTree = "<group>"; };
+		E918FC492136598300CCB252 /* theft.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft.c; sourceTree = "<group>"; };
+		E918FC4A2136598300CCB252 /* theft_call_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_call_internal.h; sourceTree = "<group>"; };
+		E918FC4B2136598300CCB252 /* theft_aux.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_aux.c; sourceTree = "<group>"; };
+		E918FC4C2136598400CCB252 /* theft_types_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_types_internal.h; sourceTree = "<group>"; };
+		E918FC4D2136598400CCB252 /* theft_hash.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_hash.c; sourceTree = "<group>"; };
+		E918FC4E2136598400CCB252 /* theft_shrink.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_shrink.c; sourceTree = "<group>"; };
+		E918FC4F2136598400CCB252 /* theft_call.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_call.c; sourceTree = "<group>"; };
+		E918FC502136598400CCB252 /* theft_rng.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_rng.c; sourceTree = "<group>"; };
+		E918FC512136598400CCB252 /* theft_run.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_run.c; sourceTree = "<group>"; };
+		E918FC522136598400CCB252 /* theft_shrink.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink.h; sourceTree = "<group>"; };
+		E918FC532136598400CCB252 /* theft_bloom.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_bloom.c; sourceTree = "<group>"; };
+		E918FC542136598400CCB252 /* theft_autoshrink.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_autoshrink.c; sourceTree = "<group>"; };
+		E918FC552136598400CCB252 /* theft_trial.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = theft_trial.c; sourceTree = "<group>"; };
+		E918FC562136598500CCB252 /* theft_rng.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_rng.h; sourceTree = "<group>"; };
+		E918FC572136598500CCB252 /* theft_autoshrink.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_autoshrink.h; sourceTree = "<group>"; };
+		E918FC582136598500CCB252 /* theft_call.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_call.h; sourceTree = "<group>"; };
+		E918FC592136598500CCB252 /* theft_trial_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_trial_internal.h; sourceTree = "<group>"; };
+		E918FC5A2136598500CCB252 /* theft_bloom.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_bloom.h; sourceTree = "<group>"; };
+		E918FC5B2136598500CCB252 /* theft_run.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_run.h; sourceTree = "<group>"; };
+		E918FC5C2136598500CCB252 /* theft_trial.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_trial.h; sourceTree = "<group>"; };
+		E918FC5D2136598500CCB252 /* theft_autoshrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_autoshrink_internal.h; sourceTree = "<group>"; };
+		E918FC5E2136598600CCB252 /* theft_shrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink_internal.h; sourceTree = "<group>"; };
 		E927CD612074855300D4797E /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha512.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
 		E9708AD91E499E040029E0A5 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
@@ -1061,6 +1121,14 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E918FC312136583F00CCB252 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E918FC322136583F00CCB252 /* libh2o.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1465,6 +1533,7 @@
 				10D0906919F38B2E0043D458 /* examples-http1client */,
 				10EA45DF1D0949BF00769A2B /* examples-latency-optimization */,
 				08790E101D8BD7F100A04BC1 /* examples-redis-client */,
+				E918FC392136583F00CCB252 /* proptest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1484,6 +1553,7 @@
 				10F417FB19C2D2B400B6E31A /* picotest */,
 				E9708AD01E499D8B0029E0A5 /* picotls */,
 				109428A91CC6C48C00E676CB /* ssl-conservatory */,
+				E918FC3E2136592500CCB252 /* theft */,
 				10756E221AC125E00009BF57 /* yaml */,
 				10F417FC19C2D2BA00B6E31A /* yoml */,
 			);
@@ -1751,6 +1821,7 @@
 			isa = PBXGroup;
 			children = (
 				109EEFE61D77B376001F11D1 /* README.md */,
+				E918FC3A2136589900CCB252 /* 00prop */,
 				105534C41A3BB1C300627ECB /* 00unit */,
 				105534F21A460EF600627ECB /* 00unit.evloop.t */,
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
@@ -1969,6 +2040,65 @@
 				D081373E1FD40431004679DF /* roundrobin.c */,
 			);
 			path = balancer;
+			sourceTree = "<group>";
+		};
+		E918FC3A2136589900CCB252 /* 00prop */ = {
+			isa = PBXGroup;
+			children = (
+				E918FC3B213658BE00CCB252 /* prop.c */,
+			);
+			path = 00prop;
+			sourceTree = "<group>";
+		};
+		E918FC3E2136592500CCB252 /* theft */ = {
+			isa = PBXGroup;
+			children = (
+				E918FC3F2136594900CCB252 /* inc */,
+				E918FC402136594E00CCB252 /* src */,
+			);
+			path = theft;
+			sourceTree = "<group>";
+		};
+		E918FC3F2136594900CCB252 /* inc */ = {
+			isa = PBXGroup;
+			children = (
+				E918FC422136597200CCB252 /* theft_types.h */,
+				E918FC412136597200CCB252 /* theft.h */,
+			);
+			path = inc;
+			sourceTree = "<group>";
+		};
+		E918FC402136594E00CCB252 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				E918FC5D2136598500CCB252 /* theft_autoshrink_internal.h */,
+				E918FC542136598400CCB252 /* theft_autoshrink.c */,
+				E918FC572136598500CCB252 /* theft_autoshrink.h */,
+				E918FC452136598300CCB252 /* theft_aux_builtin.c */,
+				E918FC4B2136598300CCB252 /* theft_aux.c */,
+				E918FC532136598400CCB252 /* theft_bloom.c */,
+				E918FC5A2136598500CCB252 /* theft_bloom.h */,
+				E918FC4A2136598300CCB252 /* theft_call_internal.h */,
+				E918FC4F2136598400CCB252 /* theft_call.c */,
+				E918FC582136598500CCB252 /* theft_call.h */,
+				E918FC4D2136598400CCB252 /* theft_hash.c */,
+				E918FC462136598300CCB252 /* theft_random.c */,
+				E918FC472136598300CCB252 /* theft_random.h */,
+				E918FC502136598400CCB252 /* theft_rng.c */,
+				E918FC562136598500CCB252 /* theft_rng.h */,
+				E918FC482136598300CCB252 /* theft_run_internal.h */,
+				E918FC512136598400CCB252 /* theft_run.c */,
+				E918FC5B2136598500CCB252 /* theft_run.h */,
+				E918FC5E2136598600CCB252 /* theft_shrink_internal.h */,
+				E918FC4E2136598400CCB252 /* theft_shrink.c */,
+				E918FC522136598400CCB252 /* theft_shrink.h */,
+				E918FC592136598500CCB252 /* theft_trial_internal.h */,
+				E918FC552136598400CCB252 /* theft_trial.c */,
+				E918FC5C2136598500CCB252 /* theft_trial.h */,
+				E918FC4C2136598400CCB252 /* theft_types_internal.h */,
+				E918FC492136598300CCB252 /* theft.c */,
+			);
+			path = src;
 			sourceTree = "<group>";
 		};
 		E9708AD01E499D8B0029E0A5 /* picotls */ = {
@@ -2402,6 +2532,24 @@
 			productReference = 10F417D319C1907B00B6E31A /* h2o */;
 			productType = "com.apple.product-type.tool";
 		};
+		E918FBED2136583F00CCB252 /* proptest */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E918FC342136583F00CCB252 /* Build configuration list for PBXNativeTarget "proptest" */;
+			buildPhases = (
+				E918FBEE2136583F00CCB252 /* Sources */,
+				E918FC312136583F00CCB252 /* Frameworks */,
+				E918FC332136583F00CCB252 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E918FC8621365A8C00CCB252 /* PBXTargetDependency */,
+			);
+			name = proptest;
+			productName = simple;
+			productReference = E918FC392136583F00CCB252 /* proptest */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -2425,6 +2573,7 @@
 			targets = (
 				1079231419A320A700C52AD6 /* h2o */,
 				1079242A19A3260E00C52AD6 /* unittest */,
+				E918FBED2136583F00CCB252 /* proptest */,
 				10F417C619C1907B00B6E31A /* server */,
 				107923D819A321F400C52AD6 /* examples-simple */,
 				1079240219A3247A00C52AD6 /* examples-websocket */,
@@ -2803,6 +2952,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E918FBEE2136583F00CCB252 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E918FC9321365ABC00CCB252 /* prop.c in Sources */,
+				E918FC8821365AB700CCB252 /* theft_aux_builtin.c in Sources */,
+				E918FC8F21365AB700CCB252 /* theft_run.c in Sources */,
+				E918FC8A21365AB700CCB252 /* theft_bloom.c in Sources */,
+				E918FC9221365AB700CCB252 /* theft.c in Sources */,
+				E918FC8921365AB700CCB252 /* theft_aux.c in Sources */,
+				E918FC8C21365AB700CCB252 /* theft_hash.c in Sources */,
+				E918FC9121365AB700CCB252 /* theft_trial.c in Sources */,
+				E918FC8D21365AB700CCB252 /* theft_random.c in Sources */,
+				E918FC8E21365AB700CCB252 /* theft_rng.c in Sources */,
+				E918FC8B21365AB700CCB252 /* theft_call.c in Sources */,
+				E918FC9021365AB700CCB252 /* theft_shrink.c in Sources */,
+				E918FC8721365AB700CCB252 /* theft_autoshrink.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -2830,6 +2999,11 @@
 			isa = PBXTargetDependency;
 			target = 1079231419A320A700C52AD6 /* h2o */;
 			targetProxy = 10EA45D41D0949BF00769A2B /* PBXContainerItemProxy */;
+		};
+		E918FC8621365A8C00CCB252 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1079231419A320A700C52AD6 /* h2o */;
+			targetProxy = E918FC8521365A8C00CCB252 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -3948,6 +4122,114 @@
 			};
 			name = "libuv-release";
 		};
+		E918FC352136583F00CCB252 /* evloop-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-debug";
+		};
+		E918FC362136583F00CCB252 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-debug";
+		};
+		E918FC372136583F00CCB252 /* evloop-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "H2O_USE_LIBUV=0";
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-release";
+		};
+		E918FC382136583F00CCB252 /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					deps/yaml/include,
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-release";
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -4057,6 +4339,17 @@
 				10F417D019C1907B00B6E31A /* libuv-debug */,
 				10F417D119C1907B00B6E31A /* evloop-release */,
 				10F417D219C1907B00B6E31A /* libuv-release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "evloop-release";
+		};
+		E918FC342136583F00CCB252 /* Build configuration list for PBXNativeTarget "proptest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E918FC352136583F00CCB252 /* evloop-debug */,
+				E918FC362136583F00CCB252 /* libuv-debug */,
+				E918FC372136583F00CCB252 /* evloop-release */,
+				E918FC382136583F00CCB252 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "evloop-release";
