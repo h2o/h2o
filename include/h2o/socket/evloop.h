@@ -44,7 +44,7 @@ typedef struct st_h2o_evloop_t {
     } _statechanged;
     uint64_t _now;
     struct timeval _tv_at;
-    h2o_timer_wheel_t *_timerwheel;
+    h2o_timer_context_t *_timer_ctx;
     h2o_sliding_counter_t exec_time_counter;
 } h2o_evloop_t;
 
@@ -85,7 +85,7 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 
 inline void h2o_timeout_link(h2o_evloop_t *loop, uint64_t ticks, h2o_timeout_t *timer)
 {
-    h2o_timer_link_abs(loop->_timerwheel, timer, loop->_now + ticks);
+    h2o_timer_link_abs(loop->_timer_ctx, timer, loop->_now + ticks);
 }
 
 #endif

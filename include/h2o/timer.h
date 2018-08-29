@@ -27,7 +27,7 @@
 #define H2O_TIMERWHEEL_BITS_PER_WHEEL 5
 #define H2O_TIMERWHEEL_SLOTS_PER_WHEEL (1 << H2O_TIMERWHEEL_BITS_PER_WHEEL)
 
-typedef struct st_h2o_timer_wheel_t h2o_timer_wheel_t;
+typedef struct st_h2o_timer_context_t h2o_timer_context_t;
 
 struct st_h2o_timer_t;
 
@@ -46,7 +46,7 @@ static void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb);
 /**
  * activates a timer
  */
-void h2o_timer_link_abs(h2o_timer_wheel_t *w, h2o_timer_t *timer, uint64_t at);
+void h2o_timer_link_abs(h2o_timer_context_t *ctx, h2o_timer_t *timer, uint64_t at);
 /**
  * disactivates a timer
  */
@@ -59,25 +59,25 @@ static int h2o_timer_is_linked(h2o_timer_t *timer);
 /**
  * creates a timerwheel
  */
-h2o_timer_wheel_t *h2o_timer_create_wheel(size_t num_wheels, uint64_t now);
+h2o_timer_context_t *h2o_timer_create_context(size_t num_wheels, uint64_t now);
 /**
  * destroys a timerwheel
  */
-void h2o_timer_destroy_wheel(h2o_timer_wheel_t *wheel);
+void h2o_timer_destroy_context(h2o_timer_context_t *ctx);
 /**
  * display the contents of the timerwheel
  */
-void h2o_timer_dump_wheel(h2o_timer_wheel_t *wheel);
+void h2o_timer_dump_context(h2o_timer_context_t *ctx);
 /**
  * validates the timerwheel and returns the result as a boolean value
  */
-int h2o_timer_validate_wheel(h2o_timer_wheel_t *wheel);
+int h2o_timer_validate_context(h2o_timer_context_t *ctx);
 /**
  * find out the time ramaining until the next timer triggers
  */
-uint64_t h2o_timer_get_wake_at(h2o_timer_wheel_t *wheel);
+uint64_t h2o_timer_get_wake_at(h2o_timer_context_t *ctx);
 
-size_t h2o_timer_run_wheel(h2o_timer_wheel_t *w, uint64_t now);
+size_t h2o_timer_run(h2o_timer_context_t *ctx, uint64_t now);
 
 /* inline definitions */
 
