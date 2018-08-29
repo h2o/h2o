@@ -57,7 +57,7 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
         if (t.called != 0)
             return THEFT_TRIAL_FAIL;
         if (h2o_timer_get_wake_at(w) == UINT64_MAX)
-	    return THEFT_TRIAL_FAIL;
+            return THEFT_TRIAL_FAIL;
 
         wake_time = h2o_timer_get_wake_at(w);
         if (wake_time > input->first_time) {
@@ -208,11 +208,7 @@ static struct theft_type_info random_buffer_info = {
         theft_seed seed = theft_seed_of_time();                                                                                    \
                                                                                                                                    \
         struct theft_run_config config = {                                                                                         \
-            .name = __func__,                                                                                                      \
-            .prop1 = fn_,                                                                                                          \
-            .type_info = {&random_buffer_info},                                                                                    \
-            .seed = seed,                                                                                                          \
-            .trials = 100,                                                                                                      \
+            .name = __func__, .prop1 = fn_, .type_info = {&random_buffer_info}, .seed = seed, .trials = 100,                       \
         };                                                                                                                         \
                                                                                                                                    \
         enum theft_run_res res = theft_run(&config);                                                                               \
