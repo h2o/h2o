@@ -465,13 +465,9 @@ h2o_evloop_t *create_evloop(size_t sz)
 
     memset(loop, 0, sz);
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
-
     update_now(loop);
-
     /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
-    loop->_timer_ctx = h2o_timer_create_context(3, loop->_now);
-    h2o_timer_run(loop->_timer_ctx, loop->_now); /* FIXME remove this? */
-    h2o_evloop_run_pending(loop);
+    loop->_timeouts = h2o_timer_create_context(3, loop->_now);
 
     return loop;
 }
@@ -484,7 +480,7 @@ void update_now(h2o_evloop_t *loop)
 
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 {
-    uint64_t wake_at = h2o_timer_get_wake_at(loop->_timer_ctx);
+    uint64_t wake_at = h2o_timer_get_wake_at(loop->_timeouts);
 
     update_now(loop);
 
@@ -543,7 +539,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
     }
 }
 
-void h2o_evloop_run_pending(h2o_evloop_t *loop)
+static void run_pending(h2o_evloop_t *loop)
 {
     struct st_h2o_evloop_socket_t *sock;
 
@@ -566,7 +562,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     struct st_h2o_evloop_socket_t *sock;
 
     /* timeouts are governed by the application and MUST be destroyed prior to destroying the loop */
-    assert(h2o_timer_get_wake_at(loop->_timer_ctx) == UINT64_MAX);
+    assert(h2o_timer_get_wake_at(loop->_timeouts) == UINT64_MAX);
 
     /* dispose all socket */
     while ((sock = loop->_pending_as_client) != NULL) {
@@ -592,7 +588,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     evloop_do_dispose(loop);
 
     /* lastly we need to free loop memory */
-    h2o_timer_destroy_context(loop->_timer_ctx);
+    h2o_timer_destroy_context(loop->_timeouts);
     free(loop);
 }
 
@@ -603,9 +599,9 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
         return -1;
 
     /* run the pending callbacks */
-    h2o_evloop_run_pending(loop);
-    h2o_timer_run(loop->_timer_ctx, loop->_now);
-    h2o_evloop_run_pending(loop);
+    run_pending(loop);
+    h2o_timer_run(loop->_timeouts, loop->_now);
+    run_pending(loop);
 
     /* assert h2o_timer_run_wheel has called run_pending */
     assert(loop->_pending_as_client == NULL);

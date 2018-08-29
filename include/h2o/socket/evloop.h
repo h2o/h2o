@@ -44,7 +44,7 @@ typedef struct st_h2o_evloop_t {
     } _statechanged;
     uint64_t _now;
     struct timeval _tv_at;
-    h2o_timer_context_t *_timer_ctx;
+    h2o_timer_context_t *_timeouts;
     h2o_sliding_counter_t exec_time_counter;
 } h2o_evloop_t;
 
@@ -59,7 +59,6 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
-void h2o_evloop_run_pending(h2o_evloop_t *loop);
 
 #define h2o_timeout_init h2o_timer_init
 #define h2o_timeout_is_linked h2o_timer_is_linked
@@ -85,7 +84,7 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 
 inline void h2o_timeout_link(h2o_evloop_t *loop, uint64_t ticks, h2o_timeout_t *timer)
 {
-    h2o_timer_link_abs(loop->_timer_ctx, timer, loop->_now + ticks);
+    h2o_timer_link_abs(loop->_timeouts, timer, loop->_now + ticks);
 }
 
 #endif
