@@ -31,13 +31,6 @@ struct st_h2o_mruby_sleep_context_t {
     uint64_t started_at;
 };
 
-static void on_deferred_timeout(h2o_timeout_t *entry)
-{
-    struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
-    h2o_timeout_unlink(entry);
-    free(ctx);
-}
-
 static void on_sleep_timeout(h2o_timeout_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
@@ -50,7 +43,7 @@ static void on_sleep_timeout(h2o_timeout_t *entry)
     mrb_gc_arena_restore(shared->mrb, gc_arena);
 
     mrb_gc_unregister(shared->mrb, ctx->receiver);
-    on_deferred_timeout(entry);
+    free(ctx);
 }
 
 static mrb_value sleep_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args, int *run_again)
@@ -82,7 +75,6 @@ static mrb_value sleep_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_
     ctx->ctx = mctx;
     ctx->receiver = *receiver;
     h2o_timeout_init(&ctx->timeout_entry, on_sleep_timeout);
-    /* FIXME timerwheel */
     h2o_timeout_link(ctx->ctx->shared->ctx->loop, msec, &ctx->timeout_entry);
 
     ctx->started_at = h2o_now(ctx->ctx->shared->ctx->loop);
