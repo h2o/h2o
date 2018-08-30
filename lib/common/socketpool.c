@@ -34,6 +34,9 @@
 #include "h2o/socket.h"
 #include "h2o/balancer.h"
 
+/* TODO set the timer by calculating the exact moment when the oldest entry expires */
+#define CHECK_EXPIRATION_INTERVAL 1000
+
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
     size_t target;
@@ -94,19 +97,19 @@ static void destroy_expired(h2o_socketpool_t *pool)
     }
 }
 
-static void on_timeout(h2o_timeout_t *timeout_entry)
+static void on_timeout(h2o_timeout_t *timeout)
 {
     /* FIXME decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well
      */
-    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.entry, timeout_entry);
+    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.timeout, timeout);
 
     if (pthread_mutex_trylock(&pool->_shared.mutex) == 0) {
         destroy_expired(pool);
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 
-    h2o_timeout_link(pool->_interval_cb.loop, pool->_interval_cb.timeout, &pool->_interval_cb.entry);
+    h2o_timeout_link(pool->_interval_cb.loop, CHECK_EXPIRATION_INTERVAL, &pool->_interval_cb.timeout);
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **targets, size_t num_targets, size_t capacity,
@@ -263,16 +266,15 @@ void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
         return;
 
     pool->_interval_cb.loop = loop;
-    pool->_interval_cb.timeout = 1000;
-    pool->_interval_cb.entry.cb = on_timeout;
-    h2o_timeout_link(loop, pool->_interval_cb.timeout, &pool->_interval_cb.entry);
+    pool->_interval_cb.timeout.cb = on_timeout;
+    h2o_timeout_link(loop, CHECK_EXPIRATION_INTERVAL, &pool->_interval_cb.timeout);
 }
 
 void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
     if (pool->_interval_cb.loop != loop)
         return;
-    h2o_timeout_unlink(&pool->_interval_cb.entry);
+    h2o_timeout_unlink(&pool->_interval_cb.timeout);
     pool->_interval_cb.loop = NULL;
 }
 
