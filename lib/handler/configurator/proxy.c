@@ -31,7 +31,7 @@
 
 struct proxy_config_vars_t {
     h2o_proxy_config_vars_t conf;
-    uint64_t keepalive_timeout; /* in milliseconds */
+    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     SSL_CTX *ssl_ctx;
 };
 
