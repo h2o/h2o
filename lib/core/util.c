@@ -65,12 +65,13 @@ static struct {
 } async_resumption_context;
 
 static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at,
-                                                       size_t sz)
+                                                       h2o_timeout_cb timeout_cb, size_t sz)
 {
     struct st_h2o_accept_data_t *data = h2o_mem_alloc(sz);
     data->ctx = ctx;
     data->sock = sock;
-    h2o_timeout_init(&data->timeout, NULL);
+    h2o_timeout_init(&data->timeout, timeout_cb);
+    h2o_timeout_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->timeout);
     data->connected_at = connected_at;
     return data;
 }
@@ -78,19 +79,16 @@ static struct st_h2o_accept_data_t *create_accept_data(h2o_accept_ctx_t *ctx, h2
 static struct st_h2o_accept_data_t *create_default_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock,
                                                                struct timeval connected_at)
 {
-    struct st_h2o_accept_data_t *data = create_accept_data(ctx, sock, connected_at, sizeof(struct st_h2o_accept_data_t));
-    data->timeout.cb = on_accept_timeout;
-    h2o_timeout_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->timeout);
+    struct st_h2o_accept_data_t *data =
+        create_accept_data(ctx, sock, connected_at, on_accept_timeout, sizeof(struct st_h2o_accept_data_t));
     return data;
 }
 
 static struct st_h2o_accept_data_t *create_redis_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     struct st_h2o_redis_resumption_accept_data_t *data = (struct st_h2o_redis_resumption_accept_data_t *)create_accept_data(
-        ctx, sock, connected_at, sizeof(struct st_h2o_redis_resumption_accept_data_t));
+        ctx, sock, connected_at, on_redis_accept_timeout, sizeof(struct st_h2o_redis_resumption_accept_data_t));
     data->get_command = NULL;
-    data->super.timeout.cb = on_redis_accept_timeout;
-    h2o_timeout_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->super.timeout);
     return &data->super;
 }
 
@@ -98,10 +96,8 @@ static struct st_h2o_accept_data_t *create_memcached_accept_data(h2o_accept_ctx_
                                                                  struct timeval connected_at)
 {
     struct st_h2o_memcached_resumption_accept_data_t *data = (struct st_h2o_memcached_resumption_accept_data_t *)create_accept_data(
-        ctx, sock, connected_at, sizeof(struct st_h2o_memcached_resumption_accept_data_t));
+        ctx, sock, connected_at, on_memcached_accept_timeout, sizeof(struct st_h2o_memcached_resumption_accept_data_t));
     data->get_req = NULL;
-    data->super.timeout.cb = on_memcached_accept_timeout;
-    h2o_timeout_link(ctx->ctx->loop, ctx->ctx->globalconf->handshake_timeout, &data->super.timeout);
     return &data->super;
 }
 
@@ -135,8 +131,7 @@ static struct {
     struct st_h2o_accept_data_t *(*create)(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
     void (*destroy)(struct st_h2o_accept_data_t *accept_data);
 } accept_data_callbacks = {
-    create_default_accept_data,
-    destroy_default_accept_data,
+    create_default_accept_data, destroy_default_accept_data,
 };
 
 static void memcached_resumption_on_get(h2o_iovec_t session_data, void *_accept_data)
