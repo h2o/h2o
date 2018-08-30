@@ -616,7 +616,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     {                                                                                                                              \
         struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, *args, 1);                                          \
         *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
-        args->_timeout.cb = send_error_deferred_cb_##status_;                                                                      \
+        h2o_timeout_init(&args->_timeout, send_error_deferred_cb_##status_);                                                       \
         h2o_timeout_link(req->conn->ctx->loop, 0, &args->_timeout);                                                                \
     }
 
