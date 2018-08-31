@@ -27,7 +27,6 @@
 #include "h2o/socket.h"
 
 #define H2O_TIMERWHEEL_SLOTS_MASK (H2O_TIMERWHEEL_SLOTS_PER_WHEEL - 1)
-#define H2O_TIMERWHEEL_MAX_TIMER(num_wheels) ((1LU << (H2O_TIMERWHEEL_BITS_PER_WHEEL * (num_wheels))) - 1)
 
 #ifndef H2O_TIMER_VALIDATE
 #define H2O_TIMER_VALIDATE 0
@@ -71,11 +70,10 @@ void h2o_timer_dump_context(h2o_timer_context_t *ctx)
 
 static size_t timer_wheel(size_t num_wheels, uint64_t delta)
 {
-    delta &= H2O_TIMERWHEEL_MAX_TIMER(num_wheels);
+    H2O_BUILD_ASSERT(sizeof(unsigned long long) == 8);
+
     if (delta == 0)
         return 0;
-
-    H2O_BUILD_ASSERT(sizeof(unsigned long long) == 8);
     return (63 - __builtin_clzll(delta)) / H2O_TIMERWHEEL_BITS_PER_WHEEL;
 }
 
