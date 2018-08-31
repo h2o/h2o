@@ -274,8 +274,8 @@ static void cascade_one(h2o_timer_context_t *ctx, size_t wheel, size_t slot)
     while (!h2o_linklist_is_empty(s)) {
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
         if (entry->expire_at < ctx->last_run) {
-            fprintf(stderr, "%s:%d:last_run=%" PRIu64 ", expire_at=%" PRIu64 "\n", __FUNCTION__, __LINE__, ctx->last_run,
-                    entry->expire_at);
+            fprintf(stderr, "%s:%d:wheel=%zu, slot=%zu, last_run=%" PRIu64 ", expire_at=%" PRIu64 "\n", __FUNCTION__, __LINE__,
+                    wheel, slot, ctx->last_run, entry->expire_at);
             abort();
         }
         h2o_linklist_unlink(&entry->_link);
