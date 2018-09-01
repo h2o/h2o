@@ -300,7 +300,6 @@ static int cascade_all(h2o_timer_context_t *ctx, size_t wheel)
 
 void h2o_timer_get_expired(h2o_timer_context_t *ctx, uint64_t now, h2o_linklist_t *expired)
 {
-    h2o_linklist_t todo;
     size_t wheel = 0, slot, slot_start;
 
 #if H2O_TIMER_VALIDATE
@@ -313,16 +312,14 @@ void h2o_timer_get_expired(h2o_timer_context_t *ctx, uint64_t now, h2o_linklist_
         return;
     }
 
-    h2o_linklist_init_anchor(&todo);
-
 Redo:
     /* collect from the first slot */
     slot_start = timer_slot(wheel, ctx->last_run);
     for (slot = slot_start; slot < H2O_TIMERWHEEL_SLOTS_PER_WHEEL; ++slot) {
         if (wheel == 0) {
-            h2o_linklist_insert_list(&todo, &ctx->wheels[wheel][slot]);
+            h2o_linklist_insert_list(expired, &ctx->wheels[wheel][slot]);
             if (ctx->last_run == now)
-                goto Collected;
+                goto Exit;
             ++ctx->last_run;
         } else {
             if (!h2o_linklist_is_empty(&ctx->wheels[wheel][slot])) {
@@ -334,7 +331,7 @@ Redo:
             ctx->last_run += 1 << (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL);
             if (ctx->last_run > now) {
                 ctx->last_run = now;
-                goto Collected;
+                goto Exit;
             }
         }
     }
@@ -349,22 +346,8 @@ Redo:
     if (ctx->last_run < now)
         ctx->last_run = now;
 
-Collected: /* expiration processing */
+Exit:
     assert(ctx->last_run == now);
-    while (!h2o_linklist_is_empty(&todo)) {
-        do {
-            h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, todo.next);
-            /* remove this timer from todo list */
-            h2o_linklist_unlink(&timer->_link);
-            if (timer->expire_at <= now) {
-                h2o_linklist_insert(expired, &timer->_link);
-            } else {
-                link_timer(ctx, timer);
-            }
-        } while (!h2o_linklist_is_empty(&todo));
-        h2o_linklist_insert_list(&todo, ctx->wheels[0] + timer_slot(0, now));
-    }
-
 #if H2O_TIMER_VALIDATE
     assert(h2o_timer_validate_wheel(w));
 #endif
