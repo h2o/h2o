@@ -32,6 +32,19 @@
 #define H2O_TIMER_VALIDATE 0
 #endif
 
+#define REPORT_CORRUPT_TIMER(ctx, t, fmt, ...)                                                                                     \
+    do {                                                                                                                           \
+        h2o_timer_t *_t = (t);                                                                                                     \
+        fprintf(stderr, "%s:%d:last_run=%" PRIu64 fmt ", timer(%p)={expire_at=%" PRIu64 ", cb=%p}\n", __FUNCTION__, __LINE__,      \
+                (ctx)->last_run, __VA_ARGS__, _t, _t->expire_at, _t->cb);                                                          \
+    } while (0)
+
+#define ABORT_CORRUPT_TIMER(ctx, t, fmt, ...)                                                                                      \
+    do {                                                                                                                           \
+        REPORT_CORRUPT_TIMER(ctx, t, fmt, __VA_ARGS__);                                                                            \
+        abort();                                                                                                                   \
+    } while (0)
+
 struct st_h2o_timer_context_t {
     /**
      * the last time h2o_timer_run_wheel was called
@@ -123,9 +136,8 @@ static int validate_slot(h2o_timer_context_t *ctx, size_t wheel, size_t slot)
     for (link = anchor->next; link != anchor; link = link->next) {
         h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, link);
         if (!(at_min <= timer->expire_at && timer->expire_at <= at_max)) {
-            fprintf(stderr, "invalid entry at %zu,%zu; last_run=%" PRIu64 ", expire_at=%" PRIu64 " (expected range: [%" PRIu64
-                            ",%" PRIu64 "])\n",
-                    wheel, slot, ctx->last_run, timer->expire_at, at_min, at_max);
+            REPORT_CORRUPT_TIMER(ctx, timer, ", wheel=%zu, slot=%zu, expected_range=[%" PRIu64 ",%" PRIu64 "]", wheel, slot, at_min,
+                                 at_max);
             success = 0;
         }
     }
@@ -209,12 +221,9 @@ static void link_timer(h2o_timer_context_t *ctx, h2o_timer_t *timer)
     if (H2O_TIMER_VALIDATE) {
         uint64_t at_min, at_max;
         calc_expire_for_slot(ctx->num_wheels, ctx->last_run, wheel, slot, &at_min, &at_max);
-        if (!(at_min <= timer->expire_at && timer->expire_at <= at_max)) {
-            fprintf(stderr,
-                    "%s:last_run=%" PRIu64 ",expire_at=%" PRIu64 ",wheel=%zu,slot=%zu,at_min=%" PRIu64 ",at_max=%" PRIu64 "\n",
-                    __FUNCTION__, ctx->last_run, timer->expire_at, wheel, slot, at_min, at_max);
-            abort();
-        }
+        if (!(at_min <= timer->expire_at && timer->expire_at <= at_max))
+            ABORT_CORRUPT_TIMER(ctx, timer, ", wheel=%zu, slot=%zu, at_min=%" PRIu64 ", at_max=%" PRIu64, wheel, slot, at_min,
+                                at_max);
     }
 
     h2o_linklist_insert(&ctx->wheels[wheel][slot], &timer->_link);
@@ -269,11 +278,8 @@ static void cascade_one(h2o_timer_context_t *ctx, size_t wheel, size_t slot)
 
     while (!h2o_linklist_is_empty(s)) {
         h2o_timer_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, s->next);
-        if (entry->expire_at < ctx->last_run) {
-            fprintf(stderr, "%s:%d:wheel=%zu, slot=%zu, last_run=%" PRIu64 ", expire_at=%" PRIu64 "\n", __FUNCTION__, __LINE__,
-                    wheel, slot, ctx->last_run, entry->expire_at);
-            abort();
-        }
+        if (entry->expire_at < ctx->last_run)
+            ABORT_CORRUPT_TIMER(ctx, entry, ", wheel=%zu, slot=%zu", wheel, slot);
         h2o_linklist_unlink(&entry->_link);
         link_timer(ctx, entry);
         assert(&entry->_link != s->prev); /* detect the entry reassigned to the same slot */
