@@ -325,6 +325,34 @@ static void test_overflow(void)
     ok(1);
 }
 
+static void test_multiple_cascade_in_sparse_wheels(void)
+{
+    const uint64_t base_time = 0x1659418c000;
+    h2o_timer_context_t *ctx = h2o_timer_create_context(3, base_time - 2048);
+    h2o_timer_t t1, t2;
+
+    invokes = 0;
+
+    h2o_timer_init(&t1, my_callback);
+    h2o_timer_link_abs(ctx, &t1, base_time);
+
+    h2o_timer_run(ctx, base_time - 100);
+    ok(invokes == 0);
+
+    h2o_timer_init(&t2, my_callback);
+    h2o_timer_link_abs(ctx, &t2, base_time);
+
+    h2o_timer_run(ctx, base_time - 100);
+    ok(invokes == 0);
+
+    h2o_timer_run(ctx, base_time);
+    ok(invokes == 2);
+
+    h2o_timer_run(ctx, base_time + 1024);
+
+    h2o_timer_destroy_context(ctx);
+}
+
 void test_lib__common__timerwheel_c()
 {
     subtest("slot calculation", test_slot_calc);
@@ -335,4 +363,5 @@ void test_lib__common__timerwheel_c()
     subtest("exhaustive", test_exhaustive);
     subtest("overflow", test_overflow);
     subtest("get_wake_at", test_get_wake_at);
+    subtest("multiple_cascade_in_sparse_wheels", test_multiple_cascade_in_sparse_wheels);
 }
