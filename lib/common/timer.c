@@ -66,8 +66,6 @@ void h2o_timer_dump_context(h2o_timer_context_t *ctx)
     }
 }
 
-/* timer APIs */
-
 static size_t timer_wheel(size_t num_wheels, uint64_t delta)
 {
     H2O_BUILD_ASSERT(sizeof(unsigned long long) == 8);
