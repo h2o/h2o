@@ -266,7 +266,7 @@ void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
         return;
 
     pool->_interval_cb.loop = loop;
-    h2o_timer_init(&pool->_interval_cb.timeout, on_timeout);
+    h2o_timeout_init(&pool->_interval_cb.timeout, on_timeout);
     h2o_timeout_link(loop, CHECK_EXPIRATION_INTERVAL, &pool->_interval_cb.timeout);
 }
 
