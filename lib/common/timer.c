@@ -336,7 +336,7 @@ Redo:
         }
     }
     /* carry */
-    if (cascade_all(ctx, wheel + 1)) {
+    if (cascade_all(ctx, wheel != 0 ? wheel : 1)) {
         wheel = 0;
         goto Redo;
     }
