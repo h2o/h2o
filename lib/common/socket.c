@@ -37,7 +37,6 @@
 #include "picotls.h"
 #endif
 #include "h2o/socket.h"
-#include "h2o/timeout.h"
 
 #if defined(__APPLE__) && defined(__clang__)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"

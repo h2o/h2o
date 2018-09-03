@@ -46,7 +46,7 @@ struct rp_generator_t {
 
 struct rp_ws_upgrade_info_t {
     h2o_context_t *ctx;
-    h2o_timeout_t *timeout;
+    uint64_t timeout;
     h2o_socket_t *upstream_sock;
 };
 
@@ -393,7 +393,7 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     free(info);
 }
 
-static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout_t *timeout, int rlen)
+static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t timeout, int rlen)
 {
     h2o_req_t *req = self->src_req;
     h2o_socket_t *sock = h2o_http1client_steal_socket(self->client);
@@ -544,7 +544,7 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->websocket_timeout != NULL);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        on_websocket_upgrade(self, client_ctx->websocket_timeout, rlen);
+        on_websocket_upgrade(self, *client_ctx->websocket_timeout, rlen);
         self->client = NULL;
         return NULL;
     }

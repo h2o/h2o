@@ -48,7 +48,6 @@ extern "C" {
 #include "h2o/socket.h"
 #include "h2o/string_.h"
 #include "h2o/time_.h"
-#include "h2o/timeout.h"
 #include "h2o/url.h"
 #include "h2o/version.h"
 #include "h2o/balancer.h"
@@ -578,18 +577,6 @@ struct st_h2o_context_t {
      */
     h2o_loop_t *loop;
     /**
-     * timeout structure to be used for registering deferred callbacks
-     */
-    h2o_timeout_t zero_timeout;
-    /**
-     * timeout structure to be used for registering 1-second timeout callbacks
-     */
-    h2o_timeout_t one_sec_timeout;
-    /**
-     * timeout structrue to be used for registering 100-milisecond timeout callbacks
-     */
-    h2o_timeout_t hundred_ms_timeout;
-    /**
      * pointer to the global configuration
      */
     h2o_globalconf_t *globalconf;
@@ -616,16 +603,7 @@ struct st_h2o_context_t {
      */
     int shutdown_requested;
 
-    /**
-     * SSL handshake timeout
-     */
-    h2o_timeout_t handshake_timeout;
-
     struct {
-        /**
-         * request timeout
-         */
-        h2o_timeout_t req_timeout;
         /**
          * link-list of h2o_http1_conn_t
          */
@@ -634,21 +612,13 @@ struct st_h2o_context_t {
 
     struct {
         /**
-         * idle timeout
-         */
-        h2o_timeout_t idle_timeout;
-        /**
          * link-list of h2o_http2_conn_t
          */
         h2o_linklist_t _conns;
         /**
-         * graceful shutdown timeout
-         */
-        h2o_timeout_t graceful_shutdown_timeout;
-        /**
          * timeout entry used for graceful shutdown
          */
-        h2o_timeout_entry_t _graceful_shutdown_timeout;
+        h2o_timer_t _graceful_shutdown_timeout;
         struct {
             /**
              * counter for http2 errors internally emitted by h2o
@@ -670,18 +640,6 @@ struct st_h2o_context_t {
          * the default client context for proxy
          */
         h2o_http1client_ctx_t client_ctx;
-        /**
-         * timeout handler used by the default client context
-         */
-        h2o_timeout_t io_timeout;
-        /**
-         * timeout handler used by the default client context
-         */
-        h2o_timeout_t connect_timeout;
-        /**
-         * timeout handler used by the default client context
-         */
-        h2o_timeout_t first_byte_timeout;
     } proxy;
 
     struct {
@@ -1206,7 +1164,7 @@ struct st_h2o_req_t {
     h2o_generator_t *_generator;
     h2o_ostream_t *_ostr_top;
     size_t _next_filter_index;
-    h2o_timeout_entry_t _timeout_entry;
+    h2o_timer_t _timeout_entry;
 
     /* per-request memory pool (placed at the last since the structure is large) */
     h2o_mem_pool_t pool;
