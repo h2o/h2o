@@ -165,11 +165,12 @@ static void test_hpack(void)
     note("decode_huffman");
     {
         h2o_iovec_t huffcode = {H2O_STRLIT("\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")};
-        uint8_t flags = 0;
-        h2o_iovec_t *decoded = decode_huffman(&pool, (const uint8_t *)huffcode.base, huffcode.len, &flags);
-        ok(decoded->len == sizeof("www.example.com") - 1);
-        ok(strcmp(decoded->base, "www.example.com") == 0);
-        ok(flags == 0);
+        char buf[32];
+        const char *err_desc = NULL;
+        size_t len = h2o_hpack_decode_huffman(buf, (const uint8_t *)huffcode.base, huffcode.len, 0, &err_desc);
+        ok(len == sizeof("www.example.com") - 1);
+        ok(memcmp(buf, "www.example.com", len) == 0);
+        ok(err_desc == NULL);
     }
     h2o_mem_clear_pool(&pool);
 
@@ -290,7 +291,7 @@ static void test_hpack(void)
     {
         h2o_iovec_t huffcode = {H2O_STRLIT("\xf1\xe3\xc2\xe5\xf2\x3a\x6b\xa0\xab\x90\xf4\xff")};
         char buf[sizeof("www.example.com")];
-        size_t l = encode_huffman((uint8_t *)buf, (uint8_t *)H2O_STRLIT("www.example.com"));
+        size_t l = h2o_hpack_encode_huffman((uint8_t *)buf, (uint8_t *)H2O_STRLIT("www.example.com"));
         ok(l == huffcode.len);
         ok(memcmp(buf, huffcode.base, huffcode.len) == 0);
     }

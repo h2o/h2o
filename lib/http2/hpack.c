@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include "h2o.h"
 #include "h2o/http2.h"
+#include "h2o/hpack.h"
 #include "h2o/http2_internal.h"
 
 #define HEADER_TABLE_OFFSET 62
@@ -58,66 +59,6 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
     buf->base = (char *)buf + sizeof(h2o_iovec_t);
     buf->len = len;
     return buf;
-}
-
-/* validate a header value against https://tools.ietf.org/html/rfc7230#section-3.2 */
-static int contains_invalid_field_value_char(const char *s, size_t len)
-{
-    /* all printable chars + horizontal tab */
-    static const char valid_h2_field_value_char[] = {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*    0-31 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   32-63 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   64-95 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /*  96-127 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 128-159 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 160-191 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 192-223 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 224-255 */
-    };
-
-    for (; len != 0; ++s, --len) {
-        unsigned char ch = (unsigned char)*s;
-        if (!valid_h2_field_value_char[ch]) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static const char *err_found_upper_case_in_header_name = "found an upper-case letter in header name";
-static const char *soft_err_found_invalid_char_in_header_name = "found an invalid character in header name";
-static const char *soft_err_found_invalid_char_in_header_value = "found an invalid character in header value";
-
-/* validate a header name against https://tools.ietf.org/html/rfc7230#section-3.2,
- * in addition to that, we disallow upper case chars as well.
- * This sets @err_desc for all invalid characters, but only returns true
- * for upper case characters, this is because we return a protocol error
- * in that case. */
-static const char *validate_header_name(const char *s, size_t len)
-{
-    const char *ret = NULL;
-    /* all printable chars, except upper case and separator characters */
-    static const char valid_h2_header_name_char[] = {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*    0-31 */
-        0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, /*   32-63 */
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, /*   64-95 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, /*  96-127 */
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 128-159 */
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 160-191 */
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 192-223 */
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 224-255 */
-    };
-
-    for (; len != 0; ++s, --len) {
-        unsigned char ch = (unsigned char)*s;
-        if (!valid_h2_header_name_char[ch]) {
-            if (ch - 'A' < 26U) {
-                return err_found_upper_case_in_header_name;
-            }
-            ret = soft_err_found_invalid_char_in_header_name;
-        }
-    }
-    return ret;
 }
 
 static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
@@ -163,28 +104,102 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
     return dst;
 }
 
-static h2o_iovec_t *decode_huffman(h2o_mem_pool_t *pool, const uint8_t *src, size_t len, uint8_t *seen_char_types)
-{
-    const uint8_t *src_end = src + len;
-    char *dst;
-    uint8_t state = 0;
-    int maybe_eos = 1;
-    h2o_iovec_t *dst_buf = alloc_buf(pool, len * 2); /* max compression ratio is >= 0.5 */
+const char *h2o_hpack_err_found_upper_case_in_header_name = "found an upper-case letter in header name";
+const char *h2o_hpack_soft_err_found_invalid_char_in_header_name = "found an invalid character in header name";
+const char *h2o_hpack_soft_err_found_invalid_char_in_header_value = "found an invalid character in header value";
 
-    dst = dst_buf->base;
+size_t h2o_hpack_decode_huffman(char *_dst, const uint8_t *src, size_t len, int is_name, const char **err_desc)
+{
+    char *dst = _dst;
+    const uint8_t *src_end = src + len;
+    uint8_t state = 0, seen_char_types = 0;
+    int maybe_eos = 1;
+
+    /* decode */
     for (; src < src_end; src++) {
-        if ((dst = huffdecode4(dst, *src >> 4, &state, &maybe_eos, seen_char_types)) == NULL)
-            return NULL;
-        if ((dst = huffdecode4(dst, *src & 0xf, &state, &maybe_eos, seen_char_types)) == NULL)
-            return NULL;
+        if ((dst = huffdecode4(dst, *src >> 4, &state, &maybe_eos, &seen_char_types)) == NULL)
+            return SIZE_MAX;
+        if ((dst = huffdecode4(dst, *src & 0xf, &state, &maybe_eos, &seen_char_types)) == NULL)
+            return SIZE_MAX;
+    }
+    if (!maybe_eos)
+        return SIZE_MAX;
+
+    /* validate */
+    if (is_name) {
+        if (dst == _dst)
+            return SIZE_MAX;
+        /* pseudo-headers are checked later in `decode_header` */
+        if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME) != 0 && _dst[0] != ':') {
+            if ((seen_char_types & NGHTTP2_HUFF_UPPER_CASE_CHAR) != 0) {
+                *err_desc = h2o_hpack_err_found_upper_case_in_header_name;
+                return SIZE_MAX;
+            } else {
+                *err_desc = h2o_hpack_soft_err_found_invalid_char_in_header_name;
+            }
+        }
+    } else {
+        if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) != 0)
+            *err_desc = h2o_hpack_soft_err_found_invalid_char_in_header_value;
     }
 
-    if (!maybe_eos)
-        return NULL;
+    return dst - _dst;
+}
 
-    *dst = '\0';
-    dst_buf->len = dst - dst_buf->base;
-    return dst_buf;
+/* validate a header name against https://tools.ietf.org/html/rfc7230#section-3.2,
+ * in addition to that, we disallow upper case chars as well.
+ * This sets @err_desc for all invalid characters, but only returns true
+ * for upper case characters, this is because we return a protocol error
+ * in that case. */
+int h2o_hpack_validate_header_name(const char *s, size_t len, const char **err_desc)
+{
+    /* all printable chars, except upper case and separator characters */
+    static const char valid_h2_header_name_char[] = {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*    0-31 */
+        0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, /*   32-63 */
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, /*   64-95 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, /*  96-127 */
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 128-159 */
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 160-191 */
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 192-223 */
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 224-255 */
+    };
+
+    for (; len != 0; ++s, --len) {
+        unsigned char ch = (unsigned char)*s;
+        if (!valid_h2_header_name_char[ch]) {
+            if (ch - 'A' < 26U) {
+                *err_desc = h2o_hpack_err_found_upper_case_in_header_name;
+                return 0;
+            }
+            *err_desc = h2o_hpack_soft_err_found_invalid_char_in_header_name;
+        }
+    }
+    return 1;
+}
+
+/* validate a header value against https://tools.ietf.org/html/rfc7230#section-3.2 */
+void h2o_hpack_validate_header_value(const char *s, size_t len, const char **err_desc)
+{
+    /* all printable chars + horizontal tab */
+    static const char valid_h2_field_value_char[] = {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*    0-31 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   32-63 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   64-95 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /*  96-127 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 128-159 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 160-191 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 192-223 */
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 224-255 */
+    };
+
+    for (; len != 0; ++s, --len) {
+        unsigned char ch = (unsigned char)*s;
+        if (!valid_h2_field_value_char[ch]) {
+            *err_desc = h2o_hpack_soft_err_found_invalid_char_in_header_value;
+            break;
+        }
+    }
 }
 
 static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, const uint8_t *src_end, int is_header_name,
@@ -202,44 +217,21 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         return NULL;
 
     if (is_huffman) {
-        uint8_t hflags = 0;
         if (*src + len > src_end)
             return NULL;
-        if ((ret = decode_huffman(pool, *src, len, &hflags)) == NULL)
+        ret = alloc_buf(pool, len * 2); /* max compression ratio is >= 0.5 */
+        if ((ret->len = h2o_hpack_decode_huffman(ret->base, *src, len, is_header_name, err_desc)) == SIZE_MAX)
             return NULL;
-        if (is_header_name) {
-            if (ret->len <= 0) {
-                return NULL;
-            }
-            /* pseudo-headers are checked later in `decode_header` */
-            if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME && ret->base[0] != ':') {
-                if (hflags & NGHTTP2_HUFF_UPPER_CASE_CHAR) {
-                    *err_desc = err_found_upper_case_in_header_name;
-                    return NULL;
-                } else {
-                    *err_desc = soft_err_found_invalid_char_in_header_name;
-                }
-            }
-        } else {
-            if (hflags & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) {
-                *err_desc = soft_err_found_invalid_char_in_header_value;
-            }
-        }
+        ret->base[ret->len] = '\0';
     } else {
         if (*src + len > src_end)
             return NULL;
         if (is_header_name) {
             /* pseudo-headers are checked later in `decode_header` */
-            if (**src != (uint8_t)':') {
-                *err_desc = validate_header_name((char *)*src, len);
-                if (*err_desc == err_found_upper_case_in_header_name) {
-                    return NULL;
-                }
-            }
+            if (**src != (uint8_t)':' && !h2o_hpack_validate_header_name((char *)*src, len, err_desc))
+                return NULL;
         } else {
-            if (contains_invalid_field_value_char((char *)*src, len)) {
-                *err_desc = soft_err_found_invalid_char_in_header_value;
-            }
+            h2o_hpack_validate_header_value((char *)*src, len, err_desc);
         }
         ret = alloc_buf(pool, len);
         memcpy(ret->base, *src, len);
@@ -380,9 +372,8 @@ Redo:
         /* non-existing name */
         const h2o_token_t *name_token;
         if ((result->name = decode_string(pool, src, src_end, 1, err_desc)) == NULL) {
-            if (*err_desc == err_found_upper_case_in_header_name) {
+            if (*err_desc == h2o_hpack_err_found_upper_case_in_header_name)
                 return H2O_HTTP2_ERROR_PROTOCOL;
-            }
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
         if (!*err_desc) {
@@ -604,7 +595,7 @@ static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
     return dst;
 }
 
-static size_t encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
+size_t h2o_hpack_encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
 {
     uint8_t *dst = _dst, *dst_end = dst + len;
     const uint8_t *src_end = src + len;
@@ -620,7 +611,7 @@ static size_t encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
             bits <<= 8;
             bits_left += 8;
             if (dst == dst_end) {
-                return 0;
+                return SIZE_MAX;
             }
         }
     }
@@ -630,7 +621,7 @@ static size_t encode_huffman(uint8_t *_dst, const uint8_t *src, size_t len)
         *dst++ = bits >> 32;
     }
     if (dst == dst_end) {
-        return 0;
+        return SIZE_MAX;
     }
 
     return dst - _dst;
@@ -650,8 +641,8 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
 {
     if (H2O_LIKELY(len != 0)) {
         /* try to encode using huffman */
-        size_t hufflen = encode_huffman(dst + 1, (const uint8_t *)s, len);
-        if (H2O_LIKELY(hufflen != 0)) {
+        size_t hufflen = h2o_hpack_encode_huffman(dst + 1, (const uint8_t *)s, len);
+        if (H2O_LIKELY(hufflen != SIZE_MAX)) {
             size_t head_len;
             if (H2O_LIKELY(encode_int_is_onebyte((uint32_t)hufflen, 7))) {
                 dst[0] = (uint8_t)(0x80 | hufflen);
