@@ -34,7 +34,7 @@ typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
 
 typedef struct st_throttle_resp_t {
     h2o_ostream_t super;
-    h2o_timeout_t timeout_entry;
+    h2o_timer_t timeout_entry;
     int64_t tokens;
     size_t token_inc;
     h2o_context_t *ctx;
@@ -61,14 +61,14 @@ static void real_send(throttle_resp_t *self)
 
     h2o_ostream_send_next(&self->super, self->req, self->state.bufs.entries, self->state.bufs.size, self->state.stream_state);
     if (!h2o_send_state_is_in_progress(self->state.stream_state))
-        h2o_timeout_unlink(&self->timeout_entry);
+        h2o_timer_unlink(&self->timeout_entry);
 }
 
-static void add_token(h2o_timeout_t *entry)
+static void add_token(h2o_timer_t *entry)
 {
     throttle_resp_t *self = H2O_STRUCT_FROM_MEMBER(throttle_resp_t, timeout_entry, entry);
 
-    h2o_timeout_link(self->ctx->loop, 100, &self->timeout_entry);
+    h2o_timer_link(self->ctx->loop, 100, &self->timeout_entry);
     self->tokens += self->token_inc;
 
     if (self->tokens > 0)
@@ -97,8 +97,8 @@ static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, s
 static void on_stop(h2o_ostream_t *_self, h2o_req_t *req)
 {
     throttle_resp_t *self = (void *)_self;
-    if (h2o_timeout_is_linked(&self->timeout_entry))
-        h2o_timeout_unlink(&self->timeout_entry);
+    if (h2o_timer_is_linked(&self->timeout_entry))
+        h2o_timer_unlink(&self->timeout_entry);
 }
 
 static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -141,8 +141,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     throttle->tokens = throttle->token_inc;
     slot = &throttle->super.next;
 
-    h2o_timeout_init(&throttle->timeout_entry, add_token);
-    h2o_timeout_link(throttle->ctx->loop, 100, &throttle->timeout_entry);
+    h2o_timer_init(&throttle->timeout_entry, add_token);
+    h2o_timer_link(throttle->ctx->loop, 100, &throttle->timeout_entry);
 
 Next:
     h2o_setup_next_ostream(req, slot);

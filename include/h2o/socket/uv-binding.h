@@ -35,17 +35,18 @@ typedef uv_loop_t h2o_loop_t;
 h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb);
 h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb);
 
-typedef struct st_h2o_timeout_t h2o_timeout_t;
-typedef void (*h2o_timeout_cb)(h2o_timeout_t *timer);
-struct st_h2o_timeout_t {
+typedef struct st_h2o_timer_t h2o_timer_t;
+typedef void (*h2o_timer_cb)(h2o_timer_t *timer);
+struct st_h2o_timer_t {
     uv_timer_t uv_timer;
     int is_linked;
-    h2o_timeout_cb cb;
+    h2o_timer_cb cb;
 };
 
-void h2o_timeout_link(h2o_loop_t *l, uint64_t ticks, h2o_timeout_t *timer);
-int h2o_timeout_is_linked(h2o_timeout_t *timer);
-void h2o_timeout_unlink(h2o_timeout_t *timer);
+static void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb);
+void h2o_timer_link(h2o_loop_t *l, uint64_t ticks, h2o_timer_t *timer);
+static int h2o_timer_is_linked(h2o_timer_t *timer);
+void h2o_timer_unlink(h2o_timer_t *timer);
 
 /* inline definitions */
 
@@ -61,10 +62,15 @@ static inline uint64_t h2o_now(h2o_loop_t *loop)
     return uv_now(loop);
 }
 
-static inline void h2o_timeout_init(h2o_timeout_t *timer, h2o_timeout_cb cb)
+inline void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb)
 {
     memset(timer, 0, sizeof(*timer));
     timer->cb = cb;
+}
+
+inline int h2o_timer_is_linked(h2o_timer_t *entry)
+{
+    return entry->is_linked;
 }
 
 #endif

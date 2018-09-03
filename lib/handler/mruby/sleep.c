@@ -27,11 +27,11 @@
 struct st_h2o_mruby_sleep_context_t {
     h2o_mruby_context_t *ctx;
     mrb_value receiver;
-    h2o_timeout_t timeout_entry;
+    h2o_timer_t timeout_entry;
     uint64_t started_at;
 };
 
-static void on_sleep_timeout(h2o_timeout_t *entry)
+static void on_sleep_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_mruby_sleep_context_t *ctx = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_sleep_context_t, timeout_entry, entry);
     assert(!mrb_nil_p(ctx->receiver));
@@ -74,8 +74,8 @@ static mrb_value sleep_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_
     memset(ctx, 0, sizeof(*ctx));
     ctx->ctx = mctx;
     ctx->receiver = *receiver;
-    h2o_timeout_init(&ctx->timeout_entry, on_sleep_timeout);
-    h2o_timeout_link(ctx->ctx->shared->ctx->loop, msec, &ctx->timeout_entry);
+    h2o_timer_init(&ctx->timeout_entry, on_sleep_timeout);
+    h2o_timer_link(ctx->ctx->shared->ctx->loop, msec, &ctx->timeout_entry);
 
     ctx->started_at = h2o_now(ctx->ctx->shared->ctx->loop);
 

@@ -47,7 +47,7 @@ typedef struct st_h2o_redis_client_t {
     uint64_t command_timeout;
 
     struct redisAsyncContext *_redis;
-    h2o_timeout_t _timeout_entry;
+    h2o_timer_t _timeout_entry;
 } h2o_redis_client_t;
 
 typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, const char *errstr);
@@ -67,7 +67,7 @@ typedef struct st_h2o_redis_command_t {
     h2o_redis_command_cb cb;
     void *data;
     h2o_redis_command_type_t type;
-    h2o_timeout_t _command_timeout;
+    h2o_timer_t _command_timeout;
 } h2o_redis_command_t;
 
 h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz);

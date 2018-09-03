@@ -37,10 +37,10 @@ struct st_redis_socket_data_t {
 
 static void attach_loop(redisAsyncContext *ac, h2o_loop_t *loop);
 
-static void invoke_deferred(h2o_redis_client_t *client, uint64_t tick, h2o_timeout_t *entry, h2o_timeout_cb cb)
+static void invoke_deferred(h2o_redis_client_t *client, uint64_t tick, h2o_timer_t *entry, h2o_timer_cb cb)
 {
     entry->cb = cb;
-    h2o_timeout_link(client->loop, tick, entry);
+    h2o_timer_link(client->loop, tick, entry);
 }
 
 static void close_and_detach_connection(h2o_redis_client_t *client, const char *errstr)
@@ -52,7 +52,7 @@ static void close_and_detach_connection(h2o_redis_client_t *client, const char *
 
     client->_redis->data = NULL;
     client->_redis = NULL;
-    h2o_timeout_unlink(&client->_timeout_entry);
+    h2o_timer_unlink(&client->_timeout_entry);
 }
 
 static void disconnect(h2o_redis_client_t *client, const char *errstr)
@@ -101,7 +101,7 @@ static void on_connect(const redisAsyncContext *redis, int status)
         close_and_detach_connection(client, h2o_redis_error_connection);
         return;
     }
-    h2o_timeout_unlink(&client->_timeout_entry);
+    h2o_timer_unlink(&client->_timeout_entry);
 
     client->state = H2O_REDIS_CONNECTION_STATE_CONNECTED;
     if (client->on_connect != NULL)
@@ -117,7 +117,7 @@ static void on_disconnect(const redisAsyncContext *redis, int status)
     close_and_detach_connection(client, get_error(redis));
 }
 
-static void on_connect_timeout(h2o_timeout_t *entry)
+static void on_connect_timeout(h2o_timer_t *entry)
 {
     h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _timeout_entry, entry);
     assert((client->_redis->c.flags & REDIS_CONNECTED) == 0);
@@ -133,7 +133,7 @@ h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz)
 
     client->loop = loop;
     client->state = H2O_REDIS_CONNECTION_STATE_CLOSED;
-    h2o_timeout_init(&client->_timeout_entry, on_connect_timeout);
+    h2o_timer_init(&client->_timeout_entry, on_connect_timeout);
 
     return client;
 }
@@ -164,7 +164,7 @@ void h2o_redis_connect(h2o_redis_client_t *client, const char *host, uint16_t po
     }
 
     if (client->connect_timeout != 0)
-        h2o_timeout_link(client->loop, client->connect_timeout, &client->_timeout_entry);
+        h2o_timer_link(client->loop, client->connect_timeout, &client->_timeout_entry);
 }
 
 void h2o_redis_disconnect(h2o_redis_client_t *client)
@@ -175,7 +175,7 @@ void h2o_redis_disconnect(h2o_redis_client_t *client)
 
 static void dispose_command(h2o_redis_command_t *command)
 {
-    h2o_timeout_unlink(&command->_command_timeout);
+    h2o_timer_unlink(&command->_command_timeout);
     free(command);
 }
 
@@ -213,7 +213,7 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
     handle_reply(command, reply, errstr);
 }
 
-static void on_command_timeout(h2o_timeout_t *entry)
+static void on_command_timeout(h2o_timer_t *entry)
 {
     h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _command_timeout, entry);
 
@@ -230,11 +230,11 @@ static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis
     command->cb = cb;
     command->data = cb_data;
     command->type = type;
-    h2o_timeout_init(&command->_command_timeout, on_command_timeout);
+    h2o_timer_init(&command->_command_timeout, on_command_timeout);
 
     if (client->command_timeout != 0 && (type == H2O_REDIS_COMMAND_TYPE_NORMAL || type == H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE ||
                                          type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE))
-        h2o_timeout_link(client->loop, client->command_timeout, &command->_command_timeout);
+        h2o_timer_link(client->loop, client->command_timeout, &command->_command_timeout);
 
     return command;
 }
@@ -341,7 +341,7 @@ void h2o_redis_free(h2o_redis_client_t *client)
 {
     if (client->state != H2O_REDIS_CONNECTION_STATE_CLOSED)
         disconnect(client, NULL);
-    h2o_timeout_unlink(&client->_timeout_entry);
+    h2o_timer_unlink(&client->_timeout_entry);
     free(client);
 }
 

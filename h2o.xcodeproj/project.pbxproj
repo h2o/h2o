@@ -385,10 +385,10 @@
 		E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76E41F00E70700EB7A09 /* salsa20.h */; };
 		E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
 		E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E91F00E74C00EB7A09 /* poly1305.c */; };
-		E9BCE68A1FF0CF85003CEA11 /* timer.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BCE6891FF0CF84003CEA11 /* timer.h */; };
-		E9BCE68C1FF0CF98003CEA11 /* timer.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timer.c */; };
-		E9BCE68D1FF0CFBB003CEA11 /* timer.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timer.c */; };
-		E9BCE6901FF0CFEC003CEA11 /* timer.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68E1FF0CFE4003CEA11 /* timer.c */; };
+		E9BCE68A1FF0CF85003CEA11 /* timerwheel.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BCE6891FF0CF84003CEA11 /* timerwheel.h */; };
+		E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
+		E9BCE68D1FF0CFBB003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
+		E9BCE6901FF0CFEC003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68E1FF0CFE4003CEA11 /* timerwheel.c */; };
 		E9F677D42007476D006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
 		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
@@ -1033,9 +1033,9 @@
 		E9BC76E41F00E70700EB7A09 /* salsa20.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = salsa20.h; sourceTree = "<group>"; };
 		E9BC76E61F00E72D00EB7A09 /* chacha20.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chacha20.c; sourceTree = "<group>"; };
 		E9BC76E91F00E74C00EB7A09 /* poly1305.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = poly1305.c; sourceTree = "<group>"; };
-		E9BCE6891FF0CF84003CEA11 /* timer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = timer.h; sourceTree = "<group>"; };
-		E9BCE68B1FF0CF98003CEA11 /* timer.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = timer.c; sourceTree = "<group>"; };
-		E9BCE68E1FF0CFE4003CEA11 /* timer.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = timer.c; sourceTree = "<group>"; };
+		E9BCE6891FF0CF84003CEA11 /* timerwheel.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = timerwheel.h; sourceTree = "<group>"; };
+		E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = timerwheel.c; sourceTree = "<group>"; };
+		E9BCE68E1FF0CFE4003CEA11 /* timerwheel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = timerwheel.c; sourceTree = "<group>"; };
 		E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "80no-handler-vs-h2-post.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http2-request-window-size.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9BCE6931FF35502003CEA11 /* 50mruby-channel.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50mruby-channel.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1208,7 +1208,7 @@
 				10EC2A371A0B4DC70083514F /* socketpool.c */,
 				10D0905A19F230280043D458 /* string.c */,
 				10AA2E951A80A612004322AC /* time.c */,
-				E9BCE68B1FF0CF98003CEA11 /* timer.c */,
+				E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */,
 				10AA2EA01A88082E004322AC /* url.c */,
 			);
 			path = common;
@@ -1272,7 +1272,7 @@
 				103BAB351B130666000694F4 /* socket.c */,
 				105534C61A3BB29100627ECB /* string.c */,
 				10AA2E981A81F68A004322AC /* time.c */,
-				E9BCE68E1FF0CFE4003CEA11 /* timer.c */,
+				E9BCE68E1FF0CFE4003CEA11 /* timerwheel.c */,
 				10AA2EA21A88090B004322AC /* url.c */,
 			);
 			path = common;
@@ -1618,7 +1618,7 @@
 				10EC2A351A0B4D370083514F /* socketpool.h */,
 				10D0905819F22FA10043D458 /* string_.h */,
 				10AA2E931A80A592004322AC /* time_.h */,
-				E9BCE6891FF0CF84003CEA11 /* timer.h */,
+				E9BCE6891FF0CF84003CEA11 /* timerwheel.h */,
 				107923A219A3215F00C52AD6 /* token.h */,
 				106C22F91C040F7800405689 /* tunnel.h */,
 				10AA2E9E1A8807CF004322AC /* url.h */,
@@ -2337,7 +2337,7 @@
 				108867751AD9069900987967 /* defaults.c.h in Headers */,
 				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
 				1047A9FF1D0E6D5900CC4BCE /* rand.h in Headers */,
-				E9BCE68A1FF0CF85003CEA11 /* timer.h in Headers */,
+				E9BCE68A1FF0CF85003CEA11 /* timerwheel.h in Headers */,
 				10AA2E941A80A592004322AC /* time_.h in Headers */,
 				0812AB2C1D7FD54700004F23 /* read.h in Headers */,
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
@@ -2645,7 +2645,7 @@
 				10FEF24A1D6FC6F600E11B1D /* durations.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
 				0812AB201D7FCFEB00004F23 /* async.c in Sources */,
-				E9BCE68C1FF0CF98003CEA11 /* timer.c in Sources */,
+				E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
@@ -2736,7 +2736,7 @@
 				E987E5F01FD8C04D00DE4346 /* brotli_bit_stream.c in Sources */,
 				107E34221C7FEE2200AEF5F8 /* brotli.c in Sources */,
 				105534C31A3B917000627ECB /* mimemap.c in Sources */,
-				E9BCE6901FF0CFEC003CEA11 /* timer.c in Sources */,
+				E9BCE6901FF0CFEC003CEA11 /* timerwheel.c in Sources */,
 				10AA2E991A81F68A004322AC /* time.c in Sources */,
 				10F417FF19C2D2F800B6E31A /* picotest.c in Sources */,
 				107D4D471B5880BC004A9B21 /* emitter.c in Sources */,
@@ -2855,7 +2855,7 @@
 				E9708B461E52C7DF0029E0A5 /* filecache.c in Sources */,
 				E9708B5F1E52C80F0029E0A5 /* errordoc.c in Sources */,
 				E9708B3C1E52C7860029E0A5 /* connect.c in Sources */,
-				E9BCE68D1FF0CFBB003CEA11 /* timer.c in Sources */,
+				E9BCE68D1FF0CFBB003CEA11 /* timerwheel.c in Sources */,
 				08F320E01E7A9CBD0038FA5A /* net.c in Sources */,
 				E9708B611E52C80F0029E0A5 /* file.c in Sources */,
 				E9708B7B1E52C83D0029E0A5 /* reproxy.c in Sources */,

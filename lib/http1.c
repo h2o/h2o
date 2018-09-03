@@ -55,7 +55,7 @@ struct st_h2o_http1_conn_t {
     h2o_socket_t *sock;
     /* internal structure */
     h2o_linklist_t _conns;
-    h2o_timeout_t _timeout_entry;
+    h2o_timer_t _timeout_entry;
     uint64_t _req_index;
     size_t _prevreqlen;
     size_t _reqsize;
@@ -127,7 +127,7 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
-    h2o_timeout_unlink(&conn->_timeout_entry);
+    h2o_timer_unlink(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
@@ -138,13 +138,13 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 /**
  * timer is activated if cb != NULL, disactivated otherwise
  */
-static void set_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timeout_cb cb)
+static void set_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_timer_cb cb)
 {
     if (conn->_timeout_entry.cb != NULL)
-        h2o_timeout_unlink(&conn->_timeout_entry);
+        h2o_timer_unlink(&conn->_timeout_entry);
     conn->_timeout_entry.cb = cb;
     if (cb != NULL)
-        h2o_timeout_link(conn->super.ctx->loop, timeout, &conn->_timeout_entry);
+        h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_timeout_entry);
 }
 
 static void process_request(struct st_h2o_http1_conn_t *conn)
@@ -517,7 +517,7 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
-static void reqread_on_timeout(h2o_timeout_t *entry)
+static void reqread_on_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
 
@@ -821,7 +821,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     proceed_pull(conn, headers_len);
 }
 
-static void on_delayed_send_complete(h2o_timeout_t *entry)
+static void on_delayed_send_complete(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
     on_send_complete(conn->sock, 0);

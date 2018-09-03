@@ -33,7 +33,6 @@ extern "C" {
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
-#include "h2o/timer.h"
 
 #ifndef H2O_USE_LIBUV
 #if H2O_USE_SELECT || H2O_USE_EPOLL || H2O_USE_KQUEUE

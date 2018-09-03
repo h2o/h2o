@@ -147,15 +147,15 @@ int fill_body(h2o_iovec_t *reqbuf)
 
 struct st_timeout_ctx {
     h2o_socket_t *sock;
-    h2o_timeout_t _timeout;
+    h2o_timer_t _timeout;
 };
-static void timeout_cb(h2o_timeout_t *entry)
+static void timeout_cb(h2o_timer_t *entry)
 {
     static h2o_iovec_t reqbuf;
     struct st_timeout_ctx *tctx = H2O_STRUCT_FROM_MEMBER(struct st_timeout_ctx, _timeout, entry);
 
     fill_body(&reqbuf);
-    h2o_timeout_unlink(&tctx->_timeout);
+    h2o_timer_unlink(&tctx->_timeout);
     h2o_http1client_write_req(tctx->sock, reqbuf, cur_body_size <= 0);
     free(tctx);
 
@@ -170,7 +170,7 @@ static void proceed_request(h2o_http1client_t *client, size_t written, int is_en
         memset(tctx, 0, sizeof(*tctx));
         tctx->sock = client->sock;
         tctx->_timeout.cb = timeout_cb;
-        h2o_timeout_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
+        h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 }
 
@@ -195,7 +195,7 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
         memset(tctx, 0, sizeof(*tctx));
         tctx->sock = client->sock;
         tctx->_timeout.cb = timeout_cb;
-        h2o_timeout_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
+        h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 
     return on_head;

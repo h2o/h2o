@@ -34,7 +34,7 @@ struct st_headers_early_hints_handler_t {
 struct st_headers_early_hints_sender_t {
     h2o_req_t *req;
     h2o_headers_command_t *cmds;
-    h2o_timeout_t deferred_timeout_entry;
+    h2o_timer_t deferred_timeout_entry;
 };
 
 static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t **slot)
@@ -64,7 +64,7 @@ static void on_informational(h2o_filter_t *_self, h2o_req_t *req)
     }
 }
 
-static void on_sender_deferred_timeout(h2o_timeout_t *entry)
+static void on_sender_deferred_timeout(h2o_timer_t *entry)
 {
     struct st_headers_early_hints_sender_t *sender =
         H2O_STRUCT_FROM_MEMBER(struct st_headers_early_hints_sender_t, deferred_timeout_entry, entry);
@@ -81,8 +81,8 @@ static void on_sender_deferred_timeout(h2o_timeout_t *entry)
 static void on_sender_dispose(void *_sender)
 {
     struct st_headers_early_hints_sender_t *sender = (struct st_headers_early_hints_sender_t *)_sender;
-    if (h2o_timeout_is_linked(&sender->deferred_timeout_entry))
-        h2o_timeout_unlink(&sender->deferred_timeout_entry);
+    if (h2o_timer_is_linked(&sender->deferred_timeout_entry))
+        h2o_timer_unlink(&sender->deferred_timeout_entry);
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -92,8 +92,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     struct st_headers_early_hints_sender_t *sender = h2o_mem_alloc_shared(&req->pool, sizeof(*sender), on_sender_dispose);
     sender->req = req;
     sender->cmds = handler->cmds;
-    h2o_timeout_init(&sender->deferred_timeout_entry, on_sender_deferred_timeout);
-    h2o_timeout_link(req->conn->ctx->loop, 0, &sender->deferred_timeout_entry);
+    h2o_timer_init(&sender->deferred_timeout_entry, on_sender_deferred_timeout);
+    h2o_timer_link(req->conn->ctx->loop, 0, &sender->deferred_timeout_entry);
 
     return -1;
 }

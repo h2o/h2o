@@ -467,7 +467,7 @@ h2o_evloop_t *create_evloop(size_t sz)
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
     update_now(loop);
     /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
-    loop->_timeouts = h2o_timer_create_context(3, loop->_now);
+    loop->_timeouts = h2o_timerwheel_create(3, loop->_now);
 
     return loop;
 }
@@ -480,7 +480,7 @@ void update_now(h2o_evloop_t *loop)
 
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 {
-    uint64_t wake_at = h2o_timer_get_wake_at(loop->_timeouts);
+    uint64_t wake_at = h2o_timerwheel_get_wake_at(loop->_timeouts);
 
     update_now(loop);
 
@@ -562,7 +562,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     struct st_h2o_evloop_socket_t *sock;
 
     /* timeouts are governed by the application and MUST be destroyed prior to destroying the loop */
-    assert(h2o_timer_get_wake_at(loop->_timeouts) == UINT64_MAX);
+    assert(h2o_timerwheel_get_wake_at(loop->_timeouts) == UINT64_MAX);
 
     /* dispose all socket */
     while ((sock = loop->_pending_as_client) != NULL) {
@@ -588,7 +588,7 @@ void h2o_evloop_destroy(h2o_evloop_t *loop)
     evloop_do_dispose(loop);
 
     /* lastly we need to free loop memory */
-    h2o_timer_destroy_context(loop->_timeouts);
+    h2o_timerwheel_destroy(loop->_timeouts);
     free(loop);
 }
 
@@ -606,11 +606,11 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
     while (1) {
         h2o_linklist_t expired;
         h2o_linklist_init_anchor(&expired);
-        h2o_timer_get_expired(loop->_timeouts, loop->_now, &expired);
+        h2o_timerwheel_get_expired(loop->_timeouts, loop->_now, &expired);
         if (h2o_linklist_is_empty(&expired))
             break;
         do {
-            h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, _link, expired.next);
+            h2o_timerwheel_entry_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timerwheel_entry_t, _link, expired.next);
             h2o_linklist_unlink(&timer->_link);
             timer->cb(timer);
             run_pending(loop);
