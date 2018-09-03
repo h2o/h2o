@@ -44,7 +44,7 @@ struct st_h2o_timer_t {
 };
 
 static void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb);
-void h2o_timer_link(h2o_loop_t *l, uint64_t ticks, h2o_timer_t *timer);
+void h2o_timer_link(h2o_loop_t *l, uint64_t delay_ticks, h2o_timer_t *timer);
 static int h2o_timer_is_linked(h2o_timer_t *timer);
 void h2o_timer_unlink(h2o_timer_t *timer);
 

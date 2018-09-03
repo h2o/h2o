@@ -62,7 +62,7 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
 
 #define h2o_timer_init h2o_timerwheel_init_entry
 #define h2o_timer_is_linked h2o_timerwheel_is_linked
-static void h2o_timer_link(h2o_evloop_t *loop, uint64_t rel_expire, h2o_timer_t *timer);
+static void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer);
 #define h2o_timer_unlink h2o_timerwheel_unlink
 
 /* inline definitions */
@@ -82,9 +82,9 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
     return loop->exec_time_counter.average;
 }
 
-inline void h2o_timer_link(h2o_evloop_t *loop, uint64_t ticks, h2o_timer_t *timer)
+inline void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer)
 {
-    h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now + ticks);
+    h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now + delay_ticks);
 }
 
 #endif
