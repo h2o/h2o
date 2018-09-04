@@ -176,6 +176,7 @@ int main(int argc, char **argv)
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
         subtest("lib/http2/casper.c", test_lib__http2__casper);
         subtest("lib/http2/cache_digests.c", test_lib__http2__cache_digests);
+        subtest("lib/quic/qpack.c", test_lib__quic_qpack);
     }
 
     { /* tests that use the run loop */

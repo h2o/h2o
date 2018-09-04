@@ -72,6 +72,7 @@ void test_lib__http2__hpack(void);
 void test_lib__http2__scheduler(void);
 void test_lib__http2__casper(void);
 void test_lib__http2__cache_digests(void);
+void test_lib__quic_qpack(void);
 void test_src__ssl_c(void);
 void test_issues293(void);
 void test_percent_encode_zero_byte(void);

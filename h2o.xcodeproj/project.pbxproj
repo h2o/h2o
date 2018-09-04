@@ -302,6 +302,9 @@
 		E901C435213E52C700D17C93 /* cifra.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD81E499E040029E0A5 /* cifra.c */; };
 		E901C436213E52CA00D17C93 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
 		E901C437213E52CD00D17C93 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
+		E901C43B213E59A000D17C93 /* qpack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C439213E59A000D17C93 /* qpack.c */; };
+		E901C43D213FAE0300D17C93 /* qpack.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C43C213FAE0300D17C93 /* qpack.h */; };
+		E901C4402140CCB500D17C93 /* qpack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C43F2140CCB500D17C93 /* qpack.c */; };
 		E90A95F31E30795100483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F21E30795100483D6C /* headers_util.c */; };
 		E90A95F51E30797D00483D6C /* headers_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E90A95F41E30797D00483D6C /* headers_util.c */; };
 		E918FC322136583F00CCB252 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
@@ -956,6 +959,9 @@
 		E901C419213E3C2700D17C93 /* cc_newreno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc_newreno.c; sourceTree = "<group>"; };
 		E901C41A213E3C2700D17C93 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
 		E901C41B213E3C2800D17C93 /* cc_cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc_cubic.c; sourceTree = "<group>"; };
+		E901C439213E59A000D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
+		E901C43C213FAE0300D17C93 /* qpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = qpack.h; sourceTree = "<group>"; };
+		E901C43F2140CCB500D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1423,6 +1429,7 @@
 				104B9A4E1A5FAA91009EEE64 /* core */,
 				104B9A4F1A5FAAA5009EEE64 /* handler */,
 				105534BF1A3B90E600627ECB /* http2 */,
+				E901C43E2140CC9000D17C93 /* quic */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -1706,6 +1713,7 @@
 				10AA2EA91A8DDC57004322AC /* multithread.h */,
 				10B38A711B8D34BB007DC191 /* mruby_.h */,
 				1058F6EC1D7CC81E00FFFFA3 /* openssl_backport.h */,
+				E901C43C213FAE0300D17C93 /* qpack.h */,
 				1047A9FE1D0E6D5900CC4BCE /* rand.h */,
 				104B9A231A4A4FAF009EEE64 /* serverutil.h */,
 				10D0903F19F0B90A0043D458 /* socket */,
@@ -1749,6 +1757,7 @@
 				104B9A4B1A5FA804009EEE64 /* handler */,
 				107923B119A3217300C52AD6 /* http1.c */,
 				107923B219A3217300C52AD6 /* http2 */,
+				E901C438213E593D00D17C93 /* quic */,
 				106C22F71C040F6400405689 /* tunnel.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
@@ -2204,6 +2213,22 @@
 			path = dcc;
 			sourceTree = "<group>";
 		};
+		E901C438213E593D00D17C93 /* quic */ = {
+			isa = PBXGroup;
+			children = (
+				E901C439213E59A000D17C93 /* qpack.c */,
+			);
+			path = quic;
+			sourceTree = "<group>";
+		};
+		E901C43E2140CC9000D17C93 /* quic */ = {
+			isa = PBXGroup;
+			children = (
+				E901C43F2140CCB500D17C93 /* qpack.c */,
+			);
+			path = quic;
+			sourceTree = "<group>";
+		};
 		E918FC3A2136589900CCB252 /* 00prop */ = {
 			isa = PBXGroup;
 			children = (
@@ -2491,6 +2516,7 @@
 				E901C3EE213E1C3600D17C93 /* linklist.h in Headers */,
 				1024A3FE1D22546800EB13F1 /* cache_digests.h in Headers */,
 				10DA969C1CD2BF9000679165 /* cache.h in Headers */,
+				E901C43D213FAE0300D17C93 /* qpack.h in Headers */,
 				1044812E1BFD0FBE0007863F /* filecache.h in Headers */,
 				107923A619A3215F00C52AD6 /* http2.h in Headers */,
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
@@ -2970,6 +2996,7 @@
 				E901C437213E52CD00D17C93 /* picotls.c in Sources */,
 				103BAB361B130666000694F4 /* socket.c in Sources */,
 				10583C001AEF368A004A3AD6 /* 293.c in Sources */,
+				E901C4402140CCB500D17C93 /* qpack.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
 				E901C433213E52BF00D17C93 /* sha256.c in Sources */,
 				E987E5EF1FD8C04D00DE4346 /* block_splitter.c in Sources */,
@@ -3138,6 +3165,7 @@
 				E9F677D42007476D006476D3 /* least_conn.c in Sources */,
 				E9708B441E52C7DF0029E0A5 /* cache.c in Sources */,
 				E9708B831E52C8560029E0A5 /* cache_digests.c in Sources */,
+				E901C43B213E59A000D17C93 /* qpack.c in Sources */,
 				E9708B7F1E52C8430029E0A5 /* requests.c in Sources */,
 				E9708B431E52C7AA0029E0A5 /* picohttpparser.c in Sources */,
 				E9708B671E52C80F0029E0A5 /* status.c in Sources */,
