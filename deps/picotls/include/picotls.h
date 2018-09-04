@@ -58,7 +58,10 @@ extern "C" {
 
 /* negotiated_groups */
 #define PTLS_GROUP_SECP256R1 23
+#define PTLS_GROUP_SECP384R1 24
+#define PTLS_GROUP_SECP521R1 25
 #define PTLS_GROUP_X25519 29
+#define PTLS_GROUP_X448 30
 
 /* signature algorithms */
 #define PTLS_SIGNATURE_RSA_PKCS1_SHA1 0x0201
@@ -93,6 +96,7 @@ extern "C" {
 #define PTLS_ALERT_CERTIFICATE_EXPIRED 45
 #define PTLS_ALERT_CERTIFICATE_UNKNOWN 46
 #define PTLS_ALERT_ILLEGAL_PARAMETER 47
+#define PTLS_ALERT_UNKNOWN_CA 48
 #define PTLS_ALERT_DECODE_ERROR 50
 #define PTLS_ALERT_DECRYPT_ERROR 51
 #define PTLS_ALERT_PROTOCOL_VERSION 70
@@ -100,6 +104,7 @@ extern "C" {
 #define PTLS_ALERT_USER_CANCELED 90
 #define PTLS_ALERT_MISSING_EXTENSION 109
 #define PTLS_ALERT_UNRECOGNIZED_NAME 112
+#define PTLS_ALERT_CERTIFICATE_REQUIRED 116
 #define PTLS_ALERT_NO_APPLICATION_PROTOCOL 120
 
 /* internal errors */
@@ -109,6 +114,7 @@ extern "C" {
 #define PTLS_ERROR_INCOMPATIBLE_KEY (PTLS_ERROR_CLASS_INTERNAL + 4)
 #define PTLS_ERROR_SESSION_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 5)
 #define PTLS_ERROR_STATELESS_RETRY (PTLS_ERROR_CLASS_INTERNAL + 6)
+#define PTLS_ERROR_NOT_AVAILABLE (PTLS_ERROR_CLASS_INTERNAL + 7)
 
 #define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
 #define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
@@ -382,6 +388,11 @@ PTLS_CALLBACK_TYPE(void, log_secret, ptls_t *tls, const char *label, ptls_iovec_
  * reference counting
  */
 PTLS_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
+/**
+ * applications that have their own record layer can set this function to derive their own traffic keys from the traffic secret.
+ * The cipher-suite that is being associated to the connection can be obtained by calling the ptls_get_cipher function.
+ */
+PTLS_CALLBACK_TYPE(int, update_traffic_key, ptls_t *tls, int is_enc, size_t epoch, const void *secret);
 
 /**
  * the configuration
@@ -435,6 +446,10 @@ struct st_ptls_context_t {
      */
     uint32_t max_early_data_size;
     /**
+     * the label prefix used in hkdf-expand-label (if NULL, uses "tls13 ")
+     */
+    const char *hkdf_label_prefix;
+    /**
      * if set, psk handshakes use (ec)dhe
      */
     unsigned require_dhe_on_psk : 1;
@@ -446,6 +461,11 @@ struct st_ptls_context_t {
      * if ChangeCipherSpec message should be sent during handshake
      */
     unsigned send_change_cipher_spec : 1;
+    /**
+     * if set, the server requests client certificates
+     * to authenticate the client.
+     */
+    unsigned require_client_authentication : 1;
     /**
      *
      */
@@ -462,6 +482,10 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_open_count_t *update_open_count;
+    /**
+     *
+     */
+    ptls_update_traffic_key_t *update_traffic_key;
 };
 
 typedef struct st_ptls_raw_extension_t {
@@ -770,6 +794,10 @@ int ptls_receive(ptls_t *tls, ptls_buffer_t *plaintextbuf, const void *input, si
  */
 int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t inlen);
 /**
+ * Returns if the context is a server context.
+ */
+int ptls_is_server(ptls_t *tls);
+/**
  * returns per-record overhead
  */
 size_t ptls_get_record_overhead(ptls_t *tls);
@@ -781,6 +809,10 @@ int ptls_send_alert(ptls_t *tls, ptls_buffer_t *sendbuf, uint8_t level, uint8_t 
  *
  */
 int ptls_export_secret(ptls_t *tls, void *output, size_t outlen, const char *label, ptls_iovec_t context_value, int is_early);
+/**
+ *
+ */
+int ptls_calc_hash(ptls_hash_algorithm_t *algo, void *output, const void *src, size_t len);
 /**
  *
  */
@@ -797,7 +829,7 @@ int ptls_hkdf_expand(ptls_hash_algorithm_t *hash, void *output, size_t outlen, p
  *
  */
 int ptls_hkdf_expand_label(ptls_hash_algorithm_t *algo, void *output, size_t outlen, ptls_iovec_t secret, const char *label,
-                           ptls_iovec_t hash_value, const char *base_label);
+                           ptls_iovec_t hash_value, const char *label_prefix);
 /**
  * instantiates a symmetric cipher
  */
@@ -823,7 +855,7 @@ static void ptls_cipher_encrypt(ptls_cipher_context_t *ctx, void *output, const 
  * @return pointer to an AEAD context if successful, otherwise NULL
  */
 ptls_aead_context_t *ptls_aead_new(ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, int is_enc, const void *secret,
-                                   const char *base_label);
+                                   const char *label_prefix);
 /**
  * destroys an AEAD cipher context
  */
@@ -853,6 +885,29 @@ static size_t ptls_aead_encrypt_final(ptls_aead_context_t *ctx, void *output);
  */
 static size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                                 const void *aad, size_t aadlen);
+/**
+ * Return the current read epoch.
+ */
+size_t ptls_get_read_epoch(ptls_t *tls);
+/**
+ * Runs the handshake by dealing directly with handshake messages. Callers MUST delay supplying input to this function until the
+ * epoch of the input becomes equal to the value returned by `ptls_get_read_epoch()`.
+ * @param tls            the TLS context
+ * @param sendbuf        buffer to which the output will be written
+ * @param epoch_offsets  start and end offset of the messages in each epoch. For example, when the server emits ServerHello between
+ *                       offset 0 and 38, the following handshake messages between offset 39 and 348, and a post-handshake message
+ *                       between 349 and 451, epoch_offsets will be {0,39,39,349,452} and the length of the sendbuf will be 452.
+ *                       This argument is an I/O argument. Applications can either reset sendbuf to empty and epoch_offsets and to
+ *                       all zero every time they invoke the function, or retain the values until the handshake completes so that
+ *                       data will be appended to sendbuf and epoch_offsets will be adjusted.
+ * @param in_epoch       epoch of the input
+ * @param input          input bytes (must be NULL when starting the handshake on the client side)
+ * @param inlen          length of the input
+ * @param properties     properties specific to the running handshake
+ * @return same as `ptls_handshake`
+ */
+int ptls_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offsets[5], size_t in_epoch, const void *input,
+                        size_t inlen, ptls_handshake_properties_t *properties);
 /**
  * internal
  */
@@ -930,7 +985,7 @@ inline size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const vo
     return ctx->do_decrypt(ctx, output, input, inlen, iv, aad, aadlen);
 }
 
-int ptls_load_certificates(ptls_context_t *ctx, char *cert_pem_file);
+int ptls_load_certificates(ptls_context_t *ctx, char const *cert_pem_file);
 
 extern ptls_get_time_t ptls_get_time;
 
