@@ -1,0 +1,12 @@
+[submodule "deps/picotls"]
+	path = deps/picotls
+	url = https://github.com/h2o/picotls.git
+[submodule "deps/klib"]
+	path = deps/klib
+	url = https://github.com/attractivechaos/klib.git
+[submodule "deps/picotest"]
+	path = deps/picotest
+	url = https://github.com/kazuho/picotest.git
+[submodule "deps/dcc"]
+	path = deps/dcc
+	url = https://github.com/h2o/daemons-cc.git

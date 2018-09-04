@@ -1,0 +1,37 @@
+language: c
+cache: ccache
+
+env:
+  global:
+    - MAKEFLAGS="-j 2"
+
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+      before_install: &bi
+        - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+        - sudo apt-get update --yes
+        - sudo apt-get install --yes -f gcc-6 g++-6
+        - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 60 --slave /usr/bin/g++ g++ /usr/bin/g++-6
+      script: &s
+        # Cmake 2.8.12
+        - curl -O https://cmake.org/files/v2.8/cmake-2.8.12.1.tar.gz
+        - tar -xf cmake-2.8.12.1.tar.gz
+        - cd cmake-2.8.12.1/
+        - cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_CursesDialog=OFF -DBUILD_TESTING=OFF .
+        - make && sudo make install
+        - cd ..
+        # LibreSSL
+        - curl -O https://www.openssl.org/source/openssl-1.0.2l.tar.gz
+        - tar -xf openssl-1.0.2l.tar.gz
+        - cd openssl-1.0.2l
+        - ./config --prefix=$HOME/openssl-build
+        - make
+        - make install
+        - cd ..
+        - cmake -DOPENSSL_ROOT_DIR=$HOME/openssl-build .
+        - make && make check
+    - os: macosx
+      script: *s

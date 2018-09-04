@@ -1,0 +1,59 @@
+/*
+ * Copyright (c) 2017 Fastly, Kazuho Oku
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */
+#ifndef quicly_constants_h
+#define quicly_constants_h
+
+#include <stddef.h>
+#include <stdint.h>
+
+#define QUICLY_DELAYED_ACK_TIMEOUT 25 /* milliseconds */
+
+#define QUICLY_TRANSPORT_ERROR_BASE 1024
+#define QUICLY_TRANSPORT_ERROR_CODE(n) (QUICLY_TRANSPORT_ERROR_BASE + (n))
+#define QUICLY_ERROR_INTERNAL QUICLY_TRANSPORT_ERROR_CODE(1)
+#define QUICLY_ERROR_FLOW_CONTROL QUICLY_TRANSPORT_ERROR_CODE(3)
+#define QUICLY_ERROR_STREAM_ID QUICLY_TRANSPORT_ERROR_CODE(4)
+#define QUICLY_ERROR_STREAM_STATE QUICLY_TRANSPORT_ERROR_CODE(5)
+#define QUICLY_ERROR_FINAL_OFFSET QUICLY_TRANSPORT_ERROR_CODE(6)
+#define QUICLY_ERROR_FRAME_FORMAT QUICLY_TRANSPORT_ERROR_CODE(7)
+#define QUICLY_ERROR_TRANSPORT_PARAMETER QUICLY_TRANSPORT_ERROR_CODE(8)
+#define QUICLY_ERROR_VERSION_NEGOTIATION QUICLY_TRANSPORT_ERROR_CODE(9)
+#define QUICLY_ERROR_PROTOCOL_VIOLATION QUICLY_TRANSPORT_ERROR_CODE(10)
+#define QUICLY_ERROR_UNSOLICITED_PONG QUICLY_TRANSPORT_ERROR_CODE(11)
+#define QUICLY_ERROR_FRAME_ERROR(frame_id) QUICLY_TRANSPORT_ERROR_CODE(0x100 + (frame_id))
+#define QUICLY_ERROR_TBD QUICLY_ERROR_INTERNAL
+
+#define QUICLY_INTERNAL_ERROR_BASE 1536
+#define QUICLY_INTERNAL_ERROR_CODE(n) (QUICLY_INTERNAL_ERROR_BASE + (n))
+#define QUICLY_ERROR_HANDSHAKE_TOO_LARGE QUICLY_INTERNAL_ERROR_CODE(1)
+#define QUICLY_ERROR_PACKET_IGNORED QUICLY_INTERNAL_ERROR_CODE(2)
+#define QUICLY_ERROR_FIN_CLOSED QUICLY_INTERNAL_ERROR_CODE(3)
+#define QUICLY_ERROR_SENDBUF_FULL QUICLY_INTERNAL_ERROR_CODE(4)
+#define QUICLY_ERROR_CONNECTION_CLOSED QUICLY_INTERNAL_ERROR_CODE(5)
+#define QUICLY_ERROR_TOO_MANY_OPEN_STREAMS QUICLY_INTERNAL_ERROR_CODE(6)
+#define QUICLY_ERROR_VERSION_NEGOTIATION_FAILURE QUICLY_INTERNAL_ERROR_CODE(7)
+
+#define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
+
+typedef int64_t quicly_stream_id_t;
+
+#endif
