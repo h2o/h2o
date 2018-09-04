@@ -108,7 +108,6 @@
 		107923C619A3217300C52AD6 /* connection.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B319A3217300C52AD6 /* connection.c */; };
 		107923C719A3217300C52AD6 /* hpack.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B419A3217300C52AD6 /* hpack.c */; };
 		107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923B519A3217300C52AD6 /* hpack_huffman_table.h */; };
-		107923C919A3217300C52AD6 /* hpack_static_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923B619A3217300C52AD6 /* hpack_static_table.h */; };
 		107923CB19A3217300C52AD6 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B819A3217300C52AD6 /* frame.c */; };
 		107923CC19A3217300C52AD6 /* context.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B919A3217300C52AD6 /* context.c */; };
 		107923CD19A3217300C52AD6 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* memory.c */; };
@@ -690,7 +689,6 @@
 		107923B319A3217300C52AD6 /* connection.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = connection.c; sourceTree = "<group>"; };
 		107923B419A3217300C52AD6 /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		107923B519A3217300C52AD6 /* hpack_huffman_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hpack_huffman_table.h; sourceTree = "<group>"; };
-		107923B619A3217300C52AD6 /* hpack_static_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hpack_static_table.h; sourceTree = "<group>"; };
 		107923B819A3217300C52AD6 /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		107923B919A3217300C52AD6 /* context.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = context.c; sourceTree = "<group>"; };
 		107923BA19A3217300C52AD6 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
@@ -1667,7 +1665,6 @@
 			isa = PBXGroup;
 			children = (
 				107923B519A3217300C52AD6 /* hpack_huffman_table.h */,
-				107923B619A3217300C52AD6 /* hpack_static_table.h */,
 				1024A3FB1D22315000EB13F1 /* cache_digests.c */,
 				10AAAC641B6C9275004487C3 /* casper.c */,
 				107923B319A3217300C52AD6 /* connection.c */,
@@ -2315,7 +2312,6 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				107923C919A3217300C52AD6 /* hpack_static_table.h in Headers */,
 				10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */,
 				08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */,
 				1022E7C61CA8BCEB00CE2A05 /* yrmcds_portability.h in Headers */,

@@ -34,18 +34,12 @@
 #define CONTENT_LENGTH_HEADER_MAX_SIZE                                                                                             \
     (3 + sizeof(H2O_UINT64_LONGEST_STR) - 1) /* uses Literal Header Field without Indexing (RFC7541 6.2.2) */
 
-struct st_h2o_hpack_static_table_entry_t {
-    const h2o_token_t *name;
-    const h2o_iovec_t value;
-};
-
 struct st_h2o_decode_header_result_t {
     h2o_iovec_t *name;
     h2o_iovec_t *value;
 };
 
 #include "hpack_huffman_table.h"
-#include "hpack_static_table.h"
 
 static inline int value_is_part_of_static_table(const h2o_iovec_t *value)
 {
