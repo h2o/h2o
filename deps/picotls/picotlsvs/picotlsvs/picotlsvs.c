@@ -9,6 +9,12 @@
 #include "../../include/picotls/asn1.h"
 #include "../../include/picotls/pembase64.h"
 
+#ifdef _WINDOWS
+#define PICOTLS_CERT_STORE "..\\..\\t\\assets\\test-ca.crt"
+#else 
+#define PICOTLS_CERT_STORE "../../t/assets/test-ca.crt"
+#endif
+
 void log_printf(void * ctx, const char * format, ...)
 {
 	va_list argptr;
@@ -121,7 +127,7 @@ int get_certificates(char * pem_fname, ptls_iovec_t ** list, int * nb_certs)
     return ret;
 }
 
-void SetSignCertificate(char * keypem, ptls_context_t * ctx)
+void SetSignCertificate(char const * keypem, ptls_context_t * ctx)
 {
     static ptls_openssl_sign_certificate_t signer;
 
@@ -249,10 +255,29 @@ int verify_1rtt_secret_extraction(ptls_t *tls_client, ptls_t *tls_server)
     return ret;
 }
 
-int openssl_init_test_client(ptls_context_t *ctx_client)
+X509_STORE * openssl_init_cert_store(char const * crt_file)
+{
+    int ret = 0;
+    X509_STORE *store = X509_STORE_new();
+
+    if (store != NULL) {
+        X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
+        ret = X509_LOOKUP_load_file(lookup, crt_file, X509_FILETYPE_PEM);
+        if (ret != 1) {
+            fprintf(stderr, "Cannot load store (%s), ret = %d\n",
+                crt_file, ret);
+        }
+    }
+
+    return store;
+}
+
+
+int openssl_init_test_client(ptls_context_t *ctx_client, char const * crt_file)
 {
 	int ret = 0;
 	static ptls_openssl_verify_certificate_t verifier;
+    X509_STORE *store = NULL;
 
 	/* Initialize the client context */
 	memset(ctx_client, 0, sizeof(ptls_context_t));
@@ -260,13 +285,14 @@ int openssl_init_test_client(ptls_context_t *ctx_client)
     ctx_client->get_time = &ptls_get_time;
 	ctx_client->key_exchanges = ptls_openssl_key_exchanges;
 	ctx_client->cipher_suites = ptls_openssl_cipher_suites;
-	ptls_openssl_init_verify_certificate(&verifier, NULL);
+	ptls_openssl_init_verify_certificate(&verifier, openssl_init_cert_store(crt_file));
 	ctx_client->verify_certificate = &verifier.super;
 
 	return ret;
 }
 
-int openssl_init_test_server(ptls_context_t *ctx_server, char * key_file, char * cert_file)
+int openssl_init_test_server(ptls_context_t *ctx_server, 
+    char const * key_file, char const * cert_file)
 {
 	int ret = 0;
 	/* Initialize the server context */
@@ -292,21 +318,18 @@ int openssl_init_test_server(ptls_context_t *ctx_server, char * key_file, char *
 int minicrypto_init_test_client(ptls_context_t *ctx_client)
 {
 	int ret = 0;
-	// static ptls_openssl_verify_certificate_t verifier;
-
 	/* Initialize the client context */
 	memset(ctx_client, 0, sizeof(ptls_context_t));
 	ctx_client->random_bytes = ptls_minicrypto_random_bytes;
     ctx_client->get_time = &ptls_get_time;
 	ctx_client->key_exchanges = ptls_minicrypto_key_exchanges;
 	ctx_client->cipher_suites = ptls_minicrypto_cipher_suites;
-	// ptls_openssl_init_verify_certificate(&verifier, NULL);
 	ctx_client->verify_certificate = NULL; // &verifier.super;
 
 	return ret;
 }
 
-int minicrypto_init_test_server(ptls_context_t *ctx_server, char * key_file, char * cert_file)
+int minicrypto_init_test_server(ptls_context_t *ctx_server, char const * key_file, char const * cert_file)
 {
 	int ret = 0;
 
@@ -334,7 +357,7 @@ int minicrypto_init_test_server(ptls_context_t *ctx_server, char * key_file, cha
 #define PICOTLS_VS_TEST_EXTENSION 1234
 static uint8_t testExtensionClient[] = { 1, 2, 3 };
 static uint8_t testExtensionServer[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
-char const test_sni[] = "picotls.example.com";
+char const test_sni[] = "test.example.com";
 char const test_alpn[] = "picotls";
 static const ptls_iovec_t proposed_alpn[] = {
 	{ (uint8_t *) "grease", 6},
@@ -456,7 +479,7 @@ int verify_handshake_extension(struct st_picotls_vs_test_context_t * app_ctx_cli
 	return ret;
 }
 
-int ptls_memory_loopback_test(int openssl_client, int openssl_server, char * key_file, char * cert_file)
+int ptls_memory_loopback_test(int openssl_client, int openssl_server, char const * key_file, char const * cert_file)
 {
 	ptls_context_t ctx_client, ctx_server;
 	ptls_t *tls_client = NULL, *tls_server = NULL;
@@ -469,7 +492,7 @@ int ptls_memory_loopback_test(int openssl_client, int openssl_server, char * key
 	/* init the contexts */
 	if (ret == 0 && openssl_client)
 	{
-		ret = openssl_init_test_client(&ctx_client);
+		ret = openssl_init_test_client(&ctx_client, PICOTLS_CERT_STORE);
 	}
 	else
 	{
@@ -617,8 +640,8 @@ int ptls_memory_loopback_test(int openssl_client, int openssl_server, char * key
 }
 
 static char const * test_keys[] = {
-	"key.pem",
-	"ec_key.pem",
+    "key.pem",
+    "ec_key.pem",
 	"key-test-1.pem",
 	"key-test-2.pem",
 	"key-test-4.pem"

@@ -751,10 +751,10 @@
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -764,10 +764,10 @@
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -866,10 +866,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -880,10 +880,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -911,10 +911,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -924,10 +924,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
