@@ -34,7 +34,7 @@ extern const char *h2o_hpack_soft_err_found_invalid_char_in_header_value;
 /**
  * encodes an integer (maximum size of the output excluding the first octet is H2O_HTTP2_ENCODE_INT_MAX_LENGTH bytes)
  */
-uint8_t *h2o_hpack_encode_int(uint8_t *dst, int64_t value, size_t prefix_bits);
+uint8_t *h2o_hpack_encode_int(uint8_t *dst, int64_t value, unsigned prefix_bits);
 /**
  * encodes a huffman string and returns its length, or returns SIZE_MAX if the resulting string would be longer than the input
  */
@@ -42,7 +42,7 @@ size_t h2o_hpack_encode_huffman(uint8_t *dst, const uint8_t *src, size_t len);
 /**
  * decodes an integer, or returns any negative number when the observing a partial input
  */
-int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits);
+int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits);
 /**
  * decodes a huffman string and returns its length, or SIZE_MAX if fails. The destination buffer must be at least double the size
  * of the input.

@@ -55,7 +55,7 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
     return buf;
 }
 
-int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
+int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits)
 {
     uint64_t value;
     unsigned shift;
@@ -565,12 +565,12 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
     return 0;
 }
 
-static inline int encode_int_is_onebyte(int64_t value, size_t prefix_bits)
+static inline int encode_int_is_onebyte(int64_t value, unsigned prefix_bits)
 {
     return value < (1 << prefix_bits) - 1;
 }
 
-uint8_t *h2o_hpack_encode_int(uint8_t *dst, int64_t value, size_t prefix_bits)
+uint8_t *h2o_hpack_encode_int(uint8_t *dst, int64_t value, unsigned prefix_bits)
 {
     if (encode_int_is_onebyte(value, prefix_bits)) {
         *dst++ |= value;
