@@ -565,20 +565,19 @@ int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_tab
     return 0;
 }
 
-static inline int encode_int_is_onebyte(uint32_t value, size_t prefix_bits)
+static inline int encode_int_is_onebyte(int64_t value, size_t prefix_bits)
 {
     return value < (1 << prefix_bits) - 1;
 }
 
-uint8_t *h2o_hpack_encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
+uint8_t *h2o_hpack_encode_int(uint8_t *dst, int64_t value, size_t prefix_bits)
 {
     if (encode_int_is_onebyte(value, prefix_bits)) {
         *dst++ |= value;
     } else {
         /* see also: MAX_ENCODE_INT_LENGTH */
+        assert(value >= 0);
         value -= (1 << prefix_bits) - 1;
-        if (value > 0x0fffffff)
-            h2o_fatal("value out of range");
         *dst++ |= (1 << prefix_bits) - 1;
         for (; value >= 128; value >>= 7) {
             *dst++ = 0x80 | value;
@@ -624,7 +623,7 @@ static size_t encode_as_is(uint8_t *dst, const char *s, size_t len)
 {
     uint8_t *start = dst;
     *dst = '\0';
-    dst = h2o_hpack_encode_int(dst, (uint32_t)len, 7);
+    dst = h2o_hpack_encode_int(dst, len, 7);
     memcpy(dst, s, len);
     dst += len;
     return dst - start;
@@ -643,7 +642,7 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
             } else {
                 uint8_t head[8];
                 head[0] = '\x80';
-                head_len = h2o_hpack_encode_int(head, (uint32_t)hufflen, 7) - head;
+                head_len = h2o_hpack_encode_int(head, hufflen, 7) - head;
                 memmove(dst + head_len, dst + 1, hufflen);
                 memcpy(dst, head, head_len);
             }
@@ -677,7 +676,7 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
                 goto Next;
             /* name and value matched! */
             *dst = 0x80;
-            dst = h2o_hpack_encode_int(dst, (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET), 7);
+            dst = h2o_hpack_encode_int(dst, header_table->num_entries - n + HEADER_TABLE_OFFSET, 7);
             return dst;
         Next:
             ++header_table_index;
