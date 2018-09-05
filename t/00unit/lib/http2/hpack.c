@@ -122,7 +122,7 @@ static void test_hpack(void)
 #define TEST(input, output)                                                                                                        \
     in = h2o_iovec_init(H2O_STRLIT(input));                                                                                        \
     p = (const uint8_t *)in.base;                                                                                                  \
-    out = decode_int(&p, p + in.len, 7);                                                                                           \
+    out = h2o_hpack_decode_int(&p, p + in.len, 7);                                                                                 \
     ok(out == output);                                                                                                             \
     ok(p == (const uint8_t *)in.base + in.len);
         TEST("\x00", 0);
@@ -148,7 +148,7 @@ static void test_hpack(void)
         size_t len;
 #define TEST(encoded, value)                                                                                                       \
     memset(buf, 0, sizeof(buf));                                                                                                   \
-    len = encode_int(buf, value, 7) - buf;                                                                                         \
+    len = h2o_hpack_encode_int(buf, value, 7) - buf;                                                                               \
     ok(len == sizeof(encoded) - 1);                                                                                                \
     ok(memcmp(buf, encoded, sizeof(encoded) - 1) == 0);
         TEST("\x00", 0);

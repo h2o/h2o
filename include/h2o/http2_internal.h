@@ -38,8 +38,6 @@ typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
 /* hpack */
 
-#define H2O_HTTP2_ENCODE_INT_MAX_LENGTH 5
-
 typedef struct st_h2o_hpack_header_table_t {
     /* ring buffer */
     struct st_h2o_hpack_header_table_entry_t *entries;

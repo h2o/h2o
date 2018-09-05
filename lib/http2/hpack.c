@@ -61,7 +61,7 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
     return buf;
 }
 
-static int32_t decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
+int32_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
 {
     int32_t value, mult;
     uint8_t prefix_max = (1 << prefix_bits) - 1;
@@ -213,7 +213,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         return NULL;
 
     is_huffman = (**src & 0x80) != 0;
-    if ((len = decode_int(src, src_end, 7)) == -1)
+    if ((len = h2o_hpack_decode_int(src, src_end, 7)) == -1)
         return NULL;
 
     if (is_huffman) {
@@ -312,14 +312,14 @@ Redo:
     /* determine the mode and handle accordingly */
     if (**src >= 128) {
         /* indexed header field representation */
-        if ((index = decode_int(src, src_end, 7)) <= 0)
+        if ((index = h2o_hpack_decode_int(src, src_end, 7)) <= 0)
             return H2O_HTTP2_ERROR_COMPRESSION;
         value_is_indexed = 1;
     } else if (**src >= 64) {
         /* literal header field with incremental handling */
         if (**src == 64) {
             ++*src;
-        } else if ((index = decode_int(src, src_end, 6)) <= 0) {
+        } else if ((index = h2o_hpack_decode_int(src, src_end, 6)) <= 0) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
         do_index = 1;
@@ -327,13 +327,13 @@ Redo:
         /* literal header field without indexing / never indexed */
         if ((**src & 0xf) == 0) {
             ++*src;
-        } else if ((index = decode_int(src, src_end, 4)) <= 0) {
+        } else if ((index = h2o_hpack_decode_int(src, src_end, 4)) <= 0) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
     } else {
         /* size update */
         int new_apacity;
-        if ((new_apacity = decode_int(src, src_end, 5)) < 0) {
+        if ((new_apacity = h2o_hpack_decode_int(src, src_end, 5)) < 0) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
         if (new_apacity > hpack_header_table->hpack_max_capacity) {
@@ -577,7 +577,7 @@ static inline int encode_int_is_onebyte(uint32_t value, size_t prefix_bits)
     return value < (1 << prefix_bits) - 1;
 }
 
-static uint8_t *encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
+uint8_t *h2o_hpack_encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits)
 {
     if (encode_int_is_onebyte(value, prefix_bits)) {
         *dst++ |= value;
@@ -631,7 +631,7 @@ static size_t encode_as_is(uint8_t *dst, const char *s, size_t len)
 {
     uint8_t *start = dst;
     *dst = '\0';
-    dst = encode_int(dst, (uint32_t)len, 7);
+    dst = h2o_hpack_encode_int(dst, (uint32_t)len, 7);
     memcpy(dst, s, len);
     dst += len;
     return dst - start;
@@ -650,7 +650,7 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
             } else {
                 uint8_t head[8];
                 head[0] = '\x80';
-                head_len = encode_int(head, (uint32_t)hufflen, 7) - head;
+                head_len = h2o_hpack_encode_int(head, (uint32_t)hufflen, 7) - head;
                 memmove(dst + head_len, dst + 1, hufflen);
                 memcpy(dst, head, head_len);
             }
@@ -684,7 +684,7 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
                 goto Next;
             /* name and value matched! */
             *dst = 0x80;
-            dst = encode_int(dst, (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET), 7);
+            dst = h2o_hpack_encode_int(dst, (uint32_t)(header_table->num_entries - n + HEADER_TABLE_OFFSET), 7);
             return dst;
         Next:
             ++header_table_index;
@@ -700,10 +700,10 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
         if (dont_compress == 1) {
             /* mark the field as 'never indexed' */
             *dst = 0x10;
-            dst = encode_int(dst, name_index, 4);
+            dst = h2o_hpack_encode_int(dst, name_index, 4);
         } else {
             *dst = 0x40;
-            dst = encode_int(dst, name_index, 6);
+            dst = h2o_hpack_encode_int(dst, name_index, 6);
         }
     } else {
         /* literal header field with indexing (new name) */
@@ -798,7 +798,7 @@ static uint8_t *encode_literal_header_without_indexing(uint8_t *dst, const h2o_i
 
 static size_t calc_capacity(size_t name_len, size_t value_len)
 {
-    return name_len + value_len + 1 + H2O_HTTP2_ENCODE_INT_MAX_LENGTH * 2;
+    return name_len + value_len + 1 + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2;
 }
 
 static size_t calc_headers_capacity(const h2o_header_t *headers, size_t num_headers)
