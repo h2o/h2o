@@ -28,6 +28,7 @@
 #include "h2o/cache.h"
 #include "h2o/http2_casper.h"
 #include "h2o/cache_digests.h"
+#include "h2o/hpack.h"
 #include "h2o/http2_scheduler.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
@@ -54,15 +55,7 @@ typedef struct st_h2o_hpack_header_table_entry_t {
     const char *err_desc; /* the recorded soft error description */
 } h2o_hpack_header_table_entry_t;
 
-#define H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS 1
-#define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
-#define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
-#define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
-
 void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
-int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                size_t max_frame_size, h2o_req_t *req, uint32_t parent_stream_id);
