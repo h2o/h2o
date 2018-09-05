@@ -55,31 +55,30 @@ static h2o_iovec_t *alloc_buf(h2o_mem_pool_t *pool, size_t len)
     return buf;
 }
 
-int32_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
+int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits)
 {
-    int32_t value, mult;
+    uint64_t value;
+    unsigned shift;
     uint8_t prefix_max = (1 << prefix_bits) - 1;
 
     if (*src >= src_end)
         return -1;
 
-    value = (uint8_t) * (*src)++ & prefix_max;
-    if (value != prefix_max) {
-        return value;
-    }
+    value = *(*src)++ & prefix_max;
+    if (value != prefix_max)
+        return (int64_t)value;
 
-    /* we only allow at most 4 octets (excluding prefix) to be used as int (== 2**(4*7) == 2**28) */
-    if (src_end - *src > 4)
-        src_end = *src + 4;
+    /* we only allow at most 9 octets (excluding prefix) to be used as int (== 2**(9*7) == 2**63) */
+    if (src_end - *src > 9)
+        src_end = *src + 9;
 
     value = prefix_max;
-    for (mult = 1;; mult *= 128) {
-        if (*src >= src_end)
-            return -1;
-        value += (**src & 127) * mult;
+    for (shift = 0; *src < src_end; shift += 7) {
+        value += (uint64_t)(**src & 127) << shift;
         if ((*(*src)++ & 128) == 0)
-            return value;
+            return (int64_t)value >= 0 ? (int64_t)value : -1;
     }
+    return -1;
 }
 
 static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, uint8_t *seen_char_types)
@@ -201,7 +200,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
 {
     h2o_iovec_t *ret;
     int is_huffman;
-    int32_t len;
+    int64_t len;
 
     if (*src >= src_end)
         return NULL;
@@ -211,14 +210,14 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         return NULL;
 
     if (is_huffman) {
-        if (*src + len > src_end)
+        if (len > src_end - *src)
             return NULL;
         ret = alloc_buf(pool, len * 2); /* max compression ratio is >= 0.5 */
         if ((ret->len = h2o_hpack_decode_huffman(ret->base, *src, len, is_header_name, err_desc)) == SIZE_MAX)
             return NULL;
         ret->base[ret->len] = '\0';
     } else {
-        if (*src + len > src_end)
+        if (len > src_end - *src)
             return NULL;
         if (is_header_name) {
             /* pseudo-headers are checked later in `decode_header` */
@@ -296,7 +295,7 @@ static int decode_header(h2o_mem_pool_t *pool, struct st_h2o_decode_header_resul
                          h2o_hpack_header_table_t *hpack_header_table, const uint8_t **const src, const uint8_t *src_end,
                          const char **err_desc)
 {
-    int32_t index = 0;
+    int64_t index = 0;
     int value_is_indexed = 0, do_index = 0;
 
 Redo:
@@ -326,14 +325,14 @@ Redo:
         }
     } else {
         /* size update */
-        int new_apacity;
-        if ((new_apacity = h2o_hpack_decode_int(src, src_end, 5)) < 0) {
+        int64_t new_capacity;
+        if ((new_capacity = h2o_hpack_decode_int(src, src_end, 5)) < 0) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
-        if (new_apacity > hpack_header_table->hpack_max_capacity) {
+        if (new_capacity > hpack_header_table->hpack_max_capacity) {
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
-        hpack_header_table->hpack_capacity = new_apacity;
+        hpack_header_table->hpack_capacity = (size_t)new_capacity;
         while (hpack_header_table->num_entries != 0 && hpack_header_table->hpack_size > hpack_header_table->hpack_capacity) {
             header_table_evict_one(hpack_header_table);
         }

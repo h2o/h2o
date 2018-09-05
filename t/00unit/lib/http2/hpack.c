@@ -118,7 +118,7 @@ static void test_hpack(void)
     {
         h2o_iovec_t in;
         const uint8_t *p;
-        int32_t out;
+        int64_t out;
 #define TEST(input, output)                                                                                                        \
     in = h2o_iovec_init(H2O_STRLIT(input));                                                                                        \
     p = (const uint8_t *)in.base;                                                                                                  \
@@ -134,11 +134,14 @@ static void test_hpack(void)
         TEST("\x7f\x81\x00", 128);
         TEST("\x7f\x80\x01", 255);
         TEST("\x7f\xff\xff\xff\x7f", 0xfffffff + 127);
+        TEST("\x7f\x80\xff\xff\xff\xff\xff\xff\xff\x7f", INT64_MAX);
         /* failures */
         TEST("", -1);
         TEST("\x7f", -1);
         TEST("\x7f\xff", -1);
         TEST("\x7f\xff\xff\xff\xff", -1);
+        TEST("\x7f\x81\xff\xff\xff\xff\xff\xff\xff\x7f", -1);
+        TEST("\x7f\x80\xff\xff\xff\xff\xff\xff\xff\xff", -1);
 #undef TEST
     }
 

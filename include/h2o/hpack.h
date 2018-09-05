@@ -25,7 +25,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define H2O_HPACK_ENCODE_INT_MAX_LENGTH 5
+#define H2O_HPACK_ENCODE_INT_MAX_LENGTH 10 /* first byte + 9 bytes (7*9==63 bits to hold positive numbers of int64_t) */
 
 extern const char *h2o_hpack_err_found_upper_case_in_header_name;
 extern const char *h2o_hpack_soft_err_found_invalid_char_in_header_name;
@@ -40,9 +40,9 @@ uint8_t *h2o_hpack_encode_int(uint8_t *dst, uint32_t value, size_t prefix_bits);
  */
 size_t h2o_hpack_encode_huffman(uint8_t *dst, const uint8_t *src, size_t len);
 /**
- * decodes an integer, or returns -1 when the observing a partial input
+ * decodes an integer, or returns any negative number when the observing a partial input
  */
-int32_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits);
+int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, size_t prefix_bits);
 /**
  * decodes a huffman string and returns its length, or SIZE_MAX if fails. The destination buffer must be at least double the size
  * of the input.
