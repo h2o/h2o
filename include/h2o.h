@@ -139,6 +139,7 @@ typedef struct st_h2o_handler_t {
     void (*on_context_dispose)(struct st_h2o_handler_t *self, h2o_context_t *ctx);
     void (*dispose)(struct st_h2o_handler_t *self);
     int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req);
+    void* userdata;
     /**
      * If the flag is set, protocol handler may invoke the request handler before receiving the end of the request body. The request
      * handler can determine if the protocol handler has actually done so by checking if `req->proceed_req` is set to non-NULL.
