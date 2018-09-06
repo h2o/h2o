@@ -122,6 +122,7 @@ INCLUDE_DIRECTORIES(
     include
     deps/cloexec
     deps/brotli/c/include
+    deps/dcc
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -130,6 +131,7 @@ INCLUDE_DIRECTORIES(
     deps/neverbleed
     deps/picohttpparser
     deps/picotest
+    deps/quicly/include
     deps/yaml/include
     deps/yoml)
 
@@ -255,6 +257,31 @@ SET(PICOTLS_SOURCE_FILES
     deps/picotls/lib/cifra.c
     deps/picotls/lib/uecc.c
     deps/picotls/lib/openssl.c)
+
+SET(QUIC_INCLUDE_DIRECTORIES
+    deps/dcc
+    deps/quicly/include)
+
+SET(QUIC_SOURCE_FILES
+    deps/dcc/cc.c
+    deps/dcc/cc_cubic.c
+    deps/dcc/cc_newreno.c
+    deps/quicly/lib/ack.c
+    deps/quicly/lib/buffer.c
+    deps/quicly/lib/frame.c
+    deps/quicly/lib/loss.c
+    deps/quicly/lib/maxsender.c
+    deps/quicly/lib/quicly.c
+    deps/quicly/lib/ranges.c
+    deps/quicly/lib/recvbuf.c
+    deps/quicly/lib/sendbuf.c
+    lib/quic/qpack.c)
+
+SET(QUIC_UNIT_TEST_SOURCE_FILES
+    t/00unit/lib/quic/qpack.c)
+
+SET(QUIC_UNIT_TEST_REMOVE_FILES
+    lib/quic/qpack.c)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -383,6 +410,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
+    t/00unit/lib/quic/qpack.c
     t/00unit/src/ssl.c
     t/00unit/issues/293.c
     t/00unit/issues/percent-encode-zero-byte.c)
@@ -412,7 +440,8 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/hpack.c
-    lib/http2/scheduler.c)
+    lib/http2/scheduler.c
+    lib/quic/qpack.c)
 
 SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
@@ -551,9 +580,11 @@ IF (WITH_MRUBY)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
 IF (WITH_PICOTLS)
-    LIST(APPEND STANDALONE_SOURCE_FILES ${PICOTLS_SOURCE_FILES})
+    LIST(APPEND STANDALONE_SOURCE_FILES ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES})
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_PICOTLS=1")
-    INCLUDE_DIRECTORIES(${PICOTLS_INCLUDE_DIRECTORIES})
+    INCLUDE_DIRECTORIES(${PICOTLS_INCLUDE_DIRECTORIES} ${QUIC_INCLUDE_DIRECTORIES})
+    LIST(APPEND UNIT_TEST_SOURCE_FILES ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} ${QUIC_UNIT_TEST_SOURCE_FILES})
+    LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES ${QUIC_UNIT_TEST_REMOVE_FILES})
 ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
