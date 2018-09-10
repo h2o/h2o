@@ -922,6 +922,9 @@ typedef struct st_h2o_filereq_t {
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 
+#define H2O_SEND_SERVER_TIMING_BASIC 1
+#define H2O_SEND_SERVER_TIMING_PROXY 2
+
 /**
  * a HTTP request
  */
@@ -1086,21 +1089,9 @@ struct st_h2o_req_t {
      */
     unsigned char res_is_delegated : 1;
     /**
-     * whether if the bytes sent is counted by ostreams other than final ostream
-     */
-    unsigned char bytes_counted_by_ostream : 1;
-    /**
      * set by the generator if the protocol handler should replay the request upon seeing 425
      */
     unsigned char reprocess_if_too_early : 1;
-    /**
-     * whether if the response should include server-timing header
-     */
-    unsigned char send_server_timing_header : 1;
-    /**
-     * whether if the response should include server-timing trailer
-     */
-    unsigned char send_server_timing_trailer : 1;
     /**
      * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
      */
@@ -1109,6 +1100,11 @@ struct st_h2o_req_t {
      * whether the request is a subrequest
      */
     unsigned char is_subrequest : 1;
+
+    /**
+     * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
+     */
+    unsigned send_server_timing;
 
     /**
      * Whether the producer of the response has explicitely disabled or
@@ -1230,7 +1226,7 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
 /**
  * encodes the duration value of the `server-timing` header
  */
-void h2o_add_server_timing_header(h2o_req_t *req);
+void h2o_add_server_timing_header(h2o_req_t *req, int uses_trailer);
 /**
  * encodes the duration value of the `server-timing` trailer
  */
@@ -1656,13 +1652,6 @@ int h2o_access_log_open_log(const char *path);
 h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const char *fmt, int escape);
 h2o_logger_t *h2o_access_log_register(h2o_pathconf_t *pathconf, h2o_access_log_filehandle_t *handle);
 void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
-
-/* lib/chunked.c */
-
-/**
- * registers the chunked encoding output filter (added by default)
- */
-void h2o_chunked_register(h2o_pathconf_t *pathconf);
 
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);

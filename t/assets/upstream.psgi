@@ -159,11 +159,13 @@ builder {
     };
     mount "/streaming-body" => sub {
         my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        my $sleep = $query->{sleep} // 0.1;
         return sub {
             my $responder = shift;
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
             for my $i (1..30) {
-                sleep 0.1;
+                sleep $sleep;
                 $writer->write($i);
             }
             $writer->close;
