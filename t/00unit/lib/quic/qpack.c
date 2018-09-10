@@ -59,16 +59,22 @@ static void on_enc_send(quicly_sendbuf_t *sendbuf)
     buffer_transmit(&enc_recvbuf, sendbuf);
 }
 
+static void on_dec_send(quicly_sendbuf_t *sendbuf)
+{
+    assert(!"FIXME");
+}
+
 void test_lib__quic_qpack(void)
 {
     h2o_qpack_context_t ctx = {4096};
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(&ctx);
     h2o_qpack_encoder_t *enc = NULL;
-    quicly_sendbuf_t sendbuf;
+    quicly_sendbuf_t enc_sendbuf, dec_sendbuf;
     int ret;
 
     quicly_recvbuf_init(&enc_recvbuf, dummy_recvbuf_on_change);
-    quicly_sendbuf_init(&sendbuf, on_enc_send);
+    quicly_sendbuf_init(&enc_sendbuf, on_enc_send);
+    quicly_sendbuf_init(&dec_sendbuf, on_dec_send);
 
     {
         h2o_mem_pool_t pool;
@@ -79,7 +85,7 @@ void test_lib__quic_qpack(void)
         h2o_add_header(&pool, &headers, H2O_TOKEN_AUTHORITY, NULL, H2O_STRLIT("example.com"));
         h2o_add_header(&pool, &headers, H2O_TOKEN_PATH, NULL, H2O_STRLIT("/foobar"));
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-hoge"), 0, NULL, H2O_STRLIT("\x01\x02\x03")); /* literal, non-huff */
-        ret = h2o_qpack_flatten_headers(enc, &sendbuf, headers.entries, headers.size);
+        ret = h2o_qpack_flatten_headers(enc, &enc_sendbuf, headers.entries, headers.size);
         ok(ret == 0);
         h2o_mem_clear_pool(&pool);
     }
@@ -93,7 +99,7 @@ void test_lib__quic_qpack(void)
         size_t content_length;
         const char *err_desc = NULL;
         ret = h2o_qpack_parse_headers(&req, dec, 0, input.base, input.len, &pseudo_header_exists_map, &content_length, NULL,
-                                      &err_desc);
+                                      &dec_sendbuf, &err_desc);
         ok(ret == 0);
         ok(h2o_memis(req.input.method.base, req.input.method.len, H2O_STRLIT("GET")));
         ok(req.input.scheme == &H2O_URL_SCHEME_HTTPS);
@@ -103,4 +109,6 @@ void test_lib__quic_qpack(void)
         ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("x-hoge")));
         ok(h2o_memis(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("\x01\x02\x03")));
     }
+
+    ok(dec_sendbuf.pending.num_ranges == 0);
 }

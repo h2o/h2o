@@ -364,7 +364,7 @@ static int dynamic_table_size_update(h2o_qpack_decoder_t *qpack, int64_t max_siz
     return 0;
 }
 
-int h2o_qpack_decoder_update(h2o_qpack_decoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc)
+int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc)
 {
     const uint8_t *src = *input, *src_end = src + input_len;
     int64_t ret = 0;
@@ -425,47 +425,36 @@ Exit:
     return (int)ret;
 }
 
-/* enough space for ack or cancellation and sync */
-#define DECODER_SEND_BUF_SIZE ((1 + H2O_HPACK_ENCODE_INT_MAX_LENGTH) * 2)
-
-static uint8_t *emit_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *dst)
+static int send_header_ack(h2o_qpack_decoder_t *qpack, quicly_sendbuf_t *sendbuf, int64_t stream_id)
 {
-    if (qpack->insert_count != 0) {
-        *dst = 0;
-        dst = h2o_hpack_encode_int(dst, qpack->insert_count, 6);
-        qpack->insert_count = 0;
-    }
-    return dst;
+    uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH], *dst = buf;
+
+    *dst = 0x80;
+    dst = h2o_hpack_encode_int(dst, stream_id, 7);
+
+    return quicly_sendbuf_write(sendbuf, buf, dst - buf, NULL);
 }
 
 int h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, quicly_sendbuf_t *sendbuf)
 {
-    uint8_t buf[DECODER_SEND_BUF_SIZE], *dst = buf;
+    uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH], *dst = buf;
 
-    dst = emit_state_sync(qpack, dst);
-    if (dst == buf)
+    if (qpack->insert_count == 0)
         return 0;
-    return quicly_sendbuf_write(sendbuf, buf, dst - buf, NULL);
-}
 
-int h2o_qpack_decoder_send_header_ack(h2o_qpack_decoder_t *qpack, quicly_sendbuf_t *sendbuf, int64_t stream_id)
-{
-    uint8_t buf[DECODER_SEND_BUF_SIZE], *dst = buf;
-
-    *dst = 0x80;
-    dst = h2o_hpack_encode_int(dst, stream_id, 7);
-    emit_state_sync(qpack, dst);
+    *dst = 0;
+    dst = h2o_hpack_encode_int(dst, qpack->insert_count, 6);
+    qpack->insert_count = 0;
 
     return quicly_sendbuf_write(sendbuf, buf, dst - buf, NULL);
 }
 
 int h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, quicly_sendbuf_t *sendbuf, int64_t stream_id)
 {
-    uint8_t buf[DECODER_SEND_BUF_SIZE], *dst = buf;
+    uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH], *dst = buf;
 
     *dst = 0x40;
     dst = h2o_hpack_encode_int(dst, stream_id, 6);
-    emit_state_sync(qpack, dst);
 
     return quicly_sendbuf_write(sendbuf, buf, dst - buf, NULL);
 }
@@ -669,7 +658,7 @@ Fail:
 
 int h2o_qpack_parse_headers(h2o_req_t *req, h2o_qpack_decoder_t *qpack, int64_t stream_id, const uint8_t *_src, size_t len,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            const char **err_desc)
+                            quicly_sendbuf_t *sendbuf, const char **err_desc)
 {
     const uint8_t *src = _src, *src_end = src + len;
     int64_t largest_ref, base_index;
@@ -692,9 +681,18 @@ int h2o_qpack_parse_headers(h2o_req_t *req, h2o_qpack_decoder_t *qpack, int64_t 
         return H2O_HTTP2_ERROR_INCOMPLETE;
     }
 
+    /* parse */
     struct st_h2o_qpack_decode_header_ctx_t ctx = {qpack, base_index};
-    return h2o_hpack_parse_headers(req, decode_header, &ctx, src, src_end - src, pseudo_header_exists_map, content_length, digests,
-                                   err_desc);
+    int ret;
+    if ((ret = h2o_hpack_parse_headers(req, decode_header, &ctx, src, src_end - src, pseudo_header_exists_map, content_length,
+                                       digests, err_desc)) != 0)
+        return ret;
+
+    /* send header ack if necessary */
+    if (largest_ref != 0 && (ret = send_header_ack(qpack, sendbuf, stream_id)) != 0)
+        return ret;
+
+    return 0;
 }
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(h2o_qpack_context_t *ctx)
@@ -705,6 +703,62 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(h2o_qpack_context_t *ctx)
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack)
 {
     free(qpack);
+}
+
+static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t insert_count, const char **err_desc)
+{
+    if (insert_count != 0) {
+        *err_desc = "unexpected message: Table State Synchronize";
+        return H2O_HTTP2_ERROR_COMPRESSION;
+    }
+    /* FIXME is insert_count=0 considered a valid argument? */
+    return 0;
+}
+
+static int handle_header_ack(h2o_qpack_encoder_t *qpack, int64_t stream_id, const char **err_desc)
+{
+    *err_desc = "unexpected message: Header Acknowledgement";
+    return H2O_HTTP2_ERROR_COMPRESSION;
+}
+
+static int handle_stream_cancellation(h2o_qpack_encoder_t *qpack, int64_t stream_id, const char **err_desc)
+{
+    return 0;
+}
+
+int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc)
+{
+    const uint8_t *src = *input, *src_end = src + input_len;
+    int64_t ret = 0;
+
+    while (src != src_end && ret == 0) {
+        switch (*src >> 6) {
+        case 0: /* table state synchronize */ {
+            int64_t insert_count;
+            if ((ret = insert_count = h2o_hpack_decode_int(&src, src_end, 6)) < 0)
+                goto Exit;
+            ret = handle_table_state_synchronize(qpack, insert_count, err_desc);
+        } break;
+        default: /* header ack */ {
+            int64_t stream_id;
+            if ((ret = stream_id = h2o_hpack_decode_int(&src, src_end, 7)) < 0)
+                goto Exit;
+            ret = handle_header_ack(qpack, stream_id, err_desc);
+        } break;
+        case 1: /* stream cancellation */ {
+            int64_t stream_id;
+            if ((ret = stream_id = h2o_hpack_decode_int(&src, src_end, 6)) < 0)
+                goto Exit;
+            ret = handle_stream_cancellation(qpack, stream_id, err_desc);
+        } break;
+        }
+        *input = src;
+    }
+
+Exit:
+    if (ret == H2O_HTTP2_ERROR_INCOMPLETE)
+        ret = 0;
+    return (int)ret;
 }
 
 static uint8_t *flatten_string(uint8_t *dst, const char *src, size_t len, unsigned prefix_bits, int dont_compress)

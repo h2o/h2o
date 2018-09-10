@@ -42,17 +42,18 @@ extern const char *h2o_qpack_err_invalid_pseudo_header;
 
 h2o_qpack_decoder_t *h2o_qpack_create_decoder(h2o_qpack_context_t *ctx);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
-int h2o_qpack_decoder_update(h2o_qpack_decoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc);
+int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc);
 int h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, quicly_sendbuf_t *sendbuf);
 int h2o_qpack_decoder_send_header_ack(h2o_qpack_decoder_t *qpack, quicly_sendbuf_t *sendbuf, int64_t stream_id);
 int h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, quicly_sendbuf_t *sendbuf, int64_t stream_id);
 
 int h2o_qpack_parse_headers(h2o_req_t *req, h2o_qpack_decoder_t *qpack, int64_t stream_id, const uint8_t *src, size_t len,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            const char **err_desc);
+                            quicly_sendbuf_t *sendbuf, const char **err_desc);
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(h2o_qpack_context_t *ctx);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
+int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc);
 int h2o_qpack_flatten_headers(h2o_qpack_encoder_t *qpack, quicly_sendbuf_t *sendbuf, h2o_header_t *headers, size_t num_headers);
 
 #endif
