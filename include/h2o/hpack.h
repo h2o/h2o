@@ -41,7 +41,7 @@ uint8_t *h2o_hpack_encode_int(uint8_t *dst, int64_t value, unsigned prefix_bits)
  */
 size_t h2o_hpack_encode_huffman(uint8_t *dst, const uint8_t *src, size_t len);
 /**
- * decodes an integer, or returns any negative number when the observing a partial input
+ * decodes an integer, or returns an error code (either H2O_HTTP2_ERROR_COMPRESSION or H2O_HTTP2_ERROR_INCOMPLETE)
  */
 int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits);
 /**
