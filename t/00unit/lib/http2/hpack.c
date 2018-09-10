@@ -124,7 +124,7 @@ static void test_hpack(void)
     p = (const uint8_t *)in.base;                                                                                                  \
     out = h2o_hpack_decode_int(&p, p + in.len, 7);                                                                                 \
     ok(out == output);                                                                                                             \
-    ok(p == (const uint8_t *)in.base + in.len);
+    ok(output == H2O_HTTP2_ERROR_COMPRESSION || p == (const uint8_t *)in.base + in.len);
         TEST("\x00", 0);
         TEST("\x03", 3);
         TEST("\x81", 1);
@@ -136,12 +136,12 @@ static void test_hpack(void)
         TEST("\x7f\xff\xff\xff\x7f", 0xfffffff + 127);
         TEST("\x7f\x80\xff\xff\xff\xff\xff\xff\xff\x7f", INT64_MAX);
         /* failures */
-        TEST("", -1);
-        TEST("\x7f", -1);
-        TEST("\x7f\xff", -1);
-        TEST("\x7f\xff\xff\xff\xff", -1);
-        TEST("\x7f\x81\xff\xff\xff\xff\xff\xff\xff\x7f", -1);
-        TEST("\x7f\x80\xff\xff\xff\xff\xff\xff\xff\xff", -1);
+        TEST("", H2O_HTTP2_ERROR_INCOMPLETE);
+        TEST("\x7f", H2O_HTTP2_ERROR_INCOMPLETE);
+        TEST("\x7f\xff", H2O_HTTP2_ERROR_INCOMPLETE);
+        TEST("\x7f\xff\xff\xff\xff", H2O_HTTP2_ERROR_INCOMPLETE);
+        TEST("\x7f\x81\xff\xff\xff\xff\xff\xff\xff\x7f", H2O_HTTP2_ERROR_COMPRESSION);
+        TEST("\x7f\x80\xff\xff\xff\xff\xff\xff\xff\xff", H2O_HTTP2_ERROR_COMPRESSION);
 #undef TEST
     }
 

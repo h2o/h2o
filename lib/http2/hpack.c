@@ -57,23 +57,30 @@ int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, unsign
     uint8_t prefix_max = (1 << prefix_bits) - 1;
 
     if (*src >= src_end)
-        return -1;
+        return H2O_HTTP2_ERROR_INCOMPLETE;
 
     value = *(*src)++ & prefix_max;
     if (value != prefix_max)
         return (int64_t)value;
 
-    /* we only allow at most 9 octets (excluding prefix) to be used as int (== 2**(9*7) == 2**63) */
-    if (src_end - *src > 9)
-        src_end = *src + 9;
-
+    /* decode upto 8 octets (excluding prefix), that are guaranteed not to cause overflow */
     value = prefix_max;
-    for (shift = 0; *src < src_end; shift += 7) {
+    for (shift = 0; shift < 56; shift += 7) {
+        if (*src == src_end)
+            return H2O_HTTP2_ERROR_INCOMPLETE;
         value += (uint64_t)(**src & 127) << shift;
         if ((*(*src)++ & 128) == 0)
-            return (int64_t)value >= 0 ? (int64_t)value : -1;
+            return (int64_t)value;
     }
-    return -1;
+    /* handling the 9th octet */
+    if (*src == src_end)
+        return H2O_HTTP2_ERROR_INCOMPLETE;
+    if ((**src & 128) != 0)
+        return H2O_HTTP2_ERROR_COMPRESSION;
+    value += (uint64_t)(*(*src)++ & 127) << shift;
+    if (value > (uint64_t)INT64_MAX)
+        return H2O_HTTP2_ERROR_COMPRESSION;
+    return value;
 }
 
 static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, uint8_t *seen_char_types)
@@ -201,7 +208,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, const uint8_t **src, con
         return NULL;
 
     is_huffman = (**src & 0x80) != 0;
-    if ((len = h2o_hpack_decode_int(src, src_end, 7)) == -1)
+    if ((len = h2o_hpack_decode_int(src, src_end, 7)) < 0)
         return NULL;
 
     if (is_huffman) {
