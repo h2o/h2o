@@ -53,6 +53,7 @@ MRuby.each_target do
 
   # legal documents
   file "#{build_dir}/LEGAL" => [MRUBY_CONFIG, __FILE__] do |t|
+    FileUtils.mkdir_p File.dirname t.name
     open(t.name, 'w+') do |f|
      f.puts <<LEGAL
 Copyright (c) #{Time.now.year} mruby developers

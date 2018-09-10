@@ -347,7 +347,7 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | (minor_version != 0);
 
-    /* RFC 7541 6.2: a server MUST NOT send a 1xx response to an HTTP/1.0 client */
+    /* RFC 7231 6.2: a server MUST NOT send a 1xx response to an HTTP/1.0 client */
     if (conn->req.version < 0x101)
         conn->_ostr_final.super.send_informational = NULL;
 

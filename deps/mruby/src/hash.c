@@ -161,6 +161,53 @@ mrb_hash_new(mrb_state *mrb)
 static mrb_value mrb_hash_default(mrb_state *mrb, mrb_value hash);
 static mrb_value hash_default(mrb_state *mrb, mrb_value hash, mrb_value key);
 
+static mrb_value
+mrb_hash_init_copy(mrb_state *mrb, mrb_value self)
+{
+  mrb_value orig;
+  struct RHash* copy;
+  khash_t(ht) *orig_h;
+  mrb_value ifnone, vret;
+
+  mrb_get_args(mrb, "o", &orig);
+  if (mrb_obj_equal(mrb, self, orig)) return self;
+  if ((mrb_type(self) != mrb_type(orig)) || (mrb_obj_class(mrb, self) != mrb_obj_class(mrb, orig))) {
+      mrb_raise(mrb, E_TYPE_ERROR, "initialize_copy should take same class object");
+  }
+
+  orig_h = RHASH_TBL(self);
+  copy = (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
+  copy->ht = kh_init(ht, mrb);
+
+  if (orig_h && kh_size(orig_h) > 0) {
+    khash_t(ht) *copy_h = copy->ht;
+    khiter_t k, copy_k;
+
+    for (k = kh_begin(orig_h); k != kh_end(orig_h); k++) {
+      if (kh_exist(orig_h, k)) {
+        int ai = mrb_gc_arena_save(mrb);
+        copy_k = kh_put(ht, mrb, copy_h, KEY(kh_key(orig_h, k)));
+        mrb_gc_arena_restore(mrb, ai);
+        kh_val(copy_h, copy_k).v = kh_val(orig_h, k).v;
+        kh_val(copy_h, copy_k).n = kh_size(copy_h)-1;
+      }
+    }
+  }
+
+  if (MRB_RHASH_DEFAULT_P(self)) {
+    copy->flags |= MRB_HASH_DEFAULT;
+  }
+  if (MRB_RHASH_PROCDEFAULT_P(self)) {
+    copy->flags |= MRB_HASH_PROC_DEFAULT;
+  }
+  vret = mrb_obj_value(copy);
+  ifnone = RHASH_IFNONE(self);
+  if (!mrb_nil_p(ifnone)) {
+      mrb_iv_set(mrb, vret, mrb_intern_lit(mrb, "ifnone"), ifnone);
+  }
+  return vret;
+}
+
 MRB_API mrb_value
 mrb_hash_get(mrb_state *mrb, mrb_value hash, mrb_value key)
 {
@@ -223,46 +270,6 @@ mrb_hash_set(mrb_state *mrb, mrb_value hash, mrb_value key, mrb_value val)
   mrb_field_write_barrier_value(mrb, (struct RBasic*)RHASH(hash), key);
   mrb_field_write_barrier_value(mrb, (struct RBasic*)RHASH(hash), val);
   return;
-}
-
-static mrb_value
-mrb_hash_dup(mrb_state *mrb, mrb_value hash)
-{
-  struct RHash* ret;
-  khash_t(ht) *h, *ret_h;
-  khiter_t k, ret_k;
-  mrb_value ifnone, vret;
-
-  h = RHASH_TBL(hash);
-  ret = (struct RHash*)mrb_obj_alloc(mrb, MRB_TT_HASH, mrb->hash_class);
-  ret->ht = kh_init(ht, mrb);
-
-  if (h && kh_size(h) > 0) {
-    ret_h = ret->ht;
-
-    for (k = kh_begin(h); k != kh_end(h); k++) {
-      if (kh_exist(h, k)) {
-        int ai = mrb_gc_arena_save(mrb);
-        ret_k = kh_put(ht, mrb, ret_h, KEY(kh_key(h, k)));
-        mrb_gc_arena_restore(mrb, ai);
-        kh_val(ret_h, ret_k).v = kh_val(h, k).v;
-        kh_val(ret_h, ret_k).n = kh_size(ret_h)-1;
-      }
-    }
-  }
-
-  if (MRB_RHASH_DEFAULT_P(hash)) {
-    ret->flags |= MRB_HASH_DEFAULT;
-  }
-  if (MRB_RHASH_PROCDEFAULT_P(hash)) {
-    ret->flags |= MRB_HASH_PROC_DEFAULT;
-  }
-  vret = mrb_obj_value(ret);
-  ifnone = RHASH_IFNONE(hash);
-  if (!mrb_nil_p(ifnone)) {
-      mrb_iv_set(mrb, vret, mrb_intern_lit(mrb, "ifnone"), ifnone);
-  }
-  return vret;
 }
 
 MRB_API mrb_value
@@ -888,6 +895,7 @@ mrb_init_hash(mrb_state *mrb)
   mrb->hash_class = h = mrb_define_class(mrb, "Hash", mrb->object_class);              /* 15.2.13 */
   MRB_SET_INSTANCE_TT(h, MRB_TT_HASH);
 
+  mrb_define_method(mrb, h, "initialize_copy", mrb_hash_init_copy,   MRB_ARGS_REQ(1));
   mrb_define_method(mrb, h, "[]",              mrb_hash_aget,        MRB_ARGS_REQ(1)); /* 15.2.13.4.2  */
   mrb_define_method(mrb, h, "[]=",             mrb_hash_aset,        MRB_ARGS_REQ(2)); /* 15.2.13.4.3  */
   mrb_define_method(mrb, h, "clear",           mrb_hash_clear,       MRB_ARGS_NONE()); /* 15.2.13.4.4  */
@@ -906,7 +914,6 @@ mrb_init_hash(mrb_state *mrb)
   mrb_define_method(mrb, h, "length",          mrb_hash_size_m,      MRB_ARGS_NONE()); /* 15.2.13.4.20 */
   mrb_define_method(mrb, h, "member?",         mrb_hash_has_key,     MRB_ARGS_REQ(1)); /* 15.2.13.4.21 */
   mrb_define_method(mrb, h, "shift",           mrb_hash_shift,       MRB_ARGS_NONE()); /* 15.2.13.4.24 */
-  mrb_define_method(mrb, h, "dup",             mrb_hash_dup,         MRB_ARGS_NONE());
   mrb_define_method(mrb, h, "size",            mrb_hash_size_m,      MRB_ARGS_NONE()); /* 15.2.13.4.25 */
   mrb_define_method(mrb, h, "store",           mrb_hash_aset,        MRB_ARGS_REQ(2)); /* 15.2.13.4.26 */
   mrb_define_method(mrb, h, "value?",          mrb_hash_has_value,   MRB_ARGS_REQ(1)); /* 15.2.13.4.27 */

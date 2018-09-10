@@ -197,24 +197,28 @@ class Array
   # left  : the beginning of sort region
   # right : the end of sort region
   def __sort_sub__(left, right, &block)
-    if left < right
-      i = left
-      j = right
-      pivot = self[i + (j - i) / 2]
-      while true
-        while ((block)? block.call(self[i], pivot): (self[i] <=> pivot)) < 0
+    stack = [ [left, right] ]
+    until stack.empty?
+      left, right = stack.pop
+      if left < right
+        i = left
+        j = right
+        pivot = self[i + (j - i) / 2]
+        while true
+          while ((block)? block.call(self[i], pivot): (self[i] <=> pivot)) < 0
+            i += 1
+          end
+          while ((block)? block.call(pivot, self[j]): (pivot <=> self[j])) < 0
+            j -= 1
+          end
+          break if (i >= j)
+          tmp = self[i]; self[i] = self[j]; self[j] = tmp;
           i += 1
-        end
-        while ((block)? block.call(pivot, self[j]): (pivot <=> self[j])) < 0
           j -= 1
         end
-        break if (i >= j)
-        tmp = self[i]; self[i] = self[j]; self[j] = tmp;
-        i += 1
-        j -= 1
+        stack.push [left, i-1]
+        stack.push [j+1, right]
       end
-      __sort_sub__(left, i-1, &block)
-      __sort_sub__(j+1, right, &block)
     end
   end
   #  private :__sort_sub__

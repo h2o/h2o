@@ -1088,8 +1088,12 @@ gen_vmassignment(codegen_scope *s, node *tree, int rhs, int val)
     t = tree->car;
     n = 0;
     while (t) {
-      genop(s, MKOP_ABC(OP_AREF, cursp(), rhs, n));
-      gen_assignment(s, t->car, cursp(), NOVAL);
+      int sp = cursp();
+
+      genop(s, MKOP_ABC(OP_AREF, sp, rhs, n));
+      push();
+      gen_assignment(s, t->car, sp, NOVAL);
+      pop();
       n++;
       t = t->cdr;
     }
@@ -1103,14 +1107,9 @@ gen_vmassignment(codegen_scope *s, node *tree, int rhs, int val)
         p = p->cdr;
       }
     }
-    if (val) {
-      genop(s, MKOP_AB(OP_MOVE, cursp(), rhs));
-    }
-    else {
-      pop();
-    }
-    push_n(post);
-    pop_n(post);
+    genop(s, MKOP_AB(OP_MOVE, cursp(), rhs));
+    push_n(post+1);
+    pop_n(post+1);
     genop(s, MKOP_ABC(OP_APOST, cursp(), n, post));
     n = 1;
     if (t->car) {               /* rest */
@@ -1124,8 +1123,8 @@ gen_vmassignment(codegen_scope *s, node *tree, int rhs, int val)
         n++;
       }
     }
-    if (!val) {
-      push();
+    if (val) {
+      genop(s, MKOP_AB(OP_MOVE, cursp(), rhs));
     }
   }
 }
@@ -3050,8 +3049,8 @@ loop_pop(codegen_scope *s, int val)
   if (val) push();
 }
 
-MRB_API struct RProc*
-mrb_generate_code(mrb_state *mrb, parser_state *p)
+static struct RProc*
+generate_code(mrb_state *mrb, parser_state *p, int val)
 {
   codegen_scope *scope = scope_new(mrb, 0, 0);
   struct RProc *proc;
@@ -3068,7 +3067,7 @@ mrb_generate_code(mrb_state *mrb, parser_state *p)
   MRB_TRY(&scope->jmp) {
     mrb->jmp = &scope->jmp; 
     /* prepare irep */
-    codegen(scope, p->tree, NOVAL);
+    codegen(scope, p->tree, val);
     proc = mrb_proc_new(mrb, scope->irep);
     mrb_irep_decref(mrb, scope->irep);
     mrb_pool_close(scope->mpool);
@@ -3086,4 +3085,25 @@ mrb_generate_code(mrb_state *mrb, parser_state *p)
     return NULL;
   }
   MRB_END_EXC(&scope->jmp);
+}
+
+MRB_API struct RProc*
+mrb_generate_code(mrb_state *mrb, parser_state *p)
+{
+  return generate_code(mrb, p, VAL);
+}
+
+void
+mrb_irep_remove_lv(mrb_state *mrb, mrb_irep *irep)
+{
+  int i;
+
+  if (irep->lv) {
+    mrb_free(mrb, irep->lv);
+    irep->lv = NULL;
+  }
+
+  for (i = 0; i < irep->rlen; ++i) {
+    mrb_irep_remove_lv(mrb, irep->reps[i]);
+  }
 }

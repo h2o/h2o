@@ -666,6 +666,28 @@ struct st_h2o_context_t {
         h2o_timeout_t keepalive_timeout;
     } proxy;
 
+    struct {
+        /**
+         * counter for SSL errors
+         */
+        uint64_t errors;
+        /**
+         * counter for selected ALPN protocols
+         */
+        uint64_t alpn_h1;
+        uint64_t alpn_h2;
+        /**
+         * counter for handshakes
+         */
+        uint64_t handshake_full;
+        uint64_t handshake_resume;
+        /**
+         * summations of handshake latency in microsecond
+         */
+        uint64_t handshake_accum_time_full;
+        uint64_t handshake_accum_time_resume;
+    } ssl;
+
     /**
      * pointer to per-module configs
      */

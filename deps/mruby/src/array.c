@@ -377,6 +377,9 @@ ary_replace(mrb_state *mrb, struct RArray *a, struct RArray *b)
     if (ARY_EMBED_P(a)) {
       ARY_UNSET_EMBED_FLAG(a);
     }
+    else {
+      mrb_free(mrb, a->as.heap.ptr);
+    }
     a->as.heap.ptr = b->as.heap.ptr;
     a->as.heap.len = len;
     a->as.heap.aux.shared = b->as.heap.aux.shared;

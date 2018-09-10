@@ -22,11 +22,10 @@ struct RBasic {
 };
 #define mrb_basic_ptr(v) ((struct RBasic*)(mrb_ptr(v)))
 
-/* flags bits >= 18 is reserved */
-#define MRB_FLAG_IS_FROZEN (1 << 18)
-#define MRB_FROZEN_P(o) ((o)->flags & MRB_FLAG_IS_FROZEN)
-#define MRB_SET_FROZEN_FLAG(o) ((o)->flags |= MRB_FLAG_IS_FROZEN)
-#define MRB_UNSET_FROZEN_FLAG(o) ((o)->flags &= ~MRB_FLAG_IS_FROZEN)
+#define MRB_FL_OBJ_IS_FROZEN (1 << 20)
+#define MRB_FROZEN_P(o) ((o)->flags & MRB_FL_OBJ_IS_FROZEN)
+#define MRB_SET_FROZEN_FLAG(o) ((o)->flags |= MRB_FL_OBJ_IS_FROZEN)
+#define MRB_UNSET_FROZEN_FLAG(o) ((o)->flags &= ~MRB_FL_OBJ_IS_FROZEN)
 
 struct RObject {
   MRB_OBJECT_HEADER;

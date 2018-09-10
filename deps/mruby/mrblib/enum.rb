@@ -339,8 +339,7 @@ module Enumerable
     h = 12347
     i = 0
     self.each do |e|
-      n = (e.hash & (0x7fffffff >> (i % 16))) << (i % 16)
-      h ^= n
+      h = __update_hash(h, i, e.hash)
       i += 1
     end
     h
