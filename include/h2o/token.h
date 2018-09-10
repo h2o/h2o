@@ -25,11 +25,8 @@
 
 #include "h2o/string_.h"
 
-/**
- * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
- */
-typedef struct st_h2o_token_t {
-    h2o_iovec_t buf;
+typedef struct st_h2o_header_flags_t {
+    unsigned char token_index_plus1; /* 1-origin, 0 means not token */
     char http2_static_table_name_index; /* non-zero if any */
     unsigned char proxy_should_drop_for_req : 1;
     unsigned char proxy_should_drop_for_res : 1;
@@ -37,6 +34,14 @@ typedef struct st_h2o_token_t {
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
     unsigned char dont_compress : 1;
+} h2o_header_flags_t;
+
+/**
+ * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
+ */
+typedef struct st_h2o_token_t {
+    h2o_iovec_t buf;
+    h2o_header_flags_t flags;
 } h2o_token_t;
 
 #ifndef H2O_MAX_TOKENS

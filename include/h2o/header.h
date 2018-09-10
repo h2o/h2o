@@ -41,6 +41,10 @@ typedef struct st_h2o_header_t {
      * value of the header
      */
     h2o_iovec_t value;
+    /**
+      * flags of the header
+      */
+    h2o_header_flags_t flags;
 } h2o_header_t;
 
 /**
@@ -69,32 +73,42 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 /**
  * adds a header to list
  */
-void h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
-                    const char *value, size_t value_len);
+ssize_t h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
+                       const char *value, size_t value_len);
 /**
  * adds a header to list
  */
-void h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *orig_name, const char *value, size_t value_len);
+ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                              const char *orig_name, const char *value, size_t value_len);
 /**
  * adds or replaces a header into the list
  */
-void h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
-                    int overwrite_if_exists);
+ssize_t h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
+                       int overwrite_if_exists);
 /**
  * adds or replaces a header into the list
  */
-void h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *value, size_t value_len, int overwrite_if_exists);
+ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
+                              const char *value, size_t value_len, int overwrite_if_exists);
 /**
  * sets a header token
  */
-void h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
-                          size_t value_len);
+ssize_t h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
+                             size_t value_len);
 /**
  * deletes a header from list
  */
 ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
+/**
+ * validates the structure
+ */
+static void h2o_header_validate(const h2o_header_t *header);
+/**
+ * returns an boolean value if given header's name is a token, with validation
+ */
+static int h2o_header_is_token(const h2o_header_t *header);
+
+/* inline definitions */
 
 inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y)
 {
@@ -103,6 +117,17 @@ inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y
     } else {
         return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
     }
+}
+
+inline void h2o_header_validate(const h2o_header_t *header)
+{
+    assert(header->flags.token_index_plus1 == 0 || header->name == &h2o__tokens[header->flags.token_index_plus1 - 1].buf);
+}
+
+inline int h2o_header_is_token(const h2o_header_t *header)
+{
+    h2o_header_validate(header);
+    return header->flags.token_index_plus1 != 0;
 }
 
 #endif
