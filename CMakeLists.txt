@@ -38,6 +38,7 @@ SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
+INCLUDE(ExternalProject)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -289,7 +290,7 @@ SET(LIB_SOURCE_FILES
     lib/common/socketpool.c
     lib/common/string.c
     lib/common/time.c
-    lib/common/timeout.c
+    lib/common/timerwheel.c
     lib/common/token.c
     lib/common/url.c
     lib/common/balancer/roundrobin.c
@@ -371,6 +372,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/string.c
     t/00unit/lib/common/time.c
     t/00unit/lib/common/url.c
+    t/00unit/lib/common/timerwheel.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
@@ -387,6 +389,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/src/ssl.c
     t/00unit/issues/293.c
     t/00unit/issues/percent-encode-zero-byte.c)
+
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/balancer/least_conn.c
     lib/common/balancer/roundrobin.c
@@ -398,6 +401,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/socket.c
     lib/common/string.c
     lib/common/time.c
+    lib/common/timerwheel.c
     lib/common/url.c
     lib/core/headers.c
     lib/core/proxy.c
@@ -599,6 +603,23 @@ SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 
+IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile)
+    ExternalProject_Add(build-theft
+                        SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft"
+                        BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/theft"
+                        CONFIGURE_COMMAND "true"
+                        BUILD_COMMAND cd "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft" && make "BUILD=${CMAKE_CURRENT_BINARY_DIR}/theft"
+                        INSTALL_COMMAND "true")
+    SET_TARGET_PROPERTIES(build-theft PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    LINK_DIRECTORIES("${CMAKE_CURRENT_BINARY_DIR}/theft")
+    ADD_EXECUTABLE(t-00property-testing.t t/00prop/prop.c)
+    ADD_DEPENDENCIES(t-00property-testing.t build-theft)
+    TARGET_INCLUDE_DIRECTORIES(t-00property-testing.t BEFORE PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/inc")
+    TARGET_LINK_LIBRARIES(t-00property-testing.t theft libh2o-evloop ${EXTRA_LIBS})
+    SET_TARGET_PROPERTIES(t-00property-testing.t PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    SET(OPTIONAL_TEST "t-00property-testing.t")
+ENDIF ()
+
 IF (LIBUV_FOUND)
     ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
     SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
@@ -615,7 +636,7 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t lib-examples-evloop)
+    DEPENDS h2o t-00unit-evloop.t lib-examples-evloop ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
 ENDIF ()
@@ -629,7 +650,6 @@ ADD_CUSTOM_TARGET(doc-publish make -f ../misc/doc.mk publish BINARY_DIR=${CMAKE_
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
     DEPENDS h2o)
 
-INCLUDE(ExternalProject)
 GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} DIRECTORY)
 
 IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)

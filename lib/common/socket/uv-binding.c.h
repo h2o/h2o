@@ -37,8 +37,6 @@ struct st_h2o_uv_socket_t {
     };
 };
 
-static void schedule_timer(h2o_timeout_t *timeout);
-
 static void alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size, uv_buf_t *_buf)
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
@@ -325,40 +323,21 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
     return (socklen_t)len;
 }
 
-static void on_timeout(uv_timer_t *timer)
+static void on_timeout(uv_timer_t *uv_timer)
 {
-    h2o_timeout_t *timeout = H2O_STRUCT_FROM_MEMBER(h2o_timeout_t, _backend.timer, timer);
-
-    h2o_timeout_run(timer->loop, timeout, h2o_now(timer->loop));
-    if (!h2o_linklist_is_empty(&timeout->_entries))
-        schedule_timer(timeout);
+    h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, uv_timer, uv_timer);
+    timer->cb(timer);
 }
 
-void schedule_timer(h2o_timeout_t *timeout)
+void h2o_timer_link(h2o_loop_t *l, uint64_t delay_ticks, h2o_timer_t *timer)
 {
-    h2o_timeout_entry_t *entry = H2O_STRUCT_FROM_MEMBER(h2o_timeout_entry_t, _link, timeout->_entries.next);
-    uv_timer_start(&timeout->_backend.timer, on_timeout,
-                   entry->registered_at + timeout->timeout - h2o_now(timeout->_backend.timer.loop), 0);
+    timer->is_linked = 1;
+    uv_timer_init(l, &timer->uv_timer);
+    uv_timer_start(&timer->uv_timer, on_timeout, h2o_now(l) + delay_ticks, 0);
 }
 
-void h2o_timeout__do_init(h2o_loop_t *loop, h2o_timeout_t *timeout)
+void h2o_timer_unlink(h2o_timer_t *timer)
 {
-    uv_timer_init(loop, &timeout->_backend.timer);
-}
-
-void h2o_timeout__do_dispose(h2o_loop_t *loop, h2o_timeout_t *timeout)
-{
-    uv_close((uv_handle_t *)&timeout->_backend.timer, NULL);
-}
-
-void h2o_timeout__do_link(h2o_loop_t *loop, h2o_timeout_t *timeout, h2o_timeout_entry_t *entry)
-{
-    /* register the timer if the entry just being added is the only entry */
-    if (timeout->_entries.next == &entry->_link)
-        schedule_timer(timeout);
-}
-
-void h2o_timeout__do_post_callback(h2o_loop_t *loop)
-{
-    /* nothing to do */
+    timer->is_linked = 0;
+    uv_timer_stop(&timer->uv_timer);
 }

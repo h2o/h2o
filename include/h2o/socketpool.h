@@ -26,13 +26,13 @@
 extern "C" {
 #endif
 
+#include <execinfo.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
 #include "h2o/linklist.h"
 #include "h2o/multithread.h"
 #include "h2o/socket.h"
-#include "h2o/timeout.h"
 #include "h2o/url.h"
 
 typedef enum en_h2o_socketpool_target_type_t {
@@ -103,8 +103,7 @@ typedef struct st_h2o_socketpool_t {
     uint64_t timeout; /* in milliseconds */
     struct {
         h2o_loop_t *loop;
-        h2o_timeout_t timeout;
-        h2o_timeout_entry_t entry;
+        h2o_timer_t timeout;
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
 

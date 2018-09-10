@@ -140,19 +140,17 @@ int fill_body(h2o_iovec_t *reqbuf)
     }
 }
 
-static h2o_timeout_t post_body_timeout;
-
 struct st_timeout_ctx {
     h2o_httpclient_t *client;
-    h2o_timeout_entry_t _timeout;
+    h2o_timer_t _timeout;
 };
-static void timeout_cb(h2o_timeout_entry_t *entry)
+static void timeout_cb(h2o_timer_t *entry)
 {
     static h2o_iovec_t reqbuf;
     struct st_timeout_ctx *tctx = H2O_STRUCT_FROM_MEMBER(struct st_timeout_ctx, _timeout, entry);
 
     fill_body(&reqbuf);
-    h2o_timeout_unlink(&tctx->_timeout);
+    h2o_timer_unlink(&tctx->_timeout);
     tctx->client->write_req(tctx->client, reqbuf, cur_body_size <= 0);
     free(tctx);
 
@@ -167,7 +165,7 @@ static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end
         memset(tctx, 0, sizeof(*tctx));
         tctx->client = client;
         tctx->_timeout.cb = timeout_cb;
-        h2o_timeout_link(client->ctx->loop, &post_body_timeout, &tctx->_timeout);
+        h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 }
 
@@ -199,7 +197,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
         memset(tctx, 0, sizeof(*tctx));
         tctx->client = client;
         tctx->_timeout.cb = timeout_cb;
-        h2o_timeout_link(client->ctx->loop, &post_body_timeout, &tctx->_timeout);
+        h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 
     return on_head;
@@ -215,8 +213,8 @@ int main(int argc, char **argv)
 {
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
-    h2o_timeout_t io_timeout;
-    h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, &io_timeout, &io_timeout, &io_timeout};
+    uint64_t io_timeout = 5000; /* 5 seconds */
+    h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout};
     int opt;
 
     SSL_load_error_strings();
@@ -274,11 +272,8 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    h2o_timeout_init(ctx.loop, &post_body_timeout, delay_interval_ms);
-
     queue = h2o_multithread_create_queue(ctx.loop);
     h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
-    h2o_timeout_init(ctx.loop, &io_timeout, 5000); /* 5 seconds */
 
     /* setup the first request */
     start_request(&ctx);

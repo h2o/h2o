@@ -23,6 +23,7 @@
 #define h2o__evloop_h
 
 #include "h2o/linklist.h"
+#include "h2o/timerwheel.h"
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
@@ -43,15 +44,14 @@ typedef struct st_h2o_evloop_t {
     } _statechanged;
     uint64_t _now;
     struct timeval _tv_at;
-    h2o_linklist_t _timeouts; /* list of h2o_timeout_t */
+    h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_counter;
 } h2o_evloop_t;
 
 typedef h2o_evloop_t h2o_loop_t;
 
-struct st_h2o_timeout_backend_properties_t {
-    char _dummy; /* sizeof(empty_struct) differs bet. C (GCC extension) and C++ */
-};
+typedef h2o_timerwheel_entry_t h2o_timer_t;
+typedef h2o_timerwheel_cb h2o_timer_cb;
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
@@ -59,6 +59,11 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
+
+#define h2o_timer_init h2o_timerwheel_init_entry
+#define h2o_timer_is_linked h2o_timerwheel_is_linked
+static void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer);
+#define h2o_timer_unlink h2o_timerwheel_unlink
 
 /* inline definitions */
 
@@ -75,6 +80,11 @@ static inline uint64_t h2o_now(h2o_evloop_t *loop)
 static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 {
     return loop->exec_time_counter.average;
+}
+
+inline void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer)
+{
+    h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now + delay_ticks);
 }
 
 #endif

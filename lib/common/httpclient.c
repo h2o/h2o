@@ -40,8 +40,8 @@ static void close_client(struct st_h2o_httpclient_private_t *client)
         client->connect_req = NULL;
     }
 
-    if (h2o_timeout_is_linked(&client->connect_timeout_entry))
-        h2o_timeout_unlink(&client->connect_timeout_entry);
+    if (h2o_timer_is_linked(&client->connect_timeout))
+        h2o_timer_unlink(&client->connect_timeout);
 
     free(client);
 }
@@ -53,9 +53,9 @@ static void on_connect_error(struct st_h2o_httpclient_private_t *client, const c
     close_client(client);
 }
 
-static void on_connect_timeout(h2o_timeout_entry_t *entry)
+static void on_connect_timeout(h2o_timer_t *entry)
 {
-    struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, connect_timeout_entry, entry);
+    struct st_h2o_httpclient_private_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient_private_t, connect_timeout, entry);
     on_connect_error(client, "connection timeout");
 }
 
@@ -80,7 +80,7 @@ static struct st_h2o_httpclient_private_t *create_client(h2o_mem_pool_t *pool, v
     client->super.update_window = NULL;
     client->super.write_req = NULL;
     client->cb.on_connect = cb;
-    client->connect_timeout_entry.cb = on_connect_timeout;
+    client->connect_timeout.cb = on_connect_timeout;
 
     return client;
 }
@@ -89,7 +89,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
 {
     struct st_h2o_httpclient_private_t *client = data;
 
-    h2o_timeout_unlink(&client->connect_timeout_entry);
+    h2o_timer_unlink(&client->connect_timeout);
 
     client->connect_req = NULL;
 
@@ -193,7 +193,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
     return;
 
 UseSocketPool:
-    h2o_timeout_link(client->super.ctx->loop, client->super.ctx->connect_timeout, &client->connect_timeout_entry);
+    h2o_timer_link(client->super.ctx->loop, client->super.ctx->connect_timeout, &client->connect_timeout);
     h2o_socketpool_connect(&client->connect_req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos, on_pool_connect, client);
 
 }

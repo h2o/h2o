@@ -356,8 +356,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         config.http2.idle_timeout = 10 * 1000;
         config.http1.req_timeout = 10 * 1000;
         config.proxy.io_timeout = 10 * 1000;
+        config.proxy.connect_timeout = 0;
+        config.proxy.first_byte_timeout = 0;
         h2o_proxy_config_vars_t proxy_config = {};
+
         proxy_config.io_timeout = 10 * 1000;
+        proxy_config.connect_timeout = 0;
+        proxy_config.first_byte_timeout = 0;
         hostconf = h2o_config_register_host(&config, h2o_iovec_init(H2O_STRLIT(unix_listener)), 65535);
         register_handler(hostconf, "/chunked-test", chunked_test);
         h2o_url_parse(unix_listener, strlen(unix_listener), &upstream);

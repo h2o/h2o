@@ -29,7 +29,6 @@ extern "C" {
 #include "h2o/header.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
-#include "h2o/timeout.h"
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
@@ -66,12 +65,11 @@ typedef struct st_h2o_httpclient_connection_pool_t {
 typedef struct st_h2o_httpclient_ctx_t {
     h2o_loop_t *loop;
     h2o_multithread_receiver_t *getaddr_receiver;
-    h2o_timeout_t *io_timeout;
-    h2o_timeout_t *connect_timeout;
-    h2o_timeout_t *first_byte_timeout;
-    h2o_timeout_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
-    h2o_timeout_t *keepalive_timeout;
-    h2o_timeout_t *zero_timeout;
+    uint64_t io_timeout;
+    uint64_t connect_timeout;
+    uint64_t first_byte_timeout;
+    uint64_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
+    uint64_t keepalive_timeout;
     size_t max_buffer_size;
 
     struct {

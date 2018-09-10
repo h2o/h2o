@@ -56,15 +56,15 @@ struct st_h2o_http2client_conn_t {
     h2o_http2_settings_t peer_settings;
     uint32_t max_open_stream_id;
     size_t num_streams;
-    h2o_timeout_entry_t io_timeout_entry;
-    h2o_timeout_entry_t keepalive_timeout_entry;
+    h2o_timer_t io_timeout;
+    h2o_timer_t keepalive_timeout;
 
     struct {
         h2o_hpack_header_table_t header_table;
         h2o_http2_window_t window;
         h2o_buffer_t *buf;
         h2o_buffer_t *buf_in_flight;
-        h2o_timeout_entry_t defer_timeout_entry;
+        h2o_timer_t defer_timeout;
         h2o_linklist_t sending_streams;
         h2o_linklist_t sent_streams;
     } output;
@@ -82,7 +82,7 @@ struct st_h2o_http2client_stream_t {
     struct st_h2o_http2client_conn_t *conn;
     uint32_t stream_id;
     enum enum_h2o_http2client_stream_state state;
-    h2o_timeout_entry_t timeout_entry;
+    h2o_timer_t timeout;
 
     struct {
         h2o_http2_window_t window;
