@@ -41,10 +41,10 @@ static int cur_body_size;
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t props,
+                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen);
+                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup);
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
@@ -104,7 +104,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 }
 
 h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int rlen)
+                               h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
 {
     size_t i;
 
@@ -172,7 +172,7 @@ static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end
 
 h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
                                   const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                  h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t props,
+                                  h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                   h2o_url_t *origin)
 {
     if (errstr != NULL) {
