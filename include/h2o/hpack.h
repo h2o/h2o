@@ -24,6 +24,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "h2o/header.h"
+#include "h2o/url.h"
 #include "h2o/cache_digests.h"
 
 #define H2O_HPACK_ENCODE_INT_MAX_LENGTH 10 /* first byte + 9 bytes (7*9==63 bits to hold positive numbers of int64_t) */
@@ -68,8 +70,9 @@ typedef int (*h2o_hpack_decode_header_cb)(void *ctx, h2o_mem_pool_t *pool, h2o_i
                                           const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
 int h2o_hpack_decode_header(void *_hpack_header_table, h2o_mem_pool_t *pool, h2o_iovec_t **name, h2o_iovec_t *_value,
                             const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
-int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, const uint8_t *src, size_t len,
-                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            const char **err_desc);
+int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx,
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *method, h2o_iovec_t *path,
+                            h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length,
+                            h2o_cache_digests_t **digests, const uint8_t *src, size_t len, const char **err_desc);
 
 #endif

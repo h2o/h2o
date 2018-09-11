@@ -852,6 +852,16 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     }
     req->bytes_sent += bytes_to_be_sent;
 
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        conn->req.http1_is_persistent = 0;
+        conn->req.send_server_timing = 0;
+        if (req->upstream_refused) {
+            /* to let the client retry, immediately close the connection without sending any data */
+            on_send_complete(conn->sock, NULL);
+            return;
+        }
+    }
+
     if (!self->sent_headers) {
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
         setup_chunked(self, req);
@@ -878,11 +888,6 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
     bufcnt += inbufcnt;
     if (self->chunked_buf != NULL && chunked_suffix.len != 0)
         bufs[bufcnt++] = chunked_suffix;
-
-    if (send_state == H2O_SEND_STATE_ERROR) {
-        conn->req.http1_is_persistent = 0;
-        conn->req.send_server_timing = 0; /* suppress sending trailers */
-    }
 
     if (bufcnt != 0) {
         h2o_socket_write(conn->sock, bufs, bufcnt,

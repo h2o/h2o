@@ -113,7 +113,7 @@ int h2o_access_log_open_log(const char *path)
             memset(&sa, 0, sizeof(sa));
             sa.sun_family = AF_UNIX;
             strcpy(sa.sun_path, path);
-            if (connect(fd, (struct sockaddr*)&sa, sizeof(sa)) == -1) {
+            if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
                 fprintf(stderr, "failed to connect socket for log file:%s:%s\n", path, strerror(errno));
                 close(fd);
                 return -1;
