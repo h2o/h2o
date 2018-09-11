@@ -85,6 +85,7 @@ $path_conf2
 EOT
     my $server = _spawn_h2o_raw($conf, [$port1, $port2]);
     $cb->();
+    undef $server; # wait for server to die before collecting the log
 
     my @log = do {
         open my $fh, '<', $access_log or die "failed to open log file: $!";
