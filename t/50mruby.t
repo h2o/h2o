@@ -428,13 +428,14 @@ $conf
 error-log: $tempdir/error_log
 EOT
             run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+            undef $server; # wait for the server to terminate
             my @log = do {
                 open my $fh, "<", "$tempdir/error_log"
                     or die "failed to open error_log:$!";
                 map { my $l = $_; chomp $l; $l } <$fh>;
             };
             @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
-            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised: @{[$server->{conf_file}]}:$expected:\s*hoge \(RuntimeError\)};
+            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised: .*:$expected:\s*hoge \(RuntimeError\)};
         };
     };
     $tester->("flow style", <<"EOT", 5);
