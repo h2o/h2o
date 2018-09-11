@@ -863,9 +863,8 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* send headers */
-    h2o_headers_t headers_vec = (h2o_headers_t){headers, num_headers, num_headers};
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              method, &url, &headers_vec, body.base == NULL);
+                              method, &url, headers, num_headers, body.base == NULL);
     transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY);
 
     if (body.base != NULL) {

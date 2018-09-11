@@ -113,15 +113,16 @@ int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, const uint8_t *src, size_t len
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
 void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
                                     size_t max_frame_size, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
-                                    h2o_iovec_t method, h2o_iovec_t path, h2o_headers_t *headers, uint32_t parent_stream_id);
+                                    h2o_iovec_t method, h2o_iovec_t path, const h2o_header_t *headers, size_t num_headers,
+                                    uint32_t parent_stream_id);
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, int status, h2o_headers_t headers, const h2o_iovec_t *server_name,
-                                size_t content_length);
+                                size_t max_frame_size, int status, const h2o_header_t *headers, size_t num_headers,
+                                const h2o_iovec_t *server_name, size_t content_length);
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                               size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_headers_t *headers,
-                               int is_end_stream);
+                               size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, const h2o_header_t *headers,
+                               size_t num_headers, int is_end_stream);
 void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, h2o_header_t *headers, size_t num_headers);
+                                size_t max_frame_size, const h2o_header_t *headers, size_t num_headers);
 int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_headers_t *headers, size_t *content_length,
                                      h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len, const char **err_desc);
 
