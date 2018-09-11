@@ -87,11 +87,10 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     struct rp_handler_t *self = (void *)_self;
     h2o_http1client_ctx_t *client_ctx = h2o_context_get_handler_context(ctx, &self->super);
 
-    if (client_ctx == NULL)
-        return;
+    if (client_ctx != NULL)
+        free(client_ctx);
 
     h2o_socketpool_unregister_loop(self->sockpool, ctx->loop);
-    free(client_ctx);
 }
 
 static void on_handler_dispose(h2o_handler_t *_self)
