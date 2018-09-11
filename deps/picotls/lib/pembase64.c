@@ -356,7 +356,7 @@ int ptls_load_pem_objects(char const *pem_fname, const char *label, ptls_iovec_t
 
 #define PTLS_MAX_CERTS_IN_CONTEXT 16
 
-int ptls_load_certificates(ptls_context_t *ctx, char *cert_pem_file)
+int ptls_load_certificates(ptls_context_t *ctx, char const *cert_pem_file)
 {
     int ret = 0;
 

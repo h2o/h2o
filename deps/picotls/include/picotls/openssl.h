@@ -33,7 +33,21 @@
 #endif
 
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp256r1;
+#ifdef NID_secp384r1
+#define PTLS_OPENSSL_HAS_SECP384R1 1
+extern ptls_key_exchange_algorithm_t ptls_openssl_secp384r1;
+#endif
+#ifdef NID_secp521r1
+#define PTLS_OPENSSL_HAS_SECP521R1 1
+extern ptls_key_exchange_algorithm_t ptls_openssl_secp521r1;
+#endif
+#if defined(NID_X25519) && !defined(LIBRESSL_VERSION_NUMBER)
+#define PTLS_OPENSSL_HAS_X25519 1
+extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
+#endif
+
 extern ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[];
+
 extern ptls_cipher_algorithm_t ptls_openssl_aes128ctr;
 extern ptls_aead_algorithm_t ptls_openssl_aes128gcm;
 extern ptls_cipher_algorithm_t ptls_openssl_aes256ctr;
@@ -72,10 +86,9 @@ typedef struct st_ptls_openssl_verify_certificate_t {
     X509_STORE *cert_store;
 } ptls_openssl_verify_certificate_t;
 
-#define PTLS_OPENSSL_DEFAULT_CERTIFICATE_STORE ((X509_STORE *)1)
-
 int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store);
 void ptls_openssl_dispose_verify_certificate(ptls_openssl_verify_certificate_t *self);
+X509_STORE *ptls_openssl_create_default_certificate_store(void);
 
 int ptls_openssl_encrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));

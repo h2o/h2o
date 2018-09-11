@@ -44,7 +44,7 @@ ELSE ()
     MESSAGE(WARNING "Disabling OpenSSL support (requires 1.0.1 or newer)")
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check prove --exec '' -v ./*.t DEPENDS ${TEST_EXES})
+ADD_CUSTOM_TARGET(check prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${TEST_EXES})
 
 IF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     TARGET_LINK_LIBRARIES(cli "socket" "nsl")

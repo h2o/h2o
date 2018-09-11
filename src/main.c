@@ -486,6 +486,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        NULL,
                                        0,
                                        8192,
+                                       NULL,
                                        1},
                                       {{on_client_hello_ptls}, listener},
                                       {{on_staple_ocsp_ptls}, ssl_config}};
