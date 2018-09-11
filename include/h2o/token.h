@@ -25,6 +25,10 @@
 
 #include "h2o/string_.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct st_h2o_header_flags_t {
     unsigned char token_index_plus1;    /* 1-origin, 0 means not token */
     char http2_static_table_name_index; /* non-zero if any */
@@ -61,5 +65,9 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len);
 int h2o_iovec_is_token(const h2o_iovec_t *buf);
 
 #include "h2o/token_table.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

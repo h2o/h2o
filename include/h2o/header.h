@@ -25,6 +25,10 @@
 #include "h2o/memory.h"
 #include "h2o/token.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * represents a HTTP header
  */
@@ -129,5 +133,9 @@ inline int h2o_header_is_token(const h2o_header_t *header)
     h2o_header_validate(header);
     return header->flags.token_index_plus1 != 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
