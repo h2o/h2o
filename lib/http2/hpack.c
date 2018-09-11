@@ -584,7 +584,7 @@ int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_head
                                      h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len, const char **err_desc)
 {
     assert(*status == 0);
-    assert(*content_length = SIZE_MAX);
+    assert(*content_length == SIZE_MAX);
 
     const uint8_t *src_end = src + len;
 
