@@ -122,9 +122,9 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
  */
 static int req_requires_content_length(h2o_req_t *req)
 {
-    int is_put_or_post = (req->method.len >= 1 && req->method.base[0] == 'P' &&
-                          (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) ||
-                           h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
+    int is_put_or_post =
+        (req->method.len >= 1 && req->method.base[0] == 'P' && (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) ||
+                                                                h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
 
     return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
 }
@@ -450,9 +450,9 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                     return NULL;
                 }
                 if (req->overrides != NULL && req->overrides->location_rewrite.match != NULL) {
-                    h2o_iovec_t new_value = rewrite_location(&req->pool, value.base, value.len,
-                                                             req->overrides->location_rewrite.match, req->input.scheme, req->input.authority,
-                                                             req->overrides->location_rewrite.path_prefix);
+                    h2o_iovec_t new_value =
+                        rewrite_location(&req->pool, value.base, value.len, req->overrides->location_rewrite.match,
+                                         req->input.scheme, req->input.authority, req->overrides->location_rewrite.path_prefix);
                     if (new_value.base != NULL) {
                         value = new_value;
                         goto AddHeader;
@@ -558,8 +558,9 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 }
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
-                                         h2o_httpclient_properties_t *props, h2o_url_t *origin)
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                         h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -595,8 +596,9 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
-    build_request(req, method, url, &headers_vec, props, !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool),
-                  self->is_websocket_handshake, use_proxy_protocol, &reprocess_if_too_early, origin);
+    build_request(req, method, url, &headers_vec, props,
+                  !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->is_websocket_handshake,
+                  use_proxy_protocol, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
 

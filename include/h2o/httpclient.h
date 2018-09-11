@@ -41,13 +41,14 @@ typedef struct st_h2o_httpclient_properties_t {
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int minor_version,
-                                                           int status, h2o_iovec_t msg, h2o_header_t *headers,
-                                                           size_t num_headers, int rlen, int header_requires_dup);
-typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                                              const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                                              h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props, h2o_url_t *origin);
+                                                         int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
+                                                         int rlen, int header_requires_dup);
+typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method,
+                                                            h2o_url_t *url, const h2o_header_t **headers, size_t *num_headers,
+                                                            h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                                            h2o_httpclient_properties_t *props, h2o_url_t *origin);
 typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int minor_version, int status, h2o_iovec_t msg,
-                                                h2o_header_t *headers, size_t num_headers);
+                                               h2o_header_t *headers, size_t num_headers);
 
 typedef struct st_h2o_httpclient_connection_pool_t {
     /**
@@ -109,11 +110,10 @@ struct st_h2o_httpclient_t {
 extern const char *const h2o_httpclient_error_is_eos;
 extern const char *const h2o_httpclient_error_refused_stream;
 
-
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
-void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
-                            h2o_url_t *target, h2o_httpclient_connect_cb cb);
+void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 #ifdef __cplusplus
 }

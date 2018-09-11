@@ -93,7 +93,9 @@ static struct st_h2o_http2client_stream_t *get_stream(struct st_h2o_http2client_
 
 uint32_t h2o_http2client_get_max_concurrent_streams(struct st_h2o_http2client_conn_t *conn)
 {
-    return conn->peer_settings.max_concurrent_streams < conn->ctx->http2.max_concurrent_streams ? conn->peer_settings.max_concurrent_streams : conn->ctx->http2.max_concurrent_streams;
+    return conn->peer_settings.max_concurrent_streams < conn->ctx->http2.max_concurrent_streams
+               ? conn->peer_settings.max_concurrent_streams
+               : conn->ctx->http2.max_concurrent_streams;
 }
 
 static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, struct st_h2o_http2client_conn_t *conn, int forward)
@@ -193,13 +195,14 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
     size_t dummy_content_length = SIZE_MAX;
-    if ((ret = h2o_hpack_parse_response_headers(stream->super.super.pool, &stream->input.status, &stream->input.headers, &dummy_content_length, &conn->input.header_table, src, len,
-                                                err_desc)) != 0) {
+    if ((ret = h2o_hpack_parse_response_headers(stream->super.super.pool, &stream->input.status, &stream->input.headers,
+                                                &dummy_content_length, &conn->input.header_table, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto SendRSTStream;
         }
-        call_callback_with_error(stream, ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream protocol error" : "upstream compression error");
+        call_callback_with_error(stream,
+                                 ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream protocol error" : "upstream compression error");
         return ret;
     }
     if (stream->input.status == 0) {
@@ -213,15 +216,18 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
             ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO is this alright?
             goto SendRSTStream;
         }
-        if (stream->super.super.informational_cb != NULL && stream->super.super.informational_cb(&stream->super.super, 0, stream->input.status, h2o_iovec_init(NULL, 0), stream->input.headers.entries, stream->input.headers.size) != 0) {
+        if (stream->super.super.informational_cb != NULL &&
+            stream->super.super.informational_cb(&stream->super.super, 0, stream->input.status, h2o_iovec_init(NULL, 0),
+                                                 stream->input.headers.entries, stream->input.headers.size) != 0) {
             ret = H2O_HTTP2_ERROR_INTERNAL;
             goto SendRSTStream;
         }
         return 0;
     }
 
-    stream->super.cb.on_body = stream->super.cb.on_head(&stream->super.super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0, stream->input.status, h2o_iovec_init(NULL, 0),
-                                            stream->input.headers.entries, stream->input.headers.size, (int)len, 0);
+    stream->super.cb.on_body =
+        stream->super.cb.on_head(&stream->super.super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0, stream->input.status,
+                                 h2o_iovec_init(NULL, 0), stream->input.headers.entries, stream->input.headers.size, (int)len, 0);
 
     if (is_end_stream) {
         close_stream(stream);
@@ -845,8 +851,8 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_iovec_t body = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
     stream->super.cb.on_head =
-        stream->super.cb.on_connect(&stream->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &stream->streaming.proceed_req,
-                              &props, &conn->origin_url);
+        stream->super.cb.on_connect(&stream->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
+                                    &stream->streaming.proceed_req, &props, &conn->origin_url);
     if (stream->super.cb.on_head == NULL) {
         close_stream(stream);
         return;

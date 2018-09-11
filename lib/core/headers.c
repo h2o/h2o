@@ -24,7 +24,7 @@
 #include "h2o.h"
 
 static ssize_t add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_iovec_t *name, const char *orig_name, const char *value,
-                       size_t value_len, h2o_header_flags_t flags)
+                          size_t value_len, h2o_header_flags_t flags)
 {
     h2o_header_t *slot;
 
@@ -61,13 +61,13 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 }
 
 ssize_t h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
-                    const char *value, size_t value_len)
+                       const char *value, size_t value_len)
 {
     return add_header(pool, headers, (h2o_iovec_t *)&token->buf, orig_name, value, value_len, token->flags);
 }
 
 ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *orig_name, const char *value, size_t value_len)
+                              const char *orig_name, const char *value, size_t value_len)
 {
     h2o_iovec_t *name_buf;
 
@@ -84,7 +84,7 @@ ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, cons
 }
 
 ssize_t h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
-                    int overwrite_if_exists)
+                       int overwrite_if_exists)
 {
     ssize_t cursor = h2o_find_header(headers, token, -1);
     if (cursor != -1) {
@@ -100,7 +100,7 @@ ssize_t h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_t
 }
 
 ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
-                           const char *value, size_t value_len, int overwrite_if_exists)
+                              const char *value, size_t value_len, int overwrite_if_exists)
 {
     ssize_t cursor;
 
@@ -128,7 +128,7 @@ ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, cons
 }
 
 ssize_t h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
-                          size_t value_len)
+                             size_t value_len)
 {
     size_t found = -1;
     size_t i;

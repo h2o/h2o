@@ -256,8 +256,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
             break;
 
         if (client->super.super.informational_cb != NULL &&
-            client->super.super.informational_cb(&client->super.super, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers,
-                                           num_headers) != 0) {
+            client->super.super.informational_cb(&client->super.super, minor_version, http_status, h2o_iovec_init(msg, msg_len),
+                                                 headers, num_headers) != 0) {
             close_client(client);
             return;
         }
@@ -314,8 +314,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
     }
 
     /* call the callback. sock may be stealed and stealed sock need rlen.*/
-    client->super.cb.on_body = client->super.cb.on_head(&client->super.super, is_eos ? h2o_httpclient_error_is_eos : NULL, minor_version,
-                                              http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, rlen, 1);
+    client->super.cb.on_body =
+        client->super.cb.on_head(&client->super.super, is_eos ? h2o_httpclient_error_is_eos : NULL, minor_version, http_status,
+                                 h2o_iovec_init(msg, msg_len), headers, num_headers, rlen, 1);
 
     if (is_eos) {
         close_client(client);
@@ -453,7 +454,8 @@ static void on_send_timeout(h2o_timer_t *entry)
     on_error_before_head(client, "I/O timeout");
 }
 
-static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection, h2o_header_t *headers, size_t num_headers)
+static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection,
+                                 h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
     size_t offset = 0;
@@ -468,7 +470,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
             do {                                                                                                                   \
                 buf.len *= 2;                                                                                                      \
             } while (required > buf.len);                                                                                          \
-            char *newp = h2o_mem_alloc_pool(client->super.super.pool, char, buf.len);                                                         \
+            char *newp = h2o_mem_alloc_pool(client->super.super.pool, char, buf.len);                                              \
             memcpy(newp, buf.base, offset);                                                                                        \
             buf.base = newp;                                                                                                       \
         }                                                                                                                          \
@@ -479,15 +481,15 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
         offset += (l);                                                                                                             \
     } while (0)
 #define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)
-#define APPEND_HEADER(h) \
-    do { \
-        RESERVE((h)->name->len + (h)->value.len + 4); \
-        APPEND((h)->orig_name ? (h)->orig_name : (h)->name->base, (h)->name->len); \
-        buf.base[offset++] = ':'; \
-        buf.base[offset++] = ' '; \
-        APPEND((h)->value.base, (h)->value.len); \
-        buf.base[offset++] = '\r'; \
-        buf.base[offset++] = '\n'; \
+#define APPEND_HEADER(h)                                                                                                           \
+    do {                                                                                                                           \
+        RESERVE((h)->name->len + (h)->value.len + 4);                                                                              \
+        APPEND((h)->orig_name ? (h)->orig_name : (h)->name->base, (h)->name->len);                                                 \
+        buf.base[offset++] = ':';                                                                                                  \
+        buf.base[offset++] = ' ';                                                                                                  \
+        APPEND((h)->value.base, (h)->value.len);                                                                                   \
+        buf.base[offset++] = '\r';                                                                                                 \
+        buf.base[offset++] = '\n';                                                                                                 \
     } while (0)
 
     APPEND(method.base, method.len);
@@ -505,7 +507,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
     }
 
     h2o_header_t *h, *h_end;
-    for (h = (h2o_header_t*)headers, h_end = h + num_headers; h != h_end; ++h)
+    for (h = (h2o_header_t *)headers, h_end = h + num_headers; h != h_end; ++h)
         APPEND_HEADER(h);
 
     APPEND_STRLIT("\r\n");
@@ -527,18 +529,19 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     int chunked = 0;
     h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = {
-        &proxy_protocol,
-        &chunked,
-        &connection_header,
+        &proxy_protocol, &chunked, &connection_header,
     };
 
     h2o_iovec_t method = h2o_iovec_init(NULL, 0);
     h2o_url_t url = {NULL};
     h2o_header_t *headers = NULL;
     size_t num_headers = 0;
-    h2o_iovec_t body = h2o_iovec_init(NULL, 0);;
+    h2o_iovec_t body = h2o_iovec_init(NULL, 0);
+    ;
 
-    client->super.cb.on_head = client->super.cb.on_connect(&client->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body, &client->proceed_req, &props, client->_origin);
+    client->super.cb.on_head =
+        client->super.cb.on_connect(&client->super.super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
+                                    &client->proceed_req, &props, client->_origin);
 
     if (client->super.cb.on_head == NULL) {
         close_client(client);

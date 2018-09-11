@@ -26,7 +26,7 @@
 #include "h2o/string_.h"
 
 typedef struct st_h2o_header_flags_t {
-    unsigned char token_index_plus1; /* 1-origin, 0 means not token */
+    unsigned char token_index_plus1;    /* 1-origin, 0 means not token */
     char http2_static_table_name_index; /* non-zero if any */
     unsigned char proxy_should_drop_for_req : 1;
     unsigned char proxy_should_drop_for_res : 1;

@@ -568,6 +568,5 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_http2_max_concurrent_streams);
     h2o_configurator_define_command(&c->super, "proxy.http2.ratio",
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
-                                    on_config_http2_ratio);
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http2_ratio);
 }

@@ -684,7 +684,8 @@ int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o
     return 0;
 }
 
-static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_header_t *header, void *cb_data)
+static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_header_t *header,
+                                    void *cb_data)
 {
     mrb_value env = mrb_obj_value(cb_data);
     mrb_value n;

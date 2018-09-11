@@ -118,7 +118,8 @@ void h2o_http2_encode_origin_frame(h2o_buffer_t **buf, h2o_iovec_t payload)
     memcpy(dst, payload.base, payload.len);
 }
 
-ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, size_t max_frame_size, const char **err_desc)
+ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, size_t max_frame_size,
+                               const char **err_desc)
 {
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)
         return H2O_HTTP2_ERROR_INCOMPLETE;

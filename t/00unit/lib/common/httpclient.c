@@ -29,16 +29,16 @@ static void test_should_use_h2(void)
     for (i = 0; i != 110; ++i) {
         int use_h2 = should_use_h2(5, &counter);
         switch (counter) {
-            case 0:
-            case 20:
-            case 40:
-            case 60:
-            case 80:
-                ok(use_h2 == 1);
-                break;
-            default:
-                ok(use_h2 == 0);
-                break;
+        case 0:
+        case 20:
+        case 40:
+        case 60:
+        case 80:
+            ok(use_h2 == 1);
+            break;
+        default:
+            ok(use_h2 == 0);
+            break;
         }
     }
 
@@ -46,18 +46,18 @@ static void test_should_use_h2(void)
     for (i = 0; i != 110; ++i) {
         int use_h2 = should_use_h2(7, &counter);
         switch (counter) {
-            case 0:
-            case 15:
-            case 29:
-            case 43:
-            case 58:
-            case 72:
-            case 86:
-                ok(use_h2 == 1);
-                break;
-            default:
-                ok(use_h2 == 0);
-                break;
+        case 0:
+        case 15:
+        case 29:
+        case 43:
+        case 58:
+        case 72:
+        case 86:
+            ok(use_h2 == 1);
+            break;
+        default:
+            ok(use_h2 == 0);
+            break;
         }
     }
 
@@ -65,18 +65,18 @@ static void test_should_use_h2(void)
     for (i = 0; i != 110; ++i) {
         int use_h2 = should_use_h2(93, &counter);
         switch (counter) {
-            case 1:
-            case 15:
-            case 29:
-            case 43:
-            case 58:
-            case 72:
-            case 86:
-                ok(use_h2 == 0);
-                break;
-            default:
-                ok(use_h2 == 1);
-                break;
+        case 1:
+        case 15:
+        case 29:
+        case 43:
+        case 58:
+        case 72:
+        case 86:
+            ok(use_h2 == 0);
+            break;
+        default:
+            ok(use_h2 == 1);
+            break;
         }
     }
 

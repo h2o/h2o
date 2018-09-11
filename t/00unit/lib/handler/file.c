@@ -473,8 +473,7 @@ static void test_if_range(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_RANGE, NULL,
-                       H2O_STRLIT("Sun, 06 Nov 1994 08:49:37 GMT"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_RANGE, NULL, H2O_STRLIT("Sun, 06 Nov 1994 08:49:37 GMT"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=0-10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 200);
@@ -487,8 +486,7 @@ static void test_if_range(void)
         h2o_loopback_conn_t *conn = h2o_loopback_create(&ctx, ctx.globalconf->hosts);
         conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_RANGE, NULL,
-                       H2O_STRLIT("Wed, 18 May 2033 12:33:20 GMT"));
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_IF_RANGE, NULL, H2O_STRLIT("Wed, 18 May 2033 12:33:20 GMT"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=0-10"));
         h2o_loopback_run_loop(conn);
         ok(conn->req.res.status == 206);

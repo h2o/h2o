@@ -482,9 +482,9 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, const uint8_t *src, size_t len, h2o_hpack_header_table_t *header_table,
-                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *method, h2o_iovec_t *path, h2o_headers_t *headers,
-                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            const char **err_desc)
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *method, h2o_iovec_t *path,
+                            h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length,
+                            h2o_cache_digests_t **digests, const char **err_desc)
 {
     const uint8_t *src_end = src + len;
 
@@ -580,8 +580,8 @@ int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, const uint8_t *src, size_t len
     return 0;
 }
 
-int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_headers_t *headers, size_t *content_length, h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len,
-                            const char **err_desc)
+int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_headers_t *headers, size_t *content_length,
+                                     h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len, const char **err_desc)
 {
     assert(*status == 0);
     assert(*content_length = SIZE_MAX);
@@ -612,12 +612,12 @@ int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_head
             if (r.value->len != 3)
                 return H2O_HTTP2_ERROR_PROTOCOL;
             char *c = r.value->base;
-#define PARSE_DIGIT(mul) \
-    do { \
-        if (*c < '0' || '9' < *c) \
-            return H2O_HTTP2_ERROR_PROTOCOL; \
-        *status += (*c - '0') * mul; \
-        ++c; \
+#define PARSE_DIGIT(mul)                                                                                                           \
+    do {                                                                                                                           \
+        if (*c < '0' || '9' < *c)                                                                                                  \
+            return H2O_HTTP2_ERROR_PROTOCOL;                                                                                       \
+        *status += (*c - '0') * mul;                                                                                               \
+        ++c;                                                                                                                       \
     } while (0)
             PARSE_DIGIT(100);
             PARSE_DIGIT(10);
@@ -738,7 +738,7 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
 }
 
 static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
-                              const h2o_iovec_t *value, h2o_header_flags_t flags)
+                                 const h2o_iovec_t *value, h2o_header_flags_t flags)
 {
     int name_index = flags.http2_static_table_name_index;
 
@@ -820,7 +820,8 @@ static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *d
     return do_encode_header(header_table, dst, header->name, &header->value, header->flags);
 }
 
-static uint8_t *encode_header_token(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_token_t *token, const h2o_iovec_t *value)
+static uint8_t *encode_header_token(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_token_t *token,
+                                    const h2o_iovec_t *value)
 {
     return do_encode_header(header_table, dst, &token->buf, value, token->flags);
 }
@@ -950,11 +951,13 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     (*buf)->size = (char *)dst - (*buf)->bytes;
 
     /* setup the frame headers */
-    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, is_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0);
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size,
+                        is_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0);
 }
 
 void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                    size_t max_frame_size, const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t method, h2o_iovec_t path, h2o_headers_t *headers, uint32_t parent_stream_id)
+                                    size_t max_frame_size, const h2o_url_scheme_t *scheme, h2o_iovec_t authority,
+                                    h2o_iovec_t method, h2o_iovec_t path, h2o_headers_t *headers, uint32_t parent_stream_id)
 {
     size_t capacity = calc_headers_capacity(headers->entries, headers->size);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE /* first frame header */
@@ -990,7 +993,8 @@ void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t
 }
 
 void h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,
-                                size_t max_frame_size, int status, h2o_headers_t headers, const h2o_iovec_t *server_name, size_t content_length)
+                                size_t max_frame_size, int status, h2o_headers_t headers, const h2o_iovec_t *server_name,
+                                size_t content_length)
 {
     size_t capacity = calc_headers_capacity(headers.entries, headers.size);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */

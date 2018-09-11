@@ -65,7 +65,8 @@ static void do_cancel(h2o_httpclient_t *_client)
     close_client(client);
 }
 
-static struct st_h2o_httpclient_private_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
+static struct st_h2o_httpclient_private_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                                                         h2o_httpclient_connect_cb cb)
 {
 #define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
     size_t sz = SZ_MAX(sizeof(struct st_h2o_http1client_t), sizeof(struct st_h2o_http2client_stream_t));
@@ -126,15 +127,13 @@ static int should_use_h2(int8_t ratio, int8_t *counter)
     return use_h2;
 }
 
-void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *connpool,
-                            h2o_url_t *origin, h2o_httpclient_connect_cb cb)
+void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb cb)
 {
-    static const h2o_iovec_t both_protos = {H2O_STRLIT(
-                                                       "\x02"
+    static const h2o_iovec_t both_protos = {H2O_STRLIT("\x02"
                                                        "h2"
                                                        "\x08"
-                                                       "http/1.1"
-                                                       )};
+                                                       "http/1.1")};
     assert(connpool != NULL);
     h2o_iovec_t alpn_protos = h2o_iovec_init(NULL, 0);
 
@@ -157,7 +156,8 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
         if (http2_conn != NULL && connpool->socketpool->_shared.pooled_count != 0) {
             /* both of h1 and h2 connections exist, compare in-use ratio */
-            double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) / connpool->socketpool->_shared.count;
+            double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) /
+                                 connpool->socketpool->_shared.count;
             double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
             if (http2_ratio <= http1_ratio) {
                 h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
@@ -194,6 +194,6 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
 UseSocketPool:
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->connect_timeout, &client->connect_timeout);
-    h2o_socketpool_connect(&client->connect_req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos, on_pool_connect, client);
-
+    h2o_socketpool_connect(&client->connect_req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos,
+                           on_pool_connect, client);
 }

@@ -443,7 +443,8 @@ struct st_h2o_globalconf_t {
         struct {
             uint32_t max_concurrent_streams;
             /**
-             * ratio in percentage (0 ~ 100) at which each request will be sent via http2. negative value means that fixed ratio mode is disabled
+             * ratio in percentage (0 ~ 100) at which each request will be sent via http2. negative value means that fixed ratio
+             * mode is disabled
              */
             int8_t ratio;
         } http2;

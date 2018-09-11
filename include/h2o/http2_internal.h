@@ -356,7 +356,10 @@ inline int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream)
 inline void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(!stream->push.promise_sent);
-    h2o_hpack_flatten_push_promise(&conn->_write.buf, &conn->_output_header_table, stream->stream_id, conn->peer_settings.max_frame_size, stream->req.input.scheme, stream->req.input.authority, stream->req.input.method, stream->req.input.path, &stream->req.headers, stream->push.parent_stream_id);
+    h2o_hpack_flatten_push_promise(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
+                                   conn->peer_settings.max_frame_size, stream->req.input.scheme, stream->req.input.authority,
+                                   stream->req.input.method, stream->req.input.path, &stream->req.headers,
+                                   stream->push.parent_stream_id);
     stream->push.promise_sent = 1;
 }
 

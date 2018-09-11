@@ -447,7 +447,8 @@ static size_t lookup_target(h2o_socketpool_t *pool, h2o_url_t *url)
 }
 
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_iovec_t alpn_protos, h2o_socketpool_connect_cb cb, void *data)
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_iovec_t alpn_protos, h2o_socketpool_connect_cb cb,
+                            void *data)
 {
     struct pool_entry_t *entry = NULL;
     struct on_close_data_t *close_data;
