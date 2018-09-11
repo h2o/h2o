@@ -423,7 +423,7 @@ int h2o_url_init_with_hostport(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_u
     } else {
         url->_port = port;
         char _port[sizeof(H2O_UINT16_LONGEST_STR)];
-        int port_len = sprintf(_port, "%" "hu", port);
+        int port_len = sprintf(_port, "%" PRIu16, port);
         if (port_len < 0)
             return -1;
 
