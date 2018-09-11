@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__foobar_h
-#define h2o__foobar_h
+#ifndef h2o__http2_common_h
+#define h2o__http2_common_h
 
 #include "h2o/string_.h"
 #include "h2o/header.h"

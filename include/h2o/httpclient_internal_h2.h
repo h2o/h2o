@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__http2client_h
-#define h2o__http2client_h
+#ifndef h2o__httpclient_internal_h2_h
+#define h2o__httpclient_internal_h2_h
 
 #ifdef __cplusplus
 extern "C" {
