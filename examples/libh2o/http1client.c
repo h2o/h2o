@@ -28,7 +28,7 @@
 #define MIN(a, b) (((a) > (b)) ? (b) : (a))
 #endif
 
-static h2o_socketpool_t *sockpool;
+static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
 static const char *url;
 static char *method = "GET";
@@ -39,42 +39,38 @@ static h2o_iovec_t iov_filler;
 static int delay_interval_ms = 0;
 static int cur_body_size;
 
-static h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                          int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb,
-                                          h2o_iovec_t *cur_body, int *body_is_chunked, h2o_url_t *origin);
-static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status,
-                                       h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers, int rlen);
+static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                         h2o_url_t *origin);
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup);
 
-static void start_request(h2o_http1client_ctx_t *ctx)
+static void start_request(h2o_httpclient_ctx_t *ctx)
 {
-    h2o_url_t url_parsed;
-    h2o_iovec_t *req;
+    h2o_url_t *url_parsed;
 
     /* clear memory pool */
     h2o_mem_clear_pool(&pool);
 
     /* parse URL */
-    if (h2o_url_parse(url, SIZE_MAX, &url_parsed) != 0) {
+    url_parsed = h2o_mem_alloc_pool(&pool, url_parsed, 1);
+    if (h2o_url_parse(url, SIZE_MAX, url_parsed) != 0) {
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
     }
 
-    /* build request */
-    req = h2o_mem_alloc_pool(&pool, *req, 1);
-    req->base = h2o_mem_alloc_pool(&pool, char, 1024);
-    req->len =
-        snprintf(req->base, 1024, "%s %.*s HTTP/1.1\r\ncontent-length:%d\r\nhost: %.*s\r\n\r\n", method, (int)url_parsed.path.len,
-                 url_parsed.path.base, body_size, (int)url_parsed.authority.len, url_parsed.authority.base);
     cur_body_size = body_size;
-    assert(req->len < 1024);
 
     /* initiate the request */
-    if (sockpool == NULL) {
-        sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(&url_parsed, NULL);
+    if (connpool == NULL) {
+        connpool = h2o_mem_alloc(sizeof(*connpool));
+        h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(url_parsed, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, 5000 /* in msec */);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
+        h2o_httpclient_connection_pool_init(connpool, sockpool);
 
         SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
         SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
@@ -82,21 +78,21 @@ static void start_request(h2o_http1client_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_http1client_connect(NULL, req, ctx, sockpool, &url_parsed, on_connect);
+    h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed, on_connect);
 }
 
-static int on_body(h2o_http1client_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
-    if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
+    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         fprintf(stderr, "%s\n", errstr);
         exit(1);
         return -1;
     }
 
-    fwrite(client->sock->input->bytes, 1, client->sock->input->size, stdout);
-    h2o_buffer_consume(&client->sock->input, client->sock->input->size);
+    fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
+    h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
-    if (errstr == h2o_http1client_error_is_eos) {
+    if (errstr == h2o_httpclient_error_is_eos) {
         if (--cnt_left != 0) {
             /* next attempt */
             h2o_mem_clear_pool(&pool);
@@ -107,12 +103,12 @@ static int on_body(h2o_http1client_t *client, const char *errstr)
     return 0;
 }
 
-h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                h2o_header_t *headers, size_t num_headers, int rlen)
+h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+                               h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
 {
     size_t i;
 
-    if (errstr != NULL && errstr != h2o_http1client_error_is_eos) {
+    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         fprintf(stderr, "%s\n", errstr);
         exit(1);
         return NULL;
@@ -123,7 +119,7 @@ h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *errstr, i
         printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
     printf("\n");
 
-    if (errstr == h2o_http1client_error_is_eos) {
+    if (errstr == h2o_httpclient_error_is_eos) {
         fprintf(stderr, "no body\n");
         exit(1);
         return NULL;
@@ -146,7 +142,7 @@ int fill_body(h2o_iovec_t *reqbuf)
 }
 
 struct st_timeout_ctx {
-    h2o_socket_t *sock;
+    h2o_httpclient_t *client;
     h2o_timer_t _timeout;
 };
 static void timeout_cb(h2o_timer_t *entry)
@@ -156,27 +152,28 @@ static void timeout_cb(h2o_timer_t *entry)
 
     fill_body(&reqbuf);
     h2o_timer_unlink(&tctx->_timeout);
-    h2o_http1client_write_req(tctx->sock, reqbuf, cur_body_size <= 0);
+    tctx->client->write_req(tctx->client, reqbuf, cur_body_size <= 0);
     free(tctx);
 
     return;
 }
 
-static void proceed_request(h2o_http1client_t *client, size_t written, int is_end_stream)
+static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end_stream)
 {
     if (cur_body_size > 0) {
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
-        tctx->sock = client->sock;
+        tctx->client = client;
         tctx->_timeout.cb = timeout_cb;
         h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 }
 
-h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr, h2o_iovec_t **reqbufs, size_t *reqbufcnt,
-                                   int *method_is_head, h2o_http1client_proceed_req_cb *proceed_req_cb, h2o_iovec_t *cur_body,
-                                   int *body_is_chunked, h2o_url_t *dummy)
+h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
+                                  const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                  h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                  h2o_url_t *origin)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -184,16 +181,23 @@ h2o_http1client_head_cb on_connect(h2o_http1client_t *client, const char *errstr
         return NULL;
     }
 
-    *reqbufs = (h2o_iovec_t *)client->data;
-    *reqbufcnt = 1;
-    *method_is_head = 0;
+    *_method = h2o_iovec_init(method, strlen(method));
+    *url = *((h2o_url_t *)client->data);
+
     if (cur_body_size > 0) {
+        char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
+        size_t clbuf_len = sprintf(clbuf, "%d", cur_body_size);
+        h2o_headers_t headers_vec = (h2o_headers_t){NULL};
+        h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
+        *headers = headers_vec.entries;
+        *num_headers = 1;
+
         *proceed_req_cb = proceed_request;
 
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
-        tctx->sock = client->sock;
+        tctx->client = client;
         tctx->_timeout.cb = timeout_cb;
         h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
@@ -212,7 +216,7 @@ int main(int argc, char **argv)
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
     uint64_t io_timeout = 5000; /* 5 seconds */
-    h2o_http1client_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout};
+    h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout};
     int opt;
 
     SSL_load_error_strings();
@@ -229,6 +233,10 @@ int main(int argc, char **argv)
             break;
         case 'b':
             body_size = atoi(optarg);
+            if (body_size <= 0) {
+                fprintf(stderr, "body size must be greater than 0\n");
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'c':
             chunk_size = atoi(optarg);

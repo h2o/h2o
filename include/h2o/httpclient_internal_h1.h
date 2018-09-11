@@ -19,10 +19,44 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "h2o.h"
-#include "token_table.h"
+#ifndef h2o__httpclient_internal_h1_h
+#define h2o__httpclient_internal_h1_h
 
-int h2o_iovec_is_token(const h2o_iovec_t *buf)
-{
-    return &h2o__tokens[0].buf <= buf && buf <= &h2o__tokens[H2O_MAX_TOKENS - 1].buf;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "h2o/httpclient_internal.h"
+#include "picohttpparser.h"
+
+struct st_h2o_http1client_t {
+    struct st_h2o_httpclient_private_t super;
+    h2o_socket_t *sock;
+    h2o_url_t *_origin;
+    int _method_is_head;
+    int _do_keepalive;
+    union {
+        struct {
+            size_t bytesleft;
+        } content_length;
+        struct {
+            struct phr_chunked_decoder decoder;
+            size_t bytes_decoded_in_buf;
+        } chunked;
+    } _body_decoder;
+    h2o_socket_cb reader;
+    h2o_httpclient_proceed_req_cb proceed_req;
+    char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
+    h2o_buffer_t *_body_buf;
+    h2o_buffer_t *_body_buf_in_flight;
+    unsigned _is_chunked : 1;
+    unsigned _body_buf_is_done : 1;
+};
+
+void h2o_http1client_on_connect(struct st_h2o_httpclient_private_t *client, h2o_socket_t *sock, h2o_url_t *origin);
+
+#ifdef __cplusplus
 }
+#endif
+
+#endif

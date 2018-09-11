@@ -790,7 +790,8 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_timer_link(req->conn->ctx->loop, generator->handler->config.io_timeout, &generator->timeout);
 
     h2o_socketpool_connect(&generator->connect_req, &handler->sockpool, &handler->sockpool.targets.entries[0]->url,
-                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, on_connect, generator);
+                           req->conn->ctx->loop, &req->conn->ctx->receivers.hostinfo_getaddr, h2o_iovec_init(NULL, 0), on_connect,
+                           generator);
 
     return 0;
 }

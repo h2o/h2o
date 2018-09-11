@@ -161,6 +161,7 @@ int main(int argc, char **argv)
         subtest("lib/cache.c", test_lib__common__cache_c);
         subtest("lib/common/multithread.c", test_lib__common__multithread_c);
         subtest("lib/common/hostinfo.c", test_lib__common__hostinfo_c);
+        subtest("lib/common/httpclient.c", test_lib__common__httpclient_c);
         subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
         subtest("lib/common/serverutil.c", test_lib__common__socket_c);
         subtest("lib/common/string.c", test_lib__common__string_c);

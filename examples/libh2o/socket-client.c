@@ -82,7 +82,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 
     if (ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, ssl_ctx, host, on_handshake_complete);
+        h2o_socket_ssl_handshake(sock, ssl_ctx, host, h2o_iovec_init(NULL, 0), on_handshake_complete);
     } else {
         h2o_socket_write(sock, sock->data, 1, on_write);
     }
