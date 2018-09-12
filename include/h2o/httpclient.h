@@ -181,6 +181,10 @@ extern const char *const h2o_httpclient_error_refused_stream;
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
+/**
+ * issues a HTTP request using the connection pool. Either H1 or H2 may be used, depending on the given context.
+ * TODO: create H1- or H2-specific connect function that works without the connection pool?
+ */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
