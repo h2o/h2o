@@ -24,6 +24,7 @@
 
 #include <sys/un.h>
 #include "h2o/memory.h"
+#include "h2o/string_.h"
 
 typedef struct st_h2o_url_scheme_t {
     h2o_iovec_t name;

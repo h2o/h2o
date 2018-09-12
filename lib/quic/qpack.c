@@ -577,7 +577,7 @@ struct st_h2o_qpack_decode_header_ctx_t {
     int64_t base_index;
 };
 
-static int decode_header(void *_ctx, h2o_mem_pool_t *pool, h2o_iovec_t **name, h2o_iovec_t *value, const uint8_t **src,
+static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h2o_iovec_t *value, const uint8_t **src,
                          const uint8_t *src_end, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t *ctx = _ctx;
@@ -656,9 +656,10 @@ Fail:
     return H2O_HTTP2_ERROR_COMPRESSION;
 }
 
-int h2o_qpack_parse_headers(h2o_req_t *req, h2o_qpack_decoder_t *qpack, int64_t stream_id, const uint8_t *_src, size_t len,
+int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            quicly_sendbuf_t *sendbuf, const char **err_desc)
+                            quicly_sendbuf_t *sendbuf, const uint8_t *_src, size_t len, const char **err_desc)
 {
     const uint8_t *src = _src, *src_end = src + len;
     int64_t largest_ref, base_index;
@@ -684,8 +685,8 @@ int h2o_qpack_parse_headers(h2o_req_t *req, h2o_qpack_decoder_t *qpack, int64_t 
     /* parse */
     struct st_h2o_qpack_decode_header_ctx_t ctx = {qpack, base_index};
     int ret;
-    if ((ret = h2o_hpack_parse_headers(req, decode_header, &ctx, src, src_end - src, pseudo_header_exists_map, content_length,
-                                       digests, err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, headers,
+                                       pseudo_header_exists_map, content_length, digests, src, src_end - src, err_desc)) != 0)
         return ret;
 
     /* send header ack if necessary */

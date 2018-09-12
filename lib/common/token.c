@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018 Fastly Inc, Ichito Nagata
+ * Copyright (c) 2014 DeNA Co., Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,10 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include "h2o/token.h"
+#include "token_table.h"
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wshorten-64-to-32"
-#include "hiredis.h"
-#include "async.h"
-#pragma GCC diagnostic pop
+int h2o_iovec_is_token(const h2o_iovec_t *buf)
+{
+    return &h2o__tokens[0].buf <= buf && buf <= &h2o__tokens[H2O_MAX_TOKENS - 1].buf;
+}

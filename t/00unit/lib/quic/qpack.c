@@ -91,23 +91,26 @@ void test_lib__quic_qpack(void)
     }
 
     {
-        h2o_req_t req;
-        memset(&req, 0, sizeof(req));
-        h2o_mem_init_pool(&req.pool);
+        h2o_mem_pool_t pool;
         ptls_iovec_t input = quicly_recvbuf_get(&enc_recvbuf);
+        h2o_iovec_t method = {NULL}, authority = {NULL}, path = {NULL};
+        const h2o_url_scheme_t *scheme = NULL;
         int pseudo_header_exists_map = 0;
-        size_t content_length;
+        h2o_headers_t headers = {NULL};
+        size_t content_length = SIZE_MAX;
         const char *err_desc = NULL;
-        ret = h2o_qpack_parse_headers(&req, dec, 0, input.base, input.len, &pseudo_header_exists_map, &content_length, NULL,
-                                      &dec_sendbuf, &err_desc);
+        h2o_mem_init_pool(&pool);
+        ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &headers, &pseudo_header_exists_map,
+                                      &content_length, NULL, &dec_sendbuf, input.base, input.len, &err_desc);
         ok(ret == 0);
-        ok(h2o_memis(req.input.method.base, req.input.method.len, H2O_STRLIT("GET")));
-        ok(req.input.scheme == &H2O_URL_SCHEME_HTTPS);
-        ok(h2o_memis(req.input.authority.base, req.input.authority.len, H2O_STRLIT("example.com")));
-        ok(h2o_memis(req.input.path.base, req.input.path.len, H2O_STRLIT("/foobar")));
-        ok(req.headers.size == 1);
-        ok(h2o_memis(req.headers.entries[0].name->base, req.headers.entries[0].name->len, H2O_STRLIT("x-hoge")));
-        ok(h2o_memis(req.headers.entries[0].value.base, req.headers.entries[0].value.len, H2O_STRLIT("\x01\x02\x03")));
+        ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
+        ok(scheme == &H2O_URL_SCHEME_HTTPS);
+        ok(h2o_memis(authority.base, authority.len, H2O_STRLIT("example.com")));
+        ok(h2o_memis(path.base, path.len, H2O_STRLIT("/foobar")));
+        ok(headers.size == 1);
+        ok(h2o_memis(headers.entries[0].name->base, headers.entries[0].name->len, H2O_STRLIT("x-hoge")));
+        ok(h2o_memis(headers.entries[0].value.base, headers.entries[0].value.len, H2O_STRLIT("\x01\x02\x03")));
+        h2o_mem_clear_pool(&pool);
     }
 
     ok(dec_sendbuf.pending.num_ranges == 0);

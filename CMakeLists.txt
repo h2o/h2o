@@ -306,6 +306,8 @@ SET(LIB_SOURCE_FILES
     lib/common/filecache.c
     lib/common/hostinfo.c
     lib/common/http1client.c
+    lib/common/http2client.c
+    lib/common/httpclient.c
     lib/common/memcached.c
     lib/common/memory.c
     lib/common/multithread.c
@@ -316,6 +318,7 @@ SET(LIB_SOURCE_FILES
     lib/common/string.c
     lib/common/time.c
     lib/common/timerwheel.c
+    lib/common/token.c
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
@@ -327,7 +330,6 @@ SET(LIB_SOURCE_FILES
     lib/core/logconf.c
     lib/core/proxy.c
     lib/core/request.c
-    lib/core/token.c
     lib/core/util.c
 
     lib/handler/access_log.c
@@ -390,6 +392,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/balancer/roundrobin.c
     t/00unit/lib/common/cache.c
     t/00unit/lib/common/hostinfo.c
+    t/00unit/lib/common/httpclient.c
     t/00unit/lib/common/multithread.c
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/socket.c
@@ -420,6 +423,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/balancer/roundrobin.c
     lib/common/cache.c
     lib/common/hostinfo.c
+    lib/common/httpclient.c
     lib/common/multithread.c
     lib/common/serverutil.c
     lib/common/socket.c

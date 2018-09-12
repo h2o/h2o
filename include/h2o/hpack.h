@@ -24,6 +24,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "h2o/header.h"
+#include "h2o/url.h"
 #include "h2o/cache_digests.h"
 
 #define H2O_HPACK_ENCODE_INT_MAX_LENGTH 10 /* first byte + 9 bytes (7*9==63 bits to hold positive numbers of int64_t) */
@@ -64,12 +66,15 @@ void h2o_hpack_validate_header_value(const char *s, size_t len, const char **err
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
 #define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
 
-typedef int (*h2o_hpack_decode_header_cb)(void *ctx, h2o_mem_pool_t *pool, h2o_iovec_t **name, h2o_iovec_t *value,
+typedef int (*h2o_hpack_decode_header_cb)(h2o_mem_pool_t *pool, void *ctx, h2o_iovec_t **name, h2o_iovec_t *value,
                                           const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
-int h2o_hpack_decode_header(void *_hpack_header_table, h2o_mem_pool_t *pool, h2o_iovec_t **name, h2o_iovec_t *_value,
+int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o_iovec_t **name, h2o_iovec_t *_value,
                             const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
-int h2o_hpack_parse_headers(h2o_req_t *req, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, const uint8_t *src, size_t len,
+int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            const char **err_desc);
+                            const uint8_t *src, size_t len, const char **err_desc);
+int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, int *status,
+                             h2o_headers_t *headers, size_t *content_length, const uint8_t *src, size_t len, const char **err_desc);
 
 #endif

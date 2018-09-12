@@ -204,5 +204,4 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf)
 }
 
 h2o_status_handler_t h2o_durations_status_handler = {
-    {H2O_STRLIT("durations")}, durations_status_final, durations_status_init, durations_status_per_thread
-};
+    {H2O_STRLIT("durations")}, durations_status_final, durations_status_init, durations_status_per_thread};
