@@ -93,27 +93,107 @@ typedef struct st_h2o_httpclient_timings_t {
 } h2o_httpclient_timings_t;
 
 struct st_h2o_httpclient_t {
+    /**
+     * memory pool
+     */
     h2o_mem_pool_t *pool;
+    /**
+     * context
+     */
     h2o_httpclient_ctx_t *ctx;
+    /**
+     * connection pool
+     */
     h2o_httpclient_connection_pool_t *connpool;
+    /**
+     * buffer in which response data is stored (see update_window)
+     */
     h2o_buffer_t **buf;
+    /**
+     * application data pointer
+     */
     void *data;
+    /**
+     * optional callback to receive informational response(s)
+     */
     h2o_httpclient_informational_cb informational_cb;
+    /**
+     * server-timing data
+     */
     h2o_httpclient_timings_t timings;
 
+    /**
+     * cancels a in-flight request
+     */
     void (*cancel)(h2o_httpclient_t *client);
+    /**
+     * optional function that lets the application steal the socket (for HTTP/1.1.-style upgrade)
+     */
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
+    /**
+     * callback that should be called when some data is fetched out from `buf`.
+     */
     void (*update_window)(h2o_httpclient_t *client);
+    /**
+     * function for writing request body. `proceed_req_cb` supplied through the `on_connect` callback will be called when the
+     * given data is sent to the server.
+     */
     int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_stream);
+
+    h2o_timer_t _timeout;
+    h2o_socketpool_connect_request_t *_connect_req;
+    union {
+        h2o_httpclient_connect_cb on_connect;
+        h2o_httpclient_head_cb on_head;
+        h2o_httpclient_body_cb on_body;
+    } _cb;
 };
+
+/**
+ * public members of h2 client connection
+ */
+typedef struct st_h2o_httpclient__h2_conn_t {
+    /**
+     * context
+     */
+    h2o_httpclient_ctx_t *ctx;
+    /**
+     * origin server (path is ignored)
+     */
+    h2o_url_t origin_url;
+    /**
+     * underlying socket
+     */
+    h2o_socket_t *sock;
+    /**
+     * number of open streams (FIXME can't we refer to khash?)
+     */
+    size_t num_streams;
+    /**
+     * linklist of connections anchored to h2o_httpclient_connection_pool_t::http2.conns. The link is in the ascending order of
+     * `num_streams`.
+     */
+    h2o_linklist_t link;
+} h2o_httpclient__h2_conn_t;
 
 extern const char *const h2o_httpclient_error_is_eos;
 extern const char *const h2o_httpclient_error_refused_stream;
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
-void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+/**
+ * issues a HTTP request using the connection pool. Either H1 or H2 may be used, depending on the given context.
+ * TODO: create H1- or H2-specific connect function that works without the connection pool?
+ */
+void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
+
+void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
+extern size_t h2o_httpclient__h1_size;
+
+void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
+uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
+extern size_t h2o_httpclient__h2_size;
 
 #ifdef __cplusplus
 }
