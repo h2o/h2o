@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #include "khash.h"
-#include "h2o/httpclient_internal.h"
+#include "h2o/httpclient.h"
 #include "h2o/http2_common.h"
 
 enum enum_h2o_http2client_stream_state {
@@ -78,7 +78,7 @@ struct st_h2o_http2client_conn_t {
 };
 
 struct st_h2o_http2client_stream_t {
-    struct st_h2o_httpclient_private_t super;
+    h2o_httpclient_t super;
     struct st_h2o_http2client_conn_t *conn;
     uint32_t stream_id;
     enum enum_h2o_http2client_stream_state state;
@@ -103,7 +103,7 @@ struct st_h2o_http2client_stream_t {
     } streaming;
 };
 
-void h2o_http2client_on_connect(struct st_h2o_httpclient_private_t *client, h2o_socket_t *sock, h2o_url_t *origin);
+void h2o_http2client_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 
 uint32_t h2o_http2client_get_max_concurrent_streams(struct st_h2o_http2client_conn_t *conn);
 

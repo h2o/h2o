@@ -93,18 +93,60 @@ typedef struct st_h2o_httpclient_timings_t {
 } h2o_httpclient_timings_t;
 
 struct st_h2o_httpclient_t {
+    /**
+     * memory pool
+     */
     h2o_mem_pool_t *pool;
+    /**
+     * context
+     */
     h2o_httpclient_ctx_t *ctx;
+    /**
+     * connection pool
+     */
     h2o_httpclient_connection_pool_t *connpool;
+    /**
+     * buffer in which response data is stored (see update_window)
+     */
     h2o_buffer_t **buf;
+    /**
+     * application data pointer
+     */
     void *data;
+    /**
+     * optional callback to receive informational response(s)
+     */
     h2o_httpclient_informational_cb informational_cb;
+    /**
+     * server-timing data
+     */
     h2o_httpclient_timings_t timings;
 
+    /**
+     * cancels a in-flight request
+     */
     void (*cancel)(h2o_httpclient_t *client);
+    /**
+     * optional function that lets the application steal the socket (for HTTP/1.1.-style upgrade)
+     */
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
+    /**
+     * callback that should be called when some data is fetched out from `buf`.
+     */
     void (*update_window)(h2o_httpclient_t *client);
+    /**
+     * function for writing request body. `proceed_req_cb` supplied through the `on_connect` callback will be called when the
+     * given data is sent to the server.
+     */
     int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_stream);
+
+    h2o_timer_t _timeout;
+    h2o_socketpool_connect_request_t *_connect_req;
+    union {
+        h2o_httpclient_connect_cb on_connect;
+        h2o_httpclient_head_cb on_head;
+        h2o_httpclient_body_cb on_body;
+    } _cb;
 };
 
 extern const char *const h2o_httpclient_error_is_eos;
@@ -112,7 +154,7 @@ extern const char *const h2o_httpclient_error_refused_stream;
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
-void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 #ifdef __cplusplus
