@@ -53,6 +53,7 @@
 
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic ignored "-Wshorten-64-to-32"
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 #pragma GCC diagnostic pop
