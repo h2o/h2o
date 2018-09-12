@@ -20,8 +20,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "h2o/httpclient_internal_h1.h"
-#include "h2o/httpclient_internal_h2.h"
+#include "h2o/httpclient.h"
 
 const char *const h2o_httpclient_error_is_eos = "end of stream";
 const char *const h2o_httpclient_error_refused_stream = "refused stream";
@@ -67,7 +66,7 @@ static void do_cancel(h2o_httpclient_t *_client)
 static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
 {
 #define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
-    static const size_t sz = SZ_MAX(sizeof(struct st_h2o_http1client_t), sizeof(struct st_h2o_http2client_stream_t));
+    size_t sz = SZ_MAX(h2o_httpclient__h1_size, h2o_httpclient__h2_size);
 #undef SZ_MAX
     h2o_httpclient_t *client = h2o_mem_alloc(sz);
     memset(client, 0, sz);
@@ -100,14 +99,14 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
 
     h2o_iovec_t alpn_proto;
     if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
-        h2o_http1client_on_connect(client, sock, origin);
+        h2o_httpclient__h1_on_connect(client, sock, origin);
     } else {
         if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h2"))) {
             /* detach this socket from the socketpool to count the number of h1 connections correctly */
             h2o_socketpool_detach(client->connpool->socketpool, sock);
-            h2o_http2client_on_connect(client, sock, origin);
+            h2o_httpclient__h2_on_connect(client, sock, origin);
         } else if (memcmp(alpn_proto.base, "http/1.1", alpn_proto.len) == 0) {
-            h2o_http1client_on_connect(client, sock, origin);
+            h2o_httpclient__h1_on_connect(client, sock, origin);
         } else {
             on_connect_error(client, "unknown alpn protocol");
         }
@@ -142,10 +141,10 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
     client->timings.start_at = h2o_gettimeofday(ctx->loop);
 
-    struct st_h2o_http2client_conn_t *http2_conn = NULL;
+    h2o_httpclient__h2_conn_t *http2_conn = NULL;
     if (!h2o_linklist_is_empty(&connpool->http2.conns)) {
-        http2_conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, link, connpool->http2.conns.next);
-        if (http2_conn->num_streams >= h2o_http2client_get_max_concurrent_streams(http2_conn))
+        http2_conn = H2O_STRUCT_FROM_MEMBER(h2o_httpclient__h2_conn_t, link, connpool->http2.conns.next);
+        if (http2_conn->num_streams >= h2o_httpclient__h2_get_max_concurrent_streams(http2_conn))
             http2_conn = NULL;
     }
 
@@ -156,15 +155,15 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
             /* both of h1 and h2 connections exist, compare in-use ratio */
             double http1_ratio = (double)(connpool->socketpool->_shared.count - connpool->socketpool->_shared.pooled_count) /
                                  connpool->socketpool->_shared.count;
-            double http2_ratio = http2_conn->num_streams / h2o_http2client_get_max_concurrent_streams(http2_conn);
+            double http2_ratio = http2_conn->num_streams / h2o_httpclient__h2_get_max_concurrent_streams(http2_conn);
             if (http2_ratio <= http1_ratio) {
-                h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
+                h2o_httpclient__h2_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
             } else {
                 goto UseSocketPool;
             }
         } else if (http2_conn != NULL) {
             /* h2 connection exists */
-            h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
+            h2o_httpclient__h2_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
         } else if (connpool->socketpool->_shared.pooled_count != 0) {
             /* h1 connection exists */
             goto UseSocketPool;
@@ -178,7 +177,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
         if (should_use_h2(ctx->http2.ratio, &ctx->http2.counter)) {
             if (http2_conn != NULL) {
-                h2o_http2client_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
+                h2o_httpclient__h2_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
             } else {
                 alpn_protos = both_protos;
                 goto UseSocketPool;

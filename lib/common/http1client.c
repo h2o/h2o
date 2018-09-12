@@ -25,8 +25,33 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
-#include "h2o/httpclient_internal_h1.h"
+#include "picohttpparser.h"
+#include "h2o/httpclient.h"
 #include "h2o/token.h"
+
+struct st_h2o_http1client_t {
+    h2o_httpclient_t super;
+    h2o_socket_t *sock;
+    h2o_url_t *_origin;
+    int _method_is_head;
+    int _do_keepalive;
+    union {
+        struct {
+            size_t bytesleft;
+        } content_length;
+        struct {
+            struct phr_chunked_decoder decoder;
+            size_t bytes_decoded_in_buf;
+        } chunked;
+    } _body_decoder;
+    h2o_socket_cb reader;
+    h2o_httpclient_proceed_req_cb proceed_req;
+    char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
+    h2o_buffer_t *_body_buf;
+    h2o_buffer_t *_body_buf_in_flight;
+    unsigned _is_chunked : 1;
+    unsigned _body_buf_is_done : 1;
+};
 
 static void close_client(struct st_h2o_http1client_t *client)
 {
@@ -626,7 +651,7 @@ static void setup_client(struct st_h2o_http1client_t *client, h2o_socket_t *sock
     client->_origin = origin;
 }
 
-void h2o_http1client_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin)
+void h2o_httpclient__h1_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin)
 {
     struct st_h2o_http1client_t *client = (void *)_client;
 
@@ -635,3 +660,5 @@ void h2o_http1client_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h
     setup_client(client, sock, origin);
     on_connection_ready(client);
 }
+
+size_t h2o_httpclient__h1_size = sizeof(struct st_h2o_http1client_t);

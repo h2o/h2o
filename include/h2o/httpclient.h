@@ -149,6 +149,33 @@ struct st_h2o_httpclient_t {
     } _cb;
 };
 
+/**
+ * public members of h2 client connection
+ */
+typedef struct st_h2o_httpclient__h2_conn_t {
+    /**
+     * context
+     */
+    h2o_httpclient_ctx_t *ctx;
+    /**
+     * origin server (path is ignored)
+     */
+    h2o_url_t origin_url;
+    /**
+     * underlying socket
+     */
+    h2o_socket_t *sock;
+    /**
+     * number of open streams (FIXME can't we refer to khash?)
+     */
+    size_t num_streams;
+    /**
+     * linklist of connections anchored to h2o_httpclient_connection_pool_t::http2.conns. The link is in the ascending order of
+     * `num_streams`.
+     */
+    h2o_linklist_t link;
+} h2o_httpclient__h2_conn_t;
+
 extern const char *const h2o_httpclient_error_is_eos;
 extern const char *const h2o_httpclient_error_refused_stream;
 
@@ -156,6 +183,13 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
 
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
+
+void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
+extern size_t h2o_httpclient__h1_size;
+
+void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
+uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
+extern size_t h2o_httpclient__h2_size;
 
 #ifdef __cplusplus
 }
