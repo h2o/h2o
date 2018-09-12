@@ -172,8 +172,10 @@ uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t
 
 static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, struct st_h2o_http2client_conn_t *conn, int forward)
 {
-    if (!h2o_linklist_is_linked(&conn->super.link))
+    if (connpool == NULL) {
+        assert(!h2o_linklist_is_linked(&conn->super.link));
         return;
+    }
 
     double ratio = (double)conn->super.num_streams / h2o_httpclient__h2_get_max_concurrent_streams(&conn->super);
 
@@ -1143,7 +1145,8 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(stream);
     h2o_url_copy(NULL, &conn->super.origin_url, origin_url);
-    h2o_linklist_insert(&connpool->http2.conns, &conn->super.link);
+    if (connpool != NULL)
+        h2o_linklist_insert(&connpool->http2.conns, &conn->super.link);
     conn->io_timeout.cb = on_io_timeout;
     conn->keepalive_timeout.cb = on_keepalive_timeout;
 
