@@ -224,11 +224,8 @@
 		7D0341FB1FE4D5B60052E0A1 /* http2client.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0341FA1FE4D5B60052E0A1 /* http2client.c */; };
 		7D0341FC1FE4D5BD0052E0A1 /* http2client.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D0341FA1FE4D5B60052E0A1 /* http2client.c */; };
 		7D0E5D5A20761BD800DA3E5A /* hiredis_.h in Headers */ = {isa = PBXBuildFile; fileRef = 7DF88EF820761972005DB8D8 /* hiredis_.h */; };
-		7D10CC6B205D0F950054A8E2 /* httpclient_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D10CC6A205D0F8E0054A8E2 /* httpclient_internal.h */; };
 		7D25E33C20B288710092C982 /* http2_common.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D25E33B20B270BA0092C982 /* http2_common.h */; };
 		7D2DF4EE20297EEF004AD361 /* header.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D2DF4ED20297EE0004AD361 /* header.h */; };
-		7D519F8A20A3ECEC000B5313 /* httpclient_internal_h1.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D519F8820A3ECEC000B5313 /* httpclient_internal_h1.h */; };
-		7D519F8B20A3ECEC000B5313 /* httpclient_internal_h2.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D519F8920A3ECEC000B5313 /* httpclient_internal_h2.h */; };
 		7D67C721204F8C0E0049E935 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D67C720204F8C0E0049E935 /* httpclient.c */; };
 		7D67C722204F8C0E0049E935 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D67C720204F8C0E0049E935 /* httpclient.c */; };
 		7D67C724204F8CA50049E935 /* httpclient.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D67C723204F8C9B0049E935 /* httpclient.h */; };
@@ -239,8 +236,8 @@
 		7D937303202AC7BA005FE6AB /* server_timing.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D937301202AC7BA005FE6AB /* server_timing.c */; };
 		7D9FA53A1FC323B200189F88 /* channel.c in Sources */ = {isa = PBXBuildFile; fileRef = 7D9FA5381FC323AC00189F88 /* channel.c */; };
 		7DA3F5AF20E0B0400000222F /* token_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 7DA3F5AE20E0B03F0000222F /* token_table.h */; };
-		7DD70D79210F2EC400727A17 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DD70D77210F2EC400727A17 /* httpclient.c */; };
 		7DC64F541FEB78B000587150 /* sender.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DC64F521FEB78AD00587150 /* sender.c */; };
+		7DD70D79210F2EC400727A17 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DD70D77210F2EC400727A17 /* httpclient.c */; };
 		7DE1DB37212B1CC00055F500 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DE1DB35212B1CC00055F500 /* ssl.c */; };
 		7DE1DB38212B1CC00055F500 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DE1DB35212B1CC00055F500 /* ssl.c */; };
 		7DF26B091FBC020600FBE2E7 /* middleware.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DF26B071FBC020600FBE2E7 /* middleware.c */; };
@@ -932,19 +929,16 @@
 		10FFEE091BB23A8C0087AD75 /* neverbleed.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = neverbleed.h; sourceTree = "<group>"; };
 		7D0285C81EF422D40094292B /* sleep.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sleep.c; sourceTree = "<group>"; };
 		7D0341FA1FE4D5B60052E0A1 /* http2client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2client.c; sourceTree = "<group>"; };
-		7D10CC6A205D0F8E0054A8E2 /* httpclient_internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = httpclient_internal.h; sourceTree = "<group>"; };
 		7D25E33B20B270BA0092C982 /* http2_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http2_common.h; sourceTree = "<group>"; };
 		7D2DF4ED20297EE0004AD361 /* header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = header.h; sourceTree = "<group>"; };
-		7D519F8820A3ECEC000B5313 /* httpclient_internal_h1.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = httpclient_internal_h1.h; sourceTree = "<group>"; };
-		7D519F8920A3ECEC000B5313 /* httpclient_internal_h2.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = httpclient_internal_h2.h; sourceTree = "<group>"; };
 		7D67C720204F8C0E0049E935 /* httpclient.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = httpclient.c; sourceTree = "<group>"; };
 		7D67C723204F8C9B0049E935 /* httpclient.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = httpclient.h; sourceTree = "<group>"; };
 		7D9372FD202AC70F005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D937301202AC7BA005FE6AB /* server_timing.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = server_timing.c; sourceTree = "<group>"; };
 		7D9FA5381FC323AC00189F88 /* channel.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = channel.c; sourceTree = "<group>"; };
 		7DA3F5AE20E0B03F0000222F /* token_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = token_table.h; sourceTree = "<group>"; };
-		7DD70D77210F2EC400727A17 /* httpclient.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = httpclient.c; sourceTree = "<group>"; };
 		7DC64F521FEB78AD00587150 /* sender.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sender.c; sourceTree = "<group>"; };
+		7DD70D77210F2EC400727A17 /* httpclient.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = httpclient.c; sourceTree = "<group>"; };
 		7DE1DB35212B1CC00055F500 /* ssl.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ssl.c; sourceTree = "<group>"; };
 		7DF26B071FBC020600FBE2E7 /* middleware.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = middleware.c; sourceTree = "<group>"; };
 		7DF88EF820761972005DB8D8 /* hiredis_.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hiredis_.h; sourceTree = "<group>"; };
@@ -1727,9 +1721,6 @@
 				E97EC88C213CE3130086AD64 /* hpack.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				7D67C723204F8C9B0049E935 /* httpclient.h */,
-				7D10CC6A205D0F8E0054A8E2 /* httpclient_internal.h */,
-				7D519F8820A3ECEC000B5313 /* httpclient_internal_h1.h */,
-				7D519F8920A3ECEC000B5313 /* httpclient_internal_h2.h */,
 				107923A119A3215F00C52AD6 /* http2.h */,
 				7D25E33B20B270BA0092C982 /* http2_common.h */,
 				10AAAC621B6C7A7D004487C3 /* http2_casper.h */,
@@ -2525,7 +2516,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */,
-				7D519F8B20A3ECEC000B5313 /* httpclient_internal_h2.h in Headers */,
 				08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */,
 				1022E7C61CA8BCEB00CE2A05 /* yrmcds_portability.h in Headers */,
 				10D0904319F0BA780043D458 /* linklist.h in Headers */,
@@ -2536,7 +2526,6 @@
 				1079236A19A3210E00C52AD6 /* khash.h in Headers */,
 				1022E7C71CA8BCEB00CE2A05 /* yrmcds_text.h in Headers */,
 				105534D81A3C791B00627ECB /* configurator.h in Headers */,
-				7D519F8A20A3ECEC000B5313 /* httpclient_internal_h1.h in Headers */,
 				10AA2EAA1A8DDC57004322AC /* multithread.h in Headers */,
 				E901C3E5213E1C3600D17C93 /* maxsender.h in Headers */,
 				10AA2E9F1A8807CF004322AC /* url.h in Headers */,
@@ -2599,7 +2588,6 @@
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
 				E901C420213E3C2800D17C93 /* cc.h in Headers */,
 				E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */,
-				7D10CC6B205D0F950054A8E2 /* httpclient_internal.h in Headers */,
 				0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */,
 				E901C3EC213E1C3600D17C93 /* sendbuf.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
