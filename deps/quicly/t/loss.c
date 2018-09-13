@@ -228,7 +228,7 @@ quicly_get_first_timeout(client);
         assert(server_timeout > quic_now - 20);
         if (quicly_get_state(client) == QUICLY_STATE_CONNECTED && quicly_connection_is_ready(client)) {
             if (client_stream == NULL) {
-                if ((ret = quicly_open_stream(client, &client_stream)) != 0) {
+                if ((ret = quicly_open_stream(client, &client_stream, 0)) != 0) {
                     fprintf(stderr, "%s: quicly_open_stream: ret=%d\n", __FUNCTION__, ret);
                     goto Fail;
                 }

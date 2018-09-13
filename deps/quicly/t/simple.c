@@ -70,7 +70,7 @@ static void simple_http(void)
     quicly_stream_t *client_stream, *server_stream;
     int ret;
 
-    ret = quicly_open_stream(client, &client_stream);
+    ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
     ok(client_stream->stream_id == 0);
     client_stream->on_update = on_update_noop;
@@ -111,7 +111,7 @@ static void test_rst_then_close(void)
     int ret;
 
     /* client sends STOP_SENDING and RST_STREAM */
-    ret = quicly_open_stream(client, &client_stream);
+    ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
     client_stream->on_update = on_update_noop;
     stream_id = client_stream->stream_id;
@@ -154,7 +154,7 @@ static void tiny_stream_window(void)
 
     ok(max_data_is_equal(client, server));
 
-    ret = quicly_open_stream(client, &client_stream);
+    ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
     client_stream->on_update = on_update_noop;
     client_stream->_send_aux.max_stream_data = 4;
@@ -225,7 +225,7 @@ static void test_rst_during_loss(void)
     ok(max_data_is_equal(client, server));
     quicly_get_max_data(client, NULL, &max_data_at_start, NULL);
 
-    ret = quicly_open_stream(client, &client_stream);
+    ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
     client_stream->on_update = on_update_noop;
     client_stream->_send_aux.max_stream_data = 4;
@@ -324,7 +324,7 @@ static void tiny_connection_window(void)
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(client));
 
-    ret = quicly_open_stream(client, &client_stream);
+    ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
 
     for (i = 0; i < 16; ++i)

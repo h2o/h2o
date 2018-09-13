@@ -51,7 +51,7 @@ void test_stream_concurrency(void)
 
     /* open as many streams as we can */
     for (i = 0; i < limit + 1; ++i) {
-        ret = quicly_open_stream(client, client_streams + i);
+        ret = quicly_open_stream(client, client_streams + i, 0);
         if (ret != 0)
             break;
         client_streams[i]->on_update = on_update_noop;
@@ -63,7 +63,7 @@ void test_stream_concurrency(void)
     transmit(server, client);
 
     /* cannot open more even after 1RT */
-    ret = quicly_open_stream(client, client_streams + i);
+    ret = quicly_open_stream(client, client_streams + i, 0);
     ok(ret != 0);
 
     /* reset one stream in both directions and close on the client-side */
@@ -80,7 +80,7 @@ void test_stream_concurrency(void)
     transmit(server, client);
 
     /* still cannot open more */
-    ret = quicly_open_stream(client, client_streams + i);
+    ret = quicly_open_stream(client, client_streams + i, 0);
     ok(ret != 0);
 
     /* close the stream on the server-side */
@@ -91,10 +91,10 @@ void test_stream_concurrency(void)
     --i;
 
     /* now we can open one more */
-    ret = quicly_open_stream(client, client_streams + i);
+    ret = quicly_open_stream(client, client_streams + i, 0);
     ok(ret == 0);
     ++i;
-    ret = quicly_open_stream(client, client_streams + i);
+    ret = quicly_open_stream(client, client_streams + i, 0);
     ok(ret != 0);
 
     quicly_free(client);
