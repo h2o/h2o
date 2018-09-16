@@ -27,10 +27,9 @@
 static void on_read(h2o_socket_t *sock, const char *err);
 static void on_timeout(h2o_timer_t *timeout);
 
-void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, quicly_context_t *quic, h2o_qpack_context_t *qpack,
-                         h2o_socket_t *sock, h2o_hq_accept_cb acceptor)
+void h2o_hq_init_context(h2o_hq_ctx_t *ctx, quicly_context_t *quic, h2o_qpack_context_t *qpack, h2o_socket_t *sock,
+                         h2o_hq_accept_cb acceptor)
 {
-    ctx->loop = loop;
     ctx->quic = quic;
     ctx->qpack = qpack;
     ctx->sock = sock;
