@@ -275,7 +275,8 @@ SET(QUIC_SOURCE_FILES
     deps/quicly/lib/ranges.c
     deps/quicly/lib/recvbuf.c
     deps/quicly/lib/sendbuf.c
-    lib/quic/qpack.c)
+    lib/quic/qpack.c
+    lib/quic/common.c)
 
 SET(QUIC_UNIT_TEST_SOURCE_FILES
     t/00unit/lib/quic/qpack.c)

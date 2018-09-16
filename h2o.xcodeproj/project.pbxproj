@@ -466,6 +466,16 @@
 		E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
 		E9BCE68D1FF0CFBB003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68B1FF0CF98003CEA11 /* timerwheel.c */; };
 		E9BCE6901FF0CFEC003CEA11 /* timerwheel.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BCE68E1FF0CFE4003CEA11 /* timerwheel.c */; };
+		E9E50473214A5B8A004DC170 /* hqclient.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50472214A5B8A004DC170 /* hqclient.c */; };
+		E9E50474214A5B9D004DC170 /* hqclient.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50472214A5B8A004DC170 /* hqclient.c */; };
+		E9E50479214C0385004DC170 /* common.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50476214C0385004DC170 /* common.c */; };
+		E9E5047A214EB26D004DC170 /* hq_common.h in Headers */ = {isa = PBXBuildFile; fileRef = E9E50475214B3D28004DC170 /* hq_common.h */; };
+		E9E50481214EBF2A004DC170 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
+		E9E5048A214EBF6A004DC170 /* hqclient.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50489214EBF6A004DC170 /* hqclient.c */; };
+		E9E5048B214EC57A004DC170 /* common.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50476214C0385004DC170 /* common.c */; };
+		E9E5048C214EC57D004DC170 /* qpack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C439213E59A000D17C93 /* qpack.c */; };
+		E9E5048D214EC5DE004DC170 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
+		E9E5048E214EC5E2004DC170 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
 		E9F677D42007476D006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
 		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
@@ -509,6 +519,13 @@
 			remoteInfo = h2o;
 		};
 		E918FC8521365A8C00CCB252 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1079231419A320A700C52AD6;
+			remoteInfo = h2o;
+		};
+		E9E5047D214EBF2A004DC170 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
 			proxyType = 1;
@@ -591,6 +608,15 @@
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 		E918FC332136583F00CCB252 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		E9E50482214EBF2A004DC170 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -1155,6 +1181,11 @@
 		E9CD04281F8F1D7500524877 /* CONTRIBUTING.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = CONTRIBUTING.md; sourceTree = "<group>"; };
 		E9CD04291F8F1D7F00524877 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		E9CD042A1F8F1D8A00524877 /* LICENSE */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
+		E9E50472214A5B8A004DC170 /* hqclient.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = hqclient.c; sourceTree = "<group>"; };
+		E9E50475214B3D28004DC170 /* hq_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hq_common.h; sourceTree = "<group>"; };
+		E9E50476214C0385004DC170 /* common.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = common.c; sourceTree = "<group>"; };
+		E9E50488214EBF2A004DC170 /* examples-hqclient */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-hqclient"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E9E50489214EBF6A004DC170 /* hqclient.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = hqclient.c; sourceTree = "<group>"; };
 		E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http2-h2spec.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9F677CB1FF62216006476D3 /* 50reverse-proxy-chunk-trailing-headers.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunk-trailing-headers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9F677CC1FF62216006476D3 /* 50reverse-proxy-chunk-timeout-2.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunk-timeout-2.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1247,6 +1278,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E9E50480214EBF2A004DC170 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E9E50481214EBF2A004DC170 /* libh2o.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -1312,6 +1351,7 @@
 				7D67C720204F8C0E0049E935 /* httpclient.c */,
 				10D0905419F102C70043D458 /* http1client.c */,
 				7D0341FA1FE4D5B60052E0A1 /* http2client.c */,
+				E9E50472214A5B8A004DC170 /* hqclient.c */,
 				10A3D3D11B4CDBDC00327CF9 /* memcached.c */,
 				08790DE31D8276EA00A04BC1 /* redis.c */,
 				107923BA19A3217300C52AD6 /* memory.c */,
@@ -1653,6 +1693,7 @@
 				10EA45DF1D0949BF00769A2B /* examples-latency-optimization */,
 				08790E101D8BD7F100A04BC1 /* examples-redis-client */,
 				E918FC392136583F00CCB252 /* proptest */,
+				E9E50488214EBF2A004DC170 /* examples-hqclient */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1726,6 +1767,7 @@
 				10AAAC621B6C7A7D004487C3 /* http2_casper.h */,
 				10AA2EB61A970EFC004322AC /* http2_internal.h */,
 				10AA2EB81A971280004322AC /* http2_scheduler.h */,
+				E9E50475214B3D28004DC170 /* hq_common.h */,
 				10A3D3D01B4CDBC700327CF9 /* memcached.h */,
 				10D0904219F0BA780043D458 /* linklist.h */,
 				10D0903919F0A51C0043D458 /* memory.h */,
@@ -1915,6 +1957,7 @@
 			isa = PBXGroup;
 			children = (
 				10D0906A19F38B850043D458 /* http1client.c */,
+				E9E50489214EBF6A004DC170 /* hqclient.c */,
 				10D0905219F0CB130043D458 /* socket-client.c */,
 				08790DF41D8BD72500A04BC1 /* redis-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
@@ -2237,6 +2280,7 @@
 			isa = PBXGroup;
 			children = (
 				E901C439213E59A000D17C93 /* qpack.c */,
+				E9E50476214C0385004DC170 /* common.c */,
 			);
 			path = quic;
 			sourceTree = "<group>";
@@ -2577,6 +2621,7 @@
 				104B9A261A4A5041009EEE64 /* serverutil.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				1065E70C19BF664300686E72 /* evloop.h in Headers */,
+				E9E5047A214EB26D004DC170 /* hq_common.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
 				107D4D531B5B2412004A9B21 /* file.h in Headers */,
 				E9708AE01E49A2120029E0A5 /* picotls.h in Headers */,
@@ -2775,6 +2820,24 @@
 			productReference = E918FC392136583F00CCB252 /* proptest */;
 			productType = "com.apple.product-type.tool";
 		};
+		E9E5047B214EBF2A004DC170 /* examples-hqclient */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E9E50483214EBF2A004DC170 /* Build configuration list for PBXNativeTarget "examples-hqclient" */;
+			buildPhases = (
+				E9E5047E214EBF2A004DC170 /* Sources */,
+				E9E50480214EBF2A004DC170 /* Frameworks */,
+				E9E50482214EBF2A004DC170 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E9E5047C214EBF2A004DC170 /* PBXTargetDependency */,
+			);
+			name = "examples-hqclient";
+			productName = simple;
+			productReference = E9E50488214EBF2A004DC170 /* examples-hqclient */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -2806,6 +2869,7 @@
 				08790E031D8BD7F100A04BC1 /* examples-redis-client */,
 				10D0905C19F38B2E0043D458 /* examples-http1client */,
 				10EA45D21D0949BF00769A2B /* examples-latency-optimization */,
+				E9E5047B214EBF2A004DC170 /* examples-hqclient */,
 			);
 		};
 /* End PBXProject section */
@@ -2831,6 +2895,7 @@
 				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
 				1024A3FC1D22315000EB13F1 /* cache_digests.c in Sources */,
+				E9E50473214A5B8A004DC170 /* hqclient.c in Sources */,
 				E90A95F51E30797D00483D6C /* headers_util.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
 				10DA969E1CD2BFAC00679165 /* cache.c in Sources */,
@@ -2852,9 +2917,11 @@
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
+				E9E5048B214EC57A004DC170 /* common.c in Sources */,
 				D081373B1FD400F4004679DF /* roundrobin.c in Sources */,
 				10835E031C9A860000197E59 /* status.c in Sources */,
 				084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */,
+				E9E5048D214EC5DE004DC170 /* openssl.c in Sources */,
 				10AA2E961A80A612004322AC /* time.c in Sources */,
 				0812AB2B1D7FD54700004F23 /* read.c in Sources */,
 				107923C319A3217300C52AD6 /* file.c in Sources */,
@@ -2890,12 +2957,14 @@
 				10AA2EA51A8D9999004322AC /* redirect.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
+				E9E5048E214EC5E2004DC170 /* picotls.c in Sources */,
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
 				10A3D3D21B4CDBDC00327CF9 /* memcached.c in Sources */,
 				0812AB221D7FCFEB00004F23 /* hiredis.c in Sources */,
 				7D0341FB1FE4D5B60052E0A1 /* http2client.c in Sources */,
 				107923CF19A3217300C52AD6 /* request.c in Sources */,
+				E9E5048C214EC57D004DC170 /* qpack.c in Sources */,
 				1070866C1B787D06002B8F18 /* compress.c in Sources */,
 				107086721B798488002B8F18 /* compress.c in Sources */,
 				10BCF2FF1B1A892F0076939D /* fastcgi.c in Sources */,
@@ -3143,6 +3212,7 @@
 				E9708B651E52C80F0029E0A5 /* redirect.c in Sources */,
 				7D0341FC1FE4D5BD0052E0A1 /* http2client.c in Sources */,
 				08F320DD1E7A9CA60038FA5A /* redis.c in Sources */,
+				E9E50479214C0385004DC170 /* common.c in Sources */,
 				10756E2A1AC126420009BF57 /* api.c in Sources */,
 				7D9372FE202AC70F005FE6AB /* server_timing.c in Sources */,
 				10756E2B1AC126420009BF57 /* dumper.c in Sources */,
@@ -3235,6 +3305,7 @@
 				E9708B521E52C7E50029E0A5 /* url.c in Sources */,
 				E9708B271E49BAE10029E0A5 /* sha256.c in Sources */,
 				E9708B571E52C7EE0029E0A5 /* logconf.c in Sources */,
+				E9E50474214A5B9D004DC170 /* hqclient.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3255,6 +3326,14 @@
 				E918FC8B21365AB700CCB252 /* theft_call.c in Sources */,
 				E918FC9021365AB700CCB252 /* theft_shrink.c in Sources */,
 				E918FC8721365AB700CCB252 /* theft_autoshrink.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E9E5047E214EBF2A004DC170 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E9E5048A214EBF6A004DC170 /* hqclient.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3290,6 +3369,11 @@
 			isa = PBXTargetDependency;
 			target = 1079231419A320A700C52AD6 /* h2o */;
 			targetProxy = E918FC8521365A8C00CCB252 /* PBXContainerItemProxy */;
+		};
+		E9E5047C214EBF2A004DC170 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1079231419A320A700C52AD6 /* h2o */;
+			targetProxy = E9E5047D214EBF2A004DC170 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -4532,6 +4616,112 @@
 			};
 			name = "libuv-release";
 		};
+		E9E50484214EBF2A004DC170 /* evloop-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-debug";
+		};
+		E9E50485214EBF2A004DC170 /* libuv-debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-debug";
+		};
+		E9E50486214EBF2A004DC170 /* evloop-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "evloop-release";
+		};
+		E9E50487214EBF2A004DC170 /* libuv-release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/include",
+					"$(inherited)",
+					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
+					/usr/local/include,
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.0.2/lib",
+					/usr/local/lib,
+				);
+				OTHER_CFLAGS = "";
+				OTHER_LDFLAGS = (
+					"-lssl",
+					"-lcrypto",
+					"-luv",
+					"-lz",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = "libuv-release";
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -4652,6 +4842,17 @@
 				E918FC362136583F00CCB252 /* libuv-debug */,
 				E918FC372136583F00CCB252 /* evloop-release */,
 				E918FC382136583F00CCB252 /* libuv-release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "evloop-release";
+		};
+		E9E50483214EBF2A004DC170 /* Build configuration list for PBXNativeTarget "examples-hqclient" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E9E50484214EBF2A004DC170 /* evloop-debug */,
+				E9E50485214EBF2A004DC170 /* libuv-debug */,
+				E9E50486214EBF2A004DC170 /* evloop-release */,
+				E9E50487214EBF2A004DC170 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "evloop-release";

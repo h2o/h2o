@@ -82,6 +82,8 @@ typedef struct st_h2o_httpclient_ctx_t {
         int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
 
+    struct st_h2o_hq_ctx_t *quic;
+
 } h2o_httpclient_ctx_t;
 
 typedef struct st_h2o_httpclient_timings_t {
@@ -194,6 +196,9 @@ extern size_t h2o_httpclient__h1_size;
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern size_t h2o_httpclient__h2_size;
+
+void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                               h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 #ifdef __cplusplus
 }
