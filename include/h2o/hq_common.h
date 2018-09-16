@@ -26,6 +26,7 @@
 #include "quicly.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
+#include "h2o/qpack.h"
 
 #define H2O_HQ_FRAME_TYPE_DATA 0
 #define H2O_HQ_FRAME_TYPE_HEADERS 1
@@ -81,6 +82,10 @@ struct st_h2o_hq_ctx_t {
      */
     quicly_context_t *quic;
     /**
+     * qpack context
+     */
+    h2o_qpack_context_t *qpack;
+    /**
      * underlying unbound socket
      */
     h2o_socket_t *sock;
@@ -104,6 +109,10 @@ struct st_h2o_hq_conn_t {
     h2o_linklist_t conns_link; /* linklist between connections, anchor is h2o_hq_ctx_t::conns */
     h2o_timer_t _timeout;
     quicly_conn_t *quic;
+    struct {
+        h2o_qpack_encoder_t *enc;
+        h2o_qpack_decoder_t *dec;
+    } qpack;
 };
 
 #define h2o_hq_encode_frame(_pool_, _buf_, _type, _block)                                                                          \
@@ -133,7 +142,8 @@ struct st_h2o_hq_conn_t {
 /**
  * initializes the context
  */
-void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, quicly_context_t *quic, h2o_socket_t *sock, h2o_hq_accept_cb acceptor);
+void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, quicly_context_t *quic, h2o_qpack_context_t *qpack,
+                         h2o_socket_t *sock, h2o_hq_accept_cb acceptor);
 /**
  * initializes a hq connection
  */

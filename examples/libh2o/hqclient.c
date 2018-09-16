@@ -143,7 +143,8 @@ int main(int argc, char **argv)
     //qctx.on_conn_close = h2o_hq_on_conn_close;
     qctx.tls.max_early_data_size = UINT32_MAX;
 
-    h2o_hq_init_context(&hqctx, loop, &qctx, sock, NULL);
+    h2o_qpack_context_t qpctx = {4096};
+    h2o_hq_init_context(&hqctx, loop, &qctx, &qpctx, sock, NULL);
 
     uint64_t io_timeout = 5000; /* 5 seconds */
     h2o_httpclient_ctx_t ctx = {loop, &getaddr_receiver, io_timeout, io_timeout, io_timeout, NULL, io_timeout, 1048576, {{0}},

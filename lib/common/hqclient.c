@@ -29,7 +29,6 @@
 #include "h2o/httpclient.h"
 #include "h2o/hq_common.h"
 #include "h2o/http2_common.h"
-#include "h2o/qpack.h"
 
 struct st_h2o_hqclient_conn_t {
     h2o_hq_conn_t super;
@@ -39,10 +38,6 @@ struct st_h2o_hqclient_conn_t {
         char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
     } server;
     ptls_handshake_properties_t handshake_properties;
-    struct {
-        h2o_qpack_encoder_t *enc;
-        h2o_qpack_decoder_t *dec;
-    } qpack;
     h2o_timer_t timeout;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
     h2o_linklist_t pending_requests; /* linklist used to queue pending requests */
@@ -120,10 +115,6 @@ static void destroy_connection(struct st_h2o_hqclient_conn_t *conn)
     if (conn->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(conn->getaddr_req);
     h2o_timer_unlink(&conn->timeout);
-    if (conn->qpack.dec != NULL)
-        h2o_qpack_destroy_decoder(conn->qpack.dec);
-    if (conn->qpack.enc != NULL)
-        h2o_qpack_destroy_encoder(conn->qpack.enc);
     free(conn->server.origin_url.host.base);
     free(conn->server.origin_url.authority.base);
     h2o_hq_dispose_conn(&conn->super);
@@ -366,7 +357,7 @@ static int on_update_expect_header(quicly_stream_t *_stream)
     }
     if (frame.type != H2O_HQ_FRAME_TYPE_HEADERS)
         return on_error_before_head(req, "unexpected frame", H2O_HQ_ERROR_GENERAL_PROTOCOL);
-    if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->qpack.dec, req->stream->stream_id, &status, &headers,
+    if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->stream->stream_id, &status, &headers,
                                         &content_length, header_ack, &header_ack_len, frame.payload, frame.length, &err_desc)) !=
         0) {
         if (ret == H2O_HTTP2_ERROR_INCOMPLETE)
@@ -438,8 +429,8 @@ static void start_request(struct st_h2o_hqclient_req_t *req)
 
     h2o_byte_vector_t buf = {NULL};
     h2o_hq_encode_frame(req->super.pool, &buf, H2O_HQ_FRAME_TYPE_HEADERS, {
-        h2o_qpack_flatten_request(req->conn->qpack.enc, req->super.pool, &buf, method, url.scheme, url.authority, url.path, headers,
-                                  num_headers);
+        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, &buf, method, url.scheme, url.authority, url.path,
+                                  headers, num_headers);
     });
     if (quicly_sendbuf_write(&req->stream->sendbuf, buf.entries, buf.size, NULL) != 0)
         h2o_fatal("no memory");

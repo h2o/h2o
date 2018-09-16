@@ -27,10 +27,12 @@
 static void on_read(h2o_socket_t *sock, const char *err);
 static void on_timeout(h2o_timer_t *timeout);
 
-void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, quicly_context_t *quic, h2o_socket_t *sock, h2o_hq_accept_cb acceptor)
+void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, quicly_context_t *quic, h2o_qpack_context_t *qpack,
+                         h2o_socket_t *sock, h2o_hq_accept_cb acceptor)
 {
     ctx->loop = loop;
     ctx->quic = quic;
+    ctx->qpack = qpack;
     ctx->sock = sock;
     ctx->sock->data = ctx;
     h2o_linklist_init_anchor(&ctx->conns);
@@ -47,10 +49,14 @@ void h2o_hq_init_conn(h2o_hq_conn_t *conn, h2o_hq_ctx_t *ctx, const h2o_hq_conn_
     h2o_linklist_insert(&conn->ctx->conns, &conn->conns_link);
     h2o_timer_init(&conn->_timeout, on_timeout);
     conn->quic = NULL;
+    conn->qpack.enc = h2o_qpack_create_encoder(ctx->qpack);
+    conn->qpack.dec = h2o_qpack_create_decoder(ctx->qpack);
 }
 
 void h2o_hq_dispose_conn(h2o_hq_conn_t *conn)
 {
+    h2o_qpack_destroy_decoder(conn->qpack.dec);
+    h2o_qpack_destroy_encoder(conn->qpack.enc);
     if (conn->quic != NULL)
         quicly_free(conn->quic);
     h2o_linklist_unlink(&conn->conns_link);
