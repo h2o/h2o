@@ -323,6 +323,7 @@ struct _st_quicly_conn_public_t {
     } num_packets;
     uint64_t num_bytes_sent;
     uint32_t version;
+    void *data;
 };
 
 typedef enum {
@@ -496,6 +497,10 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
 /**
  *
  */
+static void **quicly_get_data(quicly_conn_t *conn);
+/**
+ *
+ */
 void quicly_free(quicly_conn_t *conn);
 /**
  *
@@ -548,6 +553,14 @@ void quicly_reset_stream(quicly_stream_t *stream, unsigned direction, uint32_t r
  *
  */
 void quicly_close_stream(quicly_stream_t *stream);
+/**
+ *
+ */
+static int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id);
+/**
+ *
+ */
+static int quicly_stream_is_unidirectional(quicly_stream_id_t stream_id);
 /**
  *
  */
@@ -644,6 +657,22 @@ inline void quicly_get_peername(quicly_conn_t *conn, struct sockaddr **sa, sockl
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
     *sa = c->peer.sa;
     *salen = c->peer.salen;
+}
+
+inline void **quicly_get_data(quicly_conn_t *conn)
+{
+    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
+    return &c->data;
+}
+
+inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)
+{
+    return (stream_id & 1) == 0;
+}
+
+inline int quicly_stream_is_unidirectional(quicly_stream_id_t stream_id)
+{
+    return (stream_id & 2) != 0;
 }
 
 inline void quicly_get_packet_stats(quicly_conn_t *conn, uint64_t *num_received, uint64_t *num_sent, uint64_t *num_lost,

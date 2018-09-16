@@ -63,9 +63,6 @@
 
 #define STATELESS_RESET_TOKEN_SIZE 16
 
-#define STREAM_IS_CLIENT_INITIATED(stream_id) (((stream_id)&1) == 0)
-#define STREAM_IS_UNI(stream_id) (((stream_id)&2) != 0)
-
 KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
 
 #define INT_EVENT_ATTR(label, value) _int_event_attr(QUICLY_EVENT_ATTRIBUTE_##label, value)
@@ -671,10 +668,10 @@ static quicly_stream_t *open_stream(quicly_conn_t *conn, uint64_t stream_id)
 
 static struct st_quicly_conn_streamgroup_state_t *get_streamgroup_state(quicly_conn_t *conn, quicly_stream_id_t stream_id)
 {
-    if (quicly_is_client(conn) == STREAM_IS_CLIENT_INITIATED(stream_id)) {
-        return STREAM_IS_UNI(stream_id) ? &conn->super.host.uni : &conn->super.host.bidi;
+    if (quicly_is_client(conn) == quicly_stream_is_client_initiated(stream_id)) {
+        return quicly_stream_is_unidirectional(stream_id) ? &conn->super.host.uni : &conn->super.host.bidi;
     } else {
-        return STREAM_IS_UNI(stream_id) ? &conn->super.peer.uni : &conn->super.peer.bidi;
+        return quicly_stream_is_unidirectional(stream_id) ? &conn->super.peer.uni : &conn->super.peer.bidi;
     }
 }
 
@@ -2632,12 +2629,12 @@ static int get_stream_or_open_if_new(quicly_conn_t *conn, uint64_t stream_id, qu
         goto Exit;
 
     /* TODO implement */
-    if (STREAM_IS_UNI(stream_id)) {
+    if (quicly_stream_is_unidirectional(stream_id)) {
         ret = QUICLY_ERROR_INTERNAL;
         goto Exit;
     }
 
-    if (STREAM_IS_CLIENT_INITIATED(stream_id) != quicly_is_client(conn)) {
+    if (quicly_stream_is_client_initiated(stream_id) != quicly_is_client(conn)) {
         /* open new streams upto given id */
         struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(conn, stream_id);
         if (group->next_stream_id <= stream_id) {
@@ -2820,7 +2817,7 @@ static int handle_stream_blocked_frame(quicly_conn_t *conn, quicly_stream_blocke
 static int handle_max_stream_id_frame(quicly_conn_t *conn, quicly_max_stream_id_frame_t *frame)
 {
     quicly_stream_id_t *slot =
-        STREAM_IS_UNI(frame->max_stream_id) ? &conn->egress.max_stream_id_uni : &conn->egress.max_stream_id_bidi;
+        quicly_stream_is_unidirectional(frame->max_stream_id) ? &conn->egress.max_stream_id_uni : &conn->egress.max_stream_id_bidi;
     if (frame->max_stream_id < *slot)
         return 0;
     *slot = frame->max_stream_id;
@@ -3009,8 +3006,9 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *src,
                     quicly_stream_id_blocked_frame_t frame;
                     if ((ret = quicly_decode_stream_id_blocked_frame(&src, end, &frame)) != 0)
                         goto Exit;
-                    quicly_maxsender_reset(
-                        STREAM_IS_UNI(frame.stream_id) ? &conn->ingress.max_stream_id_uni : &conn->ingress.max_stream_id_bidi, 0);
+                    quicly_maxsender_reset(quicly_stream_is_unidirectional(frame.stream_id) ? &conn->ingress.max_stream_id_uni
+                                                                                            : &conn->ingress.max_stream_id_bidi,
+                                           0);
                     ret = 0;
                 } break;
                 case QUICLY_FRAME_TYPE_STOP_SENDING: {
