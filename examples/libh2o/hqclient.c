@@ -69,7 +69,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 }
 
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
+                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
 {
     size_t i;
 
@@ -94,9 +94,9 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 }
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
-                                  const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                  h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
-                                  h2o_url_t *origin)
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                         h2o_url_t *origin)
 {
     if (errstr != NULL) {
         fprintf(stderr, "%s\n", errstr);
@@ -139,16 +139,16 @@ int main(int argc, char **argv)
     qctx.tls.random_bytes = ptls_openssl_random_bytes;
     qctx.tls.key_exchanges = ptls_openssl_key_exchanges;
     qctx.tls.cipher_suites = ptls_openssl_cipher_suites;
-    //qctx.on_stream_open = h2o_hq_on_stream_open;
-    //qctx.on_conn_close = h2o_hq_on_conn_close;
+    // qctx.on_stream_open = h2o_hq_on_stream_open;
+    // qctx.on_conn_close = h2o_hq_on_conn_close;
     qctx.tls.max_early_data_size = UINT32_MAX;
 
     h2o_qpack_context_t qpctx = {4096};
     h2o_hq_init_context(&hqctx, loop, &qctx, &qpctx, sock, NULL);
 
     uint64_t io_timeout = 5000; /* 5 seconds */
-    h2o_httpclient_ctx_t ctx = {loop, &getaddr_receiver, io_timeout, io_timeout, io_timeout, NULL, io_timeout, 1048576, {{0}},
-                                &hqctx};
+    h2o_httpclient_ctx_t ctx = {loop, &getaddr_receiver, io_timeout, io_timeout, io_timeout,
+                                NULL, io_timeout,        1048576,    {{0}},      &hqctx};
 
     h2o_mem_pool_t pool;
     h2o_mem_init_pool(&pool);
