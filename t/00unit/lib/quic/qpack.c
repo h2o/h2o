@@ -24,8 +24,7 @@
 
 void test_lib__quic_qpack(void)
 {
-    h2o_qpack_context_t ctx = {4096};
-    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(&ctx);
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(H2O_HQ_DEFAULT_HEADER_TABLE_SIZE);
     h2o_qpack_encoder_t *enc = NULL;
     h2o_mem_pool_t pool;
     h2o_byte_vector_t flattened = {NULL};

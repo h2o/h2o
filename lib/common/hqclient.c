@@ -70,8 +70,6 @@ struct st_h2o_hqclient_req_t {
     h2o_buffer_t *respbuf;
 };
 
-#define MAX_FRAME_SIZE 16384 /* maximum payload size excluding DATA frame */
-
 static int on_update_expect_data_frame(quicly_stream_t *_stream);
 static void handle_input(h2o_hq_conn_t *conn, quicly_decoded_packet_t *packets, size_t num_packets);
 
@@ -129,6 +127,7 @@ static void on_connect_timeout(h2o_timer_t *timeout)
 
 static void start_connect(struct st_h2o_hqclient_conn_t *conn, struct sockaddr *sa, socklen_t salen)
 {
+    quicly_conn_t *qconn;
     int ret;
 
     assert(conn->super.quic == NULL);
@@ -136,11 +135,13 @@ static void start_connect(struct st_h2o_hqclient_conn_t *conn, struct sockaddr *
     assert(h2o_timer_is_linked(&conn->timeout));
     assert(conn->timeout.cb == on_connect_timeout);
 
-    if ((ret = quicly_connect(&conn->super.quic, conn->ctx->quic->quic, conn->server.origin_url.host.base, sa, salen,
+    if ((ret = quicly_connect(&qconn, conn->ctx->quic->quic, conn->server.origin_url.host.base, sa, salen,
                               &conn->handshake_properties)) != 0) {
         conn->super.quic = NULL; /* just in case */
         goto Fail;
     }
+    if ((ret = h2o_hq_setup(&conn->super, qconn)) != 0)
+        goto Fail;
 
     h2o_hq_send(&conn->super);
 
@@ -233,47 +234,6 @@ static int on_error_in_body(struct st_h2o_hqclient_req_t *req, const char *errst
     return 0;
 }
 
-struct st_h2o_peek_frame_t {
-    uint8_t type;
-    uint8_t _header_size;
-    const uint8_t *payload;
-    uint64_t length;
-};
-
-/**
- * returns a frame header (if BODY frame) or an entire frame
- */
-static int peek_frame(quicly_recvbuf_t *recvbuf, struct st_h2o_peek_frame_t *frame)
-{
-    /* FIXME what if recvbuf has split input to multiple buffers? do we need a option to flatten that? */
-    ptls_iovec_t input = quicly_recvbuf_get(recvbuf);
-    const uint8_t *src = input.base, *src_end = src + input.len;
-
-    if ((frame->length = quicly_decodev(&src, src_end)) == UINT64_MAX)
-        return H2O_HTTP2_ERROR_INCOMPLETE;
-    if (src == src_end)
-        return H2O_HTTP2_ERROR_INCOMPLETE;
-    frame->type = *src++;
-    if (frame->type != H2O_HQ_FRAME_TYPE_DATA) {
-        if (frame->length >= MAX_FRAME_SIZE)
-            return H2O_HTTP2_ERROR_INTERNAL; /* FIXME */
-        if (src_end - src < frame->length)
-            return H2O_HTTP2_ERROR_INCOMPLETE;
-        frame->payload = src;
-        frame->_header_size = (uint8_t)(src - input.base);
-    }
-
-    return 0;
-}
-
-static void shift_frame(quicly_recvbuf_t *recvbuf, struct st_h2o_peek_frame_t *frame)
-{
-    size_t sz = frame->_header_size;
-    if (frame->type != H2O_HQ_FRAME_TYPE_DATA)
-        sz += frame->length;
-    quicly_recvbuf_shift(recvbuf, sz);
-}
-
 static int on_update_expect_data_payload(quicly_stream_t *_stream)
 {
     struct st_h2o_hqclient_req_t *req = _stream->data;
@@ -305,7 +265,7 @@ static int on_update_expect_data_payload(quicly_stream_t *_stream)
 int on_update_expect_data_frame(quicly_stream_t *_stream)
 {
     struct st_h2o_hqclient_req_t *req = _stream->data;
-    struct st_h2o_peek_frame_t frame;
+    h2o_hq_peek_frame_t frame;
     int ret;
 
     /* handle close */
@@ -313,8 +273,8 @@ int on_update_expect_data_frame(quicly_stream_t *_stream)
         return on_error_in_body(req, h2o_httpclient_error_is_eos, H2O_HQ_ERROR_NO_ERROR);
 
     /* read frame header */
-    if ((ret = peek_frame(&req->stream->recvbuf, &frame)) != 0) {
-        assert(ret == H2O_HTTP2_ERROR_INCOMPLETE);
+    if ((ret = h2o_hq_peek_frame(&req->stream->recvbuf, &frame)) != 0) {
+        assert(ret == H2O_HQ_ERROR_INCOMPLETE);
         return 0;
     }
     switch (frame.type) {
@@ -326,7 +286,7 @@ int on_update_expect_data_frame(quicly_stream_t *_stream)
     }
     if (frame.length == 0)
         return on_error_in_body(req, "malformed frame", H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_DATA));
-    shift_frame(&req->stream->recvbuf, &frame);
+    h2o_hq_shift_frame(&req->stream->recvbuf, &frame);
 
     req->bytes_left = frame.length;
     req->stream->on_update = on_update_expect_data_payload;
@@ -336,7 +296,7 @@ int on_update_expect_data_frame(quicly_stream_t *_stream)
 static int on_update_expect_header(quicly_stream_t *_stream)
 {
     struct st_h2o_hqclient_req_t *req = _stream->data;
-    struct st_h2o_peek_frame_t frame;
+    h2o_hq_peek_frame_t frame;
     int status;
     h2o_headers_t headers = {NULL};
     size_t content_length;
@@ -350,8 +310,8 @@ static int on_update_expect_header(quicly_stream_t *_stream)
         return on_error_before_head(req, "unexpected shutdown", H2O_HQ_ERROR_GENERAL_PROTOCOL);
 
     /* read HEADERS frame */
-    if ((ret = peek_frame(&req->stream->recvbuf, &frame)) != 0) {
-        if (ret == H2O_HTTP2_ERROR_INCOMPLETE)
+    if ((ret = h2o_hq_peek_frame(&req->stream->recvbuf, &frame)) != 0) {
+        if (ret == H2O_HQ_ERROR_INCOMPLETE)
             return 0;
         return on_error_before_head(req, "response header too large", H2O_HQ_ERROR_GENERAL_PROTOCOL); /* FIXME correct code? */
     }
@@ -364,7 +324,7 @@ static int on_update_expect_header(quicly_stream_t *_stream)
             return 0;
         return on_error_before_head(req, err_desc != NULL ? err_desc : "qpack error", H2O_HQ_ERROR_GENERAL_PROTOCOL /* FIXME */);
     }
-    shift_frame(&req->stream->recvbuf, &frame);
+    h2o_hq_shift_frame(&req->stream->recvbuf, &frame);
     if ((ret = quicly_sendbuf_write(&req->stream->sendbuf, header_ack, header_ack_len, NULL)) != 0)
         h2o_fatal("no memory");
 

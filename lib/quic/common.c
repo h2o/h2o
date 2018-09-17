@@ -24,14 +24,49 @@
 #include <sys/socket.h>
 #include "h2o/hq_common.h"
 
+#define MAX_FRAME_SIZE                                                                                                             \
+    16384 /* maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this                      \
+             */
+
 static void on_read(h2o_socket_t *sock, const char *err);
 static void on_timeout(h2o_timer_t *timeout);
 
-void h2o_hq_init_context(h2o_hq_ctx_t *ctx, quicly_context_t *quic, h2o_qpack_context_t *qpack, h2o_socket_t *sock,
-                         h2o_hq_accept_cb acceptor)
+int h2o_hq_peek_frame(quicly_recvbuf_t *recvbuf, h2o_hq_peek_frame_t *frame)
 {
+    /* FIXME what if recvbuf has split input to multiple buffers? do we need a option to flatten that? */
+    ptls_iovec_t input = quicly_recvbuf_get(recvbuf);
+    const uint8_t *src = input.base, *src_end = src + input.len;
+
+    if ((frame->length = quicly_decodev(&src, src_end)) == UINT64_MAX)
+        return H2O_HQ_ERROR_INCOMPLETE;
+    if (src == src_end)
+        return H2O_HQ_ERROR_INCOMPLETE;
+    frame->type = *src++;
+    if (frame->type != H2O_HQ_FRAME_TYPE_DATA) {
+        if (frame->length >= MAX_FRAME_SIZE)
+            return H2O_HQ_ERROR_INTERNAL; /* FIXME */
+        if (src_end - src < frame->length)
+            return H2O_HQ_ERROR_INCOMPLETE;
+        frame->payload = src;
+        frame->_header_size = (uint8_t)(src - input.base);
+    }
+
+    return 0;
+}
+
+void h2o_hq_shift_frame(quicly_recvbuf_t *recvbuf, h2o_hq_peek_frame_t *frame)
+{
+    size_t sz = frame->_header_size;
+    if (frame->type != H2O_HQ_FRAME_TYPE_DATA)
+        sz += frame->length;
+    quicly_recvbuf_shift(recvbuf, sz);
+}
+
+void h2o_hq_init_context(h2o_hq_ctx_t *ctx, quicly_context_t *quic, h2o_socket_t *sock, h2o_hq_accept_cb acceptor)
+{
+    assert(quic->on_stream_open != NULL && "on_stream_open MUST be set to h2o_hq_on_stream_open or its wrapper");
+
     ctx->quic = quic;
-    ctx->qpack = qpack;
     ctx->sock = sock;
     ctx->sock->data = ctx;
     h2o_linklist_init_anchor(&ctx->conns);
@@ -42,24 +77,222 @@ void h2o_hq_init_context(h2o_hq_ctx_t *ctx, quicly_context_t *quic, h2o_qpack_co
 
 void h2o_hq_init_conn(h2o_hq_conn_t *conn, h2o_hq_ctx_t *ctx, const h2o_hq_conn_callbacks_t *callbacks)
 {
+    memset(conn, 0, sizeof(*conn));
     conn->ctx = ctx;
     conn->callbacks = callbacks;
-    conn->conns_link = (h2o_linklist_t){NULL};
     h2o_linklist_insert(&conn->ctx->conns, &conn->conns_link);
     h2o_timer_init(&conn->_timeout, on_timeout);
-    conn->quic = NULL;
-    conn->qpack.enc = h2o_qpack_create_encoder(ctx->qpack);
-    conn->qpack.dec = h2o_qpack_create_decoder(ctx->qpack);
 }
 
 void h2o_hq_dispose_conn(h2o_hq_conn_t *conn)
 {
-    h2o_qpack_destroy_decoder(conn->qpack.dec);
-    h2o_qpack_destroy_encoder(conn->qpack.enc);
+    if (conn->qpack.dec != NULL)
+        h2o_qpack_destroy_decoder(conn->qpack.dec);
+    if (conn->qpack.enc != NULL)
+        h2o_qpack_destroy_encoder(conn->qpack.enc);
     if (conn->quic != NULL)
         quicly_free(conn->quic);
     h2o_linklist_unlink(&conn->conns_link);
     h2o_timer_unlink(&conn->_timeout);
+}
+
+static int open_unidirectional_stream(h2o_hq_conn_t *conn, quicly_stream_t **stream_slot, h2o_iovec_t initial_bytes)
+{
+    int ret;
+
+    if ((ret = quicly_open_stream(conn->quic, stream_slot, 1)) != 0)
+        return ret;
+    return quicly_sendbuf_write(&(*stream_slot)->sendbuf, initial_bytes.base, initial_bytes.len, NULL);
+}
+
+int h2o_hq_setup(h2o_hq_conn_t *conn, quicly_conn_t *quic)
+{
+    int ret;
+
+    conn->quic = quic;
+    *quicly_get_data(conn->quic) = conn;
+    conn->qpack.dec = h2o_qpack_create_decoder(H2O_HQ_DEFAULT_HEADER_TABLE_SIZE);
+
+    /* FIXME handle the case where peer blocks the creation of unidirectional streams */
+    if ((ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.control, h2o_iovec_init(H2O_STRLIT("C\0\4")))) !=
+            0 ||
+        (ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.qpack_encoder, h2o_iovec_init(H2O_STRLIT("Q")))) !=
+            0 ||
+        (ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.qpack_decoder, h2o_iovec_init(H2O_STRLIT("q")))) !=
+            0)
+        return ret;
+
+    return 0;
+}
+
+static int on_update_control_stream(quicly_stream_t *stream)
+{
+    h2o_hq_conn_t *conn = *quicly_get_data(stream->conn);
+    h2o_hq_peek_frame_t frame;
+    int ret;
+
+    if (quicly_recvbuf_is_shutdown(&stream->recvbuf))
+        return H2O_HQ_ERROR_CLOSED_CRITICAL_STREAM;
+    if ((ret = h2o_hq_peek_frame(&stream->recvbuf, &frame)) != 0)
+        return ret == H2O_HQ_ERROR_INCOMPLETE ? 0 : ret;
+
+    if ((ret = conn->callbacks->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length)) != 0)
+        return ret;
+
+    h2o_hq_shift_frame(&stream->recvbuf, &frame);
+    return 0;
+}
+
+static int on_update_qpack_stream(quicly_stream_t *stream, int is_encoder_stream)
+{
+    if (quicly_recvbuf_is_shutdown(&stream->recvbuf))
+        return H2O_HQ_ERROR_CLOSED_CRITICAL_STREAM;
+
+    h2o_hq_conn_t *conn = *quicly_get_data(stream->conn);
+    ptls_iovec_t input = quicly_recvbuf_get(&stream->recvbuf);
+    const uint8_t *src = input.base, *src_end = src + input.len;
+    int ret = 0;
+
+    while (src != src_end) {
+        const char *err_desc = NULL;
+        if (is_encoder_stream) {
+            ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &src, src_end, &err_desc);
+        } else {
+            ret = h2o_qpack_encoder_handle_input(conn->qpack.enc, &src, src_end, &err_desc);
+        }
+        if (ret != 0)
+            break;
+        /* TODO save err_desc */
+    }
+
+    if (src != input.base)
+        quicly_recvbuf_shift(&stream->recvbuf, src - input.base);
+
+    return ret;
+}
+
+static int on_update_qpack_encoder_stream(quicly_stream_t *stream)
+{
+    return on_update_qpack_stream(stream, 1);
+}
+
+static int on_update_qpack_decoder_stream(quicly_stream_t *stream)
+{
+    return on_update_qpack_stream(stream, 0);
+}
+
+static int on_update_identify_unidirectional_stream_type(quicly_stream_t *stream)
+{
+    h2o_hq_conn_t *conn = *quicly_get_data(stream->conn);
+    ptls_iovec_t input;
+    quicly_stream_t **stream_slot;
+    quicly_stream_update_cb on_update;
+
+    if ((input = quicly_recvbuf_get(&stream->recvbuf)).len == 0)
+        return 0;
+
+    switch (input.base[0]) {
+    case 'C':
+        stream_slot = &conn->_control_streams.ingress.control;
+        on_update = on_update_control_stream;
+        break;
+    case 'H':
+        stream_slot = &conn->_control_streams.ingress.qpack_encoder;
+        on_update = on_update_qpack_encoder_stream;
+        break;
+    case 'h':
+        stream_slot = &conn->_control_streams.ingress.qpack_decoder;
+        on_update = on_update_qpack_decoder_stream;
+        break;
+    default:
+        return H2O_HQ_ERROR_WRONG_STREAM;
+    }
+
+    if (*stream_slot != NULL)
+        return H2O_HQ_ERROR_WRONG_STREAM_COUNT;
+
+    quicly_recvbuf_shift(&stream->recvbuf, 1);
+    *stream_slot = stream;
+    stream->on_update = on_update;
+
+    return stream->on_update(stream);
+}
+
+int h2o_hq_on_stream_open(quicly_stream_t *stream)
+{
+    if (quicly_stream_is_unidirectional(stream->stream_id)) {
+        stream->on_update = on_update_identify_unidirectional_stream_type;
+        return stream->on_update(stream);
+    }
+    return H2O_HQ_ERROR_GENERAL_PROTOCOL;
+}
+
+static int handle_settings_frame(h2o_hq_conn_t *conn, const uint8_t *payload, size_t length)
+{
+    const uint8_t *src = payload, *src_end = src + length;
+    uint32_t header_table_size = H2O_HQ_DEFAULT_HEADER_TABLE_SIZE;
+
+    if (conn->qpack.enc != NULL)
+        goto Malformed;
+
+    while (src != src_end) {
+        uint16_t id;
+        uint64_t length;
+        if (ptls_decode16(&id, &src, src_end) != 0)
+            goto Malformed;
+        if ((length = quicly_decodev(&src, src_end)) == UINT64_MAX)
+            goto Malformed;
+        if (src_end - src < length)
+            goto Malformed;
+        const uint8_t *content_end = src + length;
+        switch (id) {
+        case H2O_HQ_SETTINGS_HEADER_TABLE_SIZE: {
+            uint64_t v;
+            if ((v = quicly_decodev(&src, src_end)) == UINT64_MAX)
+                goto Malformed;
+            if (v > H2O_HQ_MAX_HEADER_TABLE_SIZE)
+                goto Malformed;
+            header_table_size = (uint32_t)v;
+        } break;
+        /* TODO add */
+        default:
+            src = content_end;
+            break;
+        }
+        if (src != content_end)
+            goto Malformed;
+    }
+
+    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size);
+    return 0;
+Malformed:
+    return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_SETTINGS);
+}
+
+int h2o_hq_handle_control_stream_frame(h2o_hq_conn_t *conn, uint8_t type, const uint8_t *payload, size_t length)
+{
+    switch (type) {
+    case H2O_HQ_FRAME_TYPE_SETTINGS:
+        return handle_settings_frame(conn, payload, length);
+    case H2O_HQ_FRAME_TYPE_PRIORITY:
+        if (quicly_is_client(conn->quic))
+            return H2O_HQ_ERROR_GENERAL_PROTOCOL; /* FIXME? */
+        return 0;
+    case H2O_HQ_FRAME_TYPE_CANCEL_PUSH:
+        return H2O_HQ_ERROR_GENERAL_PROTOCOL; /* TODO implement push? */
+    case H2O_HQ_FRAME_TYPE_PUSH_PROMISE:
+        if (!quicly_is_client(conn->quic))
+            return H2O_HQ_ERROR_GENERAL_PROTOCOL; /* FIXME? */
+        return 0;
+    case H2O_HQ_FRAME_TYPE_GOAWAY:
+        return 0; /* FIXME implement */
+    case H2O_HQ_FRAME_TYPE_MAX_PUSH_ID:
+        if (quicly_is_client(conn->quic))
+            return H2O_HQ_ERROR_GENERAL_PROTOCOL; /* FIXME? */
+        return 0;
+    default:
+        return 0;
+    }
 }
 
 static h2o_hq_conn_t *find_by_cid(h2o_hq_ctx_t *ctx, ptls_iovec_t dest)

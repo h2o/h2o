@@ -26,6 +26,7 @@
 #include "h2o.h"
 #include "h2o/hpack.h"
 #include "h2o/qpack.h"
+#include "h2o/hq_common.h"
 
 /**
  * a mem-shared object that contains the name and value of a header field
@@ -61,11 +62,11 @@ struct st_h2o_qpack_decoder_t {
     /**
      *
      */
-    h2o_qpack_context_t *ctx;
+    struct st_h2o_qpack_header_table_t table;
     /**
      *
      */
-    struct st_h2o_qpack_header_table_t table;
+    uint32_t header_table_size;
     /**
      * number of updates since last sync
      */
@@ -158,6 +159,13 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_abs(struct st_h2o_qpack_hea
     return table->first[index];
 }
 
+static int decode_int(int64_t *value, const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits)
+{
+    if ((*value = h2o_hpack_decode_int(src, src_end, prefix_bits)) < 0)
+        return *value == H2O_HTTP2_ERROR_INCOMPLETE ? H2O_HQ_ERROR_INCOMPLETE : H2O_HQ_ERROR_QPACK_DECOMPRESSION;
+    return 0;
+}
+
 static size_t decode_value(int is_huff, const uint8_t *src, size_t srclen, char *outbuf, const char **err_desc)
 {
     size_t outlen;
@@ -175,13 +183,13 @@ static size_t decode_value(int is_huff, const uint8_t *src, size_t srclen, char 
     return outlen;
 }
 
-h2o_qpack_decoder_t *h2o_qpack_create_decoder(h2o_qpack_context_t *ctx)
+h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size)
 {
     h2o_qpack_decoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
 
-    qpack->ctx = ctx;
-    header_table_init(&qpack->table, ctx->header_table_size);
+    header_table_init(&qpack->table, header_table_size);
     qpack->insert_count = 0;
+    qpack->header_table_size = header_table_size;
     memset(&qpack->blocked_streams, 0, sizeof(qpack->blocked_streams));
 
     return qpack;
@@ -248,7 +256,7 @@ static int decode_value_and_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpa
     return 0;
 Fail:
     h2o_mem_release_shared(header);
-    return H2O_HTTP2_ERROR_COMPRESSION;
+    return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
 }
 
 static int insert_token_header(h2o_qpack_decoder_t *qpack, const h2o_token_t *name, int value_is_huff, const uint8_t *value,
@@ -282,23 +290,23 @@ static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_st
 {
     if (value_len >= MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP2_ERROR_COMPRESSION;
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     }
 
     if (name_is_static) {
         const struct st_h2o_hpack_static_table_entry_t *ref;
         if ((ref = resolve_static_abs(name_index, err_desc)) == NULL)
-            return H2O_HTTP2_ERROR_COMPRESSION;
+            return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
         return insert_token_header(qpack, ref->name, value_is_huff, value, value_len, err_desc);
     } else {
         struct st_h2o_qpack_header_t *ref;
         int64_t base_index = qpack->table.base_offset + (qpack->table.last - qpack->table.first) - 1;
         if (name_index > base_index) {
             *err_desc = h2o_qpack_err_invalid_dynamic_reference;
-            return H2O_HTTP2_ERROR_COMPRESSION;
+            return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
         }
         if ((ref = resolve_dynamic_abs(&qpack->table, base_index - name_index, err_desc)) == NULL)
-            return H2O_HTTP2_ERROR_COMPRESSION;
+            return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
         if (h2o_iovec_is_token(ref->name)) {
             return insert_token_header(qpack, (h2o_token_t *)ref->name, value_is_huff, value, value_len, err_desc);
         } else {
@@ -314,20 +322,20 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
 
     if (qnlen >= MAX_HEADER_NAME_LENGTH) {
         *err_desc = h2o_qpack_err_header_name_too_long;
-        return H2O_HTTP2_ERROR_COMPRESSION;
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     }
     if (qvlen >= MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP2_ERROR_COMPRESSION;
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     }
 
     if (qnhuff) {
         name.base = alloca(qnlen * 2);
         if ((name.len = h2o_hpack_decode_huffman(name.base, qn, qnlen, 1, err_desc)) == SIZE_MAX)
-            return H2O_HTTP2_ERROR_COMPRESSION;
+            return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     } else {
         if (!h2o_hpack_validate_header_name((void *)qn, qnlen, err_desc))
-            return H2O_HTTP2_ERROR_COMPRESSION;
+            return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
         name = h2o_iovec_init(qn, qnlen);
     }
 
@@ -343,7 +351,7 @@ static int duplicate(h2o_qpack_decoder_t *qpack, int64_t name_index, const char 
 {
     if (name_index >= qpack->table.last - qpack->table.first) {
         *err_desc = h2o_qpack_err_invalid_duplicate;
-        return H2O_HTTP2_ERROR_COMPRESSION;
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     }
 
     struct st_h2o_qpack_header_t *header = qpack->table.first[name_index];
@@ -354,9 +362,9 @@ static int duplicate(h2o_qpack_decoder_t *qpack, int64_t name_index, const char 
 
 static int dynamic_table_size_update(h2o_qpack_decoder_t *qpack, int64_t max_size, const char **err_desc)
 {
-    if (max_size > qpack->ctx->header_table_size) {
+    if (max_size > qpack->header_table_size) {
         *err_desc = h2o_qpack_err_invalid_max_size;
-        return H2O_HTTP2_ERROR_COMPRESSION;
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     }
 
     qpack->table.max_size = max_size;
@@ -364,22 +372,22 @@ static int dynamic_table_size_update(h2o_qpack_decoder_t *qpack, int64_t max_siz
     return 0;
 }
 
-int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc)
+int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **_src, const uint8_t *src_end, const char **err_desc)
 {
-    const uint8_t *src = *input, *src_end = src + input_len;
-    int64_t ret = 0;
+    const uint8_t *src = *_src;
+    int ret = 0;
 
     while (src != src_end && ret == 0) {
         switch (*src >> 5) {
         default: /* insert with name reference */ {
             int64_t name_index, value_len;
             int name_is_static = (*src & 0x40) != 0;
-            if ((ret = name_index = h2o_hpack_decode_int(&src, src_end, 6)) < 0)
+            if ((ret = decode_int(&name_index, &src, src_end, 6)) != 0)
                 goto Exit;
             if (src == src_end)
                 goto Exit;
             int value_is_huff = (*src & 0x80) != 0;
-            if ((ret = value_len = h2o_hpack_decode_int(&src, src_end, 7)) < 0)
+            if ((ret = decode_int(&value_len, &src, src_end, 7)) != 0)
                 goto Exit;
             if (!(src + value_len <= src_end))
                 goto Exit;
@@ -390,13 +398,13 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **i
         case 3: /* insert without name reference */ {
             int64_t name_len, value_len;
             int name_is_huff = (*src & 0x20) != 0;
-            if ((ret = name_len = h2o_hpack_decode_int(&src, src_end, 5)) < 0)
+            if ((ret = decode_int(&name_len, &src, src_end, 5)) != 0)
                 goto Exit;
             if (!(src + name_len < src_end))
                 goto Exit;
             const uint8_t *name = src;
             int value_is_huff = (*src & 0x80) != 0;
-            if ((ret = value_len = h2o_hpack_decode_int(&src, src_end, 7)) < 0)
+            if ((ret = decode_int(&value_len, &src, src_end, 7)) != 0)
                 goto Exit;
             if (!(src + value_len <= src_end))
                 goto Exit;
@@ -405,18 +413,18 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **i
         } break;
         case 0: /* duplicate */ {
             int64_t name_index;
-            if ((ret = name_index = h2o_hpack_decode_int(&src, src_end, 5)) < 0)
+            if ((ret = decode_int(&name_index, &src, src_end, 5)) != 0)
                 goto Exit;
             ret = duplicate(qpack, name_index, err_desc);
         } break;
         case 1: /* dynamic table size update */ {
             int64_t max_size;
-            if ((ret = max_size = h2o_hpack_decode_int(&src, src_end, 5)) < 0)
+            if ((ret = decode_int(&max_size, &src, src_end, 5)) != 0)
                 goto Exit;
             ret = dynamic_table_size_update(qpack, max_size, err_desc);
         } break;
         }
-        *input = src;
+        *_src = src;
     }
 
 Exit:
@@ -449,7 +457,7 @@ static const h2o_hpack_static_table_entry_t *resolve_static(const uint8_t **src,
 {
     int64_t index;
 
-    if ((index = h2o_hpack_decode_int(src, src_end, prefix_bits)) < 0)
+    if (decode_int(&index, src, src_end, prefix_bits) != 0)
         goto Fail;
     if (index == 0)
         goto Fail;
@@ -469,7 +477,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic(struct st_h2o_qpack_header_
 {
     int64_t off;
 
-    if ((off = h2o_hpack_decode_int(src, src_end, prefix_bits)) < 0 || off >= base_index) {
+    if (decode_int(&off, src, src_end, prefix_bits) != 0 || off >= base_index) {
         *err_desc = h2o_qpack_err_invalid_dynamic_reference;
         return NULL;
     }
@@ -482,7 +490,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
 {
     int64_t off;
 
-    if ((off = h2o_hpack_decode_int(src, src_end, prefix_bits)) < 0 || INT64_MAX - off < base_index + 1) {
+    if (decode_int(&off, src, src_end, prefix_bits) != 0 || INT64_MAX - off < base_index + 1) {
         *err_desc = h2o_qpack_err_invalid_dynamic_reference;
         return NULL;
     }
@@ -499,7 +507,7 @@ static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, const uint8
 
     /* obtain flags and length */
     is_huff = (**src >> prefix_bits) & 1;
-    if ((len = h2o_hpack_decode_int(src, src_end, prefix_bits)) < 0 || len > MAX_HEADER_NAME_LENGTH) {
+    if (decode_int(&len, src, src_end, prefix_bits) != 0 || len > MAX_HEADER_NAME_LENGTH) {
         *err_desc = h2o_qpack_err_header_name_too_long;
         goto Fail;
     }
@@ -540,7 +548,7 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, const uint8
     int is_huff = (**src & 0x80) != 0;
     int64_t len;
 
-    if ((len = h2o_hpack_decode_int(src, src_end, 7)) < 0 || len > MAX_HEADER_VALUE_LENGTH) {
+    if (decode_int(&len, src, src_end, 7) != 0 || len > MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
         goto Fail;
     }
@@ -647,7 +655,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
 
     return 0;
 Fail:
-    return H2O_HTTP2_ERROR_COMPRESSION;
+    return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
 }
 
 static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_decode_header_ctx_t *ctx, int64_t stream_id,
@@ -656,19 +664,19 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     ctx->qpack = qpack;
 
     /* decode prefix */
-    if ((ctx->largest_ref = h2o_hpack_decode_int(src, src_end, 8)) < 0)
-        return H2O_HTTP2_ERROR_COMPRESSION;
+    if (decode_int(&ctx->largest_ref, src, src_end, 8) != 0)
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     if (*src >= src_end)
-        return H2O_HTTP2_ERROR_COMPRESSION;
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     int sign = (**src & 0x80) != 0;
-    if ((ctx->base_index = h2o_hpack_decode_int(src, src_end, 7)) < 0)
-        return H2O_HTTP2_ERROR_COMPRESSION;
+    if (decode_int(&ctx->base_index, src, src_end, 7) != 0)
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     ctx->base_index = sign == 0 ? ctx->largest_ref + ctx->base_index : ctx->largest_ref - ctx->base_index;
 
     /* is the stream blocked? */
     if (ctx->largest_ref >= qpack->table.base_offset + qpack->table.last - qpack->table.first) {
         decoder_link_blocked(qpack, stream_id, ctx->largest_ref);
-        return H2O_HTTP2_ERROR_INCOMPLETE;
+        return H2O_HQ_ERROR_INCOMPLETE;
     }
 
     return 0;
@@ -687,7 +695,7 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
         return ret;
     if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, headers,
                                        pseudo_header_exists_map, content_length, digests, src, src_end - src, err_desc)) != 0)
-        return ret;
+        return ret < 0 ? H2O_HQ_ERROR_QPACK_DECOMPRESSION : ret; /* h2 errors are negative */
 
     *outbufsize = send_header_ack(qpack, &ctx, outbuf, stream_id);
     return 0;
@@ -705,13 +713,13 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
         return ret;
     if ((ret = h2o_hpack_parse_response(pool, decode_header, &ctx, status, headers, content_length, src, src_end - src,
                                         err_desc)) != 0)
-        return ret;
+        return ret < 0 ? H2O_HQ_ERROR_QPACK_DECOMPRESSION : ret; /* h2 errors are negative */
 
     *outbufsize = send_header_ack(qpack, &ctx, outbuf, stream_id);
     return 0;
 }
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(h2o_qpack_context_t *ctx)
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size)
 {
     return h2o_mem_alloc(1);
 }
@@ -725,7 +733,7 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
 {
     if (insert_count != 0) {
         *err_desc = "unexpected message: Table State Synchronize";
-        return H2O_HTTP2_ERROR_COMPRESSION;
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     }
     /* FIXME is insert_count=0 considered a valid argument? */
     return 0;
@@ -734,7 +742,7 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
 static int handle_header_ack(h2o_qpack_encoder_t *qpack, int64_t stream_id, const char **err_desc)
 {
     *err_desc = "unexpected message: Header Acknowledgement";
-    return H2O_HTTP2_ERROR_COMPRESSION;
+    return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
 }
 
 static int handle_stream_cancellation(h2o_qpack_encoder_t *qpack, int64_t stream_id, const char **err_desc)
@@ -742,37 +750,37 @@ static int handle_stream_cancellation(h2o_qpack_encoder_t *qpack, int64_t stream
     return 0;
 }
 
-int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **input, size_t input_len, const char **err_desc)
+int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **_src, const uint8_t *src_end, const char **err_desc)
 {
-    const uint8_t *src = *input, *src_end = src + input_len;
-    int64_t ret = 0;
+    const uint8_t *src = *_src;
+    int ret = 0;
 
     while (src != src_end && ret == 0) {
         switch (*src >> 6) {
         case 0: /* table state synchronize */ {
             int64_t insert_count;
-            if ((ret = insert_count = h2o_hpack_decode_int(&src, src_end, 6)) < 0)
+            if ((ret = decode_int(&insert_count, &src, src_end, 6)) != 0)
                 goto Exit;
             ret = handle_table_state_synchronize(qpack, insert_count, err_desc);
         } break;
         default: /* header ack */ {
             int64_t stream_id;
-            if ((ret = stream_id = h2o_hpack_decode_int(&src, src_end, 7)) < 0)
+            if ((ret = decode_int(&stream_id, &src, src_end, 7)) != 0)
                 goto Exit;
             ret = handle_header_ack(qpack, stream_id, err_desc);
         } break;
         case 1: /* stream cancellation */ {
             int64_t stream_id;
-            if ((ret = stream_id = h2o_hpack_decode_int(&src, src_end, 6)) < 0)
+            if ((ret = decode_int(&stream_id, &src, src_end, 6)) != 0)
                 goto Exit;
             ret = handle_stream_cancellation(qpack, stream_id, err_desc);
         } break;
         }
-        *input = src;
+        *_src = src;
     }
 
 Exit:
-    if (ret == H2O_HTTP2_ERROR_INCOMPLETE)
+    if (ret == H2O_HQ_ERROR_INCOMPLETE)
         ret = 0;
     return (int)ret;
 }
