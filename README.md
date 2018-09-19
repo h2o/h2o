@@ -17,16 +17,11 @@ copyright attribution). It can also be used as a library.
 
 This fork is modified to enable PostgreSQL mruby module.
 
-If necessary, as demonstrated below, specify the `-DPG_LIBRARY=...` and `-DPG_INCLUDE=...` flags for cmake
-
-
 ### OSX Compilation & Installation Example
 
 ```bash
   brew install libpq
-  # --> installs sometimes to /usr/local/opt/libpq if you already have postgres installed (for example)
-
-  cmake -DENABLE_MRUBY=true -DPG_LIBRARY=/usr/local/opt/libpq/lib/libpq.a -DPG_INCLUDE=/usr/local/opt/libpq/include/ .
+  cmake -DENABLE_MRUBY=true .
   make
   sudo make install
 ```
