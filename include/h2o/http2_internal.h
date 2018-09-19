@@ -161,7 +161,7 @@ typedef enum enum_h2o_http2_stream_state_t {
      */
     H2O_HTTP2_STREAM_STATE_SEND_HEADERS,
     /**
-     * sending body
+     * sending body, or tunneling websocket data frames 
      */
     H2O_HTTP2_STREAM_STATE_SEND_BODY,
     /**
