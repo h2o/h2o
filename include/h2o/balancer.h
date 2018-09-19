@@ -47,18 +47,35 @@ struct st_h2o_balancer_backend_t {
      * weight - 1 for load balancer, where weight is an integer within range [1, 256]
      */
     uint8_t weight_m1;
+    /**
+     * connection count
+     */
+    size_t conn_count;
 };
 
 struct st_h2o_balancer_t {
     const h2o_balancer_callbacks_t *callbacks;
 };
 
+/* common */
+static void h2o_balancer_inc_conn_count(h2o_balancer_backend_t *backend);
+static void h2o_balancer_dec_conn_count(h2o_balancer_backend_t *backend);
+
 /* round robin */
 h2o_balancer_t *h2o_balancer_create_rr(void);
 
 /* least connection */
-typedef void (*h2o_balancer_lc_get_conn_count_cb)(size_t *conn_count, h2o_balancer_backend_t **backends, size_t backends_len);
-h2o_balancer_t *h2o_balancer_create_lc(h2o_balancer_lc_get_conn_count_cb conn_count_cb);
+h2o_balancer_t *h2o_balancer_create_lc(void);
+
+inline void h2o_balancer_inc_conn_count(h2o_balancer_backend_t *backend)
+{
+    __sync_add_and_fetch(&backend->conn_count, 1);
+}
+
+inline void h2o_balancer_dec_conn_count(h2o_balancer_backend_t *backend)
+{
+    __sync_sub_and_fetch(&backend->conn_count, 1);
+}
 
 #ifdef __cplusplus
 }

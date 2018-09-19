@@ -293,17 +293,6 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
     return h2o_socketpool_create_target(&url, &lb_target_conf);
 }
 
-static void balancer_lc_conn_count_cb(size_t *conn_count, h2o_balancer_backend_t **backends, size_t backends_len)
-{
-    size_t i;
-    h2o_socketpool_target_t *target;
-
-    for (i = 0; i < backends_len; i++) {
-        target = (void *)backends[i];
-        conn_count[i] = target->_shared.leased_count;
-    }
-}
-
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -352,7 +341,7 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
         if (strcmp((*balancer_conf)->data.scalar, "round-robin") == 0) {
             balancer = h2o_balancer_create_rr();
         } else if (strcmp((*balancer_conf)->data.scalar, "least-conn") == 0) {
-            balancer = h2o_balancer_create_lc(balancer_lc_conn_count_cb);
+            balancer = h2o_balancer_create_lc();
         } else {
             h2o_configurator_errprintf(
                 cmd, node, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn");

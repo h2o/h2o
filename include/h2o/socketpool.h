@@ -70,11 +70,6 @@ typedef struct st_h2o_socketpool_target_t {
      */
     struct {
         h2o_linklist_t sockets;
-        /**
-         * number of connections being _leased_ to the applications (i.e. not including the number of connections being pooled).
-         * Synchronous operation must be used to access the variable.
-         */
-        size_t leased_count;
     } _shared;
 } h2o_socketpool_target_t;
 
@@ -114,6 +109,7 @@ typedef struct st_h2o_socketpool_t {
 
     /* load balancer */
     h2o_balancer_t *balancer;
+    h2o_balancer_backend_t **targets_wrapper;
 } h2o_socketpool_t;
 
 typedef struct st_h2o_socketpool_connect_request_t h2o_socketpool_connect_request_t;
