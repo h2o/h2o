@@ -1,46 +1,44 @@
 #include "../../../test.h"
 #include "../../../../../lib/common/balancer/roundrobin.c"
 
-static h2o_socketpool_target_vector_t gen_targets(size_t size)
+struct round_robin_test_backend_t {
+    h2o_balancer_backend_t super;
+    size_t leased_count;
+};
+
+static struct round_robin_test_backend_t *gen_backends(size_t size)
 {
     size_t i;
-    h2o_socketpool_target_vector_t targets = {NULL};
+    struct round_robin_test_backend_t *backends = h2o_mem_alloc(size * sizeof(*backends));
 
-    h2o_vector_reserve(NULL, &targets, size);
     for (i = 0; i < size; i++) {
-        h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-        target->_shared.leased_count = 0;
-        target->conf.weight_m1 = 0;
-        targets.entries[i] = target;
+        backends[i].super.weight_m1 = 0;
+        backends[i].leased_count = 0;
     }
-    targets.size = size;
 
-    return targets;
+    return backends;
 }
 
-static void free_targets(h2o_socketpool_target_vector_t *targets)
+static void free_backends(struct round_robin_test_backend_t *backends)
 {
-    size_t i;
-
-    for (i = 0; i < targets->size; i++) {
-        free(targets->entries[i]);
-    }
-
-    free(targets->entries);
+    free(backends);
 }
 
 static void test_when_backend_down(void)
 {
-    h2o_socketpool_target_vector_t targets = gen_targets(10);
+    struct round_robin_test_backend_t *real_backends = gen_backends(10);
+    h2o_balancer_backend_t **backends = alloca(10 * sizeof(*backends));
     char tried[10] = {0};
     size_t i;
     size_t selected;
     h2o_balancer_t *balancer;
 
+    for (i = 0; i < 10; i++)
+        backends[i] = &real_backends[i].super;
     balancer = h2o_balancer_create_rr();
 
     for (i = 0; i < 10; i++) {
-        selected = selector(balancer, &targets, tried);
+        selected = selector(balancer, backends, 10, tried);
         ok(selected >= 0 && selected < 10);
         ok(!tried[selected]);
         tried[selected] = 1;
@@ -48,17 +46,17 @@ static void test_when_backend_down(void)
 
     destroy(balancer);
 
-    free_targets(&targets);
+    free_backends(real_backends);
 }
 
-static int check_weight_distribution(h2o_socketpool_target_vector_t *targets)
+static int check_weight_distribution(struct round_robin_test_backend_t *backends, size_t backends_len)
 {
     size_t i, j;
 
-    for (i = 0; i < targets->size; i++) {
-        for (j = i + 1; j < targets->size; j++) {
-            if (targets->entries[i]->_shared.leased_count * ((unsigned)targets->entries[j]->conf.weight_m1 + 1) !=
-                targets->entries[j]->_shared.leased_count * ((unsigned)targets->entries[i]->conf.weight_m1 + 1))
+    for (i = 0; i < backends_len; i++) {
+        for (j = i + 1; j < backends_len; j++) {
+            if (backends[i].leased_count * ((unsigned)backends[j].super.weight_m1 + 1) !=
+                backends[j].leased_count * ((unsigned)backends[i].super.weight_m1 + 1))
                 return 0;
         }
     }
@@ -67,44 +65,8 @@ static int check_weight_distribution(h2o_socketpool_target_vector_t *targets)
 
 static void test_round_robin(void)
 {
-    h2o_socketpool_target_vector_t targets = gen_targets(10);
-    size_t i, selected;
-    size_t last_selected = 0;
-    size_t total_count = 0;
-    char tried[10] = {0};
-    int check_result = 1;
-    h2o_balancer_t *balancer;
-
-    balancer = h2o_balancer_create_rr();
-
-    for (i = 0; i < targets.size; i++)
-        total_count += ((unsigned)targets.entries[i]->conf.weight_m1) + 1;
-    total_count *= 1000;
-
-    for (i = 0; i < total_count; i++) {
-        selected = selector(balancer, &targets, tried);
-        if (selected > targets.size) {
-            ok(selected >= 0 && selected < targets.size);
-            goto Done;
-        }
-        check_result = selected >= last_selected || (last_selected == targets.size - 1 && selected == 0);
-        if (!check_result) {
-            ok(check_result);
-            goto Done;
-        }
-        targets.entries[selected]->_shared.leased_count++;
-        last_selected = selected;
-    }
-    ok(check_weight_distribution(&targets));
-
-Done:
-    destroy(balancer);
-    free_targets(&targets);
-}
-
-static void test_round_robin_weighted(void)
-{
-    h2o_socketpool_target_vector_t targets = gen_targets(10);
+    struct round_robin_test_backend_t *real_backends = gen_backends(10);
+    h2o_balancer_backend_t **backends = alloca(10 * sizeof(*backends));
     size_t i, selected;
     size_t last_selected = 0;
     size_t total_count = 0;
@@ -113,32 +75,74 @@ static void test_round_robin_weighted(void)
     h2o_balancer_t *balancer;
 
     for (i = 0; i < 10; i++)
-        targets.entries[i]->conf.weight_m1 = i % 3;
+        backends[i] = &real_backends[i].super;
     balancer = h2o_balancer_create_rr();
 
-    for (i = 0; i < targets.size; i++)
-        total_count += ((unsigned)targets.entries[i]->conf.weight_m1) + 1;
+    for (i = 0; i < 10; i++)
+        total_count += ((unsigned)real_backends[i].super.weight_m1) + 1;
     total_count *= 1000;
 
     for (i = 0; i < total_count; i++) {
-        selected = selector(balancer, &targets, tried);
-        if (selected > targets.size) {
-            ok(selected >= 0 && selected < targets.size);
+        selected = selector(balancer, backends, 10, tried);
+        if (selected > 10) {
+            ok(selected >= 0 && selected < 10);
             goto Done;
         }
-        check_result = selected >= last_selected || (last_selected == targets.size - 1 && selected == 0);
+        check_result = selected >= last_selected || (last_selected == 10 - 1 && selected == 0);
         if (!check_result) {
             ok(check_result);
             goto Done;
         }
-        targets.entries[selected]->_shared.leased_count++;
+        real_backends[selected].leased_count++;
         last_selected = selected;
     }
-    ok(check_weight_distribution(&targets));
+    ok(check_weight_distribution(real_backends, 10));
 
 Done:
     destroy(balancer);
-    free_targets(&targets);
+    free_backends(real_backends);
+}
+
+static void test_round_robin_weighted(void)
+{
+    struct round_robin_test_backend_t *real_backends = gen_backends(10);
+    h2o_balancer_backend_t **backends = alloca(10 * sizeof(*backends));
+    size_t i, selected;
+    size_t last_selected = 0;
+    size_t total_count = 0;
+    char tried[10] = {0};
+    int check_result = 1;
+    h2o_balancer_t *balancer;
+
+    for (i = 0; i < 10; i++) {
+        backends[i] = &real_backends[i].super;
+        real_backends[i].super.weight_m1 = i % 3;
+    }
+    balancer = h2o_balancer_create_rr();
+
+    for (i = 0; i < 10; i++)
+        total_count += ((unsigned)real_backends[i].super.weight_m1) + 1;
+    total_count *= 1000;
+
+    for (i = 0; i < total_count; i++) {
+        selected = selector(balancer, backends, 10, tried);
+        if (selected > 10) {
+            ok(selected >= 0 && selected < 10);
+            goto Done;
+        }
+        check_result = selected >= last_selected || (last_selected == 10 - 1 && selected == 0);
+        if (!check_result) {
+            ok(check_result);
+            goto Done;
+        }
+        real_backends[selected].leased_count++;
+        last_selected = selected;
+    }
+    ok(check_weight_distribution(real_backends, 10));
+
+Done:
+    destroy(balancer);
+    free_backends(real_backends);
 }
 
 void test_lib__common__balancer__roundrobin_c(void)

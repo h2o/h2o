@@ -34,25 +34,17 @@ extern "C" {
 #include "h2o/socket.h"
 #include "h2o/timeout.h"
 #include "h2o/url.h"
+#include "h2o/balancer.h"
 
 typedef enum en_h2o_socketpool_target_type_t {
     H2O_SOCKETPOOL_TYPE_NAMED,
     H2O_SOCKETPOOL_TYPE_SOCKADDR
 } h2o_socketpool_target_type_t;
 
-/**
- * TODO: support subclassing for adding balancer-specific properties
- */
-typedef struct st_h2o_socketpool_target_conf_t {
-    /**
-     * weight - 1 for load balancer, where weight is an integer within range [1, 256]
-     */
-    uint8_t weight_m1;
-} h2o_socketpool_target_conf_t;
-
 #define H2O_SOCKETPOOL_TARGET_MAX_WEIGHT 256
 
 typedef struct st_h2o_socketpool_target_t {
+    h2o_balancer_backend_t super;
     /**
      * target URL
      */
@@ -73,10 +65,6 @@ typedef struct st_h2o_socketpool_target_t {
             socklen_t len;
         } sockaddr;
     } peer;
-    /**
-     * per-target lb configuration
-     */
-    h2o_socketpool_target_conf_t conf;
 
     /**
      * the per-target portion of h2o_socketpool_t::_shared
@@ -92,8 +80,6 @@ typedef struct st_h2o_socketpool_target_t {
 } h2o_socketpool_target_t;
 
 typedef H2O_VECTOR(h2o_socketpool_target_t *) h2o_socketpool_target_vector_t;
-
-typedef struct st_h2o_balancer_t h2o_balancer_t;
 
 typedef struct st_h2o_socketpool_t {
 
@@ -145,9 +131,9 @@ void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity);
  */
 void h2o_socketpool_dispose(h2o_socketpool_t *pool);
 /**
- * create a target. If lb_target_conf is NULL, a default target conf would be created.
+ * create a target based on url provided.
  */
-h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_balancer_backend_t *lb_target_conf);
 /**
  * destroy a target
  */

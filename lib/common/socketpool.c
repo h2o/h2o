@@ -150,7 +150,7 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
     }
 }
 
-h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_balancer_backend_t *lb_target_conf)
 {
     struct sockaddr_storage sa;
     socklen_t salen;
@@ -177,9 +177,9 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
     }
     target->_shared.leased_count = 0;
     if (lb_target_conf != NULL)
-        target->conf.weight_m1 = lb_target_conf->weight_m1;
+        target->super.weight_m1 = lb_target_conf->weight_m1;
     else {
-        target->conf.weight_m1 = 0;
+        target->super.weight_m1 = 0;
     }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
@@ -295,12 +295,16 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
 static void try_connect(h2o_socketpool_connect_request_t *req)
 {
     h2o_socketpool_target_t *target;
+    size_t i;
 
     req->remaining_try_count--;
 
     if (req->lb.tried != NULL) {
         if (req->pool->targets.size > 1) {
-            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets, req->lb.tried);
+            h2o_balancer_backend_t **backends = alloca(req->pool->targets.size * sizeof(*backends));
+            for (i = 0; i < req->pool->targets.size; i++)
+                backends[i] = &req->pool->targets.entries[i]->super;
+            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, backends, req->pool->targets.size, req->lb.tried);
             assert(!req->lb.tried[req->selected_target]);
             req->lb.tried[req->selected_target] = 1;
         } else {

@@ -19,6 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <pthread.h>
+#include "h2o/memory.h"
 #include "h2o/balancer.h"
 
 struct round_robin_t {
@@ -28,15 +30,16 @@ struct round_robin_t {
     pthread_mutex_t mutex;
 };
 
-static inline void select_next(struct round_robin_t *self, h2o_socketpool_target_vector_t *targets)
+static inline void select_next(struct round_robin_t *self, size_t backends_len)
 {
     self->pos += 1;
-    if (self->pos == targets->size)
+    if (self->pos == backends_len)
         self->pos = 0;
     self->consumed_weight = 0;
 }
 
-static size_t selector(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, char *tried)
+static size_t selector(h2o_balancer_t *balancer, h2o_balancer_backend_t **backends,
+                       size_t backends_len, char *tried)
 {
     size_t i;
     size_t result = 0;
@@ -44,17 +47,17 @@ static size_t selector(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t 
 
     pthread_mutex_lock(&self->mutex);
 
-    assert(targets->size != 0);
-    for (i = 0; i < targets->size; i++) {
+    assert(backends_len != 0);
+    for (i = 0; i < backends_len; i++) {
         if (!tried[self->pos]) {
             /* get the result */
             result = self->pos;
-            if (++self->consumed_weight > targets->entries[self->pos]->conf.weight_m1)
-                select_next(self, targets);
+            if (++self->consumed_weight > backends[self->pos]->weight_m1)
+                select_next(self, backends_len);
             pthread_mutex_unlock(&self->mutex);
             return result;
         } else {
-            select_next(self, targets);
+            select_next(self, backends_len);
         }
     }
     assert(!"unreachable");

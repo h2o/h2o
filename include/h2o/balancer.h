@@ -26,10 +26,14 @@
 extern "C" {
 #endif
 
-#include <netdb.h>
-#include "h2o/socketpool.h"
+#include <stdint.h>
 
-typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, char *tried);
+typedef struct st_h2o_balancer_backend_t h2o_balancer_backend_t;
+
+typedef struct st_h2o_balancer_t h2o_balancer_t;
+
+typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_balancer_backend_t **backends,
+                                        size_t backends_len, char *tried);
 
 typedef void (*h2o_balancer_destroyer)(h2o_balancer_t *balancer);
 
@@ -37,6 +41,13 @@ typedef struct st_h2o_balancer_callbacks_t {
     h2o_balancer_selector select_;
     h2o_balancer_destroyer destroy;
 } h2o_balancer_callbacks_t;
+
+struct st_h2o_balancer_backend_t {
+    /**
+     * weight - 1 for load balancer, where weight is an integer within range [1, 256]
+     */
+    uint8_t weight_m1;
+};
 
 struct st_h2o_balancer_t {
     const h2o_balancer_callbacks_t *callbacks;
@@ -46,7 +57,8 @@ struct st_h2o_balancer_t {
 h2o_balancer_t *h2o_balancer_create_rr(void);
 
 /* least connection */
-h2o_balancer_t *h2o_balancer_create_lc(void);
+typedef void (*h2o_balancer_lc_get_conn_count_cb)(size_t *conn_count, h2o_balancer_backend_t **backends, size_t backends_len);
+h2o_balancer_t *h2o_balancer_create_lc(h2o_balancer_lc_get_conn_count_cb conn_count_cb);
 
 #ifdef __cplusplus
 }
