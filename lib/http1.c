@@ -968,6 +968,36 @@ static h2o_socket_t *get_socket(h2o_conn_t *_conn)
     return conn->sock;
 }
 
+struct websocket_upgrade_info_t {
+    h2o_context_t *ctx;
+    h2o_timeout_t *timeout;
+    h2o_socket_t *upstream_sock;
+};
+
+static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
+{
+    struct websocket_upgrade_info_t *info = _info;
+
+    if (sock != NULL) {
+        h2o_buffer_consume(&sock->input, reqsize); // It is detached from conn. Let's trash unused data.
+        h2o_tunnel_establish(info->ctx, &h2o_tunnel_socket_endpoint_callbacks, sock, &h2o_tunnel_socket_endpoint_callbacks, info->upstream_sock,
+                             info->timeout);
+    } else {
+        h2o_socket_close(info->upstream_sock);
+    }
+    free(info);
+}
+
+static void websocket_upgrade(h2o_req_t *req, h2o_socket_t *upstream_sock, h2o_timeout_t *timeout, char *websocket_key)
+{
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
+    struct websocket_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
+    info->upstream_sock = upstream_sock;
+    info->timeout = timeout;
+    info->ctx = req->conn->ctx;
+    h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
+}
+
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1012,6 +1042,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         NULL,         /* push */
         get_socket,   /* get underlying socket */
         NULL,         /* get debug state */
+        websocket_upgrade, /* websocket upgrade */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
             {log_request_index},                                                                     /* http1 */

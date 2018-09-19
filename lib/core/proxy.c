@@ -46,12 +46,6 @@ struct rp_generator_t {
     char *websocket_key;
 };
 
-struct rp_ws_upgrade_info_t {
-    h2o_context_t *ctx;
-    h2o_timeout_t *timeout;
-    h2o_socket_t *upstream_sock;
-};
-
 static h2o_http1client_ctx_t *get_client_ctx(h2o_req_t *req)
 {
     h2o_req_overrides_t *overrides = req->overrides;
@@ -130,21 +124,6 @@ static int req_requires_content_length(h2o_req_t *req)
                                                                 h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
 
     return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
-}
-
-// copied from websocket.c FIXME move to somewhere?
-#include <openssl/sha.h>
-static void create_websocket_accept_key(char *dst, const char *client_key)
-{
-#define WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-    uint8_t sha1buf[20], key_src[60];
-
-    memcpy(key_src, client_key, 24);
-    memcpy(key_src + 24, WS_GUID, 36);
-    SHA1(key_src, sizeof(key_src), sha1buf);
-    h2o_base64_encode(dst, sha1buf, sizeof(sha1buf), 0);
-    dst[28] = '\0';
-#undef WS_GUID
 }
 
 static void create_websocket_key(char *dst)
@@ -423,56 +402,6 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
     }
 }
 
-static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_t reqsize)
-{
-    struct rp_ws_upgrade_info_t *info = _info;
-
-    if (sock != NULL) {
-        h2o_buffer_consume(&sock->input, reqsize); // It is detached from conn. Let's trash unused data.
-        h2o_tunnel_establish(info->ctx, &h2o_tunnel_socket_endpoint_callbacks, sock, &h2o_tunnel_socket_endpoint_callbacks, info->upstream_sock,
-                             info->timeout);
-    } else {
-        h2o_socket_close(info->upstream_sock);
-    }
-    free(info);
-}
-
-static inline void on_websocket_upgrade(struct rp_generator_t *self, h2o_timeout_t *timeout, int rlen)
-{
-    h2o_req_t *req = self->src_req;
-    h2o_socket_t *sock = h2o_http1client_steal_socket(self->client);
-    h2o_buffer_consume(&sock->input, rlen); // trash data after stealing sock.
-
-    if (req->version < 0x200) {
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
-        info->upstream_sock = sock;
-        info->timeout = timeout;
-        info->ctx = req->conn->ctx;
-        h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
-    } else {
-        assert(self->websocket_key != NULL);
-        ssize_t cursor = h2o_find_header_by_str(&req->res.headers, H2O_STRLIT("sec-websocket-accept"), -1);
-        if (cursor == -1)
-            goto OnInvalidResponse;
-
-        h2o_header_t accept_header = req->res.headers.entries[cursor];
-        h2o_delete_header(&req->res.headers, cursor);
-        char accept_key[29];
-        create_websocket_accept_key(accept_key, self->websocket_key);
-        if (!h2o_memis(accept_key, strlen(accept_key), accept_header.value.base, accept_header.value.len))
-            goto OnInvalidResponse;
-
-        req->res.status = 200;
-        h2o_http2_tunnel(req, &h2o_tunnel_socket_endpoint_callbacks, sock, timeout);
-        return;
-
-    OnInvalidResponse:
-        req->res.status = 502;
-        h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
-    }
-}
-
 static void await_send(h2o_http1client_t *client)
 {
     if (client)
@@ -610,10 +539,14 @@ static h2o_http1client_body_cb on_head(h2o_http1client_t *client, const char *er
         h2o_resp_add_date_header(req);
 
     if (self->is_websocket_handshake && req->res.status == 101) {
-        h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
-        assert(client_ctx->websocket_timeout != NULL);
-        on_websocket_upgrade(self, client_ctx->websocket_timeout, rlen);
-        self->client = NULL;
+        if (req->conn->callbacks->websocket_upgrade != NULL) {
+            h2o_http1client_ctx_t *client_ctx = get_client_ctx(req);
+            assert(client_ctx->websocket_timeout != NULL);\
+            h2o_socket_t *upstream_sock = h2o_http1client_steal_socket(self->client);
+            h2o_buffer_consume(&upstream_sock->input, rlen); // trash data after stealing sock.
+            req->conn->callbacks->websocket_upgrade(self->src_req, upstream_sock, client_ctx->websocket_timeout, self->websocket_key);
+            self->client = NULL;
+        }
         return NULL;
     }
     /* declare the start of the response */

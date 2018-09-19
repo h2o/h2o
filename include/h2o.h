@@ -847,6 +847,10 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
+     * callback for websocket upgrade (may be NULL)
+     */
+    void (*websocket_upgrade)(h2o_req_t *req, h2o_socket_t *upstream_sock, h2o_timeout_t *timeout, char *websocket_key);
+    /**
      * logging callbacks (may be NULL)
      */
     union {

@@ -1316,6 +1316,44 @@ static h2o_socket_t *get_socket(h2o_conn_t *_conn)
     return conn->sock;
 }
 
+// copied from websocket.c FIXME move to somewhere?
+#include <openssl/sha.h>
+static void create_websocket_accept_key(char *dst, const char *client_key)
+{
+#define WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    uint8_t sha1buf[20], key_src[60];
+
+    memcpy(key_src, client_key, 24);
+    memcpy(key_src + 24, WS_GUID, 36);
+    SHA1(key_src, sizeof(key_src), sha1buf);
+    h2o_base64_encode(dst, sha1buf, sizeof(sha1buf), 0);
+    dst[28] = '\0';
+#undef WS_GUID
+}
+
+static void websocket_upgrade(h2o_req_t *req, h2o_socket_t *upstream_sock, h2o_timeout_t *timeout, char *websocket_key)
+{
+    assert(websocket_key != NULL);
+    ssize_t cursor = h2o_find_header_by_str(&req->res.headers, H2O_STRLIT("sec-websocket-accept"), -1);
+    if (cursor == -1)
+        goto OnInvalidResponse;
+
+    h2o_header_t accept_header = req->res.headers.entries[cursor];
+    h2o_delete_header(&req->res.headers, cursor);
+    char accept_key[29];
+    create_websocket_accept_key(accept_key, websocket_key);
+    if (!h2o_memis(accept_key, strlen(accept_key), accept_header.value.base, accept_header.value.len))
+        goto OnInvalidResponse;
+
+    req->res.status = 200;
+    h2o_http2_tunnel(req, &h2o_tunnel_socket_endpoint_callbacks, upstream_sock, timeout);
+    return;
+
+OnInvalidResponse:
+    req->res.status = 502;
+    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
+}
+
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1415,6 +1453,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         push_path,                 /* HTTP2 push */
         get_socket,                /* get underlying socket */
         h2o_http2_get_debug_state, /* get debug state */
+        websocket_upgrade,         /* websocket upgrade */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
             {NULL},                                                                                  /* http1 */
