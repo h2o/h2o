@@ -89,27 +89,25 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     memset(ctx, 0, sizeof(*ctx));
     ctx->loop = loop;
     ctx->globalconf = config;
-    h2o_timeout_init(ctx->loop, &ctx->zero_timeout, 0);
-    h2o_timeout_init(ctx->loop, &ctx->one_sec_timeout, 1000);
-    h2o_timeout_init(ctx->loop, &ctx->hundred_ms_timeout, 100);
     ctx->queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
-    h2o_timeout_init(ctx->loop, &ctx->handshake_timeout, config->handshake_timeout);
-    h2o_timeout_init(ctx->loop, &ctx->http1.req_timeout, config->http1.req_timeout);
     h2o_linklist_init_anchor(&ctx->http1._conns);
-    h2o_timeout_init(ctx->loop, &ctx->http2.idle_timeout, config->http2.idle_timeout);
-    h2o_timeout_init(ctx->loop, &ctx->http2.graceful_shutdown_timeout, config->http2.graceful_shutdown_timeout);
     h2o_linklist_init_anchor(&ctx->http2._conns);
     ctx->proxy.client_ctx.loop = loop;
-    h2o_timeout_init(ctx->loop, &ctx->proxy.io_timeout, config->proxy.io_timeout);
-    h2o_timeout_init(ctx->loop, &ctx->proxy.connect_timeout, config->proxy.connect_timeout);
-    h2o_timeout_init(ctx->loop, &ctx->proxy.first_byte_timeout, config->proxy.first_byte_timeout);
+    ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
+    ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
+    ctx->proxy.client_ctx.first_byte_timeout = ctx->globalconf->proxy.first_byte_timeout;
+    ctx->proxy.client_ctx.keepalive_timeout = ctx->globalconf->proxy.keepalive_timeout;
     ctx->proxy.client_ctx.getaddr_receiver = &ctx->receivers.hostinfo_getaddr;
-    ctx->proxy.client_ctx.io_timeout = &ctx->proxy.io_timeout;
-    ctx->proxy.client_ctx.connect_timeout = &ctx->proxy.connect_timeout;
-    ctx->proxy.client_ctx.first_byte_timeout = &ctx->proxy.first_byte_timeout;
+    ctx->proxy.client_ctx.http2.latency_optimization = ctx->globalconf->http2.latency_optimization;
+    ctx->proxy.client_ctx.max_buffer_size = ctx->globalconf->proxy.max_buffer_size;
+    ctx->proxy.client_ctx.http2.max_concurrent_streams = ctx->globalconf->proxy.http2.max_concurrent_streams;
+    ctx->proxy.client_ctx.http2.ratio = ctx->globalconf->proxy.http2.ratio;
+    ctx->proxy.client_ctx.http2.counter = -1;
+    ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
+    h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
@@ -148,16 +146,6 @@ void h2o_context_dispose(h2o_context_t *ctx)
     }
     free(ctx->_pathconfs_inited.entries);
     free(ctx->_module_configs);
-    h2o_timeout_dispose(ctx->loop, &ctx->zero_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->one_sec_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->hundred_ms_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->handshake_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->http1.req_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->http2.idle_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->http2.graceful_shutdown_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->proxy.io_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->proxy.connect_timeout);
-    h2o_timeout_dispose(ctx->loop, &ctx->proxy.first_byte_timeout);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
     h2o_filecache_destroy(ctx->filecache);
@@ -178,11 +166,6 @@ void h2o_context_dispose(h2o_context_t *ctx)
 
     if (ctx->_timestamp_cache.value != NULL)
         h2o_mem_release_shared(ctx->_timestamp_cache.value);
-
-#if H2O_USE_LIBUV
-    /* make sure the handles released by h2o_timeout_dispose get freed */
-    uv_run(ctx->loop, UV_RUN_NOWAIT);
-#endif
 }
 
 void h2o_context_request_shutdown(h2o_context_t *ctx)

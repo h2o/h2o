@@ -93,7 +93,7 @@ prepare_singleton_class(mrb_state *mrb, struct RBasic *o)
 
   if (o->c->tt == MRB_TT_SCLASS) return;
   sc = (struct RClass*)mrb_obj_alloc(mrb, MRB_TT_SCLASS, mrb->class_class);
-  sc->flags |= MRB_FLAG_IS_INHERITED;
+  sc->flags |= MRB_FL_CLASS_IS_INHERITED;
   sc->mt = kh_init(mt, mrb);
   sc->iv = 0;
   if (o->tt == MRB_TT_CLASS) {
@@ -275,7 +275,7 @@ mrb_class_inherited(mrb_state *mrb, struct RClass *super, struct RClass *klass)
 
   if (!super)
     super = mrb->object_class;
-  super->flags |= MRB_FLAG_IS_INHERITED;
+  super->flags |= MRB_FL_CLASS_IS_INHERITED;
   s = mrb_obj_value(super);
   mc_clear_by_class(mrb, klass);
   mid = mrb_intern_lit(mrb, "inherited");
@@ -1061,7 +1061,7 @@ include_module_at(mrb_state *mrb, struct RClass *c, struct RClass *ins_pos, stru
   while (m) {
     int superclass_seen = 0;
 
-    if (m->flags & MRB_FLAG_IS_PREPENDED)
+    if (m->flags & MRB_FL_CLASS_IS_PREPENDED)
       goto skip;
 
     if (klass_mt && klass_mt == m->mt)
@@ -1084,7 +1084,7 @@ include_module_at(mrb_state *mrb, struct RClass *c, struct RClass *ins_pos, stru
     }
 
     ic = include_class_new(mrb, m, ins_pos->super);
-    m->flags |= MRB_FLAG_IS_INHERITED;
+    m->flags |= MRB_FL_CLASS_IS_INHERITED;
     ins_pos->super = ic;
     mrb_field_write_barrier(mrb, (struct RBasic*)ins_pos, (struct RBasic*)ic);
     mc_clear_by_class(mrb, ins_pos);
@@ -1111,15 +1111,15 @@ mrb_prepend_module(mrb_state *mrb, struct RClass *c, struct RClass *m)
   struct RClass *origin;
   int changed = 0;
 
-  if (!(c->flags & MRB_FLAG_IS_PREPENDED)) {
+  if (!(c->flags & MRB_FL_CLASS_IS_PREPENDED)) {
     origin = (struct RClass*)mrb_obj_alloc(mrb, MRB_TT_ICLASS, c);
-    origin->flags |= MRB_FLAG_IS_ORIGIN | MRB_FLAG_IS_INHERITED;
+    origin->flags |= MRB_FL_CLASS_IS_ORIGIN | MRB_FL_CLASS_IS_INHERITED;
     origin->super = c->super;
     c->super = origin;
     origin->mt = c->mt;
     c->mt = kh_init(mt, mrb);
     mrb_field_write_barrier(mrb, (struct RBasic*)c, (struct RBasic*)origin);
-    c->flags |= MRB_FLAG_IS_PREPENDED;
+    c->flags |= MRB_FL_CLASS_IS_PREPENDED;
   }
   changed = include_module_at(mrb, c, c, m, 0);
   if (changed < 0) {
@@ -1196,7 +1196,7 @@ mrb_mod_ancestors(mrb_state *mrb, mrb_value self)
     if (c->tt == MRB_TT_ICLASS) {
       mrb_ary_push(mrb, result, mrb_obj_value(c->c));
     }
-    else if (!(c->flags & MRB_FLAG_IS_PREPENDED)) {
+    else if (!(c->flags & MRB_FL_CLASS_IS_PREPENDED)) {
       mrb_ary_push(mrb, result, mrb_obj_value(c));
     }
     c = c->super;
@@ -1365,9 +1365,9 @@ mc_clear_by_class(mrb_state *mrb, struct RClass *c)
   struct mrb_cache_entry *mc = mrb->cache;
   int i;
 
-  if (c->flags & MRB_FLAG_IS_INHERITED) {
+  if (c->flags & MRB_FL_CLASS_IS_INHERITED) {
     mc_clear_all(mrb);
-    c->flags &= ~MRB_FLAG_IS_INHERITED;
+    c->flags &= ~MRB_FL_CLASS_IS_INHERITED;
     return;
   }
   for (i=0; i<MRB_METHOD_CACHE_SIZE; i++) {
@@ -1381,9 +1381,9 @@ mc_clear_by_id(mrb_state *mrb, struct RClass *c, mrb_sym mid)
   struct mrb_cache_entry *mc = mrb->cache;
   int i;
 
-  if (c->flags & MRB_FLAG_IS_INHERITED) {
+  if (c->flags & MRB_FL_CLASS_IS_INHERITED) {
     mc_clear_all(mrb);
-    c->flags &= ~MRB_FLAG_IS_INHERITED;
+    c->flags &= ~MRB_FL_CLASS_IS_INHERITED;
     return;
   }
   for (i=0; i<MRB_METHOD_CACHE_SIZE; i++) {
@@ -1763,10 +1763,10 @@ mrb_class_path(mrb_state *mrb, struct RClass *c)
 MRB_API struct RClass*
 mrb_class_real(struct RClass* cl)
 {
-  if (cl == 0)
-    return NULL;
+  if (cl == 0) return NULL;
   while ((cl->tt == MRB_TT_SCLASS) || (cl->tt == MRB_TT_ICLASS)) {
     cl = cl->super;
+    if (cl == 0) return NULL;
   }
   return cl;
 }

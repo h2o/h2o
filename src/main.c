@@ -486,6 +486,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        NULL,
                                        0,
                                        8192,
+                                       NULL,
                                        1},
                                       {{on_client_hello_ptls}, listener},
                                       {{on_staple_ocsp_ptls}, ssl_config}};
@@ -1276,6 +1277,26 @@ static int on_config_temp_buffer_path(h2o_configurator_command_t *cmd, h2o_confi
     return 0;
 }
 
+static int on_config_temp_buffer_threshold(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* if "OFF", disable temp buffers by setting the threshold to SIZE_MAX */
+    if (strcasecmp(node->data.scalar, "OFF") == 0) {
+        h2o_socket_buffer_mmap_settings.threshold = SIZE_MAX;
+        return 0;
+    }
+
+    /* if not "OFF", it could be a number */
+    if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_socket_buffer_mmap_settings.threshold) != 0)
+        return -1;
+
+    if (h2o_socket_buffer_mmap_settings.threshold < 1048576) {
+        h2o_configurator_errprintf(cmd, node, "threshold is too low (must be >= 1048576; OFF to disable)");
+        return -1;
+    }
+
+    return 0;
+}
+
 static int on_config_crash_handler(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     conf.crash_handler = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
@@ -1923,6 +1944,9 @@ static void setup_configurators(void)
                                         on_config_num_ocsp_updaters);
         h2o_configurator_define_command(c, "temp-buffer-path", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_temp_buffer_path);
+        h2o_configurator_define_command(c, "temp-buffer-threshold",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_temp_buffer_threshold);
         h2o_configurator_define_command(c, "crash-handler", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler);
         h2o_configurator_define_command(c, "crash-handler.wait-pipe-close",
@@ -1948,7 +1972,8 @@ static void setup_configurators(void)
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
 
-    h2o_config_register_simple_status_handler(&conf.globalconf, (h2o_iovec_t){H2O_STRLIT("main")}, on_extra_status);
+    static h2o_status_handler_t extra_status_handler = {{H2O_STRLIT("main")}, on_extra_status};
+    h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
 int main(int argc, char **argv)

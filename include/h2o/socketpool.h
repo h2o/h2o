@@ -32,7 +32,6 @@ extern "C" {
 #include "h2o/linklist.h"
 #include "h2o/multithread.h"
 #include "h2o/socket.h"
-#include "h2o/timeout.h"
 #include "h2o/url.h"
 #include "h2o/balancer.h"
 
@@ -89,8 +88,7 @@ typedef struct st_h2o_socketpool_t {
     uint64_t timeout; /* in milliseconds */
     struct {
         h2o_loop_t *loop;
-        h2o_timeout_t timeout;
-        h2o_timeout_entry_t entry;
+        h2o_timer_t timeout;
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
 
@@ -108,6 +106,10 @@ typedef struct st_h2o_socketpool_t {
          * operation must be used to access the variable.
          */
         size_t count;
+        /**
+         * number of pooled connections governed by the pool
+         */
+        size_t pooled_count;
     } _shared;
 
     /* load balancer */
@@ -162,7 +164,8 @@ void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop);
  * connects to the peer (or returns a pooled connection)
  */
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data);
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_iovec_t alpn_protos, h2o_socketpool_connect_cb cb,
+                            void *data);
 /**
  * cancels a connect request
  */
@@ -171,6 +174,10 @@ void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req);
  * returns an idling socket to the socket pool
  */
 int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock);
+/**
+ * detach a socket from the socket pool
+ */
+void h2o_socketpool_detach(h2o_socketpool_t *pool, h2o_socket_t *sock);
 /**
  * determines if a socket belongs to the socket pool
  */

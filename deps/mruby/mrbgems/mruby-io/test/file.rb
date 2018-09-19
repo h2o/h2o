@@ -75,12 +75,12 @@ assert('File#mtime') do
   begin
     now = Time.now.to_i
     mt = 0
-    File.open('mtime-test', 'w') do |f|
+    File.open("#{$mrbtest_io_wfname}.mtime", 'w') do |f|
       mt = f.mtime.to_i
     end
     assert_equal true, mt >= now
   ensure
-    File.delete('mtime-test')
+    File.delete("#{$mrbtest_io_wfname}.mtime")
   end
 end
 

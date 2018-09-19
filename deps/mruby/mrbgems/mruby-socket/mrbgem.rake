@@ -4,6 +4,7 @@ MRuby::Gem::Specification.new('mruby-socket') do |spec|
   spec.summary = 'standard socket class'
 
   spec.cc.include_paths << "#{build.root}/src"
+  #spec.cc.defines << "HAVE_SA_LEN=0"
 
   # If Windows, use winsock
   if ( /mswin|mingw|win32/ =~ RUBY_PLATFORM ) then

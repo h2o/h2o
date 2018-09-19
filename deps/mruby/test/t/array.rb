@@ -392,3 +392,10 @@ assert('Array#freeze') do
     a[0] = 1
   end
 end
+
+assert('shared array replace') do
+  a = [0] * 40
+  b = [0, 1, 2]
+  b.replace a[1, 20].dup
+  assert_equal 20, b.size
+end

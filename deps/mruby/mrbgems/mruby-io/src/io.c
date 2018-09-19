@@ -80,6 +80,9 @@ io_get_open_fptr(mrb_state *mrb, mrb_value self)
   struct mrb_io *fptr;
 
   fptr = (struct mrb_io *)mrb_get_datatype(mrb, self, &mrb_io_type);
+  if (fptr == NULL) {
+    mrb_raise(mrb, E_IO_ERROR, "uninitialized stream.");
+  }
   if (fptr->fd < 0) {
     mrb_raise(mrb, E_IO_ERROR, "closed stream.");
   }
@@ -777,7 +780,7 @@ reopen:
     mrb_str_modify(mrb, mrb_str_ptr(emsg));
     mrb_sys_fail(mrb, RSTRING_PTR(emsg));
   }
-  mrb_utf8_free(fname);
+  mrb_locale_free(fname);
 
   if (fd <= 2) {
     mrb_fd_cloexec(mrb, fd);
@@ -873,7 +876,7 @@ mrb_io_sysseek(mrb_state *mrb, mrb_value io)
     whence = 0;
   }
 
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
+  fptr = io_get_open_fptr(mrb, io);
   pos = lseek(fptr->fd, (off_t)offset, (int)whence);
   if (pos == -1) {
     mrb_sys_fail(mrb, "sysseek");
@@ -896,7 +899,7 @@ mrb_io_syswrite(mrb_state *mrb, mrb_value io)
   mrb_value str, buf;
   int fd, length;
 
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
+  fptr = io_get_open_fptr(mrb, io);
   if (! fptr->writable) {
     mrb_raise(mrb, E_IO_ERROR, "not opened for writing");
   }
@@ -946,7 +949,7 @@ mrb_io_closed(mrb_state *mrb, mrb_value io)
 {
   struct mrb_io *fptr;
   fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
-  if (fptr->fd >= 0) {
+  if (fptr == NULL || fptr->fd >= 0) {
     return mrb_false_value();
   }
 
@@ -957,7 +960,7 @@ mrb_value
 mrb_io_pid(mrb_state *mrb, mrb_value io)
 {
   struct mrb_io *fptr;
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
+  fptr = io_get_open_fptr(mrb, io);
 
   if (fptr->pid > 0) {
     return mrb_fixnum_value(fptr->pid);
@@ -1086,7 +1089,7 @@ mrb_io_s_select(mrb_state *mrb, mrb_value klass)
     FD_ZERO(rp);
     for (i = 0; i < RARRAY_LEN(read); i++) {
       read_io = RARRAY_PTR(read)[i];
-      fptr = (struct mrb_io *)mrb_get_datatype(mrb, read_io, &mrb_io_type);
+      fptr = io_get_open_fptr(mrb, read_io);
       FD_SET(fptr->fd, rp);
       if (mrb_io_read_data_pending(mrb, read_io)) {
         pending++;
@@ -1108,7 +1111,7 @@ mrb_io_s_select(mrb_state *mrb, mrb_value klass)
     wp = &wset;
     FD_ZERO(wp);
     for (i = 0; i < RARRAY_LEN(write); i++) {
-      fptr = (struct mrb_io *)mrb_get_datatype(mrb, RARRAY_PTR(write)[i], &mrb_io_type);
+      fptr = io_get_open_fptr(mrb, RARRAY_PTR(write)[i]);
       FD_SET(fptr->fd, wp);
       if (max < fptr->fd)
         max = fptr->fd;
@@ -1127,7 +1130,7 @@ mrb_io_s_select(mrb_state *mrb, mrb_value klass)
     ep = &eset;
     FD_ZERO(ep);
     for (i = 0; i < RARRAY_LEN(except); i++) {
-      fptr = (struct mrb_io *)mrb_get_datatype(mrb, RARRAY_PTR(except)[i], &mrb_io_type);
+      fptr = io_get_open_fptr(mrb, RARRAY_PTR(except)[i]);
       FD_SET(fptr->fd, ep);
       if (max < fptr->fd)
         max = fptr->fd;
@@ -1165,7 +1168,7 @@ retry:
     if (rp) {
       list = RARRAY_PTR(result)[0];
       for (i = 0; i < RARRAY_LEN(read); i++) {
-        fptr = (struct mrb_io *)mrb_get_datatype(mrb, RARRAY_PTR(read)[i], &mrb_io_type);
+        fptr = io_get_open_fptr(mrb, RARRAY_PTR(read)[i]);
         if (FD_ISSET(fptr->fd, rp) ||
             FD_ISSET(fptr->fd, &pset)) {
           mrb_ary_push(mrb, list, RARRAY_PTR(read)[i]);
@@ -1176,7 +1179,7 @@ retry:
     if (wp) {
       list = RARRAY_PTR(result)[1];
       for (i = 0; i < RARRAY_LEN(write); i++) {
-        fptr = (struct mrb_io *)mrb_get_datatype(mrb, RARRAY_PTR(write)[i], &mrb_io_type);
+        fptr = io_get_open_fptr(mrb, RARRAY_PTR(write)[i]);
         if (FD_ISSET(fptr->fd, wp)) {
           mrb_ary_push(mrb, list, RARRAY_PTR(write)[i]);
         } else if (fptr->fd2 >= 0 && FD_ISSET(fptr->fd2, wp)) {
@@ -1188,7 +1191,7 @@ retry:
     if (ep) {
       list = RARRAY_PTR(result)[2];
       for (i = 0; i < RARRAY_LEN(except); i++) {
-        fptr = (struct mrb_io *)mrb_get_datatype(mrb, RARRAY_PTR(except)[i], &mrb_io_type);
+        fptr = io_get_open_fptr(mrb, RARRAY_PTR(except)[i]);
         if (FD_ISSET(fptr->fd, ep)) {
           mrb_ary_push(mrb, list, RARRAY_PTR(except)[i]);
         } else if (fptr->fd2 >= 0 && FD_ISSET(fptr->fd2, ep)) {
@@ -1205,7 +1208,7 @@ mrb_value
 mrb_io_fileno(mrb_state *mrb, mrb_value io)
 {
   struct mrb_io *fptr;
-  fptr = (struct mrb_io *)mrb_get_datatype(mrb, io, &mrb_io_type);
+  fptr = io_get_open_fptr(mrb, io);
   return mrb_fixnum_value(fptr->fd);
 }
 

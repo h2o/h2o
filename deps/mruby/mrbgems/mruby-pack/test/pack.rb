@@ -129,7 +129,7 @@ assert 'pack/unpack "i"' do
   if PACK_IS_LITTLE_ENDIAN
     str = "\xC7\xCF" + "\xFF" * (int_size-2)
   else
-    str = "\xFF" * (int_size-2) + "\xC7\xCF"
+    str = "\xFF" * (int_size-2) + "\xCF\xC7"
   end
   assert_pack 'i', str, [-12345]
 end
@@ -141,7 +141,7 @@ assert 'pack/unpack "I"' do
   if PACK_IS_LITTLE_ENDIAN
     str = "\x39\x30" + "\0" * (uint_size-2)
   else
-    str = "\0" * (uint_size-2) + "\x39\x30"
+    str = "\0" * (uint_size-2) + "\x30\x39"
   end
   assert_pack 'I', str, [12345]
 end

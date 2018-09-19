@@ -42,9 +42,9 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     stream->stream_id = stream_id;
     stream->_ostr_final.do_send = finalostream_send;
     stream->_ostr_final.start_pull = finalostream_start_pull;
-    stream->_ostr_final.send_informational = conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_NONE
-                                                 ? NULL
-                                                 : finalostream_send_informational;
+    stream->_ostr_final.send_informational =
+        conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_NONE ? NULL
+                                                                                                 : finalostream_send_informational;
     stream->state = H2O_HTTP2_STREAM_STATE_IDLE;
     h2o_http2_window_init(&stream->output_window, conn->peer_settings.initial_window_size);
     h2o_http2_window_init(&stream->input_window.window, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
@@ -123,7 +123,7 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
     if (length || send_state == H2O_SEND_STATE_FINAL) {
         h2o_http2_encode_frame_header(
             (void *)((*outbuf)->bytes + (*outbuf)->size), length, H2O_HTTP2_FRAME_TYPE_DATA,
-            (send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing_trailer) ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0,
+            (send_state == H2O_SEND_STATE_FINAL && !stream->req.send_server_timing) ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0,
             stream->stream_id);
         h2o_http2_window_consume_window(&conn->_write.window, length);
         h2o_http2_window_consume_window(&stream->output_window, length);
@@ -132,7 +132,8 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
     }
     /* send a RST_STREAM if there's an error */
     if (send_state == H2O_SEND_STATE_ERROR) {
-        h2o_http2_encode_rst_stream_frame(outbuf, stream->stream_id, -H2O_HTTP2_ERROR_PROTOCOL);
+        h2o_http2_encode_rst_stream_frame(
+            outbuf, stream->stream_id, -(stream->req.upstream_refused ? H2O_HTTP2_ERROR_REFUSED_STREAM : H2O_HTTP2_ERROR_PROTOCOL));
     }
 }
 
@@ -215,6 +216,13 @@ static int is_blocking_asset(h2o_req_t *req)
     return req->res.mime_attr->priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 }
 
+static void send_refused_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_REFUSED_STREAM);
+    h2o_http2_conn_request_write(conn);
+    h2o_http2_stream_close(conn, stream);
+}
+
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (stream->req.res.status == 425 && stream->req.reprocess_if_too_early) {
@@ -295,10 +303,11 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     if (h2o_http2_stream_is_push(stream->stream_id))
         h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
                               H2O_STRLIT("pushed"));
-    if (stream->req.send_server_timing_header)
-        h2o_add_server_timing_header(&stream->req);
+    if (stream->req.send_server_timing)
+        h2o_add_server_timing_header(&stream->req, 1);
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                               conn->peer_settings.max_frame_size, &stream->req.res, &conn->super.ctx->globalconf->server_name,
+                               conn->peer_settings.max_frame_size, stream->req.res.status, stream->req.res.headers.entries,
+                               stream->req.res.headers.size, &conn->super.ctx->globalconf->server_name,
                                stream->req.res.content_length);
     h2o_http2_conn_request_write(conn);
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_BODY);
@@ -327,6 +336,11 @@ void finalostream_start_pull(h2o_ostream_t *self, h2o_ostream_pull_cb cb)
 
     assert(stream->blocked_by_server);
     h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
+
+    if (stream->req.upstream_refused) {
+        send_refused_stream(conn, stream);
+        return;
+    }
 
     /* register the pull callback */
     stream->_pull_cb = cb;
@@ -365,6 +379,10 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, s
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
+        if (stream->req.upstream_refused) {
+            send_refused_stream(conn, stream);
+            return;
+        }
         if (send_headers(conn, stream) != 0)
             return;
     /* fallthru */
@@ -396,7 +414,8 @@ static void finalostream_send_informational(h2o_ostream_t *self, h2o_req_t *req)
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)req->conn;
 
     h2o_hpack_flatten_response(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
-                               conn->peer_settings.max_frame_size, &req->res, NULL, SIZE_MAX);
+                               conn->peer_settings.max_frame_size, req->res.status, req->res.headers.entries, req->res.headers.size,
+                               NULL, SIZE_MAX);
     h2o_http2_conn_request_write(conn);
 }
 
@@ -434,7 +453,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     }
 
     if (send_state == H2O_SEND_STATE_ERROR) {
-        stream->req.send_server_timing_trailer = 0;
+        stream->req.send_server_timing = 0; /* suppress sending trailers */
     }
 }
 

@@ -2,7 +2,10 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Headers Directives")->(sub {
 
 <p>
-This document describes the configuration directives of the headers handler.
+Headers directives can be used to manipulate response headers.
+</p>
+<p>
+This document describes the following configuration directives as well as <a href="configure/headers_directives.html#timing-of-application">when they are applied</a>.
 </p>
 
 ? $ctx->{directive_list}->()->(sub {
@@ -84,5 +87,36 @@ EOT
 ? })
 
 ? })
+
+<h3 id="timing-of-application">Timing of Application</h3>
+
+<p>
+Starting from v2.3, it is possible to specify the timing when the headers directives is applied.
+All of the header directives can take either of the following two forms.
+</p>
+
+<?= $ctx->{example}->('Scalar Form', <<'EOT');
+header.add: "X-Foo: FOO":
+EOT
+?>
+
+<?= $ctx->{example}->('Mapping Form', <<'EOT');
+header.add:
+  header: "X-Foo: FOO":
+  when: final
+EOT
+?>
+
+<p>
+The above two are identical.
+</p>
+<p>
+<code>when</code> can be either of: <code>final</code>, <code>early</code>, <code>all</code>. Default is <code>final</code>.
+</p>
+<p>
+If the value is <code>final</code>, the header directive is only applied to final (i.e. non-1xx) response.
+If the value is <code>early</code>, it's only applied to 1xx informational responses.
+If <code>all</code> is set, it's applied to both of final and 1xx responses.
+</p>
 
 ? })

@@ -171,6 +171,10 @@ assert('Kernel#clone', '15.3.1.3.8') do
   assert_true a.respond_to?(:test)
   assert_false b.respond_to?(:test)
   assert_true c.respond_to?(:test)
+  
+  a.freeze
+  d = a.clone
+  assert_true d.frozen?
 end
 
 assert('Kernel#dup', '15.3.1.3.9') do

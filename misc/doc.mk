@@ -22,6 +22,7 @@ OUTPUT=\
     configure/proxy_directives.html \
     configure/redirect_directives.html \
     configure/reproxy_directives.html \
+    configure/server_timing_directives.html \
     configure/status_directives.html \
     configure/throttle_response_directives.html \
     configure/basic_auth.html \

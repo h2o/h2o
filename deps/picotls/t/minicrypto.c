@@ -32,12 +32,12 @@
 
 static void test_secp256r1_key_exchange(void)
 {
-    test_key_exchange(&ptls_minicrypto_secp256r1);
+    test_key_exchange(&ptls_minicrypto_secp256r1, &ptls_minicrypto_secp256r1);
 }
 
 static void test_x25519_key_exchange(void)
 {
-    test_key_exchange(&ptls_minicrypto_x25519);
+    test_key_exchange(&ptls_minicrypto_x25519, &ptls_minicrypto_x25519);
 }
 
 static void test_secp256r1_sign(void)
