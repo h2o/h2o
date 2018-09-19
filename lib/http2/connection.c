@@ -77,7 +77,7 @@ static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
-static void do_tunnel_send(h2o_http2_stream_t *stream, h2o_iovec_t buf, int is_end_stream);
+static void do_tunnel_send_to_server(h2o_http2_stream_t *stream, h2o_iovec_t buf, int is_end_stream);
 
 const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
 
@@ -722,7 +722,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             handle_request_body_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
                                       (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
         } else {
-            do_tunnel_send(stream, h2o_iovec_init(payload.data, payload.length), (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+            do_tunnel_send_to_server(stream, h2o_iovec_init(payload.data, payload.length), (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
         }
     }
 
@@ -1644,14 +1644,14 @@ struct st_http2_tunnel_generator_t {
     unsigned client_final_received : 1;
 };
 
-static void do_tunnel_send_buffer(h2o_tunnel_t *tunnel, struct st_http2_tunnel_generator_t *generator)
+static void do_tunnel_send_buffer_to_server(h2o_tunnel_t *tunnel, struct st_http2_tunnel_generator_t *generator)
 {
     generator->bytes_inflight = generator->buf->size;
     h2o_iovec_t buf = h2o_iovec_init(generator->buf->bytes, generator->buf->size);
     h2o_tunnel_send(tunnel, &tunnel->endpoints[0], &buf, 1, generator->client_final_received);
 }
 
-static void do_tunnel_send(h2o_http2_stream_t *stream, h2o_iovec_t buf, int is_end_stream)
+static void do_tunnel_send_to_server(h2o_http2_stream_t *stream, h2o_iovec_t buf, int is_end_stream)
 {
     assert(stream->tunnel != NULL);
     h2o_tunnel_endpoint_t *endpoint = &stream->tunnel->endpoints[0];
@@ -1663,10 +1663,10 @@ static void do_tunnel_send(h2o_http2_stream_t *stream, h2o_iovec_t buf, int is_e
         generator->client_final_received = 1;
 
     if (stream->tunnel->endpoints[1].sending == 0)
-        do_tunnel_send_buffer(stream->tunnel, generator);
+        do_tunnel_send_buffer_to_server(stream->tunnel, generator);
 }
 
-static void tunnel_endpoint_on_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+static void tunnel_endpoint_send_to_client(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     struct st_http2_tunnel_generator_t *generator = (void *)end->data;
     assert(!generator->server_final_received);
@@ -1675,7 +1675,7 @@ static void tunnel_endpoint_on_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t 
     h2o_send(generator->req, bufs, bufcnt, H2O_SEND_STATE_IN_PROGRESS);
 }
 
-static void tunnel_endpoint_on_send_complete(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer)
+static void tunnel_endpoint_on_send_to_server(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer)
 {
     struct st_http2_tunnel_generator_t *generator = (void *)end->data;
 
@@ -1686,7 +1686,7 @@ static void tunnel_endpoint_on_send_complete(h2o_tunnel_t *tunnel, h2o_tunnel_en
     generator->req->proceed_req(generator->req, bytes_inflight, generator->client_final_received);
 
     if (generator->buf->size != 0 || (generator->client_final_received && !tunnel->endpoints[0].shutdowned)) {
-        do_tunnel_send_buffer(tunnel, generator);
+        do_tunnel_send_buffer_to_server(tunnel, generator);
     }
 }
 
@@ -1707,8 +1707,8 @@ static void on_tunnel_generator_proceed(h2o_generator_t *_generator, h2o_req_t *
         /* sent 200 response, start tunneling */
         static const h2o_tunnel_endpoint_callbacks_t callbacks = {
             NULL,
-            tunnel_endpoint_on_send,
-            tunnel_endpoint_on_send_complete,
+            tunnel_endpoint_send_to_client,
+            tunnel_endpoint_on_send_to_server,
             tunnel_endpoint_on_close,
         };
         stream->tunnel = h2o_tunnel_establish(req->conn->ctx, &callbacks, generator, generator->peer.cb, generator->peer.data, generator->timeout);

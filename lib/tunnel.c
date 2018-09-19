@@ -88,7 +88,7 @@ void h2o_tunnel_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *from, h2o_iove
     if (is_final)
         from->shutdowned = 1;
     to->sending = 1;
-    to->callbacks->on_send(tunnel, to, bufs, bufcnt, is_final);
+    to->callbacks->send(tunnel, to, bufs, bufcnt, is_final);
 }
 
 void h2o_tunnel_notify_sent(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end)
@@ -97,8 +97,8 @@ void h2o_tunnel_notify_sent(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end)
     reset_timeout(tunnel);
     end->sending = 0;
     h2o_tunnel_endpoint_t *peer = end == &tunnel->endpoints[0] ? &tunnel->endpoints[1] : &tunnel->endpoints[0];
-    if (peer->callbacks->on_notify_sent != NULL)
-        peer->callbacks->on_notify_sent(tunnel, peer, end);
+    if (peer->callbacks->on_peer_sent != NULL)
+        peer->callbacks->on_peer_sent(tunnel, peer, end);
 
     if (!is_sending(tunnel) && tunnel->endpoints[0].shutdowned && tunnel->endpoints[1].shutdowned)
         break_now(tunnel);
@@ -155,7 +155,7 @@ static void socket_endpoint_on_open(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t 
         on_socket_read(sock, NULL);
     h2o_socket_read_start(sock, on_socket_read);
 }
-static void socket_endpoint_on_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+static void socket_endpoint_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
 {
     h2o_socket_t *sock = end->data;
     if (bufcnt != 0)
@@ -165,7 +165,7 @@ static void socket_endpoint_on_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t 
     if (bufcnt == 0)
         h2o_tunnel_notify_sent(tunnel, end);
 }
-static void socket_endpoint_on_send_complete(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer)
+static void socket_endpoint_on_notify_peer_sent(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer)
 {
     h2o_socket_t *sock = end->data;
     h2o_buffer_consume(&sock->input, sock->input->size);
@@ -179,7 +179,7 @@ static void socket_endpoint_on_close(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t
 
 const h2o_tunnel_endpoint_callbacks_t h2o_tunnel_socket_endpoint_callbacks = {
     socket_endpoint_on_open,
-    socket_endpoint_on_send,
-    socket_endpoint_on_send_complete,
+    socket_endpoint_send,
+    socket_endpoint_on_notify_peer_sent,
     socket_endpoint_on_close,
 };

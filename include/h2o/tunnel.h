@@ -29,9 +29,9 @@ extern "C" {
 typedef struct st_h2o_tunnel_t h2o_tunnel_t;
 typedef struct st_h2o_tunnel_endpoint_t h2o_tunnel_endpoint_t;
 typedef void (*h2o_tunnel_endpoint_on_open_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end);
-typedef void (*h2o_tunnel_endpoint_on_send_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt,
+typedef void (*h2o_tunnel_endpoint_send_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt,
                                         int is_final);
-typedef void (*h2o_tunnel_endpoint_on_notify_sent_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer);
+typedef void (*h2o_tunnel_endpoint_on_peer_sent_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer);
 typedef void (*h2o_tunnel_endpoint_on_close_cb)(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, const char *err);
 
 typedef struct st_h2o_tunnel_endpoint_callbacks_t {
@@ -42,11 +42,11 @@ typedef struct st_h2o_tunnel_endpoint_callbacks_t {
     /**
      * called when the peer wants to send data to this end
      */
-    h2o_tunnel_endpoint_on_send_cb on_send;
+    h2o_tunnel_endpoint_send_cb send;
     /**
      * called when the peer completed to send the data (maybe NULL)
      */
-    h2o_tunnel_endpoint_on_notify_sent_cb on_notify_sent;
+    h2o_tunnel_endpoint_on_peer_sent_cb on_peer_sent;
     /**
      * called when tunnel gets closed
      */
