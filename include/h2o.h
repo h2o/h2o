@@ -1742,6 +1742,9 @@ typedef struct st_h2o_fastcgi_config_vars_t {
     uint64_t io_timeout;
     uint64_t keepalive_timeout; /* 0 to disable */
     h2o_iovec_t document_root;  /* .base=NULL if not set */
+    struct {
+        int enabled;
+    } chroot;
     int send_delegated_uri;     /* whether to send the rewritten HTTP_HOST & REQUEST_URI by delegation, or the original */
     struct {
         void (*dispose)(h2o_fastcgi_handler_t *handler, void *data);
