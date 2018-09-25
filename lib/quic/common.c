@@ -22,14 +22,18 @@
 #include <errno.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include "h2o/string_.h"
 #include "h2o/hq_common.h"
 
-#define MAX_FRAME_SIZE                                                                                                             \
-    16384 /* maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this                      \
-             */
+/**
+ * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this
+ */
+#define MAX_FRAME_SIZE 16384
 
 static void on_read(h2o_socket_t *sock, const char *err);
 static void on_timeout(h2o_timer_t *timeout);
+
+const ptls_iovec_t h2o_hq_alpn[1] = {{(void *)H2O_STRLIT("hq-14")}};
 
 int h2o_hq_peek_frame(quicly_recvbuf_t *recvbuf, h2o_hq_peek_frame_t *frame)
 {
@@ -44,7 +48,7 @@ int h2o_hq_peek_frame(quicly_recvbuf_t *recvbuf, h2o_hq_peek_frame_t *frame)
     frame->type = *src++;
     if (frame->type != H2O_HQ_FRAME_TYPE_DATA) {
         if (frame->length >= MAX_FRAME_SIZE)
-            return H2O_HQ_ERROR_INTERNAL; /* FIXME */
+            return H2O_HQ_ERROR_MALFORMED_FRAME(frame->type); /* FIXME is this the correct code? */
         if (src_end - src < frame->length)
             return H2O_HQ_ERROR_INCOMPLETE;
         frame->payload = src;
@@ -62,13 +66,14 @@ void h2o_hq_shift_frame(quicly_recvbuf_t *recvbuf, h2o_hq_peek_frame_t *frame)
     quicly_recvbuf_shift(recvbuf, sz);
 }
 
-void h2o_hq_init_context(h2o_hq_ctx_t *ctx, quicly_context_t *quic, h2o_socket_t *sock, h2o_hq_accept_cb acceptor)
+void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic, h2o_hq_accept_cb acceptor)
 {
     assert(quic->on_stream_open != NULL && "on_stream_open MUST be set to h2o_hq_on_stream_open or its wrapper");
 
-    ctx->quic = quic;
+    ctx->loop = loop;
     ctx->sock = sock;
     ctx->sock->data = ctx;
+    ctx->quic = quic;
     h2o_linklist_init_anchor(&ctx->conns);
     ctx->acceptor = acceptor;
 
@@ -122,6 +127,7 @@ int h2o_hq_setup(h2o_hq_conn_t *conn, quicly_conn_t *quic)
             0)
         return ret;
 
+    h2o_hq_schedule_timer(conn);
     return 0;
 }
 
@@ -307,14 +313,24 @@ static h2o_hq_conn_t *find_by_cid(h2o_hq_ctx_t *ctx, ptls_iovec_t dest)
     return NULL;
 }
 
-static void process_packets(h2o_hq_ctx_t *ctx, quicly_decoded_packet_t *packets, size_t num_packets)
+static void process_packets(h2o_hq_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, quicly_decoded_packet_t *packets,
+                            size_t num_packets)
 {
     h2o_hq_conn_t *conn = find_by_cid(ctx, packets[0].cid.dest);
+
     if (conn != NULL) {
-        conn->callbacks->handle_input(conn, packets, num_packets);
+        size_t i;
+        for (i = 0; i != num_packets; ++i) {
+            /* FIXME process closure and errors */
+            quicly_receive(conn->quic, packets + i);
+        }
     } else if (ctx->acceptor != NULL) {
-        ctx->acceptor(ctx, packets, num_packets);
+        conn = ctx->acceptor(ctx, sa, salen, packets, num_packets);
     }
+
+    /* for locality, emit packets belonging to the same connection NOW! */
+    if (conn != NULL)
+        h2o_hq_send(conn);
 }
 
 void on_read(h2o_socket_t *sock, const char *err)
@@ -326,7 +342,7 @@ void on_read(h2o_socket_t *sock, const char *err)
         uint8_t buf[16384], *bufpt = buf;
         struct {
             struct msghdr mess;
-            struct sockaddr sa;
+            struct sockaddr_storage sa;
             struct iovec vec;
         } dgrams[32];
         size_t dgram_index, num_dgrams;
@@ -357,6 +373,13 @@ void on_read(h2o_socket_t *sock, const char *err)
         quicly_decoded_packet_t packets[64];
         size_t packet_index = 0;
         for (dgram_index = 0; dgram_index != num_dgrams; ++dgram_index) {
+            if (packet_index != 0 &&
+                !(dgram_index == 0 ||
+                  h2o_socket_compare_address(dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index].mess.msg_name))) {
+                process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen, packets,
+                                packet_index);
+                packet_index = 0;
+            }
             size_t off = 0;
             while (off != dgrams[dgram_index].vec.iov_len) {
                 size_t plen = quicly_decode_packet(packets + packet_index, dgrams[dgram_index].vec.iov_base + off,
@@ -367,7 +390,8 @@ void on_read(h2o_socket_t *sock, const char *err)
                 if (packet_index == sizeof(packets) / sizeof(packets[0]) - 1 ||
                     !(packet_index == 0 || h2o_memis(packets[0].cid.dest.base, packets[0].cid.dest.len,
                                                      packets[packet_index].cid.dest.base, packets[packet_index].cid.dest.len))) {
-                    process_packets(ctx, packets, packet_index + 1);
+                    process_packets(ctx, dgrams[dgram_index].mess.msg_name, dgrams[dgram_index].mess.msg_namelen, packets,
+                                    packet_index + 1);
                     packet_index = 0;
                 } else {
                     ++packet_index;
@@ -375,7 +399,8 @@ void on_read(h2o_socket_t *sock, const char *err)
             }
         }
         if (packet_index != 0)
-            process_packets(ctx, packets, packet_index);
+            process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen, packets,
+                            packet_index);
     }
 }
 
@@ -422,4 +447,12 @@ void h2o_hq_send(h2o_hq_conn_t *conn)
     } while (ret == 0 && num_packets != 0);
 
     assert(ret == 0);
+
+    h2o_hq_schedule_timer(conn);
+}
+
+void h2o_hq_schedule_timer(h2o_hq_conn_t *conn)
+{
+    int64_t timeout = quicly_get_first_timeout(conn->quic);
+    h2o_timer_link(conn->ctx->loop, timeout, &conn->_timeout);
 }

@@ -682,6 +682,14 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     return 0;
 }
 
+static int normalize_error_code(int err)
+{
+    /* convert H2 errors (except invaild_header_char) to QPACK error code */
+    if (err < 0 && err != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+        err = H2O_HQ_ERROR_QPACK_DECOMPRESSION;
+    return err;
+}
+
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests, uint8_t *outbuf,
@@ -695,7 +703,7 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
         return ret;
     if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, headers,
                                        pseudo_header_exists_map, content_length, digests, src, src_end - src, err_desc)) != 0)
-        return ret < 0 ? H2O_HQ_ERROR_QPACK_DECOMPRESSION : ret; /* h2 errors are negative */
+        return normalize_error_code(ret);
 
     *outbufsize = send_header_ack(qpack, &ctx, outbuf, stream_id);
     return 0;
@@ -713,7 +721,7 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
         return ret;
     if ((ret = h2o_hpack_parse_response(pool, decode_header, &ctx, status, headers, content_length, src, src_end - src,
                                         err_desc)) != 0)
-        return ret < 0 ? H2O_HQ_ERROR_QPACK_DECOMPRESSION : ret; /* h2 errors are negative */
+        return normalize_error_code(ret);
 
     *outbufsize = send_header_ack(qpack, &ctx, outbuf, stream_id);
     return 0;
@@ -878,6 +886,54 @@ void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
     }
     flatten_token_header(qpack, pool, buf, H2O_TOKEN_AUTHORITY, authority);
     flatten_token_header(qpack, pool, buf, H2O_TOKEN_PATH, path);
+
+    /* flatten headers */
+    size_t i;
+    for (i = 0; i != num_headers; ++i)
+        flatten_header(qpack, pool, buf, headers + i);
+}
+
+void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int status,
+                                const h2o_header_t *headers, size_t num_headers, const h2o_iovec_t *server_name,
+                                size_t content_length)
+{
+    h2o_vector_reserve(pool, buf, buf->size + 3);
+
+    /* largest_ref and base_index */
+    buf->entries[buf->size++] = 0;
+    buf->entries[buf->size++] = 0;
+
+    /* pseudo headers */
+    switch (status) {
+#define SHORT_STATUS(st, cp)                                                                                                       \
+    case st:                                                                                                                       \
+        buf->entries[buf->size++] = cp;                                                                                            \
+        break
+        SHORT_STATUS(200, 8);
+        SHORT_STATUS(204, 9);
+        SHORT_STATUS(206, 10);
+        SHORT_STATUS(304, 11);
+        SHORT_STATUS(400, 12);
+        SHORT_STATUS(404, 13);
+        SHORT_STATUS(500, 14);
+#undef SHORT_STATUS
+    default: {
+        char status_str[sizeof(H2O_UINT16_LONGEST_STR)];
+        sprintf(status_str, "%" PRIu16, (uint16_t)status);
+        flatten_token_header(qpack, pool, buf, H2O_TOKEN_STATUS, h2o_iovec_init(status_str, strlen(status_str)));
+    } break;
+    }
+
+    /* TODO keep some kind of reference to the indexed Server header, and reuse it */
+    if (server_name != NULL && server_name->len != 0)
+        flatten_token_header(qpack, pool, buf, H2O_TOKEN_SERVER, *server_name);
+
+    /* content-length */
+    if (content_length != SIZE_MAX) {
+        char cl_str[sizeof(H2O_UINT64_LONGEST_STR)];
+        sprintf(cl_str, "%" PRIu64, (uint64_t)content_length);
+        flatten_token_header(qpack, pool, buf, H2O_TOKEN_CONTENT_LENGTH, h2o_iovec_init(cl_str, strlen(cl_str)));
+    }
 
     /* flatten headers */
     size_t i;

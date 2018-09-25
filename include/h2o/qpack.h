@@ -59,5 +59,8 @@ int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **s
 void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, h2o_iovec_t method,
                                const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers,
                                size_t num_headers);
+void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int status,
+                                const h2o_header_t *headers, size_t num_headers, const h2o_iovec_t *server_name,
+                                size_t content_length);
 
 #endif

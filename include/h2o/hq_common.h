@@ -23,6 +23,7 @@
 #define h2o__hq_common_h
 
 #include <string.h>
+#include <sys/socket.h>
 #include "quicly.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
@@ -75,17 +76,22 @@
 typedef struct st_h2o_hq_conn_t h2o_hq_conn_t;
 typedef struct st_h2o_hq_ctx_t h2o_hq_ctx_t;
 
-typedef void (*h2o_hq_accept_cb)(h2o_hq_ctx_t *ctx, quicly_decoded_packet_t *packets, size_t num_packets);
+typedef h2o_hq_conn_t *(*h2o_hq_accept_cb)(h2o_hq_ctx_t *ctx, struct sockaddr *sa, socklen_t salen,
+                                           quicly_decoded_packet_t *packets, size_t num_packets);
 
 struct st_h2o_hq_ctx_t {
     /**
-     * quic context
+     * the event loop
      */
-    quicly_context_t *quic;
+    h2o_loop_t *loop;
     /**
      * underlying unbound socket
      */
     h2o_socket_t *sock;
+    /**
+     * quic context
+     */
+    quicly_context_t *quic;
     /**
      * list of connections (FIXME use hash or something)
      */
@@ -98,10 +104,6 @@ struct st_h2o_hq_ctx_t {
 
 typedef struct st_h2o_hq_conn_callback_t {
     /**
-     * processes incoming packets (FIXME does this need to be a callback?)
-     */
-    void (*handle_input)(h2o_hq_conn_t *conn, quicly_decoded_packet_t *packets, size_t num_packets);
-    /**
      * handles a control stream frame and returns a QUIC error code
      */
     int (*handle_control_stream_frame)(h2o_hq_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
@@ -111,7 +113,7 @@ struct st_h2o_hq_conn_t {
     h2o_hq_ctx_t *ctx;
     const h2o_hq_conn_callbacks_t *callbacks;
     h2o_linklist_t conns_link; /* linklist between connections, anchor is h2o_hq_ctx_t::conns */
-    h2o_timer_t _timeout;
+    h2o_timer_t _timeout;      /* the "transport" timer */
     quicly_conn_t *quic;
     struct {
         h2o_qpack_encoder_t *enc;
@@ -155,12 +157,21 @@ struct st_h2o_hq_conn_t {
         _buf->entries[_payload_off - 1] = (_type);                                                                                 \
     } while (0)
 
+#define h2o_hq_call_and_assert(expr)                                                                                               \
+    do {                                                                                                                           \
+        int _ret = (expr);                                                                                                         \
+        if (_ret != 0)                                                                                                             \
+            h2o_fatal("quicly returned %s; no memory?");                                                                           \
+    } while (0)
+
 typedef struct st_h2o_hq_peek_frame_t {
     uint8_t type;
     uint8_t _header_size;
     const uint8_t *payload;
     uint64_t length;
 } h2o_hq_peek_frame_t;
+
+const ptls_iovec_t h2o_hq_alpn[1];
 
 /**
  * returns a frame header (if BODY frame) or an entire frame
@@ -173,7 +184,8 @@ void h2o_hq_shift_frame(quicly_recvbuf_t *recvbuf, h2o_hq_peek_frame_t *frame);
 /**
  * initializes the context
  */
-void h2o_hq_init_context(h2o_hq_ctx_t *ctx, quicly_context_t *quic, h2o_socket_t *sock, h2o_hq_accept_cb acceptor);
+void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
+                         h2o_hq_accept_cb acceptor);
 /**
  * initializes a hq connection
  */
@@ -199,8 +211,22 @@ int h2o_hq_handle_control_stream_frame(h2o_hq_conn_t *conn, uint8_t type, const 
  */
 void h2o_hq_send(h2o_hq_conn_t *conn);
 /**
- *
+ * Schedules the transport timer. Application must call this function when it writes data to the connection (TODO better way to
+ * handle this?). The function is automatically called when packets are sent or received.
  */
 void h2o_hq_schedule_timer(h2o_hq_conn_t *conn);
+/**
+ *
+ */
+static int h2o_hq_send_qpack_stream_cancel(h2o_hq_conn_t *conn, quicly_stream_id_t stream_id);
+
+/* inline definitions */
+
+inline int h2o_hq_send_qpack_stream_cancel(h2o_hq_conn_t *conn, quicly_stream_id_t stream_id)
+{
+    uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+    size_t len = h2o_qpack_decoder_send_stream_cancel(conn->qpack.dec, buf, stream_id);
+    return quicly_sendbuf_write(&conn->_control_streams.egress.qpack_decoder->sendbuf, buf, len, NULL);
+}
 
 #endif

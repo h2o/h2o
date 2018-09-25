@@ -62,6 +62,7 @@
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#include "h2o/hq_server.h"
 #include "h2o/serverutil.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
@@ -109,12 +110,14 @@ struct listener_config_t {
     socklen_t addrlen;
     h2o_hostconf_t **hosts;
     H2O_VECTOR(struct listener_ssl_config_t *) ssl;
-    int proxy_protocol;
+    unsigned proxy_protocol : 1;
+    unsigned is_quic : 1; /* otherwise a SOCK_STREAM (i.e., TCP or unix socket) */
 };
 
 struct listener_ctx_t {
     h2o_accept_ctx_t accept_ctx;
     h2o_socket_t *sock;
+    h2o_hq_server_ctx_t *hq;
 };
 
 typedef struct st_resolve_tag_node_cache_entry_t {
@@ -826,20 +829,22 @@ Error:
     return -1;
 }
 
-static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t addrlen)
+static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t addrlen, int is_quic)
 {
     size_t i;
 
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener = conf.listeners[i];
-        if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr) == 0)
+        if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr) == 0 &&
+            listener->is_quic == is_quic)
             return listener;
     }
 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
+                                              int is_quic)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -854,6 +859,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     listener->proxy_protocol = proxy_protocol;
+    listener->is_quic = is_quic;
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -945,8 +951,8 @@ ErrorExit:
     return -1;
 }
 
-static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                             int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
@@ -958,13 +964,6 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
             goto Error;
     }
-#ifdef TCP_DEFER_ACCEPT
-    { /* set TCP_DEFER_ACCEPT */
-        int flag = 1;
-        if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
-            goto Error;
-    }
-#endif
 #ifdef IPV6_V6ONLY
     /* set IPv6only */
     if (domain == AF_INET6) {
@@ -975,24 +974,35 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 #endif
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
-    if (listen(fd, H2O_SOMAXCONN) != 0)
-        goto Error;
 
-    /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
-    if (conf.tfo_queues > 0) {
+    /* TCP-specific actions */
+    if (protocol == IPPROTO_TCP) {
+#ifdef TCP_DEFER_ACCEPT
+        { /* set TCP_DEFER_ACCEPT */
+            int flag = 1;
+            if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
+                goto Error;
+        }
+#endif
+        /* listen */
+        if (listen(fd, H2O_SOMAXCONN) != 0)
+            goto Error;
+        /* set TCP_FASTOPEN; when tfo_queues is zero TFO is always disabled */
+        if (conf.tfo_queues > 0) {
 #ifdef TCP_FASTOPEN
-        int tfo_queues;
+            int tfo_queues;
 #ifdef __APPLE__
-        /* In OS X, the option value for TCP_FASTOPEN must be 1 if is's enabled */
-        tfo_queues = 1;
+            /* In OS X, the option value for TCP_FASTOPEN must be 1 if is's enabled */
+            tfo_queues = 1;
 #else
-        tfo_queues = conf.tfo_queues;
+            tfo_queues = conf.tfo_queues;
 #endif
-        if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&tfo_queues, sizeof(tfo_queues)) != 0)
-            fprintf(stderr, "[warning] failed to set TCP_FASTOPEN:%s\n", strerror(errno));
+            if (setsockopt(fd, IPPROTO_TCP, TCP_FASTOPEN, (const void *)&tfo_queues, sizeof(tfo_queues)) != 0)
+                fprintf(stderr, "[warning] failed to set TCP_FASTOPEN:%s\n", strerror(errno));
 #else
-        assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
+            assert(!"conf.tfo_queues not zero on platform without TCP_FASTOPEN");
 #endif
+        }
     }
 
     return fd;
@@ -1000,9 +1010,31 @@ static int open_tcp_listener(h2o_configurator_command_t *cmd, yoml_t *node, cons
 Error:
     if (fd != -1)
         close(fd);
-    h2o_configurator_errprintf(NULL, node, "failed to listen to port %s:%s: %s", hostname != NULL ? hostname : "ANY", servname,
-                               strerror(errno));
+    h2o_configurator_errprintf(NULL, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
+                               hostname != NULL ? hostname : "ANY", servname, strerror(errno));
     return -1;
+}
+
+static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t *node, int socktype, int protocol,
+                                        const char *hostname, const char *servname)
+{
+    struct addrinfo hints, *res;
+    int error;
+
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+
+    if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
+        h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: %s", gai_strerror(error));
+        return NULL;
+    } else if (res == NULL) {
+        h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: getaddrinfo returned an empty list");
+        return NULL;
+    }
+
+    return res;
 }
 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -1053,7 +1085,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         strcpy(sa.sun_path, servname);
         /* find existing listener or create a new one */
         listener_is_new = 0;
-        if ((listener = find_listener((void *)&sa, sizeof(sa))) == NULL) {
+        if ((listener = find_listener((void *)&sa, sizeof(sa), 0)) == NULL) {
             int fd = -1;
             switch (conf.run_mode) {
             case RUN_MODE_WORKER:
@@ -1070,7 +1102,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, 0);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1083,23 +1115,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     } else if (strcmp(type, "tcp") == 0) {
 
         /* TCP socket */
-        struct addrinfo hints, *res, *ai;
-        int error;
-        /* call getaddrinfo */
-        memset(&hints, 0, sizeof(hints));
-        hints.ai_socktype = SOCK_STREAM;
-        hints.ai_protocol = IPPROTO_TCP;
-        hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
-        if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
-            h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: %s", gai_strerror(error));
+        struct addrinfo *res, *ai;
+        if ((res = resolve_address(cmd, node, SOCK_STREAM, IPPROTO_TCP, hostname, servname)) == NULL)
             return -1;
-        } else if (res == NULL) {
-            h2o_configurator_errprintf(cmd, node, "failed to resolve the listening address: getaddrinfo returned an empty list");
-            return -1;
-        }
-        /* listen to the returned addresses */
         for (ai = res; ai != NULL; ai = ai->ai_next) {
-            struct listener_config_t *listener = find_listener(ai->ai_addr, ai->ai_addrlen);
+            struct listener_config_t *listener = find_listener(ai->ai_addr, ai->ai_addrlen, 0);
             int listener_is_new = 0;
             if (listener == NULL) {
                 int fd = -1;
@@ -1113,8 +1133,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else {
-                        if ((fd = open_tcp_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                    ai->ai_addr, ai->ai_addrlen)) == -1) {
+                        if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
+                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1123,7 +1143,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, 0);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
@@ -1136,7 +1156,44 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
         }
-        /* release res */
+        freeaddrinfo(res);
+
+    } else if (strcmp(type, "quic") == 0) {
+
+        /* QUIC socket; FIXME add support for graceful restart (using server-starter?) and multi-threading */
+        if (ssl_node == NULL) {
+            h2o_configurator_errprintf(cmd, node, "QUIC endpoint must be accompanied by a SSL configuration");
+            return -1;
+        }
+        struct addrinfo *res, *ai;
+        if ((res = resolve_address(cmd, node, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
+            return -1;
+        for (ai = res; ai != NULL; ai = ai->ai_next) {
+            struct listener_config_t *listener = find_listener(ai->ai_addr, ai->ai_addrlen, 1);
+            int listener_is_new = 0;
+            if (listener == NULL) {
+                int fd = -1;
+                switch (conf.run_mode) {
+                case RUN_MODE_WORKER:
+                    if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
+                                                 ai->ai_addr, ai->ai_addrlen)) == -1) {
+                        freeaddrinfo(res);
+                        return -1;
+                    }
+                    break;
+                default:
+                    break;
+                }
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 1);
+                listener_is_new = 1;
+            }
+            if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
+                freeaddrinfo(res);
+                return -1;
+            }
+            if (listener->hosts != NULL && ctx->hostconf != NULL)
+                h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
+        }
         freeaddrinfo(res);
 
     } else {
@@ -1585,12 +1642,12 @@ static void update_listener_state(struct listener_ctx_t *listeners)
 
     if (num_connections(0) < conf.max_connections) {
         for (i = 0; i != conf.num_listeners; ++i) {
-            if (!h2o_socket_is_reading(listeners[i].sock))
+            if (listeners[i].hq == NULL && !h2o_socket_is_reading(listeners[i].sock))
                 h2o_socket_read_start(listeners[i].sock, on_accept);
         }
     } else {
         for (i = 0; i != conf.num_listeners; ++i) {
-            if (h2o_socket_is_reading(listeners[i].sock))
+            if (listeners[i].hq == NULL && h2o_socket_is_reading(listeners[i].sock))
                 h2o_socket_read_stop(listeners[i].sock);
         }
     }
@@ -1605,6 +1662,25 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
         h2o_linklist_unlink(&message->link);
         free(message);
     }
+}
+
+static void setup_hq_context(struct listener_ctx_t *listener, h2o_loop_t *loop, h2o_hq_server_ctx_t *hq, quicly_context_t *quic)
+{
+    ptls_context_t *tls_src = h2o_socket_ssl_get_picotls_context(listener->accept_ctx.ssl_ctx);
+
+    assert(tls_src != NULL);
+
+    *quic = quicly_default_context;
+    quic->tls = *tls_src;
+    quic->tls.hkdf_label_prefix = quicly_default_context.tls.hkdf_label_prefix;
+    quic->tls.send_change_cipher_spec = 0;
+    quic->tls.update_traffic_key = quicly_default_context.tls.update_traffic_key;
+    quic->tls.max_early_data_size = UINT32_MAX;
+
+    h2o_hq_init_context(&hq->super, loop, listener->sock, quic, h2o_hq_server_accept);
+    hq->accept_ctx = &listener->accept_ctx;
+
+    listener->hq = hq;
 }
 
 H2O_NORETURN static void *run_loop(void *_thread_index)
@@ -1645,6 +1721,12 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
+        if (listener_config->is_quic) {
+            setup_hq_context(listeners + i, conf.threads[thread_index].ctx.loop, alloca(sizeof(h2o_hq_server_ctx_t)),
+                             alloca(sizeof(quicly_context_t)));
+        } else {
+            listeners[i].hq = NULL;
+        }
     }
     /* and start listening */
     update_listener_state(listeners);
