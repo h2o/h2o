@@ -46,6 +46,10 @@ struct st_quicly_sendbuf_t {
      */
     uint64_t eos;
     /**
+     * the reason peer requested stop (or ERROR_FIN_CLOSED)
+     */
+    uint16_t stop_reason;
+    /**
      * callback
      */
     quicly_sendbuf_change_cb on_change;

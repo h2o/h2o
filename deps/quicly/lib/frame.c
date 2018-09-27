@@ -94,5 +94,5 @@ int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_
 
     return 0;
 Error:
-    return QUICLY_ERROR_FRAME_ERROR(QUICLY_FRAME_TYPE_ACK);
+    return QUICLY_ERROR_FRAME_ENCODING;
 }

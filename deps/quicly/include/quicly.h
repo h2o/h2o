@@ -143,16 +143,21 @@ typedef quicly_stream_t *(*quicly_alloc_stream_cb)(quicly_context_t *ctx);
 typedef void (*quicly_free_stream_cb)(quicly_stream_t *stream);
 typedef int (*quicly_stream_open_cb)(quicly_stream_t *stream);
 typedef int (*quicly_stream_update_cb)(quicly_stream_t *stream);
-typedef void (*quicly_conn_close_cb)(quicly_conn_t *conn, uint8_t type, uint16_t code, const char *reason, size_t reason_len);
+typedef void (*quicly_conn_close_cb)(quicly_conn_t *conn, uint16_t code, const uint64_t *frame_type, const char *reason,
+                                     size_t reason_len);
 typedef int64_t (*quicly_now_cb)(quicly_context_t *ctx);
 typedef void (*quicly_event_log_cb)(quicly_context_t *ctx, quicly_event_type_t type, const quicly_event_attribute_t *attributes,
                                     size_t num_attributes);
+
+typedef struct st_quicly_initial_max_stream_data_t {
+    uint32_t bidi_local, bidi_remote, uni;
+} quicly_initial_max_stream_data_t;
 
 typedef struct st_quicly_transport_parameters_t {
     /**
      * in octets
      */
-    uint32_t initial_max_stream_data;
+    quicly_initial_max_stream_data_t initial_max_stream_data;
     /**
      * in octets
      */
@@ -200,7 +205,7 @@ struct st_quicly_context_t {
     /**
      * transport parameters
      */
-    uint32_t initial_max_stream_data;
+    quicly_initial_max_stream_data_t initial_max_stream_data;
     /**
      *
      */
@@ -375,14 +380,14 @@ struct st_quicly_stream_t {
          */
         struct {
             quicly_sender_state_t sender_state;
-            uint32_t reason;
+            uint16_t error_code;
         } stop_sending;
         /**
          * rst_stream
          */
         struct {
             quicly_sender_state_t sender_state;
-            uint32_t reason;
+            uint16_t error_code;
         } rst;
         /**
          * sends receive window updates to peer
@@ -404,10 +409,6 @@ struct st_quicly_stream_t {
          * size of the receive window
          */
         uint32_t window;
-        /**
-         *
-         */
-        uint16_t rst_reason;
     } _recv_aux;
 };
 
@@ -421,10 +422,6 @@ typedef struct st_quicly_decoded_packet_t {
     size_t encrypted_off;
     size_t datagram_size;
 } quicly_decoded_packet_t;
-
-#define QUICLY_RESET_STREAM_EGRESS 1
-#define QUICLY_RESET_STREAM_INGRESS 2
-#define QUICLY_RESET_STREAM_BOTH_DIRECTIONS (QUICLY_RESET_STREAM_INGRESS | QUICLY_RESET_STREAM_EGRESS)
 
 extern const quicly_context_t quicly_default_context;
 extern FILE *quicly_default_event_log_fp;
@@ -548,7 +545,11 @@ static int quicly_stream_is_closable(quicly_stream_t *stream);
 /**
  *
  */
-void quicly_reset_stream(quicly_stream_t *stream, unsigned direction, uint32_t reason);
+void quicly_reset_stream(quicly_stream_t *stream, uint16_t error_code);
+/**
+ *
+ */
+void quicly_request_stop(quicly_stream_t *stream, uint16_t error_code);
 /**
  *
  */

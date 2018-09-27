@@ -170,7 +170,7 @@ static int on_resp_receive(quicly_stream_t *stream)
         quicly_recvbuf_shift(&stream->recvbuf, input.len);
     }
 
-    if (quicly_recvbuf_is_shutdown(&stream->recvbuf)) {
+    if (quicly_recvbuf_is_shutdown(&stream->recvbuf, NULL)) {
         static size_t num_resp_received;
         ++num_resp_received;
         if (req_paths[num_resp_received] == NULL) {
@@ -192,10 +192,10 @@ static int on_stream_open(quicly_stream_t *stream)
     return 0;
 }
 
-static void on_conn_close(quicly_conn_t *conn, uint8_t type, uint16_t code, const char *reason, size_t reason_len)
+static void on_conn_close(quicly_conn_t *conn, uint16_t code, const uint64_t *frame_type, const char *reason, size_t reason_len)
 {
-    fprintf(stderr, "%s close:%" PRIx16 ":%.*s\n", type == QUICLY_FRAME_TYPE_CONNECTION_CLOSE ? "connection" : "application", code,
-            (int)reason_len, reason);
+    fprintf(stderr, "%s close:%" PRIx16 ":%.*s\n", frame_type != NULL ? "connection" : "application", code, (int)reason_len,
+            reason);
 }
 
 static int send_one(int fd, quicly_datagram_t *p)

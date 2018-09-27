@@ -35,6 +35,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define MAXDROPS 64
+
 struct connection_t {
     struct connection_t *prev, *next;
     size_t cid;
@@ -43,6 +45,8 @@ struct connection_t {
         struct sockaddr_storage ss;
         socklen_t len;
     } down_addr;
+    uint64_t packet_num_up;
+    uint64_t packet_num_down;
 };
 
 struct queue_t {
@@ -56,10 +60,13 @@ struct queue_t {
             size_t len;
         } * elements;
     } ring;
+    int64_t delay_usec; /* TODO: add propagation delay */
     int64_t interval_usec;
     int64_t congested_until; /* in usec */
     uint64_t num_forwarded;
     uint64_t num_dropped;
+    uint16_t drops[MAXDROPS];
+    uint16_t num_drops;
 } up = {{16}, 10}, down = {{16}, 10};
 
 static int listen_fd = -1;
@@ -71,14 +78,16 @@ static void usage(const char *cmd, int exit_status)
     printf("Usage: %s [options] <upstream-host> <upstream-port>\n"
            "\n"
            "Options:\n"
-           "  -d <depth>     depth of the buffer for packets upstream (default: 16)\n"
-           "  -D <depth>     depth of the buffer for packets downstream (default: 16)\n"
-           "  -i <interval>  delay (in microseconds) to insert after sending one packet\n"
-           "                 upstream (default: 10)\n"
-           "  -I <interval>  delay (in microseconds) to insert after sending one packet\n"
-           "                 downstream (default: 10)\n"
-           "  -l <port>      port number to which the command binds\n"
-           "  -h             prints this help\n"
+           "  -b <buffersize> size of the buffer for packets upstream (default: 16)\n"
+           "  -B <buffersize> size of the buffer for packets downstream (default: 16)\n"
+           "  -i <interval>   delay (in microseconds) to insert after sending one packet\n"
+           "                  upstream (default: 10)\n"
+           "  -I <interval>   delay (in microseconds) to insert after sending one packet\n"
+           "                  downstream (default: 10)\n"
+           "  -l <port>       port number to which the command binds\n"
+           "  -d <packetnum>  packet number in connection to drop upstream\n"
+           "  -D <packetnum>  packet number in connection to drop downstream\n"
+           "  -h              prints this help\n"
            "\n",
            cmd);
     exit(exit_status);
@@ -142,6 +151,8 @@ static struct connection_t *find_or_create_connection(struct sockaddr *sa, sockl
     c->next = &connections;
     connections.prev = c;
     c->prev->next = c;
+    c->packet_num_up = 0;
+    c->packet_num_down = 0;
     return c;
 }
 
@@ -177,16 +188,36 @@ static int read_queue(struct queue_t *q, struct connection_t *conn, int64_t now)
     ssize_t readlen;
     struct sockaddr_storage ss;
     socklen_t sslen = sizeof(ss);
+    int downstream = (conn != NULL);
 
-    if ((readlen = recvfrom(conn != NULL ? conn->up_fd : listen_fd, q->ring.elements[q->ring.tail].data,
-                            sizeof(q->ring.elements[q->ring.tail].data), 0, conn != NULL ? NULL : (void *)&ss,
-                            conn != NULL ? NULL : &sslen)) <= 0)
+    if ((readlen = recvfrom(downstream ? conn->up_fd : listen_fd, q->ring.elements[q->ring.tail].data,
+                            sizeof(q->ring.elements[q->ring.tail].data), 0, downstream ? NULL : (void *)&ss,
+                            downstream ? NULL : &sslen)) <= 0)
         return 0;
 
+    if (!downstream) {
+        conn = find_or_create_connection((void *)&ss, sslen);
+    }
+
+    assert(conn != NULL);
+    uint64_t packet_num = downstream ? ++(conn->packet_num_down) : ++(conn->packet_num_up);
+    /* check if packet should be dropped */
+    if (q->num_drops > 0 && packet_num >= q->drops[0] && packet_num <= q->drops[q->num_drops - 1]) {
+        int i = 0;
+        while (i < q->num_drops) {
+            if (packet_num == q->drops[i]) {
+                fprintf(stderr, "%" PRId64 ":%zu:%c:droplist\n", now, conn->cid, downstream ? 'd' : 'u');
+                return 1;
+            }
+            i++;
+        }
+    }
+
     q->ring.elements[q->ring.tail].len = readlen;
-    q->ring.elements[q->ring.tail].conn = conn != NULL ? conn : find_or_create_connection((void *)&ss, sslen);
+    q->ring.elements[q->ring.tail].conn = conn;
     size_t next_tail = (q->ring.tail + 1) % q->ring.depth;
-    fprintf(stderr, "%" PRId64 ":%zu:%c:", now, q->ring.elements[q->ring.tail].conn->cid, conn != NULL ? 'd' : 'u');
+    fprintf(stderr, "%" PRId64 ":%zu:%c:", now, q->ring.elements[q->ring.tail].conn->cid, downstream ? 'd' : 'u');
+
     if (next_tail != q->ring.head) {
         q->ring.tail = next_tail;
         ++q->num_forwarded;
@@ -219,15 +250,15 @@ int main(int argc, char **argv)
     signal(SIGINT, on_signal);
     signal(SIGHUP, on_signal);
 
-    while ((ch = getopt(argc, argv, "d:D:i:I:l:h")) != -1) {
+    while ((ch = getopt(argc, argv, "b:B:i:I:l:d:D:h")) != -1) {
         switch (ch) {
-        case 'd': /* depth of the upstream buffer */
+        case 'b': /* size of the upstream buffer */
             if (sscanf(optarg, "%zu", &up.ring.depth) != 1 || up.ring.depth == 0) {
-                fprintf(stderr, "argument to `-d` must be a positive number\n");
+                fprintf(stderr, "argument to `-b` must be a positive number\n");
                 exit(1);
             }
             break;
-        case 'D': /* depth of the upstream buffer */
+        case 'B': /* size of the downstream buffer */
             if (sscanf(optarg, "%zu", &down.ring.depth) != 1 || down.ring.depth == 0) {
                 fprintf(stderr, "argument to `-D` must be a positive number\n");
                 exit(1);
@@ -261,6 +292,26 @@ int main(int argc, char **argv)
                 exit(1);
             }
         } break;
+        case 'd': { /* packet to drop upstream*/
+            uint16_t pnum;
+            if (up.num_drops >= MAXDROPS)
+                break;
+            if (sscanf(optarg, "%" SCNu16, &pnum) != 1) {
+                fprintf(stderr, "argument to `-d` must be an unsigned number\n");
+                exit(1);
+            }
+            up.drops[up.num_drops++] = pnum;
+        } break;
+        case 'D': { /* packet to drop downstream */
+            uint16_t pnum;
+            if (down.num_drops >= MAXDROPS)
+                break;
+            if (sscanf(optarg, "%" SCNu16, &pnum) != 1) {
+                fprintf(stderr, "argument to `-D` must be an unsigned number\n");
+                exit(1);
+            }
+            down.drops[down.num_drops++] = pnum;
+        } break;
         case 'h':
             usage(argv[0], 0);
             break;
@@ -292,6 +343,7 @@ int main(int argc, char **argv)
             exit(1);
         }
     }
+
     init_queue(&up);
     init_queue(&down);
 

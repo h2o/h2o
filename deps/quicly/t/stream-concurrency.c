@@ -69,7 +69,8 @@ void test_stream_concurrency(void)
     /* reset one stream in both directions and close on the client-side */
     server_stream = quicly_get_stream(server, client_streams[i - 1]->stream_id);
     ok(server_stream != NULL);
-    quicly_reset_stream(client_streams[i - 1], QUICLY_RESET_STREAM_BOTH_DIRECTIONS, 0);
+    quicly_reset_stream(client_streams[i - 1], 0);
+    quicly_request_stop(client_streams[i - 1], 0);
     transmit(client, server);
     transmit(server, client);
     ok(quicly_stream_is_closable(client_streams[i - 1]));

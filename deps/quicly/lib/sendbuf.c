@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "picotls.h"
+#include "quicly/constants.h"
 #include "quicly/sendbuf.h"
 
 void quicly_sendbuf_init(quicly_sendbuf_t *buf, quicly_sendbuf_change_cb on_change)
@@ -31,6 +32,7 @@ void quicly_sendbuf_init(quicly_sendbuf_t *buf, quicly_sendbuf_change_cb on_chan
     quicly_ranges_init(&buf->pending);
     quicly_buffer_init(&buf->data);
     buf->eos = UINT64_MAX;
+    buf->stop_reason = QUICLY_ERROR_FIN_CLOSED;
     buf->on_change = on_change;
 }
 
