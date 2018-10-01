@@ -51,8 +51,12 @@
 #define QUICLY_ERROR_CONNECTION_CLOSED 0xff04
 #define QUICLY_ERROR_TOO_MANY_OPEN_STREAMS 0xff05
 
-/* application error codes */
-#define QUICLY_APPLICATION_ERROR_STOPPING 0
+/* application error codes returned by  */
+#define QUICLY_STREAM_ERROR_IS_OPEN -1
+#define QUICLY_STREAM_ERROR_FIN_CLOSED -2
+#define QUICLY_STREAM_ERROR_STOPPED 0
+
+typedef int32_t quicly_stream_error_t;
 
 #define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 

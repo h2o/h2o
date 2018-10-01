@@ -46,9 +46,9 @@ struct st_quicly_sendbuf_t {
      */
     uint64_t eos;
     /**
-     * the reason peer requested stop (or ERROR_FIN_CLOSED)
+     * the reason peer requested stop (or open, or fin-closed)
      */
-    uint16_t stop_reason;
+    quicly_stream_error_t error_code;
     /**
      * callback
      */
@@ -67,6 +67,7 @@ typedef struct st_quicly_sendbuf_dataiter_t {
 
 void quicly_sendbuf_init(quicly_sendbuf_t *buf, quicly_sendbuf_change_cb on_change);
 void quicly_sendbuf_dispose(quicly_sendbuf_t *buf);
+static quicly_stream_error_t quicly_sendbuf_get_error(quicly_sendbuf_t *buf);
 static int quicly_sendbuf_transfer_complete(quicly_sendbuf_t *buf);
 int quicly_sendbuf_write(quicly_sendbuf_t *buf, const void *p, size_t len, quicly_buffer_free_cb free_cb);
 int quicly_sendbuf_shutdown(quicly_sendbuf_t *buf);
@@ -78,6 +79,11 @@ static void quicly_sendbuf_init_dataiter(quicly_sendbuf_t *buf, quicly_sendbuf_d
 static void quicly_sendbuf_advance_dataiter(quicly_sendbuf_dataiter_t *iter, size_t nbytes);
 
 /* inline definitions */
+
+inline quicly_stream_error_t quicly_sendbuf_get_error(quicly_sendbuf_t *buf)
+{
+    return buf->error_code;
+}
 
 inline int quicly_sendbuf_transfer_complete(quicly_sendbuf_t *buf)
 {

@@ -981,7 +981,7 @@ static int do_apply_stream_frame(quicly_stream_t *stream, uint64_t off, ptls_iov
 
     /* try the fast (copyless) path */
     if (stream->recvbuf.data_off == off && stream->recvbuf.data.len == 0) {
-        struct st_quicly_buffer_vec_t vec = {NULL};
+        quicly_buffer_vec_t vec = {NULL};
         assert(stream->recvbuf.received.num_ranges == 1);
         assert(stream->recvbuf.received.ranges[0].end == stream->recvbuf.data_off);
 
@@ -2864,9 +2864,9 @@ static int handle_stop_sending_frame(quicly_conn_t *conn, quicly_stop_sending_fr
     if ((ret = get_stream_or_open_if_new(conn, frame->stream_id, &stream)) != 0 || stream == NULL)
         return ret;
 
-    if (stream->sendbuf.stop_reason == QUICLY_ERROR_FIN_CLOSED)
-        stream->sendbuf.stop_reason = frame->app_error_code;
-    quicly_reset_stream(stream, QUICLY_APPLICATION_ERROR_STOPPING);
+    if (stream->sendbuf.error_code == QUICLY_STREAM_ERROR_IS_OPEN)
+        stream->sendbuf.error_code = frame->app_error_code;
+    quicly_reset_stream(stream, 0 /* STOPPING */);
     return 0;
 }
 
@@ -3255,6 +3255,7 @@ void quicly_request_stop(quicly_stream_t *stream, uint16_t error_code)
 
     /* send STOP_SENDING if the incoming side of the stream is still open */
     if (stream->recvbuf.eos == UINT64_MAX && stream->_send_aux.stop_sending.sender_state == QUICLY_SENDER_STATE_NONE) {
+        stream->recvbuf._error_code = QUICLY_STREAM_ERROR_STOPPED;
         stream->_send_aux.stop_sending.sender_state = QUICLY_SENDER_STATE_SEND;
         stream->_send_aux.stop_sending.error_code = error_code;
         sched_stream_control(stream);

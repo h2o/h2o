@@ -32,7 +32,7 @@ void quicly_sendbuf_init(quicly_sendbuf_t *buf, quicly_sendbuf_change_cb on_chan
     quicly_ranges_init(&buf->pending);
     quicly_buffer_init(&buf->data);
     buf->eos = UINT64_MAX;
-    buf->stop_reason = QUICLY_ERROR_FIN_CLOSED;
+    buf->error_code = QUICLY_STREAM_ERROR_IS_OPEN;
     buf->on_change = on_change;
 }
 
@@ -70,6 +70,7 @@ int quicly_sendbuf_shutdown(quicly_sendbuf_t *buf)
     buf->eos = buf->acked.ranges[0].end + buf->data.len;
     if ((ret = quicly_ranges_add(&buf->pending, buf->eos, buf->eos + 1)) != 0)
         goto Exit;
+    buf->error_code = QUICLY_STREAM_ERROR_FIN_CLOSED;
 
     buf->on_change(buf);
 Exit:

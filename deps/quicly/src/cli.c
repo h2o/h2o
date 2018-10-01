@@ -170,7 +170,7 @@ static int on_resp_receive(quicly_stream_t *stream)
         quicly_recvbuf_shift(&stream->recvbuf, input.len);
     }
 
-    if (quicly_recvbuf_is_shutdown(&stream->recvbuf, NULL)) {
+    if (quicly_recvbuf_get_error(&stream->recvbuf) != QUICLY_STREAM_ERROR_IS_OPEN) {
         static size_t num_resp_received;
         ++num_resp_received;
         if (req_paths[num_resp_received] == NULL) {

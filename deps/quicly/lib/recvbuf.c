@@ -28,7 +28,7 @@ void quicly_recvbuf_init(quicly_recvbuf_t *buf, quicly_recvbuf_change_cb on_chan
     quicly_buffer_init(&buf->data);
     buf->data_off = 0;
     buf->eos = UINT64_MAX;
-    buf->error_code = QUICLY_ERROR_FIN_CLOSED;
+    buf->_error_code = QUICLY_STREAM_ERROR_FIN_CLOSED; /* see get_error; the value is not returned until all the data is read */
     buf->on_change = on_change;
 }
 
@@ -79,7 +79,10 @@ int quicly_recvbuf_reset(quicly_recvbuf_t *buf, uint16_t error_code, uint64_t eo
         goto Exit;
     quicly_buffer_init(&buf->data);
     buf->data_off = eos_at;
-    buf->error_code = error_code;
+
+    /* the code will be set to STOPPED if we have sent STOP_SENDING */
+    if (buf->_error_code != QUICLY_STREAM_ERROR_STOPPED)
+        buf->_error_code = error_code;
 
 Exit:
     return ret;

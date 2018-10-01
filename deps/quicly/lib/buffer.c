@@ -25,12 +25,12 @@
 #include "picotls.h"
 #include "quicly/buffer.h"
 
-#define INTERNAL_MIN_CAPACITY (2048 - offsetof(struct st_quicly_buffer_vec_t, _buf))
+#define INTERNAL_MIN_CAPACITY (2048 - offsetof(quicly_buffer_vec_t, _buf))
 #define INTERNAL_EXACT_CAPACITY_THRESHOLD (1024 * 1024)
 
-static struct st_quicly_buffer_vec_t *get_tail(quicly_buffer_t *buf)
+static quicly_buffer_vec_t *get_tail(quicly_buffer_t *buf)
 {
-    return (void *)((char *)buf->tail_ref - offsetof(struct st_quicly_buffer_vec_t, next));
+    return (void *)((char *)buf->tail_ref - offsetof(quicly_buffer_vec_t, next));
 }
 
 static size_t alloc_size(quicly_buffer_t *buf, size_t sz)
@@ -45,11 +45,11 @@ static size_t alloc_size(quicly_buffer_t *buf, size_t sz)
     return sz < optimal ? optimal : sz;
 }
 
-static struct st_quicly_buffer_vec_t *new_vec(quicly_buffer_t *buf, size_t internal_capacity)
+static quicly_buffer_vec_t *new_vec(quicly_buffer_t *buf, size_t internal_capacity)
 {
-    struct st_quicly_buffer_vec_t *vec;
+    quicly_buffer_vec_t *vec;
 
-    if ((vec = malloc(offsetof(struct st_quicly_buffer_vec_t, _buf) + internal_capacity)) == NULL)
+    if ((vec = malloc(offsetof(quicly_buffer_vec_t, _buf) + internal_capacity)) == NULL)
         return NULL;
 
     vec->next = NULL;
@@ -59,27 +59,27 @@ static struct st_quicly_buffer_vec_t *new_vec(quicly_buffer_t *buf, size_t inter
     return vec;
 }
 
-static void free_noop(struct st_quicly_buffer_vec_t *vec)
+static void free_noop(quicly_buffer_t *buf, quicly_buffer_vec_t *vec)
 {
 }
 
-static void free_internal(struct st_quicly_buffer_vec_t *vec)
+static void free_internal(quicly_buffer_t *buf, quicly_buffer_vec_t *vec)
 {
     free(vec);
 }
 
 void quicly_buffer_dispose(quicly_buffer_t *buf)
 {
-    struct st_quicly_buffer_vec_t *vec;
+    quicly_buffer_vec_t *vec;
 
     while ((vec = buf->first) != NULL) {
         buf->first = vec->next;
         vec->len = 0; /* fast path of apply_stream_frame relies on the field reset on disposal */
-        vec->free_cb(vec);
+        vec->free_cb(buf, vec);
     }
 }
 
-void quicly_buffer_set_fast_external(quicly_buffer_t *buf, struct st_quicly_buffer_vec_t *vec, const void *p, size_t len)
+void quicly_buffer_set_fast_external(quicly_buffer_t *buf, quicly_buffer_vec_t *vec, const void *p, size_t len)
 {
     assert(buf->first == NULL);
 
@@ -95,7 +95,7 @@ void quicly_buffer_set_fast_external(quicly_buffer_t *buf, struct st_quicly_buff
 
 static int push_external(quicly_buffer_t *buf, const void *p, size_t len, quicly_buffer_free_cb free_cb)
 {
-    struct st_quicly_buffer_vec_t *vec;
+    quicly_buffer_vec_t *vec;
 
     assert(len != 0);
 
@@ -112,7 +112,7 @@ static int push_external(quicly_buffer_t *buf, const void *p, size_t len, quicly
 
 static int push_internal(quicly_buffer_t *buf, const void *p, size_t len)
 {
-    struct st_quicly_buffer_vec_t *vec;
+    quicly_buffer_vec_t *vec;
 
     if (len == 0)
         return 0;
@@ -166,7 +166,7 @@ int quicly_buffer_write(quicly_buffer_t *buf, size_t pos, const void *p, size_t 
         size_t newlen = pos + len;
         /* adjust the size of the current tail */
         if (buf->capacity != 0) {
-            struct st_quicly_buffer_vec_t *tail = get_tail(buf);
+            quicly_buffer_vec_t *tail = get_tail(buf);
             size_t space_avail = buf->capacity - tail->len;
             if (newlen <= buf->len + space_avail) {
                 tail->len += pos + len - buf->len;
@@ -178,7 +178,7 @@ int quicly_buffer_write(quicly_buffer_t *buf, size_t pos, const void *p, size_t 
         }
         /* expand the buffer if necessary */
         if (buf->len < newlen) {
-            struct st_quicly_buffer_vec_t *vec;
+            quicly_buffer_vec_t *vec;
             size_t veclen = newlen - buf->len;
             if ((vec = new_vec(buf, alloc_size(buf, veclen))) == NULL)
                 return PTLS_ERROR_NO_MEMORY;
@@ -205,7 +205,7 @@ int quicly_buffer_write(quicly_buffer_t *buf, size_t pos, const void *p, size_t 
 
 size_t quicly_buffer_shift(quicly_buffer_t *buf, size_t delta)
 {
-    struct st_quicly_buffer_vec_t *vec;
+    quicly_buffer_vec_t *vec;
     size_t avail_in_vec;
 
     while ((vec = buf->first) != NULL) {
@@ -218,7 +218,7 @@ size_t quicly_buffer_shift(quicly_buffer_t *buf, size_t delta)
         delta -= avail_in_vec;
         buf->first = vec->next;
         buf->skip = 0;
-        vec->free_cb(vec);
+        vec->free_cb(buf, vec);
     }
     assert(buf->len == 0);
     buf->tail_ref = &buf->first;

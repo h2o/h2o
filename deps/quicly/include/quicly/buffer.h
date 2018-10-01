@@ -24,15 +24,16 @@
 
 #include <stddef.h>
 
-struct st_quicly_buffer_vec_t;
+typedef struct st_quicly_buffer_t quicly_buffer_t;
+typedef struct st_quicly_buffer_vec_t quicly_buffer_vec_t;
 
-typedef void (*quicly_buffer_free_cb)(struct st_quicly_buffer_vec_t *vec);
+typedef void (*quicly_buffer_free_cb)(quicly_buffer_t *buf, quicly_buffer_vec_t *vec);
 
 struct st_quicly_buffer_vec_t {
     /**
      * pointer to next
      */
-    struct st_quicly_buffer_vec_t *next;
+    quicly_buffer_vec_t *next;
     /**
      * pointer to data (points to _buf if the vector is internal)
      */
@@ -51,11 +52,11 @@ struct st_quicly_buffer_vec_t {
     uint8_t _buf[1];
 };
 
-typedef struct st_quicly_buffer_t {
+struct st_quicly_buffer_t {
     /**
      * references to the linked list of vec
      */
-    struct st_quicly_buffer_vec_t *first, **tail_ref;
+    quicly_buffer_vec_t *first, **tail_ref;
     /**
      * amount of data available
      */
@@ -68,16 +69,16 @@ typedef struct st_quicly_buffer_t {
      * capacity of the last vec
      */
     size_t capacity;
-} quicly_buffer_t;
+};
 
 typedef struct st_quicly_buffer_iter_t {
-    struct st_quicly_buffer_vec_t *vec;
+    quicly_buffer_vec_t *vec;
     size_t vec_off;
 } quicly_buffer_iter_t;
 
 static void quicly_buffer_init(quicly_buffer_t *buf);
 void quicly_buffer_dispose(quicly_buffer_t *buf);
-void quicly_buffer_set_fast_external(quicly_buffer_t *buf, struct st_quicly_buffer_vec_t *vec, const void *p, size_t len);
+void quicly_buffer_set_fast_external(quicly_buffer_t *buf, quicly_buffer_vec_t *vec, const void *p, size_t len);
 int quicly_buffer_push(quicly_buffer_t *buf, const void *p, size_t len, quicly_buffer_free_cb free_cb);
 int quicly_buffer_write(quicly_buffer_t *buf, size_t pos, const void *p, size_t len);
 size_t quicly_buffer_shift(quicly_buffer_t *buf, size_t delta);

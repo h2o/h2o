@@ -49,9 +49,9 @@ struct st_quicly_recvbuf_t {
      */
     uint64_t eos;
     /**
-     * error code of RST_STREAM frame that closed the stream (QUICLY_ERROR_FIN_CLOSED if closed by FIN)
+     * error code of RST_STREAM frame that closed the stream (or IS_OPEN, FIN_CLOSED, STOPPED)
      */
-    uint16_t error_code;
+    quicly_stream_error_t _error_code;
     /**
      * callback
      */
@@ -60,16 +60,23 @@ struct st_quicly_recvbuf_t {
 
 void quicly_recvbuf_init(quicly_recvbuf_t *buf, quicly_recvbuf_change_cb on_change);
 void quicly_recvbuf_dispose(quicly_recvbuf_t *buf);
+static quicly_stream_error_t quicly_recvbuf_get_error(quicly_recvbuf_t *buf);
 static int quicly_recvbuf_transfer_complete(quicly_recvbuf_t *buf);
 static size_t quicly_recvbuf_available(quicly_recvbuf_t *buf);
 static ptls_iovec_t quicly_recvbuf_get(quicly_recvbuf_t *buf);
-static int quicly_recvbuf_is_shutdown(quicly_recvbuf_t *buf, uint16_t *rst_reason);
 static void quicly_recvbuf_shift(quicly_recvbuf_t *buf, size_t delta);
 int quicly_recvbuf_mark_eos(quicly_recvbuf_t *buf, uint64_t eos_at);
 int quicly_recvbuf_reset(quicly_recvbuf_t *buf, uint16_t error_code, uint64_t eos_at, uint64_t *bytes_missing);
 int quicly_recvbuf_write(quicly_recvbuf_t *buf, uint64_t offset, const void *p, size_t len);
 
 /* inline definitions */
+
+inline quicly_stream_error_t quicly_recvbuf_get_error(quicly_recvbuf_t *buf)
+{
+    if (buf->data_off != buf->eos)
+        return QUICLY_STREAM_ERROR_IS_OPEN;
+    return buf->_error_code;
+}
 
 inline int quicly_recvbuf_transfer_complete(quicly_recvbuf_t *buf)
 {
@@ -90,13 +97,6 @@ inline ptls_iovec_t quicly_recvbuf_get(quicly_recvbuf_t *buf)
     if (ret.len > avail)
         ret.len = avail;
     return ret;
-}
-
-inline int quicly_recvbuf_is_shutdown(quicly_recvbuf_t *buf, uint16_t *rst_reason)
-{
-    if (rst_reason != NULL)
-        *rst_reason = buf->error_code;
-    return buf->data_off == buf->eos;
 }
 
 inline void quicly_recvbuf_shift(quicly_recvbuf_t *buf, size_t delta)
