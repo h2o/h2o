@@ -239,12 +239,12 @@ static int on_update_expect_data_payload(quicly_stream_t *_stream)
 {
     struct st_h2o_hqclient_req_t *req = _stream->data;
     ptls_iovec_t input;
-    uint16_t app_error_code;
+    quicly_stream_error_t stream_error;
 
     assert(req->bytes_left != 0);
 
-    if (quicly_recvbuf_is_shutdown(&req->stream->recvbuf, &app_error_code)) {
-        if (app_error_code == QUICLY_ERROR_FIN_CLOSED)
+    if ((stream_error = quicly_recvbuf_get_error(&req->stream->recvbuf)) != QUICLY_STREAM_ERROR_IS_OPEN) {
+        if (stream_error == QUICLY_ERROR_FIN_CLOSED)
             return on_error_in_body(req, "unexpected EOS", H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_DATA));
         return on_error_in_body(req, "stream reset", H2O_HQ_ERROR_STOPPING);
     }
@@ -271,13 +271,13 @@ int on_update_expect_data_frame(quicly_stream_t *_stream)
 {
     struct st_h2o_hqclient_req_t *req = _stream->data;
     h2o_hq_peek_frame_t frame;
-    uint16_t app_error_code;
+    quicly_stream_error_t stream_error;
     int ret;
 
     /* handle close */
-    if (quicly_recvbuf_is_shutdown(&req->stream->recvbuf, &app_error_code)) {
+    if ((stream_error = quicly_recvbuf_get_error(&req->stream->recvbuf)) != QUICLY_STREAM_ERROR_IS_OPEN) {
         /* FIXME do we need to check content-length? */
-        if (app_error_code == QUICLY_ERROR_FIN_CLOSED)
+        if (stream_error == QUICLY_ERROR_FIN_CLOSED)
             return on_error_in_body(req, h2o_httpclient_error_is_eos, H2O_HQ_ERROR_NO_ERROR);
         return on_error_in_body(req, "stream reset", H2O_HQ_ERROR_STOPPING);
     }
@@ -316,7 +316,7 @@ static int on_update_expect_header(quicly_stream_t *_stream)
     int ret;
 
     /* error handling */
-    if (quicly_recvbuf_is_shutdown(&req->stream->recvbuf, NULL))
+    if (quicly_recvbuf_get_error(&req->stream->recvbuf) != QUICLY_STREAM_ERROR_IS_OPEN)
         return on_error_before_head(req, "unexpected close", H2O_HQ_ERROR_GENERAL_PROTOCOL);
 
     /* read HEADERS frame */
@@ -340,7 +340,7 @@ static int on_update_expect_header(quicly_stream_t *_stream)
 
     /* handle 1xx */
     if (100 <= status && status <= 199) {
-        if (quicly_recvbuf_is_shutdown(&req->stream->recvbuf, NULL))
+        if (quicly_recvbuf_get_error(&req->stream->recvbuf) != QUICLY_STREAM_ERROR_IS_OPEN)
             return on_error_before_head(req, "unexpected close", H2O_HQ_ERROR_GENERAL_PROTOCOL);
         if (status == 101)
             return on_error_before_head(req, "unexpected 101", H2O_HQ_ERROR_GENERAL_PROTOCOL);
@@ -353,17 +353,22 @@ static int on_update_expect_header(quicly_stream_t *_stream)
     }
 
     /* handle final response */
-    uint16_t app_error_code;
-    int fin_closed =
-        quicly_recvbuf_is_shutdown(&req->stream->recvbuf, &app_error_code) && app_error_code == QUICLY_ERROR_FIN_CLOSED;
-    if ((req->super._cb.on_body = req->super._cb.on_head(&req->super, fin_closed ? h2o_httpclient_error_is_eos : NULL, 0, status,
-                                                         h2o_iovec_init(NULL, 0), headers.entries, headers.size, 0, 0)) == NULL) {
+    quicly_stream_error_t stream_error = quicly_recvbuf_get_error(&req->stream->recvbuf);
+    if ((req->super._cb.on_body = req->super._cb.on_head(
+             &req->super, stream_error == QUICLY_STREAM_ERROR_FIN_CLOSED ? h2o_httpclient_error_is_eos : NULL, 0, status,
+             h2o_iovec_init(NULL, 0), headers.entries, headers.size, 0, 0)) == NULL) {
+        /* FIXME what is the legal behavior of the callback when stream_error is FIN_CLOSED? */
         close_request(req, H2O_HQ_ERROR_INTERNAL);
         return 0;
     }
-    if (fin_closed) {
+    switch (stream_error) {
+    case QUICLY_STREAM_ERROR_IS_OPEN:
+        break;
+    case QUICLY_STREAM_ERROR_FIN_CLOSED:
         close_request(req, H2O_HQ_ERROR_NO_ERROR);
         return 0;
+    default:
+        return on_error_before_head(req, "unexpected close", H2O_HQ_ERROR_GENERAL_PROTOCOL);
     }
 
     /* handle body (or prepare to handle body) */

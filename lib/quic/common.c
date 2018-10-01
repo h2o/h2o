@@ -131,7 +131,7 @@ static int on_update_control_stream(quicly_stream_t *stream)
     h2o_hq_peek_frame_t frame;
     int ret;
 
-    if (quicly_recvbuf_is_shutdown(&stream->recvbuf, NULL))
+    if (quicly_recvbuf_get_error(&stream->recvbuf) != QUICLY_STREAM_ERROR_IS_OPEN)
         return H2O_HQ_ERROR_CLOSED_CRITICAL_STREAM;
     if ((ret = h2o_hq_peek_frame(&stream->recvbuf, &frame)) != 0)
         return ret == H2O_HQ_ERROR_INCOMPLETE ? 0 : ret;
@@ -145,7 +145,7 @@ static int on_update_control_stream(quicly_stream_t *stream)
 
 static int on_update_qpack_stream(quicly_stream_t *stream, int is_encoder_stream)
 {
-    if (quicly_recvbuf_is_shutdown(&stream->recvbuf, NULL))
+    if (quicly_recvbuf_get_error(&stream->recvbuf) != QUICLY_STREAM_ERROR_IS_OPEN)
         return H2O_HQ_ERROR_CLOSED_CRITICAL_STREAM;
 
     h2o_hq_conn_t *conn = *quicly_get_data(stream->conn);
