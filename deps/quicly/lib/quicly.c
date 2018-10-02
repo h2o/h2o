@@ -281,11 +281,8 @@ struct st_quicly_conn_t {
 static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, int is_enc, size_t epoch, const void *secret);
 static int retire_acks_by_epoch(quicly_conn_t *conn, size_t epoch);
 
-static ptls_update_traffic_key_t update_traffic_key = {update_traffic_key_cb};
-
 const quicly_context_t quicly_default_context = {
-    {NULL, &ptls_get_time,     NULL, NULL, {NULL}, NULL, NULL, NULL, NULL, 0, 0, HKDF_BASE_LABEL, 1, 0, 0, 0, NULL, NULL, NULL,
-     NULL, &update_traffic_key},                         /* tls */
+    NULL,                                                /* tls */
     0,                                                   /* next_master_id */
     1280,                                                /* max_packet_size */
     &quicly_loss_default_conf,                           /* loss */
@@ -1184,7 +1181,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     ptls_t *tls = NULL;
     quicly_conn_t *conn;
 
-    if ((tls = ptls_new(&ctx->tls, server_name == NULL)) == NULL)
+    if ((tls = ptls_new(ctx->tls, server_name == NULL)) == NULL)
         return NULL;
     if (server_name != NULL && ptls_set_server_name(tls, server_name, strlen(server_name)) != 0) {
         ptls_free(tls);
@@ -1200,7 +1197,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     conn->super.master_id = ctx->next_master_id++;
     conn->super.state = QUICLY_STATE_FIRSTFLIGHT;
     if (server_name != NULL) {
-        ctx->tls.random_bytes(conn->super.peer.cid.cid, 8);
+        ctx->tls->random_bytes(conn->super.peer.cid.cid, 8);
         conn->super.peer.cid.len = 8;
         conn->super.host.bidi.next_stream_id = 0;
         conn->super.host.uni.next_stream_id = 1;
@@ -1214,7 +1211,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     }
     conn->super.peer.transport_params = transport_params_before_handshake;
     if (server_name != NULL && ctx->enforce_version_negotiation) {
-        ctx->tls.random_bytes(&conn->super.version, sizeof(conn->super.version));
+        ctx->tls->random_bytes(&conn->super.version, sizeof(conn->super.version));
         conn->super.version = (conn->super.version & 0xf0f0f0f0) | 0x0a0a0a0a;
     } else {
         conn->super.version = QUICLY_PROTOCOL_VERSION;
@@ -1323,7 +1320,7 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
 
     if ((ret = setup_handshake_space_and_flow(conn, 0)) != 0)
         goto Exit;
-    if ((ret = setup_initial_encryption(&conn->initial->cipher.ingress, &conn->initial->cipher.egress, ctx->tls.cipher_suites,
+    if ((ret = setup_initial_encryption(&conn->initial->cipher.ingress, &conn->initial->cipher.egress, ctx->tls->cipher_suites,
                                         ptls_iovec_init(server_cid->cid, server_cid->len), 1)) != 0)
         goto Exit;
 
@@ -1493,7 +1490,7 @@ int quicly_accept(quicly_conn_t **_conn, quicly_context_t *ctx, struct sockaddr 
         ret = QUICLY_ERROR_PROTOCOL_VIOLATION;
         goto Exit;
     }
-    if ((ret = setup_initial_encryption(&ingress_cipher, &egress_cipher, ctx->tls.cipher_suites, packet->cid.dest, 0)) != 0)
+    if ((ret = setup_initial_encryption(&ingress_cipher, &egress_cipher, ctx->tls->cipher_suites, packet->cid.dest, 0)) != 0)
         goto Exit;
     next_expected_pn = 0; /* is this correct? do we need to take care of underflow? */
     if ((payload = decrypt_packet(&ingress_cipher, &next_expected_pn, packet, &pn)).base == NULL) {
@@ -1532,7 +1529,7 @@ int quicly_accept(quicly_conn_t **_conn, quicly_context_t *ctx, struct sockaddr 
     }
     set_cid(&conn->super.peer.cid, packet->cid.src);
     /* TODO let the app set host cid after successful return from quicly_accept / quicly_connect */
-    ctx->tls.random_bytes(conn->super.host.cid.cid, 8);
+    ctx->tls->random_bytes(conn->super.host.cid.cid, 8);
     conn->super.host.cid.len = 8;
     set_cid(&conn->super.host.offered_cid, packet->cid.dest);
     if ((ret = setup_handshake_space_and_flow(conn, 0)) != 0)
@@ -2326,7 +2323,7 @@ quicly_datagram_t *quicly_send_version_negotiation(quicly_context_t *ctx, struct
     dst = packet->data.base;
 
     /* type_flags */
-    ctx->tls.random_bytes(dst, 1);
+    ctx->tls->random_bytes(dst, 1);
     *dst |= 0x80;
     ++dst;
     /* version */
@@ -3415,6 +3412,15 @@ char *quicly_hexdump(const uint8_t *bytes, size_t len, size_t indent)
     assert(p - buf <= bufsize);
 
     return buf;
+}
+
+void quicly_amend_ptls_context(ptls_context_t *ptls)
+{
+    static ptls_update_traffic_key_t update_traffic_key = {update_traffic_key_cb};
+
+    ptls->max_early_data_size = UINT32_MAX;
+    ptls->hkdf_label_prefix = HKDF_BASE_LABEL;
+    ptls->update_traffic_key = &update_traffic_key;
 }
 
 /**

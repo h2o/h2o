@@ -189,7 +189,7 @@ struct st_quicly_context_t {
     /**
      * tls context to use
      */
-    ptls_context_t tls;
+    ptls_context_t *tls;
     /**
      *
      */
@@ -587,6 +587,10 @@ int64_t quicly_default_now(quicly_context_t *ctx);
  */
 void quicly_default_event_log(quicly_context_t *ctx, quicly_event_type_t type, const quicly_event_attribute_t *attributes,
                               size_t num_attributes);
+/**
+ *
+ */
+void quicly_amend_ptls_context(ptls_context_t *ptls);
 /**
  *
  */

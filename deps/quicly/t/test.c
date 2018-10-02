@@ -83,9 +83,6 @@
 
 static int64_t get_now(quicly_context_t *ctx);
 
-static ptls_iovec_t cert;
-static ptls_openssl_sign_certificate_t cert_signer;
-
 int64_t quic_now;
 quicly_context_t quic_ctx;
 
@@ -212,13 +209,23 @@ static void test_next_packet_number(void)
 
 int main(int argc, char **argv)
 {
+    static ptls_iovec_t cert;
+    static ptls_openssl_sign_certificate_t cert_signer;
+    static ptls_context_t tlsctx = {ptls_openssl_random_bytes,
+                                    &ptls_get_time,
+                                    ptls_openssl_key_exchanges,
+                                    ptls_openssl_cipher_suites,
+                                    {&cert, 1},
+                                    NULL,
+                                    NULL,
+                                    &cert_signer.super,
+                                    NULL,
+                                    0,
+                                    0,
+                                    NULL,
+                                    1};
     quic_ctx = quicly_default_context;
-    quic_ctx.tls.random_bytes = ptls_openssl_random_bytes;
-    quic_ctx.tls.key_exchanges = ptls_openssl_key_exchanges;
-    quic_ctx.tls.cipher_suites = ptls_openssl_cipher_suites;
-    quic_ctx.tls.certificates.list = &cert;
-    quic_ctx.tls.certificates.count = 1;
-    quic_ctx.tls.sign_certificate = &cert_signer.super;
+    quic_ctx.tls = &tlsctx;
     quic_ctx.max_streams_bidi = 10;
     quic_ctx.on_stream_open = on_stream_open_buffering;
     quic_ctx.now = get_now;
@@ -249,6 +256,8 @@ int main(int argc, char **argv)
         ptls_openssl_init_sign_certificate(&cert_signer, pkey);
         EVP_PKEY_free(pkey);
     }
+
+    quicly_amend_ptls_context(quic_ctx.tls);
 
     subtest("next-packet-number", test_next_packet_number);
     subtest("ranges", test_ranges);

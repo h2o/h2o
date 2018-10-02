@@ -51,6 +51,21 @@ static void hexdump(const char *title, const uint8_t *p, size_t l)
 
 static ptls_handshake_properties_t hs_properties;
 static quicly_context_t ctx;
+static ptls_context_t tlsctx = {ptls_openssl_random_bytes,
+                                &ptls_get_time,
+                                ptls_openssl_key_exchanges,
+                                ptls_openssl_cipher_suites,
+                                NULL,
+                                NULL,
+                                {NULL},
+                                NULL,
+                                NULL,
+                                NULL,
+                                NULL,
+                                0,
+                                0,
+                                NULL,
+                                1};
 static const char *req_paths[1024];
 
 static void send_data(quicly_stream_t *stream, const char *s)
@@ -532,14 +547,12 @@ int main(int argc, char **argv)
     int ch;
 
     ctx = quicly_default_context;
-    ctx.tls.random_bytes = ptls_openssl_random_bytes;
-    ctx.tls.key_exchanges = ptls_openssl_key_exchanges;
-    ctx.tls.cipher_suites = ptls_openssl_cipher_suites;
+    ctx.tls = &tlsctx;
     ctx.on_stream_open = on_stream_open;
     ctx.on_conn_close = on_conn_close;
 
-    setup_session_cache(&ctx.tls);
-    ctx.tls.max_early_data_size = UINT32_MAX; /* we need to set this after calling setup_session_cache */
+    setup_session_cache(ctx.tls);
+    quicly_amend_ptls_context(ctx.tls);
 
     while ((ch = getopt(argc, argv, "a:c:k:l:np:r:S:s:Vvh")) != -1) {
         switch (ch) {
@@ -547,13 +560,13 @@ int main(int argc, char **argv)
             set_alpn(&hs_properties, optarg);
             break;
         case 'c':
-            load_certificate_chain(&ctx.tls, optarg);
+            load_certificate_chain(ctx.tls, optarg);
             break;
         case 'k':
-            load_private_key(&ctx.tls, optarg);
+            load_private_key(ctx.tls, optarg);
             break;
         case 'l':
-            setup_log_secret(&ctx.tls, optarg);
+            setup_log_secret(ctx.tls, optarg);
             break;
         case 'n':
             ctx.enforce_version_negotiation = 1;
@@ -573,17 +586,17 @@ int main(int argc, char **argv)
         case 'S':
             ctx.stateless_retry.enforce_use = 1;
             ctx.stateless_retry.key = optarg;
-            if (strlen(ctx.stateless_retry.key) < ctx.tls.cipher_suites[0]->hash->digest_size) {
+            if (strlen(ctx.stateless_retry.key) < ctx.tls->cipher_suites[0]->hash->digest_size) {
                 fprintf(stderr, "secret for stateless retry is too short (should be at least %zu bytes long)\n",
-                        ctx.tls.cipher_suites[0]->hash->digest_size);
+                        ctx.tls->cipher_suites[0]->hash->digest_size);
                 exit(1);
             }
             break;
         case 's':
-            setup_session_file(&ctx.tls, &hs_properties, optarg);
+            setup_session_file(ctx.tls, &hs_properties, optarg);
             break;
         case 'V':
-            setup_verify_certificate(&ctx.tls);
+            setup_verify_certificate(ctx.tls);
             break;
         case 'v':
             ++verbosity;
@@ -609,9 +622,9 @@ int main(int argc, char **argv)
         ctx.event_log.cb = quicly_default_event_log;
     }
 
-    if (ctx.tls.certificates.count != 0 || ctx.tls.sign_certificate != NULL) {
+    if (ctx.tls->certificates.count != 0 || ctx.tls->sign_certificate != NULL) {
         /* server */
-        if (ctx.tls.certificates.count == 0 || ctx.tls.sign_certificate == NULL) {
+        if (ctx.tls->certificates.count == 0 || ctx.tls->sign_certificate == NULL) {
             fprintf(stderr, "-ck and -k options must be used together\n");
             exit(1);
         }
@@ -628,5 +641,5 @@ int main(int argc, char **argv)
     if (resolve_address((void *)&sa, &salen, host, port, AF_INET, SOCK_DGRAM, IPPROTO_UDP) != 0)
         exit(1);
 
-    return ctx.tls.certificates.count != 0 ? run_server((void *)&sa, salen) : run_client((void *)&sa, salen, host);
+    return ctx.tls->certificates.count != 0 ? run_server((void *)&sa, salen) : run_client((void *)&sa, salen, host);
 }
