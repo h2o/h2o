@@ -1162,7 +1162,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         /* QUIC socket; FIXME add support for graceful restart (using server-starter?) and multi-threading */
         if (ssl_node == NULL) {
-            h2o_configurator_errprintf(cmd, node, "QUIC endpoint must be accompanied by a SSL configuration");
+            h2o_configurator_errprintf(cmd, node, "QUIC endpoint must have an accompanying SSL configuration");
             return -1;
         }
         struct addrinfo *res, *ai;
