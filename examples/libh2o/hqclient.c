@@ -135,15 +135,25 @@ int main(int argc, char **argv)
     h2o_multithread_register_receiver(queue, &getaddr_receiver, h2o_hostinfo_getaddr_receiver);
     h2o_socket_t *sock = create_socket(loop);
 
+    ptls_context_t tlsctx = {ptls_openssl_random_bytes,
+                             &ptls_get_time,
+                             ptls_openssl_key_exchanges,
+                             ptls_openssl_cipher_suites,
+                             {NULL},
+                             NULL,
+                             NULL,
+                             NULL,
+                             NULL,
+                             0,
+                             0,
+                             NULL,
+                             1};
     quicly_context_t qctx = quicly_default_context;
-    qctx.tls.random_bytes = ptls_openssl_random_bytes;
-    qctx.tls.key_exchanges = ptls_openssl_key_exchanges;
-    qctx.tls.cipher_suites = ptls_openssl_cipher_suites;
+    qctx.tls = &tlsctx;
     qctx.on_stream_open = h2o_hq_on_stream_open;
     // qctx.on_conn_close = h2o_hq_on_conn_close;
-    qctx.tls.max_early_data_size = UINT32_MAX;
 
-    h2o_hq_init_context(&hqctx, &qctx, sock, NULL);
+    h2o_hq_init_context(&hqctx, loop, sock, &qctx, NULL);
 
     uint64_t io_timeout = 5000; /* 5 seconds */
     h2o_httpclient_ctx_t ctx = {loop, &getaddr_receiver, io_timeout, io_timeout, io_timeout,
