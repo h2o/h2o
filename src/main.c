@@ -110,8 +110,8 @@ struct listener_config_t {
     socklen_t addrlen;
     h2o_hostconf_t **hosts;
     H2O_VECTOR(struct listener_ssl_config_t *) ssl;
-    unsigned proxy_protocol : 1;
-    unsigned is_quic : 1; /* otherwise a SOCK_STREAM (i.e., TCP or unix socket) */
+    quicly_context_t *quic;
+    int proxy_protocol;
 };
 
 struct listener_ctx_t {
@@ -818,9 +818,14 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
         if (errstr != NULL)
             h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
+        if (listener->quic != NULL) {
+            listener->quic->tls = h2o_socket_ssl_get_picotls_context(ssl_ctx);
+            assert(listener->quic->tls != NULL);
+            quicly_amend_ptls_context(listener->quic->tls);
+        }
     } else
 #endif
-    if (listener->is_quic) {
+    if (listener->quic != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
         goto Error;
     }
@@ -840,7 +845,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener = conf.listeners[i];
         if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr) == 0 &&
-            listener->is_quic == is_quic)
+            (listener->quic != NULL) == is_quic)
             return listener;
     }
 
@@ -848,7 +853,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
 }
 
 static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
-                                              int is_quic)
+                                              quicly_context_t *quic)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -863,7 +868,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     listener->proxy_protocol = proxy_protocol;
-    listener->is_quic = is_quic;
+    listener->quic = quic;
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1026,8 +1031,8 @@ static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t 
     int error;
 
     memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_socktype = socktype;
+    hints.ai_protocol = protocol;
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
 
     if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
@@ -1106,7 +1111,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, 0);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, NULL);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1147,7 +1152,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, 0);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, NULL);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
@@ -1188,7 +1193,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 1);
+                quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
+                *quic = quicly_default_context;
+                quic->on_stream_open = h2o_hq_on_stream_open;
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
@@ -1668,25 +1676,6 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
     }
 }
 
-static void setup_hq_context(struct listener_ctx_t *listener, h2o_loop_t *loop, h2o_hq_server_ctx_t *hq, quicly_context_t *quic)
-{
-    ptls_context_t *tls_src = h2o_socket_ssl_get_picotls_context(listener->accept_ctx.ssl_ctx);
-
-    assert(tls_src != NULL);
-
-    *quic = quicly_default_context;
-    quic->tls = *tls_src;
-    quic->tls.hkdf_label_prefix = quicly_default_context.tls.hkdf_label_prefix;
-    quic->tls.send_change_cipher_spec = 0;
-    quic->tls.update_traffic_key = quicly_default_context.tls.update_traffic_key;
-    quic->tls.max_early_data_size = UINT32_MAX;
-
-    h2o_hq_init_context(&hq->super, loop, listener->sock, quic, h2o_hq_server_accept);
-    hq->accept_ctx = &listener->accept_ctx;
-
-    listener->hq = hq;
-}
-
 H2O_NORETURN static void *run_loop(void *_thread_index)
 {
     size_t thread_index = (size_t)_thread_index;
@@ -1725,9 +1714,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
-        if (listener_config->is_quic) {
-            setup_hq_context(listeners + i, conf.threads[thread_index].ctx.loop, alloca(sizeof(h2o_hq_server_ctx_t)),
-                             alloca(sizeof(quicly_context_t)));
+        if (listener_config->quic != NULL) {
+            listeners[i].hq = alloca(sizeof(*listeners[i].hq));
+            h2o_hq_init_context(&listeners[i].hq->super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
+                                listener_config->quic, h2o_hq_server_accept);
+            listeners[i].hq->accept_ctx = &listeners[i].accept_ctx;
         } else {
             listeners[i].hq = NULL;
         }
