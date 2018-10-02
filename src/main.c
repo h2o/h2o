@@ -818,8 +818,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
         if (errstr != NULL)
             h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
-    }
+    } else
 #endif
+    if (listener->is_quic) {
+        h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
+        goto Error;
+    }
 
     return 0;
 
