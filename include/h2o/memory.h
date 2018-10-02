@@ -26,6 +26,7 @@
 #include <alloca.h>
 #endif
 #include <assert.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
