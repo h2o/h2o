@@ -454,5 +454,10 @@ void h2o_hq_send(h2o_hq_conn_t *conn)
 void h2o_hq_schedule_timer(h2o_hq_conn_t *conn)
 {
     int64_t timeout = quicly_get_first_timeout(conn->quic);
+    if (h2o_timer_is_linked(&conn->_timeout)) {
+        if (timeout == conn->_timeout.expire_at)
+            return;
+        h2o_timer_unlink(&conn->_timeout);
+    }
     h2o_timer_link(conn->ctx->loop, timeout, &conn->_timeout);
 }
