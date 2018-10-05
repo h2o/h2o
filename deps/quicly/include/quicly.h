@@ -366,6 +366,10 @@ struct st_quicly_stream_t {
     /**
      *
      */
+    unsigned stream_id_blocked : 1;
+    /**
+     *
+     */
     struct {
         /**
          * send window
@@ -397,7 +401,7 @@ struct st_quicly_stream_t {
          * linklist of pending streams
          */
         struct {
-            quicly_linklist_t control;
+            quicly_linklist_t control; /* links to conn_t::control (or to conn_t::stream_id_blocked if the blocked flag is set) */
             quicly_linklist_t stream;
         } pending_link;
     } _send_aux;

@@ -49,7 +49,6 @@
 #define QUICLY_ERROR_FIN_CLOSED 0xff02
 #define QUICLY_ERROR_SENDBUF_FULL 0xff03
 #define QUICLY_ERROR_CONNECTION_CLOSED 0xff04
-#define QUICLY_ERROR_TOO_MANY_OPEN_STREAMS 0xff05
 
 /* application error codes returned by  */
 #define QUICLY_STREAM_ERROR_IS_OPEN -1

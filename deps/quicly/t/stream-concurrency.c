@@ -52,7 +52,7 @@ void test_stream_concurrency(void)
     /* open as many streams as we can */
     for (i = 0; i < limit + 1; ++i) {
         ret = quicly_open_stream(client, client_streams + i, 0);
-        if (ret != 0)
+        if (client_streams[i]->stream_id_blocked)
             break;
         client_streams[i]->on_update = on_update_noop;
         quicly_sendbuf_write(&client_streams[i]->sendbuf, "hello", 5, NULL);
@@ -62,9 +62,8 @@ void test_stream_concurrency(void)
     transmit(client, server);
     transmit(server, client);
 
-    /* cannot open more even after 1RT */
-    ret = quicly_open_stream(client, client_streams + i, 0);
-    ok(ret != 0);
+    /* the last steram is still ID-blocked after 1RT */
+    ok(client_streams[i]->stream_id_blocked);
 
     /* reset one stream in both directions and close on the client-side */
     server_stream = quicly_get_stream(server, client_streams[i - 1]->stream_id);
@@ -80,23 +79,22 @@ void test_stream_concurrency(void)
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
 
-    /* still cannot open more */
-    ret = quicly_open_stream(client, client_streams + i, 0);
-    ok(ret != 0);
+    /* still ID-blocked */
+    ok(client_streams[i]->stream_id_blocked);
 
     /* close the stream on the server-side */
     ok(quicly_stream_is_closable(server_stream));
     quicly_close_stream(server_stream);
     transmit(server, client);
 
-    --i;
+    /* no longer ID-blocked */
+    ok(!client_streams[i]->stream_id_blocked);
+    ++i;
 
-    /* now we can open one more */
+    /* but we cannot open one more */
     ret = quicly_open_stream(client, client_streams + i, 0);
     ok(ret == 0);
-    ++i;
-    ret = quicly_open_stream(client, client_streams + i, 0);
-    ok(ret != 0);
+    ok(client_streams[i]->stream_id_blocked);
 
     quicly_free(client);
     quicly_free(server);
