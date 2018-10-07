@@ -285,17 +285,31 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
 
     /* handle ALPN */
     if (num_negotiated_protocols != 0) {
-        const h2o_iovec_t *server_pref;
-        for (server_pref = h2o_alpn_protocols; server_pref->len != 0; ++server_pref) {
-            size_t i;
-            for (i = 0; i != num_negotiated_protocols; ++i)
-                if (h2o_memis(server_pref->base, server_pref->len, negotiated_protocols[i].base, negotiated_protocols[i].len))
-                    goto ALPN_Found;
+        if (self->listener->quic != NULL) {
+            size_t i, j;
+            for (i = 0; i != sizeof(h2o_hq_alpn) / sizeof(h2o_hq_alpn[0]); ++i) {
+                for (j = 0; j != num_negotiated_protocols; ++j)
+                    if (h2o_memis(h2o_hq_alpn[i].base, h2o_hq_alpn[i].len, negotiated_protocols[j].base,
+                                  negotiated_protocols[j].len))
+                        goto HQ_ALPN_Found;
+            }
+            return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
+        HQ_ALPN_Found:
+            if ((ret = ptls_set_negotiated_protocol(tls, (char *)h2o_hq_alpn[i].base, h2o_hq_alpn[i].len)) != 0)
+                return ret;
+        } else {
+            const h2o_iovec_t *server_pref;
+            for (server_pref = h2o_alpn_protocols; server_pref->len != 0; ++server_pref) {
+                size_t i;
+                for (i = 0; i != num_negotiated_protocols; ++i)
+                    if (h2o_memis(server_pref->base, server_pref->len, negotiated_protocols[i].base, negotiated_protocols[i].len))
+                        goto TCP_ALPN_Found;
+            }
+            return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
+        TCP_ALPN_Found:
+            if ((ret = ptls_set_negotiated_protocol(tls, server_pref->base, server_pref->len)) != 0)
+                return ret;
         }
-        return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
-    ALPN_Found:
-        if ((ret = ptls_set_negotiated_protocol(tls, server_pref->base, server_pref->len)) != 0)
-            return ret;
     }
 
     return ret;
