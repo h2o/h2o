@@ -152,6 +152,9 @@ int main(int argc, char **argv)
     qctx.tls = &tlsctx;
     qctx.on_stream_open = h2o_hq_on_stream_open;
     // qctx.on_conn_close = h2o_hq_on_conn_close;
+    qctx.event_log.cb = quicly_default_event_log;
+    qctx.event_log.mask = UINT64_MAX;
+    quicly_default_event_log_fp = stderr;
 
     h2o_hq_init_context(&hqctx, loop, sock, &qctx, NULL);
 

@@ -1209,6 +1209,9 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 }
                 quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
                 *quic = quicly_default_context;
+                quic->event_log.cb = quicly_default_event_log;
+                quic->event_log.mask = UINT64_MAX;
+                quicly_default_event_log_fp = stderr;
                 quic->on_stream_open = h2o_hq_on_stream_open;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
