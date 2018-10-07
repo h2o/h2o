@@ -444,7 +444,7 @@ void h2o_hq_send(h2o_hq_conn_t *conn)
         } else {
             fprintf(stderr, "quicly_send returned %d\n", ret);
         }
-    } while (ret == 0 && num_packets != 0);
+    } while (ret == 0 && num_packets == sizeof(packets) / sizeof(packets[0]));
 
     assert(ret == 0);
 
