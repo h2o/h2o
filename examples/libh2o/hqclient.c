@@ -148,6 +148,7 @@ int main(int argc, char **argv)
                              0,
                              NULL,
                              1};
+    quicly_amend_ptls_context(&tlsctx);
     quicly_context_t qctx = quicly_default_context;
     qctx.tls = &tlsctx;
     qctx.on_stream_open = h2o_hq_on_stream_open;
