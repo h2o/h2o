@@ -53,6 +53,9 @@ struct st_quicly_ack_t {
             quicly_maxsender_ackargs_t args;
         } max_stream_id;
         struct {
+            quicly_maxsender_ackargs_t args;
+        } stream_id_blocked;
+        struct {
             quicly_stream_id_t stream_id;
         } stream_state_sender;
         struct {

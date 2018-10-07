@@ -139,7 +139,7 @@ typedef struct st_quicly_max_stream_data_frame_t {
 
 static int quicly_decode_max_stream_data_frame(const uint8_t **src, const uint8_t *end, quicly_max_stream_data_frame_t *frame);
 
-static uint8_t *quicly_encode_max_stream_id_frame(uint8_t *dst, uint64_t max_stream_id);
+static uint8_t *quicly_encode_max_stream_id_frame(uint8_t *dst, quicly_stream_id_t max_stream_id);
 
 typedef struct st_quicly_max_stream_id_frame_t {
     uint64_t max_stream_id;
@@ -555,8 +555,9 @@ Error:
     return QUICLY_ERROR_FRAME_ENCODING;
 }
 
-inline uint8_t *quicly_encode_max_stream_id_frame(uint8_t *dst, uint64_t max_stream_id)
+inline uint8_t *quicly_encode_max_stream_id_frame(uint8_t *dst, quicly_stream_id_t max_stream_id)
 {
+    assert(max_stream_id >= 0);
     *dst++ = QUICLY_FRAME_TYPE_MAX_STREAM_ID;
     dst = quicly_encodev(dst, max_stream_id);
     return dst;

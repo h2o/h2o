@@ -318,6 +318,7 @@ static void tiny_connection_window(void)
         ret = quicly_send(client, &raw, &num_packets);
         ok(ret == 0);
         ok(num_packets == 1);
+        ok(quicly_get_first_timeout(client) > quic_ctx.now(&quic_ctx));
         decode_packets(&decoded, &raw, 1, 8);
         ok(num_packets == 1);
         ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, NULL, &decoded);

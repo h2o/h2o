@@ -55,9 +55,9 @@ static void test_stream_id(void)
     quicly_maxsender_t m;
 
     quicly_maxsender_init(&m, 400);
-    ok(quicly_maxsender_should_update_stream_id(&m, 8, 0, 100, 512) == 0);
+    ok(quicly_maxsender_should_update_stream_id(&m, 8, 0, 100, 512) == -1);
     ok(quicly_maxsender_should_update_stream_id(&m, 8, 0, 100, 1024) == 404);
-    ok(quicly_maxsender_should_update_stream_id(&m, 400, 99, 100, 0) == 0);
+    ok(quicly_maxsender_should_update_stream_id(&m, 400, 99, 100, 0) == -1);
     ok(quicly_maxsender_should_update_stream_id(&m, 404, 99, 100, 0) == 404);
 }
 

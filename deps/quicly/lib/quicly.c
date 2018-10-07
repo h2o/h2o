@@ -211,17 +211,12 @@ struct st_quicly_conn_t {
         /**
          *
          */
-        quicly_stream_id_t max_stream_id_bidi;
-        /**
-         *
-         */
-        quicly_stream_id_t max_stream_id_uni;
-        /**
-         *
-         */
         struct {
-            quicly_sender_state_t uni, bidi;
-        } stream_id_blocked_state;
+            struct st_quicly_max_stream_id_t {
+                quicly_stream_id_t id;
+                quicly_maxsender_t blocked_sender;
+            } uni, bidi;
+        } max_stream_id;
         /**
          *
          */
@@ -453,6 +448,21 @@ static void assert_consistency(quicly_conn_t *conn, int run_timers)
         assert(now < conn->egress.loss.alarm_at);
 }
 
+static void init_max_stream_id(struct st_quicly_max_stream_id_t *m)
+{
+    m->id = -1;
+    quicly_maxsender_init(&m->blocked_sender, -1);
+}
+
+static void update_max_stream_id(struct st_quicly_max_stream_id_t *m, quicly_stream_id_t id)
+{
+    if (m->id < id) {
+        m->id = id;
+        if (m->blocked_sender.max_acked < id)
+            m->blocked_sender.max_acked = id;
+    }
+}
+
 int quicly_connection_is_ready(quicly_conn_t *conn)
 {
     return conn->application != NULL;
@@ -501,6 +511,10 @@ static void resched_stream_data(quicly_stream_t *stream)
         }
         return;
     }
+
+    /* do nothing if blocked */
+    if (stream->stream_id_blocked)
+        return;
 
     /* unlink so that we would round-robin the streams */
     if (quicly_linklist_is_linked(&stream->_send_aux.pending_link.stream))
@@ -867,10 +881,10 @@ static int setup_application_space_and_flow(quicly_conn_t *conn, int setup_0rtt)
 static void apply_peer_transport_params(quicly_conn_t *conn)
 {
     conn->egress.max_data.permitted = conn->super.peer.transport_params.initial_max_data;
-    conn->egress.max_stream_id_bidi =
-        conn->super.peer.transport_params.initial_max_streams_bidi * 4 - (quicly_is_client(conn) ? 4 : 3);
-    conn->egress.max_stream_id_uni =
-        conn->super.peer.transport_params.initial_max_streams_uni * 4 + (quicly_is_client(conn) ? 2 : 1);
+    update_max_stream_id(&conn->egress.max_stream_id.uni,
+                         conn->super.peer.transport_params.initial_max_streams_uni * 4 - (quicly_is_client(conn) ? 2 : 1));
+    update_max_stream_id(&conn->egress.max_stream_id.bidi,
+                         conn->super.peer.transport_params.initial_max_streams_bidi * 4 - (quicly_is_client(conn) ? 4 : 3));
 }
 
 void quicly_free(quicly_conn_t *conn)
@@ -1226,16 +1240,18 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     if (conn->_.super.ctx->max_streams_uni != 0) {
         conn->_.ingress.max_stream_id.uni = &conn->max_stream_id_uni;
         quicly_maxsender_init(conn->_.ingress.max_stream_id.uni,
-                              conn->_.super.ctx->max_streams_uni * 4 + conn->_.super.peer.uni.next_stream_id);
+                              conn->_.super.ctx->max_streams_uni * 4 - 4 + conn->_.super.peer.uni.next_stream_id);
     }
     if (conn->_.super.ctx->max_streams_bidi != 0) {
         conn->_.ingress.max_stream_id.bidi = &conn->max_stream_id_bidi;
         quicly_maxsender_init(conn->_.ingress.max_stream_id.bidi,
-                              conn->_.super.ctx->max_streams_bidi * 4 + conn->_.super.peer.bidi.next_stream_id);
+                              conn->_.super.ctx->max_streams_bidi * 4 - 4 + conn->_.super.peer.bidi.next_stream_id);
     }
     quicly_acks_init(&conn->_.egress.acks);
     quicly_loss_init(&conn->_.egress.loss, conn->_.super.ctx->loss,
                      conn->_.super.ctx->loss->default_initial_rtt /* FIXME remember initial_rtt in session ticket */);
+    init_max_stream_id(&conn->_.egress.max_stream_id.uni);
+    init_max_stream_id(&conn->_.egress.max_stream_id.bidi);
     conn->_.egress.path_challenge.tail_ref = &conn->_.egress.path_challenge.head;
     conn->_.egress.send_ack_at = INT64_MAX;
     cc_init(&conn->_.egress.cc.ccv, &newreno_cc_algo, 1280 * 8, 1280);
@@ -1702,38 +1718,19 @@ static int on_ack_stop_sending(quicly_conn_t *conn, int acked, quicly_ack_t *ack
     return 0;
 }
 
-static int on_ack_stream_id_blocked(quicly_conn_t *conn, int acked, quicly_ack_t *ack, int uni)
+static int on_ack_stream_id_blocked(quicly_conn_t *conn, int acked, quicly_ack_t *ack)
 {
-    {
-        quicly_sender_state_t *sender_state;
-        quicly_linklist_t *anchor;
+    quicly_maxsender_ackargs_t *ackargs = &ack->data.stream_id_blocked.args;
+    struct st_quicly_max_stream_id_t *m =
+        quicly_stream_is_unidirectional(ackargs->value) ? &conn->egress.max_stream_id.uni : &conn->egress.max_stream_id.bidi;
 
-        if (uni) {
-            sender_state = &conn->egress.stream_id_blocked_state.uni;
-            anchor = &conn->pending_link.stream_id_blocked.uni;
-        } else {
-            sender_state = &conn->egress.stream_id_blocked_state.bidi;
-            anchor = &conn->pending_link.stream_id_blocked.bidi;
-        }
-
-        if (!acked && *sender_state == QUICLY_SENDER_STATE_UNACKED && quicly_linklist_is_linked(anchor)) {
-            *sender_state = QUICLY_SENDER_STATE_SEND;
-        } else {
-            *sender_state = QUICLY_SENDER_STATE_NONE;
-        }
-
-        return 0;
+    if (acked) {
+        quicly_maxsender_acked(&m->blocked_sender, ackargs);
+    } else {
+        quicly_maxsender_lost(&m->blocked_sender, ackargs);
     }
-}
 
-static int on_ack_stream_id_blocked_uni(quicly_conn_t *conn, int acked, quicly_ack_t *ack)
-{
-    return on_ack_stream_id_blocked(conn, acked, ack, 1);
-}
-
-static int on_ack_stream_id_blocked_bidi(quicly_conn_t *conn, int acked, quicly_ack_t *ack)
-{
-    return on_ack_stream_id_blocked(conn, acked, ack, 0);
+    return 0;
 }
 
 static int on_ack_cc(quicly_conn_t *conn, int acked, quicly_ack_t *ack)
@@ -2325,10 +2322,18 @@ static void update_loss_alarm(quicly_conn_t *conn)
     quicly_loss_update_alarm(&conn->egress.loss, conn->egress.last_retransmittable_sent_at, conn->egress.acks.num_active != 0);
 }
 
-static void open_id_blocked_streams(quicly_conn_t *conn, quicly_stream_id_t max_stream_id)
+static void open_id_blocked_streams(quicly_conn_t *conn, int uni)
 {
-    quicly_linklist_t *anchor = quicly_stream_is_unidirectional(max_stream_id) ? &conn->pending_link.stream_id_blocked.uni
-                                                                               : &conn->pending_link.stream_id_blocked.bidi;
+    quicly_stream_id_t max_stream_id;
+    quicly_linklist_t *anchor;
+
+    if (uni) {
+        max_stream_id = conn->egress.max_stream_id.uni.id;
+        anchor = &conn->pending_link.stream_id_blocked.uni;
+    } else {
+        max_stream_id = conn->egress.max_stream_id.bidi.id;
+        anchor = &conn->pending_link.stream_id_blocked.bidi;
+    }
 
     while (quicly_linklist_is_linked(anchor)) {
         quicly_stream_t *stream = (void *)((char *)anchor->next - offsetof(quicly_stream_t, _send_aux.pending_link.control));
@@ -2337,9 +2342,9 @@ static void open_id_blocked_streams(quicly_conn_t *conn, quicly_stream_id_t max_
         assert(stream->stream_id_blocked);
         quicly_linklist_unlink(&stream->_send_aux.pending_link.control);
         stream->stream_id_blocked = 0;
-        quicly_linklist_insert(
-            &conn->pending_link.control,
-            &stream->_send_aux.pending_link.control); /* TODO retain a separate flag so that we can see if this is necessary? */
+        /* TODO retain separate flags for stream states so that we do not always need to sched for both control and data */
+        sched_stream_control(stream);
+        resched_stream_data(stream);
     }
 }
 
@@ -2497,8 +2502,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *_tls, 
 
     if (epoch == 3 && is_enc) {
         /* update states now that we have 1-RTT write key */
-        open_id_blocked_streams(conn, conn->egress.max_stream_id_uni);
-        open_id_blocked_streams(conn, conn->egress.max_stream_id_bidi);
+        open_id_blocked_streams(conn, 1);
+        open_id_blocked_streams(conn, 0);
     }
 
     return 0;
@@ -2598,10 +2603,10 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
 /* send max_stream_id frames */
 #define SEND_MAX_STREAM_ID(label)                                                                                                  \
     if (conn->ingress.max_stream_id.label != NULL) {                                                                               \
-        uint64_t max_stream_id;                                                                                                    \
+        quicly_stream_id_t max_stream_id;                                                                                          \
         if ((max_stream_id = quicly_maxsender_should_update_stream_id(                                                             \
                  conn->ingress.max_stream_id.label, conn->super.peer.label.next_stream_id, conn->super.peer.label.num_streams,     \
-                 conn->super.ctx->max_streams_##label, 768)) != 0) {                                                               \
+                 conn->super.ctx->max_streams_##label, 768)) >= 0) {                                                               \
             quicly_ack_t *ack;                                                                                                     \
             if ((ret = prepare_acked_packet(conn, &s, QUICLY_MAX_STREAM_ID_FRAME_CAPACITY, &ack, on_ack_max_stream_id)) != 0)      \
                 goto Exit;                                                                                                         \
@@ -2624,16 +2629,18 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
             }
 /* send stream_id_blocked frames */
 #define SEND_STREAM_ID_BLOCKED(label)                                                                                              \
-    if (conn->egress.stream_id_blocked_state.label == QUICLY_SENDER_STATE_SEND) {                                                  \
-        if (quicly_linklist_is_linked(&conn->pending_link.stream_id_blocked.label)) {                                              \
+    if (quicly_linklist_is_linked(&conn->pending_link.stream_id_blocked.label)) {                                                  \
+        struct st_quicly_max_stream_id_t *max_stream_id = &conn->egress.max_stream_id.label;                                       \
+        quicly_stream_t *max_stream = (void *)((char *)conn->pending_link.stream_id_blocked.label.prev -                           \
+                                               offsetof(quicly_stream_t, _send_aux.pending_link.control));                         \
+        assert(max_stream_id->id < max_stream->stream_id);                                                                         \
+        if (quicly_maxsender_should_send_blocked(&max_stream_id->blocked_sender, max_stream->stream_id)) {                         \
             quicly_ack_t *ack;                                                                                                     \
-            if ((ret = prepare_acked_packet(conn, &s, QUICLY_STREAM_ID_BLOCKED_FRAME_CAPACITY, &ack,                               \
-                                            on_ack_stream_id_blocked_##label)) != 0)                                               \
+            if ((ret = prepare_acked_packet(conn, &s, QUICLY_STREAM_ID_BLOCKED_FRAME_CAPACITY, &ack, on_ack_stream_id_blocked)) != \
+                0)                                                                                                                 \
                 goto Exit;                                                                                                         \
-            s.dst = quicly_encode_stream_id_blocked_frame(s.dst, conn->egress.max_stream_id_##label);                              \
-            conn->egress.stream_id_blocked_state.label = QUICLY_SENDER_STATE_UNACKED;                                              \
-        } else {                                                                                                                   \
-            conn->egress.stream_id_blocked_state.label = QUICLY_SENDER_STATE_NONE;                                                 \
+            s.dst = quicly_encode_stream_id_blocked_frame(s.dst, max_stream->stream_id);                                           \
+            quicly_maxsender_record(&max_stream_id->blocked_sender, max_stream->stream_id, &ack->data.stream_id_blocked.args);     \
         }                                                                                                                          \
     }
             SEND_STREAM_ID_BLOCKED(uni);
@@ -2909,13 +2916,9 @@ static int handle_stream_blocked_frame(quicly_conn_t *conn, quicly_stream_blocke
 static int handle_max_stream_id_frame(quicly_conn_t *conn, quicly_max_stream_id_frame_t *frame)
 {
     int uni = quicly_stream_is_unidirectional(frame->max_stream_id);
-    quicly_stream_id_t *slot = uni ? &conn->egress.max_stream_id_uni : &conn->egress.max_stream_id_bidi;
 
-    if (frame->max_stream_id < *slot)
-        return 0;
-    *slot = frame->max_stream_id;
-
-    open_id_blocked_streams(conn, *slot);
+    update_max_stream_id(uni ? &conn->egress.max_stream_id.uni : &conn->egress.max_stream_id.bidi, frame->max_stream_id);
+    open_id_blocked_streams(conn, uni);
 
     return 0;
 }
@@ -3285,12 +3288,12 @@ int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int uni)
     /* determine the states */
     if (uni) {
         group = &conn->super.host.uni;
-        max_stream_id = &conn->egress.max_stream_id_uni;
+        max_stream_id = &conn->egress.max_stream_id.uni.id;
         max_stream_data_local = 0;
         max_stream_data_remote = conn->super.peer.transport_params.initial_max_stream_data.uni;
     } else {
         group = &conn->super.host.bidi;
-        max_stream_id = &conn->egress.max_stream_id_bidi;
+        max_stream_id = &conn->egress.max_stream_id.bidi.id;
         max_stream_data_local = conn->super.ctx->initial_max_stream_data.bidi_local;
         max_stream_data_remote = conn->super.peer.transport_params.initial_max_stream_data.bidi_remote;
     }
@@ -3306,10 +3309,6 @@ int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int uni)
         (*stream)->stream_id_blocked = 1;
         quicly_linklist_insert(uni ? &conn->pending_link.stream_id_blocked.uni : &conn->pending_link.stream_id_blocked.bidi,
                                &(*stream)->_send_aux.pending_link.control);
-        quicly_sender_state_t *sender_state =
-            uni ? &conn->egress.stream_id_blocked_state.uni : &conn->egress.stream_id_blocked_state.bidi;
-        if (*sender_state != QUICLY_SENDER_STATE_UNACKED)
-            *sender_state = QUICLY_SENDER_STATE_SEND;
     }
 
     return 0;
