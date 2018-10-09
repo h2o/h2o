@@ -79,6 +79,8 @@ typedef struct st_h2o_hq_ctx_t h2o_hq_ctx_t;
 typedef h2o_hq_conn_t *(*h2o_hq_accept_cb)(h2o_hq_ctx_t *ctx, struct sockaddr *sa, socklen_t salen,
                                            quicly_decoded_packet_t *packets, size_t num_packets);
 
+typedef int (*h2o_hq_handle_control_stream_frame_cb)(h2o_hq_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
+
 struct st_h2o_hq_ctx_t {
     /**
      * the event loop
@@ -106,19 +108,36 @@ typedef struct st_h2o_hq_conn_callback_t {
     /**
      * handles a control stream frame and returns a QUIC error code
      */
-    int (*handle_control_stream_frame)(h2o_hq_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
 } h2o_hq_conn_callbacks_t;
 
 struct st_h2o_hq_conn_t {
+    /**
+     * context
+     */
     h2o_hq_ctx_t *ctx;
-    const h2o_hq_conn_callbacks_t *callbacks;
-    h2o_linklist_t conns_link; /* linklist between connections, anchor is h2o_hq_ctx_t::conns */
-    h2o_timer_t _timeout;      /* the "transport" timer */
+    /**
+     * underlying QUIC connection
+     */
     quicly_conn_t *quic;
+    /**
+     * QPACK states
+     */
     struct {
         h2o_qpack_encoder_t *enc;
         h2o_qpack_decoder_t *dec;
     } qpack;
+    /**
+     * callback for handling control stream frames
+     */
+    h2o_hq_handle_control_stream_frame_cb handle_control_stream_frame;
+    /**
+     * linklist between connections, anchor is h2o_hq_ctx_t::conns
+     */
+    h2o_linklist_t conns_link;
+    /**
+     * the "transport" timer. Applications must have separate timer.
+     */
+    h2o_timer_t _timeout;
     struct {
         struct {
             quicly_stream_t *control;
@@ -189,7 +208,7 @@ void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock
 /**
  * initializes a hq connection
  */
-void h2o_hq_init_conn(h2o_hq_conn_t *conn, h2o_hq_ctx_t *ctx, const h2o_hq_conn_callbacks_t *callbacks);
+void h2o_hq_init_conn(h2o_hq_conn_t *conn, h2o_hq_ctx_t *ctx, h2o_hq_handle_control_stream_frame_cb handle_control_stream_frame);
 /**
  *
  */

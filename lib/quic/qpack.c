@@ -907,7 +907,7 @@ void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool
     switch (status) {
 #define SHORT_STATUS(st, cp)                                                                                                       \
     case st:                                                                                                                       \
-        buf->entries[buf->size++] = cp;                                                                                            \
+        buf->entries[buf->size++] = 0xc0 | cp;                                                                                     \
         break
         SHORT_STATUS(200, 8);
         SHORT_STATUS(204, 9);

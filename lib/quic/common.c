@@ -80,11 +80,11 @@ void h2o_hq_init_context(h2o_hq_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock
     h2o_socket_read_start(ctx->sock, on_read);
 }
 
-void h2o_hq_init_conn(h2o_hq_conn_t *conn, h2o_hq_ctx_t *ctx, const h2o_hq_conn_callbacks_t *callbacks)
+void h2o_hq_init_conn(h2o_hq_conn_t *conn, h2o_hq_ctx_t *ctx, h2o_hq_handle_control_stream_frame_cb handle_control_stream_frame)
 {
     memset(conn, 0, sizeof(*conn));
     conn->ctx = ctx;
-    conn->callbacks = callbacks;
+    conn->handle_control_stream_frame = handle_control_stream_frame;
     h2o_linklist_insert(&conn->ctx->conns, &conn->conns_link);
     h2o_timer_init(&conn->_timeout, on_timeout);
 }
@@ -118,12 +118,11 @@ int h2o_hq_setup(h2o_hq_conn_t *conn, quicly_conn_t *quic)
     *quicly_get_data(conn->quic) = conn;
     conn->qpack.dec = h2o_qpack_create_decoder(H2O_HQ_DEFAULT_HEADER_TABLE_SIZE);
 
-    /* FIXME handle the case where peer blocks the creation of unidirectional streams */
     if ((ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.control, h2o_iovec_init(H2O_STRLIT("C\0\4")))) !=
             0 ||
-        (ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.qpack_encoder, h2o_iovec_init(H2O_STRLIT("Q")))) !=
+        (ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.qpack_encoder, h2o_iovec_init(H2O_STRLIT("H")))) !=
             0 ||
-        (ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.qpack_decoder, h2o_iovec_init(H2O_STRLIT("q")))) !=
+        (ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.qpack_decoder, h2o_iovec_init(H2O_STRLIT("h")))) !=
             0)
         return ret;
 
@@ -142,7 +141,7 @@ static int on_update_control_stream(quicly_stream_t *stream)
     if ((ret = h2o_hq_peek_frame(&stream->recvbuf, &frame)) != 0)
         return ret == H2O_HQ_ERROR_INCOMPLETE ? 0 : ret;
 
-    if ((ret = conn->callbacks->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length)) != 0)
+    if ((ret = conn->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length)) != 0)
         return ret;
 
     h2o_hq_shift_frame(&stream->recvbuf, &frame);
@@ -277,9 +276,17 @@ Malformed:
 
 int h2o_hq_handle_control_stream_frame(h2o_hq_conn_t *conn, uint8_t type, const uint8_t *payload, size_t length)
 {
+    if (conn->qpack.enc == NULL) {
+        if (type != H2O_HQ_FRAME_TYPE_SETTINGS)
+            return H2O_HQ_ERROR_MALFORMED_FRAME(type);
+        /* handle settings frame (and setup qpack.enc) */
+        return handle_settings_frame(conn, payload, length);
+    }
+
+    /* SETTINGS has already been received */
     switch (type) {
     case H2O_HQ_FRAME_TYPE_SETTINGS:
-        return handle_settings_frame(conn, payload, length);
+        return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_SETTINGS);
     case H2O_HQ_FRAME_TYPE_PRIORITY:
         if (quicly_is_client(conn->quic))
             return H2O_HQ_ERROR_GENERAL_PROTOCOL; /* FIXME? */
@@ -383,7 +390,7 @@ void on_read(h2o_socket_t *sock, const char *err)
             size_t off = 0;
             while (off != dgrams[dgram_index].vec.iov_len) {
                 size_t plen = quicly_decode_packet(packets + packet_index, dgrams[dgram_index].vec.iov_base + off,
-                                                   dgrams[dgram_index].vec.iov_len - off, 8);
+                                                   dgrams[dgram_index].vec.iov_len - off, ctx->acceptor != NULL ? 8 : 0);
                 if (plen == SIZE_MAX)
                     break;
                 off += plen;

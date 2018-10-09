@@ -71,8 +71,7 @@ struct st_h2o_hqclient_req_t {
 };
 
 static int on_update_expect_data_frame(quicly_stream_t *_stream);
-
-static const h2o_hq_conn_callbacks_t callbacks = {NULL};
+static void start_request(struct st_h2o_hqclient_req_t *req);
 
 static struct st_h2o_hqclient_conn_t *find_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
 {
@@ -80,8 +79,6 @@ static struct st_h2o_hqclient_conn_t *find_connection(h2o_httpclient_ctx_t *ctx,
 
     for (link = ctx->quic->conns.next; link != &ctx->quic->conns; link = link->next) {
         struct st_h2o_hqclient_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hqclient_conn_t, super.conns_link, link);
-        if (!(conn->super.callbacks == &callbacks && conn->ctx == ctx))
-            continue;
         /* FIXME check max_concurrent_streams, etc. */
         if (conn->server.origin_url.scheme == origin->scheme &&
             h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len, origin->authority.base,
@@ -151,12 +148,33 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     start_connect(conn, selected->ai_addr, selected->ai_addrlen);
 }
 
+static int handle_control_stream_frame_expect_settings(h2o_hq_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len)
+{
+    struct st_h2o_hqclient_conn_t *conn = (void *)_conn;
+    int ret;
+
+    if (type != H2O_HQ_FRAME_TYPE_SETTINGS)
+        return H2O_HQ_ERROR_MALFORMED_FRAME(type);
+
+    conn->super.handle_control_stream_frame = h2o_hq_handle_control_stream_frame;
+    if ((ret = conn->super.handle_control_stream_frame(&conn->super, type, payload, len)) != 0)
+        return ret;
+
+    while (!h2o_linklist_is_empty(&conn->pending_requests)) {
+        struct st_h2o_hqclient_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hqclient_req_t, link, conn->pending_requests.next);
+        h2o_linklist_unlink(&req->link);
+        start_request(req);
+    }
+
+    return 0;
+}
+
 struct st_h2o_hqclient_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
 {
     struct st_h2o_hqclient_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     memset(conn, 0, sizeof(*conn));
-    h2o_hq_init_conn(&conn->super, ctx->quic, &callbacks);
+    h2o_hq_init_conn(&conn->super, ctx->quic, handle_control_stream_frame_expect_settings);
     conn->ctx = ctx;
     conn->server.origin_url = (h2o_url_t){origin->scheme, h2o_strdup(NULL, origin->authority.base, origin->authority.len),
                                           h2o_strdup(NULL, origin->host.base, origin->host.len)};
@@ -184,7 +202,8 @@ static int on_stream_wait_close(quicly_stream_t *stream)
 
 static void close_request(struct st_h2o_hqclient_req_t *req, uint32_t reason)
 {
-    h2o_buffer_dispose(&req->respbuf);
+    if (req->respbuf != NULL)
+        h2o_buffer_dispose(&req->respbuf);
 
     if (req->stream != NULL) {
         if (quicly_stream_is_closable(req->stream)) {
@@ -239,6 +258,8 @@ static int on_update_expect_data_payload(quicly_stream_t *_stream)
         } else {
             req->bytes_left -= input.len;
         }
+        if (req->respbuf == NULL)
+            h2o_buffer_init(&req->respbuf, &h2o_socket_buffer_prototype);
         h2o_buffer_append(&req->respbuf, input.base, input.len);
         quicly_recvbuf_shift(&req->stream->recvbuf, input.len);
         if (req->bytes_left == 0) {
@@ -292,7 +313,7 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     h2o_hq_peek_frame_t frame;
     int status;
     h2o_headers_t headers = {NULL};
-    size_t content_length;
+    size_t content_length = SIZE_MAX;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
     const char *err_desc = NULL;
@@ -318,7 +339,9 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
         return on_error_before_head(req, err_desc != NULL ? err_desc : "qpack error", H2O_HQ_ERROR_GENERAL_PROTOCOL /* FIXME */);
     }
     h2o_hq_shift_frame(&req->stream->recvbuf, &frame);
-    h2o_hq_call_and_assert(quicly_sendbuf_write(&req->stream->sendbuf, header_ack, header_ack_len, NULL));
+    if (header_ack_len != 0)
+        h2o_hq_call_and_assert(quicly_sendbuf_write(&req->conn->super._control_streams.egress.qpack_decoder->sendbuf, header_ack,
+                                                    header_ack_len, NULL));
 
     /* handle 1xx */
     if (100 <= status && status <= 199) {
@@ -360,7 +383,7 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     return 0;
 }
 
-static void start_request(struct st_h2o_hqclient_req_t *req)
+void start_request(struct st_h2o_hqclient_req_t *req)
 {
     h2o_iovec_t method;
     h2o_url_t url;

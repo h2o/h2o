@@ -192,13 +192,14 @@ static void handle_pending_reqs(h2o_timer_t *timer)
         struct st_h2o_hq_server_stream_t *stream =
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_stream_t, link, conn->pending_reqs.next);
         h2o_linklist_unlink(&stream->link);
+        set_state(stream, H2O_HQ_SERVER_STREAM_STATE_SEND_HEADERS);
         h2o_process_request(&stream->req);
     }
 }
 
 static int on_update_req_pending(quicly_stream_t *_stream)
 {
-    struct st_h2o_hq_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_stream_t, quic, _stream);
+    struct st_h2o_hq_server_stream_t *stream = _stream->data;
     quicly_stream_error_t stream_error;
 
     if ((stream_error = quicly_sendbuf_get_error(&stream->quic->sendbuf)) != QUICLY_STREAM_ERROR_IS_OPEN) {
@@ -221,13 +222,13 @@ static void register_pending_req(struct st_h2o_hq_server_stream_t *stream)
 
 static int on_update_expect_headers(quicly_stream_t *_stream)
 {
-    struct st_h2o_hq_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_stream_t, quic, _stream);
+    struct st_h2o_hq_server_stream_t *stream = _stream->data;
     quicly_stream_error_t stream_error;
     h2o_hq_peek_frame_t frame;
     int header_exists_map, ret;
-    uint8_t decoder_stream_buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
-    size_t decoder_stream_len;
-    const char *err_desc;
+    uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+    size_t header_ack_len;
+    const char *err_desc = NULL;
 
     /* error handling */
     if ((stream_error = quicly_recvbuf_get_error(&stream->quic->recvbuf)) != QUICLY_STREAM_ERROR_IS_OPEN)
@@ -244,14 +245,17 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->hq.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, NULL /* TODO cache-digests */, decoder_stream_buf,
-                                       &decoder_stream_len, frame.payload, frame.length, &err_desc)) != 0) {
+                                       &stream->req.content_length, NULL /* TODO cache-digests */, header_ack, &header_ack_len,
+                                       frame.payload, frame.length, &err_desc)) != 0) {
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
         h2o_send_error_400(&stream->req, "Invalid Request", err_desc, 0);
         return 0;
     }
     h2o_hq_shift_frame(&stream->quic->recvbuf, &frame);
+    if (header_ack_len != 0 && get_conn(stream)->hq._control_streams.egress.qpack_decoder != NULL)
+        h2o_hq_call_and_assert(quicly_sendbuf_write(&get_conn(stream)->hq._control_streams.egress.qpack_decoder->sendbuf,
+                                                    header_ack, header_ack_len, NULL));
 
     if (quicly_recvbuf_get_error(&stream->quic->recvbuf) != QUICLY_STREAM_ERROR_FIN_CLOSED) {
         h2o_send_error_400(&stream->req, "FIXME", "handle request body", 0);
@@ -320,6 +324,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_iovec_t *bufs, si
     if (stream->state == H2O_HQ_SERVER_STREAM_STATE_SEND_HEADERS) {
         write_response(stream);
         set_state(stream, H2O_HQ_SERVER_STREAM_STATE_SEND_BODY);
+    } else {
+        assert(stream->state == H2O_HQ_SERVER_STREAM_STATE_SEND_BODY);
     }
 
     if (bufcnt != 0) {
@@ -356,8 +362,7 @@ int h2o_hq_server_on_stream_open(quicly_stream_t *quic)
 
     /* create new stream and start handling the request */
     struct st_h2o_hq_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
-    h2o_init_request(&stream->req,
-                     &H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_conn_t, hq, *quicly_get_data(stream->quic->conn))->super,
+    h2o_init_request(&stream->req, &H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_conn_t, hq, *quicly_get_data(quic->conn))->super,
                      NULL);
     stream->req.version = 0x0300;
     stream->quic = quic;
@@ -366,6 +371,7 @@ int h2o_hq_server_on_stream_open(quicly_stream_t *quic)
     ++*get_state_counter(get_conn(stream), stream->state);
     stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, NULL, do_send_informational};
     stream->req._ostr_top = &stream->ostr_final;
+    quic->data = stream;
 
     stream->quic->on_update = on_update_expect_headers;
     return stream->quic->on_update(stream->quic);
@@ -399,11 +405,11 @@ SynFound : {
             {NULL}                                                                                       /* http2 */
         }}                                                                                               /* loggers */
     };
-    static const h2o_hq_conn_callbacks_t hq_callbacks = {NULL};
     struct st_h2o_hq_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
-    h2o_hq_init_conn(&conn->hq, &ctx->super, &hq_callbacks);
+    h2o_hq_init_conn(&conn->hq, &ctx->super, h2o_hq_handle_control_stream_frame);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
+    h2o_linklist_init_anchor(&conn->pending_reqs);
     h2o_timer_init(&conn->timeout, handle_pending_reqs);
     quicly_conn_t *qconn;
 

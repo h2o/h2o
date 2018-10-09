@@ -150,6 +150,7 @@ int main(int argc, char **argv)
                              1};
     quicly_amend_ptls_context(&tlsctx);
     quicly_context_t qctx = quicly_default_context;
+    qctx.max_streams_uni = 3;
     qctx.tls = &tlsctx;
     qctx.on_stream_open = h2o_hq_on_stream_open;
     // qctx.on_conn_close = h2o_hq_on_conn_close;
