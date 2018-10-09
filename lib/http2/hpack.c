@@ -616,16 +616,16 @@ int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_head
             if (r.value->len != 3)
                 return H2O_HTTP2_ERROR_PROTOCOL;
             char *c = r.value->base;
-#define PARSE_DIGIT(mul)                                                                                                           \
+#define PARSE_DIGIT(mul, min_digit)                                                                                                \
     do {                                                                                                                           \
-        if (*c < '0' || '9' < *c)                                                                                                  \
+        if (*c < '0' + (min_digit) || '9' < *c)                                                                                    \
             return H2O_HTTP2_ERROR_PROTOCOL;                                                                                       \
         *status += (*c - '0') * mul;                                                                                               \
         ++c;                                                                                                                       \
     } while (0)
-            PARSE_DIGIT(100);
-            PARSE_DIGIT(10);
-            PARSE_DIGIT(1);
+            PARSE_DIGIT(100, 1);
+            PARSE_DIGIT(10, 0);
+            PARSE_DIGIT(1, 0);
 #undef PARSE_DIGIT
         } else {
             if (*status == 0)
