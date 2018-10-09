@@ -279,11 +279,6 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
                                  ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream protocol error" : "upstream compression error");
         return ret;
     }
-    if (stream->input.status == 0) {
-        /* couldn't find :status pseudo header */
-        ret = H2O_HTTP2_ERROR_PROTOCOL;
-        goto SendRSTStream;
-    }
 
     if (100 <= stream->input.status && stream->input.status <= 199) {
         if (stream->input.status == 101) {
