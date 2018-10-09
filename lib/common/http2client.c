@@ -268,7 +268,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
     assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
-    size_t dummy_content_length = SIZE_MAX;
+    size_t dummy_content_length;
     if ((ret = h2o_hpack_parse_response_headers(stream->super.pool, &stream->input.status, &stream->input.headers,
                                                 &dummy_content_length, &conn->input.header_table, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
