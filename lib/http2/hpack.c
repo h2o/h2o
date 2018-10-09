@@ -583,12 +583,16 @@ int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, const uint8_t *src, size_t len
 int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_headers_t *headers, size_t *content_length,
                                      h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len, const char **err_desc)
 {
-    assert(*status == 0);
-    assert(*content_length == SIZE_MAX);
+    *status = 0;
+    *content_length = SIZE_MAX;
 
     const uint8_t *src_end = src + len;
 
-    while (src != src_end) {
+    /* the response MUST contain a :status header as the first element */
+    if (src == src_end)
+        return H2O_HTTP2_ERROR_PROTOCOL;
+
+    do {
         struct st_h2o_decode_header_result_t r;
         const char *decode_err = NULL;
         int ret = decode_header(pool, &r, header_table, &src, src_end, &decode_err);
@@ -612,16 +616,16 @@ int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_head
             if (r.value->len != 3)
                 return H2O_HTTP2_ERROR_PROTOCOL;
             char *c = r.value->base;
-#define PARSE_DIGIT(mul)                                                                                                           \
+#define PARSE_DIGIT(mul, min_digit)                                                                                                \
     do {                                                                                                                           \
-        if (*c < '0' || '9' < *c)                                                                                                  \
+        if (*c < '0' + (min_digit) || '9' < *c)                                                                                    \
             return H2O_HTTP2_ERROR_PROTOCOL;                                                                                       \
         *status += (*c - '0') * mul;                                                                                               \
         ++c;                                                                                                                       \
     } while (0)
-            PARSE_DIGIT(100);
-            PARSE_DIGIT(10);
-            PARSE_DIGIT(1);
+            PARSE_DIGIT(100, 1);
+            PARSE_DIGIT(10, 0);
+            PARSE_DIGIT(1, 0);
 #undef PARSE_DIGIT
         } else {
             if (*status == 0)
@@ -641,7 +645,7 @@ int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_head
                 h2o_add_header_by_str(pool, headers, r.name->base, r.name->len, 0, NULL, r.value->base, r.value->len);
             }
         }
-    }
+    } while (src != src_end);
 
     if (*err_desc) {
         return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
