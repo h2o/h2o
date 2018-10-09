@@ -59,6 +59,7 @@ struct st_quicly_recvbuf_t {
 };
 
 void quicly_recvbuf_init(quicly_recvbuf_t *buf, quicly_recvbuf_change_cb on_change);
+void quicly_recvbuf_init_closed(quicly_recvbuf_t *buf);
 void quicly_recvbuf_dispose(quicly_recvbuf_t *buf);
 static quicly_stream_error_t quicly_recvbuf_get_error(quicly_recvbuf_t *buf);
 static int quicly_recvbuf_transfer_complete(quicly_recvbuf_t *buf);

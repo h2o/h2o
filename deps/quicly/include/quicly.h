@@ -652,7 +652,7 @@ inline const quicly_cid_t *quicly_get_peer_cid(quicly_conn_t *conn)
 inline int quicly_is_client(quicly_conn_t *conn)
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
-    return (c->host.bidi.next_stream_id & 2) == 0;
+    return (c->host.bidi.next_stream_id & 1) == 0;
 }
 
 inline quicly_stream_id_t quicly_get_next_stream_id(quicly_conn_t *conn, int uni)
@@ -676,11 +676,15 @@ inline void **quicly_get_data(quicly_conn_t *conn)
 
 inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)
 {
+    if (stream_id < 0)
+        return (stream_id & 1) != 0;
     return (stream_id & 1) == 0;
 }
 
 inline int quicly_stream_is_unidirectional(quicly_stream_id_t stream_id)
 {
+    if (stream_id < 0)
+        return 0;
     return (stream_id & 2) != 0;
 }
 

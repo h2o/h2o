@@ -36,6 +36,15 @@ void quicly_sendbuf_init(quicly_sendbuf_t *buf, quicly_sendbuf_change_cb on_chan
     buf->on_change = on_change;
 }
 
+void quicly_sendbuf_init_closed(quicly_sendbuf_t *buf)
+{
+    quicly_sendbuf_init(buf, NULL);
+    buf->eos = 1;
+    assert(buf->acked.num_ranges == 1);
+    buf->acked.ranges[0].end = 1;
+    buf->error_code = QUICLY_STREAM_ERROR_NOT_IN_USE;
+}
+
 void quicly_sendbuf_dispose(quicly_sendbuf_t *buf)
 {
     quicly_buffer_dispose(&buf->data);

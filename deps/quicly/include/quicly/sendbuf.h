@@ -66,6 +66,7 @@ typedef struct st_quicly_sendbuf_dataiter_t {
 } quicly_sendbuf_dataiter_t;
 
 void quicly_sendbuf_init(quicly_sendbuf_t *buf, quicly_sendbuf_change_cb on_change);
+void quicly_sendbuf_init_closed(quicly_sendbuf_t *buf);
 void quicly_sendbuf_dispose(quicly_sendbuf_t *buf);
 static quicly_stream_error_t quicly_sendbuf_get_error(quicly_sendbuf_t *buf);
 static int quicly_sendbuf_transfer_complete(quicly_sendbuf_t *buf);

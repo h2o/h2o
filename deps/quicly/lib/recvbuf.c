@@ -32,6 +32,13 @@ void quicly_recvbuf_init(quicly_recvbuf_t *buf, quicly_recvbuf_change_cb on_chan
     buf->on_change = on_change;
 }
 
+void quicly_recvbuf_init_closed(quicly_recvbuf_t *buf)
+{
+    quicly_recvbuf_init(buf, NULL);
+    buf->eos = 0;
+    buf->_error_code = QUICLY_STREAM_ERROR_NOT_IN_USE;
+}
+
 void quicly_recvbuf_dispose(quicly_recvbuf_t *buf)
 {
     quicly_buffer_dispose(&buf->data);
