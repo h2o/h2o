@@ -1019,6 +1019,15 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     handshake_cb(sock, err);
 }
 
+static void on_alert_sent(h2o_socket_t *sock, const char *err)
+{
+    if (err != NULL) {
+        on_handshake_complete(sock, err);
+    } else {
+        on_handshake_complete(sock, "handshake failure");
+    }
+}
+
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
 {
     h2o_iovec_t first_input = {NULL};
@@ -1129,7 +1138,6 @@ Redo:
         ret = SSL_connect(sock->ssl->ossl);
     }
 
-    int is_complete = 0;
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
         /* failed */
         long verify_result = SSL_get_verify_result(sock->ssl->ossl);
@@ -1139,17 +1147,16 @@ Redo:
             err = "ssl handshake failure";
         }
 
-        if (sock->ssl->output.bufs.size == 0)
-            goto Complete;
-
-        is_complete = 1;
+        if (sock->ssl->output.bufs.size != 0) {
+            h2o_socket_read_stop(sock);
+            flush_pending_ssl(sock, on_alert_sent);
+            return;
+        }
     }
 
     if (sock->ssl->output.bufs.size != 0) {
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
-        if (is_complete)
-            goto Complete;
     } else {
         if (ret == 1) {
             if (!SSL_is_server(sock->ssl->ossl)) {
