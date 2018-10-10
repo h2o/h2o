@@ -156,14 +156,14 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
-extern const char *h2o_socket_error_out_of_memory;
-extern const char *h2o_socket_error_io;
-extern const char *h2o_socket_error_closed;
-extern const char *h2o_socket_error_conn_fail;
-extern const char *h2o_socket_error_ssl_no_cert;
-extern const char *h2o_socket_error_ssl_cert_invalid;
-extern const char *h2o_socket_error_ssl_cert_name_mismatch;
-extern const char *h2o_socket_error_ssl_decode;
+extern const char h2o_socket_error_out_of_memory[];
+extern const char h2o_socket_error_io[];
+extern const char h2o_socket_error_closed[];
+extern const char h2o_socket_error_conn_fail[];
+extern const char h2o_socket_error_ssl_no_cert[];
+extern const char h2o_socket_error_ssl_cert_invalid[];
+extern const char h2o_socket_error_ssl_cert_name_mismatch[];
+extern const char h2o_socket_error_ssl_decode[];
 
 /**
  * returns the loop
