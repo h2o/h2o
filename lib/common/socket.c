@@ -1020,7 +1020,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     handshake_cb(sock, err);
 }
 
-static void on_alert_sent(h2o_socket_t *sock, const char *err)
+static void on_handshake_failure_ossl111(h2o_socket_t *sock, const char *err)
 {
     on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
 }
@@ -1142,12 +1142,15 @@ Redo:
             err = X509_verify_cert_error_string(verify_result);
         } else {
             err = h2o_socket_error_ssl_handshake;
+            /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
+             * shutdown_ssl. */
+            if (sock->ssl->output.bufs.size != 0) {
+                h2o_socket_read_stop(sock);
+                flush_pending_ssl(sock, on_handshake_failure_ossl111);
+                return;
+            }
         }
-        if (sock->ssl->output.bufs.size != 0) {
-            h2o_socket_read_stop(sock);
-            flush_pending_ssl(sock, on_alert_sent);
-            return;
-        }
+        goto Complete;
     }
 
     if (sock->ssl->output.bufs.size != 0) {
