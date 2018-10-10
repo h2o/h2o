@@ -131,14 +131,14 @@ __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
     &h2o_socket_buffer_mmap_settings};
 
-const char *h2o_socket_error_out_of_memory = "out of memory";
-const char *h2o_socket_error_io = "I/O error";
-const char *h2o_socket_error_closed = "socket closed by peer";
-const char *h2o_socket_error_conn_fail = "connection failure";
-const char *h2o_socket_error_ssl_no_cert = "no certificate";
-const char *h2o_socket_error_ssl_cert_invalid = "invalid certificate";
-const char *h2o_socket_error_ssl_cert_name_mismatch = "certificate name mismatch";
-const char *h2o_socket_error_ssl_decode = "SSL decode error";
+const char h2o_socket_error_out_of_memory[] = "out of memory";
+const char h2o_socket_error_io[] = "I/O error";
+const char h2o_socket_error_closed[] = "socket closed by peer";
+const char h2o_socket_error_conn_fail[] = "connection failure";
+const char h2o_socket_error_ssl_no_cert[] = "no certificate";
+const char h2o_socket_error_ssl_cert_invalid[] = "invalid certificate";
+const char h2o_socket_error_ssl_cert_name_mismatch[] = "certificate name mismatch";
+const char h2o_socket_error_ssl_decode[] = "SSL decode error";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);

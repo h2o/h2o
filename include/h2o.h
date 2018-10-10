@@ -1145,10 +1145,10 @@ static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* util */
 
-extern const char *h2o_http2_npn_protocols;
-extern const char *h2o_npn_protocols;
-extern const h2o_iovec_t *h2o_http2_alpn_protocols;
-extern const h2o_iovec_t *h2o_alpn_protocols;
+extern const char h2o_http2_npn_protocols[];
+extern const char h2o_npn_protocols[];
+extern const h2o_iovec_t h2o_http2_alpn_protocols[];
+extern const h2o_iovec_t h2o_alpn_protocols[];
 
 /**
  * accepts a connection

@@ -28,9 +28,6 @@ extern "C" {
 
 #include "http2_common.h"
 
-extern const char *h2o_http2_npn_protocols;
-extern const h2o_iovec_t *h2o_http2_alpn_protocols;
-
 extern const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS;
 
 /* don't forget to update SERVER_PREFACE when choosing non-default parameters */
