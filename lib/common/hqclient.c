@@ -313,7 +313,7 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     h2o_hq_peek_frame_t frame;
     int status;
     h2o_headers_t headers = {NULL};
-    size_t content_length = SIZE_MAX;
+    size_t content_length;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
     const char *err_desc = NULL;
