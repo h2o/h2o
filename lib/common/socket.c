@@ -1135,6 +1135,7 @@ Redo:
         ret = SSL_connect(sock->ssl->ossl);
     }
 
+    int is_complete = 0;
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
         /* failed */
         long verify_result = SSL_get_verify_result(sock->ssl->ossl);
@@ -1150,12 +1151,18 @@ Redo:
                 return;
             }
         }
-        goto Complete;
+
+        if (sock->ssl->output.bufs.size == 0)
+            goto Complete;
+
+        is_complete = 1;
     }
 
     if (sock->ssl->output.bufs.size != 0) {
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
+        if (is_complete)
+            goto Complete;
     } else {
         if (ret == 1) {
             if (!SSL_is_server(sock->ssl->ossl)) {
