@@ -139,6 +139,7 @@ const char *h2o_socket_error_ssl_no_cert = "no certificate";
 const char *h2o_socket_error_ssl_cert_invalid = "invalid certificate";
 const char *h2o_socket_error_ssl_cert_name_mismatch = "certificate name mismatch";
 const char *h2o_socket_error_ssl_decode = "SSL decode error";
+const char *h2o_socket_error_ssl_handshake = "ssl handshake failure";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
@@ -1024,7 +1025,7 @@ static void on_alert_sent(h2o_socket_t *sock, const char *err)
     if (err != NULL) {
         on_handshake_complete(sock, err);
     } else {
-        on_handshake_complete(sock, "handshake failure");
+        on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
     }
 }
 
@@ -1144,9 +1145,8 @@ Redo:
         if (verify_result != X509_V_OK) {
             err = X509_verify_cert_error_string(verify_result);
         } else {
-            err = "ssl handshake failure";
+            err = h2o_socket_error_ssl_handshake;
         }
-
         if (sock->ssl->output.bufs.size != 0) {
             h2o_socket_read_stop(sock);
             flush_pending_ssl(sock, on_alert_sent);
