@@ -1022,11 +1022,7 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 
 static void on_alert_sent(h2o_socket_t *sock, const char *err)
 {
-    if (err != NULL) {
-        on_handshake_complete(sock, err);
-    } else {
-        on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
-    }
+    on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
 }
 
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
