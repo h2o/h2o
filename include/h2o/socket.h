@@ -164,6 +164,7 @@ extern const char h2o_socket_error_ssl_no_cert[];
 extern const char h2o_socket_error_ssl_cert_invalid[];
 extern const char h2o_socket_error_ssl_cert_name_mismatch[];
 extern const char h2o_socket_error_ssl_decode[];
+extern const char h2o_socket_error_ssl_handshake[];
 
 /**
  * returns the loop
