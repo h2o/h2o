@@ -61,6 +61,25 @@ subtest 'content-length' => sub {
     like $body, qr/hello world/;
 };
 
+subtest 'invalid content-length' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = create_upstream($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+                'content-length' => 'foobar'
+            ], 0);
+            $conn->send_data($stream_id, 'hello world', 1);
+        },
+    });
+
+    my $server = create_h2o($upstream_port);
+    my ($headers, $body) = run_prog("curl -s --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}");
+    like $headers, qr{^HTTP/[0-9.]+ 502}is;
+    ok check_port($server->{port}), 'live check';
+};
+
 sub create_h2o {
     my ($upstream_port) = @_;
     if (my $port = $ENV{H2O_PORT}) {

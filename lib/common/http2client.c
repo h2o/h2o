@@ -299,14 +299,9 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         stream->super._cb.on_head(&stream->super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0, stream->input.status,
                                   h2o_iovec_init(NULL, 0), stream->input.headers.entries, stream->input.headers.size, (int)len, 0);
 
-    if (is_end_stream) {
+    if (is_end_stream || stream->super._cb.on_body == NULL) {
         close_stream(stream);
         return 0;
-    }
-
-    if (stream->super._cb.on_body == NULL) {
-        ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO: what error is suitable for this case?
-        goto SendRSTStream;
     }
 
     transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY);
