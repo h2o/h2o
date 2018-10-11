@@ -580,11 +580,10 @@ int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, const uint8_t *src, size_t len
     return 0;
 }
 
-int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_headers_t *headers, size_t *content_length,
+int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_headers_t *headers,
                                      h2o_hpack_header_table_t *header_table, const uint8_t *src, size_t len, const char **err_desc)
 {
     *status = 0;
-    *content_length = SIZE_MAX;
 
     const uint8_t *src_end = src + len;
 
@@ -632,15 +631,10 @@ int h2o_hpack_parse_response_headers(h2o_mem_pool_t *pool, int *status, h2o_head
                 return H2O_HTTP2_ERROR_PROTOCOL;
             if (h2o_iovec_is_token(r.name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, r.name);
-                if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                    if ((*content_length = h2o_strtosize(r.value->base, r.value->len)) == SIZE_MAX)
-                        return H2O_HTTP2_ERROR_PROTOCOL;
-                } else {
-                    /* reject headers as defined in draft-16 8.1.2.2 */
-                    if (token->flags.http2_should_reject)
-                        return H2O_HTTP2_ERROR_PROTOCOL;
-                    h2o_add_header(pool, headers, token, NULL, r.value->base, r.value->len);
-                }
+                /* reject headers as defined in draft-16 8.1.2.2 */
+                if (token->flags.http2_should_reject)
+                    return H2O_HTTP2_ERROR_PROTOCOL;
+                h2o_add_header(pool, headers, token, NULL, r.value->base, r.value->len);
             } else {
                 h2o_add_header_by_str(pool, headers, r.name->base, r.name->len, 0, NULL, r.value->base, r.value->len);
             }
