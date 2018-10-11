@@ -176,6 +176,8 @@ static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, s
         assert(!h2o_linklist_is_linked(&conn->super.link));
         return;
     }
+    if (!h2o_linklist_is_linked(&conn->super.link))
+        return;
 
     double ratio = (double)conn->super.num_streams / h2o_httpclient__h2_get_max_concurrent_streams(&conn->super);
 
