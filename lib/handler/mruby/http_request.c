@@ -426,16 +426,25 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     if (props->connection_header) {
         if (!ctx->req.can_keepalive) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
+        } else {
+            *props->connection_header = h2o_iovec_init(NULL, 0);
         }
     }
+    if (props->proxy_protocol)
+        *props->proxy_protocol = h2o_iovec_init(NULL, 0);
+    if (props->chunked)
+        *props->chunked = 0;
 
     *method = ctx->req.method;
     *url = ctx->req.url;
     *headers = ctx->req.headers.entries;
     *num_headers = ctx->req.headers.size;
+    *proceed_req_cb = NULL;
 
     if (ctx->req.body.base != NULL) {
         *body = ctx->req.body;
+    } else {
+        *body = h2o_iovec_init(NULL, 0);
     }
 
     return on_head;

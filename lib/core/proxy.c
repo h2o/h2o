@@ -154,9 +154,13 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
         remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
 
-    if (use_proxy_protocol && props->proxy_protocol != NULL) {
-        props->proxy_protocol->base = h2o_mem_alloc_pool(&req->pool, char, H2O_PROXY_HEADER_MAX_LENGTH);
-        props->proxy_protocol->len = h2o_stringify_proxy_header(req->conn, props->proxy_protocol->base);
+    if (props->proxy_protocol != NULL) {
+        if (use_proxy_protocol) {
+            props->proxy_protocol->base = h2o_mem_alloc_pool(&req->pool, char, H2O_PROXY_HEADER_MAX_LENGTH);
+            props->proxy_protocol->len = h2o_stringify_proxy_header(req->conn, props->proxy_protocol->base);
+        } else {
+            *props->proxy_protocol = h2o_iovec_init(NULL, 0);
+        }
     }
 
     /* method */
@@ -178,6 +182,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
 
     /* CL or TE? Depends on whether we're streaming the request body or
        not, and if CL was advertised in the original request */
+    if (props->chunked != NULL)
+        *(props->chunked) = 0;
     if (req->proceed_req == NULL) {
         if (req->entity.base != NULL || req_requires_content_length(req)) {
             h2o_iovec_t cl_buf = build_content_length(&req->pool, req->entity.len);
@@ -605,6 +611,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     if (reprocess_if_too_early)
         req->reprocess_if_too_early = 1;
 
+    *body = h2o_iovec_init(NULL, 0);
+    *proceed_req_cb = NULL;
     if (self->src_req->entity.base != NULL) {
         *body = self->src_req->entity;
         if (self->src_req->proceed_req != NULL) {
