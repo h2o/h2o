@@ -1151,6 +1151,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* close by error if necessary */
     if (err != NULL) {
         conn->super.ctx->http2.events.write_closed++;
+        if (h2o_timer_is_linked(&conn->_write.timeout_entry))
+            h2o_timer_unlink(&conn->_write.timeout_entry);
         close_connection_now(conn);
         return;
     }
