@@ -55,11 +55,16 @@ struct st_h2o_balancer_backend_t {
 
 struct st_h2o_balancer_t {
     const h2o_balancer_callbacks_t *callbacks;
+
+    /**
+     * need connection count
+     */
+    char conn_count_needed;
 };
 
 /* common */
-static void h2o_balancer_inc_conn_count(h2o_balancer_backend_t *backend);
-static void h2o_balancer_dec_conn_count(h2o_balancer_backend_t *backend);
+static void h2o_balancer_inc_conn_count(h2o_balancer_t *balancer, h2o_balancer_backend_t *backend);
+static void h2o_balancer_dec_conn_count(h2o_balancer_t *balancer, h2o_balancer_backend_t *backend);
 
 /* round robin */
 h2o_balancer_t *h2o_balancer_create_rr(void);
@@ -67,14 +72,16 @@ h2o_balancer_t *h2o_balancer_create_rr(void);
 /* least connection */
 h2o_balancer_t *h2o_balancer_create_lc(void);
 
-inline void h2o_balancer_inc_conn_count(h2o_balancer_backend_t *backend)
+inline void h2o_balancer_inc_conn_count(h2o_balancer_t *balancer, h2o_balancer_backend_t *backend)
 {
-    __sync_add_and_fetch(&backend->conn_count, 1);
+    if (balancer->conn_count_needed)
+        __sync_add_and_fetch(&backend->conn_count, 1);
 }
 
-inline void h2o_balancer_dec_conn_count(h2o_balancer_backend_t *backend)
+inline void h2o_balancer_dec_conn_count(h2o_balancer_t *balancer, h2o_balancer_backend_t *backend)
 {
-    __sync_sub_and_fetch(&backend->conn_count, 1);
+    if (balancer->conn_count_needed)
+        __sync_sub_and_fetch(&backend->conn_count, 1);
 }
 
 #ifdef __cplusplus

@@ -69,6 +69,7 @@ h2o_balancer_t *h2o_balancer_create_lc(void)
     static const h2o_balancer_callbacks_t lc_callbacks = {selector, destroy};
     struct least_conn_t *self = h2o_mem_alloc(sizeof(*self));
     self->super.callbacks = &lc_callbacks;
+    self->super.conn_count_needed = 1;
     pthread_mutex_init(&self->mutex, NULL);
     return &self->super;
 }

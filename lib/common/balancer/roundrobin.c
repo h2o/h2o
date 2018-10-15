@@ -77,6 +77,7 @@ h2o_balancer_t *h2o_balancer_create_rr(void)
     struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
     pthread_mutex_init(&self->mutex, NULL);
     self->super.callbacks = &rr_callbacks;
+    self->super.conn_count_needed = 0;
     self->pos = 0;
     self->consumed_weight = 0;
 
