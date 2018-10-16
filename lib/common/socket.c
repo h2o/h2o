@@ -676,9 +676,15 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                     ptls_buffer_init(&wbuf, dst, dst_size);
                     ret = ptls_send(sock->ssl->ptls, &wbuf, bufs[0].base + off, sz);
                     assert(ret == 0);
-                    assert(!wbuf.is_allocated);
+                    dst_size = wbuf.off;
+                    if (wbuf.is_allocated) {
+                        /* happens when ptls_send emits KeyUpdate message, for one case due to receiving one from peer */
+                        dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
+                        memcpy(dst, wbuf.base, dst_size);
+                        ptls_buffer_dispose(&wbuf);
+                    }
                     h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
-                    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(dst, wbuf.off);
+                    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(dst, dst_size);
                 } else
 #endif
                 {

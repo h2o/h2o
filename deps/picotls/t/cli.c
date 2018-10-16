@@ -57,7 +57,7 @@ static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 }
 
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                             ptls_handshake_properties_t *hsprop)
+                             ptls_handshake_properties_t *hsprop, int request_key_update)
 {
     ptls_t *tls = ptls_new(ctx, server_name == NULL);
     ptls_buffer_t rbuf, encbuf, ptbuf;
@@ -131,6 +131,8 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                         /* release data sent as early-data, if server accepted it */
                         if (hsprop->client.early_data_accepted_by_peer)
                             shift_buffer(&ptbuf, early_bytes_sent);
+                        if (request_key_update)
+                            ptls_update_key(tls, 1);
                         if (ptbuf.off != 0) {
                             if ((ret = ptls_send(tls, &encbuf, ptbuf.base, ptbuf.off)) != 0) {
                                 fprintf(stderr, "ptls_send(1rtt):%d\n", ret);
@@ -233,7 +235,7 @@ Exit:
 }
 
 static int run_server(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx, const char *input_file,
-                      ptls_handshake_properties_t *hsprop)
+                      ptls_handshake_properties_t *hsprop, int request_key_update)
 {
     int listen_fd, conn_fd, on = 1;
 
@@ -256,14 +258,14 @@ static int run_server(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
 
     while (1) {
         if ((conn_fd = accept(listen_fd, NULL, 0)) != -1)
-            handle_connection(conn_fd, ctx, NULL, input_file, hsprop);
+            handle_connection(conn_fd, ctx, NULL, input_file, hsprop, request_key_update);
     }
 
     return 0;
 }
 
 static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                      ptls_handshake_properties_t *hsprop)
+                      ptls_handshake_properties_t *hsprop, int request_key_update)
 {
     int fd;
 
@@ -276,7 +278,7 @@ static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
         return 1;
     }
 
-    return handle_connection(fd, ctx, server_name, input_file, hsprop);
+    return handle_connection(fd, ctx, server_name, input_file, hsprop, request_key_update);
 }
 
 static void usage(const char *cmd)
@@ -298,6 +300,7 @@ static void usage(const char *cmd)
            "  -S                   require public key exchange when resuming a session\n"
            "  -e                   when resuming a session, send first 8,192 bytes of input\n"
            "                       as early data\n"
+           "  -u                   update the traffic key when handshake is complete\n"
            "  -v                   verify peer using the default certificates\n"
            "  -h                   print this help\n"
            "\n"
@@ -330,12 +333,12 @@ int main(int argc, char **argv)
     ptls_context_t ctx = {ptls_openssl_random_bytes, &ptls_get_time, key_exchanges, ptls_openssl_cipher_suites};
     ptls_handshake_properties_t hsprop = {{{{NULL}}}};
     const char *host, *port, *file = NULL;
-    int is_server = 0, use_early_data = 0, ch;
+    int is_server = 0, use_early_data = 0, request_key_update = 0, ch;
     struct sockaddr_storage sa;
     socklen_t salen;
     int family = 0;
 
-    while ((ch = getopt(argc, argv, "46aC:c:i:k:nN:es:Sl:vh")) != -1) {
+    while ((ch = getopt(argc, argv, "46aC:c:i:k:nN:es:Sl:uvh")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -404,6 +407,9 @@ int main(int argc, char **argv)
                 ;
             key_exchanges[i++] = algo;
         } break;
+        case 'u':
+            request_key_update = 1;
+            break;
         default:
             usage(argv[0]);
             exit(1);
@@ -441,8 +447,8 @@ int main(int argc, char **argv)
         exit(1);
 
     if (is_server) {
-        return run_server((struct sockaddr *)&sa, salen, &ctx, file, &hsprop);
+        return run_server((struct sockaddr *)&sa, salen, &ctx, file, &hsprop, request_key_update);
     } else {
-        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop);
+        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop, request_key_update);
     }
 }

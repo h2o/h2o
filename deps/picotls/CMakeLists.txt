@@ -49,3 +49,17 @@ ADD_CUSTOM_TARGET(check prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t WORKI
 IF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     TARGET_LINK_LIBRARIES(cli "socket" "nsl")
 ENDIF ()
+
+IF (BUILD_FUZZER)
+    IF (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        MESSAGE(FATAL ERROR "The fuzzer needs clang as a compiler")
+    ENDIF()
+
+    ADD_EXECUTABLE(fuzzer-asn1-validation fuzz/fuzzer-asn1-validation.c lib/asn1.c)
+    SET_TARGET_PROPERTIES(fuzzer-asn1-validation PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
+    SET_TARGET_PROPERTIES(fuzzer-asn1-validation PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
+
+    ADD_EXECUTABLE(fuzzer-asn1-type-and-length fuzz/fuzzer-asn1-type-and-length.c lib/asn1.c)
+    SET_TARGET_PROPERTIES(fuzzer-asn1-type-and-length PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
+    SET_TARGET_PROPERTIES(fuzzer-asn1-type-and-length PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
+ENDIF()
