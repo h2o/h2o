@@ -27,9 +27,21 @@
 #include <stdio.h>
 #include "picotls.h"
 #include "picotls/minicrypto.h"
+#include "picotls/pembase64.h"
 #include "../deps/picotest/picotest.h"
 #include "../lib/picotls.c"
 #include "test.h"
+
+static void test_is_ipaddr(void)
+{
+    ok(!ptls_server_name_is_ipaddr("www.google.com"));
+    ok(!ptls_server_name_is_ipaddr("www.google.com."));
+    ok(!ptls_server_name_is_ipaddr("www"));
+    ok(!ptls_server_name_is_ipaddr(""));
+    ok(!ptls_server_name_is_ipaddr("123"));
+    ok(ptls_server_name_is_ipaddr("1.1.1.1"));
+    ok(ptls_server_name_is_ipaddr("2001:db8::2:1"));
+}
 
 ptls_context_t *ctx, *ctx_peer;
 ptls_verify_certificate_t *verify_certificate;
@@ -242,6 +254,37 @@ static void test_chacha20poly1305(void)
     }
 }
 
+static void test_base64_decode(void)
+{
+    ptls_base64_decode_state_t state;
+    ptls_buffer_t buf;
+    int ret;
+
+    ptls_buffer_init(&buf, "", 0);
+
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("aGVsbG8gd29ybGQ=", &state, &buf);
+    ok(ret == 0);
+    ok(buf.off == 11);
+    ok(memcmp(buf.base, "hello world", 11) == 0);
+
+    buf.off = 0;
+
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("a$b", &state, &buf);
+    ok(ret != 0);
+
+    buf.off = 0;
+
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("a\xFF"
+                             "b",
+                             &state, &buf);
+    ok(ret != 0);
+
+    ptls_buffer_dispose(&buf);
+}
+
 static struct {
     struct {
         uint8_t buf[32];
@@ -333,7 +376,14 @@ static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_iov
     return 0;
 }
 
-enum { TEST_HANDSHAKE_1RTT, TEST_HANDSHAKE_2RTT, TEST_HANDSHAKE_HRR, TEST_HANDSHAKE_HRR_STATELESS, TEST_HANDSHAKE_EARLY_DATA };
+enum {
+    TEST_HANDSHAKE_1RTT,
+    TEST_HANDSHAKE_2RTT,
+    TEST_HANDSHAKE_HRR,
+    TEST_HANDSHAKE_HRR_STATELESS,
+    TEST_HANDSHAKE_EARLY_DATA,
+    TEST_HANDSHAKE_KEY_UPDATE
+};
 
 static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int check_ch, int require_client_authentication)
 {
@@ -504,6 +554,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ok(memcmp(decbuf.base, req, strlen(req)) == 0);
         ok(ptls_handshake_is_complete(server));
         decbuf.off = 0;
+        cbuf.off = 0;
 
         ret = ptls_send(server, &sbuf, resp, strlen(resp));
         ok(ret == 0);
@@ -517,6 +568,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     ok(memcmp(decbuf.base, resp, strlen(resp)) == 0);
     ok(ptls_handshake_is_complete(client));
     decbuf.off = 0;
+    sbuf.off = 0;
 
     if (mode == TEST_HANDSHAKE_EARLY_DATA) {
         consumed = cbuf.off;
@@ -525,6 +577,39 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ok(cbuf.off == consumed);
         ok(decbuf.off == 0);
         ok(ptls_handshake_is_complete(client));
+        cbuf.off = 0;
+    }
+
+    if (mode == TEST_HANDSHAKE_KEY_UPDATE) {
+        /* server -> client with update_request */
+        ret = ptls_update_key(server, 1);
+        ok(ret == 0);
+        ok(server->needs_key_update);
+        ok(server->key_update_send_request);
+        ret = ptls_send(server, &sbuf, "good bye", 8);
+        ok(ret == 0);
+        ok(!server->needs_key_update);
+        ok(!server->key_update_send_request);
+        consumed = sbuf.off;
+        ret = ptls_receive(client, &decbuf, sbuf.base, &consumed);
+        ok(ret == 0);
+        ok(sbuf.off == consumed);
+        ok(decbuf.off == 8);
+        ok(memcmp(decbuf.base, "good bye", 8) == 0);
+        ok(client->needs_key_update);
+        ok(!client->key_update_send_request);
+        sbuf.off = 0;
+        decbuf.off = 0;
+        ret = ptls_send(client, &cbuf, "hello", 5);
+        ok(ret == 0);
+        consumed = cbuf.off;
+        ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+        ok(ret == 0);
+        ok(cbuf.off == consumed);
+        ok(decbuf.off == 5);
+        ok(memcmp(decbuf.base, "hello", 5) == 0);
+        cbuf.off = 0;
+        decbuf.off = 0;
     }
 
     ptls_buffer_dispose(&cbuf);
@@ -594,6 +679,11 @@ static void test_full_handshake(void)
 static void test_full_handshake_with_client_authentication(void)
 {
     test_full_handshake_impl(1);
+}
+
+static void test_key_update(void)
+{
+    test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_KEY_UPDATE, 0, 0, 0);
 }
 
 static void test_hrr_handshake(void)
@@ -912,8 +1002,10 @@ static void test_handshake_api(void)
     int ret;
 
     ctx->update_traffic_key = &update_traffic_key;
+    ctx->omit_end_of_early_data = 1;
     ctx->save_ticket = &save_ticket;
     ctx_peer->update_traffic_key = &update_traffic_key;
+    ctx_peer->omit_end_of_early_data = 1;
     ctx_peer->encrypt_ticket = &encrypt_ticket;
     ctx_peer->ticket_lifetime = 86400;
     ctx_peer->max_early_data_size = 8192;
@@ -1002,8 +1094,10 @@ static void test_handshake_api(void)
     ptls_buffer_dispose(&sbuf);
 
     ctx->update_traffic_key = NULL;
+    ctx->omit_end_of_early_data = 0;
     ctx->save_ticket = NULL;
     ctx_peer->update_traffic_key = NULL;
+    ctx_peer->omit_end_of_early_data = 0;
     ctx_peer->encrypt_ticket = NULL;
     ctx_peer->save_ticket = NULL;
     ctx_peer->ticket_lifetime = 0;
@@ -1012,6 +1106,7 @@ static void test_handshake_api(void)
 
 void test_picotls(void)
 {
+    subtest("is_ipaddr", test_is_ipaddr);
     subtest("sha256", test_sha256);
     subtest("sha384", test_sha384);
     subtest("hmac-sha256", test_hmac_sha256);
@@ -1021,6 +1116,8 @@ void test_picotls(void)
     subtest("chacha20poly1305", test_chacha20poly1305);
     subtest("aes128ctr", test_aes128ctr);
     subtest("chacha20", test_chacha20);
+
+    subtest("base64-decode", test_base64_decode);
 
     subtest("fragmented-message", test_fragmented_message);
 
@@ -1046,6 +1143,8 @@ void test_picotls(void)
     subtest("enforce-retry-stateless", test_enforce_retry_stateless);
 
     subtest("stateless-hrr-aad-change", test_stateless_hrr_aad_change);
+
+    subtest("key-update", test_key_update);
 
     subtest("handshake-api", test_handshake_api);
 
