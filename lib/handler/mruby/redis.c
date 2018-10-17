@@ -27,6 +27,7 @@
 #include <mruby/string.h>
 #include <mruby/variable.h>
 #include "h2o/mruby_.h"
+#include "embedded.c.h"
 #include "h2o/redis.h"
 #include "h2o/hiredis_.h"
 
@@ -300,6 +301,9 @@ static mrb_value redis_join_reply_callback(h2o_mruby_context_t *mctx, mrb_value 
 void h2o_mruby_redis_init_context(h2o_mruby_shared_context_t *ctx)
 {
     mrb_state *mrb = ctx->mrb;
+
+    h2o_mruby_eval_expr_location(mrb, H2O_MRUBY_CODE_REDIS, "(h2o)lib/handler/mruby/embedded/redis.rb", 1);
+    h2o_mruby_assert(mrb);
 
     struct RClass *module = mrb_define_module(mrb, "H2O");
 
