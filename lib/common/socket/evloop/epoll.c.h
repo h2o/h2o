@@ -114,8 +114,12 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     max_wait = adjust_max_wait(&loop->super, max_wait);
     nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
     update_now(&loop->super);
-    if (nevents == -1)
-        return -1;
+    if (nevents == -1) {
+        if (errno != EINTR)
+            return -1;
+        else
+            nevents = 0;
+    }
 
     if (nevents != 0)
         h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now);
