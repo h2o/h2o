@@ -148,7 +148,6 @@ struct st_h2o_http2_conn_t {
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
     h2o_http2_conn_state_t state;
-    h2o_linklist_t _conns; /* linklist to h2o_context_t::http2._conns */
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
     h2o_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
     h2o_hpack_header_table_t _input_header_table;

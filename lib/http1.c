@@ -54,7 +54,6 @@ struct st_h2o_http1_conn_t {
     h2o_conn_t super;
     h2o_socket_t *sock;
     /* internal structure */
-    h2o_linklist_t _conns;
     h2o_timer_t _timeout_entry;
     uint64_t _req_index;
     size_t _prevreqlen;
@@ -131,7 +130,7 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
         h2o_socket_close(conn->sock);
-    h2o_linklist_unlink(&conn->_conns);
+    h2o_linklist_unlink(&conn->super._conns);
     free(conn);
 }
 
@@ -143,8 +142,13 @@ static void set_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_
     if (conn->_timeout_entry.cb != NULL)
         h2o_timer_unlink(&conn->_timeout_entry);
     conn->_timeout_entry.cb = cb;
-    if (cb != NULL)
+    h2o_linklist_unlink(&conn->super._conns);
+    if (cb != NULL) {
+        h2o_linklist_insert(&conn->super.ctx->_inactive_conns, &conn->super._conns);
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_timeout_entry);
+    } else {
+        h2o_linklist_insert(&conn->super.ctx->_active_conns, &conn->super._conns);
+    }
 }
 
 static void process_request(struct st_h2o_http1_conn_t *conn)
@@ -517,6 +521,17 @@ void reqread_on_read(h2o_socket_t *sock, const char *err)
         conn->_req_entity_reader->handle_incoming_entity(conn);
 }
 
+static int close_idle_connection(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    if (conn->sock->input->size == 0) {
+        conn->req.http1_is_persistent = 0;
+        close_connection(conn, 1);
+        return 1;
+    }
+    return 0;
+}
+
 static void reqread_on_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _timeout_entry, entry);
@@ -529,8 +544,7 @@ static void reqread_on_timeout(h2o_timer_t *entry)
         conn->req.res.reason = "Request Timeout";
     }
 
-    conn->req.http1_is_persistent = 0;
-    close_connection(conn, 1);
+    close_idle_connection(&conn->super);
 }
 
 static inline void reqread_start(struct st_h2o_http1_conn_t *conn)
@@ -994,15 +1008,27 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
+static int conn_is_h1(h2o_conn_t *conn)
+{
+    return conn->callbacks->get_sockname == get_sockname;
+}
+
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
 {
     h2o_linklist_t *node;
+    h2o_linklist_t *conn_list[] = {&ctx->_active_conns, &ctx->_inactive_conns};
+    int i;
 
-    for (node = ctx->http1._conns.next; node != &ctx->http1._conns; node = node->next) {
-        struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _conns, node);
-        int ret = cb(&conn->req, cbdata);
-        if (ret != 0)
-            return ret;
+    for (i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
+        for (node = conn_list[i]->next; node != conn_list[i]; node = node->next) {
+            h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
+            struct st_h2o_http1_conn_t *conn = (void *)_conn;
+            if (!conn_is_h1(_conn))
+                continue;
+            int ret = cb(&conn->req, cbdata);
+            if (ret != 0)
+                return ret;
+        }
     }
     return 0;
 }
@@ -1015,6 +1041,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         NULL,         /* push */
         get_socket,   /* get underlying socket */
         NULL,         /* get debug state */
+        close_idle_connection,
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
             {log_request_index},                                                                     /* http1 */
@@ -1028,7 +1055,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     /* init properties that need to be non-zero */
     conn->sock = sock;
     sock->data = conn;
-    h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
+    h2o_linklist_insert(&ctx->ctx->_inactive_conns, &conn->super._conns);
 
     init_request(conn);
     reqread_start(conn);

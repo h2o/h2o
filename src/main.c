@@ -1565,13 +1565,16 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
-        if (num_connections(0) >= conf.max_connections) {
+        int excess_connections = num_connections(0) - conf.max_connections;
+        if (excess_connections >= 1) {
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
              * server does not check if the number of connections has exceeded _after_ epoll notifies of a new connection _but_
              * _before_ calling `accept`.  In other words t/40max-connections.t may fail.
              */
-            break;
+            if (!h2o_context_close_idle_connections(ctx->accept_ctx.ctx, excess_connections)) {
+                return;
+            }
         }
         if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
             break;

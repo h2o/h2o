@@ -60,7 +60,12 @@ EOT
 
     # close the preceeding connections
     while (@conns) {
-        close shift @conns;
+        my $conn = shift @conns;
+        syswrite($conn, "\r\n") or die "failed to complete partial request:$!";
+
+        my $resp = do { local $/; <$conn> };
+        like $resp, qr{^HTTP/1\.1 200 OK\r\n}s, "response is valid";
+        close $conn;
     }
 
     sleep $WAIT;
