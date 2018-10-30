@@ -5,23 +5,23 @@ use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
 
-my $MAX_CONN = 2;
 my $WAIT = 0.1;
 
-subtest "single-threaded" => sub {
+subtest "single-connection" => sub {
     doit(1);
 };
-subtest "multi-threaded" => sub {
+
+subtest "multiple-connections" => sub {
     doit(4);
 };
 
 done_testing;
 
 sub doit {
-    my $num_threads = shift;
+    my $max_conn = shift;
     my $server = spawn_h2o(<< "EOT");
-num-threads: $num_threads
-max-connections: $MAX_CONN
+num-threads: 1
+max-connections: $max_conn
 hosts:
   default:
     paths:
@@ -34,7 +34,7 @@ EOT
 
     # establish connections to the maximum (and write partial requests so that the server would accept(2) the connections)
     my @conns;
-    for (1..$MAX_CONN) {
+    for (1..$max_conn) {
         my $conn = IO::Socket::INET->new(
             PeerAddr => "127.0.0.1:$port",
             Proto    => "tcp",
