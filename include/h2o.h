@@ -946,13 +946,15 @@ struct st_h2o_req_t {
      */
     h2o_pathconf_t *pathconf;
     /**
-     * filters
+     * filters and the size of it
      */
-    H2O_VECTOR(h2o_filter_t *) filters;
+    h2o_filter_t **filters;
+    size_t num_filters;
     /**
-     * loggers
+     * loggers and the size of it
      */
-    H2O_VECTOR(h2o_logger_t *) loggers;
+    h2o_logger_t **loggers;
+    size_t num_loggers;
     /**
      * the handler that has been executed
      */
@@ -2031,8 +2033,8 @@ inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
 {
     h2o_filter_t *next;
 
-    if (req->_next_filter_index < req->filters.size) {
-        next = req->filters.entries[req->_next_filter_index++];
+    if (req->_next_filter_index < req->num_filters) {
+        next = req->filters[req->_next_filter_index++];
         next->on_setup_ostream(next, req, slot);
     }
 }
