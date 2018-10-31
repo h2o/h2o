@@ -630,7 +630,8 @@ static int handle_goaway_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2
     });
 
     /* stop opening new streams */
-    h2o_linklist_unlink(&conn->super.link);
+    if (h2o_linklist_is_linked(&conn->super.link))
+        h2o_linklist_unlink(&conn->super.link);
 
     return 0;
 }
@@ -813,7 +814,8 @@ static void enqueue_goaway(struct st_h2o_http2client_conn_t *conn, int errnum, h
     conn->state = H2O_HTTP2CLIENT_CONN_STATE_HALF_CLOSED;
 
     /* stop opening new streams */
-    h2o_linklist_unlink(&conn->super.link);
+    if (h2o_linklist_is_linked(&conn->super.link))
+        h2o_linklist_unlink(&conn->super.link);
 }
 
 static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
