@@ -413,7 +413,7 @@ static void on_send_headers_timeout(h2o_timer_t *entry)
 }
 
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
+                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;

@@ -44,7 +44,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup);
+                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup);
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
@@ -113,7 +113,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 }
 
 h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
+                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     size_t i;
 
