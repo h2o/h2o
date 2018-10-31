@@ -212,13 +212,13 @@ struct st_h2o_pathconf_t {
      */
     H2O_VECTOR(h2o_handler_t *) handlers;
     /**
-     * list of filters
+     * list of filters that will be copied into req->filters
      */
-    H2O_VECTOR(h2o_filter_t *) filters;
+    H2O_VECTOR(h2o_filter_t *) _filters;
     /**
-     * list of loggers (h2o_logger_t)
+     * list of loggers (h2o_logger_t) that will be copied into req->loggers
      */
-    H2O_VECTOR(h2o_logger_t *) loggers;
+    H2O_VECTOR(h2o_logger_t *) _loggers;
     /**
      * mimemap
      */
@@ -943,6 +943,14 @@ struct st_h2o_req_t {
      * the path context
      */
     h2o_pathconf_t *pathconf;
+    /**
+     * filters
+     */
+    H2O_VECTOR(h2o_filter_t *) filters;
+    /**
+     * loggers
+     */
+    H2O_VECTOR(h2o_logger_t *) loggers;
     /**
      * the handler that has been executed
      */
@@ -2021,8 +2029,8 @@ inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
 {
     h2o_filter_t *next;
 
-    if (req->_next_filter_index < req->pathconf->filters.size) {
-        next = req->pathconf->filters.entries[req->_next_filter_index++];
+    if (req->_next_filter_index < req->filters.size) {
+        next = req->filters.entries[req->_next_filter_index++];
         next->on_setup_ostream(next, req, slot);
     }
 }

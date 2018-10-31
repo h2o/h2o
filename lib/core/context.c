@@ -46,8 +46,8 @@ void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathc
     } while (0)
 
     DOIT(h2o_handler_t, handlers);
-    DOIT(h2o_filter_t, filters);
-    DOIT(h2o_logger_t, loggers);
+    DOIT(h2o_filter_t, _filters);
+    DOIT(h2o_logger_t, _loggers);
 
 #undef DOIT
 }
@@ -74,8 +74,8 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
     } while (0)
 
     DOIT(h2o_handler_t, handlers);
-    DOIT(h2o_filter_t, filters);
-    DOIT(h2o_logger_t, loggers);
+    DOIT(h2o_filter_t, _filters);
+    DOIT(h2o_logger_t, _loggers);
 
 #undef DOIT
 }
