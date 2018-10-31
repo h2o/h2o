@@ -40,14 +40,14 @@ typedef struct st_h2o_httpclient_properties_t {
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
-typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int minor_version,
+typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version,
                                                          int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
                                                          int rlen, int header_requires_dup);
 typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method,
                                                             h2o_url_t *url, const h2o_header_t **headers, size_t *num_headers,
                                                             h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
                                                             h2o_httpclient_properties_t *props, h2o_url_t *origin);
-typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int minor_version, int status, h2o_iovec_t msg,
+typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg,
                                                h2o_header_t *headers, size_t num_headers);
 
 typedef struct st_h2o_httpclient_connection_pool_t {

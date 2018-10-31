@@ -226,7 +226,7 @@ static void on_error_before_head(struct st_h2o_http1client_t *client, const char
 static void on_head(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
-    int minor_version, http_status, rlen, is_eos;
+    int minor_version, version, http_status, rlen, is_eos;
     const char *msg;
 #define MAX_HEADERS 100
     h2o_header_t *headers;
@@ -259,6 +259,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             return;
         }
+
+        version = 0x100 | (minor_version != 0);
+
         /* fill-in the headers */
         for (i = 0; i != num_headers; ++i) {
             const h2o_token_t *token;
@@ -281,7 +284,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
             break;
 
         if (client->super.informational_cb != NULL &&
-            client->super.informational_cb(&client->super, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers,
+            client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                            num_headers) != 0) {
             close_client(client);
             return;
@@ -340,7 +343,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* call the callback. sock may be stealed and stealed sock need rlen.*/
     client->super._cb.on_body =
-        client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, minor_version, http_status,
+        client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, version, http_status,
                                   h2o_iovec_init(msg, msg_len), headers, num_headers, rlen, 1);
 
     if (is_eos) {

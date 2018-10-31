@@ -43,7 +43,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
                                          h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                          h2o_url_t *origin);
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup);
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
@@ -112,7 +112,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
 {
     size_t i;
@@ -123,7 +123,7 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
         return NULL;
     }
 
-    printf("HTTP/1.%d %d %.*s\n", minor_version, status, (int)msg.len, msg.base);
+    printf("HTTP/1.%d %d %.*s\n", (version & 0xFF), status, (int)msg.len, msg.base);
     for (i = 0; i != num_headers; ++i)
         printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
     printf("\n");

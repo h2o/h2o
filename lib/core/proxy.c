@@ -403,7 +403,7 @@ static char compress_hint_to_enum(const char *val, size_t len)
     return H2O_COMPRESS_HINT_AUTO;
 }
 
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
 {
     struct rp_generator_t *self = client->data;
@@ -526,7 +526,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     return on_body;
 }
 
-static int on_1xx(h2o_httpclient_t *client, int minor_version, int status, h2o_iovec_t msg, h2o_header_t *headers,
+static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
                   size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
