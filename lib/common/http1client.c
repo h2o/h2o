@@ -35,6 +35,7 @@ struct st_h2o_http1client_t {
     h2o_url_t *_origin;
     int _method_is_head;
     int _do_keepalive;
+    int bytes_to_consume;
     union {
         struct {
             size_t bytesleft;
@@ -341,7 +342,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
             client->_do_keepalive = 0;
     }
 
-    /* call the callback. sock may be stealed and stealed sock need rlen.*/
+    /* call the callback. sock may be stealed */
+    client->bytes_to_consume = rlen;
     client->super._cb.on_body =
         client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, version, http_status,
                                   h2o_iovec_init(msg, msg_len), headers, num_headers, rlen, 1);
@@ -355,7 +357,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    h2o_buffer_consume(&client->sock->input, rlen);
+    h2o_buffer_consume(&sock->input, client->bytes_to_consume);
+    client->bytes_to_consume = 0;
     client->sock->bytes_read = client->sock->input->size;
 
     client->super._timeout.cb = on_body_timeout;
@@ -635,6 +638,8 @@ static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
     struct st_h2o_http1client_t *client = (void *)_client;
     h2o_socket_t *sock = client->sock;
     h2o_socket_read_stop(sock);
+    h2o_buffer_consume(&sock->input, client->bytes_to_consume);
+    client->bytes_to_consume = 0;
     client->sock = NULL;
     return sock;
 }

@@ -352,11 +352,10 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     free(info);
 }
 
-static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t timeout, int rlen)
+static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t timeout)
 {
     h2o_req_t *req = self->src_req;
     h2o_socket_t *sock = self->client->steal_socket(self->client);
-    h2o_buffer_consume(&sock->input, rlen); // trash data after stealing sock.
     struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
     info->upstream_sock = sock;
     info->timeout = timeout;
@@ -500,7 +499,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->websocket_timeout != NULL);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        on_websocket_upgrade(self, *client_ctx->websocket_timeout, rlen);
+        on_websocket_upgrade(self, *client_ctx->websocket_timeout);
         self->client = NULL;
         return NULL;
     }
