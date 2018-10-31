@@ -458,6 +458,21 @@ Default:
     return 0x101;
 }
 
+static h2o_pathconf_t *create_pathconf(h2o_mem_pool_t *pool, h2o_pathconf_t *base, int preserve_filters)
+{
+    h2o_pathconf_t *pathconf = h2o_mem_alloc_pool(pool, h2o_pathconf_t, 1);
+    *pathconf = *base;
+    pathconf->loggers.entries = NULL;
+    pathconf->loggers.size = 0;
+    pathconf->loggers.capacity = 0;
+    if (!preserve_filters) {
+        pathconf->filters.entries = NULL;
+        pathconf->filters.size = 0;
+        pathconf->filters.capacity = 0;
+    }
+    return pathconf;
+}
+
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env, int is_reprocess)
 {
     static const h2o_conn_callbacks_t callbacks = {get_sockname, /* stringify address */
@@ -487,10 +502,6 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     /* initialize super and conn */
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
-    subreq->super.is_subrequest = 1;
-    if (!is_reprocess) {
-        subreq->super.disable_filters = 1;
-    }
     h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
     ostream->do_send = subreq_ostream_send;
     subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;
@@ -699,7 +710,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->super.input.path = h2o_strdup(&subreq->super.pool, url_parsed.path.base, url_parsed.path.len);
     h2o_hostconf_t *hostconf = h2o_req_setup(&subreq->super);
     subreq->super.hostconf = hostconf;
-    subreq->super.pathconf = ctx->handler->pathconf;
+    subreq->super.pathconf = create_pathconf(&subreq->super.pool, ctx->handler->pathconf, is_reprocess);
     subreq->super.handler = &ctx->handler->super;
     subreq->super.version = parse_protocol_version(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol));
 

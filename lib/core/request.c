@@ -312,7 +312,7 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timer_unlink(&req->_timeout_entry);
 
-    if (req->pathconf != NULL && !req->is_subrequest) {
+    if (req->pathconf != NULL) {
         h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);
@@ -476,12 +476,10 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     req->_generator = generator;
 
     /* setup response filters */
-    if (!req->disable_filters) {
-        if (req->prefilters != NULL) {
-            req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
-        } else {
-            h2o_setup_next_ostream(req, &req->_ostr_top);
-        }
+    if (req->prefilters != NULL) {
+        req->prefilters->on_setup_ostream(req->prefilters, req, &req->_ostr_top);
+    } else {
+        h2o_setup_next_ostream(req, &req->_ostr_top);
     }
 }
 
