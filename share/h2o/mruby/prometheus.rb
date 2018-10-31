@@ -19,10 +19,15 @@
 # IN THE SOFTWARE.
 #
 
-class PrometheusHelper
-    def self.run(url)
-        resp = http_request(url)
-        status, headers, body = resp.join
+class Prometheus
+
+    def initialize(app)
+      @app = app
+    end
+
+    def call(env)
+        env['PATH_INFO'] = '/json'
+        status, headers, body = @app.call(env)
         stats = JSON.parse(body.join)
         s = ""
         version = ""
