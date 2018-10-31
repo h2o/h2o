@@ -72,8 +72,17 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_register_loop(sockpool, ctx->loop);
         h2o_httpclient_connection_pool_init(connpool, sockpool);
 
+        /* obtain root */
+        char *root, *crt_fullpath;
+        if ((root = getenv("H2O_ROOT")) == NULL)
+            root = H2O_TO_STR(H2O_ROOT);
+#define CA_PATH "/share/h2o/ca-bundle.crt"
+        crt_fullpath = h2o_mem_alloc(strlen(root) + strlen(CA_PATH) + 1);
+        sprintf(crt_fullpath, "%s%s", root, CA_PATH);
+#undef CA_PATH
+
         SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
-        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+        SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
