@@ -21,36 +21,36 @@
 
 class Prometheus
 
-    def initialize(app)
-      @app = app
-    end
+  def initialize(app)
+    @app = app
+  end
 
-    def call(env)
-        env['PATH_INFO'] = '/json'
-        status, headers, body = @app.call(env)
-        stats = JSON.parse(body.join)
-        s = ""
-        version = ""
-        keys = {}
-        stats.each { |k,v|
-            next if v.kind_of?(Array)
-            next if k =~ "-time$"
-            if k == "server-version" then
-                version = v 
-                next
-            end
-            keys[k] = v
-        }
-        keys.each { |k,v|
-            next if k =~ "-type$"
+  def call(env)
+    env['PATH_INFO'] = '/json'
+    status, headers, body = @app.call(env)
+    stats = JSON.parse(body.join)
+    s = ""
+    version = ""
+    keys = {}
+    stats.each { |k,v|
+      next if v.kind_of?(Array)
+      next if k =~ "-time$"
+      if k == "server-version" then
+        version = v 
+        next
+      end
+      keys[k] = v
+    }
+    keys.each { |k,v|
+      next if k =~ "-type$"
 
-            type = keys["#{k}-type"]
-            type = "counter" unless type
+      type = keys["#{k}-type"]
+      type = "counter" unless type
 
-            s += "#HELP #{k}\n"
-            s += "#TYPE #{k} #{type}\n"
-            s += "#{k}{version=\"#{version}\"} #{v}\n"
-        }
-        [status, headers, [s]]
-    end
+      s += "#HELP #{k}\n"
+      s += "#TYPE #{k} #{type}\n"
+      s += "#{k}{version=\"#{version}\"} #{v}\n"
+    }
+    [status, headers, [s]]
+  end
 end
