@@ -1077,6 +1077,10 @@ struct st_h2o_req_t {
      * whether the request is a subrequest
      */
     unsigned char is_subrequest : 1;
+    /**
+     * whether the filters and prefilters will be applied
+     */
+    unsigned char disable_filters : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
