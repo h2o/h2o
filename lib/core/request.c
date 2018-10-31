@@ -312,8 +312,8 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timer_unlink(&req->_timeout_entry);
 
-    if (req->pathconf != NULL && !req->is_subrequest) {
-        h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
+    if (req->pathconf != NULL) {
+        h2o_logger_t **logger = req->loggers, **end = logger + req->num_loggers;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);
         }
@@ -531,6 +531,13 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
 {
     req->hostconf = hostconf;
     req->pathconf = pathconf;
+
+    /* copy filters and loggers */
+    req->filters = pathconf->_filters.entries;
+    req->num_filters = pathconf->_filters.size;
+    req->loggers = pathconf->_loggers.entries;
+    req->num_loggers = pathconf->_loggers.size;
+
     if (pathconf->env != NULL)
         apply_env(req, pathconf->env);
 }
@@ -776,8 +783,8 @@ void h2o_send_informational(h2o_req_t *req)
         goto Clear;
 
     int i = 0;
-    for (i = 0; i != req->pathconf->filters.size; ++i) {
-        h2o_filter_t *filter = req->pathconf->filters.entries[i];
+    for (i = 0; i != req->num_filters; ++i) {
+        h2o_filter_t *filter = req->filters[i];
         if (filter->on_informational != NULL)
             filter->on_informational(filter, req);
     }
