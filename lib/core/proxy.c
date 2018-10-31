@@ -41,6 +41,7 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
+    h2o_timer_t send_headers_timeout;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -367,6 +368,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
 
+    h2o_timer_unlink(&self->send_headers_timeout);
+
     if (errstr != NULL) {
         self->src_req->timestamps.proxy = self->client->timings;
 
@@ -400,6 +403,13 @@ static char compress_hint_to_enum(const char *val, size_t len)
         return H2O_COMPRESS_HINT_ENABLE_BR;
     }
     return H2O_COMPRESS_HINT_AUTO;
+}
+
+static void on_send_headers_timeout(h2o_timer_t *entry)
+{
+    struct rp_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct rp_generator_t, send_headers_timeout, entry);
+    h2o_doublebuffer_prepare_empty(&self->sending);
+    h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 }
 
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
@@ -512,15 +522,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         return NULL;
     }
 
-    /* We currently fail to notify the protocol handler that the headers are complete (by invoking h2o_send(NULL, 0)) if the body
-     * received from upstream is using chunked encoding and if only an incomplete chunk header (i.e. chunk-size CR LF CR LF) was
-     * received along with the HTTP headers. However it is not a big deal; we are only failing to "optimize" for a theoretical
-     * corner case.
-     */
-    if ((*self->client->buf)->size == rlen) {
-        h2o_doublebuffer_prepare_empty(&self->sending);
-        h2o_send(req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
-    }
+    /* if httpclient has no received body at this time, immediately send only headers using zero timeout */
+    h2o_timer_link(req->conn->ctx->loop, 0, &self->send_headers_timeout);
 
     return on_body;
 }
@@ -634,6 +637,7 @@ static void on_generator_dispose(void *_self)
     }
     h2o_buffer_dispose(&self->last_content_before_send);
     h2o_doublebuffer_dispose(&self->sending);
+    h2o_timer_unlink(&self->send_headers_timeout);
 }
 
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
@@ -654,6 +658,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
     req->timestamps.proxy = (h2o_httpclient_timings_t){{0}};
+    h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
 
     return self;
 }
