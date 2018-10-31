@@ -458,18 +458,16 @@ Default:
     return 0x101;
 }
 
-static h2o_pathconf_t *create_pathconf(h2o_mem_pool_t *pool, h2o_pathconf_t *base, int preserve_filters)
+static h2o_pathconf_t *create_pathconf(h2o_mem_pool_t *pool, h2o_pathconf_t *base)
 {
     h2o_pathconf_t *pathconf = h2o_mem_alloc_pool(pool, h2o_pathconf_t, 1);
     *pathconf = *base;
     pathconf->loggers.entries = NULL;
     pathconf->loggers.size = 0;
     pathconf->loggers.capacity = 0;
-    if (!preserve_filters) {
-        pathconf->filters.entries = NULL;
-        pathconf->filters.size = 0;
-        pathconf->filters.capacity = 0;
-    }
+    pathconf->filters.entries = NULL;
+    pathconf->filters.size = 0;
+    pathconf->filters.capacity = 0;
     return pathconf;
 }
 
@@ -710,7 +708,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->super.input.path = h2o_strdup(&subreq->super.pool, url_parsed.path.base, url_parsed.path.len);
     h2o_hostconf_t *hostconf = h2o_req_setup(&subreq->super);
     subreq->super.hostconf = hostconf;
-    subreq->super.pathconf = create_pathconf(&subreq->super.pool, ctx->handler->pathconf, is_reprocess);
+    subreq->super.pathconf = create_pathconf(&subreq->super.pool, ctx->handler->pathconf);
     subreq->super.handler = &ctx->handler->super;
     subreq->super.version = parse_protocol_version(RSTRING_PTR(server_protocol), RSTRING_LEN(server_protocol));
 
