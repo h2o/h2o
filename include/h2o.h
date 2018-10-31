@@ -212,11 +212,13 @@ struct st_h2o_pathconf_t {
      */
     H2O_VECTOR(h2o_handler_t *) handlers;
     /**
-     * list of filters that will be copied into req->filters
+     * list of filters to be applied unless when processing a subrequest.
+     * The address of the list is set in `req->filters` and used when processing a request.
      */
     H2O_VECTOR(h2o_filter_t *) _filters;
     /**
-     * list of loggers (h2o_logger_t) that will be copied into req->loggers
+     * list of loggers to be applied unless when processing a subrequest.
+     * The address of the list is set in `req->loggers` and used when processing a request.
      */
     H2O_VECTOR(h2o_logger_t *) _loggers;
     /**
