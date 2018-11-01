@@ -21,38 +21,44 @@
 
 module H2O
   class Prometheus
-  
+
+    @@gauge_types = ['uptime', 'connections', 'num-sessions']
+
     def initialize(app)
       @app = app
     end
-  
+
+    def type_for(key)
+      if @@gauge_types.include?(key) then
+        'gauge'
+      elsif key =~ /-[0-9]+\z/ then
+        'gauge'
+      else
+        'counter'
+      end
+    end
+
     def call(env)
       env['PATH_INFO'] = '/json'
       status, headers, body = @app.call(env)
       stats = JSON.parse(body.join)
+      version = stats.delete('server-version') || ''
+      stats = stats.select {|k, v| v.kind_of?(Numeric) }
       s = ""
-      version = ""
-      keys = {}
-      stats.each { |k,v|
-        next if v.kind_of?(Array)
-        next if k =~ "-time$"
-        if k == "server-version" then
-          version = v 
-          next
-        end
-        keys[k] = v
-      }
-      keys.each { |k,v|
-        next if k =~ "-type$"
-  
-        type = keys["#{k}-type"]
-        type = "counter" unless type
-  
-        s += "#HELP #{k}\n"
-        s += "#TYPE #{k} #{type}\n"
-        s += "#{k}{version=\"#{version}\"} #{v}\n"
+      stats.each {|k, v|
+        v = 0 if v.nil?
+
+        type = type_for(k)
+
+        # sanitize invalid characters to underscore
+        pk = k.gsub(/[^a-zA-Z0-9:_]/, '_');
+
+        s += "# HELP #{pk} #{k}\n"
+        s += "# TYPE #{pk} #{type}\n" if type
+        s += "#{pk}{version=\"#{version}\"} #{v}\n"
       }
       [status, headers, [s]]
     end
+
   end
 end
