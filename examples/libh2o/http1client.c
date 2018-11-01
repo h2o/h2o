@@ -123,7 +123,16 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
         return NULL;
     }
 
-    printf("HTTP/1.%d %d %.*s\n", (version & 0xFF), status, (int)msg.len, msg.base);
+    printf("HTTP/%d", (version >> 8));
+    if ((version & 0xff) != 0) {
+        printf(".%d", version & 0xff);
+    }
+    printf(" %d", status);
+    if (msg.len == 0) {
+        printf(" %.*s\n", (int)msg.len, msg.base);
+    } else {
+        printf("\n");
+    }
     for (i = 0; i != num_headers; ++i)
         printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
     printf("\n");
