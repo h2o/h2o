@@ -196,8 +196,8 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf)
             int j;
             for (j = 0; j < hconf->paths.entries[i].handlers.size; j++) {
                 h2o_pathconf_t *pathconf = &hconf->paths.entries[i];
-                h2o_vector_reserve(NULL, &pathconf->loggers, pathconf->loggers.size + 1);
-                pathconf->loggers.entries[pathconf->loggers.size++] = (void *)logger;
+                h2o_vector_reserve(NULL, &pathconf->_loggers, pathconf->_loggers.size + 1);
+                pathconf->_loggers.entries[pathconf->_loggers.size++] = (void *)logger;
             }
         }
     }

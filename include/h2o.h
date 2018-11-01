@@ -212,13 +212,15 @@ struct st_h2o_pathconf_t {
      */
     H2O_VECTOR(h2o_handler_t *) handlers;
     /**
-     * list of filters
+     * list of filters to be applied unless when processing a subrequest.
+     * The address of the list is set in `req->filters` and used when processing a request.
      */
-    H2O_VECTOR(h2o_filter_t *) filters;
+    H2O_VECTOR(h2o_filter_t *) _filters;
     /**
-     * list of loggers (h2o_logger_t)
+     * list of loggers to be applied unless when processing a subrequest.
+     * The address of the list is set in `req->loggers` and used when processing a request.
      */
-    H2O_VECTOR(h2o_logger_t *) loggers;
+    H2O_VECTOR(h2o_logger_t *) _loggers;
     /**
      * mimemap
      */
@@ -944,6 +946,16 @@ struct st_h2o_req_t {
      */
     h2o_pathconf_t *pathconf;
     /**
+     * filters and the size of it
+     */
+    h2o_filter_t **filters;
+    size_t num_filters;
+    /**
+     * loggers and the size of it
+     */
+    h2o_logger_t **loggers;
+    size_t num_loggers;
+    /**
      * the handler that has been executed
      */
     h2o_handler_t *handler;
@@ -1073,10 +1085,6 @@ struct st_h2o_req_t {
      * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
      */
     unsigned char upstream_refused : 1;
-    /**
-     * whether the request is a subrequest
-     */
-    unsigned char is_subrequest : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
@@ -1145,10 +1153,10 @@ static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* util */
 
-extern const char *h2o_http2_npn_protocols;
-extern const char *h2o_npn_protocols;
-extern const h2o_iovec_t *h2o_http2_alpn_protocols;
-extern const h2o_iovec_t *h2o_alpn_protocols;
+extern const char h2o_http2_npn_protocols[];
+extern const char h2o_npn_protocols[];
+extern const h2o_iovec_t h2o_http2_alpn_protocols[];
+extern const h2o_iovec_t h2o_alpn_protocols[];
 
 /**
  * accepts a connection
@@ -2025,8 +2033,8 @@ inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
 {
     h2o_filter_t *next;
 
-    if (req->_next_filter_index < req->pathconf->filters.size) {
-        next = req->pathconf->filters.entries[req->_next_filter_index++];
+    if (req->_next_filter_index < req->num_filters) {
+        next = req->filters[req->_next_filter_index++];
         next->on_setup_ostream(next, req, slot);
     }
 }

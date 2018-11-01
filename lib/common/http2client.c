@@ -177,6 +177,8 @@ static void adjust_conn_linkedlist(h2o_httpclient_connection_pool_t *connpool, s
         assert(!h2o_linklist_is_linked(&conn->super.link));
         return;
     }
+    if (!h2o_linklist_is_linked(&conn->super.link))
+        return;
 
     double ratio = (double)conn->super.num_streams / h2o_httpclient__h2_get_max_concurrent_streams(&conn->super);
 
@@ -269,10 +271,9 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
     assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
-    size_t dummy_content_length;
     if ((ret =
              h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table, &stream->input.status,
-                                      &stream->input.headers, &dummy_content_length, src, len, err_desc)) != 0) {
+                                      &stream->input.headers, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto SendRSTStream;

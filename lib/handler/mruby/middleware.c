@@ -487,7 +487,6 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     /* initialize super and conn */
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
-    subreq->super.is_subrequest = 1;
     h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
     ostream->do_send = subreq_ostream_send;
     subreq->conn.super.hosts = ctx->handler->pathconf->global->hosts;

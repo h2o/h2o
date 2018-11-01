@@ -313,7 +313,6 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     h2o_hq_peek_frame_t frame;
     int status;
     h2o_headers_t headers = {NULL};
-    size_t content_length;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
     const char *err_desc = NULL;
@@ -332,8 +331,7 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     if (frame.type != H2O_HQ_FRAME_TYPE_HEADERS)
         return on_error_before_head(req, "unexpected frame", H2O_HQ_ERROR_GENERAL_PROTOCOL);
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->stream->stream_id, &status, &headers,
-                                        &content_length, header_ack, &header_ack_len, frame.payload, frame.length, &err_desc)) !=
-        0) {
+                                        header_ack, &header_ack_len, frame.payload, frame.length, &err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INCOMPLETE)
             return 0;
         return on_error_before_head(req, err_desc != NULL ? err_desc : "qpack error", H2O_HQ_ERROR_GENERAL_PROTOCOL /* FIXME */);

@@ -131,14 +131,15 @@ __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype = {
     {H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2}, /* minimum initial capacity */
     &h2o_socket_buffer_mmap_settings};
 
-const char *h2o_socket_error_out_of_memory = "out of memory";
-const char *h2o_socket_error_io = "I/O error";
-const char *h2o_socket_error_closed = "socket closed by peer";
-const char *h2o_socket_error_conn_fail = "connection failure";
-const char *h2o_socket_error_ssl_no_cert = "no certificate";
-const char *h2o_socket_error_ssl_cert_invalid = "invalid certificate";
-const char *h2o_socket_error_ssl_cert_name_mismatch = "certificate name mismatch";
-const char *h2o_socket_error_ssl_decode = "SSL decode error";
+const char h2o_socket_error_out_of_memory[] = "out of memory";
+const char h2o_socket_error_io[] = "I/O error";
+const char h2o_socket_error_closed[] = "socket closed by peer";
+const char h2o_socket_error_conn_fail[] = "connection failure";
+const char h2o_socket_error_ssl_no_cert[] = "no certificate";
+const char h2o_socket_error_ssl_cert_invalid[] = "invalid certificate";
+const char h2o_socket_error_ssl_cert_name_mismatch[] = "certificate name mismatch";
+const char h2o_socket_error_ssl_decode[] = "SSL decode error";
+const char h2o_socket_error_ssl_handshake[] = "ssl handshake failure";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
@@ -675,9 +676,15 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                     ptls_buffer_init(&wbuf, dst, dst_size);
                     ret = ptls_send(sock->ssl->ptls, &wbuf, bufs[0].base + off, sz);
                     assert(ret == 0);
-                    assert(!wbuf.is_allocated);
+                    dst_size = wbuf.off;
+                    if (wbuf.is_allocated) {
+                        /* happens when ptls_send emits KeyUpdate message, for one case due to receiving one from peer */
+                        dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
+                        memcpy(dst, wbuf.base, dst_size);
+                        ptls_buffer_dispose(&wbuf);
+                    }
                     h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
-                    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(dst, wbuf.off);
+                    sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(dst, dst_size);
                 } else
 #endif
                 {
@@ -1019,6 +1026,11 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     handshake_cb(sock, err);
 }
 
+static void on_handshake_failure_ossl111(h2o_socket_t *sock, const char *err)
+{
+    on_handshake_complete(sock, h2o_socket_error_ssl_handshake);
+}
+
 static void proceed_handshake(h2o_socket_t *sock, const char *err)
 {
     h2o_iovec_t first_input = {NULL};
@@ -1135,7 +1147,14 @@ Redo:
         if (verify_result != X509_V_OK) {
             err = X509_verify_cert_error_string(verify_result);
         } else {
-            err = "ssl handshake failure";
+            err = h2o_socket_error_ssl_handshake;
+            /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
+             * shutdown_ssl. */
+            if (sock->ssl->output.bufs.size != 0) {
+                h2o_socket_read_stop(sock);
+                flush_pending_ssl(sock, on_handshake_failure_ossl111);
+                return;
+            }
         }
         goto Complete;
     }

@@ -50,8 +50,8 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
  * outbuf should be at least H2O_HPACK_ENCODE_INT_MAX_LENGTH long
  */
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
-                             h2o_headers_t *headers, size_t *content_length, uint8_t *outbuf, size_t *outbufsize,
-                             const uint8_t *src, size_t len, const char **err_desc);
+                             h2o_headers_t *headers, uint8_t *outbuf, size_t *outbufsize, const uint8_t *src, size_t len,
+                             const char **err_desc);
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
