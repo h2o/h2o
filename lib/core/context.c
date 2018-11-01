@@ -205,5 +205,5 @@ int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_t
         if (closed == max_connections_to_close)
             break;
     }
-    return closed == max_connections_to_close;
+    return closed;
 }

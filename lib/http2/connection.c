@@ -1314,11 +1314,6 @@ static h2o_socket_t *get_socket(h2o_conn_t *_conn)
     return conn->sock;
 }
 
-static int conn_is_h2(h2o_conn_t *conn)
-{
-    return conn->callbacks->get_sockname == get_sockname;
-}
-
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1410,24 +1405,29 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
+static const h2o_conn_callbacks_t h2_callbacks = {
+    get_sockname,              /* stringify address */
+    get_peername,              /* ditto */
+    push_path,                 /* HTTP2 push */
+    get_socket,                /* get underlying socket */
+    h2o_http2_get_debug_state, /* get debug state */
+    close_idle_connection,
+    {{
+        {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
+        {NULL},                                                                                  /* http1 */
+        {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
+         log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
+    }}                                                                                                              /* loggers */
+};
+
+static int conn_is_h2(h2o_conn_t *conn)
+{
+    return conn->callbacks == &h2_callbacks;
+}
+
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
-    static const h2o_conn_callbacks_t callbacks = {
-        get_sockname,              /* stringify address */
-        get_peername,              /* ditto */
-        push_path,                 /* HTTP2 push */
-        get_socket,                /* get underlying socket */
-        h2o_http2_get_debug_state, /* get debug state */
-        close_idle_connection,
-        {{
-            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-            {NULL},                                                                                  /* http1 */
-            {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
-             log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
-        }} /* loggers */
-    };
-
-    h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &callbacks);
+    h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &h2_callbacks);
 
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->sock = sock;

@@ -544,6 +544,7 @@ static void reqread_on_timeout(h2o_timer_t *entry)
         conn->req.res.reason = "Request Timeout";
     }
 
+    assert(conn->sock->input->size == 0);
     close_idle_connection(&conn->super);
 }
 
@@ -1008,9 +1009,22 @@ static h2o_iovec_t log_request_index(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
+static const h2o_conn_callbacks_t h1_callbacks = {
+    get_sockname, /* stringify address */
+    get_peername, /* ditto */
+    NULL,         /* push */
+    get_socket,   /* get underlying socket */
+    NULL,         /* get debug state */
+    close_idle_connection,
+    {{
+        {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
+        {log_request_index},                                                                     /* http1 */
+        {NULL}                                                                                   /* http2 */
+    }}};
+
 static int conn_is_h1(h2o_conn_t *conn)
 {
-    return conn->callbacks->get_sockname == get_sockname;
+    return conn->callbacks == &h1_callbacks;
 }
 
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata)
@@ -1022,9 +1036,9 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
     for (i = 0; i < sizeof(conn_list) / sizeof(conn_list[0]); i++) {
         for (node = conn_list[i]->next; node != conn_list[i]; node = node->next) {
             h2o_conn_t *_conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
-            struct st_h2o_http1_conn_t *conn = (void *)_conn;
             if (!conn_is_h1(_conn))
                 continue;
+            struct st_h2o_http1_conn_t *conn = (void *)_conn;
             int ret = cb(&conn->req, cbdata);
             if (ret != 0)
                 return ret;
@@ -1035,19 +1049,9 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-    static const h2o_conn_callbacks_t callbacks = {
-        get_sockname, /* stringify address */
-        get_peername, /* ditto */
-        NULL,         /* push */
-        get_socket,   /* get underlying socket */
-        NULL,         /* get debug state */
-        close_idle_connection,
-        {{
-            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-            {log_request_index},                                                                     /* http1 */
-            {NULL}                                                                                   /* http2 */
-        }}};
-    struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
+
+    struct st_h2o_http1_conn_t *conn =
+        (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
 
     /* zero-fill all properties expect req */
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));
