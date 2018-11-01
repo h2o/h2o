@@ -35,13 +35,13 @@ sub parse_output {
     my @lines = split(/\n/, $out);
     while (my ($helpline, $typeline, $valueline) = splice(@lines, 0, 3)) {
         my ($name, $type, $version, $value);
-        if ($helpline =~ /^#HELP (.+)$/) {
+        if ($helpline =~ /^# HELP (\w+)/) {
             $name = $1;
         } else {
             fail("invalid helpline: $helpline");
             return;
         }
-        if ($typeline =~ /^#TYPE $name (.+)$/) {
+        if ($typeline =~ /^# TYPE $name (.+)$/) {
             $type = $1;
         } else {
             fail("invalid typeline: $typeline");
