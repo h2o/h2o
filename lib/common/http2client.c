@@ -304,6 +304,12 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         return 0;
     }
     if (stream->super._cb.on_body == NULL) {
+        /**
+         * NOTE: if on_head returns NULL due to invalid response (e.g. invalid content-length header)
+         * sending RST_STREAM with PROTOCOL_ERROR might be more suitable than CANCEL
+         * (see: https://tools.ietf.org/html/rfc7540#section-8.1.2.6)
+         * but sending CANCEL is not wrong, so we leave this as-is for now.
+         */
         ret = H2O_HTTP2_ERROR_CANCEL;
         goto SendRSTStream;
     }
