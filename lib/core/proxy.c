@@ -297,6 +297,7 @@ static void do_close(h2o_generator_t *generator, h2o_req_t *req)
         self->client->cancel(self->client);
         self->client = NULL;
     }
+    h2o_timer_unlink(&self->send_headers_timeout);
 }
 
 static void do_send(struct rp_generator_t *self)
@@ -625,13 +626,18 @@ static void on_generator_dispose(void *_self)
 {
     struct rp_generator_t *self = _self;
 
-    if (self->client != NULL) {
-        self->client->cancel(self->client);
-        self->client = NULL;
-    }
+    /**
+     * there's no chance that self->client is not NULL here because:
+     * in success case: self->client is set to NULL when h2o_httpclient_error_is_eos
+     * in failure case: it's guaranteed that generator->stop (do_close) is called before generator is disposed
+     */
+    assert(self->client == NULL);
+
+    /* same above */
+    assert(!h2o_timer_is_linked(&self->send_headers_timeout));
+
     h2o_buffer_dispose(&self->last_content_before_send);
     h2o_doublebuffer_dispose(&self->sending);
-    h2o_timer_unlink(&self->send_headers_timeout);
 }
 
 static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
