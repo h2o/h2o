@@ -51,7 +51,7 @@ module H2O
         type = type_for(k)
 
         # sanitize invalid characters to underscore
-        pk = k.gsub(/[^a-zA-Z0-9:_]/, '_');
+        pk = "h2o_#{k.gsub(/[^a-zA-Z0-9:_]/, '_')}";
 
         s += "# HELP #{pk} #{k}\n"
         s += "# TYPE #{pk} #{type}\n" if type
