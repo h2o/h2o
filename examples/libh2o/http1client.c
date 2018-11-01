@@ -196,13 +196,6 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *num_headers = 0;
     *body = h2o_iovec_init(NULL, 0);
 
-    if (props->chunked != NULL)
-        *props->chunked = 0;
-    if (props->connection_header != NULL)
-        *props->connection_header = h2o_iovec_init(NULL, 0);
-    if (props->proxy_protocol != NULL)
-        *props->proxy_protocol = h2o_iovec_init(NULL, 0);
-
     if (cur_body_size > 0) {
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
         size_t clbuf_len = sprintf(clbuf, "%d", cur_body_size);

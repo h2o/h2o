@@ -556,9 +556,9 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
 
 static void on_connection_ready(struct st_h2o_http1client_t *client)
 {
-    h2o_iovec_t proxy_protocol;
-    int chunked;
-    h2o_iovec_t connection_header;
+    h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
+    int chunked = 0;
+    h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = {
         &proxy_protocol, &chunked, &connection_header,
     };
