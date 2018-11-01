@@ -37,6 +37,8 @@ static int body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int delay_interval_ms = 0;
+static int ssl_verify_none = 0;
+static int http2_ratio = -1;
 static int cur_body_size;
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -83,7 +85,11 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
 
         SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
         SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
-        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        if (ssl_verify_none) {
+            SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
+        } else {
+            SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        }
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
@@ -250,7 +256,7 @@ int main(int argc, char **argv)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    while ((opt = getopt(argc, argv, "t:m:b:c:i:")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:b:c:i:r:k")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
@@ -275,6 +281,12 @@ int main(int argc, char **argv)
         case 'i':
             delay_interval_ms = atoi(optarg);
             break;
+        case 'r':
+            http2_ratio = atoi(optarg);
+            break;
+        case 'k':
+            ssl_verify_none = 1;
+            break;
         default:
             usage(argv[0]);
             exit(EXIT_FAILURE);
@@ -293,6 +305,8 @@ int main(int argc, char **argv)
         iov_filler.len = chunk_size;
     }
     h2o_mem_init_pool(&pool);
+
+    ctx.http2.ratio = http2_ratio;
 
 /* setup context */
 #if H2O_USE_LIBUV
