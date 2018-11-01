@@ -297,7 +297,7 @@ static void write_stream_free_cb(quicly_buffer_t *_buf, quicly_buffer_vec_t *vec
 
     free(vec);
 
-    if ((qs = H2O_STRUCT_FROM_MEMBER(quicly_stream_t, sendbuf, _buf))->data != NULL)
+    if ((qs = H2O_STRUCT_FROM_MEMBER(quicly_stream_t, sendbuf.data, _buf))->data != NULL)
         on_write_complete(qs->data);
 }
 
@@ -362,16 +362,19 @@ int h2o_hq_server_on_stream_open(quicly_stream_t *quic)
 
     /* create new stream and start handling the request */
     struct st_h2o_hq_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
+    stream->quic = quic;
+    stream->state = H2O_HQ_SERVER_STREAM_STATE_RECV_HEADERS;
+    stream->link = (h2o_linklist_t){NULL};
+    h2o_timer_init(&stream->timer, NULL);
+    stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, NULL, do_send_informational};
+    stream->send_state = H2O_SEND_STATE_IN_PROGRESS;
     h2o_init_request(&stream->req, &H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_conn_t, hq, *quicly_get_data(quic->conn))->super,
                      NULL);
     stream->req.version = 0x0300;
-    stream->quic = quic;
-    stream->link = (h2o_linklist_t){NULL};
-    stream->state = H2O_HQ_SERVER_STREAM_STATE_RECV_HEADERS;
-    ++*get_state_counter(get_conn(stream), stream->state);
-    stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, NULL, do_send_informational};
     stream->req._ostr_top = &stream->ostr_final;
     quic->data = stream;
+
+    ++*get_state_counter(get_conn(stream), stream->state);
 
     stream->quic->on_update = on_update_expect_headers;
     return stream->quic->on_update(stream->quic);
