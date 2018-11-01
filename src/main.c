@@ -463,7 +463,15 @@ Exit:
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
                                               SSL_CTX *ssl_ctx)
 {
-    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
+    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
+#ifdef PTLS_OPENSSL_HAS_X25519
+        &ptls_openssl_x25519,
+#else
+        &ptls_minicrypto_x25519,
+#endif
+        &ptls_openssl_secp256r1,
+        NULL
+    };
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;

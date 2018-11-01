@@ -149,8 +149,7 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
         }
     } else {
         assert(to_sun_err == NULL);
-        struct sockaddr_un *sun = (struct sockaddr_un *)sa;
-        *salen = sizeof(*sun);
+        *salen = sizeof(struct sockaddr_un);
         return H2O_SOCKETPOOL_TYPE_SOCKADDR;
     }
 }
