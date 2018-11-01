@@ -290,7 +290,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
             stream->super.informational_cb(&stream->super, 0, stream->input.status, h2o_iovec_init(NULL, 0),
                                            stream->input.headers.entries, stream->input.headers.size) != 0) {
             ret = H2O_HTTP2_ERROR_INTERNAL;
-            goto Failed;
+            goto SendRSTStream;
         }
         return 0;
     }
