@@ -30,9 +30,9 @@
 
 #define H2O_HPACK_ENCODE_INT_MAX_LENGTH 10 /* first byte + 9 bytes (7*9==63 bits to hold positive numbers of int64_t) */
 
-extern const char *h2o_hpack_err_found_upper_case_in_header_name;
-extern const char *h2o_hpack_soft_err_found_invalid_char_in_header_name;
-extern const char *h2o_hpack_soft_err_found_invalid_char_in_header_value;
+extern const char h2o_hpack_err_found_upper_case_in_header_name[];
+extern const char h2o_hpack_soft_err_found_invalid_char_in_header_name[];
+extern const char h2o_hpack_soft_err_found_invalid_char_in_header_value[];
 
 /**
  * encodes an integer (maximum size of the output excluding the first octet is H2O_HTTP2_ENCODE_INT_MAX_LENGTH bytes)
