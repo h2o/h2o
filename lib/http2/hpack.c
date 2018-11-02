@@ -82,9 +82,9 @@ static int contains_invalid_field_value_char(const char *s, size_t len)
     return 0;
 }
 
-static const char *err_found_upper_case_in_header_name = "found an upper-case letter in header name";
-static const char *soft_err_found_invalid_char_in_header_name = "found an invalid character in header name";
-static const char *soft_err_found_invalid_char_in_header_value = "found an invalid character in header value";
+static const char err_found_upper_case_in_header_name[] = "found an upper-case letter in header name";
+static const char soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
+static const char soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
 
 /* validate a header name against https://tools.ietf.org/html/rfc7230#section-3.2,
  * in addition to that, we disallow upper case chars as well.
