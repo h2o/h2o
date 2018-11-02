@@ -46,13 +46,13 @@ int h2o_hq_peek_frame(quicly_recvbuf_t *recvbuf, h2o_hq_peek_frame_t *frame)
     if (src == src_end)
         return H2O_HQ_ERROR_INCOMPLETE;
     frame->type = *src++;
+    frame->_header_size = (uint8_t)(src - input.base);
     if (frame->type != H2O_HQ_FRAME_TYPE_DATA) {
         if (frame->length >= MAX_FRAME_SIZE)
             return H2O_HQ_ERROR_MALFORMED_FRAME(frame->type); /* FIXME is this the correct code? */
         if (src_end - src < frame->length)
             return H2O_HQ_ERROR_INCOMPLETE;
         frame->payload = src;
-        frame->_header_size = (uint8_t)(src - input.base);
     }
 
     return 0;

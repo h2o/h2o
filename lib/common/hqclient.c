@@ -262,6 +262,11 @@ static int on_update_expect_data_payload(quicly_stream_t *_stream)
             h2o_buffer_init(&req->respbuf, &h2o_socket_buffer_prototype);
         h2o_buffer_append(&req->respbuf, input.base, input.len);
         quicly_recvbuf_shift(&req->stream->recvbuf, input.len);
+        /* TODO delay the call to after processing bunch of packets belonging to the same connection? */
+        if (req->super._cb.on_body(&req->super, NULL) != 0) {
+            close_request(req, H2O_HQ_ERROR_INTERNAL);
+            return 0;
+        }
         if (req->bytes_left == 0) {
             req->stream->on_update = on_update_expect_data_frame;
             return req->stream->on_update(req->stream);
@@ -281,7 +286,7 @@ int on_update_expect_data_frame(quicly_stream_t *_stream)
     /* handle close */
     if ((stream_error = quicly_recvbuf_get_error(&req->stream->recvbuf)) != QUICLY_STREAM_ERROR_IS_OPEN) {
         /* FIXME do we need to check content-length? */
-        if (stream_error == QUICLY_ERROR_FIN_CLOSED)
+        if (stream_error == QUICLY_STREAM_ERROR_FIN_CLOSED)
             return on_error_in_body(req, h2o_httpclient_error_is_eos, H2O_HQ_ERROR_NO_ERROR);
         return on_error_in_body(req, "stream reset", H2O_HQ_ERROR_STOPPING);
     }
@@ -435,7 +440,8 @@ void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
         conn = create_connection(ctx, target);
 
     req = h2o_mem_alloc(sizeof(*req));
-    *req = (struct st_h2o_hqclient_req_t){{pool, ctx, NULL, NULL, data, NULL, {h2o_gettimeofday(ctx->loop)}, cancel_request}, conn};
+    *req = (struct st_h2o_hqclient_req_t){
+        {pool, ctx, NULL, &req->respbuf, data, NULL, {h2o_gettimeofday(ctx->loop)}, cancel_request}, conn};
     req->super._cb.on_connect = cb;
 
     if (conn->super.quic != NULL && quicly_connection_is_ready(conn->super.quic)) {

@@ -72,7 +72,6 @@ struct st_h2o_hq_server_stream_t {
     quicly_stream_t *quic;
     enum h2o_hq_server_stream_state state;
     h2o_linklist_t link;
-    h2o_timer_t timer;
     h2o_ostream_t ostr_final;
     h2o_send_state_t send_state;
     uint8_t data_frame_header_buf[8 + 1];
@@ -183,6 +182,36 @@ static int destroy_stream(struct st_h2o_hq_server_stream_t *stream, quicly_strea
     return 0;
 }
 
+static int on_update_sending_response(quicly_stream_t *_stream)
+{
+    struct st_h2o_hq_server_stream_t *stream = _stream->data;
+    quicly_stream_error_t stream_error = quicly_sendbuf_get_error(&stream->quic->sendbuf);
+
+    switch (stream_error) {
+    case QUICLY_STREAM_ERROR_IS_OPEN:
+        /* send next if we have sent everything (FIXME we should decide what to send per-connection, by referring to the priority
+         * tree) */
+        if (stream->quic->sendbuf.data.len == 0) {
+            switch (stream->send_state) {
+            case H2O_SEND_STATE_IN_PROGRESS:
+                h2o_proceed_response(&stream->req);
+                break;
+            case H2O_SEND_STATE_ERROR:
+                destroy_stream(stream, H2O_HQ_ERROR_INTERNAL);
+                break;
+            case H2O_SEND_STATE_FINAL:
+                destroy_stream(stream, QUICLY_STREAM_ERROR_FIN_CLOSED);
+                break;
+            }
+        }
+    default: /* abruptly closed */
+        destroy_stream(stream, H2O_HQ_ERROR_INTERNAL);
+        break;
+    }
+
+    return 0;
+}
+
 static void handle_pending_reqs(h2o_timer_t *timer)
 {
     struct st_h2o_hq_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_conn_t, timeout, timer);
@@ -193,6 +222,7 @@ static void handle_pending_reqs(h2o_timer_t *timer)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_stream_t, link, conn->pending_reqs.next);
         h2o_linklist_unlink(&stream->link);
         set_state(stream, H2O_HQ_SERVER_STREAM_STATE_SEND_HEADERS);
+        stream->quic->on_update = on_update_sending_response;
         h2o_process_request(&stream->req);
     }
 }
@@ -266,39 +296,9 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     return 0;
 }
 
-static void proceed_response(h2o_timer_t *timer)
+static void write_stream_free_cb(quicly_buffer_t *buf, quicly_buffer_vec_t *vec)
 {
-    struct st_h2o_hq_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_stream_t, timer, timer);
-
-    if (stream->send_state == H2O_SEND_STATE_IN_PROGRESS) {
-        h2o_proceed_response(&stream->req);
-    } else {
-        destroy_stream(stream, stream->send_state == H2O_SEND_STATE_FINAL ? QUICLY_ERROR_FIN_CLOSED : H2O_HQ_ERROR_INTERNAL);
-    }
-}
-
-static void on_write_complete(struct st_h2o_hq_server_stream_t *stream)
-{
-    if (stream->state == H2O_HQ_SERVER_STREAM_STATE_SEND_HEADERS)
-        return;
-
-    /* schedule next if no more data is in-flight (FIXME find a better way) */
-    if (stream->quic->sendbuf.data.len != 0)
-        return;
-
-    assert(!h2o_timer_is_linked(&stream->timer));
-    stream->timer.cb = proceed_response;
-    h2o_timer_link(get_conn(stream)->super.ctx->loop, 0, &stream->timer);
-}
-
-static void write_stream_free_cb(quicly_buffer_t *_buf, quicly_buffer_vec_t *vec)
-{
-    quicly_stream_t *qs;
-
     free(vec);
-
-    if ((qs = H2O_STRUCT_FROM_MEMBER(quicly_stream_t, sendbuf.data, _buf))->data != NULL)
-        on_write_complete(qs->data);
 }
 
 #define write_stream(s, p, l) h2o_hq_call_and_assert(quicly_sendbuf_write(&(s)->quic->sendbuf, (p), (l), write_stream_free_cb))
@@ -365,7 +365,6 @@ int h2o_hq_server_on_stream_open(quicly_stream_t *quic)
     stream->quic = quic;
     stream->state = H2O_HQ_SERVER_STREAM_STATE_RECV_HEADERS;
     stream->link = (h2o_linklist_t){NULL};
-    h2o_timer_init(&stream->timer, NULL);
     stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, NULL, do_send_informational};
     stream->send_state = H2O_SEND_STATE_IN_PROGRESS;
     h2o_init_request(&stream->req, &H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_conn_t, hq, *quicly_get_data(quic->conn))->super,
