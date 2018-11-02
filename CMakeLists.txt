@@ -495,6 +495,12 @@ ELSE ()
     SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF()
 
+ADD_EXECUTABLE(t-qif ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} lib/quic/qpack.c t/qif.c)
+SET_TARGET_PROPERTIES(t-qif PROPERTIES
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(t-qif libh2o-evloop ${EXTRA_LIBS})
+
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-http1client examples-simple examples-socket-client)
 IF (WSLAY_FOUND)
     ADD_DEPENDENCIES(lib-examples examples-websocket)
