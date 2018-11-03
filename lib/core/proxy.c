@@ -289,15 +289,30 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         h2o_add_header(&req->pool, headers, H2O_TOKEN_VIA, NULL, via_buf.base, via_buf.len);
     }
 }
-static void do_close(h2o_generator_t *generator, h2o_req_t *req)
-{
-    struct rp_generator_t *self = (void *)generator;
 
+static void do_close(struct rp_generator_t *self)
+{
+    /**
+     * This can be called in the following three scenarios:
+     *   1. Downstream timeout before receiving header from upstream
+     *        dispose callback calls this function, but stop callback doesn't
+     *   2. Reprocess
+     *        stop callback calls this, but dispose callback does it later (after reprocessed request gets finished)
+     *   3. Others
+     *        Both of stop and dispose callbacks call this function in order
+     * Thus, to ensure to do closing things, both of dispose and stop callbacks call this function.
+     */
     if (self->client != NULL) {
         self->client->cancel(self->client);
         self->client = NULL;
     }
     h2o_timer_unlink(&self->send_headers_timeout);
+}
+
+static void do_stop(h2o_generator_t *generator, h2o_req_t *req)
+{
+    struct rp_generator_t *self = (void *)generator;
+    do_close(self);
 }
 
 static void do_send(struct rp_generator_t *self)
@@ -625,16 +640,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 static void on_generator_dispose(void *_self)
 {
     struct rp_generator_t *self = _self;
-
-    /**
-     * there's no chance that self->client is not NULL here because:
-     * in success case: self->client is set to NULL when h2o_httpclient_error_is_eos
-     * in failure case: it's guaranteed that generator->stop (do_close) is called before generator is disposed
-     */
-    assert(self->client == NULL);
-
-    /* same above */
-    assert(!h2o_timer_is_linked(&self->send_headers_timeout));
+    do_close(self);
 
     h2o_buffer_dispose(&self->last_content_before_send);
     h2o_doublebuffer_dispose(&self->sending);
@@ -646,7 +652,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
 
     self->super.proceed = do_proceed;
-    self->super.stop = do_close;
+    self->super.stop = do_stop;
     self->src_req = req;
     if (client_ctx->websocket_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
         self->is_websocket_handshake = 1;
