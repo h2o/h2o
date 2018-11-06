@@ -18,6 +18,16 @@ ENV PATH=/usr/lib/llvm-4.0/bin:$PATH
 RUN wget --no-verbose -O - https://curl.haxx.se/download/curl-7.57.0.tar.gz | tar xzf -
 RUN (cd curl-7.57.0 && ./configure --prefix=/usr/local --with-nghttp2 --disable-shared && make && sudo make install)
 
+# openssl 1.1.0
+ARG OPENSSL_URL="https://www.openssl.org/source/"
+ARG OPENSSL_VERSION="1.1.0i"
+ARG OPENSSL_SHA1="6713f8b083e4c0b0e70fd090bf714169baf3717c"
+RUN curl -O ${OPENSSL_URL}openssl-${OPENSSL_VERSION}.tar.gz
+RUN (echo "${OPENSSL_SHA1} openssl-${OPENSSL_VERSION}.tar.gz" | sha1sum -c - && tar xf openssl-${OPENSSL_VERSION}.tar.gz)
+RUN (cd openssl-${OPENSSL_VERSION} && \
+	./config --prefix=/opt/openssl-1.1.0 --openssldir=/opt/openssl-1.1.0 shared enable-ssl3 enable-ssl3-method enable-weak-ssl-ciphers && \
+	make -j $(nproc) && make -j install_sw install_ssldirs)
+
 # cpan modules
 RUN apt-get install --yes cpanminus
 RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-perl libjson-perl liblist-moreutils-perl libplack-perl libscope-guard-perl libtest-exception-perl libwww-perl libio-socket-ssl-perl

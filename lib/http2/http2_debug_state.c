@@ -24,9 +24,9 @@
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
 
-static const char *debug_state_string_open = "OPEN";
-static const char *debug_state_string_half_closed_remote = "HALF_CLOSED_REMOTE";
-static const char *debug_state_string_reserved_local = "RESERVED_LOCAL";
+static const char debug_state_string_open[] = "OPEN";
+static const char debug_state_string_half_closed_remote[] = "HALF_CLOSED_REMOTE";
+static const char debug_state_string_reserved_local[] = "RESERVED_LOCAL";
 
 static const char *get_debug_state_string(h2o_http2_stream_t *stream)
 {

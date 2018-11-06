@@ -3216,6 +3216,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -3355,6 +3356,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = "H2O_UNITTEST=1";
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -3654,6 +3656,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
@@ -3682,6 +3685,7 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
+					deps/brotli/c/include,
 					deps/yaml/include,
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
