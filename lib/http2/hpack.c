@@ -97,9 +97,9 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
     return dst;
 }
 
-const char *h2o_hpack_err_found_upper_case_in_header_name = "found an upper-case letter in header name";
-const char *h2o_hpack_soft_err_found_invalid_char_in_header_name = "found an invalid character in header name";
-const char *h2o_hpack_soft_err_found_invalid_char_in_header_value = "found an invalid character in header value";
+const char h2o_hpack_err_found_upper_case_in_header_name[] = "found an upper-case letter in header name";
+const char h2o_hpack_soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
+const char h2o_hpack_soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
 
 size_t h2o_hpack_decode_huffman(char *_dst, const uint8_t *src, size_t len, int is_name, const char **err_desc)
 {
