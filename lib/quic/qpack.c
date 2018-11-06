@@ -140,13 +140,13 @@ static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struc
     table->num_bytes += added->name->len + added->value_len;
 }
 
-static const h2o_hpack_static_table_entry_t *resolve_static_abs(int64_t index, const char **err_desc)
+static const h2o_qpack_static_table_entry_t *resolve_static_abs(int64_t index, const char **err_desc)
 {
-    if (index == 0 || index > sizeof(h2o_hpack_static_table) / sizeof(h2o_hpack_static_table[0])) {
+    if (index >= sizeof(h2o_qpack_static_table) / sizeof(h2o_qpack_static_table[0])) {
         *err_desc = h2o_qpack_err_invalid_static_reference;
         return NULL;
     }
-    return h2o_hpack_static_table + index - 1;
+    return h2o_qpack_static_table + index;
 }
 
 static struct st_h2o_qpack_header_t *resolve_dynamic_abs(struct st_h2o_qpack_header_table_t *table, int64_t index,
@@ -294,7 +294,7 @@ static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_st
     }
 
     if (name_is_static) {
-        const struct st_h2o_hpack_static_table_entry_t *ref;
+        const h2o_qpack_static_table_entry_t *ref;
         if ((ref = resolve_static_abs(name_index, err_desc)) == NULL)
             return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
         return insert_token_header(qpack, ref->name, value_is_huff, value, value_len, err_desc);
@@ -452,19 +452,17 @@ size_t h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, uint8_t 
     return h2o_hpack_encode_int(outbuf, stream_id, 6) - outbuf;
 }
 
-static const h2o_hpack_static_table_entry_t *resolve_static(const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
+static const h2o_qpack_static_table_entry_t *resolve_static(const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
                                                             const char **err_desc)
 {
     int64_t index;
 
     if (decode_int(&index, src, src_end, prefix_bits) != 0)
         goto Fail;
-    if (index == 0)
+    assert(index >= 0);
+    if (!(index < sizeof(h2o_qpack_static_table) / sizeof(h2o_qpack_static_table[0])))
         goto Fail;
-    --index;
-    if (!(index < sizeof(h2o_hpack_static_table) / sizeof(h2o_hpack_static_table[0])))
-        goto Fail;
-    return h2o_hpack_static_table + index;
+    return h2o_qpack_static_table + index;
 
 Fail:
     *err_desc = h2o_qpack_err_invalid_static_reference;
@@ -591,7 +589,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     case 13:
     case 14:
     case 15: /* indexed static header field */ {
-        const h2o_hpack_static_table_entry_t *entry;
+        const h2o_qpack_static_table_entry_t *entry;
         if ((entry = resolve_static(src, src_end, 6, err_desc)) == NULL)
             goto Fail;
         *name = (h2o_iovec_t *)&entry->name->buf;
@@ -610,7 +608,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     } break;
     case 5:
     case 7: /* literal header field with static name reference */ {
-        const h2o_hpack_static_table_entry_t *entry;
+        const h2o_qpack_static_table_entry_t *entry;
         if ((entry = resolve_static(src, src_end, 4, err_desc)) == NULL)
             goto Fail;
         *name = (h2o_iovec_t *)&entry->name->buf;
@@ -826,18 +824,18 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
 
 static void flatten_header(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, const h2o_header_t *header)
 {
-    if (header->flags.http2_static_table_name_index != 0) {
+    if (header->flags.qpack_static_table_index != 0) {
         /* TODO optimize for cases where multiple values exist for single name (e.g., ":scheme: https") */
-        const h2o_hpack_static_table_entry_t *entry = h2o_hpack_static_table + header->flags.http2_static_table_name_index - 1;
+        const h2o_qpack_static_table_entry_t *entry = h2o_qpack_static_table + header->flags.qpack_static_table_index;
         if (h2o_memis(header->value.base, header->value.len, entry->value.base, entry->value.len)) {
             /* static indexed header field */
             h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
             buf->entries[buf->size] = 0xc0;
-            flatten_int(buf, header->flags.http2_static_table_name_index, 6);
+            flatten_int(buf, header->flags.qpack_static_table_index, 6);
         } else {
             h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + header->value.len);
             buf->entries[buf->size] = 0x50;
-            flatten_int(buf, header->flags.http2_static_table_name_index, 4);
+            flatten_int(buf, header->flags.qpack_static_table_index, 4);
             flatten_string(buf, header->value.base, header->value.len, 7, header->flags.dont_compress);
         }
     } else {
@@ -860,6 +858,7 @@ void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
                                const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers,
                                size_t num_headers)
 {
+    static const uint8_t STATIC_TABLE_BASE = 0xc0;
     h2o_vector_reserve(pool, buf, buf->size + 3);
 
     /* largest_ref and base_index */
@@ -868,18 +867,18 @@ void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
 
     /* pseudo headers */
     if (h2o_memis(method.base, method.len, H2O_STRLIT("GET"))) {
-        buf->entries[buf->size++] = 0xc2;
+        buf->entries[buf->size++] = STATIC_TABLE_BASE + 17;
     } else if (h2o_memis(method.base, method.len, H2O_STRLIT("POST"))) {
-        buf->entries[buf->size++] = 0xc3;
+        buf->entries[buf->size++] = STATIC_TABLE_BASE + 20;
     } else {
         flatten_token_header(qpack, pool, buf, H2O_TOKEN_METHOD, method);
     }
     if (scheme == &H2O_URL_SCHEME_HTTP) {
         h2o_vector_reserve(pool, buf, buf->size + 1);
-        buf->entries[buf->size++] = 0xc6;
+        buf->entries[buf->size++] = STATIC_TABLE_BASE + 22;
     } else if (scheme == &H2O_URL_SCHEME_HTTPS) {
         h2o_vector_reserve(pool, buf, buf->size + 1);
-        buf->entries[buf->size++] = 0xc7;
+        buf->entries[buf->size++] = STATIC_TABLE_BASE + 23;
     } else {
         flatten_token_header(qpack, pool, buf, H2O_TOKEN_SCHEME, scheme->name);
     }
