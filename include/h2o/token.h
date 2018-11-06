@@ -32,6 +32,7 @@ extern "C" {
 typedef struct st_h2o_header_flags_t {
     unsigned char token_index_plus1;    /* 1-origin, 0 means not token */
     char http2_static_table_name_index; /* non-zero if any */
+    char qpack_static_table_index;      /* -1 if empty */
     unsigned char proxy_should_drop_for_req : 1;
     unsigned char proxy_should_drop_for_res : 1;
     unsigned char is_init_header_special : 1;
@@ -55,6 +56,14 @@ typedef struct st_h2o_hpack_static_table_entry_t {
     const h2o_token_t *name;
     const h2o_iovec_t value;
 } h2o_hpack_static_table_entry_t;
+
+/**
+ * qpack static tables entries
+ */
+typedef struct st_h2o_qpack_static_table_entry_t {
+    const h2o_token_t *name;
+    const h2o_iovec_t value;
+} h2o_qpack_static_table_entry_t;
 
 #ifndef H2O_MAX_TOKENS
 #define H2O_MAX_TOKENS 100
