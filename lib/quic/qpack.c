@@ -152,11 +152,15 @@ static const h2o_qpack_static_table_entry_t *resolve_static_abs(int64_t index, c
 static struct st_h2o_qpack_header_t *resolve_dynamic_abs(struct st_h2o_qpack_header_table_t *table, int64_t index,
                                                          const char **err_desc)
 {
-    if (index < table->base_offset || index >= table->last - table->first) {
-        *err_desc = h2o_qpack_err_invalid_dynamic_reference;
-        return NULL;
-    }
+    if (index < table->base_offset)
+        goto Invalid;
+    index -= table->base_offset;
+    if (index >= table->last - table->first)
+        goto Invalid;
     return table->first[index];
+Invalid:
+    *err_desc = h2o_qpack_err_invalid_dynamic_reference;
+    return NULL;
 }
 
 static int decode_int(int64_t *value, const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits)
