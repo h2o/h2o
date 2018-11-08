@@ -1488,11 +1488,18 @@ enum {
  */
 void h2o_resp_add_date_header(h2o_req_t *req);
 /**
- * sends the given string as the response
+ * sends the given string as the response.  Note that this function copies
+ * the string so the caller can discard it immediately. An important
+ * restriction on h2o_send_inline is that it must only be used from the
+ * handler that received the request. This is because a generator must be
+ * set before control passes back to the H2O eventloop. If this is not the
+ * case, the request might have been stopped meanwhile, leading to the
+ * request having become invalid in the meantime.
  */
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 /**
- * sends the given information as an error response to the client
+ * sends the given information as an error response to the client. Uses
+ * h2o_send_inline internally, so the same restrictions apply.
  */
 void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 #define H2O_SEND_ERROR_XXX(status)                                                                                                 \
@@ -1513,15 +1520,18 @@ H2O_SEND_ERROR_XXX(502)
 H2O_SEND_ERROR_XXX(503)
 
 /**
- * sends error response using zero timeout; can be called by output filters while processing the headers
+ * sends error response using zero timeout; can be called by output filters while processing the
+ * headers.  Uses h2o_send_inline internally, so the same restrictions
+ * apply.
  */
 void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 /**
- * sends a redirect response
+ * sends a redirect response.  Uses (the equivalent of) h2o_send_inline
+ * internally, so the same restrictions apply.
  */
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len);
 /**
- * handles redirect internally
+ * handles redirect internally.
  */
 void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides);
 /**
