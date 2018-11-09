@@ -228,6 +228,8 @@ static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
 #undef REQUIRED_PSEUDO_HEADERS
             fprintf(outp, ":method\t%.*s\n:scheme\t%.*s\n:authority\t%.*s\n:path\t%.*s\n", (int)method.len, method.base,
                     (int)scheme->name.len, scheme->name.base, (int)authority.len, authority.base, (int)path.len, path.base);
+            if (content_length != SIZE_MAX)
+                fprintf(outp, "content-length\t%zu\n", content_length);
             size_t i;
             for (i = 0; i != headers.size; ++i) {
                 const h2o_header_t *header = headers.entries + i;
