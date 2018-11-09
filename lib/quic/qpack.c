@@ -853,22 +853,31 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
     }
 }
 
+static void flatten_header_with_static_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
+                                               int32_t qpack_index, int is_exact, h2o_iovec_t value, int dont_compress)
+{
+    if (is_exact) {
+        /* static indexed header field */
+        h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
+        buf->entries[buf->size] = 0xc0;
+        flatten_int(buf, qpack_index, 6);
+    } else {
+        /* static indexed with name reference */
+        h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + value.len);
+        buf->entries[buf->size] = 0x50;
+        flatten_int(buf, qpack_index, 4);
+        flatten_string(buf, value.base, value.len, 7, dont_compress);
+    }
+}
+
 static void flatten_header(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, const h2o_header_t *header)
 {
-    if (header->flags.qpack_static_table_index != 0) {
-        /* TODO optimize for cases where multiple values exist for single name (e.g., ":scheme: https") */
-        const h2o_qpack_static_table_entry_t *entry = h2o_qpack_static_table + header->flags.qpack_static_table_index;
-        if (h2o_memis(header->value.base, header->value.len, entry->value.base, entry->value.len)) {
-            /* static indexed header field */
-            h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
-            buf->entries[buf->size] = 0xc0;
-            flatten_int(buf, header->flags.qpack_static_table_index, 6);
-        } else {
-            h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + header->value.len);
-            buf->entries[buf->size] = 0x50;
-            flatten_int(buf, header->flags.qpack_static_table_index, 4);
-            flatten_string(buf, header->value.base, header->value.len, 7, header->flags.dont_compress);
-        }
+    int32_t qpack_index;
+    int is_exact;
+
+    if (header->flags.token_index_plus1 != 0 &&
+        (qpack_index = h2o_qpack_lookup_static[header->flags.token_index_plus1 - 1](header->value, &is_exact)) >= 0) {
+        flatten_header_with_static_nameref(qpack, pool, buf, qpack_index, is_exact, header->value, header->flags.dont_compress);
     } else {
         /* literal header field without name reference */
         h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + header->name->len + header->value.len);
@@ -878,11 +887,15 @@ static void flatten_header(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o
     }
 }
 
-static void flatten_token_header(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, const h2o_token_t *token,
-                                 h2o_iovec_t value)
+static void flatten_known_header_with_static_lookup(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
+                                                    h2o_qpack_lookup_static_cb lookup_cb, h2o_iovec_t value)
 {
-    h2o_header_t h = {(h2o_iovec_t *)&token->buf, NULL, value, token->flags};
-    flatten_header(qpack, pool, buf, &h);
+    int32_t qpack_index;
+    int is_exact;
+
+    qpack_index = lookup_cb(value, &is_exact);
+    assert(qpack_index >= 0);
+    flatten_header_with_static_nameref(qpack, pool, buf, qpack_index, is_exact, value, 0);
 }
 
 void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, h2o_iovec_t method,
@@ -897,13 +910,7 @@ void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
     buf->entries[buf->size++] = 0;
 
     /* pseudo headers */
-    if (h2o_memis(method.base, method.len, H2O_STRLIT("GET"))) {
-        buf->entries[buf->size++] = STATIC_TABLE_BASE + 17;
-    } else if (h2o_memis(method.base, method.len, H2O_STRLIT("POST"))) {
-        buf->entries[buf->size++] = STATIC_TABLE_BASE + 20;
-    } else {
-        flatten_token_header(qpack, pool, buf, H2O_TOKEN_METHOD, method);
-    }
+    flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_method, method);
     if (scheme == &H2O_URL_SCHEME_HTTP) {
         h2o_vector_reserve(pool, buf, buf->size + 1);
         buf->entries[buf->size++] = STATIC_TABLE_BASE + 22;
@@ -911,10 +918,10 @@ void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
         h2o_vector_reserve(pool, buf, buf->size + 1);
         buf->entries[buf->size++] = STATIC_TABLE_BASE + 23;
     } else {
-        flatten_token_header(qpack, pool, buf, H2O_TOKEN_SCHEME, scheme->name);
+        flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_scheme, scheme->name);
     }
-    flatten_token_header(qpack, pool, buf, H2O_TOKEN_AUTHORITY, authority);
-    flatten_token_header(qpack, pool, buf, H2O_TOKEN_PATH, path);
+    flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_authority, authority);
+    flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_path, path);
 
     /* flatten headers */
     size_t i;
@@ -926,7 +933,7 @@ void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool
                                 const h2o_header_t *headers, size_t num_headers, const h2o_iovec_t *server_name,
                                 size_t content_length)
 {
-    h2o_vector_reserve(pool, buf, buf->size + 3);
+    h2o_vector_reserve(pool, buf, buf->size + 4);
 
     /* largest_ref and base_index */
     buf->entries[buf->size++] = 0;
@@ -934,34 +941,46 @@ void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool
 
     /* pseudo headers */
     switch (status) {
-#define SHORT_STATUS(st, cp)                                                                                                       \
+#define INDEXED_STATUS(cp, st)                                                                                                     \
     case st:                                                                                                                       \
-        buf->entries[buf->size++] = 0xc0 | cp;                                                                                     \
+        buf->entries[buf->size] = 0xc0;                                                                                            \
+        flatten_int(buf, cp, 6);                                                                                                   \
         break
-        SHORT_STATUS(200, 8);
-        SHORT_STATUS(204, 9);
-        SHORT_STATUS(206, 10);
-        SHORT_STATUS(304, 11);
-        SHORT_STATUS(400, 12);
-        SHORT_STATUS(404, 13);
-        SHORT_STATUS(500, 14);
-#undef SHORT_STATUS
+        INDEXED_STATUS(24, 103);
+        INDEXED_STATUS(25, 200);
+        INDEXED_STATUS(26, 304);
+        INDEXED_STATUS(27, 404);
+        INDEXED_STATUS(28, 503);
+        INDEXED_STATUS(63, 100);
+        INDEXED_STATUS(64, 204);
+        INDEXED_STATUS(65, 206);
+        INDEXED_STATUS(66, 302);
+        INDEXED_STATUS(67, 400);
+        INDEXED_STATUS(68, 403);
+        INDEXED_STATUS(69, 421);
+        INDEXED_STATUS(70, 425);
+        INDEXED_STATUS(71, 500);
+#undef INDEXED_STATUS
     default: {
         char status_str[sizeof(H2O_UINT16_LONGEST_STR)];
         sprintf(status_str, "%" PRIu16, (uint16_t)status);
-        flatten_token_header(qpack, pool, buf, H2O_TOKEN_STATUS, h2o_iovec_init(status_str, strlen(status_str)));
+        flatten_header_with_static_nameref(qpack, pool, buf, 24, 0, h2o_iovec_init(status_str, strlen(status_str)), 0);
     } break;
     }
 
     /* TODO keep some kind of reference to the indexed Server header, and reuse it */
     if (server_name != NULL && server_name->len != 0)
-        flatten_token_header(qpack, pool, buf, H2O_TOKEN_SERVER, *server_name);
+        flatten_header_with_static_nameref(qpack, pool, buf, 92, 0, *server_name, 0);
 
     /* content-length */
     if (content_length != SIZE_MAX) {
-        char cl_str[sizeof(H2O_UINT64_LONGEST_STR)];
-        sprintf(cl_str, "%" PRIu64, (uint64_t)content_length);
-        flatten_token_header(qpack, pool, buf, H2O_TOKEN_CONTENT_LENGTH, h2o_iovec_init(cl_str, strlen(cl_str)));
+        if (content_length == 0) {
+            flatten_header_with_static_nameref(qpack, pool, buf, 4, 1, h2o_iovec_init(H2O_STRLIT("0")), 0);
+        } else {
+            char cl_str[sizeof(H2O_UINT64_LONGEST_STR)];
+            sprintf(cl_str, "%" PRIu64, (uint64_t)content_length);
+            flatten_header_with_static_nameref(qpack, pool, buf, 4, 0, h2o_iovec_init(cl_str, strlen(cl_str)), 0);
+        }
     }
 
     /* flatten headers */

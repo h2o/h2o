@@ -63,7 +63,7 @@ while (my $line = <DATA>) {
         split /\s+/, $line, 9;
     die "unexpected input:$line"
         if $name eq '';
-    $tokens{$name} = [ $hpack_index, -1, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress ]
+    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress ]
         unless defined $tokens{$name};
     if ($hpack_index != 0) {
         $hpack[$hpack_index - 1] = [ $name, $value ];
@@ -75,14 +75,11 @@ while (my $line = <DATA>) {
     last if $line eq '';
     next if $line =~ /^#/;
     my ($qpack_index, $name, $value) = split /\s+/, $line, 3;
+    $value = '' unless defined $value;
     die "unexpected input:$line"
         if $name eq '';
-    if (defined $tokens{$name}) {
-        $tokens{$name}->[1] = $qpack_index
-            if $tokens{$name}->[1] == -1;
-    } else {
-        die "missing entry in token table: $name $value";
-    }
+    die "missing entry in token table: $name $value"
+        unless defined $tokens{$name};
     $qpack[$qpack_index] = [$name, $value];
 }
 
@@ -104,6 +101,13 @@ print $fh render(<< 'EOT', \@tokens, \@hpack, \@qpack, LICENSE)->as_string;
 
 extern const h2o_hpack_static_table_entry_t h2o_hpack_static_table[<?= scalar @$hpack ?>];
 extern const h2o_qpack_static_table_entry_t h2o_qpack_static_table[<?= scalar @$qpack ?>];
+
+typedef int32_t (*h2o_qpack_lookup_static_cb)(h2o_iovec_t value, int *is_exact);
+const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[<?= scalar @$tokens ?>];
+
+? for (my $token_index = 0; $token_index < @$tokens; ++$token_index) {
+int32_t <?= qpack_lookup_funcname($tokens->[$token_index][0]) ?>(h2o_iovec_t value, int *is_exact);
+? }
 
 #endif
 EOT
@@ -158,6 +162,27 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
 
     return NULL;
 }
+
+? for (my $token_index = 0; $token_index < @$tokens; ++$token_index) {
+int32_t <?= qpack_lookup_funcname($tokens->[$token_index][0]) ?>(h2o_iovec_t value, int *is_exact)
+{
+?     my $first_index = -1;
+?     for (my $i = 0; $i < @$qpack; $i++) {
+?         next if $qpack->[$i][0] ne $tokens->[$token_index][0];
+?         $first_index = $i if $first_index == -1;
+    if (h2o_memis(value.base, value.len, H2O_STRLIT("<?= $qpack->[$i][1] ?>"))) {
+        *is_exact = 1;
+        return <?= $i ?>;
+    }
+?     }
+    *is_exact = 0;
+    return <?= $first_index ?>;
+}
+
+? }
+const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[<?= scalar @$tokens ?>] = {
+    <?= join ",", map { qpack_lookup_funcname($_->[0]) } @$tokens ?>
+};
 EOT
 close $fh;
 
@@ -167,6 +192,13 @@ sub normalize_name {
     $n =~ s/-/_/g;
     $n =~ tr/a-z/A-Z/;
     "H2O_TOKEN_$n";
+}
+
+sub qpack_lookup_funcname {
+    my $n = shift;
+    $n =~ s/^://;
+    $n =~ s/-/_/g;
+    "h2o_qpack_lookup_$n";
 }
 
 sub render {
