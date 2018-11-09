@@ -36,7 +36,7 @@ extern const char *h2o_qpack_err_invalid_dynamic_reference;
 extern const char *h2o_qpack_err_invalid_duplicate;
 extern const char *h2o_qpack_err_invalid_pseudo_header;
 
-h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size);
+h2o_qpack_decoder_t *h2o_qpack_create_decoder(unsigned header_table_size_bits);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
 int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *outbuf);
@@ -53,7 +53,7 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
                              h2o_headers_t *headers, uint8_t *outbuf, size_t *outbufsize, const uint8_t *src, size_t len,
                              const char **err_desc);
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size);
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(unsigned header_table_size_bits);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
 int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, h2o_iovec_t method,

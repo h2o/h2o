@@ -28,6 +28,9 @@
 #include "h2o/qpack.h"
 #include "h2o/hq_common.h"
 
+#define HEADER_ENTRY_SIZE_OFFSET_LOG2 5
+#define HEADER_ENTRY_SIZE_OFFSET (1 << HEADER_ENTRY_SIZE_OFFSET_LOG2)
+
 /**
  * a mem-shared object that contains the name and value of a header field
  */
@@ -68,9 +71,17 @@ struct st_h2o_qpack_decoder_t {
      */
     uint32_t header_table_size;
     /**
+     *
+     */
+    unsigned max_entries_shift;
+    /**
      * number of updates since last sync
      */
     uint32_t insert_count;
+    /**
+     *
+     */
+    uint64_t total_inserts;
     /**
      * contains list of blocked streams (sorted in the ascending order of largest_ref)
      */
@@ -106,7 +117,7 @@ static void header_table_evict(struct st_h2o_qpack_header_table_t *table, size_t
     while (table->first != table->last) {
         if (table->num_bytes + delta <= table->max_size)
             return;
-        table->num_bytes -= (*table->first)->name->len + (*table->first)->value_len;
+        table->num_bytes -= (*table->first)->name->len + (*table->first)->value_len + HEADER_ENTRY_SIZE_OFFSET;
         h2o_mem_release_shared(*table->first);
         *table->first++ = NULL;
         ++table->base_offset;
@@ -116,7 +127,7 @@ static void header_table_evict(struct st_h2o_qpack_header_table_t *table, size_t
 
 static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struct st_h2o_qpack_header_t *added)
 {
-    header_table_evict(table, added->name->len + added->value_len);
+    header_table_evict(table, added->name->len + added->value_len + HEADER_ENTRY_SIZE_OFFSET);
 
     if (table->last == table->buf_end) {
         size_t count = table->last - table->first, new_capacity = count <= 2 ? 4 : count * 2;
@@ -137,7 +148,7 @@ static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struc
         memset(table->last, 0, sizeof(*table->last) * (table->buf_end - table->last));
     }
     *table->last++ = added;
-    table->num_bytes += added->name->len + added->value_len;
+    table->num_bytes += added->name->len + added->value_len + HEADER_ENTRY_SIZE_OFFSET;
 }
 
 static const h2o_qpack_static_table_entry_t *resolve_static_abs(int64_t index, const char **err_desc)
@@ -187,13 +198,17 @@ static size_t decode_value(int is_huff, const uint8_t *src, size_t srclen, char 
     return outlen;
 }
 
-h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size)
+h2o_qpack_decoder_t *h2o_qpack_create_decoder(unsigned header_table_size_bits)
 {
+    assert(header_table_size_bits >= HEADER_ENTRY_SIZE_OFFSET_LOG2);
+
     h2o_qpack_decoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
 
-    header_table_init(&qpack->table, header_table_size);
     qpack->insert_count = 0;
-    qpack->header_table_size = header_table_size;
+    qpack->header_table_size = (uint32_t)1 << header_table_size_bits;
+    qpack->max_entries_shift = header_table_size_bits - HEADER_ENTRY_SIZE_OFFSET_LOG2;
+    qpack->total_inserts = 0;
+    header_table_init(&qpack->table, qpack->header_table_size);
     memset(&qpack->blocked_streams, 0, sizeof(qpack->blocked_streams));
 
     return qpack;
@@ -244,6 +259,7 @@ size_t h2o_qpack_decoder_shift_unblocked_stream(h2o_qpack_decoder_t *qpack, int6
 static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_header_t *added)
 {
     ++qpack->insert_count;
+    ++qpack->total_inserts;
     header_table_insert(&qpack->table, added);
 }
 
@@ -665,9 +681,20 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 {
     ctx->qpack = qpack;
 
-    /* decode prefix */
+    /* largest reference */
     if (decode_int(&ctx->largest_ref, src, src_end, 8) != 0)
         return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
+    if (ctx->largest_ref > 0) {
+        const uint64_t max_entries = (uint64_t)1 << qpack->max_entries_shift, full_range = 2 * max_entries;
+        uint64_t max_value = qpack->total_inserts + max_entries;
+        uint64_t rounded = max_value & -full_range;
+        ctx->largest_ref += rounded - 1;
+        if (ctx->largest_ref > max_value && ctx->largest_ref >= full_range)
+            ctx->largest_ref -= full_range;
+        ctx->largest_ref += 1;
+    }
+
+    /* base index */
     if (*src >= src_end)
         return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     int sign = (**src & 0x80) != 0;
@@ -728,7 +755,7 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     return 0;
 }
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size)
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(unsigned header_table_size_bits)
 {
     return h2o_mem_alloc(1);
 }
