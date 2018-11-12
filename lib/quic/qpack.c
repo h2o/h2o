@@ -654,7 +654,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     } break;
     case 1: /* indexed header field with post-base index */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic_postbase(&qpack->table, base_index, src, src_end, 3, err_desc)) == NULL)
+        if ((entry = resolve_dynamic_postbase(&qpack->table, base_index, src, src_end, 4, err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
