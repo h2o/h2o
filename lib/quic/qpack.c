@@ -689,9 +689,9 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         uint64_t max_value = qpack->total_inserts + max_entries;
         uint64_t rounded = max_value & -full_range;
         ctx->largest_ref += rounded - 1;
-        if (ctx->largest_ref > max_value && ctx->largest_ref >= full_range)
+        if (ctx->largest_ref > max_value && ctx->largest_ref > full_range)
             ctx->largest_ref -= full_range;
-        ctx->largest_ref += 1;
+        assert(ctx->largest_ref != 0);
     }
 
     /* base index */
