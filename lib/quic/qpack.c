@@ -367,14 +367,14 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
     }
 }
 
-static int duplicate(h2o_qpack_decoder_t *qpack, int64_t name_index, const char **err_desc)
+static int duplicate(h2o_qpack_decoder_t *qpack, int64_t index, const char **err_desc)
 {
-    if (name_index >= qpack->table.last - qpack->table.first) {
+    if (index >= qpack->table.last - qpack->table.first) {
         *err_desc = h2o_qpack_err_invalid_duplicate;
         return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     }
 
-    struct st_h2o_qpack_header_t *header = qpack->table.first[name_index];
+    struct st_h2o_qpack_header_t *header = qpack->table.last[-index - 1];
     h2o_mem_addref_shared(header);
     decoder_insert(qpack, header);
     return 0;
@@ -432,10 +432,10 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **_
             src += value_len;
         } break;
         case 0: /* duplicate */ {
-            int64_t name_index;
-            if ((ret = decode_int(&name_index, &src, src_end, 5)) != 0)
+            int64_t index;
+            if ((ret = decode_int(&index, &src, src_end, 5)) != 0)
                 goto Exit;
-            ret = duplicate(qpack, name_index, err_desc);
+            ret = duplicate(qpack, index, err_desc);
         } break;
         case 1: /* dynamic table size update */ {
             int64_t max_size;
