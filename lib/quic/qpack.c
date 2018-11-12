@@ -508,7 +508,7 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
 {
     int64_t off;
 
-    if (decode_int(&off, src, src_end, prefix_bits) != 0 || INT64_MAX - off < base_index + 1) {
+    if (decode_int(&off, src, src_end, prefix_bits) != 0 || off > INT64_MAX - (base_index + 1)) {
         *err_desc = h2o_qpack_err_invalid_dynamic_reference;
         return NULL;
     }
