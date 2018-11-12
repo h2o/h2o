@@ -226,8 +226,9 @@ static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
                 return 1;
             }
 #undef REQUIRED_PSEUDO_HEADERS
-            fprintf(outp, ":method\t%.*s\n:scheme\t%.*s\n:authority\t%.*s\n:path\t%.*s\n", (int)method.len, method.base,
-                    (int)scheme->name.len, scheme->name.base, (int)authority.len, authority.base, (int)path.len, path.base);
+            fprintf(outp, "#stream\t%" PRIu64 "\n:method\t%.*s\n:scheme\t%.*s\n:authority\t%.*s\n:path\t%.*s\n", stream_id,
+                    (int)method.len, method.base, (int)scheme->name.len, scheme->name.base, (int)authority.len, authority.base,
+                    (int)path.len, path.base);
             if (content_length != SIZE_MAX)
                 fprintf(outp, "content-length\t%zu\n", content_length);
             size_t i;
