@@ -129,13 +129,13 @@ size_t h2o__num_tokens = <?= scalar @$tokens ?>;
 
 const h2o_hpack_static_table_entry_t h2o_hpack_static_table[<?= scalar @$hpack ?>] = {
 ? for my $i (0..$#$hpack) {
-    { <?= normalize_name($hpack->[$i][0]) ?>, { H2O_STRLIT("<?= $hpack->[$i][1] || "" ?>") } }<?= $i == $#$hpack ? "" : "," ?>
+    { <?= normalize_name($hpack->[$i][0]) ?>, { H2O_STRLIT("<?= $hpack->[$i][1] // "" ?>") } }<?= $i == $#$hpack ? "" : "," ?>
 ? }
 };
 
 const h2o_qpack_static_table_entry_t h2o_qpack_static_table[<?= scalar @$qpack ?>] = {
 ? for my $i (0..$#$qpack) {
-    { <?= normalize_name($qpack->[$i][0]) ?>, { H2O_STRLIT("<?= $qpack->[$i][1] || "" ?>") } }<?= $i == $#$qpack ? "" : "," ?>
+    { <?= normalize_name($qpack->[$i][0]) ?>, { H2O_STRLIT("<?= $qpack->[$i][1] // "" ?>") } }<?= $i == $#$qpack ? "" : "," ?>
 ? }
 };
 
