@@ -209,7 +209,7 @@ static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
             const h2o_url_scheme_t *scheme = NULL;
             h2o_headers_t headers = {NULL};
             int pseudo_header_exists_map = 0;
-            size_t content_length, header_ack_len;
+            size_t content_length, header_ack_len, i;
             uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
             const char *err_desc = NULL;
             if ((ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &headers,
@@ -231,18 +231,32 @@ static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
                     (int)path.len, path.base);
             if (content_length != SIZE_MAX)
                 fprintf(outp, "content-length\t%zu\n", content_length);
-            size_t i;
             for (i = 0; i != headers.size; ++i) {
                 const h2o_header_t *header = headers.entries + i;
                 fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len,
                         header->value.base);
             }
-            h2o_mem_clear_pool(&pool);
-            fputc('\n', outp);
         } else {
             /* response */
-            assert(!"FIXME");
+            int status;
+            h2o_headers_t headers = {NULL};
+            uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+            size_t header_ack_len, i;
+            const char *err_desc = NULL;
+            if ((ret = h2o_qpack_parse_response(&pool, dec, stream_id, &status, &headers, header_ack, &header_ack_len, buf,
+                                                chunk_size, &err_desc)) != 0) {
+                fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
+                return 1;
+            }
+            fprintf(outp, "#stream\t%" PRIu64 "\n:status\t%d\n", stream_id, status);
+            for (i = 0; i != headers.size; ++i) {
+                const h2o_header_t *header = headers.entries + i;
+                fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len,
+                        header->value.base);
+            }
         }
+        h2o_mem_clear_pool(&pool);
+        fputc('\n', outp);
     }
 
     return 0;
