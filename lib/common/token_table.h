@@ -168,9 +168,9 @@ const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61] = {{H2O_TOKEN_AU
 const h2o_qpack_static_table_entry_t h2o_qpack_static_table[99] = {
     {H2O_TOKEN_AUTHORITY, {H2O_STRLIT("")}},
     {H2O_TOKEN_PATH, {H2O_STRLIT("/")}},
-    {H2O_TOKEN_AGE, {H2O_STRLIT("")}},
+    {H2O_TOKEN_AGE, {H2O_STRLIT("0")}},
     {H2O_TOKEN_CONTENT_DISPOSITION, {H2O_STRLIT("")}},
-    {H2O_TOKEN_CONTENT_LENGTH, {H2O_STRLIT("")}},
+    {H2O_TOKEN_CONTENT_LENGTH, {H2O_STRLIT("0")}},
     {H2O_TOKEN_COOKIE, {H2O_STRLIT("")}},
     {H2O_TOKEN_DATE, {H2O_STRLIT("")}},
     {H2O_TOKEN_ETAG, {H2O_STRLIT("")}},
