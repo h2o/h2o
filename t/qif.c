@@ -236,6 +236,7 @@ static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
                 fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len,
                         header->value.base);
             }
+            fputc('\n', outp);
         } else {
             /* response */
             int status;
@@ -254,9 +255,9 @@ static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
                 fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len,
                         header->value.base);
             }
+            fputc('\n', outp);
         }
         h2o_mem_clear_pool(&pool);
-        fputc('\n', outp);
     }
 
     return 0;
