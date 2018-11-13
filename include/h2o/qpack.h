@@ -38,7 +38,8 @@ extern const char *h2o_qpack_err_invalid_pseudo_header;
 
 h2o_qpack_decoder_t *h2o_qpack_create_decoder(unsigned header_table_size_bits);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
-int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **src, const uint8_t *src_end, const char **err_desc);
+int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, int64_t **unblocked_stream_ids, size_t *num_unblocked,
+                                   const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *outbuf);
 size_t h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, uint8_t *outbuf, int64_t stream_id);
 

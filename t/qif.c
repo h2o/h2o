@@ -193,12 +193,16 @@ static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
             h2o_vector_reserve(NULL, &encoder_stream_buf, encoder_stream_buf.size + chunk_size);
             memcpy(encoder_stream_buf.entries + encoder_stream_buf.size, buf, chunk_size);
             encoder_stream_buf.size += chunk_size;
+            int64_t *unblocked_streams;
+            size_t num_unblocked;
             const uint8_t *p = encoder_stream_buf.entries;
             const char *err_desc = NULL;
-            if ((ret = h2o_qpack_decoder_handle_input(dec, &p, p + encoder_stream_buf.size, &err_desc)) != 0) {
+            if ((ret = h2o_qpack_decoder_handle_input(dec, &unblocked_streams, &num_unblocked, &p, p + encoder_stream_buf.size,
+                                                      &err_desc)) != 0) {
                 fprintf(stderr, "failed to decode stream 0:%s\n", err_desc);
                 return 1;
             }
+            assert(num_unblocked == 0 || !"blocking not supported (yet)");
             size_t remaining = encoder_stream_buf.entries + encoder_stream_buf.size - p;
             if (remaining != 0)
                 memmove(encoder_stream_buf.entries, p, remaining);

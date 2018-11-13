@@ -156,12 +156,15 @@ static int on_update_qpack_stream(quicly_stream_t *stream, int is_encoder_stream
     h2o_hq_conn_t *conn = *quicly_get_data(stream->conn);
     ptls_iovec_t input = quicly_recvbuf_get(&stream->recvbuf);
     const uint8_t *src = input.base, *src_end = src + input.len;
+    int64_t *unblocked_stream_ids;
+    size_t num_unblocked;
     int ret = 0;
 
     while (src != src_end) {
         const char *err_desc = NULL;
         if (is_encoder_stream) {
-            ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &src, src_end, &err_desc);
+            ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, &src, src_end, &err_desc);
+            /* TODO handle unblocked streams */
         } else {
             ret = h2o_qpack_encoder_handle_input(conn->qpack.enc, &src, src_end, &err_desc);
         }
