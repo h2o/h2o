@@ -1438,6 +1438,8 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         conn->num_streams.push.open >= conn->peer_settings.max_concurrent_streams)
         return;
 
+    if (conn->state >= H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        return;
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
     if (!(h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)))
