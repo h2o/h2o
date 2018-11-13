@@ -637,7 +637,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     case 4:
     case 6: /* literal header field with dynamic name reference */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->base_index, src, src_end, 6, err_desc)) == NULL)
+        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->base_index, src, src_end, 4, err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
