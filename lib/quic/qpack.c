@@ -602,8 +602,6 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
                          const uint8_t *src_end, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t *ctx = _ctx;
-    h2o_qpack_decoder_t *qpack = ctx->qpack;
-    int64_t base_index = ctx->base_index;
 
     switch (**src >> 4) {
     case 12:
@@ -621,7 +619,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     case 10:
     case 11: /* indexed dynamic header field */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic(&qpack->table, base_index, src, src_end, 6, err_desc)) == NULL)
+        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->base_index, src, src_end, 6, err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
@@ -639,7 +637,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     case 4:
     case 6: /* literal header field with dynamic name reference */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic(&qpack->table, base_index, src, src_end, 6, err_desc)) == NULL)
+        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->base_index, src, src_end, 6, err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
@@ -655,7 +653,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     } break;
     case 1: /* indexed header field with post-base index */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic_postbase(&qpack->table, base_index, src, src_end, 4, err_desc)) == NULL)
+        if ((entry = resolve_dynamic_postbase(&ctx->qpack->table, ctx->base_index, src, src_end, 4, err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
@@ -663,7 +661,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     } break;
     case 0: /* literal header field with post-base name reference */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic_postbase(&qpack->table, base_index, src, src_end, 3, err_desc)) == NULL)
+        if ((entry = resolve_dynamic_postbase(&ctx->qpack->table, ctx->base_index, src, src_end, 3, err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
