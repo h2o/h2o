@@ -59,11 +59,11 @@ while (my $line = <DATA>) {
     chomp $line;
     last if $line eq '';
     next if $line =~ /^#/;
-    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress, $name, $value) =
-        split /\s+/, $line, 9;
+    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress, $likely_to_repeat, $name, $value) =
+        split /\s+/, $line, 10;
     die "unexpected input:$line"
         if $name eq '';
-    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress ]
+    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $http2_should_reject, $copy_for_push_request, $dont_compress, $likely_to_repeat ]
         unless defined $tokens{$name};
     if ($hpack_index != 0) {
         $hpack[$hpack_index - 1] = [ $name, $value ];
@@ -218,102 +218,97 @@ __DATA__
 # - HTTP/2 should reject
 # - Copy for push request
 # - Disable compression (non-zero)
-1 0 0 0 0 0 0 :authority
-2 0 0 0 0 0 0 :method GET
-3 0 0 0 0 0 0 :method POST
-4 0 0 0 0 0 0 :path /
-5 0 0 0 0 0 0 :path /index.html
-6 0 0 0 0 0 0 :scheme http
-7 0 0 0 0 0 0 :scheme https
-8 0 0 0 0 0 0 :status 200
-9 0 0 0 0 0 0 :status 204
-10 0 0 0 0 0 0 :status 206
-11 0 0 0 0 0 0 :status 304
-12 0 0 0 0 0 0 :status 400
-13 0 0 0 0 0 0 :status 404
-14 0 0 0 0 0 0 :status 500
-15 0 0 0 0 1 0 accept-charset
-16 0 0 0 0 1 0 accept-encoding gzip, deflate
-17 0 0 0 0 1 0 accept-language
-18 0 0 0 0 0 0 accept-ranges
-19 0 0 0 0 1 0 accept
-20 0 0 0 0 0 0 access-control-allow-origin
-21 0 0 0 0 0 0 age
-22 0 0 0 0 0 0 allow
-23 0 0 0 0 0 0 authorization
-24 0 0 0 0 0 0 cache-control
-25 0 0 0 0 0 0 content-disposition
-26 0 0 0 0 0 0 content-encoding
-27 0 0 0 0 0 0 content-language
-28 0 0 1 0 0 0 content-length
-29 0 0 0 0 0 0 content-location
-30 0 0 0 0 0 0 content-range
-31 0 0 0 0 0 0 content-type
-32 0 0 0 0 0 1 cookie
-33 0 0 0 0 0 0 date
-34 0 0 0 0 0 0 etag
-35 0 0 1 0 0 0 expect
-36 0 0 0 0 0 0 expires
-37 0 0 0 0 0 0 from
-38 0 0 1 1 0 0 host
-39 0 0 0 0 0 0 if-match
-40 0 0 0 0 0 0 if-modified-since
-41 0 0 0 0 0 0 if-none-match
-42 0 0 0 0 0 0 if-range
-43 0 0 0 0 0 0 if-unmodified-since
-44 0 0 0 0 0 0 last-modified
-45 0 0 0 0 0 0 link
-46 0 0 0 0 0 0 location
-47 0 0 0 0 0 0 max-forwards
-48 1 0 0 0 0 0 proxy-authenticate
-49 1 0 0 0 0 0 proxy-authorization
-50 0 0 0 0 0 0 range
-51 0 0 0 0 0 0 referer
-52 0 0 0 0 0 0 refresh
-53 0 0 0 0 0 0 retry-after
-54 0 0 0 0 0 0 server
-55 0 0 0 0 0 1 set-cookie
-56 0 0 0 0 0 0 strict-transport-security
-57 1 1 1 1 0 0 transfer-encoding
-58 0 0 0 0 1 0 user-agent
-59 0 0 0 0 0 0 vary
-60 0 0 0 0 0 0 via
-61 0 0 0 0 0 0 www-authenticate
-0 1 1 0 1 0 0 connection
-0 0 0 0 0 0 0 x-reproxy-url
-0 1 1 1 1 0 0 upgrade
-0 1 0 0 1 0 0 http2-settings
-0 1 0 0 1 0 0 te
-0 1 1 0 0 0 0 keep-alive
-0 0 0 0 0 0 0 x-forwarded-for
-0 0 0 0 0 0 0 x-traffic
-0 0 0 0 0 0 0 cache-digest
-0 0 0 0 0 0 0 x-compress-hint
-0 0 0 0 0 0 0 early-data
-0 0 0 0 0 0 0 access-control-allow-headers cache-control
-0 0 0 0 0 0 0 access-control-allow-headers content-type
-0 0 0 0 0 0 0 x-content-type-options nosniff
-0 0 0 0 0 0 0 x-xss-protection 1; mode=block
-0 0 0 0 0 0 0 access-control-allow-credentials FALSE
-0 0 0 0 0 0 0 access-control-allow-credentials TRUE
-0 0 0 0 0 0 0 access-control-allow-headers *
-0 0 0 0 0 0 0 access-control-allow-methods get
-0 0 0 0 0 0 0 access-control-allow-methods get, post, options
-0 0 0 0 0 0 0 access-control-allow-methods options
-0 0 0 0 0 0 0 access-control-expose-headers content-length
-0 0 0 0 0 0 0 access-control-request-headers content-type
-0 0 0 0 0 0 0 access-control-request-method get
-0 0 0 0 0 0 0 access-control-request-method post
-0 0 0 0 0 0 0 alt-svc clear
-0 0 0 0 0 0 0 content-security-policy script-src 'none'; object-src 'none'; base-uri 'none'
-0 0 0 0 0 0 0 expect-ct
-0 0 0 0 0 0 0 forwarded
-0 0 0 0 0 0 0 origin
-0 0 0 0 0 0 0 purpose prefetch
-0 0 0 0 0 0 0 timing-allow-origin *
-0 0 0 0 0 0 0 upgrade-insecure-requests 1
-0 0 0 0 0 0 0 x-frame-options deny
-0 0 0 0 0 0 0 x-frame-options sameorigin
+# - Likely to repeat (for QPACK)
+1 0 0 0 0 0 0 0 :authority
+2 0 0 0 0 0 0 0 :method GET
+3 0 0 0 0 0 0 0 :method POST
+4 0 0 0 0 0 0 0 :path /
+5 0 0 0 0 0 0 0 :path /index.html
+6 0 0 0 0 0 0 0 :scheme http
+7 0 0 0 0 0 0 0 :scheme https
+8 0 0 0 0 0 0 0 :status 200
+9 0 0 0 0 0 0 0 :status 204
+10 0 0 0 0 0 0 0 :status 206
+11 0 0 0 0 0 0 0 :status 304
+12 0 0 0 0 0 0 0 :status 400
+13 0 0 0 0 0 0 0 :status 404
+14 0 0 0 0 0 0 0 :status 500
+15 0 0 0 0 1 0 1 accept-charset
+16 0 0 0 0 1 0 1 accept-encoding gzip, deflate
+17 0 0 0 0 1 0 1 accept-language
+18 0 0 0 0 0 0 1 accept-ranges
+19 0 0 0 0 1 0 1 accept
+20 0 0 0 0 0 0 1 access-control-allow-origin
+21 0 0 0 0 0 0 0 age
+22 0 0 0 0 0 0 1 allow
+23 0 0 0 0 0 0 0 authorization
+24 0 0 0 0 0 0 1 cache-control
+25 0 0 0 0 0 0 1 content-disposition
+26 0 0 0 0 0 0 1 content-encoding
+27 0 0 0 0 0 0 1 content-language
+28 0 0 1 0 0 0 0 content-length
+29 0 0 0 0 0 0 0 content-location
+30 0 0 0 0 0 0 0 content-range
+31 0 0 0 0 0 0 1 content-type
+32 0 0 0 0 0 1 0 cookie
+33 0 0 0 0 0 0 1 date
+34 0 0 0 0 0 0 0 etag
+35 0 0 1 0 0 0 1 expect
+36 0 0 0 0 0 0 0 expires
+37 0 0 0 0 0 0 1 from
+38 0 0 1 1 0 0 0 host
+39 0 0 0 0 0 0 0 if-match
+40 0 0 0 0 0 0 0 if-modified-since
+41 0 0 0 0 0 0 0 if-none-match
+42 0 0 0 0 0 0 0 if-range
+43 0 0 0 0 0 0 0 if-unmodified-since
+44 0 0 0 0 0 0 0 last-modified
+45 0 0 0 0 0 0 1 link
+46 0 0 0 0 0 0 0 location
+47 0 0 0 0 0 0 0 max-forwards
+48 1 0 0 0 0 0 0 proxy-authenticate
+49 1 0 0 0 0 0 0 proxy-authorization
+50 0 0 0 0 0 0 0 range
+51 0 0 0 0 0 0 1 referer
+52 0 0 0 0 0 0 0 refresh
+53 0 0 0 0 0 0 1 retry-after
+54 0 0 0 0 0 0 1 server
+55 0 0 0 0 0 1 0 set-cookie
+56 0 0 0 0 0 0 1 strict-transport-security
+57 1 1 1 1 0 0 0 transfer-encoding
+58 0 0 0 0 1 0 1 user-agent
+59 0 0 0 0 0 0 1 vary
+60 0 0 0 0 0 0 0 via
+61 0 0 0 0 0 0 0 www-authenticate
+0 1 1 0 1 0 0 0 connection
+0 0 0 0 0 0 0 0 x-reproxy-url
+0 1 1 1 1 0 0 0 upgrade
+0 1 0 0 1 0 0 0 http2-settings
+0 1 0 0 1 0 0 1 te
+0 1 1 0 0 0 0 0 keep-alive
+0 0 0 0 0 0 0 1 x-forwarded-for
+0 0 0 0 0 0 0 0 x-traffic
+0 0 0 0 0 0 0 0 cache-digest
+0 0 0 0 0 0 0 0 x-compress-hint
+0 0 0 0 0 0 0 0 early-data
+0 0 0 0 0 0 0 1 access-control-allow-headers
+0 0 0 0 0 0 0 1 x-content-type-options
+0 0 0 0 0 0 0 1 x-xss-protection
+0 0 0 0 0 0 0 0 access-control-allow-credentials
+0 0 0 0 0 0 0 1 access-control-allow-headers
+0 0 0 0 0 0 0 1 access-control-allow-methods
+0 0 0 0 0 0 0 1 access-control-expose-headers
+0 0 0 0 0 0 0 1 access-control-request-headers
+0 0 0 0 0 0 0 1 access-control-request-method
+0 0 0 0 0 0 0 1 alt-svc clear
+0 0 0 0 0 0 0 1 content-security-policy
+0 0 0 0 0 0 0 1 expect-ct
+0 0 0 0 0 0 0 1 forwarded
+0 0 0 0 0 0 0 1 origin
+0 0 0 0 0 0 0 1 purpose
+0 0 0 0 0 0 0 1 timing-allow-origin
+0 0 0 0 0 0 0 1 upgrade-insecure-requests
+0 0 0 0 0 0 0 1 x-frame-options
 
 # QPACK static table (index, name, value)
 0 :authority
