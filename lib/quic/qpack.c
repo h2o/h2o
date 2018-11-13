@@ -423,6 +423,7 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, const uint8_t **_
             if (!(src + name_len < src_end))
                 goto Exit;
             const uint8_t *name = src;
+            src += name_len;
             int value_is_huff = (*src & 0x80) != 0;
             if ((ret = decode_int(&value_len, &src, src_end, 7)) != 0)
                 goto Exit;
