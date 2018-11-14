@@ -414,8 +414,8 @@ void start_request(struct st_h2o_hqclient_req_t *req)
 
     h2o_byte_vector_t buf = {NULL};
     h2o_hq_encode_frame(req->super.pool, &buf, H2O_HQ_FRAME_TYPE_HEADERS, {
-        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, &buf, method, url.scheme, url.authority, url.path,
-                                  headers, num_headers);
+        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->stream->stream_id, NULL, &buf, method,
+                                  url.scheme, url.authority, url.path, headers, num_headers);
     });
     h2o_hq_call_and_assert(quicly_sendbuf_write(&req->stream->sendbuf, buf.entries, buf.size, NULL));
 

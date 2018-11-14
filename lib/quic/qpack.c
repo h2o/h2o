@@ -67,7 +67,7 @@ struct st_h2o_qpack_decoder_t {
      */
     struct st_h2o_qpack_header_table_t table;
     /**
-     *
+     * maximum header table size declared by itself. Current max set by peer is available in `table.max_size`.
      */
     uint32_t header_table_size;
     /**
@@ -92,6 +92,32 @@ struct st_h2o_qpack_decoder_t {
          */
         size_t num_unblocked;
     } blocked_streams;
+};
+
+struct st_h2o_qpack_encoder_t {
+    /**
+     * the header table
+     */
+    struct st_h2o_qpack_header_table_t table;
+    /**
+     * maximum id of the insertion being acked (inclusive)
+     */
+    int64_t largest_known_received;
+    /**
+     * list of unacked streams
+     */
+    H2O_VECTOR(struct st_h2o_qpack_blocked_streams_t) inflight;
+};
+
+struct st_h2o_qpack_flatten_context_t {
+    h2o_qpack_encoder_t *qpack;
+    h2o_mem_pool_t *pool;
+    int64_t stream_id;
+    h2o_byte_vector_t *encoder_buf;
+    h2o_byte_vector_t *headers_buf;
+    int64_t base_index;
+    int64_t largest_ref;
+    size_t header_data_prefix_at;
 };
 
 #define MAX_HEADER_NAME_LENGTH 128
@@ -246,6 +272,8 @@ static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_heade
 {
     ++qpack->insert_count;
     ++qpack->total_inserts;
+    fprintf(stderr, "#%s:%" PRIu64 ":%.*s\t%.*s\n", __FUNCTION__, qpack->total_inserts, (int)added->name->len, added->name->base,
+            (int)added->value_len, added->value);
     header_table_insert(&qpack->table, added);
 }
 
@@ -766,32 +794,80 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(unsigned header_table_size_bits)
 {
-    return h2o_mem_alloc(1);
+    h2o_qpack_encoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
+    header_table_init(&qpack->table, (uint32_t)(1 << header_table_size_bits));
+    qpack->largest_known_received = 0;
+    memset(&qpack->inflight, 0, sizeof(qpack->inflight));
+    return qpack;
 }
 
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack)
 {
+    header_table_dispose(&qpack->table);
+    free(qpack->inflight.entries);
     free(qpack);
 }
 
 static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t insert_count, const char **err_desc)
 {
-    if (insert_count != 0) {
-        *err_desc = "unexpected message: Table State Synchronize";
-        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
-    }
-    /* FIXME is insert_count=0 considered a valid argument? */
+    if (insert_count == 0)
+        goto Error;
+
+    int64_t new_value = qpack->largest_known_received + insert_count;
+    if (new_value >= qpack->table.base_offset + qpack->table.last - qpack->table.first)
+        goto Error;
+    qpack->largest_known_received = new_value;
+
     return 0;
+Error:
+    *err_desc = "Table State Synchronize: invalid argument";
+    return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
+}
+
+static void evict_inflight_by_index(h2o_qpack_encoder_t *qpack, size_t index)
+{
+    --qpack->inflight.size;
+    if (qpack->inflight.size == 0) {
+        free(qpack->inflight.entries);
+        memset(&qpack->inflight, 0, sizeof(qpack->inflight));
+    } else if (index < qpack->inflight.size) {
+        memmove(qpack->inflight.entries + index, qpack->inflight.entries + index + 1, qpack->inflight.size - index);
+    }
 }
 
 static int handle_header_ack(h2o_qpack_encoder_t *qpack, int64_t stream_id, const char **err_desc)
 {
-    *err_desc = "unexpected message: Header Acknowledgement";
+    size_t i;
+
+    for (i = 0; i < qpack->inflight.size; ++i)
+        if (qpack->inflight.entries[i].stream_id == stream_id)
+            goto Found;
+    /* not found */
+    *err_desc = "Header Acknowledgement: invalid stream id";
     return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
+
+Found:
+    /* update largest reference */
+    if (qpack->largest_known_received < qpack->inflight.entries[i].largest_ref)
+        qpack->largest_known_received = qpack->inflight.entries[i].largest_ref;
+    /* evict the found entry */
+    evict_inflight_by_index(qpack, i);
+
+    return 0;
 }
 
 static int handle_stream_cancellation(h2o_qpack_encoder_t *qpack, int64_t stream_id, const char **err_desc)
 {
+    size_t index = 0;
+
+    while (index < qpack->inflight.size) {
+        if (qpack->inflight.entries[index].stream_id == stream_id) {
+            evict_inflight_by_index(qpack, index);
+        } else {
+            ++index;
+        }
+    }
+
     return 0;
 }
 
@@ -830,6 +906,35 @@ Exit:
     return (int)ret;
 }
 
+static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *name, h2o_iovec_t value, int acked_only, int *is_exact)
+{
+    size_t i;
+    int64_t name_found = -1;
+
+    for (i = acked_only ? qpack->largest_known_received : qpack->table.base_offset + qpack->table.last - qpack->table.first - 1;
+         i >= qpack->table.base_offset; --i) {
+        struct st_h2o_qpack_header_t *entry = qpack->table.first[i - qpack->table.base_offset];
+        /* compare names (and continue unless they match) */
+        if (h2o_iovec_is_token(name)) {
+            if (name != entry->name)
+                continue;
+        } else {
+            if (!h2o_memis(name->base, name->len, entry->name->base, entry->name->len))
+                continue;
+        }
+        /* compare values */
+        if (h2o_memis(value.base, value.len, entry->value, entry->value_len)) {
+            *is_exact = 1;
+            return i;
+        }
+        if (name_found == 0)
+            name_found = i;
+    }
+
+    *is_exact = 0;
+    return name_found;
+}
+
 static void flatten_int(h2o_byte_vector_t *buf, int64_t value, unsigned prefix_bits)
 {
     uint8_t *p = h2o_hpack_encode_int(buf->entries + buf->size, value, prefix_bits);
@@ -862,98 +967,272 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
     }
 }
 
-static void flatten_header_with_static_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
-                                               int32_t qpack_index, int is_exact, h2o_iovec_t value, int dont_compress)
+static void emit_insert_with_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int is_static,
+                                     int64_t index, h2o_iovec_t value)
 {
-    if (is_exact) {
-        /* static indexed header field */
-        h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
-        buf->entries[buf->size] = 0xc0;
-        flatten_int(buf, qpack_index, 6);
+    h2o_vector_reserve(pool, buf, buf->size + (H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2) + value.len);
+    buf->entries[buf->size] = 0x80 | (is_static ? 0x40 : 0);
+    flatten_int(buf, index, 6);
+    flatten_string(buf, value.base, value.len, 7, 0);
+}
+
+static void emit_insert_without_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
+                                        const h2o_iovec_t *name, h2o_iovec_t value)
+{
+    h2o_vector_reserve(pool, buf, buf->size + (H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2) + name->len + value.len);
+    buf->entries[buf->size] = 0x40;
+    flatten_string(buf, name->base, name->len, 5, 0);
+    flatten_string(buf, value.base, value.len, 7, 0);
+}
+
+static void flatten_static_indexed(struct st_h2o_qpack_flatten_context_t *ctx, int32_t index)
+{
+    h2o_vector_reserve(ctx->pool, ctx->headers_buf, ctx->headers_buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
+    ctx->headers_buf->entries[ctx->headers_buf->size] = 0xc0;
+    flatten_int(ctx->headers_buf, index, 6);
+}
+
+static void flatten_dynamic_indexed(struct st_h2o_qpack_flatten_context_t *ctx, int64_t index)
+{
+    h2o_vector_reserve(ctx->pool, ctx->headers_buf, ctx->headers_buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
+
+    if (index > ctx->largest_ref)
+        ctx->largest_ref = index;
+
+    if (index <= ctx->base_index) {
+        /* indexed */
+        ctx->headers_buf->entries[ctx->headers_buf->size] = 0x80;
+        flatten_int(ctx->headers_buf, ctx->base_index - index, 6);
     } else {
-        /* static indexed with name reference */
-        h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + value.len);
-        buf->entries[buf->size] = 0x50;
-        flatten_int(buf, qpack_index, 4);
-        flatten_string(buf, value.base, value.len, 7, dont_compress);
+        /* indexed (post-base) */
+        ctx->headers_buf->entries[ctx->headers_buf->size] = 0x10;
+        flatten_int(ctx->headers_buf, index - ctx->base_index - 1, 4);
     }
 }
 
-static void flatten_header(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, const h2o_header_t *header)
+static void flatten_static_nameref(struct st_h2o_qpack_flatten_context_t *ctx, int32_t index, h2o_iovec_t value, int dont_compress)
 {
-    int32_t qpack_index;
-    int is_exact;
+    h2o_vector_reserve(ctx->pool, ctx->headers_buf, ctx->headers_buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + value.len);
+    ctx->headers_buf->entries[ctx->headers_buf->size] = 0x50 | (dont_compress ? 0x20 : 0);
+    flatten_int(ctx->headers_buf, index, 4);
+    flatten_string(ctx->headers_buf, value.base, value.len, 7, dont_compress);
+}
 
-    if (h2o_iovec_is_token(header->name) &&
-        (qpack_index = h2o_qpack_lookup_static[(const h2o_token_t *)header->name - h2o__tokens](header->value, &is_exact)) >= 0) {
-        flatten_header_with_static_nameref(qpack, pool, buf, qpack_index, is_exact, header->value, header->flags.dont_compress);
+static void flatten_dynamic_nameref(struct st_h2o_qpack_flatten_context_t *ctx, int64_t index, h2o_iovec_t value, int dont_compress)
+{
+    if (index > ctx->largest_ref)
+        ctx->largest_ref = index;
+
+    h2o_vector_reserve(ctx->pool, ctx->headers_buf, ctx->headers_buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + value.len);
+    if (index <= ctx->base_index) {
+        ctx->headers_buf->entries[ctx->headers_buf->size] = 0x40 | (dont_compress ? 0x20 : 0);
+        flatten_int(ctx->headers_buf, ctx->base_index - index, 4);
     } else {
-        /* literal header field without name reference */
-        h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + header->name->len + header->value.len);
-        buf->entries[buf->size] = 0x20;
-        flatten_string(buf, header->name->base, header->name->len, 3, 0);
-        flatten_string(buf, header->value.base, header->value.len, 7, header->flags.dont_compress);
+        ctx->headers_buf->entries[ctx->headers_buf->size] = dont_compress ? 0x8 : 0;
+        flatten_int(ctx->headers_buf, index - ctx->base_index - 1, 3);
+    }
+    flatten_string(ctx->headers_buf, value.base, value.len, 7, dont_compress);
+}
+
+static void flatten_without_nameref(struct st_h2o_qpack_flatten_context_t *ctx, const h2o_iovec_t *name, h2o_iovec_t value,
+                                    int dont_compress)
+{
+    h2o_vector_reserve(ctx->pool, ctx->headers_buf,
+                       ctx->headers_buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + name->len + value.len);
+    ctx->headers_buf->entries[ctx->headers_buf->size] = 0x20 | (dont_compress ? 0x10 : 0);
+    flatten_string(ctx->headers_buf, name->base, name->len, 3, 0);
+    flatten_string(ctx->headers_buf, value.base, value.len, 7, dont_compress);
+}
+
+static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int is_exact, int likely_to_repeat,
+                              const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
+{
+    int64_t dynamic_index;
+
+    if (static_index >= 0 && is_exact) {
+        flatten_static_indexed(ctx, static_index);
+        return;
+    }
+
+    /* try dynamic indexed */
+    if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
+        flatten_dynamic_indexed(ctx, dynamic_index);
+        return;
+    }
+
+    /* emit to encoder buf and dynamic index?
+     * At the moment the strategy is dumb; we emit encoder stream data until the table becomes full. Never triggers eviction.
+     */
+    if (likely_to_repeat && ctx->encoder_buf != NULL && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
+        name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
+        /* emit instruction to decoder stream */
+        if (static_index >= 0) {
+            emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
+        } else if (dynamic_index >= 0) {
+            emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0, dynamic_index, value);
+        } else {
+            emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
+        }
+        /* register the entry to table */
+        struct st_h2o_qpack_header_t *added;
+        if (h2o_iovec_is_token(name)) {
+            added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value.len + 1, NULL);
+            added->name = (h2o_iovec_t *)name;
+        } else {
+            added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1, NULL);
+            added->name = &added->_name_buf;
+            added->_name_buf = h2o_iovec_init(added->value + added->value_len + 1, name->len);
+            memcpy(added->_name_buf.base, name->base, name->len);
+            added->_name_buf.base[name->len] = '\0';
+        }
+        added->value_len = value.len;
+        memcpy(added->value, value.base, value.len);
+        added->value[value.len] = '\0';
+        header_table_insert(&ctx->qpack->table, added);
+        /* emit header field to headers block */
+        flatten_dynamic_indexed(ctx, ctx->qpack->table.base_offset + ctx->qpack->table.last - ctx->qpack->table.first - 1);
+        return;
+    }
+
+    if (static_index >= 0) {
+        flatten_static_nameref(ctx, static_index, value, flags.dont_compress);
+    } else if (dynamic_index >= 0) {
+        flatten_dynamic_nameref(ctx, dynamic_index, value, flags.dont_compress);
+    } else {
+        flatten_without_nameref(ctx, name, value, flags.dont_compress);
     }
 }
 
-static void flatten_known_header_with_static_lookup(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
-                                                    h2o_qpack_lookup_static_cb lookup_cb, h2o_iovec_t value)
+static void flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, const h2o_header_t *header)
 {
-    int32_t qpack_index;
-    int is_exact;
+    int32_t static_index = -1;
+    int is_exact = 0, likely_to_repeat = 0;
 
-    qpack_index = lookup_cb(value, &is_exact);
-    assert(qpack_index >= 0);
-    flatten_header_with_static_nameref(qpack, pool, buf, qpack_index, is_exact, value, 0);
+    /* obtain static index if possible */
+    if (h2o_iovec_is_token(header->name)) {
+        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
+        static_index = h2o_qpack_lookup_static[token - h2o__tokens](header->value, &is_exact);
+        likely_to_repeat = token->flags.likely_to_repeat;
+    }
+
+    return do_flatten_header(ctx, static_index, is_exact, likely_to_repeat, header->name, header->value, header->flags);
 }
 
-void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, h2o_iovec_t method,
+static void flatten_known_header_with_static_lookup(struct st_h2o_qpack_flatten_context_t *ctx,
+                                                    h2o_qpack_lookup_static_cb lookup_cb, const h2o_token_t *name,
+                                                    h2o_iovec_t value)
+{
+    int is_exact;
+    int32_t static_index = lookup_cb(value, &is_exact);
+    assert(index >= 0);
+
+    do_flatten_header(ctx, static_index, is_exact, name->flags.likely_to_repeat, &name->buf, value, (h2o_header_flags_t){0});
+}
+
+static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
+                            int64_t stream_id, h2o_byte_vector_t *encoder_buf, h2o_byte_vector_t *headers_buf)
+{
+    ctx->qpack = qpack;
+    ctx->pool = pool;
+    ctx->stream_id = stream_id;
+    ctx->encoder_buf = encoder_buf;
+    ctx->headers_buf = headers_buf;
+    ctx->base_index = qpack->table.base_offset + qpack->table.last - qpack->table.first - 1;
+    ctx->largest_ref = 0;
+    ctx->header_data_prefix_at = headers_buf->size;
+
+    /* reserve two octets for largest ref and base index (written afterwards) */
+    h2o_vector_reserve(ctx->pool, ctx->headers_buf, ctx->headers_buf->size + 2);
+    ctx->headers_buf->size += 2;
+}
+
+static void commit_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
+{
+    uint8_t prefix[H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2];
+    size_t prefix_len;
+
+    if (ctx->largest_ref == 0) {
+        ctx->base_index = 0;
+    } else {
+        /* adjust largest reference to achieve more compact representation on wire without risking blocking */
+        if (ctx->largest_ref < ctx->qpack->largest_known_received)
+            ctx->largest_ref = ctx->qpack->largest_known_received;
+        /* mark as inflight */
+        h2o_vector_reserve(NULL, &ctx->qpack->inflight, ctx->qpack->inflight.size + 1);
+        ctx->qpack->inflight.entries[ctx->qpack->inflight.size++] =
+            (struct st_h2o_qpack_blocked_streams_t){ctx->stream_id, ctx->largest_ref};
+    }
+
+    { /* build header data prefx */
+        uint8_t *p = prefix;
+        /* largest_ref */
+        *p = 0;
+        p = h2o_hpack_encode_int(p, ctx->largest_ref != 0 ? ctx->largest_ref + 1 : 0, 8);
+        /* delta base index */
+        if (ctx->largest_ref <= ctx->base_index) {
+            *p = 0;
+            p = h2o_hpack_encode_int(p, ctx->base_index - ctx->largest_ref, 7);
+        } else {
+            *p = 0x80;
+            p = h2o_hpack_encode_int(p, ctx->largest_ref - ctx->base_index, 7);
+        }
+        prefix_len = p - prefix;
+    }
+
+    /* write to the output */
+    if (prefix_len != 2) {
+        h2o_vector_reserve(ctx->pool, ctx->headers_buf, ctx->headers_buf->size + prefix_len - 2);
+        memmove(ctx->headers_buf->entries + ctx->header_data_prefix_at + prefix_len,
+                ctx->headers_buf->entries + ctx->header_data_prefix_at + 2,
+                ctx->headers_buf->size - ctx->header_data_prefix_at - 2);
+        ctx->headers_buf->size += prefix_len - 2;
+    }
+    memcpy(ctx->headers_buf->entries + ctx->header_data_prefix_at, prefix, 2);
+}
+
+void h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
+                               h2o_byte_vector_t *_encoder_buf, h2o_byte_vector_t *_headers_buf, h2o_iovec_t method,
                                const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers,
                                size_t num_headers)
 {
-    static const uint8_t STATIC_TABLE_BASE = 0xc0;
-    h2o_vector_reserve(pool, buf, buf->size + 3);
+    struct st_h2o_qpack_flatten_context_t ctx;
 
-    /* largest_ref and base_index */
-    buf->entries[buf->size++] = 0;
-    buf->entries[buf->size++] = 0;
+    prepare_flatten(&ctx, _qpack, _pool, _stream_id, _encoder_buf, _headers_buf);
 
     /* pseudo headers */
-    flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_method, method);
+    flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_method, H2O_TOKEN_METHOD, method);
     if (scheme == &H2O_URL_SCHEME_HTTP) {
-        h2o_vector_reserve(pool, buf, buf->size + 1);
-        buf->entries[buf->size++] = STATIC_TABLE_BASE + 22;
+        flatten_static_indexed(&ctx, 22);
     } else if (scheme == &H2O_URL_SCHEME_HTTPS) {
-        h2o_vector_reserve(pool, buf, buf->size + 1);
-        buf->entries[buf->size++] = STATIC_TABLE_BASE + 23;
+        flatten_static_indexed(&ctx, 23);
     } else {
-        flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_scheme, scheme->name);
+        flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_scheme, H2O_TOKEN_SCHEME, scheme->name);
     }
-    flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_authority, authority);
-    flatten_known_header_with_static_lookup(qpack, pool, buf, h2o_qpack_lookup_path, path);
+    flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_authority, H2O_TOKEN_AUTHORITY, authority);
+    flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_path, H2O_TOKEN_PATH, path);
 
     /* flatten headers */
     size_t i;
     for (i = 0; i != num_headers; ++i)
-        flatten_header(qpack, pool, buf, headers + i);
+        flatten_header(&ctx, headers + i);
+
+    commit_flatten(&ctx);
 }
 
-void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int status,
+void h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
+                                h2o_byte_vector_t *_encoder_buf, h2o_byte_vector_t *_headers_buf, int status,
                                 const h2o_header_t *headers, size_t num_headers, const h2o_iovec_t *server_name,
                                 size_t content_length)
 {
-    h2o_vector_reserve(pool, buf, buf->size + 4);
+    struct st_h2o_qpack_flatten_context_t ctx;
 
-    /* largest_ref and base_index */
-    buf->entries[buf->size++] = 0;
-    buf->entries[buf->size++] = 0;
+    prepare_flatten(&ctx, _qpack, _pool, _stream_id, _encoder_buf, _headers_buf);
 
     /* pseudo headers */
     switch (status) {
 #define INDEXED_STATUS(cp, st)                                                                                                     \
     case st:                                                                                                                       \
-        buf->entries[buf->size] = 0xc0;                                                                                            \
-        flatten_int(buf, cp, 6);                                                                                                   \
+        flatten_static_indexed(&ctx, cp);                                                                                          \
         break
         INDEXED_STATUS(24, 103);
         INDEXED_STATUS(25, 200);
@@ -973,27 +1252,32 @@ void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool
     default: {
         char status_str[sizeof(H2O_UINT16_LONGEST_STR)];
         sprintf(status_str, "%" PRIu16, (uint16_t)status);
-        flatten_header_with_static_nameref(qpack, pool, buf, 24, 0, h2o_iovec_init(status_str, strlen(status_str)), 0);
+        do_flatten_header(&ctx, 24, 0, H2O_TOKEN_STATUS->flags.likely_to_repeat, &H2O_TOKEN_STATUS->buf,
+                          h2o_iovec_init(status_str, strlen(status_str)), (h2o_header_flags_t){0});
     } break;
     }
 
     /* TODO keep some kind of reference to the indexed Server header, and reuse it */
     if (server_name != NULL && server_name->len != 0)
-        flatten_header_with_static_nameref(qpack, pool, buf, 92, 0, *server_name, 0);
+        do_flatten_header(&ctx, 92, 0, H2O_TOKEN_SERVER->flags.likely_to_repeat, &H2O_TOKEN_SERVER->buf, *server_name,
+                          (h2o_header_flags_t){0});
 
     /* content-length */
     if (content_length != SIZE_MAX) {
         if (content_length == 0) {
-            flatten_header_with_static_nameref(qpack, pool, buf, 4, 1, h2o_iovec_init(H2O_STRLIT("0")), 0);
+            flatten_static_indexed(&ctx, 4);
         } else {
             char cl_str[sizeof(H2O_UINT64_LONGEST_STR)];
             sprintf(cl_str, "%" PRIu64, (uint64_t)content_length);
-            flatten_header_with_static_nameref(qpack, pool, buf, 4, 0, h2o_iovec_init(cl_str, strlen(cl_str)), 0);
+            do_flatten_header(&ctx, 4, 0, H2O_TOKEN_CONTENT_LENGTH->flags.likely_to_repeat, &H2O_TOKEN_CONTENT_LENGTH->buf,
+                              h2o_iovec_init(cl_str, strlen(cl_str)), (h2o_header_flags_t){0});
         }
     }
 
     /* flatten headers */
     size_t i;
     for (i = 0; i != num_headers; ++i)
-        flatten_header(qpack, pool, buf, headers + i);
+        flatten_header(&ctx, headers + i);
+
+    commit_flatten(&ctx);
 }

@@ -57,11 +57,15 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(unsigned header_table_size_bits);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
 int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **src, const uint8_t *src_end, const char **err_desc);
-void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, h2o_iovec_t method,
-                               const h2o_url_scheme_t *scheme, h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers,
-                               size_t num_headers);
-void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int status,
-                                const h2o_header_t *headers, size_t num_headers, const h2o_iovec_t *server_name,
-                                size_t content_length);
+/**
+ * flattens a QPACK request.
+ * @param encoder_buf optional parameter pointing to buffer to store encoder stream data. Set to NULL to avoid blocking.
+ */
+void h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, int64_t stream_id, h2o_byte_vector_t *encoder_buf,
+                               h2o_byte_vector_t *headers_buf, h2o_iovec_t method, const h2o_url_scheme_t *scheme,
+                               h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers, size_t num_headers);
+void h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, int64_t stream_id, h2o_byte_vector_t *encoder_buf,
+                                h2o_byte_vector_t *headers_buf, int status, const h2o_header_t *headers, size_t num_headers,
+                                const h2o_iovec_t *server_name, size_t content_length);
 
 #endif

@@ -89,12 +89,12 @@ static int encode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
             assert(message.scheme != NULL);                                                                                        \
             assert(message.authority.base != NULL);                                                                                \
             assert(message.path.base != NULL);                                                                                     \
-            h2o_qpack_flatten_request(enc, &pool, &output, message.method, message.scheme, message.authority, message.path,        \
-                                      message.headers.entries, message.headers.size);                                              \
+            h2o_qpack_flatten_request(enc, &pool, stream_id, NULL, &output, message.method, message.scheme, message.authority,     \
+                                      message.path, message.headers.entries, message.headers.size);                                \
         } else {                                                                                                                   \
             assert(100 <= message.status && message.status <= 999);                                                                \
-            h2o_qpack_flatten_response(enc, &pool, &output, message.status, message.headers.entries, message.headers.size, NULL,   \
-                                       message.content_length);                                                                    \
+            h2o_qpack_flatten_response(enc, &pool, stream_id, NULL, &output, message.status, message.headers.entries,              \
+                                       message.headers.size, NULL, message.content_length);                                        \
         }                                                                                                                          \
         write_int(outp, stream_id++, 8);                                                                                           \
         write_int(outp, (uint32_t)output.size, 4);                                                                                 \

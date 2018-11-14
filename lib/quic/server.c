@@ -307,8 +307,8 @@ static void write_response(struct st_h2o_hq_server_stream_t *stream)
 {
     h2o_byte_vector_t buf = {NULL};
     h2o_hq_encode_frame(&stream->req.pool, &buf, H2O_HQ_FRAME_TYPE_HEADERS, {
-        h2o_qpack_flatten_response(get_conn(stream)->hq.qpack.enc, &stream->req.pool, &buf, stream->req.res.status,
-                                   stream->req.res.headers.entries, stream->req.res.headers.size,
+        h2o_qpack_flatten_response(get_conn(stream)->hq.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, &buf,
+                                   stream->req.res.status, stream->req.res.headers.entries, stream->req.res.headers.size,
                                    &get_conn(stream)->super.ctx->globalconf->server_name, stream->req.res.content_length);
     });
     write_stream(stream, buf.entries, buf.size);

@@ -383,9 +383,8 @@ void on_read(h2o_socket_t *sock, const char *err)
         quicly_decoded_packet_t packets[64];
         size_t packet_index = 0;
         for (dgram_index = 0; dgram_index != num_dgrams; ++dgram_index) {
-            if (packet_index != 0 &&
-                !(dgram_index == 0 ||
-                  h2o_socket_compare_address(dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index].mess.msg_name))) {
+            if (packet_index != 0 && !(dgram_index == 0 || h2o_socket_compare_address(dgrams[dgram_index - 1].mess.msg_name,
+                                                                                      dgrams[dgram_index].mess.msg_name))) {
                 process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen, packets,
                                 packet_index);
                 packet_index = 0;

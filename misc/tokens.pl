@@ -219,7 +219,7 @@ __DATA__
 # - Copy for push request
 # - Disable compression (non-zero)
 # - Likely to repeat (for QPACK)
-1 0 0 0 0 0 0 0 :authority
+1 0 0 0 0 0 0 1 :authority
 2 0 0 0 0 0 0 0 :method GET
 3 0 0 0 0 0 0 0 :method POST
 4 0 0 0 0 0 0 0 :path /
