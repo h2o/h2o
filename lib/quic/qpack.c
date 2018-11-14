@@ -707,6 +707,8 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     int sign = (**src & 0x80) != 0;
     if (decode_int(&ctx->base_index, src, src_end, 7) != 0)
         return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
+    if (sign && ctx->base_index == 0)
+        return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     ctx->base_index = sign == 0 ? ctx->largest_ref + ctx->base_index : ctx->largest_ref - ctx->base_index;
 
     /* is the stream blocked? */
