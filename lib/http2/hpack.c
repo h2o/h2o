@@ -736,16 +736,17 @@ size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len)
 }
 
 static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
-                                 const h2o_iovec_t *value, h2o_header_flags_t flags)
+                                 const h2o_iovec_t *value, int dont_compress)
 {
-    int name_index = flags.http2_static_table_name_index;
+    int is_token = h2o_iovec_is_token(name);
+    int name_index = is_token ? ((const h2o_token_t *)name)->flags.http2_static_table_name_index : 0;
 
     /* try to send as indexed */
     {
         size_t header_table_index = header_table->entry_start_index, n;
         for (n = header_table->num_entries; n != 0; --n) {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + header_table_index;
-            if (flags.token_index_plus1 != 0) {
+            if (is_token) {
                 if (name != entry->name)
                     goto Next;
             } else {
@@ -768,7 +769,10 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
         }
     }
 
-    int dont_compress = flags.dont_compress && value->len < 20 ? 1 : 0;
+    if (!dont_compress && is_token)
+        dont_compress = ((const h2o_token_t *)name)->flags.dont_compress;
+    if (dont_compress)
+        dont_compress = value->len < 20;
 
     if (name_index != 0) {
         /* literal header field with indexing (indexed name). */
@@ -796,7 +800,7 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
         struct st_h2o_hpack_header_table_entry_t *entry =
             header_table_add(header_table, name->len + value->len + HEADER_TABLE_ENTRY_SIZE_OFFSET, 32);
         if (entry != NULL) {
-            if (flags.token_index_plus1 != 0) {
+            if (is_token) {
                 entry->name = (h2o_iovec_t *)name;
             } else {
                 entry->name = alloc_buf(NULL, name->len);
@@ -814,14 +818,13 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
 
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_header_t *header)
 {
-    h2o_header_validate(header);
-    return do_encode_header(header_table, dst, header->name, &header->value, header->flags);
+    return do_encode_header(header_table, dst, header->name, &header->value, header->flags.dont_compress);
 }
 
 static uint8_t *encode_header_token(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_token_t *token,
                                     const h2o_iovec_t *value)
 {
-    return do_encode_header(header_table, dst, &token->buf, value, token->flags);
+    return do_encode_header(header_table, dst, &token->buf, value, token->flags.dont_compress);
 }
 
 static uint8_t *encode_method(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_iovec_t value)

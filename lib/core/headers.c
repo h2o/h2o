@@ -63,7 +63,7 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 ssize_t h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
                        const char *value, size_t value_len)
 {
-    return add_header(pool, headers, (h2o_iovec_t *)&token->buf, orig_name, value, value_len, token->flags);
+    return add_header(pool, headers, (h2o_iovec_t *)&token->buf, orig_name, value, value_len, (h2o_header_flags_t){0});
 }
 
 ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
@@ -74,7 +74,7 @@ ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, cons
     if (maybe_token) {
         const h2o_token_t *token = h2o_lookup_token(name, name_len);
         if (token != NULL) {
-            return add_header(pool, headers, (h2o_iovec_t *)token, orig_name, value, value_len, token->flags);
+            return add_header(pool, headers, (h2o_iovec_t *)token, orig_name, value, value_len, (h2o_header_flags_t){0});
         }
     }
     name_buf = h2o_mem_alloc_pool(pool, *name_buf, 1);

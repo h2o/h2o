@@ -212,10 +212,10 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         const h2o_header_t *h, *h_end;
         int found_early_data = 0;
         for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
-            if (h->flags.proxy_should_drop_for_req)
-                continue;
-            if (h2o_header_is_token(h)) {
+            if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
+                if (token->flags.proxy_should_drop_for_req)
+                    continue;
                 if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
                     /* FIXME current algorithm is O(n^2) against the number of cookie headers */
@@ -429,10 +429,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
         h2o_iovec_t value = headers[i].value;
-        if (headers[i].flags.proxy_should_drop_for_res)
-            continue;
-        if (h2o_header_is_token(&headers[i])) {
+        if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
+            if (token->flags.proxy_should_drop_for_res)
+                continue;
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
