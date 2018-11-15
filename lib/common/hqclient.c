@@ -225,7 +225,7 @@ static void close_request(struct st_h2o_hqclient_req_t *req, uint32_t reason)
 
 static int on_error_before_head(struct st_h2o_hqclient_req_t *req, const char *errstr, int32_t hq_reason)
 {
-    req->super._cb.on_head(&req->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
+    req->super._cb.on_head(&req->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
     close_request(req, hq_reason);
     return 0;
 }
@@ -364,7 +364,7 @@ static int on_update_expect_headers(quicly_stream_t *_stream)
     quicly_stream_error_t stream_error = quicly_recvbuf_get_error(&req->stream->recvbuf);
     if ((req->super._cb.on_body = req->super._cb.on_head(
              &req->super, stream_error == QUICLY_STREAM_ERROR_FIN_CLOSED ? h2o_httpclient_error_is_eos : NULL, 0, status,
-             h2o_iovec_init(NULL, 0), headers.entries, headers.size, 0, 0)) == NULL) {
+             h2o_iovec_init(NULL, 0), headers.entries, headers.size, 0)) == NULL) {
         /* FIXME what is the legal behavior of the callback when stream_error is FIN_CLOSED? */
         close_request(req, H2O_HQ_ERROR_INTERNAL);
         return 0;

@@ -41,6 +41,7 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
+    h2o_timer_t send_headers_timeout;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -154,7 +155,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
         remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
 
-    if (use_proxy_protocol && props->proxy_protocol != NULL) {
+    if (props->proxy_protocol != NULL && use_proxy_protocol) {
         props->proxy_protocol->base = h2o_mem_alloc_pool(&req->pool, char, H2O_PROXY_HEADER_MAX_LENGTH);
         props->proxy_protocol->len = h2o_stringify_proxy_header(req->conn, props->proxy_protocol->base);
     }
@@ -212,10 +213,10 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         const h2o_header_t *h, *h_end;
         int found_early_data = 0;
         for (h = req_headers.entries, h_end = h + req_headers.size; h != h_end; ++h) {
-            if (h->flags.proxy_should_drop_for_req)
-                continue;
-            if (h2o_header_is_token(h)) {
+            if (h2o_iovec_is_token(h->name)) {
                 const h2o_token_t *token = (void *)h->name;
+                if (token->flags.proxy_should_drop_for_req)
+                    continue;
                 if (token == H2O_TOKEN_COOKIE) {
                     /* merge the cookie headers; see HTTP/2 8.1.2.5 and HTTP/1 (RFC6265 5.4) */
                     /* FIXME current algorithm is O(n^2) against the number of cookie headers */
@@ -288,14 +289,30 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         h2o_add_header(&req->pool, headers, H2O_TOKEN_VIA, NULL, via_buf.base, via_buf.len);
     }
 }
-static void do_close(h2o_generator_t *generator, h2o_req_t *req)
-{
-    struct rp_generator_t *self = (void *)generator;
 
+static void do_close(struct rp_generator_t *self)
+{
+    /**
+     * This can be called in the following three scenarios:
+     *   1. Downstream timeout before receiving header from upstream
+     *        dispose callback calls this function, but stop callback doesn't
+     *   2. Reprocess
+     *        stop callback calls this, but dispose callback does it later (after reprocessed request gets finished)
+     *   3. Others
+     *        Both of stop and dispose callbacks call this function in order
+     * Thus, to ensure to do closing things, both of dispose and stop callbacks call this function.
+     */
     if (self->client != NULL) {
         self->client->cancel(self->client);
         self->client = NULL;
     }
+    h2o_timer_unlink(&self->send_headers_timeout);
+}
+
+static void do_stop(h2o_generator_t *generator, h2o_req_t *req)
+{
+    struct rp_generator_t *self = (void *)generator;
+    do_close(self);
 }
 
 static void do_send(struct rp_generator_t *self)
@@ -346,11 +363,10 @@ static void on_websocket_upgrade_complete(void *_info, h2o_socket_t *sock, size_
     free(info);
 }
 
-static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t timeout, int rlen)
+static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t timeout)
 {
     h2o_req_t *req = self->src_req;
     h2o_socket_t *sock = self->client->steal_socket(self->client);
-    h2o_buffer_consume(&sock->input, rlen); // trash data after stealing sock.
     struct rp_ws_upgrade_info_t *info = h2o_mem_alloc(sizeof(*info));
     info->upstream_sock = sock;
     info->timeout = timeout;
@@ -361,6 +377,8 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t ti
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
+
+    h2o_timer_unlink(&self->send_headers_timeout);
 
     if (errstr != NULL) {
         self->src_req->timestamps.proxy = self->client->timings;
@@ -397,8 +415,15 @@ static char compress_hint_to_enum(const char *val, size_t len)
     return H2O_COMPRESS_HINT_AUTO;
 }
 
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
+static void on_send_headers_timeout(h2o_timer_t *entry)
+{
+    struct rp_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct rp_generator_t, send_headers_timeout, entry);
+    h2o_doublebuffer_prepare_empty(&self->sending);
+    h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+}
+
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -429,10 +454,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     req->res.reason = h2o_strdup(&req->pool, msg.base, msg.len).base;
     for (i = 0; i != num_headers; ++i) {
         h2o_iovec_t value = headers[i].value;
-        if (headers[i].flags.proxy_should_drop_for_res)
-            continue;
-        if (h2o_header_is_token(&headers[i])) {
+        if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
+            if (token->flags.proxy_should_drop_for_res)
+                continue;
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
@@ -494,7 +519,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
         assert(client_ctx->websocket_timeout != NULL);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
-        on_websocket_upgrade(self, *client_ctx->websocket_timeout, rlen);
+        on_websocket_upgrade(self, *client_ctx->websocket_timeout);
         self->client = NULL;
         return NULL;
     }
@@ -507,20 +532,13 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         return NULL;
     }
 
-    /* We currently fail to notify the protocol handler that the headers are complete (by invoking h2o_send(NULL, 0)) if the body
-     * received from upstream is using chunked encoding and if only an incomplete chunk header (i.e. chunk-size CR LF CR LF) was
-     * received along with the HTTP headers. However it is not a big deal; we are only failing to "optimize" for a theoretical
-     * corner case.
-     */
-    if ((*self->client->buf)->size == rlen) {
-        h2o_doublebuffer_prepare_empty(&self->sending);
-        h2o_send(req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
-    }
+    /* if httpclient has no received body at this time, immediately send only headers using zero timeout */
+    h2o_timer_link(req->conn->ctx->loop, 0, &self->send_headers_timeout);
 
     return on_body;
 }
 
-static int on_1xx(h2o_httpclient_t *client, int minor_version, int status, h2o_iovec_t msg, h2o_header_t *headers,
+static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
                   size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
@@ -605,6 +623,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     if (reprocess_if_too_early)
         req->reprocess_if_too_early = 1;
 
+    *body = h2o_iovec_init(NULL, 0);
+    *proceed_req_cb = NULL;
     if (self->src_req->entity.base != NULL) {
         *body = self->src_req->entity;
         if (self->src_req->proceed_req != NULL) {
@@ -620,11 +640,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 static void on_generator_dispose(void *_self)
 {
     struct rp_generator_t *self = _self;
+    do_close(self);
 
-    if (self->client != NULL) {
-        self->client->cancel(self->client);
-        self->client = NULL;
-    }
     h2o_buffer_dispose(&self->last_content_before_send);
     h2o_doublebuffer_dispose(&self->sending);
 }
@@ -635,7 +652,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_httpclient_ctx_t *client_ctx = get_client_ctx(req);
 
     self->super.proceed = do_proceed;
-    self->super.stop = do_close;
+    self->super.stop = do_stop;
     self->src_req = req;
     if (client_ctx->websocket_timeout != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket"))) {
         self->is_websocket_handshake = 1;
@@ -647,6 +664,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
     req->timestamps.proxy = (h2o_httpclient_timings_t){{0}};
+    h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
 
     return self;
 }

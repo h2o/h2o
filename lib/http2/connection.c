@@ -1440,6 +1440,8 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         conn->num_streams.push.open >= conn->peer_settings.max_concurrent_streams)
         return;
 
+    if (conn->state >= H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        return;
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
     if (!(h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)))
@@ -1497,12 +1499,13 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         size_t i;
         for (i = 0; i != src_stream->req.headers.size; ++i) {
             h2o_header_t *src_header = src_stream->req.headers.entries + i;
-            if (src_header->flags.copy_for_push_request) {
-                assert(h2o_header_is_token(src_header)); /* currently only predefined headers are copiable*/
+            /* currently only predefined headers are copiable */
+            if (h2o_iovec_is_token(src_header->name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, src_header->name);
-                h2o_add_header(&stream->req.pool, &stream->req.headers, token, NULL,
-                               h2o_strdup(&stream->req.pool, src_header->value.base, src_header->value.len).base,
-                               src_header->value.len);
+                if (token->flags.copy_for_push_request)
+                    h2o_add_header(&stream->req.pool, &stream->req.headers, token, NULL,
+                                   h2o_strdup(&stream->req.pool, src_header->value.base, src_header->value.len).base,
+                                   src_header->value.len);
             }
         }
     }

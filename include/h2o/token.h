@@ -29,24 +29,23 @@
 extern "C" {
 #endif
 
-typedef struct st_h2o_header_flags_t {
-    unsigned char token_index_plus1;    /* 1-origin, 0 means not token */
+typedef struct st_h2o_token_flags_t {
     char http2_static_table_name_index; /* non-zero if any */
     unsigned char proxy_should_drop_for_req : 1;
     unsigned char proxy_should_drop_for_res : 1;
     unsigned char is_init_header_special : 1;
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
-    unsigned char dont_compress : 1;
+    unsigned char dont_compress : 1; /* consult `h2o_header_t:dont_compress` as well */
     unsigned char likely_to_repeat : 1;
-} h2o_header_flags_t;
+} h2o_token_flags_t;
 
 /**
  * a predefined, read-only, fast variant of h2o_iovec_t, defined in h2o/token.h
  */
 typedef struct st_h2o_token_t {
     h2o_iovec_t buf;
-    h2o_header_flags_t flags;
+    h2o_token_flags_t flags;
 } h2o_token_t;
 
 /**

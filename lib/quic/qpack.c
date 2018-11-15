@@ -884,8 +884,8 @@ static void flatten_header(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o
     int32_t qpack_index;
     int is_exact;
 
-    if (header->flags.token_index_plus1 != 0 &&
-        (qpack_index = h2o_qpack_lookup_static[header->flags.token_index_plus1 - 1](header->value, &is_exact)) >= 0) {
+    if (h2o_iovec_is_token(header->name) &&
+        (qpack_index = h2o_qpack_lookup_static[(const h2o_token_t *)header->name - h2o__tokens](header->value, &is_exact)) >= 0) {
         flatten_header_with_static_nameref(qpack, pool, buf, qpack_index, is_exact, header->value, header->flags.dont_compress);
     } else {
         /* literal header field without name reference */
