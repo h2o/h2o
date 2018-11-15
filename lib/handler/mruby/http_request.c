@@ -391,8 +391,8 @@ static int headers_sort_cb(const void *_x, const void *_y)
     return memcmp(x->name->base, y->name->base, x->name->len);
 }
 
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -423,10 +423,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         return NULL;
     }
 
-    if (props->connection_header) {
-        if (!ctx->req.can_keepalive) {
-            *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
-        }
+    if (props->connection_header && !ctx->req.can_keepalive) {
+        *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
     }
 
     *method = ctx->req.method;
@@ -436,6 +434,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (ctx->req.body.base != NULL) {
         *body = ctx->req.body;
+    } else {
+        *body = h2o_iovec_init(NULL, 0);
     }
 
     return on_head;

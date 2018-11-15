@@ -255,7 +255,7 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
-        stream->super._cb.on_head(&stream->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
+        stream->super._cb.on_head(&stream->super, errstr, 0x200, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
         stream->super._cb.on_body(&stream->super, errstr);
@@ -274,7 +274,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
                                                 &conn->input.header_table, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
-            goto SendRSTStream;
+            goto Failed;
         }
         call_callback_with_error(stream,
                                  ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream protocol error" : "upstream compression error");
@@ -284,7 +284,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     if (100 <= stream->input.status && stream->input.status <= 199) {
         if (stream->input.status == 101) {
             ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO is this alright?
-            goto SendRSTStream;
+            goto Failed;
         }
         if (stream->super.informational_cb != NULL &&
             stream->super.informational_cb(&stream->super, 0, stream->input.status, h2o_iovec_init(NULL, 0),
@@ -296,16 +296,21 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     }
 
     stream->super._cb.on_body =
-        stream->super._cb.on_head(&stream->super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0, stream->input.status,
-                                  h2o_iovec_init(NULL, 0), stream->input.headers.entries, stream->input.headers.size, (int)len, 0);
+        stream->super._cb.on_head(&stream->super, is_end_stream ? h2o_httpclient_error_is_eos : NULL, 0x200, stream->input.status,
+                                  h2o_iovec_init(NULL, 0), stream->input.headers.entries, stream->input.headers.size, 0);
 
     if (is_end_stream) {
         close_stream(stream);
         return 0;
     }
-
     if (stream->super._cb.on_body == NULL) {
-        ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO: what error is suitable for this case?
+        /**
+         * NOTE: if on_head returns NULL due to invalid response (e.g. invalid content-length header)
+         * sending RST_STREAM with PROTOCOL_ERROR might be more suitable than CANCEL
+         * (see: https://tools.ietf.org/html/rfc7540#section-8.1.2.6)
+         * but sending CANCEL is not wrong, so we leave this as-is for now.
+         */
+        ret = H2O_HTTP2_ERROR_CANCEL;
         goto SendRSTStream;
     }
 
@@ -313,9 +318,10 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
     return 0;
 
+Failed:
+    call_callback_with_error(stream, ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream error" : "internal error");
 SendRSTStream:
     stream_send_error(conn, stream->stream_id, ret);
-    call_callback_with_error(stream, ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream error" : "internal error");
     close_stream(stream);
     return 0;
 }
@@ -630,7 +636,8 @@ static int handle_goaway_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2
     });
 
     /* stop opening new streams */
-    h2o_linklist_unlink(&conn->super.link);
+    if (h2o_linklist_is_linked(&conn->super.link))
+        h2o_linklist_unlink(&conn->super.link);
 
     return 0;
 }
@@ -813,7 +820,8 @@ static void enqueue_goaway(struct st_h2o_http2client_conn_t *conn, int errnum, h
     conn->state = H2O_HTTP2CLIENT_CONN_STATE_HALF_CLOSED;
 
     /* stop opening new streams */
-    h2o_linklist_unlink(&conn->super.link);
+    if (h2o_linklist_is_linked(&conn->super.link))
+        h2o_linklist_unlink(&conn->super.link);
 }
 
 static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
@@ -832,10 +840,10 @@ static void do_stream_timeout(struct st_h2o_http2client_stream_t *stream)
     switch (stream->state) {
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
-        stream->super._cb.on_head(&stream->super, "I/O timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
+        stream->super._cb.on_head(&stream->super, "I/O timeout", 0x200, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
-        stream->super._cb.on_head(&stream->super, "first byte timeout", 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
+        stream->super._cb.on_head(&stream->super, "first byte timeout", 0x200, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
         stream->super._cb.on_body(&stream->super, "I/O timeout");
@@ -917,9 +925,9 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 {
     h2o_iovec_t method;
     h2o_url_t url;
-    h2o_header_t *headers = NULL;
-    size_t num_headers = 0;
-    h2o_iovec_t body = h2o_iovec_init(NULL, 0);
+    h2o_header_t *headers;
+    size_t num_headers;
+    h2o_iovec_t body;
     h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
     stream->super._cb.on_head =
         stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
