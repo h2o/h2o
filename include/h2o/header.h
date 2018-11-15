@@ -29,6 +29,10 @@
 extern "C" {
 #endif
 
+typedef struct st_h2o_header_flags_t {
+    unsigned char dont_compress : 1;
+} h2o_header_flags_t;
+
 /**
  * represents a HTTP header
  */
@@ -46,8 +50,8 @@ typedef struct st_h2o_header_t {
      */
     h2o_iovec_t value;
     /**
-      * flags of the header
-      */
+     * flags of the header
+     */
     h2o_header_flags_t flags;
 } h2o_header_t;
 
@@ -103,14 +107,6 @@ ssize_t h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const
  * deletes a header from list
  */
 ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
-/**
- * validates the structure
- */
-static void h2o_header_validate(const h2o_header_t *header);
-/**
- * returns an boolean value if given header's name is a token, with validation
- */
-static int h2o_header_is_token(const h2o_header_t *header);
 
 /* inline definitions */
 
@@ -121,17 +117,6 @@ inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y
     } else {
         return h2o_memis(x->name->base, x->name->len, y->name->base, y->name->len);
     }
-}
-
-inline void h2o_header_validate(const h2o_header_t *header)
-{
-    assert(header->flags.token_index_plus1 == 0 || header->name == &h2o__tokens[header->flags.token_index_plus1 - 1].buf);
-}
-
-inline int h2o_header_is_token(const h2o_header_t *header)
-{
-    h2o_header_validate(header);
-    return header->flags.token_index_plus1 != 0;
 }
 
 #ifdef __cplusplus

@@ -35,6 +35,7 @@ struct st_h2o_http1client_t {
     h2o_url_t *_origin;
     int _method_is_head;
     int _do_keepalive;
+    int bytes_to_consume;
     union {
         struct {
             size_t bytesleft;
@@ -219,14 +220,14 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
 static void on_error_before_head(struct st_h2o_http1client_t *client, const char *errstr)
 {
     client->_do_keepalive = 0;
-    client->super._cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0, 0);
+    client->super._cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
     close_client(client);
 }
 
 static void on_head(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
-    int minor_version, http_status, rlen, is_eos;
+    int minor_version, version, http_status, rlen, is_eos;
     const char *msg;
 #define MAX_HEADERS 100
     h2o_header_t *headers;
@@ -259,6 +260,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             return;
         }
+
+        version = 0x100 | (minor_version != 0);
+
         /* fill-in the headers */
         for (i = 0; i != num_headers; ++i) {
             const h2o_token_t *token;
@@ -267,21 +271,20 @@ static void on_head(h2o_socket_t *sock, const char *err)
             token = h2o_lookup_token(src_headers[i].name, src_headers[i].name_len);
             if (token != NULL) {
                 headers[i].name = (h2o_iovec_t *)&token->buf;
-                headers[i].flags = token->flags;
             } else {
                 header_names[i] = h2o_iovec_init(src_headers[i].name, src_headers[i].name_len);
                 headers[i].name = &header_names[i];
-                headers[i].flags = (h2o_header_flags_t){0};
             }
             headers[i].value = h2o_iovec_init(src_headers[i].value, src_headers[i].value_len);
             headers[i].orig_name = orig_name;
+            headers[i].flags = (h2o_header_flags_t){0};
         }
 
         if (!(100 <= http_status && http_status <= 199 && http_status != 101))
             break;
 
         if (client->super.informational_cb != NULL &&
-            client->super.informational_cb(&client->super, minor_version, http_status, h2o_iovec_init(msg, msg_len), headers,
+            client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                            num_headers) != 0) {
             close_client(client);
             return;
@@ -338,10 +341,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
             client->_do_keepalive = 0;
     }
 
-    /* call the callback. sock may be stealed and stealed sock need rlen.*/
+    /* call the callback. sock may be stealed */
+    client->bytes_to_consume = rlen;
     client->super._cb.on_body =
-        client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, minor_version, http_status,
-                                  h2o_iovec_init(msg, msg_len), headers, num_headers, rlen, 1);
+        client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, version, http_status,
+                                  h2o_iovec_init(msg, msg_len), headers, num_headers, 1);
 
     if (is_eos) {
         close_client(client);
@@ -352,7 +356,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    h2o_buffer_consume(&client->sock->input, rlen);
+    h2o_buffer_consume(&sock->input, client->bytes_to_consume);
+    client->bytes_to_consume = 0;
     client->sock->bytes_read = client->sock->input->size;
 
     client->super._timeout.cb = on_body_timeout;
@@ -556,13 +561,11 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     h2o_httpclient_properties_t props = {
         &proxy_protocol, &chunked, &connection_header,
     };
-
-    h2o_iovec_t method = h2o_iovec_init(NULL, 0);
-    h2o_url_t url = {NULL};
-    h2o_header_t *headers = NULL;
-    size_t num_headers = 0;
-    h2o_iovec_t body = h2o_iovec_init(NULL, 0);
-    ;
+    h2o_iovec_t method;
+    h2o_url_t url;
+    h2o_header_t *headers;
+    size_t num_headers;
+    h2o_iovec_t body;
 
     client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
                                                              &num_headers, &body, &client->proceed_req, &props, client->_origin);
@@ -634,6 +637,8 @@ static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
     struct st_h2o_http1client_t *client = (void *)_client;
     h2o_socket_t *sock = client->sock;
     h2o_socket_read_stop(sock);
+    h2o_buffer_consume(&sock->input, client->bytes_to_consume);
+    client->bytes_to_consume = 0;
     client->sock = NULL;
     return sock;
 }

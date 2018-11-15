@@ -13,7 +13,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -356,6 +356,23 @@ sub one_shot_http_upstream {
         $sock->print($response);
         close $sock;
     }
+}
+
+sub wait_debugger {
+    my ($pid, $timeout) = @_;
+    $timeout ||= -1;
+
+    print STDERR "waiting debugger for pid $pid ..\n";
+    while ($timeout-- != 0) {
+        my $out = `ps -p $pid -o 'state' | tail -n 1`;
+        if ($out =~ /^(T|.+X).*$/) {
+            print STDERR "debugger attached\n";
+            return 1;
+        }
+        sleep 1;
+    }
+    print STDERR "no debugger attached\n";
+    undef;
 }
 
 1;

@@ -43,8 +43,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
                                          h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                          h2o_url_t *origin);
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup);
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup);
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
@@ -72,8 +72,17 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_register_loop(sockpool, ctx->loop);
         h2o_httpclient_connection_pool_init(connpool, sockpool);
 
+        /* obtain root */
+        char *root, *crt_fullpath;
+        if ((root = getenv("H2O_ROOT")) == NULL)
+            root = H2O_TO_STR(H2O_ROOT);
+#define CA_PATH "/share/h2o/ca-bundle.crt"
+        crt_fullpath = h2o_mem_alloc(strlen(root) + strlen(CA_PATH) + 1);
+        sprintf(crt_fullpath, "%s%s", root, CA_PATH);
+#undef CA_PATH
+
         SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
-        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+        SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
@@ -103,8 +112,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
+h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     size_t i;
 
@@ -114,7 +123,16 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
         return NULL;
     }
 
-    printf("HTTP/1.%d %d %.*s\n", minor_version, status, (int)msg.len, msg.base);
+    printf("HTTP/%d", (version >> 8));
+    if ((version & 0xff) != 0) {
+        printf(".%d", version & 0xff);
+    }
+    printf(" %d", status);
+    if (msg.len == 0) {
+        printf(" %.*s\n", (int)msg.len, msg.base);
+    } else {
+        printf("\n");
+    }
     for (i = 0; i != num_headers; ++i)
         printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
     printf("\n");
@@ -183,6 +201,9 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 
     *_method = h2o_iovec_init(method, strlen(method));
     *url = *((h2o_url_t *)client->data);
+    *headers = NULL;
+    *num_headers = 0;
+    *body = h2o_iovec_init(NULL, 0);
 
     if (cur_body_size > 0) {
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
