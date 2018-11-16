@@ -279,7 +279,7 @@ static int decode_value_and_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpa
 {
     if ((header->value_len = decode_value(is_huff, qstr, qstrlen, header->value, err_desc)) == SIZE_MAX)
         goto Fail;
-    if (header->name->len + header->value_len > qpack->table.max_size) {
+    if (header->name->len + header->value_len + HEADER_ENTRY_SIZE_OFFSET > qpack->table.max_size) {
         *err_desc = h2o_qpack_err_header_exceeds_table_size;
         goto Fail;
     }
@@ -717,6 +717,8 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     if (decode_int(&ctx->largest_ref, src, src_end, 8) != 0)
         return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
     if (ctx->largest_ref > 0) {
+        if (qpack->max_entries == 0)
+            return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
         const uint32_t full_range = 2 * qpack->max_entries;
         uint64_t max_value = qpack->total_inserts + qpack->max_entries;
         uint64_t rounded = max_value / full_range * full_range;
