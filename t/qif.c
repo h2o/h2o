@@ -84,22 +84,27 @@ static int encode_qif(FILE *inp, FILE *outp, unsigned header_table_size, int is_
 
 #define EMIT()                                                                                                                     \
     do {                                                                                                                           \
-        h2o_byte_vector_t output = {NULL};                                                                                         \
+        h2o_byte_vector_t encoder_buf = {NULL}, headers_buf = {NULL};                                                              \
         if (!is_resp) {                                                                                                            \
             assert(message.method.base != NULL);                                                                                   \
             assert(message.scheme != NULL);                                                                                        \
             assert(message.authority.base != NULL);                                                                                \
             assert(message.path.base != NULL);                                                                                     \
-            h2o_qpack_flatten_request(enc, &pool, stream_id, NULL, &output, message.method, message.scheme, message.authority,     \
-                                      message.path, message.headers.entries, message.headers.size);                                \
+            h2o_qpack_flatten_request(enc, &pool, stream_id, &encoder_buf, &headers_buf, message.method, message.scheme,           \
+                                      message.authority, message.path, message.headers.entries, message.headers.size);             \
         } else {                                                                                                                   \
             assert(100 <= message.status && message.status <= 999);                                                                \
-            h2o_qpack_flatten_response(enc, &pool, stream_id, NULL, &output, message.status, message.headers.entries,              \
+            h2o_qpack_flatten_response(enc, &pool, stream_id, &encoder_buf, &headers_buf, message.status, message.headers.entries, \
                                        message.headers.size, NULL, message.content_length);                                        \
         }                                                                                                                          \
+        if (encoder_buf.size != 0) {                                                                                               \
+            write_int(outp, 0, 8);                                                                                                 \
+            write_int(outp, (uint32_t)encoder_buf.size, 4);                                                                        \
+            fwrite(encoder_buf.entries, 1, encoder_buf.size, outp);                                                                \
+        }                                                                                                                          \
         write_int(outp, stream_id++, 8);                                                                                           \
-        write_int(outp, (uint32_t)output.size, 4);                                                                                 \
-        fwrite(output.entries, 1, output.size, outp);                                                                              \
+        write_int(outp, (uint32_t)headers_buf.size, 4);                                                                            \
+        fwrite(headers_buf.entries, 1, headers_buf.size, outp);                                                                    \
         CLEAR();                                                                                                                   \
     } while (0)
 
