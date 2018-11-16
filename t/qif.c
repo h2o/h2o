@@ -23,6 +23,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,9 +51,9 @@ static uint64_t read_int(FILE *fp, size_t nbytes)
     return v;
 }
 
-static int encode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, int is_resp)
+static int encode_qif(FILE *inp, FILE *outp, unsigned header_table_size, int is_resp)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size_bits);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size);
     uint64_t stream_id = 1;
     h2o_mem_pool_t pool;
     struct {
@@ -170,9 +171,9 @@ static int encode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, in
 #undef CLEAR
 }
 
-static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size_bits, int is_resp)
+static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size, int is_resp)
 {
-    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(header_table_size_bits);
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(header_table_size);
     uint64_t stream_id;
     h2o_byte_vector_t encoder_stream_buf = {NULL}; /* NOT governed by the memory pool */
     h2o_mem_pool_t pool;
@@ -281,7 +282,7 @@ static void usage(const char *cmd)
 
 int main(int argc, char **argv)
 {
-    unsigned header_table_size_bits = 12;
+    uint32_t header_table_size = 4096;
     int ch, decode = 0, is_resp = 0;
 
     while ((ch = getopt(argc, argv, "drs:h")) != -1) {
@@ -293,8 +294,8 @@ int main(int argc, char **argv)
             is_resp = 1;
             break;
         case 's':
-            if (sscanf(optarg, "%u", &header_table_size_bits) != 1) {
-                fprintf(stderr, "failed to header table size bits\n");
+            if (sscanf(optarg, "%" PRIu32, &header_table_size) != 1) {
+                fprintf(stderr, "failed decode header table size\n");
                 exit(1);
             }
             break;
@@ -322,5 +323,5 @@ int main(int argc, char **argv)
         ++argv;
     }
 
-    return (decode ? decode_qif : encode_qif)(stdin, stdout, header_table_size_bits, is_resp);
+    return (decode ? decode_qif : encode_qif)(stdin, stdout, header_table_size, is_resp);
 }
