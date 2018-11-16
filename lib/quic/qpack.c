@@ -86,6 +86,10 @@ struct st_h2o_qpack_decoder_t {
      *
      */
     uint64_t total_inserts;
+    /**
+     *
+     */
+    uint16_t max_blocked;
     struct {
         /**
          * contains list of blocked streams (sorted in the ascending order of largest_ref)
@@ -243,7 +247,7 @@ static size_t decode_value(int is_huff, const uint8_t *src, size_t srclen, char 
     return outlen;
 }
 
-h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size)
+h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint16_t max_blocked)
 {
     h2o_qpack_decoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
 
@@ -251,6 +255,7 @@ h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size)
     qpack->header_table_size = header_table_size;
     qpack->max_entries = header_table_size / 32;
     qpack->total_inserts = 0;
+    qpack->max_blocked = max_blocked;
     header_table_init(&qpack->table, qpack->header_table_size);
     memset(&qpack->blocked_streams, 0, sizeof(qpack->blocked_streams));
 
@@ -754,6 +759,8 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 
     /* is the stream blocked? */
     if (ctx->largest_ref >= qpack->table.base_offset + qpack->table.last - qpack->table.first) {
+        if (qpack->blocked_streams.list.size + 1 >= qpack->max_blocked)
+            return H2O_HQ_ERROR_QPACK_DECOMPRESSION;
         decoder_link_blocked(qpack, stream_id, ctx->largest_ref);
         return H2O_HQ_ERROR_INCOMPLETE;
     }

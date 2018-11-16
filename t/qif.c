@@ -178,7 +178,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
 
 static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int is_resp)
 {
-    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(header_table_size);
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(header_table_size, max_blocked);
     uint64_t stream_id;
     h2o_byte_vector_t encoder_stream_buf = {NULL}; /* NOT governed by the memory pool */
     h2o_mem_pool_t pool;

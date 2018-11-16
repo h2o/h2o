@@ -116,7 +116,7 @@ int h2o_hq_setup(h2o_hq_conn_t *conn, quicly_conn_t *quic)
 
     conn->quic = quic;
     *quicly_get_data(conn->quic) = conn;
-    conn->qpack.dec = h2o_qpack_create_decoder(H2O_HQ_DEFAULT_HEADER_TABLE_SIZE);
+    conn->qpack.dec = h2o_qpack_create_decoder(H2O_HQ_DEFAULT_HEADER_TABLE_SIZE, 100 /* FIXME */);
 
     if ((ret = open_unidirectional_stream(conn, &conn->_control_streams.egress.control, h2o_iovec_init(H2O_STRLIT("C\0\4")))) !=
             0 ||

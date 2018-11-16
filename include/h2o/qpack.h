@@ -36,7 +36,7 @@ extern const char *h2o_qpack_err_invalid_dynamic_reference;
 extern const char *h2o_qpack_err_invalid_duplicate;
 extern const char *h2o_qpack_err_invalid_pseudo_header;
 
-h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size);
+h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint16_t max_blocked);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
 int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, int64_t **unblocked_stream_ids, size_t *num_unblocked,
                                    const uint8_t **src, const uint8_t *src_end, const char **err_desc);
