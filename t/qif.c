@@ -51,9 +51,9 @@ static uint64_t read_int(FILE *fp, size_t nbytes)
     return v;
 }
 
-static int encode_qif(FILE *inp, FILE *outp, unsigned header_table_size, int is_resp)
+static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int is_resp)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size, max_blocked);
     uint64_t stream_id = 1;
     h2o_mem_pool_t pool;
     struct {
@@ -176,7 +176,7 @@ static int encode_qif(FILE *inp, FILE *outp, unsigned header_table_size, int is_
 #undef CLEAR
 }
 
-static int decode_qif(FILE *inp, FILE *outp, unsigned header_table_size, int is_resp)
+static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int is_resp)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(header_table_size);
     uint64_t stream_id;
@@ -277,6 +277,7 @@ static void usage(const char *cmd)
 {
     printf("Usage: %s [options] [input-file [output-file]]\n"
            "Options:\n"
+           "  -b [max]   maximum number of blocked streams\n"
            "  -d         decode (default is encode)\n"
            "  -r         handling series of responses (default is requests)\n"
            "  -s [bits]  header table size bits (default is 12; i.e. 4096 bytes)\n"
@@ -288,10 +289,17 @@ static void usage(const char *cmd)
 int main(int argc, char **argv)
 {
     uint32_t header_table_size = 4096;
+    uint16_t max_blocked = 100;
     int ch, decode = 0, is_resp = 0;
 
-    while ((ch = getopt(argc, argv, "drs:h")) != -1) {
+    while ((ch = getopt(argc, argv, "b:drs:h")) != -1) {
         switch (ch) {
+        case 'b':
+            if (sscanf(optarg, "%" PRIu16, &max_blocked) != 1) {
+                fprintf(stderr, "failed to decode max-blocked\n");
+                exit(1);
+            }
+            break;
         case 'd':
             decode = 1;
             break;
@@ -328,5 +336,5 @@ int main(int argc, char **argv)
         ++argv;
     }
 
-    return (decode ? decode_qif : encode_qif)(stdin, stdout, header_table_size, is_resp);
+    return (decode ? decode_qif : encode_qif)(stdin, stdout, header_table_size, max_blocked, is_resp);
 }

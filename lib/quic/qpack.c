@@ -58,6 +58,11 @@ struct st_h2o_qpack_header_table_t {
 struct st_h2o_qpack_blocked_streams_t {
     int64_t stream_id;
     int64_t largest_ref;
+    union {
+        struct {
+            uint8_t is_blocking;
+        } encoder_flags;
+    };
 };
 
 struct st_h2o_qpack_decoder_t {
@@ -102,6 +107,15 @@ struct st_h2o_qpack_encoder_t {
      * maximum id of the insertion being acked (inclusive)
      */
     int64_t largest_known_received;
+    /**
+     * SETTINGS_QPACK_BLOCKED_STREAMS
+     */
+    uint16_t max_blocked;
+    /**
+     * number of potentially blocked HEADERS (not streams, sorry!) We count header blocks rather than streams because it is easier.
+     * Hopefully it would work well.
+     */
+    uint16_t num_blocked;
     /**
      * list of unacked streams
      */
@@ -791,11 +805,13 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     return 0;
 }
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size)
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint16_t max_blocked)
 {
     h2o_qpack_encoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
     header_table_init(&qpack->table, header_table_size);
     qpack->largest_known_received = 0;
+    qpack->max_blocked = max_blocked;
+    qpack->num_blocked = 0;
     memset(&qpack->inflight, 0, sizeof(qpack->inflight));
     return qpack;
 }
@@ -825,7 +841,10 @@ Error:
 
 static void evict_inflight_by_index(h2o_qpack_encoder_t *qpack, size_t index)
 {
+    if (qpack->inflight.entries[index].encoder_flags.is_blocking)
+        --qpack->num_blocked;
     --qpack->inflight.size;
+
     if (qpack->inflight.size == 0) {
         free(qpack->inflight.entries);
         memset(&qpack->inflight, 0, sizeof(qpack->inflight));
@@ -1134,7 +1153,7 @@ static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpac
     ctx->qpack = qpack;
     ctx->pool = pool;
     ctx->stream_id = stream_id;
-    ctx->encoder_buf = encoder_buf;
+    ctx->encoder_buf = qpack->num_blocked < qpack->max_blocked ? encoder_buf : NULL;
     ctx->headers_buf = headers_buf;
     ctx->base_index = qpack->table.base_offset + qpack->table.last - qpack->table.first - 1;
     ctx->largest_ref = 0;
@@ -1153,13 +1172,19 @@ static void commit_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
     if (ctx->largest_ref == 0) {
         ctx->base_index = 0;
     } else {
+        int is_blocking = 0;
         /* adjust largest reference to achieve more compact representation on wire without risking blocking */
-        if (ctx->largest_ref < ctx->qpack->largest_known_received)
+        if (ctx->largest_ref < ctx->qpack->largest_known_received) {
             ctx->largest_ref = ctx->qpack->largest_known_received;
+        } else if (ctx->largest_ref > ctx->qpack->largest_known_received) {
+            assert(ctx->qpack->num_blocked < ctx->qpack->max_blocked);
+            ++ctx->qpack->num_blocked;
+            is_blocking = 1;
+        }
         /* mark as inflight */
         h2o_vector_reserve(NULL, &ctx->qpack->inflight, ctx->qpack->inflight.size + 1);
         ctx->qpack->inflight.entries[ctx->qpack->inflight.size++] =
-            (struct st_h2o_qpack_blocked_streams_t){ctx->stream_id, ctx->largest_ref};
+            (struct st_h2o_qpack_blocked_streams_t){ctx->stream_id, ctx->largest_ref, {{is_blocking}}};
     }
 
     { /* build header data prefx */

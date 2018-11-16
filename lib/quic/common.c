@@ -271,7 +271,7 @@ static int handle_settings_frame(h2o_hq_conn_t *conn, const uint8_t *payload, si
             goto Malformed;
     }
 
-    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size);
+    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, 100 /* FIXME */);
     return 0;
 Malformed:
     return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_SETTINGS);

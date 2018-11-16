@@ -54,7 +54,7 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
                              h2o_headers_t *headers, uint8_t *outbuf, size_t *outbufsize, const uint8_t *src, size_t len,
                              const char **err_desc);
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size);
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint16_t max_blocked);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
 int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 /**
