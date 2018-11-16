@@ -51,7 +51,7 @@ static uint64_t read_int(FILE *fp, size_t nbytes)
     return v;
 }
 
-static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int is_resp)
+static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int simulate_ack, int is_resp)
 {
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size, max_blocked);
     uint64_t stream_id = 1;
@@ -90,21 +90,35 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
             assert(message.scheme != NULL);                                                                                        \
             assert(message.authority.base != NULL);                                                                                \
             assert(message.path.base != NULL);                                                                                     \
-            h2o_qpack_flatten_request(enc, &pool, stream_id, &encoder_buf, &headers_buf, message.method, message.scheme,           \
-                                      message.authority, message.path, message.headers.entries, message.headers.size);             \
+            h2o_qpack_flatten_request(enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, &headers_buf,               \
+                                      message.method, message.scheme, message.authority, message.path, message.headers.entries,    \
+                                      message.headers.size);                                                                       \
         } else {                                                                                                                   \
             assert(100 <= message.status && message.status <= 999);                                                                \
-            h2o_qpack_flatten_response(enc, &pool, stream_id, &encoder_buf, &headers_buf, message.status, message.headers.entries, \
-                                       message.headers.size, NULL, message.content_length);                                        \
+            h2o_qpack_flatten_response(enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, &headers_buf,              \
+                                       message.status, message.headers.entries, message.headers.size, NULL,                        \
+                                       message.content_length);                                                                    \
         }                                                                                                                          \
         if (encoder_buf.size != 0) {                                                                                               \
             write_int(outp, 0, 8);                                                                                                 \
             write_int(outp, (uint32_t)encoder_buf.size, 4);                                                                        \
             fwrite(encoder_buf.entries, 1, encoder_buf.size, outp);                                                                \
         }                                                                                                                          \
-        write_int(outp, stream_id++, 8);                                                                                           \
+        write_int(outp, stream_id, 8);                                                                                             \
         write_int(outp, (uint32_t)headers_buf.size, 4);                                                                            \
         fwrite(headers_buf.entries, 1, headers_buf.size, outp);                                                                    \
+        if (simulate_ack && encoder_buf.size != 0 && encoder_buf.entries[0] != 0) {                                                \
+            /* inject header acknowledgement */                                                                                    \
+            uint8_t decoder_buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH], *p = decoder_buf;                                                \
+            const char *err_desc = NULL;                                                                                           \
+            *p = 0x80;                                                                                                             \
+            p = h2o_hpack_encode_int(p, stream_id, 7);                                                                             \
+            const uint8_t *inp = decoder_buf;                                                                                      \
+            int ret = h2o_qpack_encoder_handle_input(enc, &inp, p, &err_desc);                                                     \
+            assert(ret == 0);                                                                                                      \
+            assert(inp == p);                                                                                                      \
+        }                                                                                                                          \
+        ++stream_id;                                                                                                               \
         CLEAR();                                                                                                                   \
     } while (0)
 
@@ -176,7 +190,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
 #undef CLEAR
 }
 
-static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int is_resp)
+static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int simulate_ack, int is_resp)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(header_table_size, max_blocked);
     uint64_t stream_id;
@@ -277,6 +291,7 @@ static void usage(const char *cmd)
 {
     printf("Usage: %s [options] [input-file [output-file]]\n"
            "Options:\n"
+           "  -a         simulate ACK (encoder only)\n"
            "  -b [max]   maximum number of blocked streams\n"
            "  -d         decode (default is encode)\n"
            "  -r         handling series of responses (default is requests)\n"
@@ -290,10 +305,13 @@ int main(int argc, char **argv)
 {
     uint32_t header_table_size = 4096;
     uint16_t max_blocked = 100;
-    int ch, decode = 0, is_resp = 0;
+    int ch, decode = 0, simulate_ack = 0, is_resp = 0;
 
-    while ((ch = getopt(argc, argv, "b:drs:h")) != -1) {
+    while ((ch = getopt(argc, argv, "ab:drs:h")) != -1) {
         switch (ch) {
+        case 'a':
+            simulate_ack = 1;
+            break;
         case 'b':
             if (sscanf(optarg, "%" PRIu16, &max_blocked) != 1) {
                 fprintf(stderr, "failed to decode max-blocked\n");
@@ -336,5 +354,5 @@ int main(int argc, char **argv)
         ++argv;
     }
 
-    return (decode ? decode_qif : encode_qif)(stdin, stdout, header_table_size, max_blocked, is_resp);
+    return (decode ? decode_qif : encode_qif)(stdin, stdout, header_table_size, max_blocked, simulate_ack, is_resp);
 }
