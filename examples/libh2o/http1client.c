@@ -133,8 +133,12 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     } else {
         printf("\n");
     }
-    for (i = 0; i != num_headers; ++i)
-        printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
+    for (i = 0; i != num_headers; ++i) {
+        const char *name = headers[i].orig_name;
+        if (name == NULL)
+            name = headers[i].name->base;
+        printf("%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
+    }
     printf("\n");
 
     if (errstr == h2o_httpclient_error_is_eos) {
@@ -238,6 +242,8 @@ int main(int argc, char **argv)
     h2o_multithread_receiver_t getaddr_receiver;
     uint64_t io_timeout = 5000; /* 5 seconds */
     h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout};
+    ctx.max_buffer_size = SIZE_MAX;
+
     int opt;
 
     SSL_load_error_strings();
