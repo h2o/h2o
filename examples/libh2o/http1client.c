@@ -48,6 +48,28 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int header_requires_dup);
 
+static void on_exit_deferred(h2o_timer_t *entry)
+{
+    h2o_timer_unlink(entry);
+    exit(1);
+}
+static h2o_timer_t exit_deferred;
+
+static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
+{
+    char errbuf[2048];
+    va_list args;
+    va_start(args, fmt);
+    int errlen = vsnprintf(errbuf, sizeof(errbuf), fmt, args);
+    va_end(args);
+    fprintf(stderr, "%.*s\n", errlen, errbuf);
+
+    /* defer using zero timeout to send pending GOAWAY frame */
+    memset(&exit_deferred, 0, sizeof(exit_deferred));
+    exit_deferred.cb = on_exit_deferred;
+    h2o_timer_link(ctx->loop, 0, &exit_deferred);
+}
+
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
     h2o_url_t *url_parsed;
@@ -58,8 +80,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     /* parse URL */
     url_parsed = h2o_mem_alloc_pool(&pool, url_parsed, 1);
     if (h2o_url_parse(url, SIZE_MAX, url_parsed) != 0) {
-        fprintf(stderr, "unrecognized type of URL: %s\n", url);
-        exit(1);
+        on_error(ctx, "unrecognized type of URL: %s", url);
+        return;
     }
 
     cur_body_size = body_size;
@@ -99,8 +121,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        fprintf(stderr, "%s\n", errstr);
-        exit(1);
+        on_error(client->ctx, errstr);
         return -1;
     }
 
@@ -118,17 +139,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static void print_status_line(int version, int status, h2o_iovec_t msg)
 {
-    size_t i;
-
-    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        fprintf(stderr, "%s\n", errstr);
-        exit(1);
-        return NULL;
-    }
-
     printf("HTTP/%d", (version >> 8));
     if ((version & 0xff) != 0) {
         printf(".%d", version & 0xff);
@@ -139,6 +151,20 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     } else {
         printf("\n");
     }
+}
+
+h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+{
+    size_t i;
+
+    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
+        on_error(client->ctx, errstr);
+        return NULL;
+    }
+
+    print_status_line(version, status, msg);
+
     for (i = 0; i != num_headers; ++i) {
         const char *name = headers[i].orig_name;
         if (name == NULL)
@@ -148,8 +174,7 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     printf("\n");
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        fprintf(stderr, "no body\n");
-        exit(1);
+        on_error(client->ctx, "no body");
         return NULL;
     }
 
@@ -204,8 +229,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
                                   h2o_url_t *origin)
 {
     if (errstr != NULL) {
-        fprintf(stderr, "%s\n", errstr);
-        exit(1);
+        on_error(client->ctx, errstr);
         return NULL;
     }
 
