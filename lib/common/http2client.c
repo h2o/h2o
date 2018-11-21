@@ -863,18 +863,8 @@ static void do_stream_timeout(struct st_h2o_http2client_stream_t *stream)
         on_connect_error(stream, "connection timeout");
         return;
     }
-    switch (stream->state) {
-    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
-    case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
-        stream->super._cb.on_head(&stream->super, "I/O timeout", 0x200, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
-        break;
-    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS:
-        stream->super._cb.on_head(&stream->super, "first byte timeout", 0x200, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
-        break;
-    case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
-        stream->super._cb.on_body(&stream->super, "I/O timeout");
-        break;
-    }
+    const char *errstr = stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS ? "first byte timeout" : "I/O timeout";
+    call_callback_with_error(stream, errstr);
     close_stream(stream);
 }
 
