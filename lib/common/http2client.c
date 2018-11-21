@@ -251,6 +251,7 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
 
 static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
 {
+    assert(errstr != NULL);
     switch (stream->state) {
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY:
@@ -261,6 +262,12 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         stream->super._cb.on_body(&stream->super, errstr);
         break;
     }
+}
+
+static void call_stream_callbacks_with_error(struct st_h2o_http2client_conn_t *conn, const char *errstr)
+{
+    struct st_h2o_http2client_stream_t *stream;
+    kh_foreach_value(conn->streams, stream, { call_callback_with_error(stream, errstr); });
 }
 
 static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2client_stream_t *stream, const uint8_t *src,
@@ -276,8 +283,6 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
         }
-        call_callback_with_error(stream,
-                                 ret == H2O_HTTP2_ERROR_PROTOCOL ? "upstream protocol error" : "upstream compression error");
         return ret;
     }
 
@@ -393,7 +398,8 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
     }
 
     if (stream->state != H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY) {
-        stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        call_callback_with_error(stream, "invalid DATA frame");
         close_stream(stream);
         return 0;
     }
@@ -405,7 +411,7 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
 
     int is_final = (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0;
     if (stream->super._cb.on_body(&stream->super, is_final ? h2o_httpclient_error_is_eos : NULL) != 0) {
-        stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL); // TODO which error code is it suit for this case?
+        stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_INTERNAL);
         close_stream(stream);
         return 0;
     }
@@ -462,7 +468,8 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
             conn->input.read_frame = expect_continuation_of_headers;
         return 0;
     default:
-        stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        call_callback_with_error(stream, "invalid HEADERS frame");
         close_stream(stream);
         return 0;
     }
@@ -651,8 +658,10 @@ static int handle_window_update_frame(struct st_h2o_http2client_conn_t *conn, h2
         if (err_is_stream_level) {
             stream_send_error(conn, frame->stream_id, ret);
             struct st_h2o_http2client_stream_t *stream = get_stream(conn, frame->stream_id);
-            if (stream != NULL)
+            if (stream != NULL) {
+                call_callback_with_error(stream, *err_desc);
                 close_stream(stream);
+            }
             return 0;
         } else {
             return ret;
@@ -669,6 +678,7 @@ static int handle_window_update_frame(struct st_h2o_http2client_conn_t *conn, h2
         if (stream != NULL) {
             if (update_stream_output_window(stream, payload.window_size_increment) != 0) {
                 stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
+                call_callback_with_error(stream, "flow control window overflow");
                 close_stream(stream);
                 return 0;
             }
@@ -889,6 +899,7 @@ static int parse_input(struct st_h2o_http2client_conn_t *conn)
                 enqueue_goaway(conn, (int)ret,
                                err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){NULL});
             }
+            call_stream_callbacks_with_error(conn, "upstream error (connection level)");
             return close_connection(conn);
         }
         /* advance to the next frame */
@@ -904,6 +915,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&conn->io_timeout);
 
     if (err != NULL) {
+        call_stream_callbacks_with_error(conn, err);
         close_connection(conn);
         return;
     }
@@ -960,6 +972,7 @@ static void on_notify_write(h2o_socket_t *sock, const char *err)
     struct st_h2o_http2client_conn_t *conn = sock->data;
 
     if (err != NULL) {
+        call_stream_callbacks_with_error(conn, err);
         close_connection_now(conn);
         return;
     }
@@ -977,6 +990,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
     /* close by error if necessary */
     if (err != NULL) {
+        call_stream_callbacks_with_error(conn, err);
         close_connection_now(conn);
         return;
     }
