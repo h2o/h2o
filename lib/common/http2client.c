@@ -162,6 +162,14 @@ static struct st_h2o_http2client_stream_t *get_stream(struct st_h2o_http2client_
     return NULL;
 }
 
+static uint32_t get_max_buffer_size(h2o_httpclient_ctx_t *ctx)
+{
+    size_t sz = ctx->max_buffer_size;
+    if (sz > INT32_MAX)
+        sz = INT32_MAX;
+    return (uint32_t)sz;
+}
+
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *_conn)
 {
     struct st_h2o_http2client_conn_t *conn = (void *)_conn;
@@ -400,6 +408,14 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
     if (stream->state != H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         call_callback_with_error(stream, "invalid DATA frame");
+        close_stream(stream);
+        return 0;
+    }
+
+    size_t max_size = get_max_buffer_size(stream->super.ctx);
+    if (stream->input.body->size + payload.length > max_size) {
+        stream->super._cb.on_body(&stream->super, "buffered data size exceeds input window");
+        stream_send_error(stream->conn, stream->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
         close_stream(stream);
         return 0;
     }
@@ -1185,14 +1201,6 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
     return conn;
 }
 
-static uint32_t get_max_buffer_size(h2o_httpclient_ctx_t *ctx)
-{
-    size_t sz = ctx->max_buffer_size;
-    if (sz > INT32_MAX)
-        sz = INT32_MAX;
-    return (uint32_t)sz;
-}
-
 static void send_client_preface(struct st_h2o_http2client_conn_t *conn, h2o_httpclient_ctx_t *ctx)
 {
 #define PREFIX                                                                                                                     \
@@ -1235,13 +1243,8 @@ static void do_update_window(h2o_httpclient_t *_client)
 {
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
     size_t max = get_max_buffer_size(stream->super.ctx);
-    size_t bufsize = (*stream->super.buf)->size;
-    if (bufsize > max) {
-        stream->super._cb.on_body(&stream->super, "buffered data size exceeds input window");
-        stream_send_error(stream->conn, stream->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
-        close_stream(stream);
-        return;
-    }
+    size_t bufsize = stream->input.body->size;
+    assert(bufsize <= max);
     enqueue_window_update(stream->conn, stream->stream_id, &stream->input.window, max - bufsize);
 }
 
