@@ -198,7 +198,7 @@ static void setup_certificate(ptls_iovec_t *dst)
 
 static void setup_sign_certificate(ptls_openssl_sign_certificate_t *sc)
 {
-    BIO *bio = BIO_new_mem_buf(RSA_PRIVATE_KEY, strlen(RSA_PRIVATE_KEY));
+    BIO *bio = BIO_new_mem_buf(RSA_PRIVATE_KEY, (int)strlen(RSA_PRIVATE_KEY));
     EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
     assert(pkey != NULL || !"failed to load private key");
     BIO_free(bio);

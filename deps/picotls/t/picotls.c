@@ -368,11 +368,12 @@ static void test_fragmented_message(void)
 #undef SET_RECORD
 }
 
-static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *protocols,
-                             size_t num_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
-    ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
-    ptls_set_negotiated_protocol(tls, (const char *)protocols[0].base, protocols[0].len);
+    ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
+    if (params->negotiated_protocols.count != 0)
+        ptls_set_negotiated_protocol(tls, (const char *)params->negotiated_protocols.list[0].base,
+                                     params->negotiated_protocols.list[0].len);
     return 0;
 }
 

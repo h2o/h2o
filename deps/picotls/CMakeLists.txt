@@ -22,8 +22,22 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/cifra/src/poly1305.c
     deps/cifra/src/sha256.c
     deps/cifra/src/sha512.c)
+SET(CORE_FILES
+    lib/picotls.c
+    lib/pembase64.c)
 
-ADD_LIBRARY(picotls-core lib/picotls.c lib/pembase64.c)
+PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)
+PKG_CHECK_MODULES(BROTLI_ENC libbrotlienc)
+IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
+    INCLUDE_DIRECTORIES(${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
+    LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_BROTLI=1")
+    LIST(APPEND CORE_FILES
+        lib/certificate_compression.c)
+    LIST(APPEND CLI_EXTRA_LIBS ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+ENDIF ()
+
+ADD_LIBRARY(picotls-core ${CORE_FILES})
 ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c)
 ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c t/picotls.c t/minicrypto.c lib/asn1.c lib/pembase64.c)
 
@@ -35,7 +49,7 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
     ADD_LIBRARY(picotls-openssl lib/openssl.c)
     ADD_EXECUTABLE(cli t/cli.c lib/pembase64.c)
-    TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+    TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CLI_EXTRA_LIBS} ${CMAKE_DL_LIBS})
     ADD_EXECUTABLE(test-openssl.t ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/uecc.c lib/asn1.c lib/pembase64.c deps/picotest/picotest.c t/picotls.c t/openssl.c)
     SET_TARGET_PROPERTIES(test-openssl.t PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
     TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
