@@ -105,6 +105,19 @@ OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFA
 
 OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
 
+FIND_PROGRAM(CCACHE ccache)
+IF (CCACHE)
+    SET(WITH_CCACHE_DEFAULT "ON")
+ELSE ()
+    SET(WITH_CCACHE_DEFAULT "OFF")
+ENDIF()
+OPTION(WITH_CCACHE "whether or not to build using ccache" ${WITH_CCACHE_DEFAULT})
+IF (WITH_CCACHE)
+    SET_PROPERTY(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
+    SET_PROPERTY(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
+ENDIF ()
+
+
 IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
     MESSAGE(STATUS "*************************************************************************\n"
                 "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with web        *\n"
@@ -778,9 +791,3 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV" AND EXISTS "${CMAKE_SOURCE_DIR}/.git
     ENDIF (LIBUV_FOUND)
 ENDIF ()
 
-# Configure CCache if available
-find_program(CCACHE_FOUND ccache)
-if(CCACHE_FOUND)
-        set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE ccache)
-        set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
-endif(CCACHE_FOUND)
