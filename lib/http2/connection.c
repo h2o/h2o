@@ -1216,7 +1216,6 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
             }
             h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                        conn->peer_settings.max_frame_size, trailers, num_trailers);
-            h2o_http2_conn_request_write(conn);
         }
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
     }
