@@ -54,7 +54,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     h2o_mem_clear_pool(&pool);
 
     /* parse URL */
-    url_parsed = h2o_mem_alloc_pool(&pool, url_parsed, 1);
+    url_parsed = h2o_mem_alloc_pool(&pool, *url_parsed, 1);
     if (h2o_url_parse(url, SIZE_MAX, url_parsed) != 0) {
         fprintf(stderr, "unrecognized type of URL: %s\n", url);
         exit(1);
