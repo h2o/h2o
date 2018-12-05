@@ -626,8 +626,6 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
     }
 
     return sock->_latency_optimization.suggested_write_size;
-
-#undef CALC_CWND_PAIR_FROM_BYTE_UNITS
 }
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
