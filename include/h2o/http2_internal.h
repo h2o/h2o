@@ -170,6 +170,14 @@ struct st_h2o_http2_conn_t {
         h2o_linklist_t blocked_streams;
     } early_data;
     h2o_iovec_t *http2_origin_frame;
+#define HTTP2_OLD_PRIORITIES 10
+    struct {
+        struct {
+            h2o_http2_scheduler_openref_t *sched_node;
+            uint32_t stream_id;
+        } streams[HTTP2_OLD_PRIORITIES];
+        size_t idx;
+    } recently_closed_streams;
 };
 
 /* connection */
