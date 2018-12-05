@@ -556,7 +556,7 @@ void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stre
 static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const h2o_http2_priority_t *priority,
                          int scheduler_is_open)
 {
-    h2o_http2_scheduler_node_t *parent_sched;
+    h2o_http2_scheduler_node_t *parent_sched = NULL;
 
     /* determine the parent */
     if (priority->dependency != 0) {
@@ -564,14 +564,21 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
         if (parent_stream != NULL) {
             parent_sched = &parent_stream->_refs.scheduler.node;
         } else {
-            /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in that
-             * stream being given a default priority. (RFC 7540 5.3.1)
-             * It is possible for a stream to become closed while prioritization information that creates a dependency on that
-             * stream is in transit. If a stream identified in a dependency has no associated priority information, then the
-             * dependent stream is instead assigned a default priority. (RFC 7540 5.3.4)
-             */
-            parent_sched = &conn->scheduler;
-            priority = &h2o_http2_default_priority;
+            for (int i = 0; i < HTTP2_OLD_PRIORITIES; i++) {
+                if (conn->recently_closed_streams.streams[i].sched_node && conn->recently_closed_streams.streams[i].stream_id == priority->dependency) {
+                    parent_sched = &conn->recently_closed_streams.streams[i].sched_node->node;
+                }
+            }
+            if (parent_sched == NULL) {
+                /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in that
+                 * stream being given a default priority. (RFC 7540 5.3.1)
+                 * It is possible for a stream to become closed while prioritization information that creates a dependency on that
+                 * stream is in transit. If a stream identified in a dependency has no associated priority information, then the
+                 * dependent stream is instead assigned a default priority. (RFC 7540 5.3.4)
+                 */
+                parent_sched = &conn->scheduler;
+                priority = &h2o_http2_default_priority;
+            }
         }
     } else {
         parent_sched = &conn->scheduler;
