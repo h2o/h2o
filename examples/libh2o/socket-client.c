@@ -26,8 +26,9 @@
 #include <sys/types.h>
 #include "h2o/socket.h"
 #include "h2o/string_.h"
+#include "h2o/hostinfo.h"
+#include "h2o/multithread.h"
 
-static h2o_loop_t *loop;
 const char *host;
 static SSL_CTX *ssl_ctx;
 static int exit_loop;
@@ -88,6 +89,34 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 }
 
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_loop)
+{
+    static h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
+    h2o_loop_t *loop;
+    h2o_socket_t *sock;
+    struct addrinfo *selected;
+
+    if (errstr != NULL) {
+        /* resolve host failed */
+        fprintf(stderr, "failed to resolve host:%s\n", errstr);
+        goto Error;
+    }
+
+    loop = _loop;
+    selected = h2o_hostinfo_select_one(res);
+    sock = h2o_socket_connect(loop, selected->ai_addr, selected->ai_addrlen, on_connect);
+    if (sock == NULL) {
+        /* create socket failed */
+        fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
+        goto Error;
+    }
+    sock->data = &send_data;
+    return;
+
+Error:
+    exit_loop = 1;
+}
+
 static void usage(const char *cmd)
 {
     fprintf(stderr, "Usage: %s [--tls] <host> <port>\n", cmd);
@@ -96,10 +125,9 @@ static void usage(const char *cmd)
 
 int main(int argc, char **argv)
 {
-    struct addrinfo hints, *res = NULL;
-    int err, ret = 1;
-    h2o_socket_t *sock;
-    h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
+    h2o_loop_t *loop;
+    h2o_multithread_queue_t *queue;
+    h2o_multithread_receiver_t getaddr_receiver;
 
     const char *cmd = (--argc, *argv++);
     if (argc < 2)
@@ -124,21 +152,15 @@ int main(int argc, char **argv)
     loop = h2o_evloop_create();
 #endif
 
-    /* resolve destination (FIXME use the function supplied by the loop) */
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_ADDRCONFIG;
-    if ((err = getaddrinfo(host, port, &hints, &res)) != 0) {
-        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, gai_strerror(err));
-        goto Exit;
-    }
+    queue = h2o_multithread_create_queue(loop);
+    h2o_multithread_register_receiver(queue, &getaddr_receiver, h2o_hostinfo_getaddr_receiver);
 
-    if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
-        fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
-        goto Exit;
-    }
-    sock->data = &send_data;
+    h2o_iovec_t iov_name = h2o_iovec_init(host, strlen(host) + 1);
+    h2o_iovec_t iov_serv = h2o_iovec_init(port, strlen(port) + 1);
+
+    /* resolve host name */
+    h2o_hostinfo_getaddr(&getaddr_receiver, iov_name, iov_serv, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV,
+                         on_getaddr, loop);
 
     while (!exit_loop) {
 #if H2O_USE_LIBUV
@@ -148,16 +170,14 @@ int main(int argc, char **argv)
 #endif
     }
 
-    ret = 0;
-
-Exit:
+    h2o_multithread_unregister_receiver(queue, &getaddr_receiver);
+    h2o_multithread_destroy_queue(queue);
     if (loop != NULL) {
 #if H2O_USE_LIBUV
         uv_loop_delete(loop);
 #else
-// FIXME
-// h2o_evloop_destroy(loop);
+        h2o_evloop_destroy(loop);
 #endif
     }
-    return ret;
+    return 0;
 }
