@@ -159,7 +159,7 @@ static void decr_active_cnt(h2o_http2_scheduler_node_t *node)
 {
     h2o_http2_scheduler_openref_t *ref;
 
-    /* do notnig if node is the root */
+    /* do nothing if node is the root */
     if (node->_parent == NULL)
         return;
 
@@ -257,7 +257,7 @@ void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_
     if (!h2o_linklist_is_empty(&src->node._all_refs)) {
         h2o_linklist_t *link;
         /* update back reference */
-        for (link = dst->node._all_refs.next; link != &dst->node._all_refs; link = link->next) {
+        for (link = src->node._all_refs.next; link != &src->node._all_refs; link = link->next) {
             h2o_http2_scheduler_openref_t *child = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, link);
             assert(child->node._parent == &src->node);
             child->node._parent = &dst->node;
@@ -274,8 +274,10 @@ void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_
     h2o_linklist_unlink(&src->_all_link);
 
     /* swap _queue_node._link */
-    h2o_linklist_insert(&src->_queue_node._link, &dst->_queue_node._link);
-    h2o_linklist_unlink(&src->_queue_node._link);
+    if (h2o_linklist_is_linked(&src->_queue_node._link)) {
+        h2o_linklist_insert(&src->_queue_node._link, &dst->_queue_node._link);
+        h2o_linklist_unlink(&src->_queue_node._link);
+    }
 }
 
 static void do_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive)

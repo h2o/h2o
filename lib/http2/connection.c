@@ -255,8 +255,6 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     assert(iter != kh_end(conn->streams));
     kh_del(h2o_http2_stream_t, conn->streams, iter);
 
-    assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
-
     if (stream->_conn_stream_in_progress) {
         h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
         stream->_conn_stream_in_progress = 0;
@@ -295,20 +293,12 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 static void close_connection_now(h2o_http2_conn_t *conn)
 {
-    size_t i;
     h2o_http2_stream_t *stream;
 
     assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
 
     kh_foreach_value(conn->streams, stream, { h2o_http2_stream_close(conn, stream); });
 
-    for (i = 0; i < HTTP2_OLD_PRIORITIES; i++) {
-        if (conn->recently_closed_streams.streams[i].sched_node) {
-            h2o_http2_stream_t *old_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.scheduler, conn->recently_closed_streams.streams[i].sched_node);
-            h2o_http2_scheduler_close(conn->recently_closed_streams.streams[i].sched_node);
-            free(old_stream);
-        }
-    }
     assert(conn->num_streams.pull.open == 0);
     assert(conn->num_streams.pull.half_closed == 0);
     assert(conn->num_streams.pull.send_body == 0);
@@ -564,9 +554,9 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
         if (parent_stream != NULL) {
             parent_sched = &parent_stream->_refs.scheduler.node;
         } else {
-            for (int i = 0; i < HTTP2_OLD_PRIORITIES; i++) {
-                if (conn->recently_closed_streams.streams[i].sched_node && conn->recently_closed_streams.streams[i].stream_id == priority->dependency) {
-                    parent_sched = &conn->recently_closed_streams.streams[i].sched_node->node;
+            for (size_t i = 0; i < HTTP2_CLOSED_STREAM_PRIORITIES; i++) {
+                if (conn->recently_closed_streams.streams[i].stream_id == priority->dependency) {
+                    parent_sched = &conn->recently_closed_streams.streams[i].sched_node.node;
                     break;
                 }
             }
