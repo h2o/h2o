@@ -124,6 +124,11 @@ typedef enum enum_h2o_http2_conn_state_t {
     H2O_HTTP2_CONN_STATE_IS_CLOSING   /* nothing should be sent */
 } h2o_http2_conn_state_t;
 
+typedef struct st_h2o_http2_closed_stream_t {
+    h2o_http2_scheduler_openref_t sched_node;
+    uint32_t stream_id;
+} h2o_http2_closed_stream_t;
+
 struct st_h2o_http2_conn_t {
     h2o_conn_t super;
     h2o_socket_t *sock;
@@ -172,10 +177,7 @@ struct st_h2o_http2_conn_t {
     h2o_iovec_t *http2_origin_frame;
 #define HTTP2_CLOSED_STREAM_PRIORITIES 10
     struct {
-        struct {
-            h2o_http2_scheduler_openref_t sched_node;
-            uint32_t stream_id;
-        } streams[HTTP2_CLOSED_STREAM_PRIORITIES]; /* a ring buffer, next_slot points to the next entry */
+        h2o_http2_closed_stream_t streams[HTTP2_CLOSED_STREAM_PRIORITIES]; /* a ring buffer, next_slot points to the next entry */
         size_t next_slot;
     } recently_closed_streams;
 };
@@ -204,6 +206,7 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+uint32_t h2o_http2_stream_get_stream_id(h2o_http2_scheduler_node_t *sched);
 static void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled);
 

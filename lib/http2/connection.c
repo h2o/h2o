@@ -1345,8 +1345,7 @@ static uint32_t get_parent_stream_id(h2o_http2_conn_t *conn, h2o_http2_stream_t 
     if (parent_sched == &conn->scheduler) {
         return 0;
     } else {
-        h2o_http2_stream_t *parent_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.scheduler, parent_sched);
-        return parent_stream->stream_id;
+        return parent_sched->get_stream_id(parent_sched);
     }
 }
 
