@@ -175,8 +175,8 @@ struct st_h2o_http2_conn_t {
         struct {
             h2o_http2_scheduler_openref_t *sched_node;
             uint32_t stream_id;
-        } streams[HTTP2_OLD_PRIORITIES];
-        size_t idx;
+        } streams[HTTP2_OLD_PRIORITIES]; /* a ring buffer, next_slot points to the next entry */
+        size_t next_slot;
     } recently_closed_streams;
 };
 

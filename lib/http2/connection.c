@@ -295,7 +295,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
 static void close_connection_now(h2o_http2_conn_t *conn)
 {
-    int i;
+    size_t i;
     h2o_http2_stream_t *stream;
 
     assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
@@ -567,6 +567,7 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
             for (int i = 0; i < HTTP2_OLD_PRIORITIES; i++) {
                 if (conn->recently_closed_streams.streams[i].sched_node && conn->recently_closed_streams.streams[i].stream_id == priority->dependency) {
                     parent_sched = &conn->recently_closed_streams.streams[i].sched_node->node;
+                    break;
                 }
             }
             if (parent_sched == NULL) {
