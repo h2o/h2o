@@ -83,6 +83,10 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_sche
  */
 void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
 /**
+ * relocates an openref to a different memory location
+ */
+void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_scheduler_openref_t *src);
+/**
  * reprioritizes the reference.
  */
 void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, uint16_t weight,

@@ -243,6 +243,41 @@ void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref)
     }
 }
 
+void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_scheduler_openref_t *src)
+{
+    init_node(&dst->node, src->node._parent);
+    dst->weight = src->weight;
+    dst->_all_link = (h2o_linklist_t){NULL};
+    dst->_active_cnt = src->_active_cnt;
+    dst->_self_is_active = src->_self_is_active;
+    dst->_queue_node._link = (h2o_linklist_t){NULL};
+    dst->_queue_node._deficit = dst->_queue_node._deficit;
+
+    /* update refs from descendants */
+    if (!h2o_linklist_is_empty(&src->node._all_refs)) {
+        h2o_linklist_t *link;
+        /* update back reference */
+        for (link = dst->node._all_refs.next; link != &dst->node._all_refs; link = link->next) {
+            h2o_http2_scheduler_openref_t *child = H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, _all_link, link);
+            assert(child->node._parent == &src->node);
+            child->node._parent = &dst->node;
+        }
+        /* attach the list to dst */
+        h2o_linklist_insert_list(&dst->node._all_refs, &src->node._all_refs);
+        /* node._queue */
+        dst->node._queue = src->node._queue;
+        src->node._queue = NULL;
+    }
+
+    /* swap all_link */
+    h2o_linklist_insert(&src->_all_link, &dst->_all_link);
+    h2o_linklist_unlink(&src->_all_link);
+
+    /* swap _queue_node._link */
+    h2o_linklist_insert(&src->_queue_node._link, &dst->_queue_node._link);
+    h2o_linklist_unlink(&src->_queue_node._link);
+}
+
 static void do_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, int exclusive)
 {
     /* rebind _all_link */
