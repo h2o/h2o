@@ -65,30 +65,23 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     return stream;
 }
 
+static void save_old_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *src)
+{
+    assert(h2o_http2_scheduler_is_open(&src->_scheduler));
 
-static uint32_t h2o_http2_stream_closed_stream_id(h2o_http2_scheduler_node_t *sched)
-{
-    h2o_http2_closed_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_closed_stream_t, sched_node, sched);
-    return stream->stream_id;
-}
+    h2o_http2_stream_t **dst = conn->recently_closed_streams.streams + conn->recently_closed_streams.next_slot;
+    if (++conn->recently_closed_streams.next_slot == HTTP2_CLOSED_STREAM_PRIORITIES)
+        conn->recently_closed_streams.next_slot = 0;
 
-uint32_t h2o_http2_stream_get_stream_id(h2o_http2_scheduler_node_t *sched)
-{
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.scheduler, sched);
-    return stream->stream_id;
-}
-static void save_old_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
-{
-    size_t slot = conn->recently_closed_streams.next_slot;
-    if (conn->recently_closed_streams.streams[slot].stream_id != 0) {
-        assert(h2o_http2_scheduler_is_open(&conn->recently_closed_streams.streams[slot].sched_node));
-        h2o_http2_scheduler_close(&conn->recently_closed_streams.streams[slot].sched_node);
+    if (*dst != NULL) {
+        assert(h2o_http2_scheduler_is_open(&(*dst)->_scheduler));
+        h2o_http2_scheduler_close(&(*dst)->_scheduler);
+    } else {
+        *dst = h2o_mem_alloc(offsetof(h2o_http2_stream_t, _scheduler) + sizeof((*dst)->_scheduler));
     }
-    assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
-    h2o_http2_scheduler_relocate(&conn->recently_closed_streams.streams[slot].sched_node, &stream->_refs.scheduler);
-    conn->recently_closed_streams.streams[slot].sched_node.node.get_stream_id = h2o_http2_stream_closed_stream_id;
-    conn->recently_closed_streams.streams[slot].stream_id = stream->stream_id;
-    conn->recently_closed_streams.next_slot = (slot + 1) % HTTP2_CLOSED_STREAM_PRIORITIES;
+
+    (*dst)->stream_id = src->stream_id;
+    h2o_http2_scheduler_relocate(&(*dst)->_scheduler, &src->_scheduler);
 }
 
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
@@ -122,7 +115,7 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
         /* clear all the queued bufs, and close the connection in the callback */
         stream->_data.size = 0;
-        if (h2o_linklist_is_linked(&stream->_refs.link)) {
+        if (h2o_linklist_is_linked(&stream->_link)) {
             /* will be closed in the callback */
         } else {
             h2o_http2_stream_close(conn, stream);
@@ -316,14 +309,14 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             h2o_http2_stream_send_push_promise(conn, stream);
         /* send ASAP if it is a blocking asset (even in case of Firefox we can't wait 1RTT for it to reprioritize the asset) */
         if (is_blocking_asset(&stream->req))
-            h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
+            h2o_http2_scheduler_rebind(&stream->_scheduler, &conn->scheduler, 257, 0);
     } else {
         /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
          * prioritization (e.g. that of Firefox)
          */
         if (conn->num_streams.priority.open == 0 && stream->req.hostconf->http2.reprioritize_blocking_assets &&
-            h2o_http2_scheduler_get_parent(&stream->_refs.scheduler) == &conn->scheduler && is_blocking_asset(&stream->req))
-            h2o_http2_scheduler_rebind(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
+            h2o_http2_scheduler_get_parent(&stream->_scheduler) == &conn->scheduler && is_blocking_asset(&stream->req))
+            h2o_http2_scheduler_rebind(&stream->_scheduler, &conn->scheduler, 257, 0);
     }
 
     /* send HEADERS, as well as start sending body */
@@ -345,7 +338,7 @@ CancelPush:
     h2o_add_header_by_str(&stream->req.pool, &stream->req.res.headers, H2O_STRLIT("x-http2-push"), 0, NULL,
                           H2O_STRLIT("cancelled"));
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-    h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+    h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     if (stream->push.promise_sent) {
         h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_INTERNAL);
         h2o_http2_conn_request_write(conn);

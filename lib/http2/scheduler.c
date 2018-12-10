@@ -127,7 +127,6 @@ static h2o_http2_scheduler_queue_node_t *queue_pop(h2o_http2_scheduler_queue_t *
 static void init_node(h2o_http2_scheduler_node_t *node, h2o_http2_scheduler_node_t *parent)
 {
     *node = (h2o_http2_scheduler_node_t){parent};
-    node->get_stream_id = h2o_http2_stream_get_stream_id;
     h2o_linklist_init_anchor(&node->_all_refs);
 }
 
