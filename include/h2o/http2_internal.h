@@ -197,7 +197,7 @@ struct st_h2o_http2_conn_t {
 #define HTTP2_CLOSED_STREAM_PRIORITIES 10
         h2o_http2_stream_t *streams[HTTP2_CLOSED_STREAM_PRIORITIES];
         size_t next_slot;
-    } recently_closed_streams;
+    } _recently_closed_streams;
 };
 
 /* connection */

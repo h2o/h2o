@@ -249,8 +249,29 @@ void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     kh_val(conn->streams, iter) = stream;
 }
 
+static void preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src)
+{
+    assert(h2o_http2_scheduler_is_open(&src->_scheduler));
+
+    h2o_http2_stream_t **dst = conn->_recently_closed_streams.streams + conn->_recently_closed_streams.next_slot;
+    if (++conn->_recently_closed_streams.next_slot == HTTP2_CLOSED_STREAM_PRIORITIES)
+        conn->_recently_closed_streams.next_slot = 0;
+
+    if (*dst != NULL) {
+        assert(h2o_http2_scheduler_is_open(&(*dst)->_scheduler));
+        h2o_http2_scheduler_close(&(*dst)->_scheduler);
+    } else {
+        *dst = h2o_mem_alloc(offsetof(h2o_http2_stream_t, _scheduler) + sizeof((*dst)->_scheduler));
+    }
+
+    (*dst)->stream_id = src->stream_id;
+    h2o_http2_scheduler_relocate(&(*dst)->_scheduler, &src->_scheduler);
+}
+
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    preserve_stream_scheduler(conn, stream);
+
     khiter_t iter = kh_get(h2o_http2_stream_t, conn->streams, stream->stream_id);
     assert(iter != kh_end(conn->streams));
     kh_del(h2o_http2_stream_t, conn->streams, iter);
@@ -317,8 +338,8 @@ static void close_connection_now(h2o_http2_conn_t *conn)
         h2o_buffer_dispose(&conn->_write.buf_in_flight);
     {
         size_t i;
-        for (i = 0; i < sizeof(conn->recently_closed_streams.streams) / sizeof(conn->recently_closed_streams.streams[0]); ++i) {
-            h2o_http2_stream_t *closed_stream = conn->recently_closed_streams.streams[i];
+        for (i = 0; i < sizeof(conn->_recently_closed_streams.streams) / sizeof(conn->_recently_closed_streams.streams[0]); ++i) {
+            h2o_http2_stream_t *closed_stream = conn->_recently_closed_streams.streams[i];
             if (closed_stream == NULL)
                 break;
             assert(h2o_http2_scheduler_is_open(&closed_stream->_scheduler));
@@ -566,17 +587,17 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
             parent_sched = &parent_stream->_scheduler.node;
         } else {
             for (size_t i = 0; i < HTTP2_CLOSED_STREAM_PRIORITIES; i++) {
-                if (conn->recently_closed_streams.streams[i]->stream_id == priority->dependency) {
-                    parent_sched = &conn->recently_closed_streams.streams[i]->_scheduler.node;
+                if (conn->_recently_closed_streams.streams[i]->stream_id == priority->dependency) {
+                    parent_sched = &conn->_recently_closed_streams.streams[i]->_scheduler.node;
                     break;
                 }
             }
             if (parent_sched == NULL) {
-                /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in that
-                 * stream being given a default priority. (RFC 7540 5.3.1)
-                 * It is possible for a stream to become closed while prioritization information that creates a dependency on that
-                 * stream is in transit. If a stream identified in a dependency has no associated priority information, then the
-                 * dependent stream is instead assigned a default priority. (RFC 7540 5.3.4)
+                /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in
+                 * that stream being given a default priority. (RFC 7540 5.3.1) It is possible for a stream to become closed while
+                 * prioritization information that creates a dependency on that stream is in transit. If a stream identified in a
+                 * dependency has no associated priority information, then the dependent stream is instead assigned a default
+                 * priority. (RFC 7540 5.3.4)
                  */
                 parent_sched = &conn->scheduler;
                 priority = &h2o_http2_default_priority;
