@@ -41,7 +41,6 @@ typedef struct st_h2o_http2_scheduler_node_t {
     struct st_h2o_http2_scheduler_node_t *_parent; /* NULL if root */
     h2o_linklist_t _all_refs;                      /* list of nodes */
     h2o_http2_scheduler_queue_t *_queue;           /* priority list (NULL if _all_refs is empty) */
-    uint32_t (*get_stream_id)(struct st_h2o_http2_scheduler_node_t *);
 } h2o_http2_scheduler_node_t;
 
 /**

@@ -74,7 +74,21 @@ typedef struct st_h2o_http2_conn_num_streams_t {
 } h2o_http2_conn_num_streams_t;
 
 struct st_h2o_http2_stream_t {
+    /**
+     * stream-id
+     */
     uint32_t stream_id;
+    /**
+     * scheduler (entries below scheduler are not maintained after the stream is closed, see ...)
+     */
+    h2o_http2_scheduler_openref_t _scheduler;
+    /**
+     * link-list of streams govered by connection.c
+     */
+    h2o_linklist_t _link;
+    /**
+     * the final ostream
+     */
     h2o_ostream_t _ostr_final;
     h2o_http2_stream_state_t state;
     h2o_http2_window_t output_window;
@@ -85,7 +99,10 @@ struct st_h2o_http2_stream_t {
     h2o_http2_priority_t received_priority;
     H2O_VECTOR(h2o_iovec_t) _data;
     h2o_ostream_pull_cb _pull_cb;
-    h2o_http2_conn_num_streams_t *_num_streams_slot; /* points http2_conn_t::num_streams::* in which the stream is counted */
+    /**
+     * points to http2_conn_t::num_streams::* in which the stream is counted
+     */
+    h2o_http2_conn_num_streams_t *_num_streams_slot;
     h2o_cache_digests_t *cache_digests;
     union {
         struct {
@@ -96,23 +113,25 @@ struct st_h2o_http2_stream_t {
             unsigned casper_is_ready : 1;
         } pull;
     };
-
     unsigned blocked_by_server : 1;
-    unsigned _conn_stream_in_progress : 1; /* true if the body is streaming */
-
-    /* references governed by connection.c for handling various things */
+    /**
+     * if the response body is streaming
+     */
+    unsigned _conn_stream_in_progress : 1;
+    /**
+     *  steate of the ostream, only used in push mode
+     */
+    h2o_send_state_t send_state;
+    /**
+     * structure used for request body processing; `body` is NULL unless request body IS expected
+     */
     struct {
-        h2o_linklist_t link;
-        h2o_http2_scheduler_openref_t scheduler;
-    } _refs;
-    h2o_send_state_t send_state; /* steate of the ostream, only used in push mode */
-
-    struct {
-        h2o_buffer_t *body; /* NULL unless request body IS expected */
+        h2o_buffer_t *body;
         size_t bytes_received;
     } _req_body;
-
-    /* placed at last since it is large and has it's own ctor */
+    /**
+     * the request object; placed at last since it is large and has it's own ctor
+     */
     h2o_req_t req;
 };
 
@@ -123,11 +142,6 @@ typedef enum enum_h2o_http2_conn_state_t {
     H2O_HTTP2_CONN_STATE_HALF_CLOSED, /* no more accepting new streams */
     H2O_HTTP2_CONN_STATE_IS_CLOSING   /* nothing should be sent */
 } h2o_http2_conn_state_t;
-
-typedef struct st_h2o_http2_closed_stream_t {
-    h2o_http2_scheduler_openref_t sched_node;
-    uint32_t stream_id;
-} h2o_http2_closed_stream_t;
 
 struct st_h2o_http2_conn_t {
     h2o_conn_t super;
@@ -175,11 +189,15 @@ struct st_h2o_http2_conn_t {
         h2o_linklist_t blocked_streams;
     } early_data;
     h2o_iovec_t *http2_origin_frame;
-#define HTTP2_CLOSED_STREAM_PRIORITIES 10
+    /**
+     * Ring buffer of closed streams. `next_slot` points to the next write position. The stored object is shrinked to only contain
+     * stream_id and _scheduler.
+     */
     struct {
-        h2o_http2_closed_stream_t streams[HTTP2_CLOSED_STREAM_PRIORITIES]; /* a ring buffer, next_slot points to the next entry */
+#define HTTP2_CLOSED_STREAM_PRIORITIES 10
+        h2o_http2_stream_t *streams[HTTP2_CLOSED_STREAM_PRIORITIES];
         size_t next_slot;
-    } recently_closed_streams;
+    } _recently_closed_streams;
 };
 
 /* connection */
@@ -206,7 +224,6 @@ void h2o_http2_stream_reset(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 static int h2o_http2_stream_has_pending_data(h2o_http2_stream_t *stream);
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
-uint32_t h2o_http2_stream_get_stream_id(h2o_http2_scheduler_node_t *sched);
 static void h2o_http2_stream_send_push_promise(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
 h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_enabled);
 
@@ -343,7 +360,7 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
 inline void h2o_http2_stream_prepare_for_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(conn->state != H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
+    assert(h2o_http2_scheduler_is_open(&stream->_scheduler));
 
     /* adjust max-open */
     uint32_t *max_open = NULL;
