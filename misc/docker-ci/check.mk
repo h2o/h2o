@@ -3,7 +3,7 @@ SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
-DOCKER_RUN_OPTS=-v `pwd`:$(SRC_DIR) --add-host=127.0.0.1.xip.io:127.0.0.1 -it
+DOCKER_RUN_OPTS=-v `pwd`:$(SRC_DIR) -e TRAVIS --add-host=127.0.0.1.xip.io:127.0.0.1 -it
 
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f /h2o/misc/docker-ci/check.mk _check
@@ -22,7 +22,7 @@ _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	make all
 	make check
-	sudo make check-as-root
+	sudo -E make check-as-root
 
 _ossl1.1.0:
 	$(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0

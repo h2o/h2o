@@ -42,8 +42,14 @@
 #include <openssl/evp.h>
 #include <openssl/engine.h>
 #include <openssl/pem.h>
+#if PICOTLS_USE_BROTLI
+#include "brotli/decode.h"
+#endif
 #include "picotls.h"
 #include "picotls/openssl.h"
+#if PICOTLS_USE_BROTLI
+#include "picotls/certificate_compression.h"
+#endif
 #include "util.h"
 
 static void shift_buffer(ptls_buffer_t *buf, size_t delta)
@@ -289,6 +295,7 @@ static void usage(const char *cmd)
            "  -4                   force IPv4\n"
            "  -6                   force IPv6\n"
            "  -a                   require client authentication\n"
+           "  -b                   enable brotli compression\n"
            "  -C certificate-file  certificate chain used for client authentication\n"
            "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
@@ -338,7 +345,7 @@ int main(int argc, char **argv)
     socklen_t salen;
     int family = 0;
 
-    while ((ch = getopt(argc, argv, "46aC:c:i:k:nN:es:Sl:uvh")) != -1) {
+    while ((ch = getopt(argc, argv, "46abC:c:i:k:nN:es:Sl:uvh")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -348,6 +355,14 @@ int main(int argc, char **argv)
             break;
         case 'a':
             ctx.require_client_authentication = 1;
+            break;
+        case 'b':
+#if PICOTLS_USE_BROTLI
+            ctx.decompress_certificate = &ptls_decompress_certificate;
+#else
+            fprintf(stderr, "support for `-b` option was turned off during configuration\n");
+            exit(1);
+#endif
             break;
         case 'C':
         case 'c':
@@ -426,6 +441,17 @@ int main(int argc, char **argv)
             fprintf(stderr, "-c and -k options must be set\n");
             return 1;
         }
+#if PICOTLS_USE_BROTLI
+        if (ctx.decompress_certificate != NULL) {
+            static ptls_emit_compressed_certificate_t ecc;
+            if (ptls_init_compressed_certificate(&ecc, PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI, ctx.certificates.list,
+                                                 ctx.certificates.count, ptls_iovec_init(NULL, 0)) != 0) {
+                fprintf(stderr, "failed to create a brotli-compressed version of the certificate chain.\n");
+                exit(1);
+            }
+            ctx.emit_certificate = &ecc.super;
+        }
+#endif
         setup_session_cache(&ctx);
     } else {
         /* client */

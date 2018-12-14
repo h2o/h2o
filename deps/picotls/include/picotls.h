@@ -115,6 +115,7 @@ extern "C" {
 #define PTLS_ERROR_SESSION_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 5)
 #define PTLS_ERROR_STATELESS_RETRY (PTLS_ERROR_CLASS_INTERNAL + 6)
 #define PTLS_ERROR_NOT_AVAILABLE (PTLS_ERROR_CLASS_INTERNAL + 7)
+#define PTLS_ERROR_COMPRESSION_FAILURE (PTLS_ERROR_CLASS_INTERNAL + 8)
 
 #define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
 #define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
@@ -132,6 +133,19 @@ extern "C" {
 #define PTLS_ERROR_INCORRECT_PEM_ECDSA_KEYSIZE (PTLS_ERROR_CLASS_INTERNAL + 63)
 #define PTLS_ERROR_INCORRECT_ASN1_ECDSA_KEY_SYNTAX (PTLS_ERROR_CLASS_INTERNAL + 64)
 
+#define PTLS_HANDSHAKE_TYPE_CLIENT_HELLO 1
+#define PTLS_HANDSHAKE_TYPE_SERVER_HELLO 2
+#define PTLS_HANDSHAKE_TYPE_NEW_SESSION_TICKET 4
+#define PTLS_HANDSHAKE_TYPE_END_OF_EARLY_DATA 5
+#define PTLS_HANDSHAKE_TYPE_ENCRYPTED_EXTENSIONS 8
+#define PTLS_HANDSHAKE_TYPE_CERTIFICATE 11
+#define PTLS_HANDSHAKE_TYPE_CERTIFICATE_REQUEST 13
+#define PTLS_HANDSHAKE_TYPE_CERTIFICATE_VERIFY 15
+#define PTLS_HANDSHAKE_TYPE_FINISHED 20
+#define PTLS_HANDSHAKE_TYPE_KEY_UPDATE 24
+#define PTLS_HANDSHAKE_TYPE_COMPRESSED_CERTIFICATE 25
+#define PTLS_HANDSHAKE_TYPE_MESSAGE_HASH 254
+
 #define PTLS_ZERO_DIGEST_SHA256                                                                                                    \
     {                                                                                                                              \
         0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4,    \
@@ -147,6 +161,7 @@ extern "C" {
 
 typedef struct st_ptls_t ptls_t;
 typedef struct st_ptls_context_t ptls_context_t;
+typedef struct st_ptls_key_schedule_t ptls_key_schedule_t;
 
 /**
  * represents a sequence of octets
@@ -333,6 +348,16 @@ typedef const struct st_ptls_cipher_suite_t {
     ptls_hash_algorithm_t *hash;
 } ptls_cipher_suite_t;
 
+struct st_ptls_traffic_protection_t;
+
+typedef struct st_ptls_message_emitter_t {
+    ptls_buffer_t *buf;
+    struct st_ptls_traffic_protection_t *enc;
+    size_t record_header_length;
+    int (*begin_message)(struct st_ptls_message_emitter_t *self);
+    int (*commit_message)(struct st_ptls_message_emitter_t *self);
+} ptls_message_emitter_t;
+
 #define PTLS_CALLBACK_TYPE0(ret, name)                                                                                             \
     typedef struct st_ptls_##name##_t {                                                                                            \
         ret (*cb)(struct st_ptls_##name##_t * self);                                                                               \
@@ -344,6 +369,31 @@ typedef const struct st_ptls_cipher_suite_t {
     } ptls_##name##_t
 
 /**
+ * arguments passsed to the on_client_hello callback
+ */
+typedef struct st_ptls_on_client_hello_parameters_t {
+    /**
+     * SNI value received from the client. The value is {NULL, 0} if the extension was absent.
+     */
+    ptls_iovec_t server_name;
+    /**
+     *
+     */
+    struct {
+        ptls_iovec_t *list;
+        size_t count;
+    } negotiated_protocols;
+    struct {
+        const uint16_t *list;
+        size_t count;
+    } signature_algorithms;
+    struct {
+        const uint16_t *list;
+        size_t count;
+    } certificate_compression_algorithms;
+} ptls_on_client_hello_parameters_t;
+
+/**
  * returns current time in milliseconds (ptls_get_time can be used to return the physical time)
  */
 PTLS_CALLBACK_TYPE0(uint64_t, get_time);
@@ -351,12 +401,12 @@ PTLS_CALLBACK_TYPE0(uint64_t, get_time);
  * after receiving ClientHello, the core calls the optional callback to give a chance to the swap the context depending on the input
  * values. The callback is required to call `ptls_set_server_name` if an SNI extension needs to be sent to the client.
  */
-PTLS_CALLBACK_TYPE(int, on_client_hello, ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *negotiated_protocols,
-                   size_t num_negotiated_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms);
+PTLS_CALLBACK_TYPE(int, on_client_hello, ptls_t *tls, ptls_on_client_hello_parameters_t *params);
 /**
- * when generating Certificate, the core calls the callback to obtain the OCSP response for stapling.
+ * callback to generate the certificate message. `ptls_context::certificates` are set when the callback is set to NULL.
  */
-PTLS_CALLBACK_TYPE(int, staple_ocsp, ptls_t *tls, ptls_buffer_t *output, size_t cert_index);
+PTLS_CALLBACK_TYPE(int, emit_certificate, ptls_t *tls, ptls_message_emitter_t *emitter, ptls_key_schedule_t *key_sched,
+                   ptls_iovec_t context);
 /**
  * when gerenating CertificateVerify, the core calls the callback to sign the handshake context using the certificate.
  */
@@ -393,6 +443,20 @@ PTLS_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
  * The cipher-suite that is being associated to the connection can be obtained by calling the ptls_get_cipher function.
  */
 PTLS_CALLBACK_TYPE(int, update_traffic_key, ptls_t *tls, int is_enc, size_t epoch, const void *secret);
+/**
+ *
+ */
+typedef struct st_ptls_decompress_certificate_t {
+    /**
+     * list of supported algorithms terminated by UINT16_MAX
+     */
+    const uint16_t *supported_algorithms;
+    /**
+     * callback that decompresses the message
+     */
+    int (*cb)(struct st_ptls_decompress_certificate_t *self, ptls_t *tls, uint16_t algorithm, ptls_iovec_t output,
+              ptls_iovec_t input);
+} ptls_decompress_certificate_t;
 
 /**
  * the configuration
@@ -428,7 +492,7 @@ struct st_ptls_context_t {
     /**
      *
      */
-    ptls_staple_ocsp_t *staple_ocsp;
+    ptls_emit_certificate_t *emit_certificate;
     /**
      *
      */
@@ -490,6 +554,10 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_traffic_key_t *update_traffic_key;
+    /**
+     *
+     */
+    ptls_decompress_certificate_t *decompress_certificate;
 };
 
 typedef struct st_ptls_raw_extension_t {
@@ -520,11 +588,14 @@ typedef struct st_ptls_handshake_properties_t {
              */
             ptls_iovec_t session_ticket;
             /**
-             * pointer to store the maximum size of early-data that can be sent immediately (if NULL, early data is not used)
+             * pointer to store the maximum size of early-data that can be sent immediately. If set to non-NULL, the first call to
+             * ptls_handshake (or ptls_handle_message) will set `*max_early_data` to the value obtained from the session ticket, or
+             * to zero if early-data cannot be sent. If NULL, early data will not be used.
              */
             size_t *max_early_data_size;
             /**
-             *
+             * if early-data has been accepted by peer. For clients using `update_traffic_key` callback, the flag is set when the
+             * callback is called with (is_enc, epoch) set to (1, 2).
              */
             unsigned early_data_accepted_by_peer : 1;
             /**
@@ -632,6 +703,12 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
         ptls_buffer_push(buf, (uint8_t)(_v >> 8), (uint8_t)_v);                                                                    \
     } while (0)
 
+#define ptls_buffer_push24(buf, v)                                                                                                 \
+    do {                                                                                                                           \
+        uint32_t _v = (v);                                                                                                         \
+        ptls_buffer_push(buf, (uint8_t)(_v >> 16), (uint8_t)(_v >> 8), (uint8_t)_v);                                               \
+    } while (0)
+
 #define ptls_buffer_push32(buf, v)                                                                                                 \
     do {                                                                                                                           \
         uint32_t _v = (v);                                                                                                         \
@@ -680,7 +757,29 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
         ptls_buffer_push_asn1_block((buf), block);                                                                                 \
     } while (0)
 
+#define ptls_buffer_push_message_body(buf, key_sched, type, block)                                                                 \
+    do {                                                                                                                           \
+        ptls_buffer_t *_buf = (buf);                                                                                               \
+        ptls_key_schedule_t *_key_sched = (key_sched);                                                                             \
+        size_t mess_start = _buf->off;                                                                                             \
+        ptls_buffer_push(_buf, (type));                                                                                            \
+        ptls_buffer_push_block(_buf, 3, block);                                                                                    \
+        if (_key_sched != NULL)                                                                                                    \
+            ptls__key_schedule_update_hash(_key_sched, _buf->base + mess_start, _buf->off - mess_start);                           \
+    } while (0)
+
+#define ptls_push_message(emitter, key_sched, type, block)                                                                         \
+    do {                                                                                                                           \
+        ptls_message_emitter_t *_emitter = (emitter);                                                                              \
+        if ((ret = _emitter->begin_message(_emitter)) != 0)                                                                        \
+            goto Exit;                                                                                                             \
+        ptls_buffer_push_message_body(_emitter->buf, (key_sched), (type), block);                                                  \
+        if ((ret = _emitter->commit_message(_emitter)) != 0)                                                                       \
+            goto Exit;                                                                                                             \
+    } while (0)
+
 int ptls_decode16(uint16_t *value, const uint8_t **src, const uint8_t *end);
+int ptls_decode24(uint32_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode32(uint32_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
 
@@ -820,6 +919,11 @@ int ptls_send_alert(ptls_t *tls, ptls_buffer_t *sendbuf, uint8_t level, uint8_t 
  */
 int ptls_export_secret(ptls_t *tls, void *output, size_t outlen, const char *label, ptls_iovec_t context_value, int is_early);
 /**
+ * build the body of a Certificate message. Can be called with tls set to NULL in order to create a precompressed message.
+ */
+int ptls_build_certificate_message(ptls_buffer_t *buf, ptls_iovec_t request_context, ptls_iovec_t *certificates,
+                                   size_t num_certificates, ptls_iovec_t ocsp_status);
+/**
  *
  */
 int ptls_calc_hash(ptls_hash_algorithm_t *algo, void *output, const void *src, size_t len);
@@ -922,6 +1026,10 @@ int ptls_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offset
  * internal
  */
 void ptls_aead__build_iv(ptls_aead_context_t *ctx, uint8_t *iv, uint64_t seq);
+/**
+ * internal
+ */
+void ptls__key_schedule_update_hash(ptls_key_schedule_t *sched, const uint8_t *msg, size_t msglen);
 /**
  * clears memory
  */
