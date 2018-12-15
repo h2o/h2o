@@ -20,7 +20,7 @@ This fork is modified to enable PostgreSQL mruby module.
 ### OSX Compilation & Installation Example
 
 ```bash
-  brew install libpq
+  brew install libpq pkg-config libuv wslay openssl
   cmake -DENABLE_MRUBY=true .
   make
   sudo make install
