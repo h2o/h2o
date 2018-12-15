@@ -156,14 +156,15 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
-extern const char *h2o_socket_error_out_of_memory;
-extern const char *h2o_socket_error_io;
-extern const char *h2o_socket_error_closed;
-extern const char *h2o_socket_error_conn_fail;
-extern const char *h2o_socket_error_ssl_no_cert;
-extern const char *h2o_socket_error_ssl_cert_invalid;
-extern const char *h2o_socket_error_ssl_cert_name_mismatch;
-extern const char *h2o_socket_error_ssl_decode;
+extern const char h2o_socket_error_out_of_memory[];
+extern const char h2o_socket_error_io[];
+extern const char h2o_socket_error_closed[];
+extern const char h2o_socket_error_conn_fail[];
+extern const char h2o_socket_error_ssl_no_cert[];
+extern const char h2o_socket_error_ssl_cert_invalid[];
+extern const char h2o_socket_error_ssl_cert_name_mismatch[];
+extern const char h2o_socket_error_ssl_decode[];
+extern const char h2o_socket_error_ssl_handshake[];
 
 /**
  * returns the loop
@@ -285,7 +286,8 @@ int32_t h2o_socket_getport(struct sockaddr *sa);
  * @param ssl_ctx SSL context
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb);
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_iovec_t alpn_protos,
+                              h2o_socket_cb handshake_cb);
 /**
  * resumes SSL handshake with given session data
  * @param sock the socket

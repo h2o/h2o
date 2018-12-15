@@ -6,6 +6,12 @@
 
 require 'getoptlong'
 require 'fileutils'
+require 'fiber'
+
+$rake_fiber_table = {}
+$rake_jobs = 1
+$rake_failed = []
+$rake_root_fiber = Fiber.current
 
 class String
   def ext(newext='')
@@ -86,14 +92,32 @@ module MiniRake
       @name.to_s
     end
 
+    def done?; @done end
+    def running?; @running end
+
     # Invoke the task if it is needed.  Prerequites are invoked first.
     def invoke
       puts "Invoke #{name} (already=[#{@already_invoked}], needed=[#{needed?}])" if $trace
       return if @already_invoked
-      @already_invoked = true
       prerequisites = @prerequisites.collect{ |n| n.is_a?(Proc) ? n.call(name) : n }.flatten
-      prerequisites.each { |n| Task[n].invoke }
-      execute if needed?
+      prerequisites.each do |n|
+        t = Task[n]
+        unless t.done?
+          return prerequisites.select{|v| v = Task[v]; v && (!v.done? || !v.running?) }
+        end
+      end
+
+      @already_invoked = true
+
+      if needed?
+        @running = true
+        return Fiber.new do
+          self.execute
+          $rake_root_fiber.transfer
+        end
+      end
+
+      @done = true
     end
 
     # Execute the actions associated with this task.
@@ -103,6 +127,8 @@ module MiniRake
       unless $dryrun
         @actions.each { |act| act.call(self) }
       end
+      @done = true
+      @running = false
     end
 
     # Is this task needed?
@@ -281,7 +307,19 @@ module MiniRake
     # Run the system command +cmd+.
     def sh(cmd)
       puts cmd if $verbose
-      system(cmd) or fail "Command Failed: [#{cmd}]"
+
+      if $rake_jobs == 1 || Fiber.current == $rake_root_fiber
+        system(cmd) or fail "Command Failed: [#{cmd}]"
+        return
+      end
+
+      pid = Process.spawn(cmd)
+      $rake_fiber_table[pid] = {
+        fiber: Fiber.current,
+        command: cmd,
+        process_waiter: Process.detach(pid)
+      }
+      $rake_root_fiber.transfer
     end
 
     def desc(text)
@@ -329,7 +367,9 @@ class RakeApp
     ['--verbose',  '-v', GetoptLong::NO_ARGUMENT,
       "Log message to standard output."],
     ['--directory', '-C', GetoptLong::REQUIRED_ARGUMENT,
-      "Change executing directory of rakefiles."]
+      "Change executing directory of rakefiles."],
+    ['--jobs', '-j', GetoptLong::REQUIRED_ARGUMENT,
+      'Execute rake with parallel jobs.']
   ]
 
   # Create a RakeApp object.
@@ -422,6 +462,8 @@ class RakeApp
       exit
     when '--directory'
       Dir.chdir value
+    when '--jobs'
+      $rake_jobs = [value.to_i, 1].max
     else
       fail "Unknown option: #{opt}"
     end
@@ -447,12 +489,12 @@ class RakeApp
         end
         here = Dir.pwd
       end
-      tasks = []
+      root_tasks = []
       ARGV.each do |task_name|
         if /^(\w+)=(.*)/.match(task_name)
           ENV[$1] = $2
         else
-          tasks << task_name
+          root_tasks << task_name
         end
       end
       puts "(in #{Dir.pwd})"
@@ -461,23 +503,94 @@ class RakeApp
       if $show_tasks
         display_tasks
       else
-        tasks.push("default") if tasks.size == 0
-        tasks.each do |task_name|
-          MiniRake::Task[task_name].invoke
+        root_tasks.push("default") if root_tasks.empty?
+        # revese tasks for popping
+        root_tasks.reverse!
+
+        tasks = []
+        until root_tasks.empty?
+          root_name = root_tasks.pop
+          tasks << root_name
+          until tasks.empty?
+            task_name = tasks.pop
+            t = MiniRake::Task[task_name]
+            f = t.invoke
+
+            # append additional tasks to task queue
+            if f.kind_of?(Array)
+              tasks.push(*f)
+              tasks.uniq!
+            end
+
+            unless f.kind_of? Fiber
+              tasks.insert 0, task_name unless t.done?
+              if root_name == task_name
+                wait_process
+              end
+              next
+            end
+
+            wait_process while $rake_fiber_table.size >= $rake_jobs
+
+            f.transfer
+          end
         end
+
+        wait_process until $rake_fiber_table.empty?
       end
-    rescue Exception => ex
-      puts "rake aborted!"
+    rescue Exception => e
+      begin
+        $rake_failed << e
+        wait_process until $rake_fiber_table.empty?
+      rescue Exception => next_e
+        e = next_e
+        retry
+      end
+    end
+
+    return if $rake_failed.empty?
+
+    puts "rake aborted!"
+    $rake_failed.each do |ex|
       puts ex.message
-      if $trace
+      if $trace || $verbose
         puts ex.backtrace.join("\n")
       else
         puts ex.backtrace.find {|str| str =~ /#{@rakefile}/ } || ""
       end
-      exit 1
     end
+    exit 1
   end
-end
+
+  def wait_process(count = 0)
+    dur = [0.0001 * (10 ** count), 1].min
+    sleep dur
+
+    exited = []
+    $rake_fiber_table.each do |pid, v|
+      exited << pid unless v[:process_waiter].alive?
+    end
+
+    exited.each do |pid|
+      ent = $rake_fiber_table.delete pid
+      st = ent[:process_waiter].value
+
+      # ignore process that isn't created by `sh` method
+      return if ent.nil?
+
+      if st.exitstatus != 0
+        raise "Command Failed: [#{ent[:command]}]"
+      end
+
+      fail 'task scheduling bug!' if $rake_fiber_table.size >= $rake_jobs
+
+      ent[:fiber].transfer
+    end
+
+    wait_process(count + 1) if !$rake_fiber_table.empty? && exited.empty?
+  end
+
+  end
 
 if __FILE__ == $0 then
   RakeApp.new.run

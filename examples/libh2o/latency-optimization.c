@@ -210,7 +210,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 
     if (ssl_ctx != NULL) {
-        h2o_socket_ssl_handshake(sock, ssl_ctx, mode_server ? NULL : "blahblah", on_handshake_complete);
+        h2o_socket_ssl_handshake(sock, ssl_ctx, mode_server ? NULL : "blahblah", h2o_iovec_init(NULL, 0), on_handshake_complete);
     } else {
         on_handshake_complete(sock, NULL);
     }
@@ -224,7 +224,8 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     if ((sock = h2o_evloop_socket_accept(listener)) != NULL) {
         h2o_socket_close(listener);
         if (ssl_ctx != NULL) {
-            h2o_socket_ssl_handshake(sock, ssl_ctx, mode_server ? NULL : "blahblah", on_handshake_complete);
+            h2o_socket_ssl_handshake(sock, ssl_ctx, mode_server ? NULL : "blahblah", h2o_iovec_init(NULL, 0),
+                                     on_handshake_complete);
         } else {
             on_handshake_complete(sock, NULL);
         }
@@ -319,7 +320,7 @@ int main(int argc, char **argv)
         OpenSSL_add_all_algorithms();
         if (mode_server) {
             ssl_ctx = SSL_CTX_new(SSLv23_server_method());
-            SSL_CTX_use_certificate_file(ssl_ctx, "examples/h2o/server.crt", SSL_FILETYPE_PEM);
+            SSL_CTX_use_certificate_chain_file(ssl_ctx, "examples/h2o/server.crt");
             SSL_CTX_use_PrivateKey_file(ssl_ctx, "examples/h2o/server.key", SSL_FILETYPE_PEM);
         } else {
             ssl_ctx = SSL_CTX_new(SSLv23_client_method());

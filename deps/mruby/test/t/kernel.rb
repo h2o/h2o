@@ -52,11 +52,6 @@ assert('Kernel.lambda', '15.3.1.2.6') do
   assert_equal Proc, m.class
 end
 
-# Not implemented at the moment
-#assert('Kernel.local_variables', '15.3.1.2.7') do
-#  Kernel.local_variables.class == Array
-#end
-
 assert('Kernel.loop', '15.3.1.2.8') do
   i = 0
 
@@ -176,6 +171,10 @@ assert('Kernel#clone', '15.3.1.3.8') do
   assert_true a.respond_to?(:test)
   assert_false b.respond_to?(:test)
   assert_true c.respond_to?(:test)
+  
+  a.freeze
+  d = a.clone
+  assert_true d.frozen?
 end
 
 assert('Kernel#dup', '15.3.1.3.9') do
@@ -334,11 +333,6 @@ assert('Kernel#lambda', '15.3.1.3.27') do
   assert_equal Proc, m.class
 end
 
-# Not implemented yet
-#assert('Kernel#local_variables', '15.3.1.3.28') do
-#  local_variables.class == Array
-#end
-
 assert('Kernel#loop', '15.3.1.3.29') do
   i = 0
 
@@ -376,48 +370,14 @@ assert('Kernel#method_missing', '15.3.1.3.30') do
   begin
     no_super_test.no_super_method_named_this
   rescue NoMethodError => e
-    assert_equal "undefined method 'no_super_method_named_this' for #{no_super_test}", e.message
+    assert_equal "undefined method 'no_super_method_named_this'", e.message
   end
 
   a = String.new
   begin
     a.no_method_named_this
   rescue NoMethodError => e
-    assert_equal "undefined method 'no_method_named_this' for \"\"", e.message
-  end
-
-  class ShortInspectClass
-    def inspect
-      'An inspect string'
-    end
-  end
-  b = ShortInspectClass.new
-  begin
-    b.no_method_named_this
-  rescue NoMethodError => e
-    assert_equal "undefined method 'no_method_named_this' for An inspect string", e.message
-  end
-
-  class LongInspectClass
-    def inspect
-      "A" * 70
-    end
-  end
-  c = LongInspectClass.new
-  begin
-    c.no_method_named_this
-  rescue NoMethodError => e
-    assert_equal "undefined method 'no_method_named_this' for #{c}", e.message
-  end
-
-  class NoInspectClass
-    undef inspect
-  end
-  d = NoInspectClass.new
-  begin
-    d.no_method_named_this
-  rescue NoMethodError => e
-    assert_equal "undefined method 'no_method_named_this' for #{d}", e.message
+    assert_equal "undefined method 'no_method_named_this'", e.message
   end
 end
 
@@ -571,7 +531,8 @@ assert('Kernel.local_variables', '15.3.1.2.7') do
 
   assert_equal [:a, :b, :c, :vars], Proc.new { |a, b|
     c = 2
-    Kernel.local_variables.sort
+    # Kernel#local_variables: 15.3.1.3.28
+    local_variables.sort
   }.call(-1, -2)
 end
 

@@ -122,6 +122,133 @@
     "    _h2o__run_child_fiber(proc { fiber.resume })\n"                                                                           \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
+    "end\n"                                                                                                                        \
+    "\n"                                                                                                                           \
+    "module H2O\n"                                                                                                                 \
+    "\n"                                                                                                                           \
+    "  class ErrorStream\n"                                                                                                        \
+    "\n"                                                                                                                           \
+    "    def puts(*msgs)\n"                                                                                                        \
+    "      msgs.each {|msg| write msg }\n"                                                                                         \
+    "      nil\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def flush\n"                                                                                                              \
+    "      self\n"                                                                                                                 \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "end\n"
+
+/* lib/handler/mruby/embedded/sender.rb */
+#define H2O_MRUBY_CODE_SENDER                                                                                                      \
+    "# Copyright (c) 2014 DeNA Co., Ltd.\n"                                                                                        \
+    "#\n"                                                                                                                          \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "#\n"                                                                                                                          \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "#\n"                                                                                                                          \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
+    "module Kernel\n"                                                                                                              \
+    "\n"                                                                                                                           \
+    "  def _h2o_sender_proc_each_to_fiber()\n"                                                                                     \
+    "    Proc.new do |args|\n"                                                                                                     \
+    "      src, generator = *args\n"                                                                                               \
+    "      fiber = Fiber.new do\n"                                                                                                 \
+    "        begin\n"                                                                                                              \
+    "          src.each do |chunk|\n"                                                                                              \
+    "            _h2o_sender_send_chunk(chunk, generator)\n"                                                                       \
+    "          end\n"                                                                                                              \
+    "          _h2o_sender_send_chunk_eos(generator)\n"                                                                            \
+    "        rescue => e\n"                                                                                                        \
+    "          _h2o_sender_handle_error(e, generator)\n"                                                                           \
+    "        end\n"                                                                                                                \
+    "      end\n"                                                                                                                  \
+    "      fiber.resume\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "end\n"
+
+/* lib/handler/mruby/embedded/middleware.rb */
+#define H2O_MRUBY_CODE_MIDDLEWARE                                                                                                  \
+    "# Copyright (c) 2017 Ichito Nagata, Fastly, Inc.\n"                                                                           \
+    "#\n"                                                                                                                          \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "#\n"                                                                                                                          \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "#\n"                                                                                                                          \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
+    "module H2O\n"                                                                                                                 \
+    "\n"                                                                                                                           \
+    "  class App\n"                                                                                                                \
+    "    def initialize(reprocess)\n"                                                                                              \
+    "      @reprocess = reprocess\n"                                                                                               \
+    "    end\n"                                                                                                                    \
+    "    def call(env)\n"                                                                                                          \
+    "      request(env).join\n"                                                                                                    \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  def self.next\n"                                                                                                            \
+    "    @@next ||= App.new(false)\n"                                                                                              \
+    "  end\n"                                                                                                                      \
+    "  def self.reprocess\n"                                                                                                       \
+    "    @@reprocess ||= App.new(true)\n"                                                                                          \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  class AppRequest\n"                                                                                                         \
+    "    def join\n"                                                                                                               \
+    "      if !@resp\n"                                                                                                            \
+    "        _h2o_middleware_wait_response(self) unless _can_build_response?\n"                                                    \
+    "        @resp = _build_response\n"                                                                                            \
+    "      end\n"                                                                                                                  \
+    "      @resp\n"                                                                                                                \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  class AppInputStream\n"                                                                                                     \
+    "    def each(&block)\n"                                                                                                       \
+    "      while chunk = _h2o_middleware_wait_chunk(self)\n"                                                                       \
+    "        yield chunk\n"                                                                                                        \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "    def join\n"                                                                                                               \
+    "      s = \"\"\n"                                                                                                             \
+    "      each do |c|\n"                                                                                                          \
+    "        s << c\n"                                                                                                             \
+    "      end\n"                                                                                                                  \
+    "      s\n"                                                                                                                    \
+    "    end\n"                                                                                                                    \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "end\n"
 
 /* lib/handler/mruby/embedded/http_request.rb */
@@ -183,45 +310,364 @@
     "\n"                                                                                                                           \
     "end\n"
 
-/* lib/handler/mruby/embedded/chunked.rb */
-#define H2O_MRUBY_CODE_CHUNKED                                                                                                     \
-    "# Copyright (c) 2014 DeNA Co., Ltd.\n"                                                                                        \
-    "#\n"                                                                                                                          \
-    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
-    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
-    "# deal in the Software without restriction, including without limitation the\n"                                               \
-    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
-    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
-    "# furnished to do so, subject to the following conditions:\n"                                                                 \
-    "#\n"                                                                                                                          \
-    "# The above copyright notice and this permission notice shall be included in\n"                                               \
-    "# all copies or substantial portions of the Software.\n"                                                                      \
-    "#\n"                                                                                                                          \
-    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
-    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
-    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
-    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
-    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
-    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
-    "# IN THE SOFTWARE.\n"                                                                                                         \
+/* lib/handler/mruby/embedded/redis.rb */
+#define H2O_MRUBY_CODE_REDIS                                                                                                       \
+    "module H2O\n"                                                                                                                 \
     "\n"                                                                                                                           \
-    "module Kernel\n"                                                                                                              \
+    "  class Redis\n"                                                                                                              \
+    "    attr_reader :host\n"                                                                                                      \
+    "    attr_reader :port\n"                                                                                                      \
+    "    attr_reader :db\n"                                                                                                        \
+    "    attr_reader :password\n"                                                                                                  \
+    "    attr_reader :connect_timeout\n"                                                                                           \
+    "    attr_reader :command_timeout\n"                                                                                           \
     "\n"                                                                                                                           \
-    "  def _h2o_chunked_proc_each_to_fiber()\n"                                                                                    \
-    "    Proc.new do |args|\n"                                                                                                     \
-    "      src, generator = *args\n"                                                                                               \
-    "      fiber = Fiber.new do\n"                                                                                                 \
-    "        begin\n"                                                                                                              \
-    "          src.each do |chunk|\n"                                                                                              \
-    "            _h2o_send_chunk(chunk, generator)\n"                                                                              \
-    "          end\n"                                                                                                              \
-    "          _h2o_send_chunk_eos(generator)\n"                                                                                   \
-    "        rescue => e\n"                                                                                                        \
-    "          _h2o__send_error(e, generator)\n"                                                                                   \
+    "    def initialize(config)\n"                                                                                                 \
+    "      @host            = config[:host]\n"                                                                                     \
+    "      @port            = config[:port].to_i\n"                                                                                \
+    "      @db              = config[:db].to_i\n"                                                                                  \
+    "      @password        = config[:password]\n"                                                                                 \
+    "      @connect_timeout = (config[:connect_timeout] || config[:timeout] || 5).to_f\n"                                          \
+    "      @command_timeout = (config[:command_timeout] || config[:timeout] || 5).to_f\n"                                          \
+    "      __setup\n"                                                                                                              \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    # will be overriden by h2o (define here for passing compile check)\n"                                                     \
+    "    def __setup; end\n"                                                                                                       \
+    "    def __connect; end\n"                                                                                                     \
+    "    def disconnect; end\n"                                                                                                    \
+    "    def disconnected?; end\n"                                                                                                 \
+    "    def __call; end\n"                                                                                                        \
+    "\n"                                                                                                                           \
+    "    def db=(_db)\n"                                                                                                           \
+    "      old = @db\n"                                                                                                            \
+    "      @db = _db.to_i\n"                                                                                                       \
+    "      if ! disconnected? && @db != old\n"                                                                                     \
+    "        self.select(@db)\n"                                                                                                   \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def connect\n"                                                                                                            \
+    "      __connect\n"                                                                                                            \
+    "      self.auth(@password) if @password\n"                                                                                    \
+    "      self.select(@db) if @db != 0\n"                                                                                         \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def ensure_connected\n"                                                                                                   \
+    "      connect if disconnected?\n"                                                                                             \
+    "      yield\n"                                                                                                                \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    STREAMING_COMMANDS = %w(subscribe psubscribe).map {|c| [c, true] }.to_h\n"                                                \
+    "    NO_REPLY_COMMANDS  = %w(unsubscribe punsubscribe).map {|c| [c, true] }.to_h\n"                                            \
+    "    def _command_class(c)\n"                                                                                                  \
+    "      c = c.to_s.downcase\n"                                                                                                  \
+    "      if STREAMING_COMMANDS.include?(c)\n"                                                                                    \
+    "        Command::Streaming\n"                                                                                                 \
+    "      elsif NO_REPLY_COMMANDS.include?(c)\n"                                                                                  \
+    "        Command::NoReply\n"                                                                                                   \
+    "      elsif c.to_sym == :exec\n"                                                                                              \
+    "        Command::OneShot::Exec\n"                                                                                             \
+    "      else\n"                                                                                                                 \
+    "        Command::OneShot\n"                                                                                                   \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def call(*command_args, &block)\n"                                                                                        \
+    "      command_class = _command_class(command_args[0])\n"                                                                      \
+    "      ensure_connected do\n"                                                                                                  \
+    "        __call(command_args, command_class, &block)\n"                                                                        \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    # errors\n"                                                                                                               \
+    "    class BaseError < RuntimeError; end\n"                                                                                    \
+    "    class CommandError < BaseError\n"                                                                                         \
+    "      attr_reader :command\n"                                                                                                 \
+    "      def initialize(message, command)\n"                                                                                     \
+    "        super(\"%s (command: %s)\" % [message, command.args.join(' ')])\n"                                                    \
+    "        @command = command\n"                                                                                                 \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "    class ConnectionError < BaseError; end\n"                                                                                 \
+    "    class ProtocolError < BaseError; end\n"                                                                                   \
+    "    class TimeoutError < ConnectionError; end\n"                                                                              \
+    "    class ConnectTimeoutError < TimeoutError; end\n"                                                                          \
+    "    class CommandTimeoutError < TimeoutError; end\n"                                                                          \
+    "    class UnknownError < BaseError; end\n"                                                                                    \
+    "    class UnavailableCommandError < BaseError; end\n"                                                                         \
+    "\n"                                                                                                                           \
+    "    class Command\n"                                                                                                          \
+    "      attr_reader :args\n"                                                                                                    \
+    "\n"                                                                                                                           \
+    "      module ReplyReceiver\n"                                                                                                 \
+    "        def _validate_reply(reply)\n"                                                                                         \
+    "          raise reply if reply.kind_of?(RuntimeError)\n"                                                                      \
     "        end\n"                                                                                                                \
     "      end\n"                                                                                                                  \
-    "      fiber.resume\n"                                                                                                         \
+    "      include ReplyReceiver\n"                                                                                                \
+    "\n"                                                                                                                           \
+    "      def initialize(args)\n"                                                                                                 \
+    "        @args = args\n"                                                                                                       \
+    "      end\n"                                                                                                                  \
+    "\n"                                                                                                                           \
+    "\n"                                                                                                                           \
+    "      class OneShot < Command\n"                                                                                              \
+    "        def _on_reply(reply)\n"                                                                                               \
+    "          @reply = reply\n"                                                                                                   \
+    "        end\n"                                                                                                                \
+    "        def join\n"                                                                                                           \
+    "          if !@reply\n"                                                                                                       \
+    "            @reply = _h2o__redis_join_reply(self)\n"                                                                          \
+    "          end\n"                                                                                                              \
+    "          _validate_reply(@reply)\n"                                                                                          \
+    "          @reply\n"                                                                                                           \
+    "        end\n"                                                                                                                \
+    "\n"                                                                                                                           \
+    "        # exec may contain error reply in array reply, or nil reply when watch failed, so have to check it\n"                 \
+    "        class Exec < OneShot\n"                                                                                               \
+    "          def _validate_reply(reply)\n"                                                                                       \
+    "            if reply.nil?\n"                                                                                                  \
+    "              raise CommandError.new('transaction was aborted', self)\n"                                                      \
+    "            end\n"                                                                                                            \
+    "            super(reply)\n"                                                                                                   \
+    "            if reply.kind_of?(Array)\n"                                                                                       \
+    "              reply.each {|child| super(child) }\n"                                                                           \
+    "            end\n"                                                                                                            \
+    "          end\n"                                                                                                              \
+    "        end\n"                                                                                                                \
+    "      end\n"                                                                                                                  \
+    "\n"                                                                                                                           \
+    "      class NoReply < Command\n"                                                                                              \
+    "        def _on_reply(reply)\n"                                                                                               \
+    "          raise RuntimeError.new('no-reply command got reply: something went wrong?')\n"                                      \
+    "        end\n"                                                                                                                \
+    "        def join\n"                                                                                                           \
+    "          'OK'\n"                                                                                                             \
+    "        end\n"                                                                                                                \
+    "      end\n"                                                                                                                  \
+    "\n"                                                                                                                           \
+    "      class Streaming < Command\n"                                                                                            \
+    "        class Channel\n"                                                                                                      \
+    "          include ReplyReceiver\n"                                                                                            \
+    "          def initialize(command)\n"                                                                                          \
+    "            @command = command\n"                                                                                             \
+    "            @replies = []\n"                                                                                                  \
+    "            @unsubscribed = false\n"                                                                                          \
+    "            @error = nil\n"                                                                                                   \
+    "          end\n"                                                                                                              \
+    "          def _on_reply(reply)\n"                                                                                             \
+    "            @replies << reply\n"                                                                                              \
+    "          end\n"                                                                                                              \
+    "          def shift\n"                                                                                                        \
+    "            raise @error if @error\n"                                                                                         \
+    "            return nil if @replies.empty? && @unsubscribed\n"                                                                 \
+    "\n"                                                                                                                           \
+    "            begin\n"                                                                                                          \
+    "              if @replies.empty?\n"                                                                                           \
+    "                reply = _h2o__redis_join_reply(@command)\n"                                                                   \
+    "              else\n"                                                                                                         \
+    "                reply = @replies.shift\n"                                                                                     \
+    "              end\n"                                                                                                          \
+    "              _validate_reply(reply)\n"                                                                                       \
+    "            rescue => e\n"                                                                                                    \
+    "              @error = e # rethrow this error when called again\n"                                                            \
+    "              raise e\n"                                                                                                      \
+    "            end\n"                                                                                                            \
+    "\n"                                                                                                                           \
+    "            kind, channel, message = reply\n"                                                                                 \
+    "            if kind == 'unsubscribe'\n"                                                                                       \
+    "              return nil\n"                                                                                                   \
+    "            elsif kind != 'message'\n"                                                                                        \
+    "              raise \"unexpected kind of message: #{reply[0]}\"\n"                                                            \
+    "            end\n"                                                                                                            \
+    "            if block_given?\n"                                                                                                \
+    "              yield channel, message\n"                                                                                       \
+    "            else\n"                                                                                                           \
+    "              return channel, message\n"                                                                                      \
+    "            end\n"                                                                                                            \
+    "          end\n"                                                                                                              \
+    "        end\n"                                                                                                                \
+    "\n"                                                                                                                           \
+    "        def initialize(args)\n"                                                                                               \
+    "          super(args)\n"                                                                                                      \
+    "        end\n"                                                                                                                \
+    "        def _on_reply(reply)\n"                                                                                               \
+    "          if @channel\n"                                                                                                      \
+    "            @channel._on_reply(reply)\n"                                                                                      \
+    "          else\n"                                                                                                             \
+    "            @reply = reply\n"                                                                                                 \
+    "          end\n"                                                                                                              \
+    "        end\n"                                                                                                                \
+    "        def join\n"                                                                                                           \
+    "          if !@reply\n"                                                                                                       \
+    "            @reply = _h2o__redis_join_reply(self)\n"                                                                          \
+    "          end\n"                                                                                                              \
+    "          _validate_reply(@reply)\n"                                                                                          \
+    "          unless @reply[0] == 'subscribe'\n"                                                                                  \
+    "            raise \"unexpected kind of message: #{@reply[0]}\"\n"                                                             \
+    "          end\n"                                                                                                              \
+    "          @channel = Channel.new(self)\n"                                                                                     \
+    "        end\n"                                                                                                                \
+    "      end\n"                                                                                                                  \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def _do_block_ensuring(block, &ensuring)\n"                                                                               \
+    "      success = false\n"                                                                                                      \
+    "      begin\n"                                                                                                                \
+    "        block.call(self)\n"                                                                                                   \
+    "        success = true\n"                                                                                                     \
+    "      rescue ConnectionError => e\n"                                                                                          \
+    "        # if connection error happens, discard / unwatch are not needed anymore\n"                                            \
+    "        raise e\n"                                                                                                            \
+    "      ensure\n"                                                                                                               \
+    "        # to provide original exception information, pass through using ensure, not re-raise.\n"                              \
+    "        # are there more smart ways?\n"                                                                                       \
+    "        unless success\n"                                                                                                     \
+    "          begin\n"                                                                                                            \
+    "            ensuring.call\n"                                                                                                  \
+    "          end\n"                                                                                                              \
+    "        end\n"                                                                                                                \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def multi(&block)\n"                                                                                                      \
+    "      command = call(:MULTI)\n"                                                                                               \
+    "      return command unless block\n"                                                                                          \
+    "      _do_block_ensuring(block) { discard }\n"                                                                                \
+    "      exec\n"                                                                                                                 \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def watch(*keys, &block)\n"                                                                                               \
+    "      command = call(:WATCH, *keys)\n"                                                                                        \
+    "      return command unless block\n"                                                                                          \
+    "      _do_block_ensuring(block) { unwatch }\n"                                                                                \
+    "      command\n"                                                                                                              \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def quit\n"                                                                                                               \
+    "      begin\n"                                                                                                                \
+    "        command = call(:QUIT)\n"                                                                                              \
+    "      rescue ConnectionError\n"                                                                                               \
+    "        command = Command::NoReply.new\n"                                                                                     \
+    "      end\n"                                                                                                                  \
+    "\n"                                                                                                                           \
+    "      if block_given?\n"                                                                                                      \
+    "        yield command\n"                                                                                                      \
+    "      else\n"                                                                                                                 \
+    "        command\n"                                                                                                            \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def monitor\n"                                                                                                            \
+    "      # monitor command implementation in hiredis asynchronous API is absolutely dangerous, so don't use it!\n"               \
+    "      raise UnavailableCommandError.new('monitor command is unavailable')\n"                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    [\n"                                                                                                                      \
+    "      # Cluster\n"                                                                                                            \
+    "      %w(\n"                                                                                                                  \
+    "        cluster_addslots cluster_count_failure_reports cluster_countkeysinslot cluster_delslots cluster_failover "            \
+    "cluster_forget\n"                                                                                                             \
+    "        cluster_getkeysinslot cluster_info cluster_keyslot cluster_meet cluster_nodes cluster_replicate\n"                    \
+    "        cluster_reset cluster_saveconfig cluster_set_config_epoch cluster_setslot cluster_slaves cluster_slots\n"             \
+    "        readonly readwrite\n"                                                                                                 \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Connection\n"                                                                                                         \
+    "      %w(\n"                                                                                                                  \
+    "        auth echo ping select swapdb\n"                                                                                       \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Generic\n"                                                                                                            \
+    "      %w(\n"                                                                                                                  \
+    "        del dump exists expire expireat keys\n"                                                                               \
+    "        migrate move object persist pexpire pexpireat\n"                                                                      \
+    "        pttl randomkey rename renamenx restore sort\n"                                                                        \
+    "        touch ttl type unlink wait scan\n"                                                                                    \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Geo\n"                                                                                                                \
+    "      %w(\n"                                                                                                                  \
+    "        geoadd geohash geopos geodist georadius georadiusbymember\n"                                                          \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Hash\n"                                                                                                               \
+    "      %w(\n"                                                                                                                  \
+    "        hdel hexists hget hgetall hincrby hincrbyfloat\n"                                                                     \
+    "        hkeys hlen hmget hmset hset hsetnx\n"                                                                                 \
+    "        hstrlen hvals hscan\n"                                                                                                \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Hyperloglog\n"                                                                                                        \
+    "      %w(\n"                                                                                                                  \
+    "        pfadd pfcount pfmerge\n"                                                                                              \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # List\n"                                                                                                               \
+    "      %w(\n"                                                                                                                  \
+    "        blpop brpop brpoplpush lindex linsert llen\n"                                                                         \
+    "        lpop lpush lpushx lrange lrem lset\n"                                                                                 \
+    "        ltrim rpop rpoplpush rpush rpushx\n"                                                                                  \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Pubsub\n"                                                                                                             \
+    "      %w(\n"                                                                                                                  \
+    "        pubsub publish\n"                                                                                                     \
+    "      ),\n"                                                                                                                   \
+    "      %w(\n"                                                                                                                  \
+    "        psubscribe punsubscribe subscribe unsubscribe\n"                                                                      \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Scripting\n"                                                                                                          \
+    "      %w(\n"                                                                                                                  \
+    "        eval evalsha script_debug script_exists script_flush script_kill script_load\n"                                       \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Server\n"                                                                                                             \
+    "      %w(\n"                                                                                                                  \
+    "        bgrewriteaof bgsave client_kill client_list client_getname client_pause\n"                                            \
+    "        client_reply client_setname command command_count command_getkeys command_info\n"                                     \
+    "        config_get config_rewrite config_set config_resetstat dbsize debug_object\n"                                          \
+    "        debug_segfault flushall flushdb info lastsave\n"                                                                      \
+    "        role save shutdown slaveof slowlog sync time\n"                                                                       \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Set\n"                                                                                                                \
+    "      %w(\n"                                                                                                                  \
+    "        sadd scard sdiff sdiffstore sinter sinterstore\n"                                                                     \
+    "        sismember smembers smove spop srandmember srem\n"                                                                     \
+    "        sunion sunionstore sscan\n"                                                                                           \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # SortedSet\n"                                                                                                          \
+    "      %w(\n"                                                                                                                  \
+    "        zadd zcard zcount zincrby zinterstore zlexcount\n"                                                                    \
+    "        zrange zrangebylex zrevrangebylex zrangebyscore zrank zrem\n"                                                         \
+    "        zremrangebylex zremrangebyrank zremrangebyscore zrevrange zrevrangebyscore zrevrank\n"                                \
+    "        zscore zunionstore zscan\n"                                                                                           \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # String\n"                                                                                                             \
+    "      %w(\n"                                                                                                                  \
+    "        append bitcount bitfield bitop bitpos decr\n"                                                                         \
+    "        decrby get getbit getrange getset incr\n"                                                                             \
+    "        incrby incrbyfloat mget mset msetnx psetex\n"                                                                         \
+    "        set setbit setex setnx setrange strlen\n"                                                                             \
+    "      ),\n"                                                                                                                   \
+    "\n"                                                                                                                           \
+    "      # Transactions\n"                                                                                                       \
+    "      %w(\n"                                                                                                                  \
+    "        discard exec unwatch\n"                                                                                               \
+    "      ),\n"                                                                                                                   \
+    "    ].flatten.each {|method|\n"                                                                                               \
+    "      method_args = method.upcase.split(/_/, 2)\n"                                                                            \
+    "      method_args[1].gsub!('_', '-') if method_args[1]\n"                                                                     \
+    "      self.define_method(method) {|*args, &block|\n"                                                                          \
+    "        call(*method_args, *args, &block)\n"                                                                                  \
+    "      }\n"                                                                                                                    \
+    "    }\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
     "end\n"

@@ -21,3 +21,12 @@ matrix:
       before_install: *bi
       script:
         - make -f misc/docker-ci/check.mk fuzz
+    - os: linux
+      sudo: required
+      services:
+        - docker
+      env:
+        - label=openssl-1.1.0
+      before_install: *bi
+      script:
+        - make -f misc/docker-ci/check.mk ossl1.1.0

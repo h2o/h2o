@@ -23,7 +23,7 @@ static mrb_value
 mrb_str_setbyte(mrb_state *mrb, mrb_value str)
 {
   mrb_int pos, byte;
-  long len;
+  mrb_int len;
 
   mrb_get_args(mrb, "ii", &pos, &byte);
 
@@ -35,7 +35,7 @@ mrb_str_setbyte(mrb_state *mrb, mrb_value str)
 
   mrb_str_modify(mrb, mrb_str_ptr(str));
   byte &= 0xff;
-  RSTRING_PTR(str)[pos] = byte;
+  RSTRING_PTR(str)[pos] = (unsigned char)byte;
   return mrb_fixnum_value((unsigned char)byte);
 }
 
@@ -44,12 +44,13 @@ mrb_str_byteslice(mrb_state *mrb, mrb_value str)
 {
   mrb_value a1;
   mrb_int len;
-  int argc;
 
-  argc = mrb_get_args(mrb, "o|i", &a1, &len);
-  if (argc == 2) {
-    return mrb_str_substr(mrb, str, mrb_fixnum(a1), len);
+  if (mrb_get_argc(mrb) == 2) {
+    mrb_int pos;
+    mrb_get_args(mrb, "ii", &pos, &len);
+    return mrb_str_substr(mrb, str, pos, len);
   }
+  mrb_get_args(mrb, "o|i", &a1, &len);
   switch (mrb_type(a1)) {
   case MRB_TT_RANGE:
     {
@@ -67,9 +68,11 @@ mrb_str_byteslice(mrb_state *mrb, mrb_value str)
       }
       return mrb_nil_value();
     }
+#ifndef MRB_WITHOUT_FLOAT
   case MRB_TT_FLOAT:
     a1 = mrb_fixnum_value((mrb_int)mrb_float(a1));
     /* fall through */
+#endif
   case MRB_TT_FIXNUM:
     return mrb_str_substr(mrb, str, mrb_fixnum(a1), 1);
   default:
@@ -306,60 +309,6 @@ mrb_fixnum_chr(mrb_state *mrb, mrb_value num)
 
 /*
  *  call-seq:
- *     string.lines    ->  array of string
- *
- *  Returns strings per line;
- *
- *     a = "abc\ndef"
- *     a.lines    #=> ["abc\n", "def"]
- */
-static mrb_value
-mrb_str_lines(mrb_state *mrb, mrb_value self)
-{
-  mrb_value result;
-  mrb_value blk;
-  int ai;
-  mrb_int len;
-  mrb_value arg;
-  char *b = RSTRING_PTR(self);
-  char *p = b, *t;
-  char *e = b + RSTRING_LEN(self);
-
-  mrb_get_args(mrb, "&", &blk);
-
-  result = mrb_ary_new(mrb);
-  ai = mrb_gc_arena_save(mrb);
-  if (!mrb_nil_p(blk)) {
-    while (p < e) {
-      t = p;
-      while (p < e && *p != '\n') p++;
-      if (*p == '\n') p++;
-      len = (mrb_int) (p - t);
-      arg = mrb_str_new(mrb, t, len);
-      mrb_yield_argv(mrb, blk, 1, &arg);
-      mrb_gc_arena_restore(mrb, ai);
-      if (b != RSTRING_PTR(self)) {
-        ptrdiff_t diff = p - b;
-        b = RSTRING_PTR(self);
-        p = b + diff;
-      }
-      e = b + RSTRING_LEN(self);
-    }
-    return self;
-  }
-  while (p < e) {
-    t = p;
-    while (p < e && *p != '\n') p++;
-    if (*p == '\n') p++;
-    len = (mrb_int) (p - t);
-    mrb_ary_push(mrb, result, mrb_str_new(mrb, t, len));
-    mrb_gc_arena_restore(mrb, ai);
-  }
-  return result;
-}
-
-/*
- *  call-seq:
  *     string.succ    ->  string
  *
  *  Returns next sequence of the string;
@@ -521,133 +470,141 @@ mrb_str_ord(mrb_state* mrb, mrb_value str)
 }
 #endif
 
-static mrb_bool
-all_digits_p(const char *s, mrb_int len)
+/*
+ *  call-seq:
+ *     str.delete_prefix!(prefix) -> self or nil
+ *
+ *  Deletes leading <code>prefix</code> from <i>str</i>, returning
+ *  <code>nil</code> if no change was made.
+ *
+ *     "hello".delete_prefix!("hel") #=> "lo"
+ *     "hello".delete_prefix!("llo") #=> nil
+ */
+static mrb_value
+mrb_str_del_prefix_bang(mrb_state *mrb, mrb_value self)
 {
-  while (len-- > 0) {
-    if (!ISDIGIT(*s)) return FALSE;
-    s++;
+  mrb_int plen, slen;
+  char *ptr, *s;
+  struct RString *str = RSTRING(self);
+
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTR_LEN(str);
+  if (plen > slen) return mrb_nil_value();
+  s = RSTR_PTR(str);
+  if (memcmp(s, ptr, plen) != 0) return mrb_nil_value();
+  if (!MRB_FROZEN_P(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
+    str->as.heap.ptr += plen;
   }
-  return TRUE;
+  else {
+    mrb_str_modify(mrb, str);
+    s = RSTR_PTR(str);
+    memmove(s, s+plen, slen-plen);
+  }
+  RSTR_SET_LEN(str, slen-plen);
+  return self;
 }
 
 /*
  *  call-seq:
- *     str.upto(other_str, exclusive=false) {|s| block }   -> str
- *     str.upto(other_str, exclusive=false)                -> an_enumerator
+ *     str.delete_prefix(prefix) -> new_str
  *
- *  Iterates through successive values, starting at <i>str</i> and
- *  ending at <i>other_str</i> inclusive, passing each value in turn to
- *  the block. The <code>String#succ</code> method is used to generate
- *  each value.  If optional second argument exclusive is omitted or is false,
- *  the last value will be included; otherwise it will be excluded.
+ *  Returns a copy of <i>str</i> with leading <code>prefix</code> deleted.
  *
- *  If no block is given, an enumerator is returned instead.
- *
- *     "a8".upto("b6") {|s| print s, ' ' }
- *     for s in "a8".."b6"
- *       print s, ' '
- *     end
- *
- *  <em>produces:</em>
- *
- *     a8 a9 b0 b1 b2 b3 b4 b5 b6
- *     a8 a9 b0 b1 b2 b3 b4 b5 b6
- *
- *  If <i>str</i> and <i>other_str</i> contains only ascii numeric characters,
- *  both are recognized as decimal numbers. In addition, the width of
- *  string (e.g. leading zeros) is handled appropriately.
- *
- *     "9".upto("11").to_a   #=> ["9", "10", "11"]
- *     "25".upto("5").to_a   #=> []
- *     "07".upto("11").to_a  #=> ["07", "08", "09", "10", "11"]
+ *     "hello".delete_prefix("hel") #=> "lo"
+ *     "hello".delete_prefix("llo") #=> "hello"
  */
 static mrb_value
-mrb_str_upto(mrb_state *mrb, mrb_value beg)
+mrb_str_del_prefix(mrb_state *mrb, mrb_value self)
 {
-  mrb_value end;
-  mrb_value exclusive = mrb_false_value();
-  mrb_value block = mrb_nil_value();
-  mrb_value current, after_end;
-  mrb_int n;
-  mrb_bool excl;
+  mrb_int plen, slen;
+  char *ptr;
 
-  mrb_get_args(mrb, "o|o&", &end, &exclusive, &block);
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTRING_LEN(self);
+  if (plen > slen) return mrb_str_dup(mrb, self);
+  if (memcmp(RSTRING_PTR(self), ptr, plen) != 0)
+    return mrb_str_dup(mrb, self);
+  return mrb_str_substr(mrb, self, plen, slen-plen);
+}
 
-  if (mrb_nil_p(block)) {
-    return mrb_funcall(mrb, beg, "to_enum", 3, mrb_symbol_value(mrb_intern_lit(mrb, "upto")), end, exclusive);
+/*
+ *  call-seq:
+ *     str.delete_suffix!(suffix) -> self or nil
+ *
+ *  Deletes trailing <code>suffix</code> from <i>str</i>, returning
+ *  <code>nil</code> if no change was made.
+ *
+ *     "hello".delete_suffix!("llo") #=> "he"
+ *     "hello".delete_suffix!("hel") #=> nil
+ */
+static mrb_value
+mrb_str_del_suffix_bang(mrb_state *mrb, mrb_value self)
+{
+  mrb_int plen, slen;
+  char *ptr, *s;
+  struct RString *str = RSTRING(self);
+
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTR_LEN(str);
+  if (plen > slen) return mrb_nil_value();
+  s = RSTR_PTR(str);
+  if (memcmp(s+slen-plen, ptr, plen) != 0) return mrb_nil_value();
+  if (!MRB_FROZEN_P(str) && (RSTR_SHARED_P(str) || RSTR_FSHARED_P(str))) {
+    /* no need to modify string */
   }
-  end = mrb_string_type(mrb, end);
-  excl = mrb_test(exclusive);
-
-  /* single character */
-  if (RSTRING_LEN(beg) == 1 && RSTRING_LEN(end) == 1 &&
-  ISASCII(RSTRING_PTR(beg)[0]) && ISASCII(RSTRING_PTR(end)[0])) {
-    char c = RSTRING_PTR(beg)[0];
-    char e = RSTRING_PTR(end)[0];
-    int ai = mrb_gc_arena_save(mrb);
-
-    if (c > e || (excl && c == e)) return beg;
-    for (;;) {
-      mrb_yield(mrb, block, mrb_str_new(mrb, &c, 1));
-      mrb_gc_arena_restore(mrb, ai);
-      if (!excl && c == e) break;
-      c++;
-      if (excl && c == e) break;
-    }
-    return beg;
+  else {
+    mrb_str_modify(mrb, str);
   }
-  /* both edges are all digits */
-  if (ISDIGIT(RSTRING_PTR(beg)[0]) && ISDIGIT(RSTRING_PTR(end)[0]) &&
-      all_digits_p(RSTRING_PTR(beg), RSTRING_LEN(beg)) &&
-      all_digits_p(RSTRING_PTR(end), RSTRING_LEN(end))) {
-    mrb_int min_width = RSTRING_LEN(beg);
-    mrb_int bi = mrb_int(mrb, mrb_str_to_inum(mrb, beg, 10, FALSE));
-    mrb_int ei = mrb_int(mrb, mrb_str_to_inum(mrb, end, 10, FALSE));
-    int ai = mrb_gc_arena_save(mrb);
+  RSTR_SET_LEN(str, slen-plen);
+  return self;
+}
 
-    while (bi <= ei) {
-      mrb_value ns, str;
+/*
+ *  call-seq:
+ *     str.delete_suffix(suffix) -> new_str
+ *
+ *  Returns a copy of <i>str</i> with leading <code>suffix</code> deleted.
+ *
+ *     "hello".delete_suffix("hel") #=> "lo"
+ *     "hello".delete_suffix("llo") #=> "hello"
+ */
+static mrb_value
+mrb_str_del_suffix(mrb_state *mrb, mrb_value self)
+{
+  mrb_int plen, slen;
+  char *ptr;
 
-      if (excl && bi == ei) break;
-      ns = mrb_format(mrb, "%S", mrb_fixnum_value(bi));
-      if (min_width > RSTRING_LEN(ns)) {
-        str = mrb_str_new(mrb, NULL, min_width);
-        memset(RSTRING_PTR(str), '0', min_width-RSTRING_LEN(ns));
-        memcpy(RSTRING_PTR(str)+min_width-RSTRING_LEN(ns),
-               RSTRING_PTR(ns), RSTRING_LEN(ns));
-      }
-      else {
-        str = ns;
-      }
-      mrb_yield(mrb, block, str);
-      mrb_gc_arena_restore(mrb, ai);
-      bi++;
-    }
+  mrb_get_args(mrb, "s", &ptr, &plen);
+  slen = RSTRING_LEN(self);
+  if (plen > slen) return mrb_str_dup(mrb, self);
+  if (memcmp(RSTRING_PTR(self)+slen-plen, ptr, plen) != 0)
+    return mrb_str_dup(mrb, self);
+  return mrb_str_substr(mrb, self, 0, slen-plen);
+}
 
-    return beg;
-  }
-  /* normal case */
-  n = mrb_int(mrb, mrb_funcall(mrb, beg, "<=>", 1, end));
-  if (n > 0 || (excl && n == 0)) return beg;
+static mrb_value
+mrb_str_lines(mrb_state *mrb, mrb_value self)
+{
+  mrb_value result;
+  int ai;
+  mrb_int len;
+  char *b = RSTRING_PTR(self);
+  char *p = b, *t;
+  char *e = b + RSTRING_LEN(self);
 
-  after_end = mrb_funcall(mrb, end, "succ", 0);
-  current = mrb_str_dup(mrb, beg);
-  while (!mrb_str_equal(mrb, current, after_end)) {
-    int ai = mrb_gc_arena_save(mrb);
-    mrb_value next = mrb_nil_value();
-    if (excl || !mrb_str_equal(mrb, current, end))
-      next = mrb_funcall(mrb, current, "succ", 0);
-    mrb_yield(mrb, block, current);
-    if (mrb_nil_p(next)) break;
-    current = mrb_str_to_str(mrb, next);
-    if (excl && mrb_str_equal(mrb, current, end)) break;
-    if (RSTRING_LEN(current) > RSTRING_LEN(end) || RSTRING_LEN(current) == 0)
-      break;
+  mrb_get_args(mrb, "");
+
+  result = mrb_ary_new(mrb);
+  ai = mrb_gc_arena_save(mrb);
+  while (p < e) {
+    t = p;
+    while (p < e && *p != '\n') p++;
+    if (*p == '\n') p++;
+    len = (mrb_int) (p - t);
+    mrb_ary_push(mrb, result, mrb_str_new(mrb, t, len));
     mrb_gc_arena_restore(mrb, ai);
   }
-
-  return beg;
+  return result;
 }
 
 void
@@ -668,14 +625,17 @@ mrb_mruby_string_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, s, "hex",             mrb_str_hex,             MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "oct",             mrb_str_oct,             MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "chr",             mrb_str_chr,             MRB_ARGS_NONE());
-  mrb_define_method(mrb, s, "lines",           mrb_str_lines,           MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ",            mrb_str_succ,            MRB_ARGS_NONE());
   mrb_define_method(mrb, s, "succ!",           mrb_str_succ_bang,       MRB_ARGS_NONE());
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next"), mrb_intern_lit(mrb, "succ"));
   mrb_alias_method(mrb, s, mrb_intern_lit(mrb, "next!"), mrb_intern_lit(mrb, "succ!"));
-  mrb_define_method(mrb, s, "ord", mrb_str_ord, MRB_ARGS_NONE());
-  mrb_define_method(mrb, s, "upto", mrb_str_upto, MRB_ARGS_ANY());
+  mrb_define_method(mrb, s, "ord",             mrb_str_ord,             MRB_ARGS_NONE());
+  mrb_define_method(mrb, s, "delete_prefix!",  mrb_str_del_prefix_bang, MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "delete_prefix",   mrb_str_del_prefix,      MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "delete_suffix!",  mrb_str_del_suffix_bang, MRB_ARGS_REQ(1));
+  mrb_define_method(mrb, s, "delete_suffix",   mrb_str_del_suffix,      MRB_ARGS_REQ(1));
 
+  mrb_define_method(mrb, s, "__lines",         mrb_str_lines,           MRB_ARGS_NONE());
   mrb_define_method(mrb, mrb->fixnum_class, "chr", mrb_fixnum_chr, MRB_ARGS_NONE());
 }
 

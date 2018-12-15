@@ -298,7 +298,6 @@ EOS
       mrbtest = exefile("#{build_dir}/bin/mrbtest")
       sh "#{filename mrbtest.relative_path}#{$verbose ? ' -v' : ''}"
       puts
-      run_bintest if bintest_enabled?
     end
 
     def run_bintest
@@ -334,6 +333,7 @@ EOS
     attr_accessor :host_target, :build_target
 
     def initialize(name, build_dir=nil, &block)
+      @endian = nil
       @test_runner = Command::CrossTestRunner.new(self)
       super
     end
@@ -343,6 +343,7 @@ EOS
     end
 
     def run_test
+      @test_runner.runner_options << ' -v' if $verbose
       mrbtest = exefile("#{build_dir}/bin/mrbtest")
       if (@test_runner.command == nil)
         puts "You should run #{mrbtest} on target device."
@@ -350,6 +351,27 @@ EOS
       else
         @test_runner.run(mrbtest)
       end
+    end
+
+    def big_endian
+      if @endian
+        puts "Endian has already specified as #{@endian}."
+        return
+      end
+      @endian = :big
+      @mrbc.compile_options += ' -E'
+      compilers.each do |c|
+        c.defines += %w(MRB_ENDIAN_BIG)
+      end
+    end
+
+    def little_endian
+      if @endian
+        puts "Endian has already specified as #{@endian}."
+        return
+      end
+      @endian = :little
+      @mrbc.compile_options += ' -e'
     end
   end # CrossBuild
 end # MRuby

@@ -66,7 +66,7 @@ static int setup_ssl(const char *cert_file, const char *key_file)
     SSL_CTX_set_options(accept_ctx.ssl_ctx, SSL_OP_NO_SSLv2);
 
     /* load certificate and private key */
-    if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_certificate_chain_file(accept_ctx.ssl_ctx, cert_file) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
         return -1;
     }

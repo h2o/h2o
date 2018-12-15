@@ -123,7 +123,7 @@ fiber_init(mrb_state *mrb, mrb_value self)
 
   /* adjust return callinfo */
   ci = c->ci;
-  ci->target_class = p->target_class;
+  ci->target_class = MRB_PROC_TARGET_CLASS(p);
   ci->proc = p;
   mrb_field_write_barrier(mrb, (struct RBasic*)mrb_obj_ptr(self), (struct RBasic*)p);
   ci->pc = p->body.irep->iseq;
@@ -187,38 +187,41 @@ fiber_switch(mrb_state *mrb, mrb_value self, mrb_int len, const mrb_value *a, mr
 {
   struct mrb_context *c = fiber_check(mrb, self);
   struct mrb_context *old_c = mrb->c;
+  enum mrb_fiber_state status;
   mrb_value value;
 
   fiber_check_cfunc(mrb, c);
-  if (resume && c->status == MRB_FIBER_TRANSFERRED) {
+  status = c->status;
+  if (resume && status == MRB_FIBER_TRANSFERRED) {
     mrb_raise(mrb, E_FIBER_ERROR, "resuming transferred fiber");
   }
-  if (c->status == MRB_FIBER_RUNNING || c->status == MRB_FIBER_RESUMED) {
-    mrb_raise(mrb, E_FIBER_ERROR, "double resume (fib)");
+  if (status == MRB_FIBER_RUNNING || status == MRB_FIBER_RESUMED) {
+    mrb_raise(mrb, E_FIBER_ERROR, "double resume");
   }
-  if (c->status == MRB_FIBER_TERMINATED) {
+  if (status == MRB_FIBER_TERMINATED) {
     mrb_raise(mrb, E_FIBER_ERROR, "resuming dead fiber");
   }
-  mrb->c->status = resume ? MRB_FIBER_RESUMED : MRB_FIBER_TRANSFERRED;
+  old_c->status = resume ? MRB_FIBER_RESUMED : MRB_FIBER_TRANSFERRED;
   c->prev = resume ? mrb->c : (c->prev ? c->prev : mrb->root_c);
-  if (c->status == MRB_FIBER_CREATED) {
+  fiber_switch_context(mrb, c);
+  if (status == MRB_FIBER_CREATED) {
     mrb_value *b, *e;
 
-    if (len >= c->stend - c->stack) {
-      mrb_raise(mrb, E_FIBER_ERROR, "too many arguments to fiber");
+    if (!c->ci->proc) {
+      mrb_raise(mrb, E_FIBER_ERROR, "double resume (current)");
     }
+    mrb_stack_extend(mrb, len+2); /* for receiver and (optional) block */
     b = c->stack+1;
     e = b + len;
     while (b<e) {
       *b++ = *a++;
     }
-    c->cibase->argc = len;
-    value = c->stack[0] = c->ci->proc->env->stack[0];
+    c->cibase->argc = (int)len;
+    value = c->stack[0] = MRB_PROC_ENV(c->ci->proc)->stack[0];
   }
   else {
     value = fiber_result(mrb, a, len);
   }
-  fiber_switch_context(mrb, c);
 
   if (vmexec) {
     c->vmexec = TRUE;
@@ -274,12 +277,13 @@ mrb_fiber_resume(mrb_state *mrb, mrb_value fib, mrb_int len, const mrb_value *a)
  *  Returns true if the fiber can still be resumed. After finishing
  *  execution of the fiber block this method will always return false.
  */
-static mrb_value
-fiber_alive_p(mrb_state *mrb, mrb_value self)
+MRB_API mrb_value
+mrb_fiber_alive_p(mrb_state *mrb, mrb_value self)
 {
   struct mrb_context *c = fiber_check(mrb, self);
   return mrb_bool_value(c->status != MRB_FIBER_TERMINATED);
 }
+#define fiber_alive_p mrb_fiber_alive_p
 
 static mrb_value
 fiber_eq(mrb_state *mrb, mrb_value self)

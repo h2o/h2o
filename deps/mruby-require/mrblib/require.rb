@@ -1,13 +1,14 @@
 class LoadError < ScriptError; end
 
+$__mruby_require_toplevel_self__ = self
 begin
   eval "1", nil
   def _require_eval_load(*args)
-    self.eval(*args)
+    $__mruby_require_toplevel_self__.eval(*args)
   end
 rescue ArgumentError
   def _require_eval_load(*args)
-    self.eval(args[0])
+    $__mruby_require_toplevel_self__.eval(args[0])
   end
 end
 
@@ -21,7 +22,7 @@ module Kernel
       # _load_rb_str File.open(path).read.to_s, path
       _require_eval_load File.open(path).read.to_s, nil, path
     else
-      raise LoadError.new "File not found -- #{path}"
+      raise LoadError, "File not found -- #{path}"
     end
 
     true
@@ -32,7 +33,7 @@ module Kernel
 
     # require method can load .rb, .mrb or without-ext filename only.
     unless ["", ".rb", ".mrb"].include? File.extname(path)
-      raise LoadError.new "cannot load such file -- #{path}"
+      raise LoadError, "cannot load such file -- #{path}"
     end
 
     filenames = []
@@ -47,32 +48,26 @@ module Kernel
     filename = nil
     if ['/', '.'].include? path[0]
       path0 = filenames.find do |fname|
-        File.file?(fname) && File.exist?(fname)
+        File.file?(fname)
       end
     else
       dir = ($LOAD_PATH || []).find do |dir0|
         filename = filenames.find do |fname|
           path0 = File.join dir0, fname
-          File.file?(path0) && File.exist?(path0)
+          File.file?(path0)
         end
       end
       path0 = dir && filename ? File.join(dir, filename) : nil
     end
 
-    if path0 && File.exist?(path0) && File.file?(path0)
-      __require__ path0
-    else
-      raise LoadError.new "cannot load such file -- #{path}"
+    unless path0 && File.file?(path0)
+      raise LoadError, "cannot load such file -- #{path}"
     end
-  end
 
-  def __require__(realpath)
-    raise LoadError.new "File not found -- #{realpath}"  unless File.exist? realpath
-    $" ||= []
-    $__mruby_loading_files__ ||= []
+    realpath = File.realpath(path0)
 
     # already required
-    return false  if ($" + $__mruby_loading_files__).include?(realpath)
+    return false if ($" + $__mruby_loading_files__).include?(realpath)
 
     $__mruby_loading_files__ << realpath
     load realpath
@@ -86,11 +81,9 @@ end
 
 $LOAD_PATH ||= []
 $LOAD_PATH << '.'
-
 if Object.const_defined?(:ENV)
   $LOAD_PATH.unshift(*ENV['MRBLIB'].split(':')) unless ENV['MRBLIB'].nil?
 end
-
 $LOAD_PATH.uniq!
 
 $" ||= []

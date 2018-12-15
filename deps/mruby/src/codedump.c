@@ -189,13 +189,13 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       print_lv(mrb, irep, c, RA);
       break;
     case OP_JMP:
-      printf("OP_JMP\t%03d\n", i+GETARG_sBx(c));
+      printf("OP_JMP\t%03d (%d)\n", i+GETARG_sBx(c), GETARG_sBx(c));
       break;
     case OP_JMPIF:
-      printf("OP_JMPIF\tR%d\t%03d\n", GETARG_A(c), i+GETARG_sBx(c));
+      printf("OP_JMPIF\tR%d\t%03d (%d)\n", GETARG_A(c), i+GETARG_sBx(c), GETARG_sBx(c));
       break;
     case OP_JMPNOT:
-      printf("OP_JMPNOT\tR%d\t%03d\n", GETARG_A(c), i+GETARG_sBx(c));
+      printf("OP_JMPNOT\tR%d\t%03d (%d)\n", GETARG_A(c), i+GETARG_sBx(c), GETARG_sBx(c));
       break;
     case OP_SEND:
       printf("OP_SEND\tR%d\t:%s\t%d\n", GETARG_A(c),
@@ -206,6 +206,9 @@ codedump(mrb_state *mrb, mrb_irep *irep)
       printf("OP_SENDB\tR%d\t:%s\t%d\n", GETARG_A(c),
              mrb_sym2name(mrb, irep->syms[GETARG_B(c)]),
              GETARG_C(c));
+      break;
+    case OP_CALL:
+      printf("OP_CALL\tR%d\n", GETARG_A(c));
       break;
     case OP_TAILCALL:
       printf("OP_TAILCALL\tR%d\t:%s\t%d\n", GETARG_A(c),
@@ -311,22 +314,22 @@ codedump(mrb_state *mrb, mrb_irep *irep)
              GETARG_C(c));
       break;
     case OP_LT:
-      printf("OP_LT\tR%d\t:%s\t%d\n", GETARG_A(c),
+      printf("OP_LT\t\tR%d\t:%s\t%d\n", GETARG_A(c),
              mrb_sym2name(mrb, irep->syms[GETARG_B(c)]),
              GETARG_C(c));
       break;
     case OP_LE:
-      printf("OP_LE\tR%d\t:%s\t%d\n", GETARG_A(c),
+      printf("OP_LE\t\tR%d\t:%s\t%d\n", GETARG_A(c),
              mrb_sym2name(mrb, irep->syms[GETARG_B(c)]),
              GETARG_C(c));
       break;
     case OP_GT:
-      printf("OP_GT\tR%d\t:%s\t%d\n", GETARG_A(c),
+      printf("OP_GT\t\tR%d\t:%s\t%d\n", GETARG_A(c),
              mrb_sym2name(mrb, irep->syms[GETARG_B(c)]),
              GETARG_C(c));
       break;
     case OP_GE:
-      printf("OP_GE\tR%d\t:%s\t%d\n", GETARG_A(c),
+      printf("OP_GE\t\tR%d\t:%s\t%d\n", GETARG_A(c),
              mrb_sym2name(mrb, irep->syms[GETARG_B(c)]),
              GETARG_C(c));
       break;

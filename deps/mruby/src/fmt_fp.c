@@ -36,6 +36,7 @@ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <mruby.h>
 #include <mruby/string.h>
 
+#ifndef MRB_WITHOUT_FLOAT
 struct fmt_args {
   mrb_state *mrb;
   mrb_value str;
@@ -370,3 +371,4 @@ mrb_float_to_str(mrb_state *mrb, mrb_value flo, const char *fmt)
   }
   return f.str;
 }
+#endif

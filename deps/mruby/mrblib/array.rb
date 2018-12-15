@@ -184,12 +184,6 @@ class Array
     return block.call if ret.nil? && block
     ret
   end
-
-  # internal method to convert multi-value to single value
-  def __svalue
-    return self.first if self.size < 2
-    self
-  end
 end
 
 ##
@@ -200,28 +194,31 @@ class Array
 
   ##
   # Quick sort
-  # a     : the array to sort
   # left  : the beginning of sort region
   # right : the end of sort region
-  def __sort_sub__(a, left, right, &block)
-    if left < right
-      i = left
-      j = right
-      pivot = a[i + (j - i) / 2]
-      while true
-        while ((block)? block.call(a[i], pivot): (a[i] <=> pivot)) < 0
+  def __sort_sub__(left, right, &block)
+    stack = [ [left, right] ]
+    until stack.empty?
+      left, right = stack.pop
+      if left < right
+        i = left
+        j = right
+        pivot = self[i + (j - i) / 2]
+        while true
+          while ((block)? block.call(self[i], pivot): (self[i] <=> pivot)) < 0
+            i += 1
+          end
+          while ((block)? block.call(pivot, self[j]): (pivot <=> self[j])) < 0
+            j -= 1
+          end
+          break if (i >= j)
+          tmp = self[i]; self[i] = self[j]; self[j] = tmp;
           i += 1
-        end
-        while ((block)? block.call(pivot, a[j]): (pivot <=> a[j])) < 0
           j -= 1
         end
-        break if (i >= j)
-        tmp = a[i]; a[i] = a[j]; a[j] = tmp;
-        i += 1
-        j -= 1
+        stack.push [left, i-1]
+        stack.push [j+1, right]
       end
-      __sort_sub__(a, left, i-1, &block)
-      __sort_sub__(a, j+1, right, &block)
     end
   end
   #  private :__sort_sub__
@@ -232,7 +229,7 @@ class Array
   def sort!(&block)
     size = self.size
     if size > 1
-      __sort_sub__(self, 0, size - 1, &block)
+      __sort_sub__(0, size - 1, &block)
     end
     self
   end

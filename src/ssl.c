@@ -106,7 +106,7 @@ H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
 static void spawn_cache_cleanup_thread(SSL_CTX **_contexts, size_t num_contexts)
 {
     /* copy the list of contexts */
-    SSL_CTX **contexts = malloc(sizeof(*contexts) * (num_contexts + 1));
+    SSL_CTX **contexts = h2o_mem_alloc(sizeof(*contexts) * (num_contexts + 1));
     h2o_memcpy(contexts, _contexts, sizeof(*contexts) * num_contexts);
     contexts[num_contexts] = NULL;
 
@@ -273,8 +273,10 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
             ticket = temp_ticket = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), 0, UINT64_MAX, 1);
         }
         memcpy(key_name, ticket->name, sizeof(ticket->name));
-        EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
-        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        ret = EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
+        assert(ret);
+        ret = HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        assert(ret);
         if (temp_ticket != NULL)
             free_ticket(ticket);
         ret = 1;
@@ -290,8 +292,10 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
         ret = 0;
         goto Exit;
     Found:
-        EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
-        HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        ret = EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
+        assert(ret);
+        ret = HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        assert(ret);
         /* Request renewal if the youngest key is active */
         if (i != 0 && session_tickets.tickets.entries[i - 1]->not_before <= time(NULL))
             ret = 2;

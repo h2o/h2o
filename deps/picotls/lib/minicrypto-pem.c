@@ -33,7 +33,6 @@
 #include "picotls/asn1.h"
 #include "picotls/pembase64.h"
 
-
 /*
  * This function could be declared as static, but we want to access it
  * in the unit tests.
@@ -116,7 +115,7 @@ size_t ptls_minicrypto_asn1_decode_private_key(ptls_asn1_pkcs8_private_key_t *pk
         pkey->parameters_index = byte_index;
 
         pkey->parameters_length =
-            ptls_asn1_validation_recursive(bytes + byte_index, last_byte1 - byte_index, decode_error, 2, log_ctx);
+            (uint32_t)ptls_asn1_validation_recursive(bytes + byte_index, last_byte1 - byte_index, decode_error, 2, log_ctx);
 
         byte_index += pkey->parameters_length;
 

@@ -105,6 +105,7 @@
 		E9BC76DF1EF3CCD100EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76CC1EF3A31000EB7A09 /* salsa20.h */; };
 		E9BC76E01EF3CCDD00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
 		E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
+		E9E4B12B2180530400514B47 /* certificate_compression.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E4B12A2180530400514B47 /* certificate_compression.c */; };
 		E9E865EB203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
 		E9E865EC203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
 		E9E865ED203BD46700E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
@@ -214,6 +215,9 @@
 		E9BC76D61EF3C1C200EB7A09 /* poly1305.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = poly1305.c; path = src/poly1305.c; sourceTree = "<group>"; };
 		E9BC76D71EF3C1C200EB7A09 /* poly1305.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = poly1305.h; path = src/poly1305.h; sourceTree = "<group>"; };
 		E9E3849C1F0748DD00D50990 /* util.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = util.h; sourceTree = "<group>"; };
+		E9E4B1292180514000514B47 /* certificate_compression.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
+		E9E4B12A2180530400514B47 /* certificate_compression.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = certificate_compression.c; sourceTree = "<group>"; };
+		E9E4B12C2181927900514B47 /* CMakeLists.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CMakeLists.txt; sourceTree = "<group>"; };
 		E9E865E9203BD45600E2FFCD /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = sha512.c; path = src/sha512.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -315,6 +319,7 @@
 		106530A91D9985E0005B2C60 = {
 			isa = PBXGroup;
 			children = (
+				E9E4B12C2181927900514B47 /* CMakeLists.txt */,
 				106530E11D9B4000005B2C60 /* deps */,
 				106530BC1D998616005B2C60 /* include */,
 				106530BD1D998624005B2C60 /* lib */,
@@ -355,6 +360,7 @@
 				106530BF1D998641005B2C60 /* picotls.c */,
 				105900C51DC9798800FB4085 /* uecc.c */,
 				E949EF272073629300511ECA /* minicrypto-pem.c */,
+				E9E4B12A2180530400514B47 /* certificate_compression.c */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -396,6 +402,7 @@
 			children = (
 				1059004F1DC8D64E00FB4085 /* minicrypto.h */,
 				106530ED1D9CEFF7005B2C60 /* openssl.h */,
+				E9E4B1292180514000514B47 /* certificate_compression.h */,
 			);
 			path = picotls;
 			sourceTree = "<group>";
@@ -677,6 +684,7 @@
 				E99B75E01F5CDDB500CF503E /* asn1.c in Sources */,
 				E99B75E11F5CDDB500CF503E /* pembase64.c in Sources */,
 				106530EB1D9B7C5C005B2C60 /* picotls.c in Sources */,
+				E9E4B12B2180530400514B47 /* certificate_compression.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -751,10 +759,10 @@
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -764,10 +772,10 @@
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -811,7 +819,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HEADER_SEARCH_PATHS = include;
+				HEADER_SEARCH_PATHS = (
+					include,
+					/usr/local/include,
+				);
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = YES;
@@ -853,7 +864,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HEADER_SEARCH_PATHS = include;
+				HEADER_SEARCH_PATHS = (
+					include,
+					/usr/local/include,
+				);
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = NO;
@@ -866,10 +880,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -880,10 +894,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
+					"/usr/local/openssl-1.1.0/include",
 					include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -910,12 +924,21 @@
 		106530FA1DAD8985005B2C60 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "PICOTLS_USE_BROTLI=1";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
 					include,
+					"/usr/local/openssl-1.1.0/include",
+					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
-				OTHER_LDFLAGS = "-lcrypto";
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.1.0/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lcrypto",
+					"-lbrotlidec",
+					"-lbrotlienc",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -923,12 +946,21 @@
 		106530FB1DAD8985005B2C60 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "PICOTLS_USE_BROTLI=1";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
 					include,
+					"/usr/local/openssl-1.1.0/include",
+					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
-				OTHER_LDFLAGS = "-lcrypto";
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.1.0/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lcrypto",
+					"-lbrotlidec",
+					"-lbrotlienc",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

@@ -22,3 +22,5 @@ x64
 */*.xbf
 */*.ilk
 deps/picotest
+/picotlsvs/cifra/cifra.vcxproj.user
+/picotlsvs/testopenssl/testopenssl.vcxproj.user

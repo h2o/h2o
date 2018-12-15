@@ -96,9 +96,34 @@ int h2o_access_log_open_log(const char *path)
         close(pipefds[0]);
         fd = pipefds[1];
     } else {
-        if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
-            fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
-            return -1;
+        struct stat st;
+        int ret;
+
+        ret = stat(path, &st);
+        if (ret == 0 && (st.st_mode & S_IFMT) == S_IFSOCK) {
+            struct sockaddr_un sa;
+            if (strlen(path) >= sizeof(sa.sun_path)) {
+                fprintf(stderr, "path:%s is too long as a unix socket name", path);
+                return -1;
+            }
+            if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+                fprintf(stderr, "failed to create socket for log file:%s:%s\n", path, strerror(errno));
+                return -1;
+            }
+            memset(&sa, 0, sizeof(sa));
+            sa.sun_family = AF_UNIX;
+            strcpy(sa.sun_path, path);
+            if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
+                fprintf(stderr, "failed to connect socket for log file:%s:%s\n", path, strerror(errno));
+                close(fd);
+                return -1;
+            }
+
+        } else {
+            if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
+                fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
+                return -1;
+            }
         }
     }
 

@@ -145,3 +145,21 @@ assert 'pack/unpack "I"' do
   end
   assert_pack 'I', str, [12345]
 end
+
+assert 'pack/unpack "U"' do
+  assert_equal [], "".unpack("U")
+  assert_equal [], "".unpack("U*")
+  assert_equal [65, 66], "ABC".unpack("U2")
+  assert_equal [12371, 12435, 12395, 12385, 12399, 19990, 30028], "こんにちは世界".unpack("U*")
+
+  assert_equal "", [].pack("U")
+  assert_equal "", [].pack("U*")
+  assert_equal "AB", [65, 66, 67].pack("U2")
+  assert_equal "こんにちは世界", [12371, 12435, 12395, 12385, 12399, 19990, 30028].pack("U*")
+
+  assert_equal "\000", [0].pack("U")
+
+  assert_raise(RangeError) { [-0x40000000].pack("U") }
+  assert_raise(RangeError) { [-1].pack("U") }
+  assert_raise(RangeError) { [0x40000000].pack("U") }
+end

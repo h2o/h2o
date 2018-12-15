@@ -31,6 +31,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -41,8 +42,14 @@
 #include <openssl/evp.h>
 #include <openssl/engine.h>
 #include <openssl/pem.h>
+#if PICOTLS_USE_BROTLI
+#include "brotli/decode.h"
+#endif
 #include "picotls.h"
 #include "picotls/openssl.h"
+#if PICOTLS_USE_BROTLI
+#include "picotls/certificate_compression.h"
+#endif
 #include "util.h"
 
 static void shift_buffer(ptls_buffer_t *buf, size_t delta)
@@ -56,7 +63,7 @@ static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 }
 
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                             ptls_handshake_properties_t *hsprop)
+                             ptls_handshake_properties_t *hsprop, int request_key_update)
 {
     ptls_t *tls = ptls_new(ctx, server_name == NULL);
     ptls_buffer_t rbuf, encbuf, ptbuf;
@@ -130,6 +137,8 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                         /* release data sent as early-data, if server accepted it */
                         if (hsprop->client.early_data_accepted_by_peer)
                             shift_buffer(&ptbuf, early_bytes_sent);
+                        if (request_key_update)
+                            ptls_update_key(tls, 1);
                         if (ptbuf.off != 0) {
                             if ((ret = ptls_send(tls, &encbuf, ptbuf.base, ptbuf.off)) != 0) {
                                 fprintf(stderr, "ptls_send(1rtt):%d\n", ret);
@@ -140,6 +149,8 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                     } else if (ret == PTLS_ERROR_IN_PROGRESS) {
                         /* ok */
                     } else {
+                        if (encbuf.off != 0)
+                            (void)write(sockfd, encbuf.base, encbuf.off);
                         fprintf(stderr, "ptls_handshake:%d\n", ret);
                         goto Exit;
                     }
@@ -230,7 +241,7 @@ Exit:
 }
 
 static int run_server(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx, const char *input_file,
-                      ptls_handshake_properties_t *hsprop)
+                      ptls_handshake_properties_t *hsprop, int request_key_update)
 {
     int listen_fd, conn_fd, on = 1;
 
@@ -253,14 +264,14 @@ static int run_server(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
 
     while (1) {
         if ((conn_fd = accept(listen_fd, NULL, 0)) != -1)
-            handle_connection(conn_fd, ctx, NULL, input_file, hsprop);
+            handle_connection(conn_fd, ctx, NULL, input_file, hsprop, request_key_update);
     }
 
     return 0;
 }
 
 static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                      ptls_handshake_properties_t *hsprop)
+                      ptls_handshake_properties_t *hsprop, int request_key_update)
 {
     int fd;
 
@@ -273,7 +284,7 @@ static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
         return 1;
     }
 
-    return handle_connection(fd, ctx, server_name, input_file, hsprop);
+    return handle_connection(fd, ctx, server_name, input_file, hsprop, request_key_update);
 }
 
 static void usage(const char *cmd)
@@ -283,19 +294,34 @@ static void usage(const char *cmd)
            "Options:\n"
            "  -4                   force IPv4\n"
            "  -6                   force IPv6\n"
-           "  -c certificate-file\n"
+           "  -a                   require client authentication\n"
+           "  -b                   enable brotli compression\n"
+           "  -C certificate-file  certificate chain used for client authentication\n"
+           "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
-           "  -k key-file          specifies the credentials to be used for running the\n"
-           "                       server. If omitted, the command runs as a client.\n"
+           "  -k key-file          specifies the credentials for signing the certificate\n"
            "  -l log-file          file to log traffic secrets\n"
            "  -n                   negotiates the key exchange method (i.e. wait for HRR)\n"
+           "  -N named-group       named group to be used (default: secp256r1)\n"
            "  -s session-file      file to read/write the session ticket\n"
            "  -S                   require public key exchange when resuming a session\n"
            "  -e                   when resuming a session, send first 8,192 bytes of input\n"
            "                       as early data\n"
+           "  -u                   update the traffic key when handshake is complete\n"
            "  -v                   verify peer using the default certificates\n"
            "  -h                   print this help\n"
-           "\n",
+           "\n"
+           "Supported named groups: secp256r1"
+#ifdef PTLS_OPENSSL_HAS_SECP384R1
+           ", secp384r1"
+#endif
+#ifdef PTLS_OPENSSL_HAS_SECP521R1
+           ", secp521r1"
+#endif
+#ifdef PTLS_OPENSSL_HAS_X25519
+           ", X25519"
+#endif
+           "\n\n",
            cmd);
 }
 
@@ -310,15 +336,16 @@ int main(int argc, char **argv)
     ENGINE_register_all_digests();
 #endif
 
-    ptls_context_t ctx = {ptls_openssl_random_bytes, &ptls_get_time, ptls_openssl_key_exchanges, ptls_openssl_cipher_suites};
+    ptls_key_exchange_algorithm_t *key_exchanges[128] = {NULL};
+    ptls_context_t ctx = {ptls_openssl_random_bytes, &ptls_get_time, key_exchanges, ptls_openssl_cipher_suites};
     ptls_handshake_properties_t hsprop = {{{{NULL}}}};
     const char *host, *port, *file = NULL;
-    int use_early_data = 0, ch;
+    int is_server = 0, use_early_data = 0, request_key_update = 0, ch;
     struct sockaddr_storage sa;
     socklen_t salen;
     int family = 0;
 
-    while ((ch = getopt(argc, argv, "46c:i:k:nes:Sl:vh")) != -1) {
+    while ((ch = getopt(argc, argv, "46abC:c:i:k:nN:es:Sl:uvh")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -326,8 +353,25 @@ int main(int argc, char **argv)
         case '6':
             family = AF_INET6;
             break;
+        case 'a':
+            ctx.require_client_authentication = 1;
+            break;
+        case 'b':
+#if PICOTLS_USE_BROTLI
+            ctx.decompress_certificate = &ptls_decompress_certificate;
+#else
+            fprintf(stderr, "support for `-b` option was turned off during configuration\n");
+            exit(1);
+#endif
+            break;
+        case 'C':
         case 'c':
+            if (ctx.certificates.count != 0) {
+                fprintf(stderr, "-C/-c can only be specified once\n");
+                return 1;
+            }
             load_certificate_chain(&ctx, optarg);
+            is_server = ch == 'c';
             break;
         case 'i':
             file = optarg;
@@ -353,6 +397,34 @@ int main(int argc, char **argv)
         case 'v':
             setup_verify_certificate(&ctx);
             break;
+        case 'N': {
+            ptls_key_exchange_algorithm_t *algo = NULL;
+#define MATCH(name)                                                                                                                \
+    if (algo == NULL && strcasecmp(optarg, #name) == 0)                                                                            \
+    algo = (&ptls_openssl_##name)
+            MATCH(secp256r1);
+#ifdef PTLS_OPENSSL_HAS_SECP384R1
+            MATCH(secp384r1);
+#endif
+#ifdef PTLS_OPENSSL_HAS_SECP521R1
+            MATCH(secp521r1);
+#endif
+#ifdef PTLS_OPENSSL_HAS_X25519
+            MATCH(x25519);
+#endif
+#undef MATCH
+            if (algo == NULL) {
+                fprintf(stderr, "could not find key exchange: %s\n", optarg);
+                return 1;
+            }
+            size_t i;
+            for (i = 0; key_exchanges[i] != NULL; ++i)
+                ;
+            key_exchanges[i++] = algo;
+        } break;
+        case 'u':
+            request_key_update = 1;
+            break;
         default:
             usage(argv[0]);
             exit(1);
@@ -360,12 +432,26 @@ int main(int argc, char **argv)
     }
     argc -= optind;
     argv += optind;
-    if (ctx.certificates.count != 0 || ctx.sign_certificate != NULL) {
-        /* server */
-        if (ctx.certificates.count == 0 || ctx.sign_certificate == NULL) {
-            fprintf(stderr, "-c and -k options must be used together\n");
+    if ((ctx.certificates.count == 0) != (ctx.sign_certificate == NULL)) {
+        fprintf(stderr, "-C/-c and -k options must be used together\n");
+        return 1;
+    }
+    if (is_server) {
+        if (ctx.certificates.count == 0) {
+            fprintf(stderr, "-c and -k options must be set\n");
             return 1;
         }
+#if PICOTLS_USE_BROTLI
+        if (ctx.decompress_certificate != NULL) {
+            static ptls_emit_compressed_certificate_t ecc;
+            if (ptls_init_compressed_certificate(&ecc, PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI, ctx.certificates.list,
+                                                 ctx.certificates.count, ptls_iovec_init(NULL, 0)) != 0) {
+                fprintf(stderr, "failed to create a brotli-compressed version of the certificate chain.\n");
+                exit(1);
+            }
+            ctx.emit_certificate = &ecc.super;
+        }
+#endif
         setup_session_cache(&ctx);
     } else {
         /* client */
@@ -374,6 +460,8 @@ int main(int argc, char **argv)
             hsprop.client.max_early_data_size = &max_early_data_size;
         }
     }
+    if (key_exchanges[0] == NULL)
+        key_exchanges[0] = &ptls_openssl_secp256r1;
     if (argc != 2) {
         fprintf(stderr, "missing host and port\n");
         return 1;
@@ -384,9 +472,9 @@ int main(int argc, char **argv)
     if (resolve_address((struct sockaddr *)&sa, &salen, host, port, family, SOCK_STREAM, IPPROTO_TCP) != 0)
         exit(1);
 
-    if (ctx.certificates.count != 0) {
-        return run_server((struct sockaddr *)&sa, salen, &ctx, file, &hsprop);
+    if (is_server) {
+        return run_server((struct sockaddr *)&sa, salen, &ctx, file, &hsprop, request_key_update);
     } else {
-        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop);
+        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop, request_key_update);
     }
 }

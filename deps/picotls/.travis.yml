@@ -1,15 +1,26 @@
-# use trusty beta (ubuntu 14.04)
-sudo: required
-dist: trusty
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+      compiler: gcc
+    - os: linux
+      dist: trusty
+      sudo: required
+      compiler: clang-6.0
+      addons:
+        apt:
+          sources: ['llvm-toolchain-trusty-6.0', 'ubuntu-toolchain-r-test']
+          packages: ['g++-4.9','clang-6.0']
+    - os: osx
 
 language: c
 
-compiler:
-  - gcc
-  - clang
-
 before_install:
-  - sudo apt-get install --yes cmake
+  - |
+    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+      sudo apt-get install --yes cmake
+    fi
 
 script:
   - cmake .
