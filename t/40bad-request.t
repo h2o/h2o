@@ -25,4 +25,13 @@ like $resp, qr{^HTTP/1\.1 400 .*Content-Length:\s*11.*\r\n\r\nBad Request$}is, "
 $resp = `echo "\r" | nc 127.0.0.1 $server->{port} 2>&1`;
 is $resp, "", "silent close on CRLF";
 
+$resp = `echo " / HTTP/1.1\r\n\r\n" | nc 127.0.0.1 $server->{port} 2>&1`;
+like $resp, qr{^HTTP/1\.1 400 .*Content-Length:\s*11.*\r\n\r\nBad Request$}is, "missing method";
+
+$resp = `echo "GET  HTTP/1.1\r\n\r\n" | nc 127.0.0.1 $server->{port} 2>&1`;
+like $resp, qr{^HTTP/1\.1 400 .*Content-Length:\s*11.*\r\n\r\nBad Request$}is, "missing path";
+
+$resp = `echo "GET / HTTP/1.1\r\nfoo: FOO\r\n    hoge\r\n\r\n" | nc 127.0.0.1 $server->{port} 2>&1`;
+like $resp, qr{^HTTP/1\.1 400 .*Content-Length:\s*31.*\r\n\r\nmultiline header is not allowed$}is, "multiline header";
+
 done_testing;
