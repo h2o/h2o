@@ -265,6 +265,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
         /* fill-in the headers */
         for (i = 0; i != num_headers; ++i) {
+            if (src_headers[i].name_len == 0) {
+                /* reject multiline header */
+                on_error_before_head(client, "received multiline header that is not allowed");
+                return;
+            }
             const h2o_token_t *token;
             char *orig_name = h2o_strdup(client->super.pool, src_headers[i].name, src_headers[i].name_len).base;
             h2o_strtolower((char *)src_headers[i].name, src_headers[i].name_len);
