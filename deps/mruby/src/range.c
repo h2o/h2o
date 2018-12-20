@@ -120,6 +120,7 @@ range_init(mrb_state *mrb, mrb_value range, mrb_value beg, mrb_value end, mrb_bo
   }
   r->edges->beg = beg;
   r->edges->end = end;
+  mrb_write_barrier(mrb, (struct RBasic*)r);
 }
 /*
  *  call-seq:

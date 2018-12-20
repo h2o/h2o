@@ -68,7 +68,7 @@ enum {
     ELEMENT_TYPE_PROXY_IDLE_TIME,               /* %{proxy-idle-time}x */
     ELEMENT_TYPE_PROXY_CONNECT_TIME,            /* %{proxy-connect-time}x */
     ELEMENT_TYPE_PROXY_REQUEST_TIME,            /* %{proxy-request-time}x */
-    ELEMENT_TYPE_PROXY_PROCESS_TIME,            /* %{proxy-first-byte-time}x */
+    ELEMENT_TYPE_PROXY_PROCESS_TIME,            /* %{proxy-process-time}x */
     ELEMENT_TYPE_PROXY_RESPONSE_TIME,           /* %{proxy-response-time}x */
     ELEMENT_TYPE_PROXY_TOTAL_TIME,              /* %{proxy-total-time}x */
     NUM_ELEMENT_TYPES

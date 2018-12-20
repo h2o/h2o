@@ -62,13 +62,13 @@ struct st_h2o_tunnel_endpoint_t {
 
 struct st_h2o_tunnel_t {
     h2o_context_t *ctx;
-    h2o_timeout_entry_t timeout_entry;
-    h2o_timeout_t *timeout;
+    h2o_timer_t timeout_entry;
+    uint64_t timeout;
     h2o_tunnel_endpoint_t endpoints[2];
     const char *err;
 };
 
-h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, const h2o_tunnel_endpoint_callbacks_t *cb1, void *data1, const h2o_tunnel_endpoint_callbacks_t *cb2, void *data2, h2o_timeout_t *timeout);
+h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, const h2o_tunnel_endpoint_callbacks_t *cb1, void *data1, const h2o_tunnel_endpoint_callbacks_t *cb2, void *data2, uint64_t timeout);
 void h2o_tunnel_send(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *from, h2o_iovec_t *bufs, size_t bufcnt, int is_final);
 void h2o_tunnel_notify_sent(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *from);
 void h2o_tunnel_reset(h2o_tunnel_t *tunnel, const char *err);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 DeNA Co., Ltd.
+ * Copyright (c) 2018 Fastly
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,10 +19,32 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "h2o.h"
-#include "token_table.h"
+#ifndef picotls_certificate_compression_h
+#define picotls_certificate_compression_h
 
-int h2o_iovec_is_token(const h2o_iovec_t *buf)
-{
-    return &h2o__tokens[0].buf <= buf && buf <= &h2o__tokens[H2O_MAX_TOKENS - 1].buf;
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include "picotls.h"
+
+#define PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_GZIP 1
+#define PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI 2
+
+typedef struct st_ptls_emit_compressed_certificate_t {
+    ptls_emit_certificate_t super;
+    uint16_t algo;
+    uint32_t uncompressed_length;
+    ptls_iovec_t buf;
+} ptls_emit_compressed_certificate_t;
+
+extern ptls_decompress_certificate_t ptls_decompress_certificate;
+
+int ptls_init_compressed_certificate(ptls_emit_compressed_certificate_t *ecc, uint16_t algo, ptls_iovec_t *certificates,
+                                     size_t num_certificates, ptls_iovec_t ocsp_status);
+
+#ifdef __cplusplus
 }
+#endif
+
+#endif

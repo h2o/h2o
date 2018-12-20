@@ -26,7 +26,7 @@
 
 static void break_now(h2o_tunnel_t *tunnel)
 {
-    h2o_timeout_unlink(&tunnel->timeout_entry);
+    h2o_timer_unlink(&tunnel->timeout_entry);
     tunnel->endpoints[0].callbacks->on_close(tunnel, &tunnel->endpoints[0], tunnel->err);
     tunnel->endpoints[1].callbacks->on_close(tunnel, &tunnel->endpoints[1], tunnel->err);
     free(tunnel);
@@ -51,27 +51,27 @@ void h2o_tunnel_reset(h2o_tunnel_t *tunnel, const char *err)
 
 static void reset_timeout(h2o_tunnel_t *tunnel)
 {
-    h2o_timeout_unlink(&tunnel->timeout_entry);
-    h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
+    h2o_timer_unlink(&tunnel->timeout_entry);
+    h2o_timer_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 }
 
-static void on_timeout(h2o_timeout_entry_t *entry)
+static void on_timeout(h2o_timer_t *entry)
 {
     h2o_tunnel_t *tunnel = H2O_STRUCT_FROM_MEMBER(struct st_h2o_tunnel_t, timeout_entry, entry);
     h2o_tunnel_reset(tunnel, "tunnel timeout");
 }
 
-h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, const h2o_tunnel_endpoint_callbacks_t *cb1, void *data1, const h2o_tunnel_endpoint_callbacks_t *cb2, void *data2, h2o_timeout_t *timeout)
+h2o_tunnel_t *h2o_tunnel_establish(h2o_context_t *ctx, const h2o_tunnel_endpoint_callbacks_t *cb1, void *data1, const h2o_tunnel_endpoint_callbacks_t *cb2, void *data2, uint64_t timeout)
 {
     h2o_tunnel_t *tunnel = h2o_mem_alloc(sizeof(*tunnel));
     tunnel->ctx = ctx;
     tunnel->timeout = timeout;
-    tunnel->timeout_entry = (h2o_timeout_entry_t){0};
+    tunnel->timeout_entry = (h2o_timer_t){{0}};
     tunnel->timeout_entry.cb = on_timeout;
     tunnel->endpoints[0] = (h2o_tunnel_endpoint_t){cb1, data1};
     tunnel->endpoints[1] = (h2o_tunnel_endpoint_t){cb2, data2};
     tunnel->err = NULL;
-    h2o_timeout_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
+    h2o_timer_link(tunnel->ctx->loop, tunnel->timeout, &tunnel->timeout_entry);
 
     if (tunnel->endpoints[1].callbacks->on_open != NULL)
         tunnel->endpoints[1].callbacks->on_open(tunnel, &tunnel->endpoints[1]);

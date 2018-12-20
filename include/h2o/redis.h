@@ -22,15 +22,15 @@
 #ifndef h2o__redis_h
 #define h2o__redis_h
 
-#include "h2o/timeout.h"
+#include "h2o/socket.h"
 
 struct redisAsyncContext;
 struct redisReply;
 
-extern const char *const h2o_redis_error_connection;
-extern const char *const h2o_redis_error_protocol;
-extern const char *const h2o_redis_error_connect_timeout;
-extern const char *const h2o_redis_error_command_timeout;
+extern const char h2o_redis_error_connection[];
+extern const char h2o_redis_error_protocol[];
+extern const char h2o_redis_error_connect_timeout[];
+extern const char h2o_redis_error_command_timeout[];
 
 typedef enum {
     H2O_REDIS_CONNECTION_STATE_CLOSED = 0,
@@ -47,10 +47,7 @@ typedef struct st_h2o_redis_client_t {
     uint64_t command_timeout;
 
     struct redisAsyncContext *_redis;
-    h2o_timeout_t _defer_timeout;
-    h2o_timeout_entry_t _defer_timeout_entry;
-    h2o_timeout_t _connect_timeout;
-    h2o_timeout_entry_t _connect_timeout_entry;
+    h2o_timer_t _timeout_entry;
 } h2o_redis_client_t;
 
 typedef void (*h2o_redis_command_cb)(struct redisReply *reply, void *cb_data, const char *errstr);
@@ -70,9 +67,7 @@ typedef struct st_h2o_redis_command_t {
     h2o_redis_command_cb cb;
     void *data;
     h2o_redis_command_type_t type;
-    h2o_timeout_entry_t _defer_timeout_entry;
-    h2o_timeout_t _command_timeout;
-    h2o_timeout_entry_t _command_timeout_entry;
+    h2o_timer_t _command_timeout;
 } h2o_redis_command_t;
 
 h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz);

@@ -47,7 +47,7 @@ istruct_test_test_receive(mrb_state *mrb, mrb_value self)
   mrb_get_args(mrb, "o", &object);
   if (mrb_obj_class(mrb, object) != mrb_class_get(mrb, "InlineStructTest"))
   {
-    mrb_raisef(mrb, E_TYPE_ERROR, "Expected InlineStructTest");
+    mrb_raise(mrb, E_TYPE_ERROR, "Expected InlineStructTest");
   }
   return mrb_bool_value(((char*)mrb_istruct_ptr(object))[0] == 's');
 }

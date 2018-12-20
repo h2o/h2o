@@ -19,9 +19,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "h2o.h"
-#include "h2o/http2.h"
-#include "h2o/http2_internal.h"
+#include "h2o/http2_common.h"
+
+const h2o_http2_priority_t h2o_http2_default_priority = {
+    0, /* exclusive */
+    0, /* dependency */
+    16 /* weight */
+};
 
 const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT = {
     /* header_table_size */ 4096,
@@ -114,7 +118,8 @@ void h2o_http2_encode_origin_frame(h2o_buffer_t **buf, h2o_iovec_t payload)
     memcpy(dst, payload.base, payload.len);
 }
 
-ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, const char **err_desc)
+ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, size_t max_frame_size,
+                               const char **err_desc)
 {
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE)
         return H2O_HTTP2_ERROR_INCOMPLETE;
@@ -124,7 +129,7 @@ ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, siz
     frame->flags = src[4];
     frame->stream_id = h2o_http2_decode32u(src + 5) & 0x7fffffff;
 
-    if (frame->length > H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE)
+    if (frame->length > max_frame_size)
         return H2O_HTTP2_ERROR_FRAME_SIZE;
 
     if (len < H2O_HTTP2_FRAME_HEADER_SIZE + frame->length)

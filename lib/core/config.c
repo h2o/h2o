@@ -154,8 +154,8 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
         free(list.entries);                                                                                                        \
     } while (0)
     DESTROY_LIST(h2o_handler_t, pathconf->handlers);
-    DESTROY_LIST(h2o_filter_t, pathconf->filters);
-    DESTROY_LIST(h2o_logger_t, pathconf->loggers);
+    DESTROY_LIST(h2o_filter_t, pathconf->_filters);
+    DESTROY_LIST(h2o_logger_t, pathconf->_loggers);
 #undef DESTROY_LIST
 
     free(pathconf->path.base);
@@ -305,10 +305,10 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
     memset(filter, 0, sz);
     filter->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, &conf->filters, conf->filters.size + 1);
-    memmove(conf->filters.entries + 1, conf->filters.entries, conf->filters.size * sizeof(conf->filters.entries[0]));
-    conf->filters.entries[0] = filter;
-    ++conf->filters.size;
+    h2o_vector_reserve(NULL, &conf->_filters, conf->_filters.size + 1);
+    memmove(conf->_filters.entries + 1, conf->_filters.entries, conf->_filters.size * sizeof(conf->_filters.entries[0]));
+    conf->_filters.entries[0] = filter;
+    ++conf->_filters.size;
 
     return filter;
 }
@@ -320,8 +320,8 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
     memset(logger, 0, sz);
     logger->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, &conf->loggers, conf->loggers.size + 1);
-    conf->loggers.entries[conf->loggers.size++] = logger;
+    h2o_vector_reserve(NULL, &conf->_loggers, conf->_loggers.size + 1);
+    conf->_loggers.entries[conf->_loggers.size++] = logger;
 
     return logger;
 }

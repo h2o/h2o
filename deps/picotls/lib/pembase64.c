@@ -34,7 +34,7 @@ static char ptls_base64_alphabet[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I
                                       'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
                                       'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/'};
 
-static char ptls_base64_values[] = {
+static signed char ptls_base64_values[] = {
     /* 0x00 to 0x0F */
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
     /* 0x10 to 0x1F */
@@ -126,7 +126,7 @@ int ptls_base64_decode(const char *text, ptls_base64_decode_state_t *state, ptls
     uint8_t decoded[3];
     size_t text_index = 0;
     int c;
-    char vc;
+    signed char vc;
 
     /* skip initial blanks */
     while (text[text_index] != 0) {
@@ -155,13 +155,10 @@ int ptls_base64_decode(const char *text, ptls_base64_decode_state_t *state, ptls
                 state->v <<= 6;
             } else {
                 /* Skip final blanks */
-                text_index--;
-                while (text[text_index] != 0) {
-                    c = text[text_index++];
-
-                    if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0x0B || c == 0x0C) {
-                        continue;
-                    }
+                for (--text_index; text[text_index] != 0; ++text_index) {
+                    c = text[text_index];
+                    if (!(c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0x0B || c == 0x0C))
+                        break;
                 }
 
                 /* Should now be at end of buffer */
@@ -356,7 +353,7 @@ int ptls_load_pem_objects(char const *pem_fname, const char *label, ptls_iovec_t
 
 #define PTLS_MAX_CERTS_IN_CONTEXT 16
 
-int ptls_load_certificates(ptls_context_t *ctx, char *cert_pem_file)
+int ptls_load_certificates(ptls_context_t *ctx, char const *cert_pem_file)
 {
     int ret = 0;
 

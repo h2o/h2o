@@ -51,6 +51,7 @@ each_backtrace(mrb_state *mrb, ptrdiff_t ciidx, mrb_code *pc0, each_backtrace_fu
       pc = mrb->c->cibase[i].err;
     }
     else if (i+1 <= ciidx) {
+      if (!mrb->c->cibase[i + 1].pc) continue;
       pc = &mrb->c->cibase[i+1].pc[-1];
     }
     else {
