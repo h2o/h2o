@@ -438,6 +438,10 @@ struct st_h2o_globalconf_t {
          */
         unsigned emit_missing_date_header : 1;
         /**
+         * a boolean flag if set to true, instructs the proxy to accept extended CONNECT method (with :protocol header) for websocket
+         */
+        unsigned websocket_http2 : 1;
+        /**
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
@@ -785,6 +789,10 @@ typedef struct st_h2o_conn_callbacks_t {
      * debug state callback (may be NULL)
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
+    /**
+     * callback for websocket upgrade (may be NULL)
+     */
+    void (*websocket_upgrade)(h2o_req_t *req, h2o_socket_t *upstream_sock, uint64_t timeout, char *websocket_key);
     /**
      * logging callbacks (may be NULL)
      */

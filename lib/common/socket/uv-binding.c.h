@@ -118,6 +118,18 @@ static void on_do_write_complete(uv_write_t *wreq, int status)
         on_write_complete(&sock->super, status == 0 ? NULL : h2o_socket_error_io);
 }
 
+static void on_shutdown(uv_shutdown_t *shutdown_req, int status)
+{
+    free(shutdown_req);
+}
+
+void do_shutdown_socket(h2o_socket_t *_sock)
+{
+    struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
+    uv_shutdown_t *shutdown_req = h2o_mem_alloc(sizeof(*shutdown_req));
+    uv_shutdown(shutdown_req, (uv_stream_t *)sock->handle, on_shutdown);
+}
+
 static void free_sock(uv_handle_t *handle)
 {
     struct st_h2o_uv_socket_t *sock = handle->data;

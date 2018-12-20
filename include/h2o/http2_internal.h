@@ -28,6 +28,7 @@
 #include "h2o/cache.h"
 #include "h2o/http2_casper.h"
 #include "h2o/http2_scheduler.h"
+#include "h2o/tunnel.h"
 
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
@@ -54,7 +55,7 @@ typedef enum enum_h2o_http2_stream_state_t {
      */
     H2O_HTTP2_STREAM_STATE_SEND_HEADERS,
     /**
-     * sending body
+     * sending body, or tunneling websocket data frames 
      */
     H2O_HTTP2_STREAM_STATE_SEND_BODY,
     /**
@@ -111,6 +112,8 @@ struct st_h2o_http2_stream_t {
         h2o_buffer_t *body; /* NULL unless request body IS expected */
         size_t bytes_received;
     } _req_body;
+
+    h2o_tunnel_t *tunnel;
 
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;

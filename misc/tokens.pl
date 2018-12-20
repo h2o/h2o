@@ -235,3 +235,4 @@ __DATA__
 0 0 0 0 0 0 0 cache-digest
 0 0 0 0 0 0 0 x-compress-hint
 0 0 0 0 0 0 0 early-data
+0 1 1 0 0 0 0 :protocol

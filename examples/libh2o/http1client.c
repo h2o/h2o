@@ -87,7 +87,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed, on_connect);
+    h2o_httpclient_connect(NULL, &pool, url_parsed, ctx, connpool, url_parsed, 0, on_connect);
 }
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)

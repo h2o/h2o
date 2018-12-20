@@ -248,6 +248,15 @@ Notify:
     sock->super._cb.read(&sock->super, err);
 }
 
+void do_shutdown_socket(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    wreq_free_buffer_if_allocated(sock);
+    if (sock->fd != -1) {
+        shutdown(sock->fd, SHUT_WR);
+    }
+}
+
 void do_dispose_socket(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;

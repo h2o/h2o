@@ -125,7 +125,7 @@ static int should_use_h2(int8_t ratio, int8_t *counter)
 }
 
 void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb cb)
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, int force_http1, h2o_httpclient_connect_cb cb)
 {
     static const h2o_iovec_t both_protos = {H2O_STRLIT("\x02"
                                                        "h2"
@@ -148,7 +148,12 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
             http2_conn = NULL;
     }
 
-    if (ctx->http2.ratio < 0) {
+    int8_t http2_ratio = ctx->http2.ratio;
+    if (force_http1) {
+        http2_ratio = 0;
+    }
+
+    if (http2_ratio < 0) {
         /* mix mode */
 
         if (http2_conn != NULL && connpool->socketpool->_shared.pooled_count != 0) {
@@ -175,7 +180,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
     } else {
         /* fixed ratio mode */
 
-        if (should_use_h2(ctx->http2.ratio, &ctx->http2.counter)) {
+        if (should_use_h2(http2_ratio, &ctx->http2.counter)) {
             if (http2_conn != NULL) {
                 h2o_httpclient__h2_on_connect(client, http2_conn->sock, &http2_conn->origin_url);
             } else {

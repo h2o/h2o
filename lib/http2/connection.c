@@ -33,18 +33,32 @@ static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\
 #define LIT24(x) LIT16((x) >> 8), (x)&0xff
 #define LIT32(x) LIT24((x) >> 8), (x)&0xff
 #define LIT_FRAME_HEADER(size, type, flags, stream_id) LIT24(size), (type), (flags), LIT32(stream_id)
-static const uint8_t SERVER_PREFACE_BIN[] = {
-    /* settings frame */
-    LIT_FRAME_HEADER(6, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100),
-    /* window_update frame */
-    LIT_FRAME_HEADER(4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, 0),
-    LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)};
+
+#define SERVER_PREFACE_BIN(settings_len, ...)                                                                                      \
+    {                                                                                                                              \
+        /* settings frame */                                                                                                       \
+        LIT_FRAME_HEADER((settings_len), H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), __VA_ARGS__, /* window_update frame */              \
+            LIT_FRAME_HEADER(4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, 0),                                                         \
+            LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)             \
+    }
+
+#define SERVER_PREFACE(settings_len, ...)                                                                                          \
+    (h2o_iovec_t)                                                                                                                  \
+    {                                                                                                                              \
+        (char *)((uint8_t[])SERVER_PREFACE_BIN(settings_len, __VA_ARGS__)),                                                        \
+            sizeof((uint8_t[])SERVER_PREFACE_BIN(settings_len, __VA_ARGS__))                                                       \
+    }
+
+static const h2o_iovec_t SERVER_PREFACE = SERVER_PREFACE(6, LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100));
+static const h2o_iovec_t SERVER_PREFACE_WITH_EXTENDED_CONNECT = SERVER_PREFACE(
+    12, LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100), LIT16(H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL), LIT32(1));
+
 #undef LIT16
 #undef LIT24
 #undef LIT32
 #undef LIT_FRAME_HEADER
-
-static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SERVER_PREFACE_BIN)};
+#undef SERVER_PREFACE_BIN
+#undef SERVER_PREFACE
 
 __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
@@ -57,6 +71,7 @@ static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int errnum);
+static void do_tunnel_send_to_server(h2o_http2_stream_t *stream, h2o_iovec_t buf, int is_end_stream);
 
 const h2o_protocol_callbacks_t H2O_HTTP2_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
 
@@ -424,7 +439,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     header_exists_map = 0;
     if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme,
                                        &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path,
-                                       &stream->req.headers, &header_exists_map, &stream->req.content_length,
+                                       &stream->req.headers, &header_exists_map, &stream->req.content_length, &stream->req.upgrade,
                                        &stream->cache_digests, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
@@ -439,6 +454,18 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 #undef EXPECTED_MAP
+
+    /* for websockets over h2 */
+    if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0) {
+        if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS) == 0 ||
+            (header_exists_map & H2O_HPACK_PARSE_HEADERS_PATH_EXISTS) == 0 ||
+            !conn->super.ctx->globalconf->proxy.websocket_http2 ||
+            !h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+            ret = H2O_HTTP2_ERROR_PROTOCOL;
+            goto SendRSTStream;
+        }
+    }
+
     if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
@@ -454,7 +481,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         return 0;
     }
 
-    if (stream->_req_body.body == NULL) {
+    if (stream->_req_body.body == NULL || (header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0) {
         execute_or_enqueue_request(conn, stream);
     } else {
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
@@ -475,7 +502,7 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme,
                                        &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path,
-                                       &stream->req.headers, NULL, &dummy_content_length, NULL, err_desc)) != 0)
+                                       &stream->req.headers, NULL, &dummy_content_length, NULL, NULL, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
@@ -676,7 +703,8 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     }
-    if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) {
+    if ((stream->tunnel == NULL && stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) ||
+        (stream->tunnel != NULL && stream->state != H2O_HTTP2_STREAM_STATE_SEND_BODY)) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         return 0;
@@ -689,9 +717,14 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
         update_stream_input_window(conn, stream, frame->length - payload.length);
 
     /* actually handle the input */
-    if (payload.length != 0 || (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0)
-        handle_request_body_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
-                                  (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+    if (payload.length != 0 || (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0) {
+        if (stream->tunnel == NULL) {
+            handle_request_body_chunk(conn, stream, h2o_iovec_init(payload.data, payload.length),
+                                      (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+        } else {
+            do_tunnel_send_to_server(stream, h2o_iovec_init(payload.data, payload.length), (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0);
+        }
+    }
 
     return 0;
 }
@@ -1001,9 +1034,11 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     }
 
     { /* send SETTINGS and connection-level WINDOW_UPDATE */
-        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
-        memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
-        conn->_write.buf->size += SERVER_PREFACE.len;
+        h2o_iovec_t preface =
+            conn->super.ctx->globalconf->proxy.websocket_http2 ? SERVER_PREFACE_WITH_EXTENDED_CONNECT : SERVER_PREFACE;
+        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, preface.len);
+        memcpy(vec.base, preface.base, preface.len);
+        conn->_write.buf->size += preface.len;
         if (conn->http2_origin_frame) {
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
@@ -1280,6 +1315,44 @@ static h2o_socket_t *get_socket(h2o_conn_t *_conn)
     return conn->sock;
 }
 
+// copied from websocket.c FIXME move to somewhere?
+#include <openssl/sha.h>
+static void create_websocket_accept_key(char *dst, const char *client_key)
+{
+#define WS_GUID "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    uint8_t sha1buf[20], key_src[60];
+
+    memcpy(key_src, client_key, 24);
+    memcpy(key_src + 24, WS_GUID, 36);
+    SHA1(key_src, sizeof(key_src), sha1buf);
+    h2o_base64_encode(dst, sha1buf, sizeof(sha1buf), 0);
+    dst[28] = '\0';
+#undef WS_GUID
+}
+
+static void websocket_upgrade(h2o_req_t *req, h2o_socket_t *upstream_sock, uint64_t timeout, char *websocket_key)
+{
+    assert(websocket_key != NULL);
+    ssize_t cursor = h2o_find_header_by_str(&req->res.headers, H2O_STRLIT("sec-websocket-accept"), -1);
+    if (cursor == -1)
+        goto OnInvalidResponse;
+
+    h2o_header_t accept_header = req->res.headers.entries[cursor];
+    h2o_delete_header(&req->res.headers, cursor);
+    char accept_key[29];
+    create_websocket_accept_key(accept_key, websocket_key);
+    if (!h2o_memis(accept_key, strlen(accept_key), accept_header.value.base, accept_header.value.len))
+        goto OnInvalidResponse;
+
+    req->res.status = 200;
+    h2o_http2_tunnel(req, &h2o_tunnel_socket_endpoint_callbacks, upstream_sock, timeout);
+    return;
+
+OnInvalidResponse:
+    req->res.status = 502;
+    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
+}
+
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1379,6 +1452,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         push_path,                 /* HTTP2 push */
         get_socket,                /* get underlying socket */
         h2o_http2_get_debug_state, /* get debug state */
+        websocket_upgrade,         /* websocket upgrade */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
             {NULL},                                                                                  /* http1 */
@@ -1583,7 +1657,10 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req, (h2o_iovec_t *)&SERVER_PREFACE, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req,
+                      (h2o_iovec_t *)(req->conn->ctx->globalconf->proxy.websocket_http2 ? &SERVER_PREFACE_WITH_EXTENDED_CONNECT
+                                                                                        : &SERVER_PREFACE),
+                      1, on_upgrade_complete, http2conn);
 
     return 0;
 Error:
@@ -1591,4 +1668,127 @@ Error:
     kh_destroy(h2o_http2_stream_t, http2conn->streams);
     free(http2conn);
     return -1;
+}
+
+struct st_http2_tunnel_generator_t {
+    h2o_generator_t super;
+    h2o_req_t *req;
+    struct {
+        const h2o_tunnel_endpoint_callbacks_t *cb;
+        void *data;
+    } peer;
+    uint64_t timeout;
+    h2o_buffer_t *buf;
+    size_t bytes_inflight;
+    unsigned server_final_received : 1;
+    unsigned client_final_received : 1;
+};
+
+static void do_tunnel_send_buffer_to_server(h2o_tunnel_t *tunnel, struct st_http2_tunnel_generator_t *generator)
+{
+    generator->bytes_inflight = generator->buf->size;
+    h2o_iovec_t buf = h2o_iovec_init(generator->buf->bytes, generator->buf->size);
+    h2o_tunnel_send(tunnel, &tunnel->endpoints[0], &buf, 1, generator->client_final_received);
+}
+
+static void do_tunnel_send_to_server(h2o_http2_stream_t *stream, h2o_iovec_t buf, int is_end_stream)
+{
+    assert(stream->tunnel != NULL);
+    h2o_tunnel_endpoint_t *endpoint = &stream->tunnel->endpoints[0];
+    struct st_http2_tunnel_generator_t *generator = (void *)endpoint->data;
+    assert(!generator->client_final_received);
+
+    h2o_buffer_append(&generator->buf, buf.base, buf.len);
+    if (is_end_stream)
+        generator->client_final_received = 1;
+
+    if (stream->tunnel->endpoints[1].sending == 0)
+        do_tunnel_send_buffer_to_server(stream->tunnel, generator);
+}
+
+static void tunnel_endpoint_send_to_client(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_iovec_t *bufs, size_t bufcnt, int is_final)
+{
+    struct st_http2_tunnel_generator_t *generator = (void *)end->data;
+    assert(!generator->server_final_received);
+    if (is_final)
+        generator->server_final_received = 1;
+    h2o_send(generator->req, bufs, bufcnt, H2O_SEND_STATE_IN_PROGRESS);
+}
+
+static void tunnel_endpoint_on_send_to_server(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, h2o_tunnel_endpoint_t *peer)
+{
+    struct st_http2_tunnel_generator_t *generator = (void *)end->data;
+
+    size_t bytes_inflight = generator->bytes_inflight;
+    h2o_buffer_consume(&generator->buf, generator->bytes_inflight);
+    generator->bytes_inflight = 0;
+
+    generator->req->proceed_req(generator->req, bytes_inflight, generator->client_final_received);
+
+    if (generator->buf->size != 0 || (generator->client_final_received && !tunnel->endpoints[0].shutdowned)) {
+        do_tunnel_send_buffer_to_server(tunnel, generator);
+    }
+}
+
+static void tunnel_endpoint_on_close(h2o_tunnel_t *tunnel, h2o_tunnel_endpoint_t *end, const char *err)
+{
+    struct st_http2_tunnel_generator_t *generator = (void *)end->data;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, generator->req);
+    if (!generator->server_final_received)
+        h2o_send(generator->req, NULL, 0, err == NULL ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_ERROR);
+    stream->tunnel = NULL;
+}
+
+static void on_tunnel_generator_proceed(h2o_generator_t *_generator, h2o_req_t *req)
+{
+    struct st_http2_tunnel_generator_t *generator = (void *)_generator;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    if (stream->tunnel == NULL) {
+        /* sent 200 response, start tunneling */
+        static const h2o_tunnel_endpoint_callbacks_t callbacks = {
+            NULL,
+            tunnel_endpoint_send_to_client,
+            tunnel_endpoint_on_send_to_server,
+            tunnel_endpoint_on_close,
+        };
+        stream->tunnel = h2o_tunnel_establish(req->conn->ctx, &callbacks, generator, generator->peer.cb, generator->peer.data, generator->timeout);
+        stream->req.proceed_req = proceed_request;
+    } else {
+        /* sent DATA frame */
+        h2o_tunnel_notify_sent(stream->tunnel, &stream->tunnel->endpoints[0]);
+        if (generator->server_final_received)
+            h2o_send(generator->req, NULL, 0, H2O_SEND_STATE_FINAL);
+    }
+}
+
+static void on_tunnel_generator_stop(h2o_generator_t *_generator, h2o_req_t *req)
+{
+    struct st_http2_tunnel_generator_t *generator = (void *)_generator;
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
+    if (stream->tunnel != NULL) {
+        /* client needs no more data, so avoid h2o_send being called in on_close callback*/
+        generator->server_final_received = 1;
+        stream->tunnel->endpoints[0].sending = 0;
+        h2o_tunnel_reset(stream->tunnel, "connection closed by client");
+    }
+}
+
+void h2o_http2_tunnel(h2o_req_t *req, const h2o_tunnel_endpoint_callbacks_t *peer_cb, void *peer_data, uint64_t timeout)
+{
+    assert(req->version >= 0x200);
+    assert(req->res.status == 200);
+
+    struct st_http2_tunnel_generator_t *generator = h2o_mem_alloc_pool(&req->pool, *generator, 1);
+    generator->super.proceed = on_tunnel_generator_proceed;
+    generator->super.stop = on_tunnel_generator_stop;
+    generator->req = req;
+    generator->peer.cb = peer_cb;
+    generator->peer.data = peer_data;
+    generator->timeout = timeout;
+    h2o_buffer_init(&generator->buf, &h2o_socket_buffer_prototype);
+    generator->bytes_inflight = 0;
+    generator->server_final_received = 0;
+    generator->client_final_received = 0;
+    h2o_start_response(req, &generator->super);
+    h2o_send(req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 }

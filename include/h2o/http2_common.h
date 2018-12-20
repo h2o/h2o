@@ -34,6 +34,7 @@
 #define H2O_HTTP2_SETTINGS_INITIAL_WINDOW_SIZE 4
 #define H2O_HTTP2_SETTINGS_MAX_FRAME_SIZE 5
 #define H2O_HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE 6
+#define H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
 
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
@@ -105,10 +106,11 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table);
 #define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
 #define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
+#define H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS 16
 
 int h2o_hpack_parse_headers(h2o_mem_pool_t *pool, const uint8_t *src, size_t len, h2o_hpack_header_table_t *header_table,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *method, h2o_iovec_t *path,
-                            h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length,
+                            h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *protocol,
                             h2o_cache_digests_t **digests, const char **err_desc);
 size_t h2o_hpack_encode_string(uint8_t *dst, const char *s, size_t len);
 void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t stream_id,

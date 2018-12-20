@@ -111,4 +111,83 @@ EOT
     doit($conn);
 };
 
+subtest 'upon http2' => sub {
+    my $code = sub {
+        my ($server, $path) = @_;
+        return <<"EOR";
+        h2g = H2.new
+        host = ARGV[0]
+        h2g.connect(host)
+        h2g.send_prefix()
+        h2g.send_settings()
+        i = 0
+        while i < 2 do
+            f = h2g.read(-1)
+            if f.type == "SETTINGS" then
+                unless f.flags == ACK
+                    h2g.send_settings_ack()
+                    puts f.to_s
+                end
+                i += 1
+            end
+        end
+        req = {
+            ":method" => "CONNECT",
+            ":authority" => "127.0.0.1:$server->{tls_port}",
+            ":scheme" => "https",
+            ":path" => "$path",
+            ":protocol" => "websocket",
+        }
+        h2g.send_headers(req, 1, END_HEADERS | END_STREAM)
+
+        sender = proc {
+            index = 0
+            lambda {
+                if index == 5
+                    h2g.send_data(1, END_STREAM, '')
+                    return false
+                end
+                index += 1
+                h2g.send_data(1, 0, "data #{index}")
+                true
+            }
+        }.call
+
+        loop do
+            f = h2g.read
+            if f == nil
+                puts "timeout"
+                exit 1
+            end
+            puts "#{f.type}, stream_id:#{f.stream_id}, len:#{f.len}, flags:#{f.flags}"
+            if f.type == 'HEADERS'
+              puts f.to_s
+              if f.flags & END_HEADERS
+                break unless sender.call
+              end
+            elsif f.type == 'DATA'
+              break unless sender.call
+            elsif f.type == 'RST_STREAM' || f.type == 'GOAWAY'
+              break
+            end
+        end
+EOR
+    };
+    subtest 'basic' => sub {
+        my $server = silent_server();
+        my $output = run_with_h2get($server, $code->($server, '/websocket'));
+        like $output, qr{unknown frame type: 8};
+        like $output, qr{':status' => '200'}i;
+        unlike $output, qr{sec-websocket-accept}i;
+        unlike $output, qr{RST_STREAM|GOAWAY};
+        my @m = $output =~ m/DATA, stream_id:1, len:6, flags:0/g;
+        is scalar(@m), 5
+    };
+    subtest 'invalid accept key' => sub {
+        my $server = silent_server();
+        my $output = run_with_h2get($server, $code->($server, '/websocket?invalid_accept_key'));
+        like $output, qr{':status' => '502'}i;
+    };
+};
+
 done_testing;
