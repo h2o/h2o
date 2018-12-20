@@ -559,7 +559,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     int chunked = 0;
     h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = {
-        &proxy_protocol, &chunked, &connection_header,
+        &proxy_protocol, &chunked, &connection_header, 1,
     };
     h2o_iovec_t method;
     h2o_url_t url;

@@ -159,6 +159,10 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
     int emit_via_header = req->conn->ctx->globalconf->proxy.emit_via_header;
 
+    if (is_websocket_handshake) {
+        assert(props->websocket_enabled);
+    }
+
     /* for x-f-f */
     if ((sslen = req->conn->callbacks->get_peername(req->conn, (void *)&ss)) != 0)
         remote_addr_len = h2o_socket_getnumerichost((void *)&ss, sslen, remote_addr);
@@ -692,5 +696,5 @@ void h2o__proxy_process_request(h2o_req_t *req)
 
      So I leave this as it is for the time being.
      */
-    h2o_httpclient_connect(&self->client, &req->pool, self, client_ctx, connpool, target, on_connect);
+    h2o_httpclient_connect(&self->client, &req->pool, self, client_ctx, connpool, target, self->is_websocket_handshake, on_connect);
 }

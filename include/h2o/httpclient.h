@@ -36,6 +36,7 @@ typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *proxy_protocol;
     int *chunked;
     h2o_iovec_t *connection_header;
+    unsigned char websocket_enabled : 1; /* an informational flag that means whether this client can use websocket or not */
 } h2o_httpclient_properties_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
@@ -186,7 +187,7 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
  * TODO: create H1- or H2-specific connect function that works without the connection pool?
  */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, int force_http1, h2o_httpclient_connect_cb cb);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 extern size_t h2o_httpclient__h1_size;
