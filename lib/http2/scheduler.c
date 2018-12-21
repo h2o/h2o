@@ -267,8 +267,10 @@ void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_
         h2o_linklist_insert_list(&dst->node._all_refs, &src->node._all_refs);
         /* node._queue */
         dst->node._queue = src->node._queue;
-        src->node._queue = NULL;
+    } else {
+        free(src->node._queue);
     }
+    src->node._queue = NULL;
 
     /* swap all_link */
     h2o_linklist_insert(&src->_all_link, &dst->_all_link);
