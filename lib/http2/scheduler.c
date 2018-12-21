@@ -341,6 +341,14 @@ void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root)
     root->_queue = NULL;
 }
 
+void h2o_http2_scheduler_deactivate(h2o_http2_scheduler_openref_t *ref)
+{
+    if (!ref->_self_is_active)
+        return;
+    ref->_self_is_active = 0;
+    decr_active_cnt(&ref->node);
+}
+
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
 {
     if (ref->_self_is_active)

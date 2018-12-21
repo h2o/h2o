@@ -266,6 +266,7 @@ static void preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
     (*dst)->stream_id = src->stream_id;
     h2o_http2_scheduler_relocate(&(*dst)->_scheduler, &src->_scheduler);
+    h2o_http2_scheduler_deactivate(&(*dst)->_scheduler);
 }
 
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
