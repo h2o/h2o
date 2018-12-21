@@ -252,7 +252,7 @@ void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_
     dst->_active_cnt = src->_active_cnt;
     dst->_self_is_active = src->_self_is_active;
     dst->_queue_node._link = (h2o_linklist_t){NULL};
-    dst->_queue_node._deficit = dst->_queue_node._deficit;
+    dst->_queue_node._deficit = src->_queue_node._deficit;
 
     /* update refs from descendants */
     if (!h2o_linklist_is_empty(&src->node._all_refs)) {
