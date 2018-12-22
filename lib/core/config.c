@@ -287,20 +287,20 @@ void h2o_config_dispose(h2o_globalconf_t *config)
 h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_handler_t *handler = h2o_mem_alloc(sz);
-
+    if(handler!=0){
     memset(handler, 0, sz);
     handler->_config_slot = conf->global->_num_config_slots++;
 
     h2o_vector_reserve(NULL, &conf->handlers, conf->handlers.size + 1);
     conf->handlers.entries[conf->handlers.size++] = handler;
-
+    }
     return handler;
 }
 
 h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_filter_t *filter = h2o_mem_alloc(sz);
-
+    if(filter!=0){
     memset(filter, 0, sz);
     filter->_config_slot = conf->global->_num_config_slots++;
 
@@ -308,19 +308,19 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
     memmove(conf->_filters.entries + 1, conf->_filters.entries, conf->_filters.size * sizeof(conf->_filters.entries[0]));
     conf->_filters.entries[0] = filter;
     ++conf->_filters.size;
-
+    }
     return filter;
 }
 
 h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_logger_t *logger = h2o_mem_alloc(sz);
-
+    if(logger!=0){
     memset(logger, 0, sz);
     logger->_config_slot = conf->global->_num_config_slots++;
 
     h2o_vector_reserve(NULL, &conf->_loggers, conf->_loggers.size + 1);
     conf->_loggers.entries[conf->_loggers.size++] = logger;
-
+    }
     return logger;
 }
