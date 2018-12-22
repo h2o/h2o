@@ -109,6 +109,10 @@ static h2o_http2_scheduler_node_t *h2o_http2_scheduler_get_parent(h2o_http2_sche
  */
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref);
 /**
+ * deactivates a reference while retaining it in the scheduler
+ */
+void h2o_http2_scheduler_deactivate(h2o_http2_scheduler_openref_t *ref);
+/**
  * calls the callback of the references linked to the dependency tree one by one, in the order defined by the dependency and the
  * weight.
  */

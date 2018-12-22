@@ -252,7 +252,7 @@ void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_
     dst->_active_cnt = src->_active_cnt;
     dst->_self_is_active = src->_self_is_active;
     dst->_queue_node._link = (h2o_linklist_t){NULL};
-    dst->_queue_node._deficit = dst->_queue_node._deficit;
+    dst->_queue_node._deficit = src->_queue_node._deficit;
 
     /* update refs from descendants */
     if (!h2o_linklist_is_empty(&src->node._all_refs)) {
@@ -267,8 +267,10 @@ void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_
         h2o_linklist_insert_list(&dst->node._all_refs, &src->node._all_refs);
         /* node._queue */
         dst->node._queue = src->node._queue;
-        src->node._queue = NULL;
+    } else {
+        free(src->node._queue);
     }
+    src->node._queue = NULL;
 
     /* swap all_link */
     h2o_linklist_insert(&src->_all_link, &dst->_all_link);
@@ -339,6 +341,14 @@ void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root)
 {
     free(root->_queue);
     root->_queue = NULL;
+}
+
+void h2o_http2_scheduler_deactivate(h2o_http2_scheduler_openref_t *ref)
+{
+    if (!ref->_self_is_active)
+        return;
+    ref->_self_is_active = 0;
+    decr_active_cnt(&ref->node);
 }
 
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref)
