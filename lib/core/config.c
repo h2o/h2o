@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
@@ -287,7 +288,7 @@ void h2o_config_dispose(h2o_globalconf_t *config)
 h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_handler_t *handler = h2o_mem_alloc(sz);
-    if(handler!=0){
+    if(handler!=NULL){
     memset(handler, 0, sz);
     handler->_config_slot = conf->global->_num_config_slots++;
 
@@ -300,7 +301,7 @@ h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
 h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_filter_t *filter = h2o_mem_alloc(sz);
-    if(filter!=0){
+    if(filter!=NULL){
     memset(filter, 0, sz);
     filter->_config_slot = conf->global->_num_config_slots++;
 
@@ -315,7 +316,7 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
 {
     h2o_logger_t *logger = h2o_mem_alloc(sz);
-    if(logger!=0){
+    if(logger!=NULL){
     memset(logger, 0, sz);
     logger->_config_slot = conf->global->_num_config_slots++;
 
