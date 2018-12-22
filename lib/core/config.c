@@ -25,7 +25,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stddef.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
