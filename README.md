@@ -15,3 +15,11 @@ Not only is it very fast, it also provides much quicker response to end-users wh
 Written in C and licensed under [the MIT License](http://opensource.org/licenses/MIT), it can also be used as a library.
 
 For more information, please refer to the documentation at [h2o.examp1e.net](https://h2o.examp1e.net).
+
+<b>Installation from source</b>
+
+```bash
+$ cmake .
+$ make
+$ make install
+```
