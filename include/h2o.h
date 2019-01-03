@@ -1442,10 +1442,10 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 static h2o_timestamp_t h2o_get_timestamp(h2o_context_t *ctx, h2o_mem_pool_t *pool);
 void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx);
 /**
- * Closes at most @max_connections_to_close inactive connection
+ * Closes at most @max_connections_to_close connections that have been inactive for @min_age seconds
  * @return number of closed connections
  */
-int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_to_close);
+int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_to_close, int min_age);
 /**
  * returns per-module context set
  */

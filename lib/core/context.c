@@ -188,19 +188,21 @@ void h2o_context_update_timestamp_string_cache(h2o_context_t *ctx)
     h2o_time2str_log(ctx->_timestamp_cache.value->log, ctx->_timestamp_cache.tv_at.tv_sec);
 }
 
-int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_to_close)
+int h2o_context_close_idle_connections(h2o_context_t *ctx, int max_connections_to_close, int min_age)
 {
     int closed = 0;
     h2o_linklist_t *node, *nprev;
+    if (max_connections_to_close <= 0)
+        return 0;
     for (node = ctx->_inactive_conns.prev; node != &ctx->_inactive_conns; node = nprev) {
         struct timeval now;
         h2o_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_conn_t, _conns, node);
         nprev = node->prev;
 
         now = h2o_gettimeofday(ctx->loop);
-        if (conn->connected_at.tv_sec == now.tv_sec && conn->connected_at.tv_usec == now.tv_usec)
+        if (now.tv_sec - conn->connected_at.tv_sec < min_age)
             continue;
-        if (conn->callbacks->close_idle_connection(conn))
+        if (conn->callbacks->close_idle_connection && conn->callbacks->close_idle_connection(conn))
             closed++;
         if (closed == max_connections_to_close)
             break;

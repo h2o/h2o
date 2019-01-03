@@ -465,6 +465,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
                                                    NULL,         /* push (no push in subrequest) */
                                                    get_socket,   /* get underlying socket */
                                                    NULL,         /* get debug state */
+                                                   NULL,         /* close idle connections */
                                                    {{{NULL}}}};
 
     mrb_state *mrb = ctx->shared->mrb;
