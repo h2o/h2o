@@ -485,6 +485,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
                                        {NULL, 0},
+                                       NULL,
                                        &pctx->ch.super,
                                        &pctx->ec.super,
                                        &pctx->sc.super,
