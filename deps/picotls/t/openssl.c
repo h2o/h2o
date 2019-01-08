@@ -90,15 +90,15 @@ static void test_key_exchanges(void)
     test_key_exchange(&ptls_openssl_secp256r1, &ptls_minicrypto_secp256r1);
     test_key_exchange(&ptls_minicrypto_secp256r1, &ptls_openssl_secp256r1);
 
-#ifdef PTLS_OPENSSL_HAS_SECP384R1
+#if PTLS_OPENSSL_HAVE_SECP384R1
     test_key_exchange(&ptls_openssl_secp384r1, &ptls_openssl_secp384r1);
 #endif
 
-#ifdef PTLS_OPENSSL_HAS_SECP521R1
+#if PTLS_OPENSSL_HAVE_SECP521R1
     test_key_exchange(&ptls_openssl_secp521r1, &ptls_openssl_secp521r1);
 #endif
 
-#ifdef PTLS_OPENSSL_HAS_X25519
+#if PTLS_OPENSSL_HAVE_X25519
     test_key_exchange(&ptls_openssl_x25519, &ptls_openssl_x25519);
     test_key_exchange(&ptls_openssl_x25519, &ptls_minicrypto_x25519);
     test_key_exchange(&ptls_minicrypto_x25519, &ptls_openssl_x25519);
@@ -150,9 +150,24 @@ static X509 *x509_from_pem(const char *pem)
 {
     BIO *bio = BIO_new_mem_buf((void *)pem, (int)strlen(pem));
     X509 *cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-    assert(cert != NULL || !!"failed to load certificate");
+    assert(cert != NULL && "failed to load certificate");
     BIO_free(bio);
     return cert;
+}
+
+static ptls_key_exchange_context_t *key_from_pem(const char *pem)
+{
+    BIO *bio = BIO_new_mem_buf((void *)pem, (int)strlen(pem));
+    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+    assert(pkey != NULL && "failed to load private key");
+    BIO_free(bio);
+
+    ptls_key_exchange_context_t *ctx;
+    int ret = ptls_openssl_create_key_exchange(&ctx, pkey);
+    assert(ret == 0 && "failed to setup private key");
+
+    EVP_PKEY_free(pkey);
+    return ctx;
 }
 
 static void test_cert_verify(void)
@@ -244,11 +259,14 @@ int main(int argc, char **argv)
                                   {&cert, 1},
                                   NULL,
                                   NULL,
+                                  NULL,
                                   &openssl_sign_certificate.super};
     assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
     ptls_context_t openssl_ctx_sha256only = openssl_ctx;
     ++openssl_ctx_sha256only.cipher_suites;
     assert(openssl_ctx_sha256only.cipher_suites[0]->hash->digest_size == 32); /* sha256 */
+
+    ptls_key_exchange_context_t *esni_private_keys[2] = {key_from_pem(ESNI_SECP256R1KEY), NULL};
 
     ctx = ctx_peer = &openssl_ctx;
     verify_certificate = &openssl_verify_certificate.super;
@@ -257,6 +275,7 @@ int main(int argc, char **argv)
     subtest("ecdsa-sign", test_ecdsa_sign);
     subtest("cert-verify", test_cert_verify);
     subtest("picotls", test_picotls);
+    test_picotls_esni(esni_private_keys);
 
     ctx = ctx_peer = &openssl_ctx_sha256only;
     subtest("picotls", test_picotls);
@@ -280,6 +299,7 @@ int main(int argc, char **argv)
                                      {&minicrypto_certificate, 1},
                                      NULL,
                                      NULL,
+                                     NULL,
                                      &minicrypto_sign_certificate.super};
     ctx = &openssl_ctx;
     ctx_peer = &minicrypto_ctx;
@@ -289,5 +309,6 @@ int main(int argc, char **argv)
     ctx_peer = &openssl_ctx;
     subtest("minicrypto vs.", test_picotls);
 
+    esni_private_keys[0]->on_exchange(esni_private_keys, 1, NULL, ptls_iovec_init(NULL, 0));
     return done_testing();
 }

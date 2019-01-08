@@ -22,6 +22,10 @@
 #ifndef picotls_minicrypto_h
 #define picotls_minicrypto_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "picotls.h"
 
 #define SECP256R1_PRIVATE_KEY_SIZE 32
@@ -57,5 +61,9 @@ typedef struct st_ptls_asn1_pkcs8_private_key_t {
 } ptls_asn1_pkcs8_private_key_t;
 
 int ptls_minicrypto_load_private_key(ptls_context_t *ctx, char const *pem_fname);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
