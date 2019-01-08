@@ -337,6 +337,7 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
                              h2o_iovec_t *expect)
 {
     ssize_t entity_header_index;
+    h2o_url_t url;
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
 
     expect->base = NULL;
@@ -353,11 +354,14 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
     entity_header_index =
         init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect);
 
+    if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0)
+        conn->req.input.path = h2o_strdup(&conn->req.pool, url.path.base, url.path.len);
+    else
+        conn->req.input.path = h2o_strdup(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len);
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
     if (entity_header_index != -1) {
         size_t i;
         conn->req.input.method = h2o_strdup(&conn->req.pool, conn->req.input.method.base, conn->req.input.method.len);
-        conn->req.input.path = h2o_strdup(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len);
         for (i = 0; i != conn->req.headers.size; ++i) {
             h2o_header_t *header = conn->req.headers.entries + i;
             if (!h2o_iovec_is_token(header->name)) {
