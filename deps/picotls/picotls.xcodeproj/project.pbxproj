@@ -91,6 +91,9 @@
 		10EACB131DCEAF0F00CA0341 /* curve25519.h in Headers */ = {isa = PBXBuildFile; fileRef = 105900361DC8D44E00FB4085 /* curve25519.h */; };
 		10EACB1A1DCEC2A300CA0341 /* libpicotls-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 106530DA1D9B3E6F005B2C60 /* libpicotls-core.a */; };
 		E949EF282073629300511ECA /* minicrypto-pem.c in Sources */ = {isa = PBXBuildFile; fileRef = E949EF272073629300511ECA /* minicrypto-pem.c */; };
+		E992F7A320E99A7C0008154D /* libpicotls-openssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1059008C1DC8E1A300FB4085 /* libpicotls-openssl.a */; };
+		E992F7A420E99A7C0008154D /* libpicotls-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 106530DA1D9B3E6F005B2C60 /* libpicotls-core.a */; };
+		E992F7AA20E99AA10008154D /* esni.c in Sources */ = {isa = PBXBuildFile; fileRef = E992F79A20E99A6B0008154D /* esni.c */; };
 		E99B75E01F5CDDB500CF503E /* asn1.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DE1F5CDDB500CF503E /* asn1.c */; };
 		E99B75E11F5CDDB500CF503E /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DF1F5CDDB500CF503E /* pembase64.c */; };
 		E99B75E21F5CE54D00CF503E /* asn1.c in Sources */ = {isa = PBXBuildFile; fileRef = E99B75DE1F5CDDB500CF503E /* asn1.c */; };
@@ -105,6 +108,7 @@
 		E9BC76DF1EF3CCD100EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76CC1EF3A31000EB7A09 /* salsa20.h */; };
 		E9BC76E01EF3CCDD00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
 		E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76D61EF3C1C200EB7A09 /* poly1305.c */; };
+		E9E4B12B2180530400514B47 /* certificate_compression.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E4B12A2180530400514B47 /* certificate_compression.c */; };
 		E9E865EB203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
 		E9E865EC203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
 		E9E865ED203BD46700E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
@@ -124,6 +128,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = 106530D91D9B3E6F005B2C60;
 			remoteInfo = "picotls-core";
+		};
+		E992F79D20E99A7C0008154D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 106530AA1D9985E0005B2C60 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 106530D91D9B3E6F005B2C60;
+			remoteInfo = "picotls-core";
+		};
+		E992F79F20E99A7C0008154D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 106530AA1D9985E0005B2C60 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 105900701DC8E1A300FB4085;
+			remoteInfo = "picotls-openssl";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -147,6 +165,15 @@
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 		106530F81DAD8985005B2C60 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		E992F7A520E99A7C0008154D /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -207,6 +234,8 @@
 		106530FE1DAD8A3C005B2C60 /* cli.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cli.c; sourceTree = "<group>"; };
 		10EACB171DCEAF0F00CA0341 /* libpicotls-minicrypto.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libpicotls-minicrypto.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E949EF272073629300511ECA /* minicrypto-pem.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "minicrypto-pem.c"; sourceTree = "<group>"; };
+		E992F79A20E99A6B0008154D /* esni.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = esni.c; sourceTree = "<group>"; };
+		E992F7A920E99A7C0008154D /* picotls-esni */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "picotls-esni"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E99B75DE1F5CDDB500CF503E /* asn1.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = asn1.c; sourceTree = "<group>"; };
 		E99B75DF1F5CDDB500CF503E /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E9BC76C61EF3A2F700EB7A09 /* chacha20.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = chacha20.c; path = src/chacha20.c; sourceTree = "<group>"; };
@@ -214,6 +243,9 @@
 		E9BC76D61EF3C1C200EB7A09 /* poly1305.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = poly1305.c; path = src/poly1305.c; sourceTree = "<group>"; };
 		E9BC76D71EF3C1C200EB7A09 /* poly1305.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = poly1305.h; path = src/poly1305.h; sourceTree = "<group>"; };
 		E9E3849C1F0748DD00D50990 /* util.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = util.h; sourceTree = "<group>"; };
+		E9E4B1292180514000514B47 /* certificate_compression.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = certificate_compression.h; sourceTree = "<group>"; };
+		E9E4B12A2180530400514B47 /* certificate_compression.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = certificate_compression.c; sourceTree = "<group>"; };
+		E9E4B12C2181927900514B47 /* CMakeLists.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CMakeLists.txt; sourceTree = "<group>"; };
 		E9E865E9203BD45600E2FFCD /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = sha512.c; path = src/sha512.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -259,6 +291,15 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E992F7A220E99A7C0008154D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E992F7A320E99A7C0008154D /* libpicotls-openssl.a in Frameworks */,
+				E992F7A420E99A7C0008154D /* libpicotls-core.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -315,9 +356,11 @@
 		106530A91D9985E0005B2C60 = {
 			isa = PBXGroup;
 			children = (
+				E9E4B12C2181927900514B47 /* CMakeLists.txt */,
 				106530E11D9B4000005B2C60 /* deps */,
 				106530BC1D998616005B2C60 /* include */,
 				106530BD1D998624005B2C60 /* lib */,
+				E992F79920E99A080008154D /* src */,
 				106530C41D9B1A0E005B2C60 /* t */,
 				106530B31D9985E0005B2C60 /* Products */,
 			);
@@ -332,6 +375,7 @@
 				1059004B1DC8D57000FB4085 /* test-minicrypto */,
 				1059008C1DC8E1A300FB4085 /* libpicotls-openssl.a */,
 				10EACB171DCEAF0F00CA0341 /* libpicotls-minicrypto.a */,
+				E992F7A920E99A7C0008154D /* picotls-esni */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -355,6 +399,7 @@
 				106530BF1D998641005B2C60 /* picotls.c */,
 				105900C51DC9798800FB4085 /* uecc.c */,
 				E949EF272073629300511ECA /* minicrypto-pem.c */,
+				E9E4B12A2180530400514B47 /* certificate_compression.c */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -396,8 +441,17 @@
 			children = (
 				1059004F1DC8D64E00FB4085 /* minicrypto.h */,
 				106530ED1D9CEFF7005B2C60 /* openssl.h */,
+				E9E4B1292180514000514B47 /* certificate_compression.h */,
 			);
 			path = picotls;
+			sourceTree = "<group>";
+		};
+		E992F79920E99A080008154D /* src */ = {
+			isa = PBXGroup;
+			children = (
+				E992F79A20E99A6B0008154D /* esni.c */,
+			);
+			path = src;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -568,6 +622,25 @@
 			productReference = 10EACB171DCEAF0F00CA0341 /* libpicotls-minicrypto.a */;
 			productType = "com.apple.product-type.library.static";
 		};
+		E992F79B20E99A7C0008154D /* picotls-esni */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E992F7A620E99A7C0008154D /* Build configuration list for PBXNativeTarget "picotls-esni" */;
+			buildPhases = (
+				E992F7A020E99A7C0008154D /* Sources */,
+				E992F7A220E99A7C0008154D /* Frameworks */,
+				E992F7A520E99A7C0008154D /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E992F79C20E99A7C0008154D /* PBXTargetDependency */,
+				E992F79E20E99A7C0008154D /* PBXTargetDependency */,
+			);
+			name = "picotls-esni";
+			productName = "test-crypto-openssl";
+			productReference = E992F7A920E99A7C0008154D /* picotls-esni */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -603,6 +676,7 @@
 				106530F11DAD8985005B2C60 /* cli */,
 				106530CB1D9B3D45005B2C60 /* test-openssl */,
 				105900411DC8D57000FB4085 /* test-minicrypto */,
+				E992F79B20E99A7C0008154D /* picotls-esni */,
 			);
 		};
 /* End PBXProject section */
@@ -677,6 +751,7 @@
 				E99B75E01F5CDDB500CF503E /* asn1.c in Sources */,
 				E99B75E11F5CDDB500CF503E /* pembase64.c in Sources */,
 				106530EB1D9B7C5C005B2C60 /* picotls.c in Sources */,
+				E9E4B12B2180530400514B47 /* certificate_compression.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -712,6 +787,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E992F7A020E99A7C0008154D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E992F7AA20E99AA10008154D /* esni.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -724,6 +807,16 @@
 			isa = PBXTargetDependency;
 			target = 106530D91D9B3E6F005B2C60 /* picotls-core */;
 			targetProxy = 10EACB181DCEAF4A00CA0341 /* PBXContainerItemProxy */;
+		};
+		E992F79C20E99A7C0008154D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 106530D91D9B3E6F005B2C60 /* picotls-core */;
+			targetProxy = E992F79D20E99A7C0008154D /* PBXContainerItemProxy */;
+		};
+		E992F79E20E99A7C0008154D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 105900701DC8E1A300FB4085 /* picotls-openssl */;
+			targetProxy = E992F79F20E99A7C0008154D /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -811,7 +904,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HEADER_SEARCH_PATHS = include;
+				HEADER_SEARCH_PATHS = (
+					include,
+					/usr/local/include,
+				);
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = YES;
@@ -853,7 +949,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				HEADER_SEARCH_PATHS = include;
+				HEADER_SEARCH_PATHS = (
+					include,
+					/usr/local/include,
+				);
 				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = NO;
@@ -910,12 +1009,22 @@
 		106530FA1DAD8985005B2C60 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "PICOTLS_USE_BROTLI=1";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
 					include,
+					"/usr/local/openssl-1.1.0/include",
+					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
-				OTHER_LDFLAGS = "-lcrypto";
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.1.0/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lcrypto",
+					"-lbrotlidec",
+					"-lbrotlienc",
+					"-lresolv",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -923,12 +1032,22 @@
 		106530FB1DAD8985005B2C60 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "PICOTLS_USE_BROTLI=1";
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.1.0/include",
 					include,
+					"/usr/local/openssl-1.1.0/include",
+					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
-				OTHER_LDFLAGS = "-lcrypto";
+				LIBRARY_SEARCH_PATHS = (
+					"/usr/local/openssl-1.1.0/lib",
+					/usr/local/lib,
+				);
+				OTHER_LDFLAGS = (
+					"-lcrypto",
+					"-lbrotlidec",
+					"-lbrotlienc",
+					"-lresolv",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -947,6 +1066,32 @@
 			buildSettings = {
 				EXECUTABLE_PREFIX = lib;
 				GCC_PREPROCESSOR_DEFINITIONS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		E992F7A720E99A7C0008154D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.1.0/include",
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				OTHER_LDFLAGS = "-lcrypto";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		E992F7A820E99A7C0008154D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				HEADER_SEARCH_PATHS = (
+					"/usr/local/openssl-1.1.0/include",
+					include,
+				);
+				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.1.0/lib";
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -1013,6 +1158,15 @@
 			buildConfigurations = (
 				10EACB151DCEAF0F00CA0341 /* Debug */,
 				10EACB161DCEAF0F00CA0341 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E992F7A620E99A7C0008154D /* Build configuration list for PBXNativeTarget "picotls-esni" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E992F7A720E99A7C0008154D /* Debug */,
+				E992F7A820E99A7C0008154D /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

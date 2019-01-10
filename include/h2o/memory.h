@@ -156,7 +156,7 @@ typedef H2O_VECTOR(void) h2o_vector_t;
 typedef H2O_VECTOR(uint8_t) h2o_byte_vector_t;
 typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
-extern void *(*h2o_mem__set_secure)(void *, int, size_t);
+extern void *(* volatile h2o_mem__set_secure)(void *, int, size_t);
 
 /**
  * prints an error message and aborts

@@ -1488,11 +1488,22 @@ enum {
  */
 void h2o_resp_add_date_header(h2o_req_t *req);
 /**
- * sends the given string as the response
+ * Sends the given string as the response. The function copies the string so that the caller can discard it immediately.
+ *
+ * Be careful of calling the function asynchronously, because there is a chance of the request object getting destroyed before the
+ * function is being invoked.  This could happpen for example when the client abruptly closing the connection. There are two ways to
+ * detect the destruction:
+ *
+ * * allocate a memory chunk using the request's memory pool with a destructor that you define; i.e. call `h2o_mem_alloc_shared(
+ *   &req->pool, obj_size, my_destructor)`. When the request object is destroyed, `my_destructor` will be invoked as part of the
+ *   memory reclamation process.
+ * * register the `stop` callback of the generator that is bound to the request. The downside of the approach is that a generator
+ *   is not associated to a request until all the response headers become ready to be sent, i.e., when `h2o_start_response` is
+ *   called.
  */
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 /**
- * sends the given information as an error response to the client
+ * sends the given information as an error response to the client. Uses h2o_send_inline internally, so the same restrictions apply.
  */
 void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 #define H2O_SEND_ERROR_XXX(status)                                                                                                 \
@@ -1513,15 +1524,16 @@ H2O_SEND_ERROR_XXX(502)
 H2O_SEND_ERROR_XXX(503)
 
 /**
- * sends error response using zero timeout; can be called by output filters while processing the headers
+ * sends error response using zero timeout; can be called by output filters while processing the headers.  Uses h2o_send_inline
+ * internally, so the same restrictions apply.
  */
 void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 /**
- * sends a redirect response
+ * sends a redirect response.  Uses (the equivalent of) h2o_send_inline internally, so the same restrictions apply.
  */
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len);
 /**
- * handles redirect internally
+ * handles redirect internally.
  */
 void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides);
 /**

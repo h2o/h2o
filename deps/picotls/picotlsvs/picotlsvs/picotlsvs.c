@@ -414,14 +414,16 @@ int collected_test_extensions(ptls_t *tls, ptls_handshake_properties_t *properti
 	return 0;
 }
 
-int client_hello_call_back(ptls_on_client_hello_t * on_hello_cb_ctx,
-	ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *negotiated_protocols,
-	size_t num_negotiated_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+int client_hello_call_back(ptls_on_client_hello_t *on_hello_cb_ctx, ptls_t *tls,
+                           ptls_on_client_hello_parameters_t *params)
 {
-	for (size_t i = 0; i < num_negotiated_protocols; i++)
+    /* Save the server name */
+    ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
+    /* Check the ALPN */
+	for (size_t i = 0; i < params->negotiated_protocols.count; i++)
 	{
-		if (negotiated_protocols[i].len == sizeof(test_alpn) - 1 &&
-			memcmp(negotiated_protocols[i].base, test_alpn, sizeof(test_alpn) - 1) == 0)
+		if (params->negotiated_protocols.list[i].len == sizeof(test_alpn) - 1 &&
+                memcmp(params->negotiated_protocols.list[i].base, test_alpn, sizeof(test_alpn) - 1) == 0)
 		{
 			ptls_set_negotiated_protocol(tls, test_alpn, sizeof(test_alpn) - 1);
 			break;
