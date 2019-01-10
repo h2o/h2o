@@ -279,15 +279,14 @@ SET(QUIC_SOURCE_FILES
     deps/dcc/cc.c
     deps/dcc/cc_cubic.c
     deps/dcc/cc_newreno.c
-    deps/quicly/lib/ack.c
-    deps/quicly/lib/buffer.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/loss.c
-    deps/quicly/lib/maxsender.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/ranges.c
-    deps/quicly/lib/recvbuf.c
-    deps/quicly/lib/sendbuf.c
+    deps/quicly/lib/recvstate.c
+    deps/quicly/lib/sendstate.c
+    deps/quicly/lib/sentmap.c
+    deps/quicly/lib/streambuf.c
     lib/quic/qpack.c
     lib/quic/common.c
     lib/quic/server.c)

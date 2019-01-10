@@ -249,41 +249,22 @@
 		E901C3DA213E1C2E00D17C93 /* quicly.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3D9213E1C2E00D17C93 /* quicly.h */; };
 		E901C3E5213E1C3600D17C93 /* maxsender.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3DB213E1C3600D17C93 /* maxsender.h */; };
 		E901C3E6213E1C3600D17C93 /* ranges.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3DC213E1C3600D17C93 /* ranges.h */; };
-		E901C3E7213E1C3600D17C93 /* ack.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3DD213E1C3600D17C93 /* ack.h */; };
 		E901C3E8213E1C3600D17C93 /* loss.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3DE213E1C3600D17C93 /* loss.h */; };
-		E901C3E9213E1C3600D17C93 /* recvbuf.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3DF213E1C3600D17C93 /* recvbuf.h */; };
-		E901C3EA213E1C3600D17C93 /* buffer.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E0213E1C3600D17C93 /* buffer.h */; };
 		E901C3EB213E1C3600D17C93 /* frame.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E1213E1C3600D17C93 /* frame.h */; };
-		E901C3EC213E1C3600D17C93 /* sendbuf.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E2213E1C3600D17C93 /* sendbuf.h */; };
 		E901C3ED213E1C3600D17C93 /* constants.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E3213E1C3600D17C93 /* constants.h */; };
 		E901C3EE213E1C3600D17C93 /* linklist.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E4213E1C3600D17C93 /* linklist.h */; };
 		E901C3F8213E1C4000D17C93 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3EF213E1C4000D17C93 /* loss.c */; };
 		E901C3F9213E1C4000D17C93 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F0213E1C4000D17C93 /* frame.c */; };
-		E901C3FA213E1C4000D17C93 /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F1213E1C4000D17C93 /* buffer.c */; };
 		E901C3FB213E1C4000D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
 		E901C3FC213E1C4000D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
-		E901C3FD213E1C4000D17C93 /* ack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F4213E1C4000D17C93 /* ack.c */; };
-		E901C3FE213E1C4000D17C93 /* recvbuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F5213E1C4000D17C93 /* recvbuf.c */; };
-		E901C3FF213E1C4000D17C93 /* sendbuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F6213E1C4000D17C93 /* sendbuf.c */; };
-		E901C401213E1C5400D17C93 /* ack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F4213E1C4000D17C93 /* ack.c */; };
-		E901C402213E1C5400D17C93 /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F1213E1C4000D17C93 /* buffer.c */; };
 		E901C403213E1C5400D17C93 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F0213E1C4000D17C93 /* frame.c */; };
 		E901C404213E1C5400D17C93 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3EF213E1C4000D17C93 /* loss.c */; };
 		E901C406213E1C5400D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
 		E901C407213E1C5400D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
-		E901C408213E1C5400D17C93 /* recvbuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F5213E1C4000D17C93 /* recvbuf.c */; };
-		E901C409213E1C5400D17C93 /* sendbuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F6213E1C4000D17C93 /* sendbuf.c */; };
-		E901C40A213E1C5500D17C93 /* ack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F4213E1C4000D17C93 /* ack.c */; };
-		E901C40B213E1C5500D17C93 /* buffer.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F1213E1C4000D17C93 /* buffer.c */; };
 		E901C40C213E1C5500D17C93 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F0213E1C4000D17C93 /* frame.c */; };
 		E901C40D213E1C5500D17C93 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3EF213E1C4000D17C93 /* loss.c */; };
-		E901C40E213E1C5500D17C93 /* maxsender.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F7213E1C4000D17C93 /* maxsender.c */; };
 		E901C40F213E1C5500D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
 		E901C410213E1C5500D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
-		E901C411213E1C5500D17C93 /* recvbuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F5213E1C4000D17C93 /* recvbuf.c */; };
-		E901C412213E1C5500D17C93 /* sendbuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F6213E1C4000D17C93 /* sendbuf.c */; };
-		E901C413213E1D0500D17C93 /* maxsender.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F7213E1C4000D17C93 /* maxsender.c */; };
-		E901C414213E1D0500D17C93 /* maxsender.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F7213E1C4000D17C93 /* maxsender.c */; };
 		E901C41C213E3C2800D17C93 /* cc_cubic.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C416213E3C2700D17C93 /* cc_cubic.h */; };
 		E901C41D213E3C2800D17C93 /* cc_int.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C417213E3C2700D17C93 /* cc_int.h */; };
 		E901C41E213E3C2800D17C93 /* cc.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C418213E3C2700D17C93 /* cc.c */; };
@@ -461,6 +442,22 @@
 		E987E5FA1FD8C04D00DE4346 /* metablock.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5801FD7BE2100DE4346 /* metablock.c */; };
 		E987E5FB1FD8C04D00DE4346 /* static_dict.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58C1FD7BE2300DE4346 /* static_dict.c */; };
 		E987E5FC1FD8C04D00DE4346 /* utf8_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5861FD7BE2200DE4346 /* utf8_util.c */; };
+		E98884C721E7F3AF0060F010 /* recvstate.h in Headers */ = {isa = PBXBuildFile; fileRef = E98884C321E7F3AE0060F010 /* recvstate.h */; };
+		E98884C821E7F3AF0060F010 /* sendstate.h in Headers */ = {isa = PBXBuildFile; fileRef = E98884C421E7F3AE0060F010 /* sendstate.h */; };
+		E98884C921E7F3AF0060F010 /* streambuf.h in Headers */ = {isa = PBXBuildFile; fileRef = E98884C521E7F3AF0060F010 /* streambuf.h */; };
+		E98884CA21E7F3AF0060F010 /* sentmap.h in Headers */ = {isa = PBXBuildFile; fileRef = E98884C621E7F3AF0060F010 /* sentmap.h */; };
+		E98884CF21E7F3C80060F010 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CB21E7F3C80060F010 /* streambuf.c */; };
+		E98884D021E7F3C80060F010 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CC21E7F3C80060F010 /* sentmap.c */; };
+		E98884D121E7F3C80060F010 /* sendstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CD21E7F3C80060F010 /* sendstate.c */; };
+		E98884D221E7F3C80060F010 /* recvstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CE21E7F3C80060F010 /* recvstate.c */; };
+		E98884D321E7F3D80060F010 /* recvstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CE21E7F3C80060F010 /* recvstate.c */; };
+		E98884D421E7F3D80060F010 /* sendstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CD21E7F3C80060F010 /* sendstate.c */; };
+		E98884D521E7F3D80060F010 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CC21E7F3C80060F010 /* sentmap.c */; };
+		E98884D621E7F3D80060F010 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CB21E7F3C80060F010 /* streambuf.c */; };
+		E98884D721E7F3D90060F010 /* recvstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CE21E7F3C80060F010 /* recvstate.c */; };
+		E98884D821E7F3D90060F010 /* sendstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CD21E7F3C80060F010 /* sendstate.c */; };
+		E98884D921E7F3D90060F010 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CC21E7F3C80060F010 /* sentmap.c */; };
+		E98884DA21E7F3D90060F010 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E98884CB21E7F3C80060F010 /* streambuf.c */; };
 		E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */ = {isa = PBXBuildFile; fileRef = E9BC76E41F00E70700EB7A09 /* salsa20.h */; };
 		E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
 		E9BC76EB1F00E74F00EB7A09 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E91F00E74C00EB7A09 /* poly1305.c */; };
@@ -1000,23 +997,14 @@
 		E901C3D9213E1C2E00D17C93 /* quicly.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = quicly.h; sourceTree = "<group>"; };
 		E901C3DB213E1C3600D17C93 /* maxsender.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = maxsender.h; sourceTree = "<group>"; };
 		E901C3DC213E1C3600D17C93 /* ranges.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ranges.h; sourceTree = "<group>"; };
-		E901C3DD213E1C3600D17C93 /* ack.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ack.h; sourceTree = "<group>"; };
 		E901C3DE213E1C3600D17C93 /* loss.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = loss.h; sourceTree = "<group>"; };
-		E901C3DF213E1C3600D17C93 /* recvbuf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = recvbuf.h; sourceTree = "<group>"; };
-		E901C3E0213E1C3600D17C93 /* buffer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = buffer.h; sourceTree = "<group>"; };
 		E901C3E1213E1C3600D17C93 /* frame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = frame.h; sourceTree = "<group>"; };
-		E901C3E2213E1C3600D17C93 /* sendbuf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sendbuf.h; sourceTree = "<group>"; };
 		E901C3E3213E1C3600D17C93 /* constants.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = constants.h; sourceTree = "<group>"; };
 		E901C3E4213E1C3600D17C93 /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
 		E901C3EF213E1C4000D17C93 /* loss.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E901C3F0213E1C4000D17C93 /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
-		E901C3F1213E1C4000D17C93 /* buffer.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = buffer.c; sourceTree = "<group>"; };
 		E901C3F2213E1C4000D17C93 /* ranges.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ranges.c; sourceTree = "<group>"; };
 		E901C3F3213E1C4000D17C93 /* quicly.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = quicly.c; sourceTree = "<group>"; };
-		E901C3F4213E1C4000D17C93 /* ack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ack.c; sourceTree = "<group>"; };
-		E901C3F5213E1C4000D17C93 /* recvbuf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = recvbuf.c; sourceTree = "<group>"; };
-		E901C3F6213E1C4000D17C93 /* sendbuf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sendbuf.c; sourceTree = "<group>"; };
-		E901C3F7213E1C4000D17C93 /* maxsender.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = maxsender.c; sourceTree = "<group>"; };
 		E901C416213E3C2700D17C93 /* cc_cubic.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc_cubic.h; sourceTree = "<group>"; };
 		E901C417213E3C2700D17C93 /* cc_int.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc_int.h; sourceTree = "<group>"; };
 		E901C418213E3C2700D17C93 /* cc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc.c; sourceTree = "<group>"; };
@@ -1153,6 +1141,14 @@
 		E987E5E21FD7EB7E00DE4346 /* version.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = version.h; sourceTree = "<group>"; };
 		E987E5E31FD7EB7E00DE4346 /* dictionary.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = dictionary.c; sourceTree = "<group>"; };
 		E987E5E41FD7EB7F00DE4346 /* dictionary.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dictionary.h; sourceTree = "<group>"; };
+		E98884C321E7F3AE0060F010 /* recvstate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = recvstate.h; sourceTree = "<group>"; };
+		E98884C421E7F3AE0060F010 /* sendstate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sendstate.h; sourceTree = "<group>"; };
+		E98884C521E7F3AF0060F010 /* streambuf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = streambuf.h; sourceTree = "<group>"; };
+		E98884C621E7F3AF0060F010 /* sentmap.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sentmap.h; sourceTree = "<group>"; };
+		E98884CB21E7F3C80060F010 /* streambuf.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = streambuf.c; sourceTree = "<group>"; };
+		E98884CC21E7F3C80060F010 /* sentmap.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sentmap.c; sourceTree = "<group>"; };
+		E98884CD21E7F3C80060F010 /* sendstate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sendstate.c; sourceTree = "<group>"; };
+		E98884CE21E7F3C80060F010 /* recvstate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = recvstate.c; sourceTree = "<group>"; };
 		E9A410951F9EA2E400D9B0FB /* 50reverse-proxy-multiple-backends-with-down.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-multiple-backends-with-down.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9A410961F9EA2F100D9B0FB /* 50reverse-proxy-multiple-backends.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-multiple-backends.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E9A410971F9EA2F200D9B0FB /* 50reverse-proxy-round-robin.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-round-robin.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2270,15 +2266,14 @@
 		E901C3D7213E1BED00D17C93 /* lib */ = {
 			isa = PBXGroup;
 			children = (
-				E901C3F4213E1C4000D17C93 /* ack.c */,
-				E901C3F1213E1C4000D17C93 /* buffer.c */,
 				E901C3F0213E1C4000D17C93 /* frame.c */,
 				E901C3EF213E1C4000D17C93 /* loss.c */,
-				E901C3F7213E1C4000D17C93 /* maxsender.c */,
 				E901C3F3213E1C4000D17C93 /* quicly.c */,
 				E901C3F2213E1C4000D17C93 /* ranges.c */,
-				E901C3F5213E1C4000D17C93 /* recvbuf.c */,
-				E901C3F6213E1C4000D17C93 /* sendbuf.c */,
+				E98884CE21E7F3C80060F010 /* recvstate.c */,
+				E98884CD21E7F3C80060F010 /* sendstate.c */,
+				E98884CC21E7F3C80060F010 /* sentmap.c */,
+				E98884CB21E7F3C80060F010 /* streambuf.c */,
 			);
 			path = lib;
 			sourceTree = "<group>";
@@ -2286,16 +2281,16 @@
 		E901C3D8213E1C1D00D17C93 /* quicly */ = {
 			isa = PBXGroup;
 			children = (
-				E901C3DD213E1C3600D17C93 /* ack.h */,
-				E901C3E0213E1C3600D17C93 /* buffer.h */,
 				E901C3E3213E1C3600D17C93 /* constants.h */,
 				E901C3E1213E1C3600D17C93 /* frame.h */,
 				E901C3E4213E1C3600D17C93 /* linklist.h */,
 				E901C3DE213E1C3600D17C93 /* loss.h */,
 				E901C3DB213E1C3600D17C93 /* maxsender.h */,
 				E901C3DC213E1C3600D17C93 /* ranges.h */,
-				E901C3DF213E1C3600D17C93 /* recvbuf.h */,
-				E901C3E2213E1C3600D17C93 /* sendbuf.h */,
+				E98884C321E7F3AE0060F010 /* recvstate.h */,
+				E98884C421E7F3AE0060F010 /* sendstate.h */,
+				E98884C621E7F3AF0060F010 /* sentmap.h */,
+				E98884C521E7F3AF0060F010 /* streambuf.h */,
 			);
 			path = quicly;
 			sourceTree = "<group>";
@@ -2606,17 +2601,18 @@
 				105534EB1A42A87E00627ECB /* _templates.c.h in Headers */,
 				7D67C724204F8CA50049E935 /* httpclient.h in Headers */,
 				1079236A19A3210E00C52AD6 /* khash.h in Headers */,
+				E98884C721E7F3AF0060F010 /* recvstate.h in Headers */,
 				1022E7C71CA8BCEB00CE2A05 /* yrmcds_text.h in Headers */,
 				105534D81A3C791B00627ECB /* configurator.h in Headers */,
 				10AA2EAA1A8DDC57004322AC /* multithread.h in Headers */,
 				E901C3E5213E1C3600D17C93 /* maxsender.h in Headers */,
 				10AA2E9F1A8807CF004322AC /* url.h in Headers */,
 				10B38A721B8D34BB007DC191 /* mruby_.h in Headers */,
-				E901C3E7213E1C3600D17C93 /* ack.h in Headers */,
 				10FCC13F1B2E4A4500F13674 /* cloexec.h in Headers */,
 				E9708B1C1E49A3480029E0A5 /* handy.h in Headers */,
 				D08137421FD408C2004679DF /* balancer.h in Headers */,
 				E901C3EE213E1C3600D17C93 /* linklist.h in Headers */,
+				E98884C921E7F3AF0060F010 /* streambuf.h in Headers */,
 				1024A3FE1D22546800EB13F1 /* cache_digests.h in Headers */,
 				10DA969C1CD2BF9000679165 /* cache.h in Headers */,
 				E901C43D213FAE0300D17C93 /* qpack.h in Headers */,
@@ -2635,6 +2631,7 @@
 				0812AB2C1D7FD54700004F23 /* read.h in Headers */,
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				E901C3E6213E1C3600D17C93 /* ranges.h in Headers */,
+				E98884CA21E7F3AF0060F010 /* sentmap.h in Headers */,
 				10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */,
 				E901C3ED213E1C3600D17C93 /* constants.h in Headers */,
 				08790DE01D8015A400A04BC1 /* sds.h in Headers */,
@@ -2647,13 +2644,12 @@
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				E9E5049421501CA5004DC170 /* hq_server.h in Headers */,
 				1058F6ED1D7CC99B00FFFFA3 /* openssl_backport.h in Headers */,
-				E901C3E9213E1C3600D17C93 /* recvbuf.h in Headers */,
+				E98884C821E7F3AF0060F010 /* sendstate.h in Headers */,
 				E901C3DA213E1C2E00D17C93 /* quicly.h in Headers */,
 				E901C3EB213E1C3600D17C93 /* frame.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
 				10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */,
 				08790DDF1D8015A400A04BC1 /* net.h in Headers */,
-				E901C3EA213E1C3600D17C93 /* buffer.h in Headers */,
 				10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */,
 				E97EC88D213CE3130086AD64 /* hpack.h in Headers */,
 				10F419801B64E70D00BEAEAC /* golombset.h in Headers */,
@@ -2673,7 +2669,6 @@
 				E901C420213E3C2800D17C93 /* cc.h in Headers */,
 				E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */,
 				0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */,
-				E901C3EC213E1C3600D17C93 /* sendbuf.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
 				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
 				1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */,
@@ -2964,6 +2959,7 @@
 				E9E50473214A5B8A004DC170 /* hqclient.c in Sources */,
 				E90A95F51E30797D00483D6C /* headers_util.c in Sources */,
 				10D0905519F102C70043D458 /* http1client.c in Sources */,
+				E98884D121E7F3C80060F010 /* sendstate.c in Sources */,
 				10DA969E1CD2BFAC00679165 /* cache.c in Sources */,
 				107923D219A3217300C52AD6 /* token.c in Sources */,
 				10C45D551CFE9B300096DB06 /* events.c in Sources */,
@@ -2978,7 +2974,6 @@
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				1022E7C31CA8BCCE00CE2A05 /* text_mode.c in Sources */,
 				080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */,
-				E901C3FD213E1C4000D17C93 /* ack.c in Sources */,
 				10835E051C9B3C6200197E59 /* status.c in Sources */,
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
@@ -3002,12 +2997,10 @@
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
 				E901C3F8213E1C4000D17C93 /* loss.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
-				E901C3FE213E1C4000D17C93 /* recvbuf.c in Sources */,
 				10FEF24A1D6FC6F600E11B1D /* durations.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
 				0812AB201D7FCFEB00004F23 /* async.c in Sources */,
 				E9BCE68C1FF0CF98003CEA11 /* timerwheel.c in Sources */,
-				E901C3FA213E1C4000D17C93 /* buffer.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
@@ -3021,8 +3014,10 @@
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */,
 				10AA2EA51A8D9999004322AC /* redirect.c in Sources */,
+				E98884CF21E7F3C80060F010 /* streambuf.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
+				E98884D221E7F3C80060F010 /* recvstate.c in Sources */,
 				E9E5048E214EC5E2004DC170 /* picotls.c in Sources */,
 				107D4D551B5B30EE004A9B21 /* file.c in Sources */,
 				10D0907319F633B00043D458 /* proxy.c in Sources */,
@@ -3044,7 +3039,6 @@
 				E9E5049021501BBA004DC170 /* server.c in Sources */,
 				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
 				E901C41E213E3C2800D17C93 /* cc.c in Sources */,
-				E901C3FF213E1C4000D17C93 /* sendbuf.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
@@ -3053,10 +3047,10 @@
 				104481301BFD10450007863F /* filecache.c in Sources */,
 				10BCF2FD1B168CAE0076939D /* fastcgi.c in Sources */,
 				084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */,
-				E901C414213E1D0500D17C93 /* maxsender.c in Sources */,
 				10A3D40B1B50DAB700327CF9 /* send.c in Sources */,
 				08790DE51D82782900A04BC1 /* redis.c in Sources */,
 				7DE1DB37212B1CC00055F500 /* ssl.c in Sources */,
+				E98884D021E7F3C80060F010 /* sentmap.c in Sources */,
 				106C23011C0544CE00405689 /* errordoc.c in Sources */,
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
@@ -3093,6 +3087,7 @@
 				1079244B19A3266700C52AD6 /* context.c in Sources */,
 				E9F677D6200775FF006476D3 /* least_conn.c in Sources */,
 				E987E5EE1FD8C04D00DE4346 /* bit_cost.c in Sources */,
+				E98884D421E7F3D80060F010 /* sendstate.c in Sources */,
 				E901C42D213E52AB00D17C93 /* drbg.c in Sources */,
 				E987E5FA1FD8C04D00DE4346 /* metablock.c in Sources */,
 				E987E5FB1FD8C04D00DE4346 /* static_dict.c in Sources */,
@@ -3107,7 +3102,6 @@
 				107D4D481B5880BC004A9B21 /* loader.c in Sources */,
 				E901C406213E1C5400D17C93 /* quicly.c in Sources */,
 				105534C11A3B911300627ECB /* hpack.c in Sources */,
-				E901C401213E1C5400D17C93 /* ack.c in Sources */,
 				E901C42A213E52A200D17C93 /* chacha20.c in Sources */,
 				E987E5EB1FD8C01E00DE4346 /* dictionary.c in Sources */,
 				E987E5F01FD8C04D00DE4346 /* brotli_bit_stream.c in Sources */,
@@ -3115,7 +3109,6 @@
 				107E34221C7FEE2200AEF5F8 /* brotli.c in Sources */,
 				E901C403213E1C5400D17C93 /* frame.c in Sources */,
 				105534C31A3B917000627ECB /* mimemap.c in Sources */,
-				E901C408213E1C5400D17C93 /* recvbuf.c in Sources */,
 				E9BCE6901FF0CFEC003CEA11 /* timerwheel.c in Sources */,
 				10AA2E991A81F68A004322AC /* time.c in Sources */,
 				10F417FF19C2D2F800B6E31A /* picotest.c in Sources */,
@@ -3131,11 +3124,12 @@
 				107D4D461B5880BC004A9B21 /* dumper.c in Sources */,
 				107D4D451B5880BC004A9B21 /* api.c in Sources */,
 				E901C428213E529000D17C93 /* aes.c in Sources */,
+				E98884D521E7F3D80060F010 /* sentmap.c in Sources */,
 				E987E5F31FD8C04D00DE4346 /* compress_fragment.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
-				E901C413213E1D0500D17C93 /* maxsender.c in Sources */,
 				E901C42B213E52A500D17C93 /* chash.c in Sources */,
 				E901C427213E3C3D00D17C93 /* cc.c in Sources */,
+				E98884D321E7F3D80060F010 /* recvstate.c in Sources */,
 				E901C432213E52BB00D17C93 /* poly1305.c in Sources */,
 				1070866A1B70A00F002B8F18 /* casper.c in Sources */,
 				E987E5F51FD8C04D00DE4346 /* encode.c in Sources */,
@@ -3155,14 +3149,13 @@
 				E987E5EC1FD8C04D00DE4346 /* backward_references_hq.c in Sources */,
 				10E2995A1A68D03100701AA6 /* scheduler.c in Sources */,
 				E901C437213E52CD00D17C93 /* picotls.c in Sources */,
+				E98884D621E7F3D80060F010 /* streambuf.c in Sources */,
 				103BAB361B130666000694F4 /* socket.c in Sources */,
 				10583C001AEF368A004A3AD6 /* 293.c in Sources */,
 				E901C4402140CCB500D17C93 /* qpack.c in Sources */,
 				105534BE1A3B8F7700627ECB /* file.c in Sources */,
 				E901C433213E52BF00D17C93 /* sha256.c in Sources */,
 				E987E5EF1FD8C04D00DE4346 /* block_splitter.c in Sources */,
-				E901C402213E1C5400D17C93 /* buffer.c in Sources */,
-				E901C409213E1C5400D17C93 /* sendbuf.c in Sources */,
 				10F9F2671AFC5F550056F26B /* hostinfo.c in Sources */,
 				1079244719A3265C00C52AD6 /* http1.c in Sources */,
 				10F9F2651AF4795D0056F26B /* redirect.c in Sources */,
@@ -3215,13 +3208,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				7D0285C91EF422D40094292B /* sleep.c in Sources */,
-				E901C40E213E1C5500D17C93 /* maxsender.c in Sources */,
 				E9708B7C1E52C83D0029E0A5 /* status.c in Sources */,
 				E987E5D81FD7BEB500DE4346 /* block_splitter.c in Sources */,
 				E9708B7D1E52C8430029E0A5 /* durations.c in Sources */,
 				E9BC76E81F00E73900EB7A09 /* chacha20.c in Sources */,
 				E9708B3F1E52C7860029E0A5 /* send_text.c in Sources */,
-				E901C411213E1C5500D17C93 /* recvbuf.c in Sources */,
 				E9708B261E49BADE0029E0A5 /* modes.c in Sources */,
 				E9708B221E49BAD00029E0A5 /* drbg.c in Sources */,
 				E9708B641E52C80F0029E0A5 /* proxy.c in Sources */,
@@ -3253,8 +3244,10 @@
 				E9708B631E52C80F0029E0A5 /* headers_util.c in Sources */,
 				E9708B541E52C7EE0029E0A5 /* configurator.c in Sources */,
 				E9708B6D1E52C8250029E0A5 /* gzip.c in Sources */,
+				E98884DA21E7F3D90060F010 /* streambuf.c in Sources */,
 				10756E2C1AC126420009BF57 /* emitter.c in Sources */,
 				E9708B3D1E52C7860029E0A5 /* recv.c in Sources */,
+				E98884D721E7F3D90060F010 /* recvstate.c in Sources */,
 				0812174E1E07B89600712F36 /* redis.c in Sources */,
 				E901C422213E3C3B00D17C93 /* cc_cubic.c in Sources */,
 				E9708B691E52C80F0029E0A5 /* http2_debug_state.c in Sources */,
@@ -3264,9 +3257,10 @@
 				E9708B5F1E52C80F0029E0A5 /* errordoc.c in Sources */,
 				E9708B3C1E52C7860029E0A5 /* connect.c in Sources */,
 				E9BCE68D1FF0CFBB003CEA11 /* timerwheel.c in Sources */,
-				E901C40A213E1C5500D17C93 /* ack.c in Sources */,
 				08F320E01E7A9CBD0038FA5A /* net.c in Sources */,
 				E9708B611E52C80F0029E0A5 /* file.c in Sources */,
+				E98884D821E7F3D90060F010 /* sendstate.c in Sources */,
+				E98884D921E7F3D90060F010 /* sentmap.c in Sources */,
 				E9708B7B1E52C83D0029E0A5 /* reproxy.c in Sources */,
 				E901C40D213E1C5500D17C93 /* loss.c in Sources */,
 				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
@@ -3292,7 +3286,6 @@
 				E987E5E91FD7EBC700DE4346 /* cluster.c in Sources */,
 				E9708B421E52C7860029E0A5 /* text_mode.c in Sources */,
 				10756E2D1AC126420009BF57 /* loader.c in Sources */,
-				E901C40B213E1C5500D17C93 /* buffer.c in Sources */,
 				E9708B561E52C7EE0029E0A5 /* headers.c in Sources */,
 				E9708B661E52C80F0029E0A5 /* reproxy.c in Sources */,
 				E9708B391E52C75A0029E0A5 /* cloexec.c in Sources */,
@@ -3357,7 +3350,6 @@
 				E9708B791E52C83D0029E0A5 /* proxy.c in Sources */,
 				7D67C722204F8C0E0049E935 /* httpclient.c in Sources */,
 				E9708B551E52C7EE0029E0A5 /* context.c in Sources */,
-				E901C412213E1C5500D17C93 /* sendbuf.c in Sources */,
 				E901C40C213E1C5500D17C93 /* frame.c in Sources */,
 				E9708B3B1E52C7730029E0A5 /* close.c in Sources */,
 				E901C40F213E1C5500D17C93 /* quicly.c in Sources */,
