@@ -34,7 +34,10 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <arpa/nameser.h>
+#include <resolv.h>
 #include <openssl/pem.h>
+#include "picotls/pembase64.h"
 #include "picotls/openssl.h"
 
 static inline void load_certificate_chain(ptls_context_t *ctx, const char *fn)
@@ -74,7 +77,7 @@ struct st_util_save_ticket_t {
     char fn[MAXPATHLEN];
 };
 
-static int save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
+static int util_save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
 {
     struct st_util_save_ticket_t *self = (void *)_self;
     FILE *fp;
@@ -96,7 +99,7 @@ static inline void setup_session_file(ptls_context_t *ctx, ptls_handshake_proper
 
     /* setup save_ticket callback */
     strcpy(st.fn, fn);
-    st.super.cb = save_ticket_cb;
+    st.super.cb = util_save_ticket_cb;
     ctx->save_ticket = &st.super;
 
     /* load session ticket if possible */
@@ -117,6 +120,37 @@ static inline void setup_verify_certificate(ptls_context_t *ctx)
     static ptls_openssl_verify_certificate_t vc;
     ptls_openssl_init_verify_certificate(&vc, NULL);
     ctx->verify_certificate = &vc.super;
+}
+
+static inline void setup_esni(ptls_context_t *ctx, const char *esni_fn, ptls_key_exchange_context_t **key_exchanges)
+{
+    uint8_t esnikeys[65536];
+    size_t esnikeys_len;
+    int ret = 0;
+
+    { /* read esnikeys */
+        FILE *fp;
+        if ((fp = fopen(esni_fn, "rb")) == NULL) {
+            fprintf(stderr, "failed to open file:%s:%s\n", esni_fn, strerror(errno));
+            exit(1);
+        }
+        esnikeys_len = fread(esnikeys, 1, sizeof(esnikeys), fp);
+        if (esnikeys_len == 0 || !feof(fp)) {
+            fprintf(stderr, "failed to load ESNI data from file:%s\n", esni_fn);
+            exit(1);
+        }
+        fclose(fp);
+    }
+
+    if ((ctx->esni = malloc(sizeof(*ctx->esni) * 2)) == NULL || (*ctx->esni = malloc(sizeof(**ctx->esni))) == NULL) {
+        fprintf(stderr, "no memory\n");
+        exit(1);
+    }
+
+    if ((ret = ptls_esni_init_context(ctx, ctx->esni[0], ptls_iovec_init(esnikeys, esnikeys_len), key_exchanges)) != 0) {
+        fprintf(stderr, "failed to parse ESNI data of file:%s:error=%d\n", esni_fn, ret);
+        exit(1);
+    }
 }
 
 struct st_util_log_secret_t {
@@ -235,6 +269,63 @@ static inline int resolve_address(struct sockaddr *sa, socklen_t *salen, const c
 
     freeaddrinfo(res);
     return 0;
+}
+
+static inline int normalize_txt(uint8_t *p, size_t len)
+{
+    uint8_t *const end = p + len, *dst = p;
+
+    if (p == end)
+        return 0;
+
+    do {
+        size_t block_len = *p++;
+        if (end - p < block_len)
+            return 0;
+        memmove(dst, p, block_len);
+        dst += block_len;
+        p += block_len;
+    } while (p != end);
+    *dst = '\0';
+
+    return 1;
+}
+
+static inline ptls_iovec_t resolve_esni_keys(const char *server_name)
+{
+    char esni_name[256], *base64;
+    uint8_t answer[1024];
+    ns_msg msg;
+    ns_rr rr;
+    ptls_buffer_t decode_buf;
+    ptls_base64_decode_state_t ds;
+    int answer_len;
+
+    ptls_buffer_init(&decode_buf, "", 0);
+
+    if (snprintf(esni_name, sizeof(esni_name), "_esni.%s", server_name) > sizeof(esni_name) - 1)
+        goto Error;
+    if ((answer_len = res_query(esni_name, ns_c_in, ns_t_txt, answer, sizeof(answer))) <= 0)
+        goto Error;
+    if (ns_initparse(answer, answer_len, &msg) != 0)
+        goto Error;
+    if (ns_msg_count(msg, ns_s_an) < 1)
+        goto Error;
+    if (ns_parserr(&msg, ns_s_an, 0, &rr) != 0)
+        goto Error;
+    base64 = (void *)ns_rr_rdata(rr);
+    if (!normalize_txt((void *)base64, ns_rr_rdlen(rr)))
+        goto Error;
+
+    ptls_base64_decode_init(&ds);
+    if (ptls_base64_decode(base64, &ds, &decode_buf) != 0)
+        goto Error;
+    assert(decode_buf.is_allocated);
+
+    return ptls_iovec_init(decode_buf.base, decode_buf.off);
+Error:
+    ptls_buffer_dispose(&decode_buf);
+    return ptls_iovec_init(NULL, 0);
 }
 
 #endif

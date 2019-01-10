@@ -368,11 +368,16 @@ static void test_fragmented_message(void)
 #undef SET_RECORD
 }
 
-static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *protocols,
-                             size_t num_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+static int was_esni;
+
+static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
-    ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
-    ptls_set_negotiated_protocol(tls, (const char *)protocols[0].base, protocols[0].len);
+    ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
+    if (params->negotiated_protocols.count != 0)
+        ptls_set_negotiated_protocol(tls, (const char *)params->negotiated_protocols.list[0].base,
+                                     params->negotiated_protocols.list[0].len);
+    if (params->esni)
+        ++was_esni;
     return 0;
 }
 
@@ -416,6 +421,11 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
 
     if (require_client_authentication) {
         ctx_peer->require_client_authentication = 1;
+    }
+
+    if (ctx_peer->esni != NULL) {
+        was_esni = 0;
+        client_hs_prop.client.esni_keys = ptls_iovec_init(ESNIKEYS, sizeof(ESNIKEYS) - 1);
     }
 
     switch (mode) {
@@ -483,6 +493,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ok(strcmp(ptls_get_server_name(server), "test.example.com") == 0);
         ok(ptls_get_negotiated_protocol(server) != NULL);
         ok(strcmp(ptls_get_negotiated_protocol(server), "h2") == 0);
+        ok(was_esni == (ctx_peer->esni != NULL));
     } else {
         ok(ptls_get_server_name(server) == NULL);
         ok(ptls_get_negotiated_protocol(server) == NULL);
@@ -1104,23 +1115,8 @@ static void test_handshake_api(void)
     ctx_peer->max_early_data_size = 0;
 }
 
-void test_picotls(void)
+static void test_all_handshakes(void)
 {
-    subtest("is_ipaddr", test_is_ipaddr);
-    subtest("sha256", test_sha256);
-    subtest("sha384", test_sha384);
-    subtest("hmac-sha256", test_hmac_sha256);
-    subtest("hkdf", test_hkdf);
-    subtest("aes128gcm", test_aes128gcm);
-    subtest("aes256gcm", test_aes256gcm);
-    subtest("chacha20poly1305", test_chacha20poly1305);
-    subtest("aes128ctr", test_aes128ctr);
-    subtest("chacha20", test_chacha20);
-
-    subtest("base64-decode", test_base64_decode);
-
-    subtest("fragmented-message", test_fragmented_message);
-
     ptls_sign_certificate_t server_sc = {sign_certificate};
     sc_orig = ctx_peer->sign_certificate;
     ctx_peer->sign_certificate = &server_sc;
@@ -1150,27 +1146,54 @@ void test_picotls(void)
 
     ctx_peer->sign_certificate = sc_orig;
 
-    if (ctx_peer != ctx) {
+    if (ctx_peer != ctx)
         ctx->sign_certificate = second_sc_orig;
-    }
+}
+
+void test_picotls(void)
+{
+    subtest("is_ipaddr", test_is_ipaddr);
+    subtest("sha256", test_sha256);
+    subtest("sha384", test_sha384);
+    subtest("hmac-sha256", test_hmac_sha256);
+    subtest("hkdf", test_hkdf);
+    subtest("aes128gcm", test_aes128gcm);
+    subtest("aes256gcm", test_aes256gcm);
+    subtest("chacha20poly1305", test_chacha20poly1305);
+    subtest("aes128ctr", test_aes128ctr);
+    subtest("chacha20", test_chacha20);
+    subtest("base64-decode", test_base64_decode);
+    subtest("fragmented-message", test_fragmented_message);
+    subtest("handshake", test_all_handshakes);
+}
+
+void test_picotls_esni(ptls_key_exchange_context_t **keys)
+{
+    ptls_esni_context_t esni, *esni_list[] = {&esni, NULL};
+    ptls_esni_init_context(ctx_peer, &esni, ptls_iovec_init(ESNIKEYS, sizeof(ESNIKEYS) - 1), keys);
+    ctx_peer->esni = esni_list;
+
+    subtest("esni-handshake", test_picotls);
+
+    ctx_peer->esni = NULL;
 }
 
 void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_algorithm_t *server)
 {
     ptls_key_exchange_context_t *ctx;
-    ptls_iovec_t client_pubkey, client_secret, server_pubkey, server_secret;
+    ptls_iovec_t client_secret, server_pubkey, server_secret;
     int ret;
 
     /* fail */
-    ret = server->exchange(&server_pubkey, &server_secret, (ptls_iovec_t){NULL});
+    ret = server->exchange(server, &server_pubkey, &server_secret, (ptls_iovec_t){NULL});
     ok(ret != 0);
 
     /* perform ecdh */
-    ret = client->create(&ctx, &client_pubkey);
+    ret = client->create(client, &ctx);
     ok(ret == 0);
-    ret = server->exchange(&server_pubkey, &server_secret, client_pubkey);
+    ret = server->exchange(server, &server_pubkey, &server_secret, ctx->pubkey);
     ok(ret == 0);
-    ret = ctx->on_exchange(&ctx, &client_secret, server_pubkey);
+    ret = ctx->on_exchange(&ctx, 1, &client_secret, server_pubkey);
     ok(ret == 0);
     ok(client_secret.len == server_secret.len);
     ok(memcmp(client_secret.base, server_secret.base, client_secret.len) == 0);
@@ -1180,9 +1203,9 @@ void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_
     free(server_secret.base);
 
     /* client abort */
-    ret = client->create(&ctx, &client_pubkey);
+    ret = client->create(client, &ctx);
     ok(ret == 0);
-    ret = ctx->on_exchange(&ctx, NULL, ptls_iovec_init(NULL, 0));
+    ret = ctx->on_exchange(&ctx, 1, NULL, ptls_iovec_init(NULL, 0));
     ok(ret == 0);
     ok(ctx == NULL);
 }

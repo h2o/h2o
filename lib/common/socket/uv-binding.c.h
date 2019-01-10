@@ -333,7 +333,7 @@ void h2o_timer_link(h2o_loop_t *l, uint64_t delay_ticks, h2o_timer_t *timer)
 {
     timer->is_linked = 1;
     uv_timer_init(l, &timer->uv_timer);
-    uv_timer_start(&timer->uv_timer, on_timeout, h2o_now(l) + delay_ticks, 0);
+    uv_timer_start(&timer->uv_timer, on_timeout, delay_ticks, 0);
 }
 
 void h2o_timer_unlink(h2o_timer_t *timer)

@@ -22,6 +22,10 @@
 #ifndef picotls_openssl_h
 #define picotls_openssl_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <openssl/opensslv.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
@@ -29,20 +33,23 @@
 #include "../picotls.h"
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
-#define PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+#define PTLS_OPENSSL_HAVE_CHACHA20_POLY1305 1
 #endif
 
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp256r1;
 #ifdef NID_secp384r1
-#define PTLS_OPENSSL_HAS_SECP384R1 1
+#define PTLS_OPENSSL_HAVE_SECP384R1 1
+#define PTLS_OPENSSL_HAS_SECP384R1 1 /* deprecated; use HAVE_ */
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp384r1;
 #endif
 #ifdef NID_secp521r1
-#define PTLS_OPENSSL_HAS_SECP521R1 1
+#define PTLS_OPENSSL_HAVE_SECP521R1 1
+#define PTLS_OPENSSL_HAS_SECP521R1 1 /* deprecated; use HAVE_ */
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp521r1;
 #endif
 #if defined(NID_X25519) && !defined(LIBRESSL_VERSION_NUMBER)
-#define PTLS_OPENSSL_HAS_X25519 1
+#define PTLS_OPENSSL_HAVE_X25519 1
+#define PTLS_OPENSSL_HAS_X25519 1  /* deprecated; use HAVE_ */
 extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
 #endif
 
@@ -65,6 +72,10 @@ extern ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256;
 #endif
 
 void ptls_openssl_random_bytes(void *buf, size_t len);
+/**
+ * constructs a key exchange context. pkey's reference count is incremented.
+ */
+int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY *pkey);
 
 struct st_ptls_openssl_signature_scheme_t {
     uint16_t scheme_id;
@@ -94,5 +105,9 @@ int ptls_openssl_encrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));
 int ptls_openssl_decrypt_ticket(ptls_buffer_t *dst, ptls_iovec_t src,
                                 int (*cb)(unsigned char *, unsigned char *, EVP_CIPHER_CTX *, HMAC_CTX *, int));
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

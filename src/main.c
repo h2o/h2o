@@ -265,28 +265,28 @@ struct st_on_client_hello_ptls_t {
     struct listener_config_t *listener;
 };
 
-static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_iovec_t server_name,
-                                const ptls_iovec_t *negotiated_protocols, size_t num_negotiated_protocols,
-                                const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
     int ret = 0;
 
     /* handle SNI */
-    if (server_name.base != NULL) {
-        struct listener_ssl_config_t *resolved = resolve_sni(self->listener, (const char *)server_name.base, server_name.len);
+    if (params->server_name.base != NULL) {
+        struct listener_ssl_config_t *resolved =
+            resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(resolved->ctx);
         ptls_set_context(tls, newctx);
-        ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
+        ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
     }
 
     /* handle ALPN */
-    if (num_negotiated_protocols != 0) {
+    if (params->negotiated_protocols.count != 0) {
         const h2o_iovec_t *server_pref;
         for (server_pref = h2o_alpn_protocols; server_pref->len != 0; ++server_pref) {
             size_t i;
-            for (i = 0; i != num_negotiated_protocols; ++i)
-                if (h2o_memis(server_pref->base, server_pref->len, negotiated_protocols[i].base, negotiated_protocols[i].len))
+            for (i = 0; i != params->negotiated_protocols.count; ++i)
+                if (h2o_memis(server_pref->base, server_pref->len, params->negotiated_protocols.list[i].base,
+                              params->negotiated_protocols.list[i].len))
                     goto ALPN_Found;
         }
         return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
@@ -429,34 +429,31 @@ static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_conf)
 
 #if H2O_USE_PICOTLS
 
-struct st_staple_ocsp_ptls_t {
-    ptls_staple_ocsp_t super;
+struct st_emit_certificate_ptls_t {
+    ptls_emit_certificate_t super;
     struct listener_ssl_config_t *conf;
 };
 
-static int on_staple_ocsp_ptls(ptls_staple_ocsp_t *_self, ptls_t *tls, ptls_buffer_t *output, size_t cert_index)
+static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
+                                    ptls_key_schedule_t *key_sched, ptls_iovec_t context)
 {
-    struct st_staple_ocsp_ptls_t *self = (struct st_staple_ocsp_ptls_t *)_self;
-    int locked = 0, ret;
+    struct st_emit_certificate_ptls_t *self = (void *)_self;
+    ptls_context_t *tlsctx = ptls_get_context(tls);
+    int ret;
 
-    if (cert_index != 0) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-
-    pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
-    locked = 1;
-
-    if (self->conf->ocsp_stapling.response.data == NULL) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    ptls_buffer_pushv(output, self->conf->ocsp_stapling.response.data->bytes, self->conf->ocsp_stapling.response.data->size);
+    ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
+        pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
+        h2o_buffer_t *ocsp_response = self->conf->ocsp_stapling.response.data;
+        ret = ptls_build_certificate_message(
+            emitter->buf, ptls_iovec_init(NULL, 0), tlsctx->certificates.list, tlsctx->certificates.count,
+            ocsp_response != NULL ? ptls_iovec_init(ocsp_response->bytes, ocsp_response->size) : ptls_iovec_init(NULL, 0));
+        pthread_mutex_unlock(&self->conf->ocsp_stapling.response.mutex);
+        if (ret != 0)
+            goto Exit;
+    });
     ret = 0;
 
 Exit:
-    if (locked)
-        pthread_mutex_unlock(&self->conf->ocsp_stapling.response.mutex);
     return ret;
 }
 
@@ -475,7 +472,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
-        struct st_staple_ocsp_ptls_t so;
+        struct st_emit_certificate_ptls_t ec;
         ptls_openssl_sign_certificate_t sc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
     EVP_PKEY *key;
@@ -488,8 +485,9 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
                                        {NULL, 0},
+                                       NULL,
                                        &pctx->ch.super,
-                                       &pctx->so.super,
+                                       &pctx->ec.super,
                                        &pctx->sc.super,
                                        NULL,
                                        0,
@@ -497,7 +495,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        NULL,
                                        1},
                                       {{on_client_hello_ptls}, listener},
-                                      {{on_staple_ocsp_ptls}, ssl_config}};
+                                      {{on_emit_certificate_ptls}, ssl_config}};
 
     { /* obtain key and cert (via fake connection for libressl compatibility) */
         SSL *fakeconn = SSL_new(ssl_ctx);
