@@ -25,6 +25,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define QUICLY_NUM_PACKETS_BEFORE_ACK 2
 #define QUICLY_DELAYED_ACK_TIMEOUT 25 /* milliseconds */
 
 /* transport error codes */
@@ -46,17 +47,8 @@
 
 /* internal errors */
 #define QUICLY_ERROR_PACKET_IGNORED 0xff01
-#define QUICLY_ERROR_FIN_CLOSED 0xff02
-#define QUICLY_ERROR_SENDBUF_FULL 0xff03
-#define QUICLY_ERROR_CONNECTION_CLOSED 0xff04
-
-/* application error codes returned by */
-#define QUICLY_STREAM_ERROR_IS_OPEN -1
-#define QUICLY_STREAM_ERROR_FIN_CLOSED -2
-#define QUICLY_STREAM_ERROR_NOT_IN_USE -3
-#define QUICLY_STREAM_ERROR_STOPPED 0
-
-typedef int32_t quicly_stream_error_t;
+#define QUICLY_ERROR_SENDBUF_FULL 0xff02    /* internal use only; the error code is never exposed to the application */
+#define QUICLY_ERROR_FREE_CONNECTION 0xff03 /* returned by quicly_send when the connection is freeable */
 
 #define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 

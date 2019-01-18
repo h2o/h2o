@@ -28,20 +28,20 @@
     do {                                                                                                                           \
         size_t _n = (n);                                                                                                           \
         if (_n != 0)                                                                                                               \
-            memcpy((dst), (src), sizeof(struct st_quicly_range_t) * _n);                                                           \
+            memcpy((dst), (src), sizeof(quicly_range_t) * _n);                                                                     \
     } while (0)
 #define MOVE(dst, src, n)                                                                                                          \
     do {                                                                                                                           \
         size_t _n = (n);                                                                                                           \
         if (_n != 0)                                                                                                               \
-            memmove((dst), (src), sizeof(struct st_quicly_range_t) * _n);                                                          \
+            memmove((dst), (src), sizeof(quicly_range_t) * _n);                                                                    \
     } while (0)
 
 static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size_t slot)
 {
     if (ranges->num_ranges == ranges->capacity) {
         size_t new_capacity = ranges->capacity < 4 ? 4 : ranges->capacity * 2;
-        struct st_quicly_range_t *new_ranges = malloc(new_capacity * sizeof(*new_ranges));
+        quicly_range_t *new_ranges = malloc(new_capacity * sizeof(*new_ranges));
         if (new_ranges == NULL)
             return -1;
         COPY(new_ranges, ranges->ranges, slot);
@@ -53,7 +53,7 @@ static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size
     } else {
         MOVE(ranges->ranges + slot + 1, ranges->ranges + slot, ranges->num_ranges - slot);
     }
-    ranges->ranges[slot] = (struct st_quicly_range_t){start, end};
+    ranges->ranges[slot] = (quicly_range_t){start, end};
     ++ranges->num_ranges;
     return 0;
 }
@@ -70,10 +70,10 @@ static inline int merge_update(quicly_ranges_t *ranges, uint64_t start, uint64_t
     return 0;
 }
 
-int quicly_ranges_init_with_empty_range(quicly_ranges_t *ranges)
+int quicly_ranges_init_with_range(quicly_ranges_t *ranges, uint64_t start, uint64_t end)
 {
     quicly_ranges_init(ranges);
-    return insert_at(ranges, 0, 0, 0);
+    return insert_at(ranges, start, end, 0);
 }
 
 int quicly_ranges_add(quicly_ranges_t *ranges, uint64_t start, uint64_t end)
@@ -185,7 +185,7 @@ void quicly_ranges_shrink(quicly_ranges_t *ranges, size_t start, size_t end)
     ranges->num_ranges -= end - start;
     if (ranges->capacity > 4 && ranges->num_ranges * 3 <= ranges->capacity) {
         size_t new_capacity = ranges->capacity / 2;
-        struct st_quicly_range_t *new_ranges = realloc(ranges->ranges, new_capacity * sizeof(*new_ranges));
+        quicly_range_t *new_ranges = realloc(ranges->ranges, new_capacity * sizeof(*new_ranges));
         if (new_ranges != NULL) {
             ranges->ranges = new_ranges;
             ranges->capacity = new_capacity;

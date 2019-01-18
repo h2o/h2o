@@ -29,6 +29,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "quicly.h"
+#include "quicly/streambuf.h"
 #include "../deps/picotls/t/util.h"
 
 static unsigned verbosity = 0;
@@ -49,30 +50,40 @@ static void hexdump(const char *title, const uint8_t *p, size_t l)
     }
 }
 
+static int save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src);
+
+static const char *ticket_file = NULL;
 static ptls_handshake_properties_t hs_properties;
+static quicly_transport_parameters_t resumed_transport_params;
 static quicly_context_t ctx;
-static ptls_context_t tlsctx = {ptls_openssl_random_bytes,
-                                &ptls_get_time,
-                                ptls_openssl_key_exchanges,
-                                ptls_openssl_cipher_suites,
-                                NULL,
-                                NULL,
-                                {NULL},
-                                NULL,
-                                NULL,
-                                NULL,
-                                NULL,
-                                0,
-                                0,
-                                NULL,
-                                1};
+static ptls_save_ticket_t save_ticket = {save_ticket_cb};
+static ptls_iovec_t retry_token;
+
+static ptls_context_t tlsctx = {.random_bytes = ptls_openssl_random_bytes,
+                                .get_time = &ptls_get_time,
+                                .key_exchanges = ptls_openssl_key_exchanges,
+                                .cipher_suites = ptls_openssl_cipher_suites,
+                                .require_dhe_on_psk = 1,
+                                .save_ticket = &save_ticket};
 static const char *req_paths[1024];
 
-static void send_data(quicly_stream_t *stream, const char *s)
-{
-    quicly_sendbuf_write(&stream->sendbuf, s, strlen(s), NULL);
-    quicly_sendbuf_shutdown(&stream->sendbuf);
-}
+static int on_stop_sending(quicly_stream_t *stream, uint16_t error_code);
+static int on_receive_reset(quicly_stream_t *stream, uint16_t error_code);
+static int server_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+static int client_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+
+static const quicly_stream_callbacks_t server_stream_callbacks = {quicly_streambuf_destroy,
+                                                                  quicly_streambuf_egress_shift,
+                                                                  quicly_streambuf_egress_emit,
+                                                                  on_stop_sending,
+                                                                  server_on_receive,
+                                                                  on_receive_reset},
+                                       client_stream_callbacks = {quicly_streambuf_destroy,
+                                                                  quicly_streambuf_egress_shift,
+                                                                  quicly_streambuf_egress_emit,
+                                                                  on_stop_sending,
+                                                                  client_on_receive,
+                                                                  on_receive_reset};
 
 static int parse_request(ptls_iovec_t input, ptls_iovec_t *path, int *is_http1)
 {
@@ -105,7 +116,12 @@ static int path_is(ptls_iovec_t path, const char *expected)
     return memcmp(path.base, expected, path.len) == 0;
 }
 
-static void send_header(quicly_sendbuf_t *sendbuf, int is_http1, int status, const char *mime_type)
+static void send_str(quicly_stream_t *stream, const char *s)
+{
+    quicly_streambuf_egress_write(stream, s, strlen(s));
+}
+
+static void send_header(quicly_stream_t *stream, int is_http1, int status, const char *mime_type)
 {
     char buf[256];
 
@@ -113,26 +129,26 @@ static void send_header(quicly_sendbuf_t *sendbuf, int is_http1, int status, con
         return;
 
     sprintf(buf, "HTTP/1.1 %03d OK\r\nConnection: close\r\nContent-Type: %s\r\n\r\n", status, mime_type);
-    quicly_sendbuf_write(sendbuf, buf, strlen(buf), NULL);
+    send_str(stream, buf);
 }
 
-static int send_file(quicly_sendbuf_t *sendbuf, int is_http1, const char *fn, const char *mime_type)
+static int send_file(quicly_stream_t *stream, int is_http1, const char *fn, const char *mime_type)
 {
     FILE *fp;
     char buf[1024];
     size_t n;
 
-    if ((fp = fopen(fn, "r")) == NULL)
+    if ((fp = fopen(fn, "rb")) == NULL)
         return 0;
-    send_header(sendbuf, is_http1, 200, mime_type);
+    send_header(stream, is_http1, 200, mime_type);
     while ((n = fread(buf, 1, sizeof(buf), fp)) != 0)
-        quicly_sendbuf_write(sendbuf, buf, n, NULL);
+        quicly_streambuf_egress_write(stream, buf, n);
     fclose(fp);
 
     return 1;
 }
 
-static int send_sized_text(quicly_sendbuf_t *sendbuf, ptls_iovec_t path, int is_http1)
+static int send_sized_text(quicly_stream_t *stream, ptls_iovec_t path, int is_http1)
 {
     unsigned size;
     if (!(path.len > 5 && path.base[0] == '/' && memcmp(path.base + path.len - 4, ".txt", 4) == 0))
@@ -140,61 +156,84 @@ static int send_sized_text(quicly_sendbuf_t *sendbuf, ptls_iovec_t path, int is_
     if (sscanf((const char *)path.base + 1, "%u", &size) != 1)
         return 0;
 
-    send_header(sendbuf, is_http1, 200, "text/plain; charset=utf-8");
+    send_header(stream, is_http1, 200, "text/plain; charset=utf-8");
     for (; size >= 12; size -= 12)
-        quicly_sendbuf_write(sendbuf, "hello world\n", 12, NULL);
+        quicly_streambuf_egress_write(stream, "hello world\n", 12);
     if (size != 0)
-        quicly_sendbuf_write(sendbuf, "hello world", size, NULL);
+        quicly_streambuf_egress_write(stream, "hello world", size);
     return 1;
 }
 
-static int on_req_receive(quicly_stream_t *stream)
+static int on_stop_sending(quicly_stream_t *stream, uint16_t error_code)
 {
-    ptls_iovec_t path;
-    int is_http1;
-
-    /* fixme call is_shutdown */
-    if (stream->sendbuf.eos != UINT64_MAX)
-        return 0;
-
-    /* obtain path of the request, or return without doing anything */
-    if (!parse_request(quicly_recvbuf_get(&stream->recvbuf), &path, &is_http1))
-        return 0;
-
-    if (path_is(path, "/logo.jpg") && send_file(&stream->sendbuf, is_http1, "assets/logo.jpg", "image/jpeg"))
-        goto Sent;
-    if (path_is(path, "/main.jpg") && send_file(&stream->sendbuf, is_http1, "assets/main.jpg", "image/jpeg"))
-        goto Sent;
-    if (send_sized_text(&stream->sendbuf, path, is_http1))
-        goto Sent;
-
-    send_header(&stream->sendbuf, is_http1, 404, "text/plain; charset=utf-8");
-    quicly_sendbuf_write(&stream->sendbuf, "not found\n", 10, NULL);
-Sent:
-    quicly_sendbuf_shutdown(&stream->sendbuf);
+    fprintf(stderr, "received STOP_SENDING: %" PRIu16 "\n", error_code);
     return 0;
 }
 
-static int on_resp_receive(quicly_stream_t *stream)
+static int on_receive_reset(quicly_stream_t *stream, uint16_t error_code)
 {
-    ptls_iovec_t input;
+    fprintf(stderr, "received RESET_STREAM: %" PRIu16 "\n", error_code);
+    return 0;
+}
 
-    while ((input = quicly_recvbuf_get(&stream->recvbuf)).len != 0) {
-        fwrite(input.base, 1, input.len, stdout);
-        fflush(stdout);
-        quicly_recvbuf_shift(&stream->recvbuf, input.len);
+static int server_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    ptls_iovec_t path;
+    int is_http1;
+    int ret;
+
+    if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
+        return ret;
+
+    if (!parse_request(quicly_streambuf_ingress_get(stream), &path, &is_http1)) {
+        if (!quicly_recvstate_transfer_complete(&stream->recvstate))
+            return 0;
+        /* failed to parse request */
+        send_header(stream, 1, 500, "text/plain; charset=utf-8");
+        send_str(stream, "failed to parse HTTP request\n");
+        goto Sent;
     }
 
-    if (quicly_recvbuf_get_error(&stream->recvbuf) != QUICLY_STREAM_ERROR_IS_OPEN) {
+    if (path_is(path, "/logo.jpg") && send_file(stream, is_http1, "assets/logo.jpg", "image/jpeg"))
+        goto Sent;
+    if (path_is(path, "/main.jpg") && send_file(stream, is_http1, "assets/main.jpg", "image/jpeg"))
+        goto Sent;
+    if (send_sized_text(stream, path, is_http1))
+        goto Sent;
+
+    send_header(stream, is_http1, 404, "text/plain; charset=utf-8");
+    send_str(stream, "not found\n");
+Sent:
+    quicly_streambuf_egress_shutdown(stream);
+    return 0;
+}
+
+static int client_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    ptls_iovec_t input;
+    int ret;
+
+    if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
+        return ret;
+
+    if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
+        fwrite(input.base, 1, input.len, stdout);
+        fflush(stdout);
+        quicly_streambuf_ingress_shift(stream, input.len);
+    }
+
+    if (quicly_recvstate_transfer_complete(&stream->recvstate)) {
         static size_t num_resp_received;
         ++num_resp_received;
         if (req_paths[num_resp_received] == NULL) {
             uint64_t num_received, num_sent, num_lost, num_ack_received, num_bytes_sent;
             quicly_get_packet_stats(stream->conn, &num_received, &num_sent, &num_lost, &num_ack_received, &num_bytes_sent);
-            fprintf(stderr, "packets: received: %" PRIu64 ", sent: %" PRIu64 ", lost: %" PRIu64 ", ack-received: %" PRIu64
-                            ", bytes-sent: %" PRIu64 "\n",
+            fprintf(stderr,
+                    "packets: received: %" PRIu64 ", sent: %" PRIu64 ", lost: %" PRIu64 ", ack-received: %" PRIu64
+                    ", bytes-sent: %" PRIu64 "\n",
                     num_received, num_sent, num_lost, num_ack_received, num_bytes_sent);
-            exit(0);
+            uint16_t error_code = QUICLY_ERROR_NONE;
+            quicly_close(stream->conn, &error_code, "");
         }
     }
 
@@ -203,13 +242,17 @@ static int on_resp_receive(quicly_stream_t *stream)
 
 static int on_stream_open(quicly_stream_t *stream)
 {
-    stream->on_update = on_req_receive;
+    int ret;
+
+    if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0)
+        return ret;
+    stream->callbacks = ctx.tls->certificates.count != 0 ? &server_stream_callbacks : &client_stream_callbacks;
     return 0;
 }
 
 static void on_conn_close(quicly_conn_t *conn, uint16_t code, const uint64_t *frame_type, const char *reason, size_t reason_len)
 {
-    fprintf(stderr, "%s close:%" PRIx16 ":%.*s\n", frame_type != NULL ? "connection" : "application", code, (int)reason_len,
+    fprintf(stderr, "%s close:0x%" PRIx16 ":%.*s\n", frame_type != NULL ? "connection" : "application", code, (int)reason_len,
             reason);
 }
 
@@ -240,17 +283,15 @@ static int send_pending(int fd, quicly_conn_t *conn)
 
     do {
         num_packets = sizeof(packets) / sizeof(packets[0]);
-        if ((ret = quicly_send(conn, packets, &num_packets)) == 0 || ret == QUICLY_ERROR_CONNECTION_CLOSED) {
+        if ((ret = quicly_send(conn, packets, &num_packets)) == 0) {
             for (i = 0; i != num_packets; ++i) {
                 if ((ret = send_one(fd, packets[i])) == -1)
                     perror("sendmsg failed");
                 ret = 0;
                 quicly_default_free_packet(&ctx, packets[i]);
             }
-        } else {
-            fprintf(stderr, "quicly_send returned %d\n", ret);
         }
-    } while (ret == 0 && num_packets != 0);
+    } while (ret == 0 && num_packets == sizeof(packets) / sizeof(packets[0]));
 
     return ret;
 }
@@ -293,9 +334,9 @@ static void send_if_possible(quicly_conn_t *conn)
             quicly_stream_t *stream;
             ret = quicly_open_stream(conn, &stream, 0);
             assert(ret == 0);
-            stream->on_update = on_resp_receive;
             sprintf(req, "GET %s\r\n", req_paths[i]);
-            send_data(stream, req);
+            send_str(stream, req);
+            quicly_streambuf_egress_shutdown(stream);
         }
     }
 }
@@ -316,7 +357,7 @@ static int run_client(struct sockaddr *sa, socklen_t salen, const char *host)
         perror("bind(2) failed");
         return 1;
     }
-    ret = quicly_connect(&conn, &ctx, host, sa, salen, &hs_properties);
+    ret = quicly_connect(&conn, &ctx, host, sa, salen, &hs_properties, &resumed_transport_params);
     assert(ret == 0);
     send_if_possible(conn);
     send_pending(fd, conn);
@@ -370,9 +411,18 @@ static int run_client(struct sockaddr *sa, socklen_t salen, const char *host)
             }
             send_if_possible(conn);
         }
-        if (conn != NULL && send_pending(fd, conn) != 0) {
-            quicly_free(conn);
-            conn = NULL;
+        if (conn != NULL) {
+            ret = send_pending(fd, conn);
+            if (ret != 0) {
+                quicly_free(conn);
+                conn = NULL;
+                if (ret == QUICLY_ERROR_FREE_CONNECTION) {
+                    return 0;
+                } else {
+                    fprintf(stderr, "quicly_send returned %d\n", ret);
+                    return 1;
+                }
+            }
         }
     }
 }
@@ -388,8 +438,9 @@ static void on_signal(int signo)
         char *host_cid_hex = quicly_hexdump(host_cid->cid, host_cid->len, SIZE_MAX);
         uint64_t num_received, num_sent, num_lost, num_ack_received, num_bytes_sent;
         quicly_get_packet_stats(conns[i], &num_received, &num_sent, &num_lost, &num_ack_received, &num_bytes_sent);
-        fprintf(stderr, "conn:%s: received: %" PRIu64 ", sent: %" PRIu64 ", lost: %" PRIu64 ", ack-received: %" PRIu64
-                        ", bytes-sent: %" PRIu64 "\n",
+        fprintf(stderr,
+                "conn:%s: received: %" PRIu64 ", sent: %" PRIu64 ", lost: %" PRIu64 ", ack-received: %" PRIu64
+                ", bytes-sent: %" PRIu64 "\n",
                 host_cid_hex, num_received, num_sent, num_lost, num_ack_received, num_bytes_sent);
         free(host_cid_hex);
     }
@@ -479,6 +530,16 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                 if (conn != NULL) {
                     /* existing connection */
                     quicly_receive(conn, &packet);
+                } else if (retry_token.len != 0 && !(packet.token.len == retry_token.len &&
+                                                     memcmp(packet.token.base, retry_token.base, retry_token.len) == 0)) {
+                    /* unbound connection; send a retry token unless the client has supplied the correct one, but not too many */
+                    if (off == 0) {
+                        quicly_datagram_t *rp =
+                            quicly_send_retry(&ctx, &sa, salen, packet.cid.src, packet.cid.dest, packet.cid.dest, retry_token);
+                        assert(rp != NULL);
+                        if (send_one(fd, rp) == -1)
+                            perror("sendmsg failed");
+                    }
                 } else {
                     /* new connection */
                     int ret = quicly_accept(&conn, &ctx, &sa, mess.msg_namelen, NULL, &packet);
@@ -517,6 +578,77 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
     }
 }
 
+int save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
+{
+    quicly_conn_t *conn = *ptls_get_data_ptr(tls);
+    ptls_buffer_t buf;
+    FILE *fp = NULL;
+    int ret;
+
+    if (ticket_file == NULL)
+        return 0;
+
+    ptls_buffer_init(&buf, "", 0);
+
+    /* build data (session ticket and transport parameters) */
+    ptls_buffer_push_block(&buf, 2, { ptls_buffer_pushv(&buf, src.base, src.len); });
+    ptls_buffer_push_block(&buf, 2, {
+        if ((ret = quicly_encode_transport_parameter_list(quicly_get_peer_transport_parameters(conn), 1, &buf)) != 0)
+            goto Exit;
+    });
+
+    /* write file */
+    if ((fp = fopen(ticket_file, "wb")) == NULL) {
+        fprintf(stderr, "failed to open file:%s:%s\n", ticket_file, strerror(errno));
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    fwrite(buf.base, 1, buf.off, fp);
+
+    ret = 0;
+Exit:
+    if (fp != NULL)
+        fclose(fp);
+    ptls_buffer_dispose(&buf);
+    return 0;
+}
+
+static void load_ticket(void)
+{
+    static uint8_t buf[65536];
+    size_t len;
+    int ret;
+
+    {
+        FILE *fp;
+        if ((fp = fopen(ticket_file, "rb")) == NULL)
+            return;
+        len = fread(buf, 1, sizeof(buf), fp);
+        if (len == 0 || !feof(fp)) {
+            fprintf(stderr, "failed to load ticket from file:%s\n", ticket_file);
+            exit(1);
+        }
+        fclose(fp);
+    }
+
+    {
+        const uint8_t *src = buf, *end = buf + len;
+        ptls_iovec_t ticket;
+        ptls_decode_open_block(src, end, 2, {
+            ticket = ptls_iovec_init(src, end - src);
+            src = end;
+        });
+        ptls_decode_block(src, end, 2, {
+            if ((ret = quicly_decode_transport_parameter_list(&resumed_transport_params, 1, src, end)) != 0)
+                goto Exit;
+            src = end;
+        });
+        hs_properties.client.session_ticket = ticket;
+    }
+
+Exit:;
+}
+
 static void usage(const char *cmd)
 {
     printf("Usage: %s [options] host port\n"
@@ -526,11 +658,12 @@ static void usage(const char *cmd)
            "  -c certificate-file\n"
            "  -k key-file          specifies the credentials to be used for running the\n"
            "                       server. If omitted, the command runs as a client.\n"
+           "  -e event-log-file    file to log events\n"
            "  -l log-file          file to log traffic secrets\n"
            "  -n                   enforce version negotiation (client-only)\n"
            "  -p path              path to request (can be set multiple times)\n"
+           "  -R                   require Retry (server only)\n"
            "  -r [initial-rto]     initial RTO (in milliseconds)\n"
-           "  -S [secret]          use stateless retry protected by the secret\n"
            "  -s session-file      file to load / store the session ticket\n"
            "  -V                   verify peer using the default certificates\n"
            "  -v                   verbose mode (-vv emits packet dumps as well)\n"
@@ -554,7 +687,7 @@ int main(int argc, char **argv)
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
 
-    while ((ch = getopt(argc, argv, "a:c:k:l:np:r:S:s:Vvh")) != -1) {
+    while ((ch = getopt(argc, argv, "a:c:k:e:l:np:Rr:s:Vvh")) != -1) {
         switch (ch) {
         case 'a':
             set_alpn(&hs_properties, optarg);
@@ -564,6 +697,15 @@ int main(int argc, char **argv)
             break;
         case 'k':
             load_private_key(ctx.tls, optarg);
+            break;
+        case 'e':
+            if ((quicly_default_event_log_fp = fopen(optarg, "w")) == NULL) {
+                fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
+                exit(1);
+            }
+            setvbuf(quicly_default_event_log_fp, NULL, _IONBF, 0);
+            ctx.event_log.mask = UINT64_MAX;
+            ctx.event_log.cb = quicly_default_event_log;
             break;
         case 'l':
             setup_log_secret(ctx.tls, optarg);
@@ -577,23 +719,17 @@ int main(int argc, char **argv)
                 ;
             req_paths[i] = optarg;
         } break;
+        case 'R':
+            retry_token = ptls_iovec_init("please retry", 12);
+            break;
         case 'r':
             if (sscanf(optarg, "%" PRIu32, &ctx.loss->default_initial_rtt) != 1) {
                 fprintf(stderr, "invalid argument passed to `-r`\n");
                 exit(1);
             }
             break;
-        case 'S':
-            ctx.stateless_retry.enforce_use = 1;
-            ctx.stateless_retry.key = optarg;
-            if (strlen(ctx.stateless_retry.key) < ctx.tls->cipher_suites[0]->hash->digest_size) {
-                fprintf(stderr, "secret for stateless retry is too short (should be at least %zu bytes long)\n",
-                        ctx.tls->cipher_suites[0]->hash->digest_size);
-                exit(1);
-            }
-            break;
         case 's':
-            setup_session_file(ctx.tls, &hs_properties, optarg);
+            ticket_file = optarg;
             break;
         case 'V':
             setup_verify_certificate(ctx.tls);
@@ -612,16 +748,6 @@ int main(int argc, char **argv)
     if (req_paths[0] == NULL)
         req_paths[0] = "/";
 
-    if (fcntl(5, F_GETFD) != -1) {
-        if ((quicly_default_event_log_fp = fdopen(5, "at")) == NULL) {
-            fprintf(stderr, "failed to open stdio for fd 5:%s\n", strerror(errno));
-            exit(1);
-        }
-        setvbuf(quicly_default_event_log_fp, NULL, _IONBF, 0);
-        ctx.event_log.mask = UINT64_MAX;
-        ctx.event_log.cb = quicly_default_event_log;
-    }
-
     if (ctx.tls->certificates.count != 0 || ctx.tls->sign_certificate != NULL) {
         /* server */
         if (ctx.tls->certificates.count == 0 || ctx.tls->sign_certificate == NULL) {
@@ -630,6 +756,8 @@ int main(int argc, char **argv)
         }
     } else {
         /* client */
+        if (ticket_file != NULL)
+            load_ticket();
     }
     if (argc != 2) {
         fprintf(stderr, "missing host and port\n");

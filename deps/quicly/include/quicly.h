@@ -36,8 +36,8 @@ extern "C" {
 #include "quicly/frame.h"
 #include "quicly/linklist.h"
 #include "quicly/loss.h"
-#include "quicly/recvbuf.h"
-#include "quicly/sendbuf.h"
+#include "quicly/recvstate.h"
+#include "quicly/sendstate.h"
 #include "quicly/maxsender.h"
 
 #ifndef QUICLY_DEBUG
@@ -64,6 +64,7 @@ typedef enum en_quicly_event_type_t {
     QUICLY_EVENT_TYPE_ACCEPT,
     QUICLY_EVENT_TYPE_SEND,
     QUICLY_EVENT_TYPE_RECEIVE,
+    QUICLY_EVENT_TYPE_FREE,
     QUICLY_EVENT_TYPE_PACKET_PREPARE,
     QUICLY_EVENT_TYPE_PACKET_COMMIT,
     QUICLY_EVENT_TYPE_PACKET_ACKED,
@@ -79,7 +80,9 @@ typedef enum en_quicly_event_type_t {
     QUICLY_EVENT_TYPE_STREAM_RECEIVE,
     QUICLY_EVENT_TYPE_STREAM_ACKED,
     QUICLY_EVENT_TYPE_STREAM_LOST,
-    QUICLY_EVENT_TYPE_QUIC_VERSION_SWITCH
+    QUICLY_EVENT_TYPE_QUIC_VERSION_SWITCH,
+    QUICLY_EVENT_TYPE_CLOSE_SEND,
+    QUICLY_EVENT_TYPE_CLOSE_RECEIVE
 } quicly_event_type_t;
 
 /**
@@ -113,10 +116,14 @@ typedef enum en_quicly_event_attribute_type_t {
     QUICLY_EVENT_ATTRIBUTE_CC_EXIT_RECOVERY,
     QUICLY_EVENT_ATTRIBUTE_ACKED_PACKETS,
     QUICLY_EVENT_ATTRIBUTE_ACKED_BYTES,
+    QUICLY_EVENT_ATTRIBUTE_STATE,
+    QUICLY_EVENT_ATTRIBUTE_ERROR_CODE,
+    QUICLY_EVENT_ATTRIBUTE_FRAME_TYPE,
     QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MAX,
     QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MIN = QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MAX,
     QUICLY_EVENT_ATTRIBUTE_DCID = QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MIN,
     QUICLY_EVENT_ATTRIBUTE_SCID,
+    QUICLY_EVENT_ATTRIBUTE_REASON_PHRASE,
     QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MAX
 } quicly_event_attribute_type_t;
 
@@ -149,35 +156,39 @@ typedef int64_t (*quicly_now_cb)(quicly_context_t *ctx);
 typedef void (*quicly_event_log_cb)(quicly_context_t *ctx, quicly_event_type_t type, const quicly_event_attribute_t *attributes,
                                     size_t num_attributes);
 
-typedef struct st_quicly_initial_max_stream_data_t {
-    uint32_t bidi_local, bidi_remote, uni;
-} quicly_initial_max_stream_data_t;
+typedef struct st_quicly_max_stream_data_t {
+    uint64_t bidi_local, bidi_remote, uni;
+} quicly_max_stream_data_t;
 
 typedef struct st_quicly_transport_parameters_t {
     /**
      * in octets
      */
-    quicly_initial_max_stream_data_t initial_max_stream_data;
+    quicly_max_stream_data_t max_stream_data;
     /**
      * in octets
      */
-    uint32_t initial_max_data;
+    uint64_t max_data;
     /**
      * in seconds
      */
-    uint16_t idle_timeout;
+    uint64_t idle_timeout;
     /**
      *
      */
-    uint16_t initial_max_streams_bidi;
+    uint64_t max_streams_bidi;
     /**
      *
      */
-    uint16_t initial_max_streams_uni;
+    uint64_t max_streams_uni;
     /**
-     *
+     * quicly ignores the value set for quicly_context_t::transport_parameters
      */
     uint8_t ack_delay_exponent;
+    /**
+     * in milliseconds; quicly ignores the value set for quicly_context_t::transport_parameters
+     */
+    uint8_t max_ack_delay;
 } quicly_transport_parameters_t;
 
 typedef struct st_quicly_cid_t {
@@ -205,30 +216,7 @@ struct st_quicly_context_t {
     /**
      * transport parameters
      */
-    quicly_initial_max_stream_data_t initial_max_stream_data;
-    /**
-     *
-     */
-    uint32_t initial_max_data;
-    /**
-     *
-     */
-    uint16_t idle_timeout;
-    /**
-     *
-     */
-    uint32_t max_streams_bidi;
-    /**
-     *
-     */
-    uint32_t max_streams_uni;
-    /**
-     * stateless reset
-     */
-    struct {
-        unsigned enforce_use : 1;
-        const void *key;
-    } stateless_retry;
+    quicly_transport_parameters_t transport_params;
     /**
      * client-only
      */
@@ -286,13 +274,13 @@ typedef enum {
      */
     QUICLY_STATE_FIRSTFLIGHT,
     /**
-     * indicates that quicly_send will send a retry
-     */
-    QUICLY_STATE_SEND_RETRY,
-    /**
      * while connected
      */
     QUICLY_STATE_CONNECTED,
+    /**
+     * sending close, but haven't seen the peer sending close
+     */
+    QUICLY_STATE_CLOSING,
     /**
      * we do not send CLOSE (at the moment), enter draining mode when receiving CLOSE
      */
@@ -332,11 +320,60 @@ struct _st_quicly_conn_public_t {
 };
 
 typedef enum {
+    /**
+     * initial state
+     */
     QUICLY_SENDER_STATE_NONE,
+    /**
+     * to be sent. Changes to UNACKED when sent out by quicly_send
+     */
     QUICLY_SENDER_STATE_SEND,
+    /**
+     * inflight. changes to SEND (when packet is deemed lost), or ACKED (when packet is ACKed)
+     */
     QUICLY_SENDER_STATE_UNACKED,
+    /**
+     * the sent value acknowledged by peer
+     */
     QUICLY_SENDER_STATE_ACKED,
 } quicly_sender_state_t;
+
+/**
+ * API that allows applications to specify it's own send / receive buffer.  The callback should be assigned by the
+ * `quicly_context_t::on_stream_open` callback.
+ */
+typedef struct st_quicly_stream_callbacks_t {
+    /**
+     * called when the stream is destroyed
+     */
+    void (*destroy)(quicly_stream_t *stream);
+    /**
+     * called whenever data can be retired from the send buffer, specifying the amount that can be newly removed
+     */
+    void (*send_shift)(quicly_stream_t *stream, size_t delta);
+    /**
+     * asks the application to fill the frame payload.  `off` is the offset within the buffer (the beginning position of the buffer
+     * changes as `send_shift` is invoked). `len` is an in/out argument that specifies the size of the buffer / amount of data being
+     * written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.  See also
+     * quicly_stream_sync_sendbuf.
+     */
+    int (*send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+    /**
+     * called when a STOP_SENDING frame is received.  Do not call `quicly_reset_stream` in response.  The stream will be
+     * automatically reset by quicly.
+     */
+    int (*send_stop)(quicly_stream_t *stream, uint16_t error_code);
+    /**
+     * called when data is newly received.  `off` is the offset within the buffer (the beginning position changes as the application
+     * calls `quicly_stream_sync_recvbuf`.  Applications should consult `quicly_stream_t::recvstate` to see if it has contiguous
+     * input.
+     */
+    int (*receive)(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+    /**
+     * called when a RESET_STREAM frame is received
+     */
+    int (*receive_reset)(quicly_stream_t *stream, uint16_t error_code);
+} quicly_stream_callbacks_t;
 
 struct st_quicly_stream_t {
     /**
@@ -348,25 +385,25 @@ struct st_quicly_stream_t {
      */
     quicly_stream_id_t stream_id;
     /**
+     *
+     */
+    const quicly_stream_callbacks_t *callbacks;
+    /**
      * send buffer
      */
-    quicly_sendbuf_t sendbuf;
+    quicly_sendstate_t sendstate;
     /**
      * receive buffer
      */
-    quicly_recvbuf_t recvbuf;
+    quicly_recvstate_t recvstate;
     /**
      *
      */
     void *data;
     /**
-     * the receive callback
-     */
-    quicly_stream_update_cb on_update;
-    /**
      *
      */
-    unsigned stream_id_blocked : 1;
+    unsigned streams_blocked : 1;
     /**
      *
      */
@@ -376,7 +413,7 @@ struct st_quicly_stream_t {
          */
         uint64_t max_stream_data;
         /**
-         * 1 + maximum offset of data that has been sent at least once (counting eos)
+         * 1 + maximum offset of data that has been sent at least once (NOT counting eos)
          */
         uint64_t max_sent;
         /**
@@ -390,6 +427,9 @@ struct st_quicly_stream_t {
          * rst_stream
          */
         struct {
+            /**
+             * STATE_NONE until RST is generated
+             */
             quicly_sender_state_t sender_state;
             uint16_t error_code;
         } rst;
@@ -401,7 +441,7 @@ struct st_quicly_stream_t {
          * linklist of pending streams
          */
         struct {
-            quicly_linklist_t control; /* links to conn_t::control (or to conn_t::stream_id_blocked if the blocked flag is set) */
+            quicly_linklist_t control; /* links to conn_t::control (or to conn_t::streams_blocked if the blocked flag is set) */
             quicly_linklist_t stream;
         } pending_link;
     } _send_aux;
@@ -417,13 +457,36 @@ struct st_quicly_stream_t {
 };
 
 typedef struct st_quicly_decoded_packet_t {
+    /**
+     * octets of the entire packet
+     */
     ptls_iovec_t octets;
     struct {
-        ptls_iovec_t dest, src;
+        /**
+         * destination CID
+         */
+        ptls_iovec_t dest;
+        /**
+         * source CID; {NULL, 0} if is a short header packet
+         */
+        ptls_iovec_t src;
     } cid;
+    /**
+     * version; 0 if is a short header packet
+     */
     uint32_t version;
+    /**
+     * token if available; otherwise {NULL, 0}
+     */
     ptls_iovec_t token;
+    /**
+     * starting offset of data (i.e., version-dependent area of a long header packet (version numbers in case of VN), odcid (in case
+     * of retry), or encrypted PN)
+     */
     size_t encrypted_off;
+    /**
+     * size of the datagram
+     */
     size_t datagram_size;
 } quicly_decoded_packet_t;
 
@@ -465,6 +528,10 @@ static const quicly_cid_t *quicly_get_peer_cid(quicly_conn_t *conn);
 /**
  *
  */
+static const quicly_transport_parameters_t *quicly_get_peer_transport_parameters(quicly_conn_t *conn);
+/**
+ *
+ */
 static quicly_state_t quicly_get_state(quicly_conn_t *conn);
 /**
  *
@@ -500,9 +567,15 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
  */
 static void **quicly_get_data(quicly_conn_t *conn);
 /**
- *
+ * destroys a connection object.
  */
 void quicly_free(quicly_conn_t *conn);
+/**
+ * closes the connection.  If `app_error_code` is not NULL, initiates a immediate close using the specified error code.  Otherwise,
+ * initiates a timeout close.  An application should continue calling quicly_recieve and quicly_send, until they return
+ * QUICLY_ERROR_FREE_CONNECTION.  At this point, it is should call quicly_free.
+ */
+int quicly_close(quicly_conn_t *conn, const uint16_t *app_error_code, const char *reason_phrase);
 /**
  *
  */
@@ -512,6 +585,11 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn);
  */
 quicly_datagram_t *quicly_send_version_negotiation(quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen,
                                                    ptls_iovec_t dest_cid, ptls_iovec_t src_cid);
+/**
+ *
+ */
+quicly_datagram_t *quicly_send_retry(quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen, ptls_iovec_t dcid,
+                                     ptls_iovec_t scid, ptls_iovec_t odcid, ptls_iovec_t token);
 /**
  *
  */
@@ -527,8 +605,18 @@ int quicly_is_destination(quicly_conn_t *conn, int is_1rtt, ptls_iovec_t cid);
 /**
  *
  */
+int quicly_encode_transport_parameter_list(const quicly_transport_parameters_t *params, int is_client, ptls_buffer_t *buf);
+/**
+ *
+ */
+int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, int is_client, const uint8_t *src,
+                                           const uint8_t *end);
+/**
+ *
+ */
 int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *sa, socklen_t salen,
-                   ptls_handshake_properties_t *handshake_properties);
+                   ptls_handshake_properties_t *handshake_properties,
+                   const quicly_transport_parameters_t *resumed_transport_params);
 /**
  *
  */
@@ -545,10 +633,6 @@ int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidir
 /**
  *
  */
-static int quicly_stream_is_closable(quicly_stream_t *stream);
-/**
- *
- */
 void quicly_reset_stream(quicly_stream_t *stream, uint16_t error_code);
 /**
  *
@@ -557,7 +641,11 @@ void quicly_request_stop(quicly_stream_t *stream, uint16_t error_code);
 /**
  *
  */
-void quicly_close_stream(quicly_stream_t *stream);
+int quicly_stream_sync_sendbuf(quicly_stream_t *stream, int activate);
+/**
+ *
+ */
+void quicly_stream_sync_recvbuf(quicly_stream_t *stream, size_t shift_amount);
 /**
  *
  */
@@ -566,6 +654,10 @@ static int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id);
  *
  */
 static int quicly_stream_is_unidirectional(quicly_stream_id_t stream_id);
+/**
+ *
+ */
+static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
 /**
  *
  */
@@ -649,6 +741,12 @@ inline const quicly_cid_t *quicly_get_peer_cid(quicly_conn_t *conn)
     return &c->peer.cid;
 }
 
+inline const quicly_transport_parameters_t *quicly_get_peer_transport_parameters(quicly_conn_t *conn)
+{
+    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
+    return &c->peer.transport_params;
+}
+
 inline int quicly_is_client(quicly_conn_t *conn)
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
@@ -688,6 +786,11 @@ inline int quicly_stream_is_unidirectional(quicly_stream_id_t stream_id)
     return (stream_id & 2) != 0;
 }
 
+inline int quicly_stream_is_self_initiated(quicly_stream_t *stream)
+{
+    return quicly_stream_is_client_initiated(stream->stream_id) == quicly_is_client(stream->conn);
+}
+
 inline void quicly_get_packet_stats(quicly_conn_t *conn, uint64_t *num_received, uint64_t *num_sent, uint64_t *num_lost,
                                     uint64_t *num_ack_received, uint64_t *num_bytes_sent)
 {
@@ -697,15 +800,6 @@ inline void quicly_get_packet_stats(quicly_conn_t *conn, uint64_t *num_received,
     *num_lost = c->num_packets.lost;
     *num_ack_received = c->num_packets.ack_received;
     *num_bytes_sent = c->num_bytes_sent;
-}
-
-inline int quicly_stream_is_closable(quicly_stream_t *stream)
-{
-    if (!quicly_sendbuf_transfer_complete(&stream->sendbuf))
-        return 0;
-    if (!quicly_recvbuf_transfer_complete(&stream->recvbuf))
-        return 0;
-    return 1;
 }
 
 #ifdef __cplusplus

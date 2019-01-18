@@ -20,23 +20,22 @@ SET(QUICLY_LIBRARY_FILES
     deps/dcc/cc.c
     deps/dcc/cc_cubic.c
     deps/dcc/cc_newreno.c
-    lib/ack.c
-    lib/buffer.c
     lib/frame.c
     lib/loss.c
-    lib/maxsender.c
     lib/quicly.c
     lib/ranges.c
-    lib/recvbuf.c
-    lib/sendbuf.c)
+    lib/recvstate.c
+    lib/sendstate.c
+    lib/sentmap.c
+    lib/streambuf.c)
 
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
-    t/ack.c
     t/frame.c
     t/maxsender.c
     t/loss.c
     t/ranges.c
+    t/sentmap.c
     t/simple.c
     t/stream-concurrency.c
     t/test.c)
@@ -51,7 +50,9 @@ TARGET_LINK_LIBRARIES(test.t quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
 ADD_EXECUTABLE(udpfw t/udpfw.c)
 
-ADD_CUSTOM_TARGET(check prove --exec "sh -c" -v ./*.t DEPENDS test.t)
+ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove --exec "sh -c" -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS test.t)
 
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
      SET(CMAKE_C_FLAGS "-D_GNU_SOURCE ${CMAKE_C_FLAGS}")

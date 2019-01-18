@@ -232,12 +232,13 @@ static int read_queue(struct queue_t *q, struct connection_t *conn, int64_t now)
 
 static void on_signal(int signo)
 {
-    fprintf(stderr, "up:\n"
-                    "  forwarded: %" PRIu64 "\n"
-                    "  dropped: %" PRIu64 "\n"
-                    "down:\n"
-                    "  forwarded: %" PRIu64 "\n"
-                    "  dropped: %" PRIu64 "\n",
+    fprintf(stderr,
+            "up:\n"
+            "  forwarded: %" PRIu64 "\n"
+            "  dropped: %" PRIu64 "\n"
+            "down:\n"
+            "  forwarded: %" PRIu64 "\n"
+            "  dropped: %" PRIu64 "\n",
             up.num_forwarded, up.num_dropped, down.num_forwarded, down.num_dropped);
     if (signo == SIGINT)
         _exit(0);

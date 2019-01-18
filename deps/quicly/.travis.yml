@@ -10,20 +10,24 @@ matrix:
     - os: linux
       dist: trusty
       sudo: required
-      before_install: &bi
+      env:
+        - label=linux/x86-64
+      before_install:
         - sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
         - sudo apt-get update --yes
         - sudo apt-get install --yes -f gcc-6 g++-6
         - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 60 --slave /usr/bin/g++ g++ /usr/bin/g++-6
-      script: &s
+        - sudo apt-get install libscope-guard-perl libtest-tcp-perl
+      script:
         # Cmake 2.8.12
         - curl -O https://cmake.org/files/v2.8/cmake-2.8.12.1.tar.gz
         - tar -xf cmake-2.8.12.1.tar.gz
-        - cd cmake-2.8.12.1/
+        - cd cmake-2.8.12.1
         - cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_CursesDialog=OFF -DBUILD_TESTING=OFF .
-        - make && sudo make install
+        - make
+        - sudo make install
         - cd ..
-        # LibreSSL
+        # OpenSSL 1.0.2
         - curl -O https://www.openssl.org/source/openssl-1.0.2l.tar.gz
         - tar -xf openssl-1.0.2l.tar.gz
         - cd openssl-1.0.2l
@@ -33,5 +37,27 @@ matrix:
         - cd ..
         - cmake -DOPENSSL_ROOT_DIR=$HOME/openssl-build .
         - make && make check
-    - os: macosx
-      script: *s
+    - os: osx
+      env:
+        - label=osx/x86-64
+      before_install: &bs_osx
+        - curl -L https://cpanmin.us | sudo perl - App::cpanminus
+        - sudo cpanm --totest Scope::Guard
+        - sudo cpanm --notest Test::TCP
+      script:
+        - cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl .
+        - make && make check
+    - os: osx
+      env:
+        - label=osx/i386
+      before_install: *bs_osx
+      script:
+        - curl -O https://www.openssl.org/source/openssl-1.1.0i.tar.gz
+        - tar -xf openssl-1.1.0i.tar.gz
+        - cd openssl-1.1.0i
+        - KERNEL_BITS=32 ./config --prefix=$HOME/openssl-build
+        - make
+        - make install
+        - cd ..
+        - cmake -DCMAKE_C_FLAGS=-m32 -DOPENSSL_ROOT_DIR=$HOME/openssl-build .
+        - make && make check

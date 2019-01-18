@@ -28,7 +28,7 @@ static void test_ack_decode_underflow(void)
 
     { /* ack pn=0 */
         const uint8_t pat[] = {0, 0, 0, 0}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded) == 0);
+        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
         ok(src == pat + sizeof(pat));
         ok(decoded.largest_acknowledged == 0);
         ok(decoded.num_gaps == 0);
@@ -37,12 +37,12 @@ static void test_ack_decode_underflow(void)
     }
     { /* underflow in first block length */
         const uint8_t pat[] = {0, 0, 0, 1}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded) != 0);
+        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) != 0);
     }
 
     { /* frame with gap going down to pn=0 */
         const uint8_t pat[] = {2, 0, 1, 0, 0, 0}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded) == 0);
+        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
         ok(src == pat + sizeof(pat));
         ok(decoded.largest_acknowledged == 2);
         ok(decoded.num_gaps == 1);
@@ -53,11 +53,11 @@ static void test_ack_decode_underflow(void)
 
     { /* additional block length going negative */
         const uint8_t pat[] = {2, 0, 1, 0, 0, 1}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded) != 0);
+        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) != 0);
     }
     { /* gap going negative */
         const uint8_t pat[] = {2, 0, 1, 0, 3, 0}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded) != 0);
+        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) != 0);
     }
 }
 
@@ -66,7 +66,7 @@ static void test_ack_decode(void)
     {
         const uint8_t pat[] = {0x34, 0x00, 0x00, 0x11}, *src = pat;
         quicly_ack_frame_t decoded;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded) == 0);
+        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
         ok(src == pat + sizeof(pat));
         ok(decoded.largest_acknowledged == 0x34);
         ok(decoded.num_gaps == 0);
@@ -77,7 +77,7 @@ static void test_ack_decode(void)
     {
         const uint8_t pat[] = {0x34, 0x00, 0x02, 0x00, 0x01, 0x02, 0x03, 0x04}, *src = pat;
         quicly_ack_frame_t decoded;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded) == 0);
+        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
         ok(src == pat + sizeof(pat));
         ok(decoded.largest_acknowledged == 0x34);
         ok(decoded.num_gaps == 2);
@@ -95,29 +95,42 @@ static void test_ack_decode(void)
 static void test_ack_encode(void)
 {
     quicly_ranges_t ranges;
-    size_t range_index;
     uint8_t buf[256], *end;
     const uint8_t *src;
     quicly_ack_frame_t decoded;
 
     quicly_ranges_init(&ranges);
-    quicly_ranges_add(&ranges, 0x12, 0x13);
+    quicly_ranges_add(&ranges, 0x12, 0x14);
 
-    range_index = 0;
-    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), ranges.ranges[ranges.num_ranges - 1].end - 1, 63, &ranges, &range_index);
+    /* encode */
+    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, 63);
     ok(end - buf == 5);
-
-    quicly_ranges_dispose(&ranges);
-
+    /* decode */
     src = buf + 1;
-    ok(quicly_decode_ack_frame(&src, end, &decoded) == 0);
+    ok(quicly_decode_ack_frame(&src, end, &decoded, 0) == 0);
     ok(src == end);
     ok(decoded.ack_delay == 63);
     ok(decoded.num_gaps == 0);
-    ok(decoded.largest_acknowledged == 0x12);
-    ok(decoded.ack_block_lengths[0] == 1);
+    ok(decoded.largest_acknowledged == 0x13);
+    ok(decoded.ack_block_lengths[0] == 2);
 
-    /* TODO add more */
+    quicly_ranges_add(&ranges, 0x10, 0x11);
+
+    /* encode */
+    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, 63);
+    ok(end - buf == 7);
+    /* decode */
+    src = buf + 1;
+    ok(quicly_decode_ack_frame(&src, end, &decoded, 0) == 0);
+    ok(src == end);
+    ok(decoded.ack_delay == 63);
+    ok(decoded.num_gaps == 1);
+    ok(decoded.largest_acknowledged == 0x13);
+    ok(decoded.ack_block_lengths[0] == 2);
+    ok(decoded.gaps[0] == 1);
+    ok(decoded.ack_block_lengths[1] == 1);
+
+    quicly_ranges_clear(&ranges);
 }
 
 static void test_mozquic(void)

@@ -3,6 +3,7 @@ import sys
 import json
 
 def find_cids(f):
+    cids = {}
     for line in f:
         event = json.loads(line)
         if event["type"] == "": continue

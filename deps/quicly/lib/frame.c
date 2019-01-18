@@ -31,34 +31,39 @@ uint8_t *quicly_encode_path_challenge_frame(uint8_t *dst, int is_response, const
     return dst;
 }
 
-uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, uint64_t largest_pn, uint64_t ack_delay, quicly_ranges_t *ranges,
-                                 size_t *range_index)
+uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t *ranges, uint64_t ack_delay)
 {
-    uint8_t num_blocks = 0, *num_blocks_at;
+#define WRITE_BLOCK(start, end)                                                                                                    \
+    do {                                                                                                                           \
+        uint64_t _start = (start), _end = (end);                                                                                   \
+        assert(_start < _end);                                                                                                     \
+        if (dst_end - dst < 8)                                                                                                     \
+            return NULL;                                                                                                           \
+        dst = quicly_encodev(dst, _end - _start - 1);                                                                              \
+    } while (0)
+
+    size_t range_index = ranges->num_ranges - 1;
+
+    assert(ranges->num_ranges != 0);
 
     *dst++ = QUICLY_FRAME_TYPE_ACK;
-    dst = quicly_encodev(dst, largest_pn);                    /* largest acknowledged */
-    dst = quicly_encodev(dst, ack_delay);                     /* ack delay */
-    num_blocks_at = dst++;                                    /* slot for num_blocks */
-    if (largest_pn == ranges->ranges[*range_index].end - 1) { /* first ack block */
-        dst = quicly_encodev(dst, ranges->ranges[*range_index].end - ranges->ranges[*range_index].start - 1);
-        --*range_index;
-    } else {
-        dst = quicly_encodev(dst, 0);
+    dst = quicly_encodev(dst, ranges->ranges[range_index].end - 1); /* largest acknowledged */
+    dst = quicly_encodev(dst, ack_delay);                           /* ack delay */
+    dst = quicly_encodev(dst, ranges->num_ranges - 1);              /* ack blocks */
+
+    while (1) {
+        WRITE_BLOCK(ranges->ranges[range_index].start, ranges->ranges[range_index].end); /* ACK block count */
+        if (range_index-- == 0)
+            break;
+        WRITE_BLOCK(ranges->ranges[range_index].end, ranges->ranges[range_index + 1].start);
     }
 
-    while (*range_index != SIZE_MAX && dst_end - dst >= 16 && num_blocks < 63) {
-        dst = quicly_encodev(dst, ranges->ranges[*range_index + 1].start - ranges->ranges[*range_index].end - 1); /* gap */
-        dst = quicly_encodev(dst, ranges->ranges[*range_index].end - ranges->ranges[*range_index].start - 1);     /* ack block */
-        --*range_index;
-        ++num_blocks;
-    }
-
-    *num_blocks_at = num_blocks;
     return dst;
+
+#undef WRITE_BLOCK
 }
 
-int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_frame_t *frame)
+int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_frame_t *frame, int is_ack_ecn)
 {
     uint64_t i, tmp;
 
@@ -92,7 +97,32 @@ int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_
         frame->smallest_acknowledged -= tmp;
     }
 
+    if (is_ack_ecn) {
+        /* just skip ECT(0), ECT(1), ECT-CE counters for the time being */
+        for (i = 0; i != 3; ++i)
+            if (quicly_decodev(src, end) == UINT64_MAX)
+                goto Error;
+    }
     return 0;
 Error:
     return QUICLY_ERROR_FRAME_ENCODING;
+}
+
+int quicly_tls_push_varint(ptls_buffer_t *buf, uint64_t v)
+{
+    size_t capacity = quicly_encodev_capacity(v);
+    int ret;
+
+    if ((ret = ptls_buffer_reserve(buf, capacity)) != 0)
+        return ret;
+    buf->off = quicly_encodev(buf->base + buf->off, v) - buf->base;
+
+    return 0;
+}
+
+int quicly_tls_decode_varint(uint64_t *value, const uint8_t **src, const uint8_t *end)
+{
+    if ((*value = quicly_decodev(src, end)) == UINT64_MAX)
+        return QUICLY_ERROR_TRANSPORT_PARAMETER;
+    return 0;
 }

@@ -25,7 +25,7 @@
 static void test_basic(void)
 {
     quicly_maxsender_t m;
-    quicly_maxsender_ackargs_t ackargs;
+    quicly_maxsender_sent_t ackargs;
 
     quicly_maxsender_init(&m, 100);
 
@@ -50,19 +50,7 @@ static void test_basic(void)
     ok(quicly_maxsender_should_update(&m, 74, 100, 768));
 }
 
-static void test_stream_id(void)
-{
-    quicly_maxsender_t m;
-
-    quicly_maxsender_init(&m, 400);
-    ok(quicly_maxsender_should_update_stream_id(&m, 8, 0, 100, 512) == -1);
-    ok(quicly_maxsender_should_update_stream_id(&m, 8, 0, 100, 1024) == 404);
-    ok(quicly_maxsender_should_update_stream_id(&m, 400, 99, 100, 0) == -1);
-    ok(quicly_maxsender_should_update_stream_id(&m, 404, 99, 100, 0) == 404);
-}
-
 void test_maxsender(void)
 {
     subtest("basic", test_basic);
-    subtest("stream-id", test_stream_id);
 }

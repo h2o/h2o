@@ -23,23 +23,34 @@
 #define test_h
 
 #include "quicly.h"
+#include "quicly/streambuf.h"
 #include "picotest.h"
+
+typedef struct st_test_streambuf_t {
+    quicly_streambuf_t super;
+    struct {
+        int32_t stop_sending;
+        int32_t reset_stream;
+    } error_received;
+    int is_detached;
+} test_streambuf_t;
 
 extern int64_t quic_now;
 extern quicly_context_t quic_ctx;
+extern quicly_stream_callbacks_t stream_callbacks;
+extern size_t on_destroy_callcnt;
 
+int on_stream_open(quicly_stream_t *stream);
 void free_packets(quicly_datagram_t **packets, size_t cnt);
 size_t decode_packets(quicly_decoded_packet_t *decoded, quicly_datagram_t **raw, size_t cnt, size_t host_cidl);
-int on_update_noop(quicly_stream_t *stream);
-int on_stream_open_buffering(quicly_stream_t *stream);
-int recvbuf_is(quicly_recvbuf_t *buf, const char *s);
+int buffer_is(ptls_buffer_t *buf, const char *s);
 size_t transmit(quicly_conn_t *src, quicly_conn_t *dst);
 int max_data_is_equal(quicly_conn_t *client, quicly_conn_t *server);
 
 void test_ranges(void);
 void test_frame(void);
 void test_maxsender(void);
-void test_ack(void);
+void test_sentmap(void);
 void test_simple(void);
 void test_loss(void);
 void test_stream_concurrency(void);
