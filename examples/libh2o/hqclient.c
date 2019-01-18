@@ -68,8 +68,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int minor_version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int rlen, int header_requires_dup)
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     size_t i;
 
@@ -144,15 +144,16 @@ int main(int argc, char **argv)
                              NULL,
                              NULL,
                              NULL,
+                             NULL,
                              0,
                              0,
                              NULL,
                              1};
     quicly_amend_ptls_context(&tlsctx);
     quicly_context_t qctx = quicly_default_context;
-    qctx.max_streams_uni = 3;
+    qctx.transport_params.max_streams_uni = 3;
     qctx.tls = &tlsctx;
-    qctx.on_stream_open = h2o_hq_on_stream_open;
+    qctx.on_stream_open = h2o_httpclient_hq_on_stream_open;
     // qctx.on_conn_close = h2o_hq_on_conn_close;
     qctx.event_log.cb = quicly_default_event_log;
     qctx.event_log.mask = UINT64_MAX;

@@ -258,7 +258,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
  * copies @len bytes from @src to @dst, calling h2o_buffer_reserve
  * @return 0 if the allocation failed, 1 otherwise
  */
-static int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len);
+static int h2o_buffer_append(h2o_buffer_t **dst, const void *src, size_t len);
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
@@ -417,7 +417,7 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
-inline int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
+inline int h2o_buffer_append(h2o_buffer_t **dst, const void *src, size_t len)
 {
     h2o_iovec_t buf = h2o_buffer_reserve(dst, len);
     if (buf.base == NULL)

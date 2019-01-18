@@ -199,6 +199,8 @@ extern size_t h2o_httpclient__h2_size;
 
 void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb);
+struct st_quicly_stream_t;
+int h2o_httpclient_hq_on_stream_open(struct st_quicly_stream_t *stream);
 
 #ifdef __cplusplus
 }

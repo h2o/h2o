@@ -1215,7 +1215,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 }
                 quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
                 *quic = quicly_default_context;
-                quic->max_streams_uni = 3;
+                quic->transport_params.max_streams_uni = 3;
                 quic->event_log.cb = quicly_default_event_log;
                 quic->event_log.mask = UINT64_MAX;
                 quicly_default_event_log_fp = stderr;
