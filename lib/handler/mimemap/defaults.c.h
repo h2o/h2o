@@ -84,7 +84,7 @@ MIMEMAP("pptx", "application/vnd.openxmlformats-officedocument.presentationml.pr
 MIMEMAP("prc", "application/x-pilot")
 MIMEMAP("ps", "application/postscript")
 MIMEMAP("ra", "audio/x-realaudio")
-MIMEMAP("rar", "application/x-rar-compressed")
+MIMEMAP("rar", "application/vnd.rar")
 MIMEMAP("rdf", "application/rdf+xml")
 MIMEMAP("rpm", "application/x-redhat-package-manager")
 MIMEMAP("rss", "application/rss+xml")
