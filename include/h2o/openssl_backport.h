@@ -61,6 +61,8 @@ static inline BIO_METHOD *BIO_meth_new(int type, const char *name)
 
 #define SSL_is_server(ssl) ((ssl)->server)
 
+#define SSL_set_alpn_protos(ssl, protos, protos_len) (-1)
+
 #endif
 
 #endif
