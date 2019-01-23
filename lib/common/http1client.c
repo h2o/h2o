@@ -267,7 +267,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         for (i = 0; i != num_headers; ++i) {
             if (src_headers[i].name_len == 0) {
                 /* reject multiline header */
-                on_error_before_head(client, "received multiline header that is not allowed");
+                on_error_before_head(client, "line folding of header fields is not supported");
                 return;
             }
             const h2o_token_t *token;
