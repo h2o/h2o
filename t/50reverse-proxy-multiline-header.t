@@ -36,6 +36,6 @@ open(CURL, "curl --http1.1 --silent --dump-header /dev/stdout 'http://127.0.0.1:
 do_upstream();
 my $resp = join('', <CURL>);
 
-like $resp, qr{^HTTP/1\.1 502 .*Content-Length:\s*45.*\r\n\r\nreceived multiline header that is not allowed$}is;
+like $resp, qr{^HTTP/1\.1 502 .*Content-Length:\s*46.*\r\n\r\nline folding of header fields is not supported$}is;
 
 done_testing();

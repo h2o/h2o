@@ -32,6 +32,6 @@ $resp = `echo "GET  HTTP/1.1\r\n\r\n" | nc 127.0.0.1 $server->{port} 2>&1`;
 like $resp, qr{^HTTP/1\.1 400 .*Content-Length:\s*11.*\r\n\r\nBad Request$}is, "missing path";
 
 $resp = `echo "GET / HTTP/1.1\r\nfoo: FOO\r\n    hoge\r\n\r\n" | nc 127.0.0.1 $server->{port} 2>&1`;
-like $resp, qr{^HTTP/1\.1 400 .*Content-Length:\s*31.*\r\n\r\nmultiline header is not allowed$}is, "multiline header";
+like $resp, qr{^HTTP/1\.1 400 .*Content-Length:\s*46.*\r\n\r\nline folding of header fields is not supported$}is, "multiline header";
 
 done_testing;
