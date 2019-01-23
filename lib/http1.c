@@ -419,8 +419,6 @@ static int contains_crlf_only(const char *s, size_t len)
 
 static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
 {
-    if (body == NULL)
-        body = "Bad Request";
     h2o_socket_read_stop(conn->sock);
     h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
@@ -448,7 +446,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         conn->_reqsize = reqlen;
         if (fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index) != 0) {
             set_timeout(conn, 0, NULL);
-            send_bad_request(conn, "multiline header is not allowed");
+            send_bad_request(conn, "line folding of header fields is not supported");
             return;
         }
         if (entity_body_header_index != -1) {
@@ -481,7 +479,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         return;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
-            send_bad_request(conn, NULL);
+            send_bad_request(conn, "Bad Request");
         }
         return;
     case -1: // error
@@ -504,7 +502,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         if (inreqlen <= 4 && contains_crlf_only(conn->sock->input->bytes, inreqlen)) {
             close_connection(conn, 1);
         } else {
-            send_bad_request(conn, NULL);
+            send_bad_request(conn, "Bad Request");
         }
         return;
     }
