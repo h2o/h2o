@@ -498,7 +498,7 @@ h2o_hq_conn_t *h2o_hq_server_accept(h2o_hq_ctx_t *_ctx, struct sockaddr *sa, soc
 
     /* find the Initial packet */
     for (i = 0; i != num_packets; ++i) {
-        if (packets[i].octets.base[0] == 0xff) {
+        if ((packets[i].octets.base[0] & 0xf0) == 0xc0) {
             syn_index = i;
             goto SynFound;
         }
