@@ -2424,7 +2424,9 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
         }
     }
     { /* cap the capacity to the current range */
-        uint64_t range_capacity = stream->sendstate.pending.ranges[0].end - !stream->sendstate.is_open - off;
+        uint64_t range_capacity = stream->sendstate.pending.ranges[0].end - off;
+        if (stream->sendstate.pending.num_ranges == 1)
+            range_capacity -= !stream->sendstate.is_open;
         if (capacity > range_capacity)
             capacity = range_capacity;
     }
@@ -2644,6 +2646,9 @@ static void open_id_blocked_streams(quicly_conn_t *conn, int uni)
         assert(stream->streams_blocked);
         quicly_linklist_unlink(&stream->_send_aux.pending_link.control);
         stream->streams_blocked = 0;
+        stream->_send_aux.max_stream_data = quicly_stream_is_unidirectional(stream->stream_id)
+                                                ? conn->super.peer.transport_params.max_stream_data.uni
+                                                : conn->super.peer.transport_params.max_stream_data.bidi_remote;
         /* TODO retain separate flags for stream states so that we do not always need to sched for both control and data */
         sched_stream_control(stream);
         resched_stream_data(stream);
