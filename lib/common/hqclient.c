@@ -252,7 +252,7 @@ static int handle_input_data_payload(struct st_h2o_hqclient_req_t *req, const ui
     if (src_end - *src < payload_bytes)
         payload_bytes = src_end - *src;
     H2O_HQ_CHECK_SUCCESS(h2o_buffer_append(&req->recvbuf.body, *src, payload_bytes));
-    src += payload_bytes;
+    *src += payload_bytes;
     req->bytes_left_in_data_frame -= payload_bytes;
     if (req->bytes_left_in_data_frame == 0)
         req->handle_input = handle_input_expect_data_frame;
