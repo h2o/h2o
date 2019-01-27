@@ -246,8 +246,6 @@ static int handle_input_data_payload(struct st_h2o_hqclient_req_t *req, const ui
     size_t payload_bytes = req->bytes_left_in_data_frame;
     const char *errstr;
 
-    assert(payload_bytes > 0);
-
     /* save data, update states */
     if (src_end - *src < payload_bytes)
         payload_bytes = src_end - *src;
@@ -291,11 +289,6 @@ int handle_input_expect_data_frame(struct st_h2o_hqclient_req_t *req, const uint
         /* FIXME handle push_promise, trailers */
         req->super._cb.on_body(&req->super, "unexpected frame");
         return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
-    }
-
-    if (frame.length == 0 || (*src == src_end && error_code == &eos_marker)) {
-        req->super._cb.on_body(&req->super, "malformed frame");
-        return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_DATA);
     }
 
     req->handle_input = handle_input_data_payload;
