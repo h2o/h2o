@@ -528,7 +528,8 @@ void h2o_hq_schedule_timer(h2o_hq_conn_t *conn)
 #endif
         h2o_timer_unlink(&conn->_timeout);
     }
-    h2o_timer_link(conn->ctx->loop, timeout, &conn->_timeout);
+    uint64_t now = h2o_now(conn->ctx->loop), delay = now < timeout ? timeout - now : 0;
+    h2o_timer_link(conn->ctx->loop, delay, &conn->_timeout);
 }
 
 int h2o_hq_handle_settings_frame(h2o_hq_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
