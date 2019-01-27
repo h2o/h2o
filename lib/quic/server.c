@@ -435,6 +435,24 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     write_response(stream);
 }
 
+static int handle_control_stream_frame(h2o_hq_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len,
+                                       const char **err_desc)
+{
+    struct st_h2o_hq_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hq_server_conn_t, hq, _conn);
+    int ret;
+
+    switch (type) {
+    case H2O_HQ_FRAME_TYPE_SETTINGS:
+        if ((ret = h2o_hq_handle_settings_frame(&conn->hq, payload, len, err_desc)) != 0)
+            return ret;
+        break;
+    default:
+        break;
+    }
+
+    return 0;
+}
+
 int h2o_hq_server_on_stream_open(quicly_stream_t *qs)
 {
     static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
@@ -502,7 +520,7 @@ SynFound : {
     };
     struct st_h2o_hq_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
-    h2o_hq_init_conn(&conn->hq, &ctx->super, NULL);
+    h2o_hq_init_conn(&conn->hq, &ctx->super, handle_control_stream_frame);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->pending_reqs);
     h2o_timer_init(&conn->timeout, handle_pending_reqs);

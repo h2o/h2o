@@ -229,10 +229,25 @@ void h2o_hq_schedule_timer(h2o_hq_conn_t *conn);
 /**
  *
  */
+int h2o_hq_handle_settings_frame(h2o_hq_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc);
+/**
+ *
+ */
 void h2o_hq_send_qpack_stream_cancel(h2o_hq_conn_t *conn, quicly_stream_id_t stream_id);
 /**
  *
  */
 void h2o_hq_send_qpack_header_ack(h2o_hq_conn_t *conn, const void *bytes, size_t len);
+/**
+ *
+ */
+static int h2o_hq_has_received_settings(h2o_hq_conn_t *conn);
+
+/* inline definitions */
+
+inline int h2o_hq_has_received_settings(h2o_hq_conn_t *conn)
+{
+    return conn->qpack.enc != NULL;
+}
 
 #endif

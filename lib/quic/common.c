@@ -142,47 +142,6 @@ static int qpack_decoder_stream_handle_input(h2o_hq_conn_t *conn, struct st_h2o_
     return 0;
 }
 
-static int handle_settings_frame(h2o_hq_conn_t *conn, const uint8_t *payload, size_t length)
-{
-    const uint8_t *src = payload, *src_end = src + length;
-    uint32_t header_table_size = H2O_HQ_DEFAULT_HEADER_TABLE_SIZE;
-
-    assert(conn->qpack.enc == NULL);
-
-    while (src != src_end) {
-        uint16_t id;
-        uint64_t length;
-        if (ptls_decode16(&id, &src, src_end) != 0)
-            goto Malformed;
-        if ((length = quicly_decodev(&src, src_end)) == UINT64_MAX)
-            goto Malformed;
-        if (src_end - src < length)
-            goto Malformed;
-        const uint8_t *content_end = src + length;
-        switch (id) {
-        case H2O_HQ_SETTINGS_HEADER_TABLE_SIZE: {
-            uint64_t v;
-            if ((v = quicly_decodev(&src, src_end)) == UINT64_MAX)
-                goto Malformed;
-            if (v > H2O_HQ_MAX_HEADER_TABLE_SIZE)
-                goto Malformed;
-            header_table_size = (uint32_t)v;
-        } break;
-        /* TODO add */
-        default:
-            src = content_end;
-            break;
-        }
-        if (src != content_end)
-            goto Malformed;
-    }
-
-    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, 100 /* FIXME */);
-    return 0;
-Malformed:
-    return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_SETTINGS);
-}
-
 static int control_stream_handle_input(h2o_hq_conn_t *conn, struct st_h2o_hq_ingress_unistream_t *stream, const uint8_t **src,
                                        const uint8_t *src_end, const char **err_desc)
 {
@@ -195,58 +154,10 @@ static int control_stream_handle_input(h2o_hq_conn_t *conn, struct st_h2o_hq_ing
         return ret;
     }
 
-    switch (frame.type) {
-    case H2O_HQ_FRAME_TYPE_SETTINGS: /* already received; see expect_settings_handle_input */
-        return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_SETTINGS);
-    case H2O_HQ_FRAME_TYPE_PRIORITY:
-        if (quicly_is_client(conn->quic))
-            return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_PRIORITY);
-        return 0;
-    case H2O_HQ_FRAME_TYPE_CANCEL_PUSH:
-        return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_CANCEL_PUSH); /* TODO implement push? */
-    case H2O_HQ_FRAME_TYPE_PUSH_PROMISE:
-        if (!quicly_is_client(conn->quic))
-            return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_PUSH_PROMISE);
-        return 0;
-    case H2O_HQ_FRAME_TYPE_GOAWAY:
-        return 0; /* FIXME implement */
-    case H2O_HQ_FRAME_TYPE_MAX_PUSH_ID:
-        if (quicly_is_client(conn->quic))
-            return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_MAX_PUSH_ID);
-        return 0;
-    default:
-        return 0;
-    }
-
-    if (conn->handle_control_stream_frame != NULL)
-        ret = conn->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length, err_desc);
-
-    return ret;
-}
-
-static int expect_settings_handle_input(h2o_hq_conn_t *conn, struct st_h2o_hq_ingress_unistream_t *stream, const uint8_t **src,
-                                        const uint8_t *src_end, const char **err_desc)
-{
-    h2o_hq_read_frame_t frame;
-    int ret;
-
-    if ((ret = h2o_hq_read_frame(&frame, src, src_end, err_desc)) != 0) {
-        if (ret == H2O_HQ_ERROR_INCOMPLETE)
-            ret = 0;
-        return ret;
-    }
-
-    if (frame.type != H2O_HQ_FRAME_TYPE_SETTINGS)
+    if (h2o_hq_has_received_settings(conn) == (frame.type == H2O_HQ_FRAME_TYPE_SETTINGS) || frame.type == H2O_HQ_FRAME_TYPE_DATA)
         return H2O_HQ_ERROR_MALFORMED_FRAME(frame.type);
 
-    if ((ret = handle_settings_frame(conn, frame.payload, frame.length)) != 0)
-        return ret;
-
-    stream->handle_input = control_stream_handle_input;
-    if (*src != src_end)
-        ret = stream->handle_input(conn, stream, src, src_end, err_desc);
-
-    return ret;
+    return conn->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length, err_desc);
 }
 
 static int unknown_stream_type_handle_input(h2o_hq_conn_t *conn, struct st_h2o_hq_ingress_unistream_t *stream, const uint8_t **src,
@@ -268,7 +179,7 @@ static int unknown_type_handle_input(h2o_hq_conn_t *conn, struct st_h2o_hq_ingre
     switch (**src) {
     case 'C':
         conn->_control_streams.ingress.control = stream;
-        stream->handle_input = expect_settings_handle_input;
+        stream->handle_input = control_stream_handle_input;
         break;
     case 'H':
         conn->_control_streams.ingress.qpack_encoder = stream;
@@ -618,6 +529,47 @@ void h2o_hq_schedule_timer(h2o_hq_conn_t *conn)
         h2o_timer_unlink(&conn->_timeout);
     }
     h2o_timer_link(conn->ctx->loop, timeout, &conn->_timeout);
+}
+
+int h2o_hq_handle_settings_frame(h2o_hq_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
+{
+    const uint8_t *src = payload, *src_end = src + length;
+    uint32_t header_table_size = H2O_HQ_DEFAULT_HEADER_TABLE_SIZE;
+
+    assert(!h2o_hq_has_received_settings(conn));
+
+    while (src != src_end) {
+        uint16_t id;
+        uint64_t length;
+        if (ptls_decode16(&id, &src, src_end) != 0)
+            goto Malformed;
+        if ((length = quicly_decodev(&src, src_end)) == UINT64_MAX)
+            goto Malformed;
+        if (src_end - src < length)
+            goto Malformed;
+        const uint8_t *content_end = src + length;
+        switch (id) {
+        case H2O_HQ_SETTINGS_HEADER_TABLE_SIZE: {
+            uint64_t v;
+            if ((v = quicly_decodev(&src, src_end)) == UINT64_MAX)
+                goto Malformed;
+            if (v > H2O_HQ_MAX_HEADER_TABLE_SIZE)
+                goto Malformed;
+            header_table_size = (uint32_t)v;
+        } break;
+        /* TODO add */
+        default:
+            src = content_end;
+            break;
+        }
+        if (src != content_end)
+            goto Malformed;
+    }
+
+    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, 100 /* FIXME */);
+    return 0;
+Malformed:
+    return H2O_HQ_ERROR_MALFORMED_FRAME(H2O_HQ_FRAME_TYPE_SETTINGS);
 }
 
 void h2o_hq_send_qpack_stream_cancel(h2o_hq_conn_t *conn, quicly_stream_id_t stream_id)

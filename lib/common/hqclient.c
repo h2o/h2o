@@ -140,13 +140,6 @@ static void start_connect(struct st_h2o_hqclient_conn_t *conn, struct sockaddr *
     if ((ret = h2o_hq_setup(&conn->super, qconn)) != 0)
         goto Fail;
 
-    /* create streams to send the request */
-    while (!h2o_linklist_is_empty(&conn->pending_requests)) {
-        struct st_h2o_hqclient_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hqclient_req_t, link, conn->pending_requests.next);
-        h2o_linklist_unlink(&req->link);
-        start_request(req);
-    }
-
     h2o_hq_send(&conn->super);
 
     return;
@@ -170,12 +163,36 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     start_connect(conn, selected->ai_addr, selected->ai_addrlen);
 }
 
+static int handle_control_stream_frame(h2o_hq_conn_t *_conn, uint8_t type, const uint8_t *payload, size_t len,
+                                       const char **err_desc)
+{
+    struct st_h2o_hqclient_conn_t *conn = (void *)_conn;
+    int ret;
+
+    switch (type) {
+    case H2O_HQ_FRAME_TYPE_SETTINGS:
+        if ((ret = h2o_hq_handle_settings_frame(&conn->super, payload, len, err_desc)) != 0)
+            return ret;
+        while (!h2o_linklist_is_empty(&conn->pending_requests)) {
+            struct st_h2o_hqclient_req_t *req =
+                H2O_STRUCT_FROM_MEMBER(struct st_h2o_hqclient_req_t, link, conn->pending_requests.next);
+            h2o_linklist_unlink(&req->link);
+            start_request(req);
+        }
+        break;
+    default:
+        break;
+    }
+
+    return 0;
+}
+
 struct st_h2o_hqclient_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
 {
     struct st_h2o_hqclient_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
     memset(conn, 0, sizeof(*conn));
-    h2o_hq_init_conn(&conn->super, ctx->quic, NULL);
+    h2o_hq_init_conn(&conn->super, ctx->quic, handle_control_stream_frame);
     conn->ctx = ctx;
     conn->server.origin_url = (h2o_url_t){origin->scheme, h2o_strdup(NULL, origin->authority.base, origin->authority.len),
                                           h2o_strdup(NULL, origin->host.base, origin->host.len)};
@@ -575,7 +592,7 @@ void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
     h2o_buffer_init(&req->recvbuf.partial_frame, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.noncontiguous, &h2o_socket_buffer_prototype);
 
-    if (conn->super.quic != NULL && quicly_connection_is_ready(conn->super.quic)) {
+    if (h2o_hq_has_received_settings(&conn->super)) {
         start_request(req);
     } else {
         h2o_linklist_insert(&conn->pending_requests, &req->link);
