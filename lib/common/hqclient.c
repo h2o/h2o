@@ -301,8 +301,8 @@ int handle_input_expect_data_frame(struct st_h2o_hqclient_req_t *req, const uint
     req->handle_input = handle_input_data_payload;
     req->bytes_left_in_data_frame = frame.length;
 
-    /* unexpected close of DATA frame is handled by handle_input_data_payload. We rely on the fuction to detect if the DATA frame is
-     * closed right after the frame header */
+    /* unexpected close of DATA frame is handled by handle_input_data_payload. We rely on the function to detect if the DATA frame
+     * is closed right after the frame header */
     return handle_input_data_payload(req, src, src_end, error_code, err_desc);
 }
 
