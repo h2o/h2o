@@ -471,7 +471,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     is_eos = quicly_recvstate_transfer_complete(&req->quic->recvstate);
     assert(is_eos || src != src_end);
     do {
-        ret = req->handle_input(req, &src, src_end, &eos_marker, &err_desc);
+        ret = req->handle_input(req, &src, src_end, is_eos ? &eos_marker : NULL, &err_desc);
     } while (ret == 0 && src != src_end);
 
     /* save data to partial buffer (if necessary) */

@@ -186,7 +186,8 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
         ++i;
     }
     if (i != 0) {
-        memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i, stream->sendbuf.vecs.size - i);
+        memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
+                (stream->sendbuf.vecs.size - i) * sizeof(stream->sendbuf.vecs.entries[0]));
         stream->sendbuf.vecs.size -= i;
     }
 
