@@ -588,6 +588,7 @@ void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
     *req = (struct st_h2o_hqclient_req_t){
         {pool, ctx, NULL, &req->recvbuf.body, data, NULL, {h2o_gettimeofday(ctx->loop)}, cancel_request}, conn};
     req->super._cb.on_connect = cb;
+    h2o_buffer_init(&req->sendbuf, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.body, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.partial_frame, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.noncontiguous, &h2o_socket_buffer_prototype);

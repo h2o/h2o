@@ -508,7 +508,7 @@ int h2o_hq_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, size_
 
     if ((*buf)->size < new_size) {
         h2o_buffer_reserve(buf, new_size);
-        if ((*buf)->size < new_size)
+        if ((*buf)->capacity < new_size)
             return PTLS_ERROR_NO_MEMORY;
     }
 

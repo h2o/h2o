@@ -338,7 +338,7 @@ static int handle_input_expect_headers(struct st_h2o_hq_server_stream_t *stream,
     struct st_h2o_hq_server_conn_t *conn = get_conn(stream);
     h2o_hq_read_frame_t frame;
     int header_exists_map, ret;
-    const char *err_desc;
+    const char *err_desc = NULL;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
 
