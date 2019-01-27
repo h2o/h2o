@@ -246,9 +246,6 @@ static int on_send_stop(quicly_stream_t *qs, uint16_t error_code)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
-    if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
-        quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
-
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
 
     return 0;
@@ -298,7 +295,8 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
 
     if (quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
         if (ret != 0) {
-            quicly_reset_stream(stream->quic, ret == H2O_HTTP3_ERROR_INCOMPLETE ? H2O_HTTP3_ERROR_GENERAL_PROTOCOL : ret);
+            /* fixme send MALFORMED_FRAME(last_frame); we might need to observe the value of handle_input */
+            quicly_reset_stream(stream->quic, ret == H2O_HTTP3_ERROR_INCOMPLETE ? H2O_HTTP3_ERROR_GENERAL : ret);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         } else if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS) {
             quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_INCOMPLETE_REQUEST);
@@ -326,13 +324,14 @@ static int on_receive_reset(quicly_stream_t *qs, uint16_t error_code)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
-    if (!quicly_sendstate_transfer_complete(&stream->quic->sendstate))
-        quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_STOPPING);
-
-    assert(stream->state != H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
-    if (h2o_linklist_is_linked(&stream->link))
-        h2o_linklist_unlink(&stream->link);
-    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
+    /* if we were still receiving the request, discard! */
+    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS) {
+        assert(!quicly_sendstate_transfer_complete(&stream->quic->sendstate));
+        quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_REQUEST_REJECTED);
+        if (h2o_linklist_is_linked(&stream->link))
+            h2o_linklist_unlink(&stream->link);
+        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
+    }
 
     return 0;
 }
@@ -350,7 +349,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if ((ret = h2o_http3_read_frame(&frame, src, src_end, &err_desc)) != 0)
         return ret;
     if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS)
-        return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+        return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
 
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->hq.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
