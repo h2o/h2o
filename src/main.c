@@ -62,7 +62,7 @@
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
-#include "h2o/hq_server.h"
+#include "h2o/http3_server.h"
 #include "h2o/serverutil.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
@@ -117,7 +117,7 @@ struct listener_config_t {
 struct listener_ctx_t {
     h2o_accept_ctx_t accept_ctx;
     h2o_socket_t *sock;
-    h2o_hq_server_ctx_t *hq;
+    h2o_http3_server_ctx_t *hq;
 };
 
 typedef struct st_resolve_tag_node_cache_entry_t {
@@ -286,15 +286,15 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     if (params->negotiated_protocols.count != 0) {
         if (self->listener->quic != NULL) {
             size_t i, j;
-            for (i = 0; i != sizeof(h2o_hq_alpn) / sizeof(h2o_hq_alpn[0]); ++i) {
+            for (i = 0; i != sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]); ++i) {
                 for (j = 0; j != params->negotiated_protocols.count; ++j)
-                    if (h2o_memis(h2o_hq_alpn[i].base, h2o_hq_alpn[i].len, params->negotiated_protocols.list[j].base,
+                    if (h2o_memis(h2o_http3_alpn[i].base, h2o_http3_alpn[i].len, params->negotiated_protocols.list[j].base,
                                   params->negotiated_protocols.list[j].len))
                         goto HQ_ALPN_Found;
             }
             return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
         HQ_ALPN_Found:
-            if ((ret = ptls_set_negotiated_protocol(tls, (char *)h2o_hq_alpn[i].base, h2o_hq_alpn[i].len)) != 0)
+            if ((ret = ptls_set_negotiated_protocol(tls, (char *)h2o_http3_alpn[i].base, h2o_http3_alpn[i].len)) != 0)
                 return ret;
         } else {
             const h2o_iovec_t *server_pref;
@@ -1219,7 +1219,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quic->event_log.cb = quicly_default_event_log;
                 quic->event_log.mask = UINT64_MAX;
                 quicly_default_event_log_fp = stderr;
-                quic->on_stream_open = h2o_hq_server_on_stream_open;
+                quic->on_stream_open = h2o_http3_server_on_stream_open;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
             }
@@ -1740,8 +1740,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].sock->data = listeners + i;
         if (listener_config->quic != NULL) {
             listeners[i].hq = alloca(sizeof(*listeners[i].hq));
-            h2o_hq_init_context(&listeners[i].hq->super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
-                                listener_config->quic, h2o_hq_server_accept);
+            h2o_http3_init_context(&listeners[i].hq->super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
+                                   listener_config->quic, h2o_http3_server_accept);
             listeners[i].hq->accept_ctx = &listeners[i].accept_ctx;
         } else {
             listeners[i].hq = NULL;

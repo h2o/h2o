@@ -21,7 +21,7 @@
  */
 #include <stdlib.h>
 #include "../../test.h"
-#include "../../../../lib/quic/qpack.c"
+#include "../../../../lib/http3/qpack.c"
 
 static void doit(int use_enc_stream)
 {

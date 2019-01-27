@@ -31,7 +31,7 @@
 #include "h2o/httpclient.h"
 #include "h2o/memory.h"
 #include "h2o/multithread.h"
-#include "h2o/hq_common.h"
+#include "h2o/http3_common.h"
 #include "h2o/url.h"
 
 static h2o_socket_t *create_socket(h2o_loop_t *loop)
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
 {
     h2o_url_t url;
     h2o_multithread_receiver_t getaddr_receiver;
-    h2o_hq_ctx_t hqctx;
+    h2o_http3_ctx_t hqctx;
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <url>\n", argv[0]);
@@ -153,13 +153,13 @@ int main(int argc, char **argv)
     quicly_context_t qctx = quicly_default_context;
     qctx.transport_params.max_streams_uni = 3;
     qctx.tls = &tlsctx;
-    qctx.on_stream_open = h2o_httpclient_hq_on_stream_open;
+    qctx.on_stream_open = h2o_httpclient_http3_on_stream_open;
     // qctx.on_conn_close = h2o_hq_on_conn_close;
     qctx.event_log.cb = quicly_default_event_log;
     qctx.event_log.mask = UINT64_MAX;
     quicly_default_event_log_fp = stderr;
 
-    h2o_hq_init_context(&hqctx, loop, sock, &qctx, NULL);
+    h2o_http3_init_context(&hqctx, loop, sock, &qctx, NULL);
 
     uint64_t io_timeout = 5000; /* 5 seconds */
     h2o_httpclient_ctx_t ctx = {loop, &getaddr_receiver, io_timeout, io_timeout, io_timeout,

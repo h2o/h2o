@@ -19,29 +19,29 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef h2o__hq_server_h
-#define h2o__hq_server_h
+#ifndef h2o__http3_server_h
+#define h2o__http3_server_h
 
 #include <sys/socket.h>
 #include "quicly.h"
-#include "h2o/hq_common.h"
+#include "h2o/http3_common.h"
 #include "h2o.h"
 
-typedef struct st_h2o_hq_server_ctx_t {
-    h2o_hq_ctx_t super;
+typedef struct st_h2o_http3_server_ctx_t {
+    h2o_http3_ctx_t super;
     h2o_accept_ctx_t *accept_ctx;
-} h2o_hq_server_ctx_t;
+} h2o_http3_server_ctx_t;
 
-extern const h2o_protocol_callbacks_t H2O_HQ_SERVER_CALLBACKS;
+extern const h2o_protocol_callbacks_t H2O_HTTP3_SERVER_CALLBACKS;
 
 /**
- * the acceptor callback to be used together with h2o_hq_server_ctx_t
+ * the acceptor callback to be used together with h2o_http3_server_ctx_t
  */
-h2o_hq_conn_t *h2o_hq_server_accept(h2o_hq_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, quicly_decoded_packet_t *packets,
-                                    size_t num_packets);
+h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen,
+                                          quicly_decoded_packet_t *packets, size_t num_packets);
 /**
  *
  */
-int h2o_hq_server_on_stream_open(quicly_stream_t *stream);
+int h2o_http3_server_on_stream_open(quicly_stream_t *stream);
 
 #endif

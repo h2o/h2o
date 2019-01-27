@@ -40,8 +40,8 @@ typedef struct st_h2o_httpclient_properties_t {
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
-typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version,
-                                                         int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
+typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
+                                                         h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
                                                          int header_requires_dup);
 typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method,
                                                             h2o_url_t *url, const h2o_header_t **headers, size_t *num_headers,
@@ -82,7 +82,7 @@ typedef struct st_h2o_httpclient_ctx_t {
         int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
 
-    struct st_h2o_hq_ctx_t *quic; /* 1-to-(0|1) relationship */
+    struct st_h2o_http3_ctx_t *quic; /* 1-to-(0|1) relationship */
 
 } h2o_httpclient_ctx_t;
 
@@ -200,7 +200,7 @@ extern size_t h2o_httpclient__h2_size;
 void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb);
 struct st_quicly_stream_t;
-int h2o_httpclient_hq_on_stream_open(struct st_quicly_stream_t *stream);
+int h2o_httpclient_http3_on_stream_open(struct st_quicly_stream_t *stream);
 
 #ifdef __cplusplus
 }

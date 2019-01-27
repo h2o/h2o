@@ -287,15 +287,15 @@ SET(QUIC_SOURCE_FILES
     deps/quicly/lib/sendstate.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
-    lib/quic/qpack.c
-    lib/quic/common.c
-    lib/quic/server.c)
+    lib/http3/qpack.c
+    lib/http3/common.c
+    lib/http3/server.c)
 
 SET(QUIC_UNIT_TEST_SOURCE_FILES
-    t/00unit/lib/quic/qpack.c)
+    t/00unit/lib/http3/qpack.c)
 
 SET(QUIC_UNIT_TEST_REMOVE_FILES
-    lib/quic/qpack.c)
+    lib/http3/qpack.c)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -427,7 +427,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
-    t/00unit/lib/quic/qpack.c
+    t/00unit/lib/http3/qpack.c
     t/00unit/src/ssl.c
     t/00unit/issues/293.c
     t/00unit/issues/percent-encode-zero-byte.c)
@@ -459,7 +459,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/casper.c
     lib/http2/hpack.c
     lib/http2/scheduler.c
-    lib/quic/qpack.c)
+    lib/http3/qpack.c)
 
 SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
@@ -507,7 +507,7 @@ ELSE ()
     SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF()
 
-ADD_EXECUTABLE(t-qif ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} lib/quic/qpack.c t/qif.c)
+ADD_EXECUTABLE(t-qif ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} lib/http3/qpack.c t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
     EXCLUDE_FROM_ALL 1)
@@ -522,13 +522,13 @@ ADD_EXECUTABLE(examples-socket-client examples/libh2o/socket-client.c)
 ADD_EXECUTABLE(examples-simple examples/libh2o/simple.c)
 ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/libh2o/websocket.c)
 
-ADD_CUSTOM_TARGET(lib-examples-evloop DEPENDS examples-http1client-evloop examples-hqclient-evloop examples-simple-evloop examples-socket-client-evloop examples-latency-optimization-evloop)
+ADD_CUSTOM_TARGET(lib-examples-evloop DEPENDS examples-http1client-evloop examples-http3client-evloop examples-simple-evloop examples-socket-client-evloop examples-latency-optimization-evloop)
 IF (WSLAY_FOUND)
     ADD_DEPENDENCIES(lib-examples-evloop examples-websocket-evloop)
 ENDIF (WSLAY_FOUND)
 ADD_EXECUTABLE(examples-latency-optimization-evloop examples/libh2o/latency-optimization.c)
 ADD_EXECUTABLE(examples-http1client-evloop examples/libh2o/http1client.c)
-ADD_EXECUTABLE(examples-hqclient-evloop ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} lib/common/hqclient.c lib/quic/common.c lib/quic/qpack.c examples/libh2o/hqclient.c)
+ADD_EXECUTABLE(examples-http3client-evloop ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} lib/common/http3client.c lib/http3/common.c lib/http3/qpack.c examples/libh2o/http3client.c)
 ADD_EXECUTABLE(examples-socket-client-evloop examples/libh2o/socket-client.c)
 ADD_EXECUTABLE(examples-simple-evloop examples/libh2o/simple.c)
 ADD_EXECUTABLE(examples-websocket-evloop lib/websocket.c examples/libh2o/websocket.c)
@@ -559,10 +559,10 @@ SET_TARGET_PROPERTIES(examples-http1client-evloop PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-http1client-evloop libh2o-evloop ${EXTRA_LIBS})
 
-SET_TARGET_PROPERTIES(examples-hqclient-evloop PROPERTIES
+SET_TARGET_PROPERTIES(examples-http3client-evloop PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-hqclient-evloop libh2o-evloop ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(examples-http3client-evloop libh2o-evloop ${EXTRA_LIBS})
 
 SET_TARGET_PROPERTIES(examples-socket-client-evloop PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
