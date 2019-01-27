@@ -232,6 +232,9 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
             sz = dst_end - dst;
         memcpy(dst, stream->sendbuf.vecs.entries[i].base + off, sz);
         dst += sz;
+        /* prepare to write next */
+        off = 0;
+        ++i;
     }
 
     *len = dst - (uint8_t *)_dst;
@@ -425,6 +428,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_iovec_t *bufs, si
         quicly_reset_stream(stream->quic, H2O_HQ_ERROR_INTERNAL);
         break;
     }
+
+    quicly_stream_sync_sendbuf(stream->quic, 1);
 }
 
 static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)

@@ -415,6 +415,7 @@ int h2o_hq_read_frame(h2o_hq_read_frame_t *frame, const uint8_t **_src, const ui
         if (src_end - src < frame->length)
             return H2O_HQ_ERROR_INCOMPLETE;
         frame->payload = src;
+        src += frame->length;
     }
 
     *_src = src;
