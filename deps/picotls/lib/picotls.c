@@ -2403,7 +2403,7 @@ Exit:
 }
 
 static int default_emit_certificate_cb(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
-                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context)
+                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
 {
     int ret;
 
@@ -2433,7 +2433,7 @@ static int send_certificate_and_certificate_verify(ptls_t *tls, ptls_message_emi
     }
 
     /* send Certificate (or the equivalent) */
-    if ((ret = emit_certificate->cb(emit_certificate, tls, emitter, tls->key_schedule, context)) != 0)
+    if ((ret = emit_certificate->cb(emit_certificate, tls, emitter, tls->key_schedule, context, push_status_request)) != 0)
         goto Exit;
 
     /* build and send CertificateVerify */
@@ -3090,7 +3090,7 @@ static int decode_client_hello(ptls_t *tls, struct st_ptls_client_hello_t *ch, c
             });
             break;
         case PTLS_EXTENSION_TYPE_COOKIE:
-            if (properties->server.cookie.key == NULL) {
+            if (properties == NULL || properties->server.cookie.key == NULL) {
                 ret = PTLS_ALERT_ILLEGAL_PARAMETER;
                 goto Exit;
             }
@@ -3458,10 +3458,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
         }
         /* the following check is necessary so that we would be able to track the connection in SSLKEYLOGFILE, even though it might
          * not be for the safety of the protocol */
-        if (!ptls_mem_equal(tls->client_random, ch.random_bytes, sizeof(tls->client_random)) ||
-            (tls->server_name != NULL) != (ch.server_name.base != NULL) ||
-            (tls->server_name != NULL && !(strncmp(tls->server_name, (char *)ch.server_name.base, ch.server_name.len) == 0 &&
-                                           tls->server_name[ch.server_name.len] == '\0'))) {
+        if (!ptls_mem_equal(tls->client_random, ch.random_bytes, sizeof(tls->client_random))) {
             ret = PTLS_ALERT_HANDSHAKE_FAILURE;
             goto Exit;
         }

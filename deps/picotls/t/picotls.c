@@ -113,7 +113,7 @@ static void test_hkdf(void)
 
 static void test_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
 {
-    const char *traffic_secret = "01234567890123456789012345678901", *src1 = "hello world", *src2 = "good bye, all";
+    const char *traffic_secret = "012345678901234567890123456789012345678901234567", *src1 = "hello world", *src2 = "good bye, all";
     ptls_aead_context_t *c;
     char enc1[256], enc2[256], dec1[256], dec2[256];
     size_t enc1len, enc2len, dec1len, dec2len;
@@ -152,7 +152,7 @@ static void test_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
 
 static void test_aad_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
 {
-    const char *traffic_secret = "01234567890123456789012345678901", *src = "hello world", *aad = "my true aad";
+    const char *traffic_secret = "012345678901234567890123456789012345678901234567", *src = "hello world", *aad = "my true aad";
     ptls_aead_context_t *c;
     char enc[256], dec[256];
     size_t enclen, declen;
@@ -434,7 +434,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         break;
     case TEST_HANDSHAKE_HRR_STATELESS:
         client_hs_prop.client.negotiate_before_key_exchange = 1;
-        server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+        server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
         server_hs_prop.server.retry_uses_cookie = 1;
         break;
     case TEST_HANDSHAKE_EARLY_DATA:
@@ -831,7 +831,7 @@ static void test_enforce_retry(int use_cookie)
     size_t consumed;
     int ret;
 
-    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
     server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
     server_hs_prop.server.enforce_retry = 1;
     server_hs_prop.server.retry_uses_cookie = use_cookie;
@@ -940,7 +940,7 @@ static void test_stateless_hrr_aad_change(void)
     size_t consumed;
     int ret;
 
-    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
     server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
     server_hs_prop.server.enforce_retry = 1;
     server_hs_prop.server.retry_uses_cookie = 1;
