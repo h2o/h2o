@@ -75,8 +75,9 @@ int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len
     }
 
     /* update received range */
-    if ((ret = quicly_ranges_add(&state->received, off, off + *len)) != 0)
-        return ret;
+    if (*len != 0)
+        if ((ret = quicly_ranges_add(&state->received, off, off + *len)) != 0)
+            return ret;
     if (state->received.num_ranges == 1 && state->received.ranges[0].start == 0 && state->received.ranges[0].end == state->eos)
         goto Complete;
 
