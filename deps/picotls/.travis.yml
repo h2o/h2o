@@ -1,28 +1,32 @@
+language: c
+dist: xenial
+sudo: required
+
 matrix:
   include:
-    - os: linux
-      dist: trusty
-      sudo: required
-      compiler: gcc
-    - os: linux
-      dist: trusty
-      sudo: required
-      compiler: clang-6.0
+    - name: Linux (gcc-8)
+      os: linux
+      compiler: gcc-8
       addons:
         apt:
-          sources: ['llvm-toolchain-trusty-6.0', 'ubuntu-toolchain-r-test']
-          packages: ['g++-4.9','clang-6.0']
-    - os: osx
-
-language: c
+          sources: ['ubuntu-toolchain-r-test']
+          packages: ['gcc-8']
+    - name: Linux (clang)
+      os: linux
+      compiler: clang
+    - name: macOS (Xcode)
+      os: osx
+      env:
+          - CMAKE_OPTS=" -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/"
+    - name: macOS (Xcode 10.1/clang-10)
+      os: osx
+      osx_image: xcode10.1
+      env:
+          - CMAKE_OPTS=" -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/"
 
 before_install:
-  - |
-    if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
-      sudo apt-get install --yes cmake
-    fi
 
 script:
-  - cmake .
+  - cmake ${CMAKE_OPTS} .
   - make all
   - make check
