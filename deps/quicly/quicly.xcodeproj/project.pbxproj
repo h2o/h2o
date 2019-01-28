@@ -593,7 +593,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
+					"/usr/local/opt/openssl@1.1/include",
 					deps/klib,
 					deps/picotls/include,
 					deps/dcc,
@@ -642,7 +642,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
+					"/usr/local/opt/openssl@1.1/include",
 					deps/klib,
 					deps/picotls/include,
 					deps/dcc,
@@ -674,7 +674,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl/lib",
+					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -685,7 +685,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl/lib",
+					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -696,7 +696,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl/lib",
+					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -707,7 +707,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl/lib",
+					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -718,7 +718,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl/lib",
+					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -729,7 +729,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl/lib",
+					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";

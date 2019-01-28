@@ -59,9 +59,10 @@ static quicly_context_t ctx;
 static ptls_save_ticket_t save_ticket = {save_ticket_cb};
 static ptls_iovec_t retry_token;
 
+ptls_key_exchange_algorithm_t *key_exchanges[128];
 static ptls_context_t tlsctx = {.random_bytes = ptls_openssl_random_bytes,
                                 .get_time = &ptls_get_time,
-                                .key_exchanges = ptls_openssl_key_exchanges,
+                                .key_exchanges = key_exchanges,
                                 .cipher_suites = ptls_openssl_cipher_suites,
                                 .require_dhe_on_psk = 1,
                                 .save_ticket = &save_ticket};
@@ -660,6 +661,7 @@ static void usage(const char *cmd)
            "                       server. If omitted, the command runs as a client.\n"
            "  -e event-log-file    file to log events\n"
            "  -l log-file          file to log traffic secrets\n"
+           "  -N                   enforce HelloRetryRequest (client-only)\n"
            "  -n                   enforce version negotiation (client-only)\n"
            "  -p path              path to request (can be set multiple times)\n"
            "  -R                   require Retry (server only)\n"
@@ -667,6 +669,7 @@ static void usage(const char *cmd)
            "  -s session-file      file to load / store the session ticket\n"
            "  -V                   verify peer using the default certificates\n"
            "  -v                   verbose mode (-vv emits packet dumps as well)\n"
+           "  -x named-group       named group to be used (default: secp256r1)\n"
            "  -h                   print this help\n"
            "\n",
            cmd);
@@ -687,7 +690,7 @@ int main(int argc, char **argv)
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
 
-    while ((ch = getopt(argc, argv, "a:c:k:e:l:np:Rr:s:Vvh")) != -1) {
+    while ((ch = getopt(argc, argv, "a:c:k:e:l:Nnp:Rr:s:Vvx:h")) != -1) {
         switch (ch) {
         case 'a':
             set_alpn(&hs_properties, optarg);
@@ -709,6 +712,9 @@ int main(int argc, char **argv)
             break;
         case 'l':
             setup_log_secret(ctx.tls, optarg);
+            break;
+        case 'N':
+            hs_properties.client.negotiate_before_key_exchange = 1;
             break;
         case 'n':
             ctx.enforce_version_negotiation = 1;
@@ -737,6 +743,27 @@ int main(int argc, char **argv)
         case 'v':
             ++verbosity;
             break;
+        case 'x': {
+            size_t i;
+            for (i = 0; key_exchanges[i] != NULL; ++i)
+                ;
+#define MATCH(name) if (key_exchanges[i] == NULL && strcasecmp(optarg, #name) == 0) key_exchanges[i] = &ptls_openssl_##name
+            MATCH(secp256r1);
+#if PTLS_OPENSSL_HAVE_SECP384R1
+            MATCH(secp384r1);
+#endif
+#if PTLS_OPENSSL_HAVE_SECP521R1
+            MATCH(secp521r1);
+#endif
+#if PTLS_OPENSSL_HAVE_X25519
+            MATCH(x25519);
+#endif
+#undef MATCH
+            if (key_exchanges[i] == NULL) {
+                fprintf(stderr, "unknown key exchange: %s\n", optarg);
+                exit(1);
+            }
+        } break;
         default:
             usage(argv[0]);
             exit(1);
@@ -747,6 +774,9 @@ int main(int argc, char **argv)
 
     if (req_paths[0] == NULL)
         req_paths[0] = "/";
+
+    if (key_exchanges[0] == NULL)
+        key_exchanges[0] = &ptls_openssl_secp256r1;
 
     if (ctx.tls->certificates.count != 0 || ctx.tls->sign_certificate != NULL) {
         /* server */

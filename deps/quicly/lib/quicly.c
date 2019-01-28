@@ -3162,6 +3162,8 @@ static int enter_close(quicly_conn_t *conn, int host_is_initiating)
 
 int quicly_close(quicly_conn_t *conn, const uint16_t *app_error_code, const char *reason_phrase)
 {
+    if (reason_phrase == NULL)
+        reason_phrase = "";
     if (app_error_code != NULL) {
         conn->egress.connection_close.error_code = *app_error_code;
         conn->egress.connection_close.frame_type = UINT64_MAX;
