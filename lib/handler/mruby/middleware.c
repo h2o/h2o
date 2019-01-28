@@ -133,6 +133,8 @@ static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *
     ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
 
     name += KEY_PREFIX_LEN;
+    len -= KEY_PREFIX_LEN;
+
     char *d = ret.base;
     for (; len != 0; ++name, --len)
         *d++ = *name == '_' ? '-' : h2o_tolower(*name);

@@ -435,7 +435,7 @@ struct st_emit_certificate_ptls_t {
 };
 
 static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
-                                    ptls_key_schedule_t *key_sched, ptls_iovec_t context)
+                                    ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
 {
     struct st_emit_certificate_ptls_t *self = (void *)_self;
     ptls_context_t *tlsctx = ptls_get_context(tls);
@@ -443,7 +443,7 @@ static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls,
 
     ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
         pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
-        h2o_buffer_t *ocsp_response = self->conf->ocsp_stapling.response.data;
+        h2o_buffer_t *ocsp_response = push_status_request ? self->conf->ocsp_stapling.response.data : NULL;
         ret = ptls_build_certificate_message(
             emitter->buf, ptls_iovec_init(NULL, 0), tlsctx->certificates.list, tlsctx->certificates.count,
             ocsp_response != NULL ? ptls_iovec_init(ocsp_response->bytes, ocsp_response->size) : ptls_iovec_init(NULL, 0));
