@@ -45,6 +45,7 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 <h3 id="news">News</h3>
 
 <ul>
+<li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.3.0-beta1">2.3.0-beta1</a> has been released (Jun 2 2018)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.2.5">2.2.5</a> has been released with a vulnerability fix <a href="https://github.com/h2o/h2o/issues/1775">#1775</a> (Jun 1 2018)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.2.4">2.2.4</a> has been released with two vulnerability fixes <a href="https://github.com/h2o/h2o/issues/1543">#1543</a> and <a href="https://github.com/h2o/h2o/issues/1544">#1544</a> (Dec 15 2017)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.2.3">2.2.3</a> has been released with two vulnerability fixes <a href="https://github.com/h2o/h2o/issues/1459">#1459</a> and <a href="https://github.com/h2o/h2o/issues/1460">#1460</a> (Oct 19 2017)</li>
