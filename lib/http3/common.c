@@ -545,30 +545,19 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
 
     while (src != src_end) {
         uint16_t id;
-        uint64_t length;
+        uint64_t value;
         if (ptls_decode16(&id, &src, src_end) != 0)
             goto Malformed;
-        if ((length = quicly_decodev(&src, src_end)) == UINT64_MAX)
+        if ((value = quicly_decodev(&src, src_end)) == UINT64_MAX)
             goto Malformed;
-        if (src_end - src < length)
-            goto Malformed;
-        const uint8_t *content_end = src + length;
         switch (id) {
-        case H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE: {
-            uint64_t v;
-            if ((v = quicly_decodev(&src, src_end)) == UINT64_MAX)
-                goto Malformed;
-            if (v > H2O_HTTP3_MAX_HEADER_TABLE_SIZE)
-                goto Malformed;
-            header_table_size = (uint32_t)v;
-        } break;
+        case H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE:
+            header_table_size = (uint32_t)value;
+            break;
         /* TODO add */
         default:
-            src = content_end;
             break;
         }
-        if (src != content_end)
-            goto Malformed;
     }
 
     conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, 100 /* FIXME */);
