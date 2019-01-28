@@ -589,7 +589,8 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
         if (parent_stream != NULL) {
             parent_sched = &parent_stream->_scheduler.node;
         } else {
-            for (size_t i = 0; i < HTTP2_CLOSED_STREAM_PRIORITIES; i++) {
+            size_t i;
+            for (i = 0; i < HTTP2_CLOSED_STREAM_PRIORITIES; i++) {
                 if (conn->_recently_closed_streams.streams[i] && conn->_recently_closed_streams.streams[i]->stream_id == priority->dependency) {
                     parent_sched = &conn->_recently_closed_streams.streams[i]->_scheduler.node;
                     break;
