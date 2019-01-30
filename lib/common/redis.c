@@ -28,6 +28,7 @@ const char h2o_redis_error_connection[] = "Connection Error";
 const char h2o_redis_error_protocol[] = "Protocol Error";
 const char h2o_redis_error_connect_timeout[] = "Connection Timeout";
 const char h2o_redis_error_command_timeout[] = "Command Timeout";
+const char h2o_redis_error_unknown[] = "Unknown Error";
 
 struct st_redis_socket_data_t {
     redisAsyncContext *context;
@@ -88,6 +89,7 @@ static const char *get_error(const redisAsyncContext *redis)
         return redis->errstr;
     default:
         assert(!"FIXME");
+        return h2o_redis_error_unknown;
     }
 }
 
