@@ -1221,6 +1221,9 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
  * release all thread-local resources used by h2o
  */
 void h2o_cleanup_thread(void);
+#ifdef H2O_THREAD_LOCAL_UNINITIALIZED
+void h2o_init_thread(void);
+#endif
 
 extern uint64_t h2o_connection_id;
 

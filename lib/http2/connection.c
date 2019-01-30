@@ -46,7 +46,11 @@ static const uint8_t SERVER_PREFACE_BIN[] = {
 
 static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SERVER_PREFACE_BIN)};
 
+#ifdef H2O_THREAD_LOCAL_UNINITIALIZED
+__thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype;
+#else
 __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
+#endif
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
 static void initiate_graceful_shutdown(h2o_context_t *ctx);

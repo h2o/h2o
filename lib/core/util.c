@@ -943,3 +943,20 @@ void h2o_cleanup_thread(void)
     h2o_mem_clear_recycle(&h2o_http2_wbuf_buffer_prototype.allocator);
     h2o_mem_clear_recycle(&h2o_socket_buffer_prototype.allocator);
 }
+
+#ifdef H2O_THREAD_LOCAL_UNINITIALIZED
+void h2o_init_thread(void)
+{
+    memset(&h2o_mem_pool_allocator, 0x00, sizeof(h2o_mem_pool_allocator));
+    h2o_mem_pool_allocator.max = 16;
+
+    memset(&h2o_http2_wbuf_buffer_prototype, 0x00, sizeof(h2o_http2_wbuf_buffer_prototype));
+    h2o_http2_wbuf_buffer_prototype.allocator.max = 16;
+    h2o_http2_wbuf_buffer_prototype._initial_buf.capacity = H2O_HTTP2_DEFAULT_OUTBUF_SIZE;
+
+    memset(&h2o_socket_buffer_prototype, 0x00, sizeof(h2o_socket_buffer_prototype));
+    h2o_http2_wbuf_buffer_prototype.allocator.max = 16;
+    h2o_http2_wbuf_buffer_prototype._initial_buf.capacity = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2;
+    h2o_http2_wbuf_buffer_prototype.mmap_settings = &h2o_socket_buffer_mmap_settings;
+}
+#endif

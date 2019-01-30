@@ -67,7 +67,12 @@ struct st_h2o_mem_pool_shared_ref_t {
 
 void *(* volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
+#ifdef H2O_THREAD_LOCAL_UNINITIALIZED
+__thread h2o_mem_recycle_t h2o_mem_pool_allocator;
+#else
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
+#endif
+
 
 void h2o__fatal(const char *msg)
 {
