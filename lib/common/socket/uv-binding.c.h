@@ -326,6 +326,7 @@ socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 static void on_timeout(uv_timer_t *uv_timer)
 {
     h2o_timer_t *timer = H2O_STRUCT_FROM_MEMBER(h2o_timer_t, uv_timer, uv_timer);
+    timer->is_linked = 0;
     timer->cb(timer);
 }
 
