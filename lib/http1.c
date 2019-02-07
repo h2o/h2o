@@ -756,7 +756,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         bufs[bufcnt++] = h2o_iovec_init(conn->_ostr_final.pull.buf, nfilled);
 
     if (nfilled < MAX_PULL_BUF_SZ) {
-        h2o_iovec_t cbuf = {(char *)conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled};
+        h2o_iovec_t cbuf = h2o_iovec_init((char *)conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled);
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         conn->req.bytes_sent += cbuf.len;
         if (conn->_ostr_final.chunked_buf != NULL) {
