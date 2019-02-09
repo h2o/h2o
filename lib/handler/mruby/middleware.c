@@ -539,9 +539,9 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     mrb_value remaining_reprocesses = mrb_nil_value();
     mrb_value rack_errors = mrb_nil_value();
 
-    on_mrb_hash_foreach_arg args = { ctx, subreq, &scheme, &method, &script_name, &path_info, &query_string, &rack_input, &http_host, &server_name, &server_port, &server_addr, &remote_addr, &remote_port, &server_protocol, &remaining_delegations, &remaining_reprocesses, &rack_errors, 0 };
+    struct on_mrb_hash_foreach_arg args = { ctx, subreq, &scheme, &method, &script_name, &path_info, &query_string, &rack_input, &http_host, &server_name, &server_port, &server_addr, &remote_addr, &remote_port, &server_protocol, &remaining_delegations, &remaining_reprocesses, &rack_errors, 0 };
     
-    mrb_hash_foreach(mrb, RHASH_TBL(env), (mrb_hash_foreach_func *)&on_mrb_hash_foreach, (void*) &args);
+    mrb_hash_foreach(mrb, (struct RHash*)RHASH_TBL(env), (mrb_hash_foreach_func *)&on_mrb_hash_foreach, (void*) &args);
     if(args.failed) goto Failed;
     
 /* do validations */
