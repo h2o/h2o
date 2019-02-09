@@ -3,12 +3,6 @@ class Symbol
 
   alias intern to_sym
 
-  def to_proc
-    ->(obj,*args,&block) do
-      obj.__send__(self, *args, &block)
-    end
-  end
-
   ##
   # call-seq:
   #   sym.capitalize  -> symbol

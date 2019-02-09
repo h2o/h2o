@@ -1,6 +1,7 @@
 #include <mruby.h>
 #include <mruby/khash.h>
 #include <mruby/array.h>
+#include <mruby/string.h>
 
 typedef struct symbol_name {
   size_t len;
@@ -45,7 +46,13 @@ static mrb_value
 mrb_sym_length(mrb_state *mrb, mrb_value self)
 {
   mrb_int len;
+#ifdef MRB_UTF8_STRING
+  mrb_int byte_len;
+  const char *name = mrb_sym2name_len(mrb, mrb_symbol(self), &byte_len);
+  len = mrb_utf8_len(name, byte_len);
+#else
   mrb_sym2name_len(mrb, mrb_symbol(self), &len);
+#endif
   return mrb_fixnum_value(len);
 }
 

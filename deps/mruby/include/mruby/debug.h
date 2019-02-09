@@ -55,10 +55,11 @@ MRB_API const char *mrb_debug_get_filename(mrb_irep *irep, ptrdiff_t pc);
  */
 MRB_API int32_t mrb_debug_get_line(mrb_irep *irep, ptrdiff_t pc);
 
-MRB_API mrb_irep_debug_info_file *mrb_debug_info_append_file(
-    mrb_state *mrb, mrb_irep *irep,
-    uint32_t start_pos, uint32_t end_pos);
 MRB_API mrb_irep_debug_info *mrb_debug_info_alloc(mrb_state *mrb, mrb_irep *irep);
+MRB_API mrb_irep_debug_info_file *mrb_debug_info_append_file(
+    mrb_state *mrb, mrb_irep_debug_info *info,
+    const char *filename, uint16_t *lines,
+    uint32_t start_pos, uint32_t end_pos);
 MRB_API void mrb_debug_info_free(mrb_state *mrb, mrb_irep_debug_info *d);
 
 MRB_END_DECL

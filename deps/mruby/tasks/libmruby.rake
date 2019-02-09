@@ -1,9 +1,9 @@
 MRuby.each_target do
-  file libfile("#{build_dir}/lib/libmruby") => libmruby.flatten do |t|
+  file libmruby_static => libmruby_objs.flatten do |t|
     archiver.run t.name, t.prerequisites
   end
 
-  file "#{build_dir}/lib/libmruby.flags.mak" => [__FILE__, libfile("#{build_dir}/lib/libmruby")] do |t|
+  file "#{build_dir}/lib/libmruby.flags.mak" => [__FILE__, libmruby_static] do |t|
     FileUtils.mkdir_p File.dirname t.name
     open(t.name, 'w') do |f|
       f.puts "MRUBY_CFLAGS = #{cc.all_flags}"
@@ -18,7 +18,7 @@ MRuby.each_target do
       gem_libraries = gems.map { |g| g.linker.libraries }
       f.puts "MRUBY_LIBS = #{linker.option_library % 'mruby'} #{linker.library_flags(gem_libraries)}"
 
-      f.puts "MRUBY_LIBMRUBY_PATH = #{libfile("#{build_dir}/lib/libmruby")}"
+      f.puts "MRUBY_LIBMRUBY_PATH = #{libmruby_static}"
     end
   end
   task :all => "#{build_dir}/lib/libmruby.flags.mak"

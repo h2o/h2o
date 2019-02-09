@@ -323,19 +323,6 @@ convert_type(mrb_state *mrb, mrb_value val, const char *tname, const char *metho
 }
 
 MRB_API mrb_value
-mrb_check_to_integer(mrb_state *mrb, mrb_value val, const char *method)
-{
-  mrb_value v;
-
-  if (mrb_fixnum_p(val)) return val;
-  v = convert_type(mrb, val, "Integer", method, FALSE);
-  if (mrb_nil_p(v) || !mrb_fixnum_p(v)) {
-    return mrb_nil_value();
-  }
-  return v;
-}
-
-MRB_API mrb_value
 mrb_convert_type(mrb_state *mrb, mrb_value val, enum mrb_vtype type, const char *tname, const char *method)
 {
   mrb_value v;
@@ -505,25 +492,22 @@ mrb_obj_is_kind_of(mrb_state *mrb, mrb_value obj, struct RClass *c)
   return FALSE;
 }
 
-static mrb_value
-mrb_to_integer(mrb_state *mrb, mrb_value val, const char *method)
-{
-  mrb_value v;
-
-  if (mrb_fixnum_p(val)) return val;
-  v = convert_type(mrb, val, "Integer", method, TRUE);
-  if (!mrb_obj_is_kind_of(mrb, v, mrb->fixnum_class)) {
-    mrb_value type = inspect_type(mrb, val);
-    mrb_raisef(mrb, E_TYPE_ERROR, "can't convert %S to Integer (%S#%S gives %S)",
-               type, type, mrb_str_new_cstr(mrb, method), inspect_type(mrb, v));
-  }
-  return v;
-}
-
 MRB_API mrb_value
 mrb_to_int(mrb_state *mrb, mrb_value val)
 {
-  return mrb_to_integer(mrb, val, "to_int");
+
+  if (!mrb_fixnum_p(val)) {
+    mrb_value type;
+
+#ifndef MRB_WITHOUT_FLOAT
+    if (mrb_float_p(val)) {
+      return mrb_flo_to_fixnum(mrb, val);
+    }
+#endif
+    type = inspect_type(mrb, val);
+    mrb_raisef(mrb, E_TYPE_ERROR, "can't convert %S to Integer", type);
+  }
+  return val;
 }
 
 MRB_API mrb_value
@@ -533,18 +517,12 @@ mrb_convert_to_integer(mrb_state *mrb, mrb_value val, mrb_int base)
 
   if (mrb_nil_p(val)) {
     if (base != 0) goto arg_error;
-      mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
+    mrb_raise(mrb, E_TYPE_ERROR, "can't convert nil into Integer");
   }
   switch (mrb_type(val)) {
 #ifndef MRB_WITHOUT_FLOAT
     case MRB_TT_FLOAT:
       if (base != 0) goto arg_error;
-      else {
-        mrb_float f = mrb_float(val);
-        if (FIXABLE_FLOAT(f)) {
-          break;
-        }
-      }
       return mrb_flo_to_fixnum(mrb, val);
 #endif
 
@@ -568,11 +546,8 @@ mrb_convert_to_integer(mrb_state *mrb, mrb_value val, mrb_int base)
 arg_error:
     mrb_raise(mrb, E_ARGUMENT_ERROR, "base specified for non string value");
   }
-  tmp = convert_type(mrb, val, "Integer", "to_int", FALSE);
-  if (mrb_nil_p(tmp) || !mrb_fixnum_p(tmp)) {
-    tmp = mrb_to_integer(mrb, val, "to_i");
-  }
-  return tmp;
+  /* to raise TypeError */
+  return mrb_to_int(mrb, val);
 }
 
 MRB_API mrb_value
@@ -603,6 +578,74 @@ mrb_Float(mrb_state *mrb, mrb_value val)
   }
 }
 #endif
+
+MRB_API mrb_value
+mrb_to_str(mrb_state *mrb, mrb_value val)
+{
+  if (!mrb_string_p(val)) {
+    mrb_value type = inspect_type(mrb, val);
+    mrb_raisef(mrb, E_TYPE_ERROR, "can't convert %S to String", type);
+  }
+  return val;
+}
+
+/* obsolete: use mrb_ensure_string_type() instead */
+MRB_API mrb_value
+mrb_string_type(mrb_state *mrb, mrb_value str)
+{
+  return mrb_ensure_string_type(mrb, str);
+}
+
+MRB_API mrb_value
+mrb_ensure_string_type(mrb_state *mrb, mrb_value str)
+{
+  if (!mrb_string_p(str)) {
+    mrb_raisef(mrb, E_TYPE_ERROR, "%S cannot be converted to String",
+               inspect_type(mrb, str));
+  }
+  return str;
+}
+
+MRB_API mrb_value
+mrb_check_string_type(mrb_state *mrb, mrb_value str)
+{
+  if (!mrb_string_p(str)) return mrb_nil_value();
+  return str;
+}
+
+MRB_API mrb_value
+mrb_ensure_array_type(mrb_state *mrb, mrb_value ary)
+{
+  if (!mrb_array_p(ary)) {
+    mrb_raisef(mrb, E_TYPE_ERROR, "%S cannot be converted to Array",
+               inspect_type(mrb, ary));
+  }
+  return ary;
+}
+
+MRB_API mrb_value
+mrb_check_array_type(mrb_state *mrb, mrb_value ary)
+{
+  if (!mrb_array_p(ary)) return mrb_nil_value();
+  return ary;
+}
+
+MRB_API mrb_value
+mrb_ensure_hash_type(mrb_state *mrb, mrb_value hash)
+{
+  if (!mrb_hash_p(hash)) {
+    mrb_raisef(mrb, E_TYPE_ERROR, "%S cannot be converted to Hash",
+               inspect_type(mrb, hash));
+  }
+  return hash;
+}
+
+MRB_API mrb_value
+mrb_check_hash_type(mrb_state *mrb, mrb_value hash)
+{
+  if (!mrb_hash_p(hash)) return mrb_nil_value();
+  return hash;
+}
 
 MRB_API mrb_value
 mrb_inspect(mrb_state *mrb, mrb_value obj)

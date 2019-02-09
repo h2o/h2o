@@ -1,19 +1,24 @@
 ##
 # Symbol(Ext) Test
 
-assert('Symbol#to_proc') do
-  assert_equal 5, :abs.to_proc[-5]
-end
-
 assert('Symbol.all_symbols') do
   foo = [:__symbol_test_1, :__symbol_test_2, :__symbol_test_3].sort
   symbols = Symbol.all_symbols.select{|sym|sym.to_s.include? '__symbol_test'}.sort
   assert_equal foo, symbols
 end
 
-assert("Symbol#length") do
-  assert_equal 5, :hello.size
-  assert_equal 5, :mruby.length
+%w[size length].each do |n|
+  assert("Symbol##{n}") do
+    assert_equal 5, :hello.__send__(n)
+    assert_equal 4, :"aA\0b".__send__(n)
+    if "あ".size == 1  # enable MRB_UTF8_STRING?
+      assert_equal 8, :"こんにちは世界!".__send__(n)
+      assert_equal 4, :"aあ\0b".__send__(n)
+    else
+      assert_equal 22, :"こんにちは世界!".__send__(n)
+      assert_equal 6, :"aあ\0b".__send__(n)
+    end
+  end
 end
 
 assert("Symbol#capitalize") do

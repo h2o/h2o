@@ -200,7 +200,7 @@ check_name_arg(mrb_state *mrb, int posarg, const char *name, mrb_int len)
 
 #define GETNUM(n, val) \
   for (; p < end && ISDIGIT(*p); p++) {\
-    if (n > MRB_INT_MAX/10) {\
+    if (n > (MRB_INT_MAX - (*p - '0'))/10) {\
       mrb_raise(mrb, E_ARGUMENT_ERROR, #val " too big"); \
     } \
     n = 10 * n + (*p - '0'); \
@@ -233,7 +233,7 @@ get_hash(mrb_state *mrb, mrb_value *hash, mrb_int argc, const mrb_value *argv)
   if (argc != 2) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "one hash required");
   }
-  tmp = mrb_check_convert_type(mrb, argv[1], MRB_TT_HASH, "Hash", "to_hash");
+  tmp = mrb_check_hash_type(mrb, argv[1]);
   if (mrb_nil_p(tmp)) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "one hash required");
   }
@@ -552,7 +552,7 @@ mrb_str_format(mrb_state *mrb, mrb_int argc, const mrb_value *argv, mrb_value fm
 
   ++argc;
   --argv;
-  fmt = mrb_str_to_str(mrb, fmt);
+  mrb_to_str(mrb, fmt);
   p = RSTRING_PTR(fmt);
   end = p + RSTRING_LEN(fmt);
   blen = 0;
@@ -1056,18 +1056,22 @@ retry:
           if (i > 0)
             need = BIT_DIGITS(i);
         }
-        need += (flags&FPREC) ? prec : 6;
-        if ((flags&FWIDTH) && need < width)
-          need = width;
-        need += 20;
-        if (need <= 0) {
+        if (need > MRB_INT_MAX - ((flags&FPREC) ? prec : 6)) {
+        too_big_width:
           mrb_raise(mrb, E_ARGUMENT_ERROR,
                     (width > prec ? "width too big" : "prec too big"));
         }
+        need += (flags&FPREC) ? prec : 6;
+        if ((flags&FWIDTH) && need < width)
+          need = width;
+        if (need > MRB_INT_MAX - 20) {
+          goto too_big_width;
+        }
+        need += 20;
 
         CHECK(need);
         n = snprintf(&buf[blen], need, fbuf, fval);
-        if (n < 0) {
+        if (n < 0 || n >= need) {
           mrb_raise(mrb, E_RUNTIME_ERROR, "formatting error");
         }
         blen += n;

@@ -73,6 +73,28 @@ struct st_h2o_mruby_middleware_sender_t {
     } blocking;
 };
 
+struct on_mrb_hash_foreach_arg{
+    h2o_mruby_context_t *ctx;
+    struct st_mruby_subreq_t *subreq;
+    mrb_value *scheme;
+    mrb_value *method;
+    mrb_value *script_name;
+    mrb_value *path_info;
+    mrb_value *query_string;
+    mrb_value *rack_input;
+    mrb_value *http_host;
+    mrb_value *server_name;
+    mrb_value *server_port;
+    mrb_value *server_addr;
+    mrb_value *remote_addr;
+    mrb_value *remote_port;
+    mrb_value *server_protocol;
+    mrb_value *remaining_delegations;
+    mrb_value *remaining_reprocesses;
+    mrb_value *rack_errors;
+    int failed;
+} on_mrb_hash_foreach_arg;
+
 static void dispose_subreq(struct st_mruby_subreq_t *subreq)
 {
     /* subreq must be alive until generator gets disposed if shortcut is used */
@@ -460,6 +482,9 @@ Default:
     return 0x101;
 }
 
+// handler definition to write mruby data
+int on_mrb_hash_foreach(mrb_state *mrb, mrb_value key, mrb_value value, void *data);
+
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env, int is_reprocess)
 {
     static const h2o_conn_callbacks_t callbacks = {get_sockname, /* stringify address */
@@ -514,111 +539,11 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     mrb_value remaining_reprocesses = mrb_nil_value();
     mrb_value rack_errors = mrb_nil_value();
 
-#define RETRIEVE_ENV(val, stringify, numify)                                                                                       \
-    do {                                                                                                                           \
-        val = value;                                                                                                               \
-        if (!mrb_nil_p(val)) {                                                                                                     \
-            if (stringify)                                                                                                         \
-                val = h2o_mruby_to_str(mrb, val);                                                                                  \
-            if (numify)                                                                                                            \
-                val = h2o_mruby_to_int(mrb, val);                                                                                  \
-            if (mrb->exc != NULL)                                                                                                  \
-                goto Failed;                                                                                                       \
-        }                                                                                                                          \
-    } while (0)
-#define RETRIEVE_ENV_OBJ(val) RETRIEVE_ENV(val, 0, 0);
-#define RETRIEVE_ENV_STR(val) RETRIEVE_ENV(val, 1, 0);
-#define RETRIEVE_ENV_NUM(val) RETRIEVE_ENV(val, 0, 1);
-
-#define COND0(str, lit, pos) (sizeof(lit) - 1 <= (pos) || (str)[pos] == (lit)[pos])
-#define COND1(str, lit, pos) (COND0(str, lit, pos) && COND0(str, lit, pos + 1) && COND0(str, lit, pos + 2))
-#define COND2(str, lit, pos) (COND1(str, lit, pos) && COND1(str, lit, pos + 3) && COND1(str, lit, pos + 6))
-#define COND(str, lit) (COND2(str, lit, 0) && COND2(str, lit, 9) && COND2(str, lit, 18))
-#define CHECK_KEY(lit) ((sizeof(lit) - 1) == keystr_len && COND(keystr, lit))
-
-    khiter_t k;
-    khash_t(ht) *h = mrb_hash_tbl(mrb, env);
-    for (k = kh_begin(h); k != kh_end(h); ++k) {
-        if (!kh_exist(h, k))
-            continue;
-        mrb_value key = h2o_mruby_to_str(mrb, kh_key(h, k));
-        if (mrb->exc != NULL)
-            goto Failed;
-        mrb_value value = kh_value(h, k).v;
-
-        const char *keystr = RSTRING_PTR(key);
-        const mrb_int keystr_len = RSTRING_LEN(key);
-
-        if (CHECK_KEY("CONTENT_LENGTH")) {
-            mrb_value content_length = mrb_nil_value();
-            RETRIEVE_ENV_NUM(content_length);
-            if (!mrb_nil_p(content_length))
-                subreq->super.content_length = mrb_fixnum(content_length);
-        } else if (CHECK_KEY("HTTP_HOST")) {
-            RETRIEVE_ENV_STR(http_host);
-        } else if (CHECK_KEY("PATH_INFO")) {
-            RETRIEVE_ENV_STR(path_info);
-        } else if (CHECK_KEY("QUERY_STRING")) {
-            RETRIEVE_ENV_STR(query_string);
-        } else if (CHECK_KEY("REMOTE_ADDR")) {
-            RETRIEVE_ENV_STR(remote_addr);
-        } else if (CHECK_KEY("REMOTE_PORT")) {
-            RETRIEVE_ENV_STR(remote_port);
-        } else if (CHECK_KEY("REQUEST_METHOD")) {
-            RETRIEVE_ENV_STR(method);
-        } else if (CHECK_KEY("SCRIPT_NAME")) {
-            RETRIEVE_ENV_STR(script_name);
-        } else if (CHECK_KEY("SERVER_ADDR")) {
-            RETRIEVE_ENV_STR(server_addr);
-        } else if (CHECK_KEY("SERVER_NAME")) {
-            RETRIEVE_ENV_STR(server_name);
-        } else if (CHECK_KEY("SERVER_PORT")) {
-            RETRIEVE_ENV_STR(server_port);
-        } else if (CHECK_KEY("SERVER_PROTOCOL")) {
-            RETRIEVE_ENV_STR(server_protocol);
-        } else if (CHECK_KEY("SERVER_SOFTWARE")) {
-        } else if (CHECK_KEY("h2o.remaining_delegations")) {
-            RETRIEVE_ENV_NUM(remaining_delegations);
-        } else if (CHECK_KEY("h2o.remaining_reprocesses")) {
-            RETRIEVE_ENV_NUM(remaining_reprocesses);
-        } else if (CHECK_KEY("rack.errors")) {
-            RETRIEVE_ENV_OBJ(rack_errors);
-        } else if (CHECK_KEY("rack.hijack?")) {
-        } else if (CHECK_KEY("rack.input")) {
-            RETRIEVE_ENV_OBJ(rack_input);
-        } else if (CHECK_KEY("rack.multiprocess")) {
-        } else if (CHECK_KEY("rack.multithread")) {
-        } else if (CHECK_KEY("rack.run_once")) {
-        } else if (CHECK_KEY("rack.url_scheme")) {
-            RETRIEVE_ENV_STR(scheme);
-        } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
-            mrb_value http_header = mrb_nil_value();
-            RETRIEVE_ENV_STR(http_header);
-            if (!mrb_nil_p(http_header))
-                h2o_mruby_iterate_header_values(ctx->shared, key, http_header, handle_header_env_key, &subreq->super);
-        } else if (keystr_len != 0) {
-            /* set to req->env */
-            mrb_value reqenv = mrb_nil_value();
-            RETRIEVE_ENV_STR(reqenv);
-            if (!mrb_nil_p(reqenv)) {
-                h2o_vector_reserve(&subreq->super.pool, &subreq->super.env, subreq->super.env.size + 2);
-                subreq->super.env.entries[subreq->super.env.size] = h2o_strdup(&subreq->super.pool, keystr, keystr_len);
-                subreq->super.env.entries[subreq->super.env.size + 1] =
-                    h2o_strdup(&subreq->super.pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
-                subreq->super.env.size += 2;
-            }
-        }
-    }
-#undef RETRIEVE_ENV
-#undef RETRIEVE_ENV_OBJ
-#undef RETRIEVE_ENV_STR
-#undef RETRIEVE_ENV_NUM
-#undef COND0
-#undef COND1
-#undef COND2
-#undef COND
-#undef CHECK_KEY
-
+    on_mrb_hash_foreach_arg args = { ctx, subreq, &scheme, &method, &script_name, &path_info, &query_string, &rack_input, &http_host, &server_name, &server_port, &server_addr, &remote_addr, &remote_port, &server_protocol, &remaining_delegations, &remaining_reprocesses, &rack_errors, 0 };
+    
+    mrb_hash_foreach(mrb, RHASH_TBL(env), (mrb_hash_foreach_func *)&on_mrb_hash_foreach, (void*) &args);
+    if(args.failed) goto Failed;
+    
 /* do validations */
 #define CHECK_REQUIRED(k, v, non_empty)                                                                                            \
     do {                                                                                                                           \
@@ -739,6 +664,112 @@ Failed:
     mrb_gc_arena_restore(mrb, gc_arena);
     return NULL;
 #undef STR_TO_IOVEC
+}
+
+int on_mrb_hash_foreach(mrb_state *mrb, mrb_value key, mrb_value value, void *data){
+  struct on_mrb_hash_foreach_arg *args = (struct on_mrb_hash_foreach_arg *)data;
+  if(mrb->exc != NULL) return (args->failed = 1); // 1 stops foreach
+  struct st_mruby_subreq_t *subreq = args->subreq;
+  h2o_mruby_context_t *ctx = args->ctx;
+  
+  const char *keystr = RSTRING_PTR(key);
+  const mrb_int keystr_len = RSTRING_LEN(key);
+
+#define RETRIEVE_ENV(val, stringify, numify)                     \
+    do {                                                         \
+        val = value;                                             \
+        if (!mrb_nil_p(val)) {                                   \
+            if (stringify)                                       \
+                val = h2o_mruby_to_str(mrb, val);                \
+            if (numify)                                          \
+                val = h2o_mruby_to_int(mrb, val);                \
+            if (mrb->exc != NULL)                                \
+                return(args->failed = 1);                        \
+        }                                                        \
+    } while (0)
+
+#define RETRIEVE_ENV_OBJ(val) RETRIEVE_ENV(val, 0, 0);
+#define RETRIEVE_ENV_STR(val) RETRIEVE_ENV(val, 1, 0);
+#define RETRIEVE_ENV_NUM(val) RETRIEVE_ENV(val, 0, 1);
+
+#define COND0(str, lit, pos) (sizeof(lit) - 1 <= (pos) || (str)[pos] == (lit)[pos])
+#define COND1(str, lit, pos) (COND0(str, lit, pos) && COND0(str, lit, pos + 1) && COND0(str, lit, pos + 2))
+#define COND2(str, lit, pos) (COND1(str, lit, pos) && COND1(str, lit, pos + 3) && COND1(str, lit, pos + 6))
+#define COND(str, lit) (COND2(str, lit, 0) && COND2(str, lit, 9) && COND2(str, lit, 18))
+#define CHECK_KEY(lit) ((sizeof(lit) - 1) == keystr_len && COND(keystr, lit))
+  
+#define ARG(val) (*(args->val))
+
+  if (CHECK_KEY("CONTENT_LENGTH")) {
+      mrb_value content_length = mrb_nil_value();
+      RETRIEVE_ENV_NUM(content_length);
+      if (!mrb_nil_p(content_length))
+          subreq->super.content_length = mrb_fixnum(content_length);
+  } else if (CHECK_KEY("HTTP_HOST")) {
+      RETRIEVE_ENV_STR(ARG(http_host));
+  } else if (CHECK_KEY("PATH_INFO")) {
+      RETRIEVE_ENV_STR(ARG(path_info));
+  } else if (CHECK_KEY("QUERY_STRING")) {
+      RETRIEVE_ENV_STR(ARG(query_string));
+  } else if (CHECK_KEY("REMOTE_ADDR")) {
+      RETRIEVE_ENV_STR(ARG(remote_addr));
+  } else if (CHECK_KEY("REMOTE_PORT")) {
+      RETRIEVE_ENV_STR(ARG(remote_port));
+  } else if (CHECK_KEY("REQUEST_METHOD")) {
+      RETRIEVE_ENV_STR(ARG(method));
+  } else if (CHECK_KEY("SCRIPT_NAME")) {
+      RETRIEVE_ENV_STR(ARG(script_name));
+  } else if (CHECK_KEY("SERVER_ADDR")) {
+      RETRIEVE_ENV_STR(ARG(server_addr));
+  } else if (CHECK_KEY("SERVER_NAME")) {
+      RETRIEVE_ENV_STR(ARG(server_name));
+  } else if (CHECK_KEY("SERVER_PORT")) {
+      RETRIEVE_ENV_STR(ARG(server_port));
+  } else if (CHECK_KEY("SERVER_PROTOCOL")) {
+      RETRIEVE_ENV_STR(ARG(server_protocol));
+  } else if (CHECK_KEY("SERVER_SOFTWARE")) {
+  } else if (CHECK_KEY("h2o.remaining_delegations")) {
+      RETRIEVE_ENV_NUM(ARG(remaining_delegations));
+  } else if (CHECK_KEY("h2o.remaining_reprocesses")) {
+      RETRIEVE_ENV_NUM(ARG(remaining_reprocesses));
+  } else if (CHECK_KEY("rack.errors")) {
+      RETRIEVE_ENV_OBJ(ARG(rack_errors));
+  } else if (CHECK_KEY("rack.hijack?")) {
+  } else if (CHECK_KEY("rack.input")) {
+      RETRIEVE_ENV_OBJ(ARG(rack_input));
+  } else if (CHECK_KEY("rack.multiprocess")) {
+  } else if (CHECK_KEY("rack.multithread")) {
+  } else if (CHECK_KEY("rack.run_once")) {
+  } else if (CHECK_KEY("rack.url_scheme")) {
+      RETRIEVE_ENV_STR(ARG(scheme));
+  } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
+      mrb_value http_header = mrb_nil_value();
+      RETRIEVE_ENV_STR(http_header);
+      if (!mrb_nil_p(http_header))
+          h2o_mruby_iterate_header_values(ctx->shared, key, http_header, handle_header_env_key, &subreq->super);
+  } else if (keystr_len != 0) {
+      /* set to req->env */
+      mrb_value reqenv = mrb_nil_value();
+      RETRIEVE_ENV_STR(reqenv);
+      if (!mrb_nil_p(reqenv)) {
+          h2o_vector_reserve(&subreq->super.pool, &subreq->super.env, subreq->super.env.size + 2);
+          subreq->super.env.entries[subreq->super.env.size] = h2o_strdup(&subreq->super.pool, keystr, keystr_len);
+          subreq->super.env.entries[subreq->super.env.size + 1] =
+              h2o_strdup(&subreq->super.pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
+          subreq->super.env.size += 2;
+      }
+  }
+#undef ARG
+#undef RETRIEVE_ENV
+#undef RETRIEVE_ENV_OBJ
+#undef RETRIEVE_ENV_STR
+#undef RETRIEVE_ENV_NUM
+#undef COND0
+#undef COND1
+#undef COND2
+#undef COND
+#undef CHECK_KEY
+  return 0; // 0 continues foreach
 }
 
 static mrb_value middleware_wait_response_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_value *receiver, mrb_value args,

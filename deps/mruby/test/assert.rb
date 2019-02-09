@@ -124,6 +124,32 @@ def assert_not_equal(arg1, arg2 = nil, arg3 = nil)
   assert_false(exp == act, msg, diff)
 end
 
+def assert_same(arg1, arg2 = nil, arg3 = nil)
+  if block_given?
+    exp, act, msg = arg1, yield, arg2
+  else
+    exp, act, msg = arg1, arg2, arg3
+  end
+
+  msg ||= "Expected #{act.inspect} to be the same object as #{exp.inspect}"
+  diff = "    Expected: #{exp.inspect} (class=#{exp.class}, oid=#{exp.__id__})\n" +
+         "      Actual: #{act.inspect} (class=#{act.class}, oid=#{act.__id__})"
+  assert_true(exp.equal?(act), msg, diff)
+end
+
+def assert_not_same(arg1, arg2 = nil, arg3 = nil)
+  if block_given?
+    exp, act, msg = arg1, yield, arg2
+  else
+    exp, act, msg = arg1, arg2, arg3
+  end
+
+  msg ||= "Expected #{act.inspect} to not be the same object as #{exp.inspect}"
+  diff = "    Expected: #{exp.inspect} (class=#{exp.class}, oid=#{exp.__id__})\n" +
+         "      Actual: #{act.inspect} (class=#{act.class}, oid=#{act.__id__})"
+  assert_false(exp.equal?(act), msg, diff)
+end
+
 def assert_nil(obj, msg = nil)
   msg = "Expected #{obj.inspect} to be nil" unless msg
   diff = assertion_diff(nil, obj)
@@ -175,7 +201,7 @@ def assert_nothing_raised(msg = nil)
     yield
     true
   rescue Exception => e
-    msg ||= "Expected not to raise #{exc.join(', ')} but it raised"
+    msg ||= "Expected not to raise #{e} but it raised"
     diff =  "      Class: <#{e.class}>\n" +
             "    Message: #{e.message}"
     $mrbtest_assert.push [$mrbtest_assert_idx, msg, diff]

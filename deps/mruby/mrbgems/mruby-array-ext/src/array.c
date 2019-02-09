@@ -106,49 +106,6 @@ mrb_ary_values_at(mrb_state *mrb, mrb_value self)
   return mrb_get_values_at(mrb, self, RARRAY_LEN(self), argc, argv, mrb_ary_ref);
 }
 
-/*
- *  call-seq:
- *     ary.to_h   ->   Hash
- *
- *  Returns the result of interpreting <i>aray</i> as an array of
- *  <tt>[key, value]</tt> paris.
- *
- *      [[:foo, :bar], [1, 2]].to_h
- *        # => {:foo => :bar, 1 => 2}
- *
- */
-
-static mrb_value
-mrb_ary_to_h(mrb_state *mrb, mrb_value ary)
-{
-  mrb_int i;
-  mrb_value v, hash;
-
-  hash = mrb_hash_new_capa(mrb, 0);
-
-  for (i = 0; i < RARRAY_LEN(ary); ++i) {
-    mrb_value elt = RARRAY_PTR(ary)[i];
-    v = mrb_check_array_type(mrb, elt);
-
-    if (mrb_nil_p(v)) {
-      mrb_raisef(mrb, E_TYPE_ERROR, "wrong element type %S at %S (expected array)",
-                 mrb_str_new_cstr(mrb,  mrb_obj_classname(mrb, elt)),
-                 mrb_fixnum_value(i)
-      );
-    }
-
-    if (RARRAY_LEN(v) != 2) {
-      mrb_raisef(mrb, E_ARGUMENT_ERROR, "wrong array length at %S (expected 2, was %S)",
-                 mrb_fixnum_value(i),
-                 mrb_fixnum_value(RARRAY_LEN(v))
-      );
-    }
-
-    mrb_hash_set(mrb, hash, RARRAY_PTR(v)[0], RARRAY_PTR(v)[1]);
-  }
-
-  return hash;
-}
 
 /*
  *  call-seq:
@@ -175,7 +132,7 @@ static mrb_value
 mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
 {
   struct RArray *a = mrb_ary_ptr(self);
-  mrb_int i, j, k, len, alen = ARY_LEN(a);
+  mrb_int i, j, k, len, alen;
   mrb_value val;
   mrb_value *ptr;
   mrb_value ary;
@@ -188,7 +145,7 @@ mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
     mrb_get_args(mrb, "o|i", &index, &len);
     switch (mrb_type(index)) {
     case MRB_TT_RANGE:
-      if (mrb_range_beg_len(mrb, index, &i, &len, alen, TRUE) == 1) {
+      if (mrb_range_beg_len(mrb, index, &i, &len, ARY_LEN(a), TRUE) == 1) {
         goto delete_pos_len;
       }
       else {
@@ -205,6 +162,7 @@ mrb_ary_slice_bang(mrb_state *mrb, mrb_value self)
 
   mrb_get_args(mrb, "ii", &i, &len);
  delete_pos_len:
+  alen = ARY_LEN(a);
   if (i < 0) i += alen;
   if (i < 0 || alen < i) return mrb_nil_value();
   if (len < 0) return mrb_nil_value();
@@ -236,7 +194,6 @@ mrb_mruby_array_ext_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, a, "at",     mrb_ary_at,     MRB_ARGS_REQ(1));
   mrb_define_method(mrb, a, "rassoc", mrb_ary_rassoc, MRB_ARGS_REQ(1));
   mrb_define_method(mrb, a, "values_at", mrb_ary_values_at, MRB_ARGS_ANY());
-  mrb_define_method(mrb, a, "to_h",   mrb_ary_to_h, MRB_ARGS_REQ(0));
   mrb_define_method(mrb, a, "slice!", mrb_ary_slice_bang,   MRB_ARGS_ANY());
 }
 

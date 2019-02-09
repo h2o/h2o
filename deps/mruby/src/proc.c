@@ -10,7 +10,7 @@
 #include <mruby/opcode.h>
 
 static mrb_code call_iseq[] = {
-  MKOP_A(OP_CALL, 0),
+  OP_CALL,
 };
 
 struct RProc*
@@ -63,12 +63,12 @@ closure_setup(mrb_state *mrb, struct RProc *p)
 {
   mrb_callinfo *ci = mrb->c->ci;
   struct RProc *up = p->upper;
-  struct REnv *e;
+  struct REnv *e = NULL;
 
-  if (ci->env) {
+  if (ci && ci->env) {
     e = ci->env;
   }
-  else {
+  else if (up) {
     struct RClass *tc = MRB_PROC_TARGET_CLASS(p);
 
     e = env_new(mrb, up->body.irep->nlocals);
@@ -78,9 +78,11 @@ closure_setup(mrb_state *mrb, struct RProc *p)
       mrb_field_write_barrier(mrb, (struct RBasic*)e, (struct RBasic*)tc);
     }
   }
-  p->e.env = e;
-  p->flags |= MRB_PROC_ENVSET;
-  mrb_field_write_barrier(mrb, (struct RBasic*)p, (struct RBasic*)e);
+  if (e) {
+    p->e.env = e;
+    p->flags |= MRB_PROC_ENVSET;
+    mrb_field_write_barrier(mrb, (struct RBasic*)p, (struct RBasic*)e);
+  }
 }
 
 struct RProc*
@@ -223,7 +225,7 @@ mrb_proc_arity(mrb_state *mrb, mrb_value self)
 {
   struct RProc *p = mrb_proc_ptr(self);
   struct mrb_irep *irep;
-  mrb_code *iseq;
+  mrb_code *pc;
   mrb_aspec aspec;
   int ma, op, ra, pa, arity;
 
@@ -237,13 +239,13 @@ mrb_proc_arity(mrb_state *mrb, mrb_value self)
     return mrb_fixnum_value(0);
   }
 
-  iseq = irep->iseq;
+  pc = irep->iseq;
   /* arity is depend on OP_ENTER */
-  if (GET_OPCODE(*iseq) != OP_ENTER) {
+  if (*pc != OP_ENTER) {
     return mrb_fixnum_value(0);
   }
 
-  aspec = GETARG_Ax(*iseq);
+  aspec = PEEK_W(pc+1);
   ma = MRB_ASPEC_REQ(aspec);
   op = MRB_ASPEC_OPT(aspec);
   ra = MRB_ASPEC_REST(aspec);

@@ -23,13 +23,13 @@ struct REnv {
 };
 
 /* flags (21bits): 1(shared flag):10(cioff/bidx):10(stack_len) */
-#define MRB_ENV_SET_STACK_LEN(e,len) (e)->flags = (((e)->flags & ~0x3ff)|((unsigned int)(len) & 0x3ff))
+#define MRB_ENV_SET_STACK_LEN(e,len) ((e)->flags = (((e)->flags & ~0x3ff)|((unsigned int)(len) & 0x3ff)))
 #define MRB_ENV_STACK_LEN(e) ((mrb_int)((e)->flags & 0x3ff))
 #define MRB_ENV_STACK_UNSHARED (1<<20)
-#define MRB_ENV_UNSHARE_STACK(e) (e)->flags |= MRB_ENV_STACK_UNSHARED
+#define MRB_ENV_UNSHARE_STACK(e) ((e)->flags |= MRB_ENV_STACK_UNSHARED)
 #define MRB_ENV_STACK_SHARED_P(e) (((e)->flags & MRB_ENV_STACK_UNSHARED) == 0)
 #define MRB_ENV_BIDX(e) (((e)->flags >> 10) & 0x3ff)
-#define MRB_ENV_SET_BIDX(e,idx) (e)->flags = (((e)->flags & ~(0x3ff<<10))|((unsigned int)(idx) & 0x3ff)<<10)
+#define MRB_ENV_SET_BIDX(e,idx) ((e)->flags = (((e)->flags & ~(0x3ff<<10))|((unsigned int)(idx) & 0x3ff)<<10))
 
 void mrb_env_unshare(mrb_state*, struct REnv*);
 
@@ -69,11 +69,11 @@ struct RProc {
 #define MRB_PROC_SET_TARGET_CLASS(p,tc) do {\
   if (MRB_PROC_ENV_P(p)) {\
     (p)->e.env->c = (tc);\
-    mrb_field_write_barrier(mrb, (struct RBasic*)(p)->e.env, (struct RBasic*)tc);\
+    mrb_field_write_barrier(mrb, (struct RBasic*)(p)->e.env, (struct RBasic*)(tc));\
   }\
   else {\
     (p)->e.target_class = (tc);\
-    mrb_field_write_barrier(mrb, (struct RBasic*)p, (struct RBasic*)tc);\
+    mrb_field_write_barrier(mrb, (struct RBasic*)p, (struct RBasic*)(tc));\
   }\
 } while (0)
 #define MRB_PROC_SCOPE 2048
@@ -88,7 +88,7 @@ MRB_API struct RProc *mrb_closure_new_cfunc(mrb_state *mrb, mrb_func_t func, int
 void mrb_proc_copy(struct RProc *a, struct RProc *b);
 
 /* implementation of #send method */
-MRB_API mrb_value mrb_f_send(mrb_state *mrb, mrb_value self);
+mrb_value mrb_f_send(mrb_state *mrb, mrb_value self);
 
 /* following functions are defined in mruby-proc-ext so please include it when using */
 MRB_API struct RProc *mrb_proc_new_cfunc_with_env(mrb_state*, mrb_func_t, mrb_int, const mrb_value*);
@@ -101,8 +101,8 @@ MRB_API mrb_value mrb_proc_cfunc_env_get(mrb_state*, mrb_int);
 #define MRB_METHOD_FUNC_FL ((uintptr_t)1)
 #define MRB_METHOD_FUNC_P(m) (((uintptr_t)(m))&MRB_METHOD_FUNC_FL)
 #define MRB_METHOD_FUNC(m) ((mrb_func_t)((uintptr_t)(m)&(~MRB_METHOD_FUNC_FL)))
-#define MRB_METHOD_FROM_FUNC(m,fn) m=(mrb_method_t)((struct RProc*)((uintptr_t)(fn)|MRB_METHOD_FUNC_FL))
-#define MRB_METHOD_FROM_PROC(m,pr) m=(mrb_method_t)(struct RProc*)(pr)
+#define MRB_METHOD_FROM_FUNC(m,fn) ((m)=(mrb_method_t)((struct RProc*)((uintptr_t)(fn)|MRB_METHOD_FUNC_FL)))
+#define MRB_METHOD_FROM_PROC(m,pr) ((m)=(mrb_method_t)(struct RProc*)(pr))
 #define MRB_METHOD_PROC_P(m) (!MRB_METHOD_FUNC_P(m))
 #define MRB_METHOD_PROC(m) ((struct RProc*)(m))
 #define MRB_METHOD_UNDEF_P(m) ((m)==0)

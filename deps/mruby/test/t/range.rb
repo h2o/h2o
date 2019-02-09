@@ -8,7 +8,8 @@ end
 assert('Range#==', '15.2.14.4.1') do
   assert_true (1..10) == (1..10)
   assert_false (1..10) == (1..100)
-  assert_true (1..10) == Range.new(1.0, 10.0) if class_defined?("Float")
+  skip unless Object.const_defined?(:Float)
+  assert_true (1..10) == Range.new(1.0, 10.0)
 end
 
 assert('Range#===', '15.2.14.4.2') do
@@ -59,7 +60,7 @@ assert('Range#initialize', '15.2.14.4.9') do
   assert_equal (1..10), b
   assert_false b.exclude_end?
 
-  assert_raise(NameError) { (0..1).send(:initialize, 1, 3) }
+  assert_raise(NameError) { (0..1).__send__(:initialize, 1, 3) }
 end
 
 assert('Range#last', '15.2.14.4.10') do
@@ -92,4 +93,20 @@ assert('Range#eql?', '15.2.14.4.14') do
   assert_false (1..10).eql? (1..100)
   assert_false (1..10).eql? (Range.new(1.0, 10.0))
   assert_false (1..10).eql? "1..10"
+end
+
+assert('Range#initialize_copy', '15.2.14.4.15') do
+  assert_raise(NameError) { (0..1).__send__(:initialize_copy, 1..3) }
+end
+
+assert('Range#dup') do
+  r = (1..3).dup
+  assert_equal r.begin, 1
+  assert_equal r.end, 3
+  assert_false r.exclude_end?
+
+  r = ("a"..."z").dup
+  assert_equal r.begin, "a"
+  assert_equal r.end, "z"
+  assert_true r.exclude_end?
 end

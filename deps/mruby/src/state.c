@@ -41,6 +41,10 @@ mrb_open_core(mrb_allocf f, void *ud)
 
   mrb_init_core(mrb);
 
+#if !defined(MRB_DISABLE_STDIO) && defined(_MSC_VER) && _MSC_VER < 1900
+  _set_output_format(_TWO_DIGIT_EXPONENT);
+#endif
+
   return mrb;
 }
 
@@ -168,10 +172,6 @@ mrb_irep_free(mrb_state *mrb, mrb_irep *irep)
   }
   mrb_free(mrb, irep->reps);
   mrb_free(mrb, irep->lv);
-  if (irep->own_filename) {
-    mrb_free(mrb, (void *)irep->filename);
-  }
-  mrb_free(mrb, irep->lines);
   mrb_debug_info_free(mrb, irep->debug_info);
   mrb_free(mrb, irep);
 }
@@ -273,7 +273,6 @@ mrb_add_irep(mrb_state *mrb)
   irep = (mrb_irep *)mrb_malloc(mrb, sizeof(mrb_irep));
   *irep = mrb_irep_zero;
   irep->refcnt = 1;
-  irep->own_filename = FALSE;
 
   return irep;
 }
