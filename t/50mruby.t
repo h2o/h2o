@@ -590,9 +590,6 @@ EOT
 
     (undef, $body) = $nc->('xyz');
     is $body, 'handler1, , xyz', 'no leading slash 4';
-
-    (undef, $body) = $nc->('');
-    is $body, 'handler1, , ', 'empty path';
 };
 
 subtest 'invalid response' => sub {
