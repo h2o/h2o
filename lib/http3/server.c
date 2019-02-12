@@ -242,7 +242,7 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
     return 0;
 }
 
-static int on_send_stop(quicly_stream_t *qs, uint16_t error_code)
+static int on_send_stop(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
@@ -320,7 +320,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     return 0;
 }
 
-static int on_receive_reset(quicly_stream_t *qs, uint16_t error_code)
+static int on_receive_reset(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
@@ -532,7 +532,8 @@ SynFound : {
     quicly_conn_t *qconn;
 
     /* accept connection */
-    if (quicly_accept(&qconn, ctx->super.quic, sa, salen, &conn->handshake_properties, packets + syn_index) != 0) {
+    if (quicly_accept(&qconn, ctx->super.quic, sa, salen, packets + syn_index, ptls_iovec_init(NULL, 0),
+                      &conn->handshake_properties) != 0) {
         h2o_http3_dispose_conn(&conn->hq);
         free(conn);
         return NULL;

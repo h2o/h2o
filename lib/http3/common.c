@@ -77,11 +77,8 @@ static int ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const v
         return ret;
 
     /* respond with fatal error if the stream is closed */
-    if (quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
-        uint16_t error_code = H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM;
-        quicly_close(conn->quic, &error_code, "");
-        return 0;
-    }
+    if (quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+        return H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM;
 
     /* determine bytes that can be handled */
     const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes,
@@ -100,20 +97,12 @@ static int ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const v
         quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
     }
 
-    /* close on error */
-    if (ret != 0) {
-        uint16_t error_code = (uint16_t)ret;
-        quicly_close(conn->quic, &error_code, err_desc);
-    }
-
-    return 0;
+    return ret;
 }
 
-static int ingress_unistream_on_receive_reset(quicly_stream_t *qs, uint16_t error_code)
+static int ingress_unistream_on_receive_reset(quicly_stream_t *qs, int err)
 {
-    uint16_t app_error = H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM;
-    quicly_close(qs->conn, &app_error, "");
-    return 0;
+    return H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM;
 }
 
 static int qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -228,11 +217,9 @@ static int egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void *
     return 0;
 }
 
-static int egress_unistream_on_send_stop(quicly_stream_t *qs, uint16_t error_code)
+static int egress_unistream_on_send_stop(quicly_stream_t *qs, int err)
 {
-    uint16_t app_error = H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM;
-    quicly_close(qs->conn, &app_error, "");
-    return 0;
+    return H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM;
 }
 
 void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)

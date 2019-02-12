@@ -30,6 +30,8 @@
 #include "h2o/http3_common.h"
 #include "h2o/http2_common.h"
 
+#define H2O_HTTP3_ERROR_EOS H2O_HTTP3_ERROR_USER1 /* the client uses USER1 for signaling eos */
+
 struct st_h2o_hqclient_conn_t {
     h2o_http3_conn_t super;
     h2o_httpclient_ctx_t *ctx;
@@ -78,13 +80,12 @@ struct st_h2o_hqclient_req_t {
     /**
      * called when new contigious data becomes available
      */
-    int (*handle_input)(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end, const int *error_code,
+    int (*handle_input)(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
                         const char **err_desc);
 };
 
-static const int eos_marker = 0; /* the address of eos_marker is used to mark eos */
-static int handle_input_expect_data_frame(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end,
-                                          const int *error_code, const char **err_desc);
+static int handle_input_expect_data_frame(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
+                                          const char **err_desc);
 static void start_request(struct st_h2o_hqclient_req_t *req);
 
 static struct st_h2o_hqclient_conn_t *find_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
@@ -224,13 +225,13 @@ static void destroy_request(struct st_h2o_hqclient_req_t *req)
     free(req);
 }
 
-static void close_stream(struct st_h2o_hqclient_req_t *req, uint16_t error_code)
+static void close_stream(struct st_h2o_hqclient_req_t *req, int err)
 {
     /* TODO are we expected to send two error codes? */
     if (quicly_sendstate_transfer_complete(&req->quic->sendstate))
-        quicly_reset_stream(req->quic, error_code);
+        quicly_reset_stream(req->quic, err);
     if (quicly_recvstate_transfer_complete(&req->quic->recvstate))
-        quicly_request_stop(req->quic, error_code);
+        quicly_request_stop(req->quic, err);
     req->quic->data = NULL;
     req->quic = NULL;
 }
@@ -240,8 +241,8 @@ static void on_error_before_head(struct st_h2o_hqclient_req_t *req, const char *
     req->super._cb.on_head(&req->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
 }
 
-static int handle_input_data_payload(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end,
-                                     const int *error_code, const char **err_desc)
+static int handle_input_data_payload(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
+                                     const char **err_desc)
 {
     size_t payload_bytes = req->bytes_left_in_data_frame;
     const char *errstr;
@@ -257,9 +258,9 @@ static int handle_input_data_payload(struct st_h2o_hqclient_req_t *req, const ui
 
     /* call the handler */
     errstr = NULL;
-    if (*src == src_end && error_code != NULL) {
+    if (*src == src_end && err != 0) {
         /* FIXME also check content-length? see what other protocol handlers do */
-        errstr = error_code == &eos_marker && req->bytes_left_in_data_frame == 0 ? h2o_httpclient_error_is_eos : "reset by peer";
+        errstr = err == H2O_HTTP3_ERROR_EOS && req->bytes_left_in_data_frame == 0 ? h2o_httpclient_error_is_eos : "reset by peer";
     } else {
         errstr = NULL;
     }
@@ -269,8 +270,8 @@ static int handle_input_data_payload(struct st_h2o_hqclient_req_t *req, const ui
     return 0;
 }
 
-int handle_input_expect_data_frame(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end,
-                                   const int *error_code, const char **err_desc)
+int handle_input_expect_data_frame(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
+                                   const char **err_desc)
 {
     h2o_http3_read_frame_t frame;
     int ret;
@@ -296,11 +297,11 @@ int handle_input_expect_data_frame(struct st_h2o_hqclient_req_t *req, const uint
 
     /* unexpected close of DATA frame is handled by handle_input_data_payload. We rely on the function to detect if the DATA frame
      * is closed right after the frame header */
-    return handle_input_data_payload(req, src, src_end, error_code, err_desc);
+    return handle_input_data_payload(req, src, src_end, err, err_desc);
 }
 
-static int handle_input_expect_headers(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end,
-                                       const int *error_code, const char **err_desc)
+static int handle_input_expect_headers(struct st_h2o_hqclient_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
+                                       const char **err_desc)
 {
     h2o_http3_read_frame_t frame;
     int status;
@@ -312,8 +313,8 @@ static int handle_input_expect_headers(struct st_h2o_hqclient_req_t *req, const 
     /* read HEADERS frame */
     if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
         if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
-            if (error_code != NULL) {
-                on_error_before_head(req, error_code == &eos_marker ? "unexpected close" : "reset by peer");
+            if (err != 0) {
+                on_error_before_head(req, err == H2O_HTTP3_ERROR_NONE ? "unexpected close" : "reset by peer");
                 return 0;
             }
             return ret;
@@ -321,7 +322,7 @@ static int handle_input_expect_headers(struct st_h2o_hqclient_req_t *req, const 
         on_error_before_head(req, "response header too large");
         return H2O_HTTP3_ERROR_EXCESSIVE_LOAD; /* FIXME correct code? */
     }
-    frame_is_eos = *src == src_end && error_code != NULL;
+    frame_is_eos = *src == src_end && err != 0;
     if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS) {
         on_error_before_head(req, "unexpected frame");
         return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
@@ -346,7 +347,7 @@ static int handle_input_expect_headers(struct st_h2o_hqclient_req_t *req, const 
             return H2O_HTTP3_ERROR_GENERAL;
         }
         if (frame_is_eos) {
-            on_error_before_head(req, error_code == &eos_marker ? "unexpected close" : "reset by peer");
+            on_error_before_head(req, err == H2O_HTTP3_ERROR_EOS ? "unexpected close" : "reset by peer");
             return 0;
         }
         if (req->super.informational_cb != NULL &&
@@ -366,11 +367,11 @@ static int handle_input_expect_headers(struct st_h2o_hqclient_req_t *req, const 
     return 0;
 }
 
-static void handle_input_error(struct st_h2o_hqclient_req_t *req, int error_code)
+static void handle_input_error(struct st_h2o_hqclient_req_t *req, int err)
 {
     const uint8_t *src = NULL, *src_end = NULL;
     const char *err_desc = NULL;
-    req->handle_input(req, &src, src_end, &error_code, &err_desc);
+    req->handle_input(req, &src, src_end, err, &err_desc);
 }
 
 static void on_stream_destroy(quicly_stream_t *qs)
@@ -407,13 +408,13 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len,
     return 0;
 }
 
-static int on_send_stop(quicly_stream_t *qs, uint16_t error_code)
+static int on_send_stop(quicly_stream_t *qs, int err)
 {
     struct st_h2o_hqclient_req_t *req;
 
     if ((req = qs->data) == NULL)
         return 0;
-    handle_input_error(req, error_code);
+    handle_input_error(req, err);
     close_stream(req, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
     destroy_request(req);
 
@@ -464,13 +465,13 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     is_eos = quicly_recvstate_transfer_complete(&req->quic->recvstate);
     assert(is_eos || src != src_end);
     do {
-        ret = req->handle_input(req, &src, src_end, is_eos ? &eos_marker : NULL, &err_desc);
+        ret = req->handle_input(req, &src, src_end, is_eos ? H2O_HTTP3_ERROR_EOS : 0, &err_desc);
     } while (ret == 0 && src != src_end);
 
     /* save data to partial buffer (if necessary) */
     if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
         if (is_eos)
-            return H2O_HTTP3_ERROR_IS_MALFORMED_FRAME(src == src_end ? H2O_HTTP3_FRAME_TYPE_DATA : *src);
+            return H2O_HTTP3_ERROR_MALFORMED_FRAME(src == src_end ? H2O_HTTP3_FRAME_TYPE_DATA : *src);
         assert(src < src_end);
         if (req->recvbuf.partial_frame->size != 0) {
             assert(src_end == (const uint8_t *)req->recvbuf.partial_frame->bytes + req->recvbuf.partial_frame->size);
@@ -483,7 +484,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     /* cleanup */
     if (is_eos) {
         if (!quicly_sendstate_transfer_complete(&req->quic->sendstate))
-            quicly_reset_stream(req->quic, 12345); /* what's the correct error code to use to notify that we've got everything? */
+            quicly_reset_stream(req->quic, H2O_HTTP3_ERROR_NONE);
         req->quic->data = NULL;
         req->quic = NULL;
         destroy_request(req);
@@ -505,13 +506,13 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     return 0;
 }
 
-static int on_receive_reset(quicly_stream_t *qs, uint16_t error_code)
+static int on_receive_reset(quicly_stream_t *qs, int err)
 {
     struct st_h2o_hqclient_req_t *req = qs->data;
 
     assert(req->recvbuf.body->size + req->recvbuf.partial_frame->size == req->recvbuf.bytes_contiguous);
 
-    handle_input_error(req, error_code);
+    handle_input_error(req, err);
     close_stream(req, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
     destroy_request(req);
 
