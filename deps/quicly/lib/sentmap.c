@@ -170,5 +170,5 @@ int quicly_sentmap__type_packet(struct st_quicly_conn_t *conn, const quicly_sent
                                 quicly_sentmap_event_t event)
 {
     assert(!"quicly_sentmap__type_packet cannot be called");
-    return QUICLY_ERROR_INTERNAL;
+    return QUICLY_TRANSPORT_ERROR_INTERNAL;
 }

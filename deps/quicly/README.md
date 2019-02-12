@@ -33,7 +33,7 @@ To run the command as a client, specify the peer hostname and port number as the
 % ./cli host port
 ```
 
-To run the command as a server, specify the files that contain the certificate and private key, as well as the hostname and the port number to which the server hould bind.
+To run the command as a server, specify the files that contain the certificate and private key, as well as the hostname and the port number to which the server should bind.
 
 ```
 % ./cli -c server.crt -k server.key 0.0.0.0 4433

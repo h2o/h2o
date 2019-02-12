@@ -105,7 +105,7 @@ static void test_even(void)
         ok(num_packets == 1);
         decode_packets(&decoded, &raw, 1, 8);
         ok(num_packets == 1);
-        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, NULL, &decoded);
+        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, &decoded, ptls_iovec_init(NULL, 0), NULL);
         ok(ret == 0);
         free_packets(&raw, 1);
         cond_even_up();
@@ -199,7 +199,7 @@ static void loss_core(int downstream_only)
         quic_now += 10;
         decode_packets(&decoded, &raw, 1, 8);
         ok(num_packets == 1);
-        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, NULL, &decoded);
+        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, &decoded, ptls_iovec_init(NULL, 0), NULL);
         ok(ret == 0);
         free_packets(&raw, 1);
         quic_now += 10;

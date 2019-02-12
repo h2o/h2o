@@ -44,6 +44,12 @@ extern "C" {
 #define QUICLY_DEBUG 0
 #endif
 
+/* invariants! */
+#define QUICLY_LONG_HEADER_BIT 0x80
+#define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
+
+#define QUICLY_PROTOCOL_VERSION 0xff000011
+
 typedef struct st_quicly_datagram_t {
     ptls_iovec_t data;
     socklen_t salen;
@@ -150,8 +156,7 @@ typedef quicly_stream_t *(*quicly_alloc_stream_cb)(quicly_context_t *ctx);
 typedef void (*quicly_free_stream_cb)(quicly_stream_t *stream);
 typedef int (*quicly_stream_open_cb)(quicly_stream_t *stream);
 typedef int (*quicly_stream_update_cb)(quicly_stream_t *stream);
-typedef void (*quicly_conn_close_cb)(quicly_conn_t *conn, uint16_t code, const uint64_t *frame_type, const char *reason,
-                                     size_t reason_len);
+typedef void (*quicly_conn_close_cb)(quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason, size_t reason_len);
 typedef int64_t (*quicly_now_cb)(quicly_context_t *ctx);
 typedef void (*quicly_event_log_cb)(quicly_context_t *ctx, quicly_event_type_t type, const quicly_event_attribute_t *attributes,
                                     size_t num_attributes);
@@ -160,6 +165,9 @@ typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
 } quicly_max_stream_data_t;
 
+/**
+ * Transport Parameters; the struct contains "configuration parameters", ODCID is managed separately
+ */
 typedef struct st_quicly_transport_parameters_t {
     /**
      * in octets
@@ -346,33 +354,33 @@ typedef struct st_quicly_stream_callbacks_t {
     /**
      * called when the stream is destroyed
      */
-    void (*destroy)(quicly_stream_t *stream);
+    void (*on_destroy)(quicly_stream_t *stream);
     /**
      * called whenever data can be retired from the send buffer, specifying the amount that can be newly removed
      */
-    void (*send_shift)(quicly_stream_t *stream, size_t delta);
+    void (*on_send_shift)(quicly_stream_t *stream, size_t delta);
     /**
      * asks the application to fill the frame payload.  `off` is the offset within the buffer (the beginning position of the buffer
-     * changes as `send_shift` is invoked). `len` is an in/out argument that specifies the size of the buffer / amount of data being
-     * written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.  See also
-     * quicly_stream_sync_sendbuf.
+     * changes as `on_send_shift` is invoked). `len` is an in/out argument that specifies the size of the buffer / amount of data
+     * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.  See
+     * also quicly_stream_sync_sendbuf.
      */
-    int (*send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+    int (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
      * called when a STOP_SENDING frame is received.  Do not call `quicly_reset_stream` in response.  The stream will be
      * automatically reset by quicly.
      */
-    int (*send_stop)(quicly_stream_t *stream, uint16_t error_code);
+    int (*on_send_stop)(quicly_stream_t *stream, int err);
     /**
      * called when data is newly received.  `off` is the offset within the buffer (the beginning position changes as the application
      * calls `quicly_stream_sync_recvbuf`.  Applications should consult `quicly_stream_t::recvstate` to see if it has contiguous
      * input.
      */
-    int (*receive)(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+    int (*on_receive)(quicly_stream_t *stream, size_t off, const void *src, size_t len);
     /**
      * called when a RESET_STREAM frame is received
      */
-    int (*receive_reset)(quicly_stream_t *stream, uint16_t error_code);
+    int (*on_receive_reset)(quicly_stream_t *stream, int err);
 } quicly_stream_callbacks_t;
 
 struct st_quicly_stream_t {
@@ -571,11 +579,11 @@ static void **quicly_get_data(quicly_conn_t *conn);
  */
 void quicly_free(quicly_conn_t *conn);
 /**
- * closes the connection.  If `app_error_code` is not NULL, initiates a immediate close using the specified error code.  Otherwise,
- * initiates a timeout close.  An application should continue calling quicly_recieve and quicly_send, until they return
+ * closes the connection.  `err` is the application error code using the coalesced scheme (see QUICLY_ERROR_* macros), or zero (no
+ * error; indicating idle close).  An application should continue calling quicly_recieve and quicly_send, until they return
  * QUICLY_ERROR_FREE_CONNECTION.  At this point, it is should call quicly_free.
  */
-int quicly_close(quicly_conn_t *conn, const uint16_t *app_error_code, const char *reason_phrase);
+int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase);
 /**
  *
  */
@@ -605,12 +613,13 @@ int quicly_is_destination(quicly_conn_t *conn, int is_1rtt, ptls_iovec_t cid);
 /**
  *
  */
-int quicly_encode_transport_parameter_list(const quicly_transport_parameters_t *params, int is_client, ptls_buffer_t *buf);
+int quicly_encode_transport_parameter_list(const quicly_transport_parameters_t *params, const quicly_cid_t *odcid, int is_client,
+                                           ptls_buffer_t *buf);
 /**
  *
  */
-int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, int is_client, const uint8_t *src,
-                                           const uint8_t *end);
+int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *odcid, int is_client,
+                                           const uint8_t *src, const uint8_t *end);
 /**
  *
  */
@@ -620,8 +629,8 @@ int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *serv
 /**
  *
  */
-int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen,
-                  ptls_handshake_properties_t *handshake_properties, quicly_decoded_packet_t *packet);
+int quicly_accept(quicly_conn_t **_conn, quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen,
+                  quicly_decoded_packet_t *packet, ptls_iovec_t retry_odcid, ptls_handshake_properties_t *handshake_properties);
 /**
  *
  */
@@ -633,11 +642,11 @@ int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidir
 /**
  *
  */
-void quicly_reset_stream(quicly_stream_t *stream, uint16_t error_code);
+void quicly_reset_stream(quicly_stream_t *stream, int err);
 /**
  *
  */
-void quicly_request_stop(quicly_stream_t *stream, uint16_t error_code);
+void quicly_request_stop(quicly_stream_t *stream, int err);
 /**
  *
  */

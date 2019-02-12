@@ -57,7 +57,7 @@ static ptls_handshake_properties_t hs_properties;
 static quicly_transport_parameters_t resumed_transport_params;
 static quicly_context_t ctx;
 static ptls_save_ticket_t save_ticket = {save_ticket_cb};
-static ptls_iovec_t retry_token;
+static int enforce_retry;
 
 ptls_key_exchange_algorithm_t *key_exchanges[128];
 static ptls_context_t tlsctx = {.random_bytes = ptls_openssl_random_bytes,
@@ -68,8 +68,8 @@ static ptls_context_t tlsctx = {.random_bytes = ptls_openssl_random_bytes,
                                 .save_ticket = &save_ticket};
 static const char *req_paths[1024];
 
-static int on_stop_sending(quicly_stream_t *stream, uint16_t error_code);
-static int on_receive_reset(quicly_stream_t *stream, uint16_t error_code);
+static int on_stop_sending(quicly_stream_t *stream, int err);
+static int on_receive_reset(quicly_stream_t *stream, int err);
 static int server_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
 static int client_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
 
@@ -165,15 +165,17 @@ static int send_sized_text(quicly_stream_t *stream, ptls_iovec_t path, int is_ht
     return 1;
 }
 
-static int on_stop_sending(quicly_stream_t *stream, uint16_t error_code)
+static int on_stop_sending(quicly_stream_t *stream, int err)
 {
-    fprintf(stderr, "received STOP_SENDING: %" PRIu16 "\n", error_code);
+    assert(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
+    fprintf(stderr, "received STOP_SENDING: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
     return 0;
 }
 
-static int on_receive_reset(quicly_stream_t *stream, uint16_t error_code)
+static int on_receive_reset(quicly_stream_t *stream, int err)
 {
-    fprintf(stderr, "received RESET_STREAM: %" PRIu16 "\n", error_code);
+    assert(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
+    fprintf(stderr, "received RESET_STREAM: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
     return 0;
 }
 
@@ -194,6 +196,8 @@ static int server_on_receive(quicly_stream_t *stream, size_t off, const void *sr
         send_str(stream, "failed to parse HTTP request\n");
         goto Sent;
     }
+    if (!quicly_recvstate_transfer_complete(&stream->recvstate))
+        quicly_request_stop(stream, 0);
 
     if (path_is(path, "/logo.jpg") && send_file(stream, is_http1, "assets/logo.jpg", "image/jpeg"))
         goto Sent;
@@ -202,10 +206,14 @@ static int server_on_receive(quicly_stream_t *stream, size_t off, const void *sr
     if (send_sized_text(stream, path, is_http1))
         goto Sent;
 
+    if (!stream->sendstate.is_open)
+        return 0;
+
     send_header(stream, is_http1, 404, "text/plain; charset=utf-8");
     send_str(stream, "not found\n");
 Sent:
     quicly_streambuf_egress_shutdown(stream);
+    quicly_streambuf_ingress_shift(stream, len);
     return 0;
 }
 
@@ -233,8 +241,7 @@ static int client_on_receive(quicly_stream_t *stream, size_t off, const void *sr
                     "packets: received: %" PRIu64 ", sent: %" PRIu64 ", lost: %" PRIu64 ", ack-received: %" PRIu64
                     ", bytes-sent: %" PRIu64 "\n",
                     num_received, num_sent, num_lost, num_ack_received, num_bytes_sent);
-            uint16_t error_code = QUICLY_ERROR_NONE;
-            quicly_close(stream->conn, &error_code, "");
+            quicly_close(stream->conn, 0, "");
         }
     }
 
@@ -251,10 +258,16 @@ static int on_stream_open(quicly_stream_t *stream)
     return 0;
 }
 
-static void on_conn_close(quicly_conn_t *conn, uint16_t code, const uint64_t *frame_type, const char *reason, size_t reason_len)
+static void on_conn_close(quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason, size_t reason_len)
 {
-    fprintf(stderr, "%s close:0x%" PRIx16 ":%.*s\n", frame_type != NULL ? "connection" : "application", code, (int)reason_len,
-            reason);
+    assert(QUICLY_ERROR_IS_QUIC(err));
+    if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
+        fprintf(stderr, "transport close:code=0x%" PRIx16 ";frame=%" PRIu64 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err),
+                frame_type, (int)reason_len, reason);
+    } else {
+        fprintf(stderr, "application close:code=0x%" PRIx16 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err), (int)reason_len,
+                reason);
+    }
 }
 
 static int send_one(int fd, quicly_datagram_t *p)
@@ -520,6 +533,15 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                 size_t plen = quicly_decode_packet(&packet, buf + off, rret - off, 8);
                 if (plen == SIZE_MAX)
                     break;
+                if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
+                    if (packet.version != QUICLY_PROTOCOL_VERSION) {
+                        quicly_datagram_t *rp = quicly_send_version_negotiation(&ctx, &sa, salen, packet.cid.src, packet.cid.dest);
+                        assert(rp != NULL);
+                        if (send_one(fd, rp) == -1)
+                            perror("sendmsg failed");
+                        break;
+                    }
+                }
                 quicly_conn_t *conn = NULL;
                 size_t i;
                 for (i = 0; i != num_conns; ++i) {
@@ -531,19 +553,24 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                 if (conn != NULL) {
                     /* existing connection */
                     quicly_receive(conn, &packet);
-                } else if (retry_token.len != 0 && !(packet.token.len == retry_token.len &&
-                                                     memcmp(packet.token.base, retry_token.base, retry_token.len) == 0)) {
+                } else if (enforce_retry && packet.token.len == 0 && packet.cid.dest.len >= 8) {
                     /* unbound connection; send a retry token unless the client has supplied the correct one, but not too many */
-                    if (off == 0) {
-                        quicly_datagram_t *rp =
-                            quicly_send_retry(&ctx, &sa, salen, packet.cid.src, packet.cid.dest, packet.cid.dest, retry_token);
-                        assert(rp != NULL);
-                        if (send_one(fd, rp) == -1)
-                            perror("sendmsg failed");
-                    }
+                    uint8_t new_server_cid[8];
+                    memcpy(new_server_cid, packet.cid.dest.base, sizeof(new_server_cid));
+                    new_server_cid[0] ^= 0xff;
+                    quicly_datagram_t *rp =
+                        quicly_send_retry(&ctx, &sa, salen, packet.cid.src, ptls_iovec_init(new_server_cid, sizeof(new_server_cid)),
+                                          packet.cid.dest, packet.cid.dest);
+                    assert(rp != NULL);
+                    if (send_one(fd, rp) == -1)
+                        perror("sendmsg failed");
+                    break;
                 } else {
                     /* new connection */
-                    int ret = quicly_accept(&conn, &ctx, &sa, mess.msg_namelen, NULL, &packet);
+                    int ret = quicly_accept(
+                        &conn, &ctx, &sa, mess.msg_namelen, &packet,
+                        enforce_retry ? packet.token /* a production server should validate the token */ : ptls_iovec_init(NULL, 0),
+                        NULL);
                     if (ret == 0) {
                         assert(conn != NULL);
                         conns = realloc(conns, sizeof(*conns) * (num_conns + 1));
@@ -551,13 +578,6 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                         conns[num_conns++] = conn;
                     } else {
                         assert(conn == NULL);
-                        if (ret == QUICLY_ERROR_VERSION_NEGOTIATION) {
-                            quicly_datagram_t *rp =
-                                quicly_send_version_negotiation(&ctx, &sa, salen, packet.cid.src, packet.cid.dest);
-                            assert(rp != NULL);
-                            if (send_one(fd, rp) == -1)
-                                perror("sendmsg failed");
-                        }
                     }
                 }
                 off += plen;
@@ -594,7 +614,7 @@ int save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
     /* build data (session ticket and transport parameters) */
     ptls_buffer_push_block(&buf, 2, { ptls_buffer_pushv(&buf, src.base, src.len); });
     ptls_buffer_push_block(&buf, 2, {
-        if ((ret = quicly_encode_transport_parameter_list(quicly_get_peer_transport_parameters(conn), 1, &buf)) != 0)
+        if ((ret = quicly_encode_transport_parameter_list(quicly_get_peer_transport_parameters(conn), NULL, 1, &buf)) != 0)
             goto Exit;
     });
 
@@ -640,7 +660,7 @@ static void load_ticket(void)
             src = end;
         });
         ptls_decode_block(src, end, 2, {
-            if ((ret = quicly_decode_transport_parameter_list(&resumed_transport_params, 1, src, end)) != 0)
+            if ((ret = quicly_decode_transport_parameter_list(&resumed_transport_params, NULL, 1, src, end)) != 0)
                 goto Exit;
             src = end;
         });
@@ -726,7 +746,7 @@ int main(int argc, char **argv)
             req_paths[i] = optarg;
         } break;
         case 'R':
-            retry_token = ptls_iovec_init("please retry", 12);
+            enforce_retry = 1;
             break;
         case 'r':
             if (sscanf(optarg, "%" PRIu32, &ctx.loss->default_initial_rtt) != 1) {

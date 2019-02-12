@@ -45,7 +45,7 @@ void test_stream_concurrency(void)
         ok(num_packets == 1);
         ok(decode_packets(&decoded, &raw, 1, 8) == 1);
         ok(num_packets == 1);
-        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, NULL, &decoded);
+        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, &decoded, ptls_iovec_init(NULL, 0), NULL);
         ok(ret == 0);
         free_packets(&raw, 1);
         transmit(server, client);
@@ -73,14 +73,14 @@ void test_stream_concurrency(void)
     server_stream = quicly_get_stream(server, client_streams[i - 1]->stream_id);
     ok(server_stream != NULL);
     server_streambuf = server_stream->data;
-    quicly_reset_stream(client_streams[i - 1], 123);
-    quicly_request_stop(client_streams[i - 1], 456);
+    quicly_reset_stream(client_streams[i - 1], QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(123));
+    quicly_request_stop(client_streams[i - 1], QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(456));
     transmit(client, server);
     transmit(server, client);
-    ok(server_streambuf->error_received.reset_stream == 123);
-    ok(server_streambuf->error_received.stop_sending == 456);
+    ok(server_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(123));
+    ok(server_streambuf->error_received.stop_sending == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(456));
     ok(!server_streambuf->is_detached); /* haven't gotten ACK for reset */
-    ok(client_streambufs[i - 1]->error_received.reset_stream == 456);
+    ok(client_streambufs[i - 1]->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(456));
     ok(client_streambufs[i - 1]->is_detached);
 
     /* the last stream is still ID-blocked */

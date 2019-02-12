@@ -105,7 +105,7 @@ int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_
     }
     return 0;
 Error:
-    return QUICLY_ERROR_FRAME_ENCODING;
+    return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
 }
 
 int quicly_tls_push_varint(ptls_buffer_t *buf, uint64_t v)
@@ -123,6 +123,6 @@ int quicly_tls_push_varint(ptls_buffer_t *buf, uint64_t v)
 int quicly_tls_decode_varint(uint64_t *value, const uint8_t **src, const uint8_t *end)
 {
     if ((*value = quicly_decodev(src, end)) == UINT64_MAX)
-        return QUICLY_ERROR_TRANSPORT_PARAMETER;
+        return QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
     return 0;
 }
