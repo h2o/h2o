@@ -100,14 +100,14 @@ static uint64_t destroy_expired_locked(h2o_socketpool_t *pool)
             __sync_sub_and_fetch(&pool->_shared.pooled_count, 1);
         }
     }
-    return SIZE_MAX;
+    return UINT64_MAX;
 }
 
 /* caller should lock the mutex */
 static void check_pool_expired_locked(h2o_socketpool_t *pool)
 {
     uint64_t next_expired = destroy_expired_locked(pool);
-    if (next_expired != SIZE_MAX) {
+    if (next_expired != UINT64_MAX) {
         if (!h2o_timer_is_linked(&pool->_interval_cb.timeout)) {
             if (next_expired < CHECK_EXPIRATION_MIN_INTERVAL)
                 next_expired = CHECK_EXPIRATION_MIN_INTERVAL;
