@@ -25,8 +25,8 @@
 
 static void doit(int use_enc_stream)
 {
-    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(12);
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(12);
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
     h2o_mem_pool_t pool;
     h2o_byte_vector_t *enc_stream = NULL, flattened = {NULL};
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
