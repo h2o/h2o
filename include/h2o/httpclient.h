@@ -133,6 +133,10 @@ struct st_h2o_httpclient_t {
      */
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
     /**
+     * returns a pointer to the underlying h2o_socket_t
+     */
+    h2o_socket_t *(*get_socket)(h2o_httpclient_t *client);
+    /**
      * callback that should be called when some data is fetched out from `buf`.
      */
     void (*update_window)(h2o_httpclient_t *client);

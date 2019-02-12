@@ -281,10 +281,10 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
     return -1;
 }
 
-static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
-                            h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect)
+static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
+                            h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
-    ssize_t entity_header_index = -1;
+    *entity_header_index = -1;
 
     assert(headers->size == 0);
 
@@ -295,7 +295,9 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
         for (i = 0; i != len; ++i) {
             const h2o_token_t *name_token;
             char orig_case[src[i].name_len];
-
+            /* reject multiline header */
+            if (src[i].name_len == 0)
+                return -1;
             /* preserve the original case */
             memcpy(orig_case, src[i].name, src[i].name_len);
             /* convert to lower-case in-place */
@@ -306,10 +308,10 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
                         host->base = (char *)src[i].value;
                         host->len = src[i].value_len;
                     } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
-                        if (entity_header_index == -1)
-                            entity_header_index = i;
+                        if (*entity_header_index == -1)
+                            *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
-                        entity_header_index = i;
+                        *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_EXPECT) {
                         expect->base = (char *)src[i].value;
                         expect->len = src[i].value_len;
@@ -330,13 +332,12 @@ static ssize_t init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const 
         }
     }
 
-    return entity_header_index;
+    return 0;
 }
 
-static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version,
-                             h2o_iovec_t *expect)
+static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version,
+                             h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
-    ssize_t entity_header_index;
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
 
     expect->base = NULL;
@@ -350,11 +351,11 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
         conn->_ostr_final.super.send_informational = NULL;
 
     /* init headers */
-    entity_header_index =
-        init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect);
+    if (init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect, entity_header_index) != 0)
+        return -1;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
-    if (entity_header_index != -1) {
+    if (*entity_header_index != -1) {
         size_t i;
         conn->req.input.method = h2o_strdup(&conn->req.pool, conn->req.input.method.base, conn->req.input.method.len);
         conn->req.input.path = h2o_strdup(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len);
@@ -392,7 +393,7 @@ static ssize_t fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header
     if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
         conn->req.http1_is_persistent = 0;
 
-    return entity_header_index;
+    return 0;
 }
 
 static void on_continue_sent(h2o_socket_t *sock, const char *err)
@@ -416,10 +417,10 @@ static int contains_crlf_only(const char *s, size_t len)
     return 1;
 }
 
-static void send_bad_request(struct st_h2o_http1_conn_t *conn)
+static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
 {
     h2o_socket_read_stop(conn->sock);
-    h2o_send_error_400(&conn->req, "Bad Request", "Bad Request", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+    h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
@@ -443,7 +444,12 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     switch (reqlen) {
     default: // parse complete
         conn->_reqsize = reqlen;
-        if ((entity_body_header_index = fixup_request(conn, headers, num_headers, minor_version, &expect)) != -1) {
+        if (fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index) != 0) {
+            set_timeout(conn, 0, NULL);
+            send_bad_request(conn, "line folding of header fields is not supported");
+            return;
+        }
+        if (entity_body_header_index != -1) {
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {
                 if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
@@ -473,7 +479,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         return;
     case -2: // incomplete
         if (inreqlen == H2O_MAX_REQLEN) {
-            send_bad_request(conn);
+            send_bad_request(conn, "Bad Request");
         }
         return;
     case -1: // error
@@ -496,7 +502,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         if (inreqlen <= 4 && contains_crlf_only(conn->sock->input->bytes, inreqlen)) {
             close_connection(conn, 1);
         } else {
-            send_bad_request(conn);
+            send_bad_request(conn, "Bad Request");
         }
         return;
     }
@@ -756,7 +762,7 @@ static void proceed_pull(struct st_h2o_http1_conn_t *conn, size_t nfilled)
         bufs[bufcnt++] = h2o_iovec_init(conn->_ostr_final.pull.buf, nfilled);
 
     if (nfilled < MAX_PULL_BUF_SZ) {
-        h2o_iovec_t cbuf = {conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled};
+        h2o_iovec_t cbuf = h2o_iovec_init((char *)conn->_ostr_final.pull.buf + nfilled, MAX_PULL_BUF_SZ - nfilled);
         send_state = h2o_pull(&conn->req, conn->_ostr_final.pull.cb, &cbuf);
         conn->req.bytes_sent += cbuf.len;
         if (conn->_ostr_final.chunked_buf != NULL) {
@@ -884,7 +890,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         if (bufs[bufcnt].len != 0)
             ++bufcnt;
     }
-    memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+    h2o_memcpy(bufs + bufcnt, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
     bufcnt += inbufcnt;
     if (self->chunked_buf != NULL && chunked_suffix.len != 0)
         bufs[bufcnt++] = chunked_suffix;

@@ -87,7 +87,7 @@ static const char *get_error(const redisAsyncContext *redis)
     case REDIS_ERR_OTHER:
         return redis->errstr;
     default:
-        assert(!"FIXME");
+        h2o_fatal("FIXME");
     }
 }
 
