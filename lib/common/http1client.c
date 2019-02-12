@@ -265,6 +265,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
         /* fill-in the headers */
         for (i = 0; i != num_headers; ++i) {
+            if (src_headers[i].name_len == 0) {
+                /* reject multiline header */
+                on_error_before_head(client, "line folding of header fields is not supported");
+                return;
+            }
             const h2o_token_t *token;
             char *orig_name = h2o_strdup(client->super.pool, src_headers[i].name, src_headers[i].name_len).base;
             h2o_strtolower((char *)src_headers[i].name, src_headers[i].name_len);
@@ -643,11 +648,18 @@ static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
     return sock;
 }
 
+static h2o_socket_t *do_get_socket(h2o_httpclient_t *_client)
+{
+    struct st_h2o_http1client_t *client = (void *)_client;
+    return client->sock;
+}
+
 static void setup_client(struct st_h2o_http1client_t *client, h2o_socket_t *sock, h2o_url_t *origin)
 {
     memset(&client->sock, 0, sizeof(*client) - offsetof(struct st_h2o_http1client_t, sock));
     client->super.cancel = do_cancel;
     client->super.steal_socket = do_steal_socket;
+    client->super.get_socket = do_get_socket;
     client->super.update_window = do_update_window;
     client->super.write_req = do_write_req;
     client->super.buf = &sock->input;
