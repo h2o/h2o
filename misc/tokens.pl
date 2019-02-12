@@ -103,7 +103,7 @@ extern const h2o_hpack_static_table_entry_t h2o_hpack_static_table[<?= scalar @$
 extern const h2o_qpack_static_table_entry_t h2o_qpack_static_table[<?= scalar @$qpack ?>];
 
 typedef int32_t (*h2o_qpack_lookup_static_cb)(h2o_iovec_t value, int *is_exact);
-const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[<?= scalar @$tokens ?>];
+extern const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[<?= scalar @$tokens ?>];
 
 ? for (my $token_index = 0; $token_index < @$tokens; ++$token_index) {
 int32_t <?= qpack_lookup_funcname($tokens->[$token_index][0]) ?>(h2o_iovec_t value, int *is_exact);
