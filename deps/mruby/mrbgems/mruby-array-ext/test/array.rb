@@ -1,13 +1,6 @@
 ##
 # Array(Ext) Test
 
-assert("Array.try_convert") do
-  assert_nil Array.try_convert(0)
-  assert_nil Array.try_convert(nil)
-  assert_equal [], Array.try_convert([])
-  assert_equal [1,2,3], Array.try_convert([1,2,3])
-end
-
 assert("Array#assoc") do
   s1 = [ "colors", "red", "blue", "green" ]
   s2 = [ "letters", "a", "b", "c" ]
@@ -73,6 +66,14 @@ assert("Array#|") do
   assert_raise(TypeError) { a | c }
   assert_equal [1, 2, 3, 4], (a | b)
   assert_equal [1, 2, 3, 1], a
+end
+
+assert("Array#union") do
+  a = [1, 2, 3, 1]
+  b = [1, 4]
+  c = [1, 5]
+
+  assert_equal [1, 2, 3, 4, 5], a.union(b,c)
 end
 
 assert("Array#&") do
@@ -330,25 +331,9 @@ assert('Array#to_h') do
   assert_raise(ArgumentError) { [[1]].to_h }
 end
 
-assert('Array#to_h (Modified)') do
-  class A
-    def to_ary
-      $a.clear
-      nil
-    end
-  end
-  $a = [A.new]
-  assert_raise(TypeError) { $a.to_h }
-end
-
 assert("Array#index (block)") do
   assert_nil (1..10).to_a.index { |i| i % 5 == 0 and i % 7 == 0 }
   assert_equal 34, (1..100).to_a.index { |i| i % 5 == 0 and i % 7 == 0 }
-end
-
-assert("Array#to_ary") do
-  assert_equal [], [].to_ary
-  assert_equal [1,2,3], [1,2,3].to_ary
 end
 
 assert("Array#dig") do
@@ -418,5 +403,5 @@ assert('Array#transpose') do
   assert_equal([[1], [2], [3]].transpose, [[1,2,3]])
   assert_equal([[1,2], [3,4], [5,6]].transpose, [[1,3,5], [2,4,6]])
   assert_raise(TypeError) { [1].transpose }
-  assert_raise(IndexError) { [[1], [2,3,4]].transpose } 
+  assert_raise(IndexError) { [[1], [2,3,4]].transpose }
 end

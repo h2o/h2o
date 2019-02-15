@@ -40,7 +40,7 @@ MRuby::Build.new('cxx_abi') do |conf|
   toolchain :gcc
 
   conf.gembox 'full-core'
-  conf.cc.flags += %w(-Werror=declaration-after-statement)
+  conf.cc.flags += %w(-Werror=declaration-after-statement -fpermissive)
   conf.compilers.each do |c|
     c.defines += %w(MRB_GC_FIXED_ARENA)
   end

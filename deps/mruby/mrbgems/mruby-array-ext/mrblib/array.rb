@@ -1,31 +1,6 @@
 class Array
   ##
   # call-seq:
-  #    Array.try_convert(obj) -> array or nil
-  #
-  # Tries to convert +obj+ into an array, using +to_ary+ method.
-  # converted array or +nil+ if +obj+ cannot be converted for any reason.
-  # This method can be used to check if an argument is an array.
-  #
-  #    Array.try_convert([1])   #=> [1]
-  #    Array.try_convert("1")   #=> nil
-  #
-  #    if tmp = Array.try_convert(arg)
-  #      # the argument is an array
-  #    elsif tmp = String.try_convert(arg)
-  #      # the argument is a string
-  #    end
-  #
-  def self.try_convert(obj)
-    if obj.respond_to?(:to_ary)
-      obj.to_ary
-    else
-      nil
-    end
-  end
-
-  ##
-  # call-seq:
   #    ary.uniq!                -> ary or nil
   #    ary.uniq! { |item| ... } -> ary or nil
   #
@@ -41,23 +16,19 @@ class Array
   #    c.uniq! { |s| s.first } # => [["student", "sam"], ["teacher", "matz"]]
   #
   def uniq!(&block)
-    ary = self.dup
-    result = []
+    hash = {}
     if block
-      hash = {}
-      while ary.size > 0
-        val = ary.shift
+      self.each do |val|
         key = block.call(val)
-        hash[key] = val unless hash.has_key?(key)
+        hash[key] = val unless hash.key?(key)
       end
-      hash.each_value do |value|
-        result << value
-      end
+      result = hash.values
     else
-      while ary.size > 0
-        result << ary.shift
-        ary.delete(result.last)
+      hash = {}
+      self.each do |val|
+        hash[val] = val
       end
+      result = hash.keys
     end
     if result.size == self.size
       nil
@@ -132,6 +103,25 @@ class Array
 
     ary = self + elem
     ary.uniq! or ary
+  end
+
+  ##
+  # call-seq:
+  #    ary.union(other_ary,...)  -> new_ary
+  #
+  # Set Union---Returns a new array by joining this array with
+  # <i>other_ary</i>, removing duplicates.
+  #
+  #    ["a", "b", "c"].union(["c", "d", "a"], ["a", "c", "e"])
+  #           #=> ["a", "b", "c", "d", "e"]
+  #
+  def union(*args)
+    ary = self.dup
+    args.each do |x|
+      ary.concat(x)
+      ary.uniq!
+    end
+    ary
   end
 
   ##
@@ -276,7 +266,6 @@ class Array
     self
   end
 
-  NONE=Object.new
   ##
   #  call-seq:
   #     ary.fetch(index)                    -> obj
@@ -301,7 +290,7 @@ class Array
   #                              #=> "100 is out of bounds"
   #
 
-  def fetch(n=nil, ifnone=NONE, &block)
+  def fetch(n, ifnone=NONE, &block)
     warn "block supersedes default value argument" if !n.nil? && ifnone != NONE && block
 
     idx = n
@@ -783,16 +772,6 @@ class Array
   end
 
   ##
-  #  call-seq:
-  #     ary.to_ary -> ary
-  #
-  #  Returns +self+.
-  #
-  def to_ary
-    self
-  end
-
-  ##
   # call-seq:
   #   ary.dig(idx, ...)                 -> object
   #
@@ -911,7 +890,7 @@ class Array
   #
   # Assumes that self is an array of arrays and transposes the rows and columns.
   #
-  # If the length of the subarrays don’t match, an IndexError is raised.
+  # If the length of the subarrays don't match, an IndexError is raised.
   #
   # Examples:
   #
@@ -931,5 +910,30 @@ class Array
     Array.new(column_count) do |column_index|
       self.map { |row| row[column_index] }
     end
+  end
+
+  ##
+  #  call-seq:
+  #    ary.to_h                ->   Hash
+  #    ary.to_h{|item| ... }   ->   Hash
+  #
+  # Returns the result of interpreting <i>aray</i> as an array of
+  # <tt>[key, value]</tt> pairs. If a block is given, it should
+  # return <tt>[key, value]</tt> pairs to construct a hash.
+  #
+  #     [[:foo, :bar], [1, 2]].to_h
+  #       # => {:foo => :bar, 1 => 2}
+  #     [1, 2].to_h{|x| [x, x*2]}
+  #       # => {1 => 2, 2 => 4}
+  #
+  def to_h(&blk)
+    h = {}
+    self.each do |v|
+      v = blk.call(v) if blk
+      raise TypeError, "wrong element type #{v.class}" unless Array === v
+      raise ArgumentError, "wrong array length (expected 2, was #{v.length})" unless v.length == 2
+      h[v[0]] = v[1]
+    end
+    h
   end
 end

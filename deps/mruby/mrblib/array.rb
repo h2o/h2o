@@ -66,7 +66,7 @@ class Array
   #
   # ISO 15.2.12.5.15
   def initialize(size=0, obj=nil, &block)
-    raise TypeError, "expected Integer for 1st argument" unless size.kind_of? Integer
+    size = size.__to_int
     raise ArgumentError, "negative array size" if size < 0
 
     self.clear
@@ -84,8 +84,15 @@ class Array
   end
 
   def _inspect
-    return "[]" if self.size == 0
-    "["+self.map{|x|x.inspect}.join(", ")+"]"
+    size = self.size
+    return "[]" if size == 0
+    ary=[]
+    i=0
+    while i<size
+      ary<<self[i].inspect
+      i+=1
+    end
+    "["+ary.join(", ")+"]"
   end
   ##
   # Return the contents of this array as a string.
@@ -193,43 +200,61 @@ class Array
   include Enumerable
 
   ##
-  # Quick sort
-  # left  : the beginning of sort region
-  # right : the end of sort region
-  def __sort_sub__(left, right, &block)
-    stack = [ [left, right] ]
-    until stack.empty?
-      left, right = stack.pop
-      if left < right
-        i = left
-        j = right
-        pivot = self[i + (j - i) / 2]
-        while true
-          while ((block)? block.call(self[i], pivot): (self[i] <=> pivot)) < 0
-            i += 1
-          end
-          while ((block)? block.call(pivot, self[j]): (pivot <=> self[j])) < 0
-            j -= 1
-          end
-          break if (i >= j)
-          tmp = self[i]; self[i] = self[j]; self[j] = tmp;
-          i += 1
-          j -= 1
-        end
-        stack.push [left, i-1]
-        stack.push [j+1, right]
-      end
-    end
-  end
-  #  private :__sort_sub__
-
-  ##
   # Sort all elements and replace +self+ with these
   # elements.
   def sort!(&block)
-    size = self.size
-    if size > 1
-      __sort_sub__(0, size - 1, &block)
+    stack = [ [ 0, self.size - 1 ] ]
+    until stack.empty?
+      left, mid, right = stack.pop
+      if right == nil
+        right = mid
+        # sort self[left..right]
+        if left < right
+          if left + 1 == right
+            lval = self[left]
+            rval = self[right]
+            if (block&.call(lval, rval) || (lval <=> rval)) > 0
+              self[left]  = rval
+              self[right] = lval
+            end
+          else
+            mid = ((left + right + 1) / 2).floor
+            stack.push [ left, mid, right ]
+            stack.push [ mid, right ]
+            stack.push [ left, (mid - 1) ] if left < mid - 1
+          end
+        end
+      else
+        lary = self[left, mid - left]
+        lsize = lary.size
+
+        # The entity sharing between lary and self may cause a large memory
+        # copy operation in the merge loop below.  This harmless operation
+        # cancels the sharing and provides a huge performance gain.
+        lary[0] = lary[0]
+
+        # merge
+        lidx = 0
+        ridx = mid
+        (left..right).each { |i|
+          if lidx >= lsize
+            break
+          elsif ridx > right
+            self[i, lsize - lidx] = lary[lidx, lsize - lidx]
+            break
+          else
+            lval = lary[lidx]
+            rval = self[ridx]
+            if (block&.call(lval, rval) || (lval <=> rval)) <= 0
+              self[i] = lval
+              lidx += 1
+            else
+              self[i] = rval
+              ridx += 1
+            end
+          end
+        }
+      end
     end
     self
   end

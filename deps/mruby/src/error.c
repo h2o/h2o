@@ -28,7 +28,7 @@ mrb_exc_new(mrb_state *mrb, struct RClass *c, const char *ptr, size_t len)
 MRB_API mrb_value
 mrb_exc_new_str(mrb_state *mrb, struct RClass* c, mrb_value str)
 {
-  str = mrb_str_to_str(mrb, str);
+  mrb_to_str(mrb, str);
   return mrb_obj_new(mrb, c, 1, &str);
 }
 

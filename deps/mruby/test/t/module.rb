@@ -3,7 +3,7 @@
 
 def labeled_module(name, &block)
   Module.new do
-    singleton_class.class_eval do
+    (class <<self; self end).class_eval do
       define_method(:to_s) { name }
       alias_method :inspect, :to_s
     end
@@ -13,7 +13,7 @@ end
 
 def labeled_class(name, supklass = Object, &block)
   Class.new(supklass) do
-    singleton_class.class_eval do
+    (class <<self; self end).class_eval do
       define_method(:to_s) { name }
       alias_method :inspect, :to_s
     end
@@ -27,24 +27,9 @@ end
 
 # TODO not implemented ATM assert('Module.constants', '15.2.2.3.1') do
 
-# TODO not implemented ATM assert('Module.nesting', '15.2.2.3.2') do
-
-assert('Module.nesting', '15.2.2.2.2') do
-  module Test4ModuleNesting
-    module Test4ModuleNesting2
-      assert_equal [Test4ModuleNesting2, Test4ModuleNesting],
-                   Module.nesting
-    end
-  end
-  module Test4ModuleNesting::Test4ModuleNesting2
-    assert_equal [Test4ModuleNesting::Test4ModuleNesting2], Module.nesting
-  end
-end
-
 assert('Module#ancestors', '15.2.2.4.9') do
   class Test4ModuleAncestors
   end
-  sc = Test4ModuleAncestors.singleton_class
   r = String.ancestors
 
   assert_equal Array, r.class
@@ -213,56 +198,9 @@ assert('Module#class_eval', '15.2.2.4.15') do
     def method1
     end
   end
-  r = Test4ClassEval.instance_methods
-
   assert_equal 11, Test4ClassEval.class_eval{ @a }
   assert_equal 12, Test4ClassEval.class_eval{ @b }
-  assert_equal Array, r.class
-  assert_true r.include?(:method1)
-end
-
-assert('Module#class_variable_defined?', '15.2.2.4.16') do
-  class Test4ClassVariableDefined
-    @@cv = 99
-  end
-
-  assert_true Test4ClassVariableDefined.class_variable_defined?(:@@cv)
-  assert_false Test4ClassVariableDefined.class_variable_defined?(:@@noexisting)
-end
-
-assert('Module#class_variable_get', '15.2.2.4.17') do
-  class Test4ClassVariableGet
-    @@cv = 99
-  end
-
-  assert_equal 99, Test4ClassVariableGet.class_variable_get(:@@cv)
-end
-
-assert('Module#class_variable_set', '15.2.2.4.18') do
-  class Test4ClassVariableSet
-    @@foo = 100
-    def foo
-      @@foo
-    end
-  end
-
-  assert_true Test4ClassVariableSet.class_variable_set(:@@cv, 99)
-  assert_true Test4ClassVariableSet.class_variable_set(:@@foo, 101)
-  assert_true Test4ClassVariableSet.class_variables.include? :@@cv
-  assert_equal 99, Test4ClassVariableSet.class_variable_get(:@@cv)
-  assert_equal 101, Test4ClassVariableSet.new.foo
-end
-
-assert('Module#class_variables', '15.2.2.4.19') do
-  class Test4ClassVariables1
-    @@var1 = 1
-  end
-  class Test4ClassVariables2 < Test4ClassVariables1
-    @@var2 = 2
-  end
-
-  assert_equal [:@@var1], Test4ClassVariables1.class_variables
-  assert_equal [:@@var2, :@@var1], Test4ClassVariables2.class_variables
+  assert_equal true, Test4ClassEval.new.respond_to?(:method1)
 end
 
 assert('Module#const_defined?', '15.2.2.4.20') do
@@ -288,16 +226,6 @@ assert('Module#const_get', '15.2.2.4.21') do
   assert_raise(NameError){ Test4ConstGet.const_get("I_DO_NOT_EXIST::ME_NEITHER") }
 end
 
-assert('Module#const_missing', '15.2.2.4.22') do
-  module Test4ConstMissing
-    def self.const_missing(sym)
-      42 # the answer to everything
-    end
-  end
-
-  assert_equal 42, Test4ConstMissing.const_get(:ConstDoesntExist)
-end
-
 assert('Module#const_set', '15.2.2.4.23') do
   module Test4ConstSet
     Const4Test4ConstSet = 42
@@ -307,19 +235,36 @@ assert('Module#const_set', '15.2.2.4.23') do
   assert_equal 23, Test4ConstSet.const_get(:Const4Test4ConstSet)
 end
 
-assert('Module#constants', '15.2.2.4.24') do
-  $n = []
-  module TestA
-    C = 1
-  end
-  class TestB
-    include TestA
-    C2 = 1
-    $n = constants.sort
+assert('Module#remove_const', '15.2.2.4.40') do
+  module Test4RemoveConst
+    ExistingConst = 23
   end
 
-  assert_equal [ :C ], TestA.constants
-  assert_equal [ :C, :C2 ], $n
+  result = Test4RemoveConst.module_eval { remove_const :ExistingConst }
+
+  name_error = false
+  begin
+    Test4RemoveConst.module_eval { remove_const :NonExistingConst }
+  rescue NameError
+    name_error = true
+  end
+
+  # Constant removed from Module
+  assert_false Test4RemoveConst.const_defined? :ExistingConst
+  # Return value of binding
+  assert_equal 23, result
+  # Name Error raised when Constant doesn't exist
+  assert_true name_error
+end
+
+assert('Module#const_missing', '15.2.2.4.22') do
+  module Test4ConstMissing
+    def self.const_missing(sym)
+      42 # the answer to everything
+    end
+  end
+
+  assert_equal 42, Test4ConstMissing.const_get(:ConstDoesntExist)
 end
 
 assert('Module#include', '15.2.2.4.27') do
@@ -366,46 +311,14 @@ assert('Module#included', '15.2.2.4.29') do
   assert_equal Test4Included2, Test4Included2.const_get(:Const4Included2)
 end
 
-assert('Module#included_modules', '15.2.2.4.30') do
-  module Test4includedModules
-  end
-  module Test4includedModules2
-    include Test4includedModules
-  end
-  r = Test4includedModules2.included_modules
-
-  assert_equal Array, r.class
-  assert_true r.include?(Test4includedModules)
-end
-
 assert('Module#initialize', '15.2.2.4.31') do
   assert_kind_of Module, Module.new
   mod = Module.new { def hello; "hello"; end }
-  assert_equal [:hello], mod.instance_methods
+  cls = Class.new{include mod}
+  assert_true cls.new.respond_to?(:hello)
   a = nil
   mod = Module.new { |m| a = m }
   assert_equal mod, a
-end
-
-assert('Module#instance_methods', '15.2.2.4.33') do
-  module Test4InstanceMethodsA
-    def method1()  end
-  end
-  class Test4InstanceMethodsB
-    def method2()  end
-  end
-  class Test4InstanceMethodsC < Test4InstanceMethodsB
-    def method3()  end
-  end
-
-  r = Test4InstanceMethodsC.instance_methods(true)
-
-  assert_equal [:method1], Test4InstanceMethodsA.instance_methods
-  assert_equal [:method2], Test4InstanceMethodsB.instance_methods(false)
-  assert_equal [:method3], Test4InstanceMethodsC.instance_methods(false)
-  assert_equal Array, r.class
-  assert_true r.include?(:method3)
-  assert_true r.include?(:method2)
 end
 
 assert('Module#method_defined?', '15.2.2.4.34') do
@@ -431,7 +344,6 @@ assert('Module#method_defined?', '15.2.2.4.34') do
   assert_false Test4MethodDefined::C.method_defined? "method4"
 end
 
-
 assert('Module#module_eval', '15.2.2.4.35') do
   module Test4ModuleEval
     @a = 11
@@ -440,55 +352,6 @@ assert('Module#module_eval', '15.2.2.4.35') do
 
   assert_equal 11, Test4ModuleEval.module_eval{ @a }
   assert_equal 12, Test4ModuleEval.module_eval{ @b }
-end
-
-assert('Module#remove_class_variable', '15.2.2.4.39') do
-  class Test4RemoveClassVariable
-    @@cv = 99
-  end
-
-  assert_equal 99, Test4RemoveClassVariable.remove_class_variable(:@@cv)
-  assert_false Test4RemoveClassVariable.class_variables.include? :@@cv
-end
-
-assert('Module#remove_const', '15.2.2.4.40') do
-  module Test4RemoveConst
-    ExistingConst = 23
-  end
-
-  result = Test4RemoveConst.module_eval { remove_const :ExistingConst }
-
-  name_error = false
-  begin
-    Test4RemoveConst.module_eval { remove_const :NonExistingConst }
-  rescue NameError
-    name_error = true
-  end
-
-  # Constant removed from Module
-  assert_false Test4RemoveConst.const_defined? :ExistingConst
-  # Return value of binding
-  assert_equal 23, result
-  # Name Error raised when Constant doesn't exist
-  assert_true name_error
-end
-
-assert('Module#remove_method', '15.2.2.4.41') do
-  module Test4RemoveMethod
-    class Parent
-      def hello
-      end
-     end
-
-     class Child < Parent
-      def hello
-      end
-    end
-  end
-
-  assert_true Test4RemoveMethod::Child.class_eval{ remove_method :hello }
-  assert_true Test4RemoveMethod::Child.instance_methods.include? :hello
-  assert_false Test4RemoveMethod::Child.instance_methods(false).include? :hello
 end
 
 assert('Module#undef_method', '15.2.2.4.42') do
@@ -511,7 +374,6 @@ assert('Module#undef_method', '15.2.2.4.42') do
   assert_true Test4UndefMethod::Parent.new.respond_to?(:hello)
   assert_false Test4UndefMethod::Child.new.respond_to?(:hello)
   assert_false Test4UndefMethod::GrandChild.new.respond_to?(:hello)
-  assert_false Test4UndefMethod::Child.instance_methods(false).include? :hello
 end
 
 # Not ISO specified
@@ -608,41 +470,6 @@ end
     assert_kind_of(b, c.new, bug8357)
   end
 
-  assert('Moduler#prepend + #instance_methods') do
-    bug6655 = '[ruby-core:45915]'
-    assert_equal(Object.instance_methods, Class.new {prepend Module.new}.instance_methods, bug6655)
-  end
-
-  assert 'Module#prepend + #singleton_methods' do
-    o = Object.new
-    o.singleton_class.class_eval {prepend Module.new}
-    assert_equal([], o.singleton_methods)
-  end
-
-  assert 'Module#prepend + #remove_method' do
-    c = Class.new do
-      prepend Module.new { def foo; end }
-    end
-    assert_raise(NameError) do
-      c.class_eval do
-        remove_method(:foo)
-      end
-    end
-    c.class_eval do
-      def foo; end
-    end
-    removed = nil
-    c.singleton_class.class_eval do
-      define_method(:method_removed) {|id| removed = id}
-    end
-    assert_nothing_raised('[Bug #7843]') do
-      c.class_eval do
-        remove_method(:foo)
-      end
-    end
-    assert_equal(:foo, removed)
-  end
-
   assert 'Module#prepend + Class#ancestors' do
     bug6658 = '[ruby-core:45919]'
     m = labeled_module("m")
@@ -683,12 +510,6 @@ end
     assert_equal([m3, m0, m1], m3.ancestors)
   end
 
-  assert 'Module#prepend #instance_methods(false)' do
-    bug6660 = '[ruby-dev:45863]'
-    assert_equal([:m1], Class.new{ prepend Module.new; def m1; end }.instance_methods(false), bug6660)
-    assert_equal([:m1], Class.new(Class.new{def m2;end}){ prepend Module.new; def m1; end }.instance_methods(false), bug6660)
-  end
-
   assert 'cyclic Module#prepend' do
     bug7841 = '[ruby-core:52205] [Bug #7841]'
     m1 = Module.new
@@ -699,7 +520,7 @@ end
     end
   end
 
-  # these assertions will not run without a #assert_seperately method
+  # these assertions will not run without a #assert_separately method
   #assert 'test_prepend_optmethod' do
   #  bug7983 = '[ruby-dev:47124] [Bug #7983]'
   #  assert_separately [], %{
@@ -715,76 +536,61 @@ end
   #end
 
   # mruby has no visibility control
-  assert 'Module#prepend visibility' do
-    bug8005 = '[ruby-core:53106] [Bug #8005]'
-    c = Class.new do
-      prepend Module.new {}
-      def foo() end
-      protected :foo
-    end
-    a = c.new
-    assert_true a.respond_to?(:foo), bug8005
-    assert_nothing_raised(bug8005) {a.send :foo}
-  end
+  # assert 'Module#prepend visibility' do
+  #   bug8005 = '[ruby-core:53106] [Bug #8005]'
+  #   c = Class.new do
+  #     prepend Module.new {}
+  #     def foo() end
+  #     protected :foo
+  #   end
+  #   a = c.new
+  #   assert_true a.respond_to?(:foo), bug8005
+  #   assert_nothing_raised(bug8005) {a.send :foo}
+  # end
 
   # mruby has no visibility control
-  assert 'Module#prepend inherited visibility' do
-    bug8238 = '[ruby-core:54105] [Bug #8238]'
-    module Test4PrependVisibilityInherited
-      class A
-        def foo() A; end
-        private :foo
-      end
-      class B < A
-        public :foo
-        prepend Module.new
-      end
-    end
-    assert_equal(Test4PrependVisibilityInherited::A, Test4PrependVisibilityInherited::B.new.foo, "#{bug8238}")
-  end
+  # assert 'Module#prepend inherited visibility' do
+  #   bug8238 = '[ruby-core:54105] [Bug #8238]'
+  #   module Test4PrependVisibilityInherited
+  #     class A
+  #       def foo() A; end
+  #       private :foo
+  #     end
+  #     class B < A
+  #       public :foo
+  #       prepend Module.new
+  #     end
+  #   end
+  #   assert_equal(Test4PrependVisibilityInherited::A, Test4PrependVisibilityInherited::B.new.foo, "#{bug8238}")
+  # end
 
-  assert 'Module#prepend + #included_modules' do
-    bug8025 = '[ruby-core:53158] [Bug #8025]'
-    mixin = labeled_module("mixin")
-    c = labeled_module("c") {prepend mixin}
-    im = c.included_modules
-    assert_not_include(im, c, bug8025)
-    assert_include(im, mixin, bug8025)
-    c1 = labeled_class("c1") {prepend mixin}
-    c2 = labeled_class("c2", c1)
-    im = c2.included_modules
-    assert_not_include(im, c1, bug8025)
-    assert_not_include(im, c2, bug8025)
-    assert_include(im, mixin, bug8025)
-  end
+  # assert 'Module#prepend super in alias' do
+  #   skip "super does not currently work in aliased methods"
+  #   bug7842 = '[Bug #7842]'
 
-  assert 'Module#prepend super in alias' do
-    skip "super does not currently work in aliased methods"
-    bug7842 = '[Bug #7842]'
+  #   p = labeled_module("P") do
+  #     def m; "P"+super; end
+  #   end
 
-    p = labeled_module("P") do
-      def m; "P"+super; end
-    end
+  #   a = labeled_class("A") do
+  #     def m; "A"; end
+  #   end
 
-    a = labeled_class("A") do
-      def m; "A"; end
-    end
+  #   b = labeled_class("B", a) do
+  #     def m; "B"+super; end
+  #     alias m2 m
+  #     prepend p
+  #     alias m3 m
+  #   end
 
-    b = labeled_class("B", a) do
-      def m; "B"+super; end
-      alias m2 m
-      prepend p
-      alias m3 m
-    end
+  #   assert_nothing_raised do
+  #     assert_equal("BA", b.new.m2, bug7842)
+  #   end
 
-    assert_nothing_raised do
-      assert_equal("BA", b.new.m2, bug7842)
-    end
-
-    assert_nothing_raised do
-      assert_equal("PBA", b.new.m3, bug7842)
-    end
-  end
+  #   assert_nothing_raised do
+  #     assert_equal("PBA", b.new.m3, bug7842)
+  #   end
+  # end
 
   assert 'Module#prepend each class' do
     m = labeled_module("M")
@@ -807,7 +613,7 @@ end
     assert_equal([m, c2, m, c1], c2.ancestors[0, 4], "should accesisble prepended module in superclass")
   end
 
-  # requires #assert_seperately
+  # requires #assert_separately
   #assert 'Module#prepend call super' do
   #  assert_separately([], <<-'end;') #do
   #    bug10847 = '[ruby-core:68093] [Bug #10847]'
@@ -900,6 +706,15 @@ end
 assert('module with non-class/module outer raises TypeError') do
   assert_raise(TypeError) { module 0::M1 end }
   assert_raise(TypeError) { module []::M2 end }
+end
+
+assert('module to return the last value') do
+  m = module M; :m end
+  assert_equal(m, :m)
+end
+
+assert('module to return nil if body is empty') do
+  assert_nil(module M end)
 end
 
 assert('get constant of parent module in singleton class; issue #3568') do

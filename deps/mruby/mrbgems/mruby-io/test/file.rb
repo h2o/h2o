@@ -1,16 +1,16 @@
 ##
-# IO Test
-
-assert('File', '15.2.21') do
-  File.class == Class
-end
-
-assert('File', '15.2.21.2') do
-  File.superclass == IO
-end
+# File Test
 
 assert('File TEST SETUP') do
   MRubyIOTestUtil.io_test_setup
+end
+
+assert('File', '15.2.21') do
+  assert_equal Class, File.class
+end
+
+assert('File', '15.2.21.2') do
+  assert_equal IO, File.superclass
 end
 
 assert('File#initialize', '15.2.21.4.1') do
@@ -27,7 +27,7 @@ assert('File#path', '15.2.21.4.2') do
   assert_equal $mrbtest_io_rfname, io.path
   io.close
   assert_equal $mrbtest_io_rfname, io.path
-  io.closed?
+  assert_true io.closed?
 end
 
 assert('File.basename') do
@@ -73,12 +73,12 @@ assert('File#mtime') do
     skip "File#mtime require Time"
   end
   begin
-    now = Time.now.to_i
-    mt = 0
     File.open("#{$mrbtest_io_wfname}.mtime", 'w') do |f|
-      mt = f.mtime.to_i
+      assert_equal Time, f.mtime.class
+      File.open("#{$mrbtest_io_wfname}.mtime", 'r') do |f2|
+        assert_equal true, f.mtime == f2.mtime
+      end
     end
-    assert_equal true, mt >= now
   ensure
     File.delete("#{$mrbtest_io_wfname}.mtime")
   end
@@ -177,7 +177,6 @@ assert('File.path') do
   assert_equal "a/../b/./c", File.path("a/../b/./c")
   assert_raise(TypeError) { File.path(nil) }
   assert_raise(TypeError) { File.path(123) }
-
 end
 
 assert('File.symlink') do
@@ -200,11 +199,11 @@ assert('File.symlink') do
 end
 
 assert('File.chmod') do
-  File.open('chmod-test', 'w') {}
+  File.open("#{$mrbtest_io_wfname}.chmod-test", 'w') {}
   begin
-    assert_equal 1, File.chmod(0400, 'chmod-test')
+    assert_equal 1, File.chmod(0400, "#{$mrbtest_io_wfname}.chmod-test")
   ensure
-    File.delete('chmod-test')
+    File.delete("#{$mrbtest_io_wfname}.chmod-test")
   end
 end
 
