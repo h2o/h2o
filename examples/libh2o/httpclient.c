@@ -240,13 +240,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
 
     if (cur_body_size > 0) {
-        char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
-        size_t clbuf_len = sprintf(clbuf, "%d", cur_body_size);
-        h2o_headers_t headers_vec = (h2o_headers_t){NULL};
-        h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
-        *headers = headers_vec.entries;
-        *num_headers = 1;
-
+        props->content_length = cur_body_size;
         *proceed_req_cb = proceed_request;
 
         struct st_timeout_ctx *tctx;

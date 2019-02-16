@@ -947,7 +947,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_header_t *headers;
     size_t num_headers;
     h2o_iovec_t body;
-    h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
+    h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){SIZE_MAX};
 
     register_stream(stream, conn);
 
@@ -957,6 +957,13 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     if (stream->super._cb.on_head == NULL) {
         close_stream(stream);
         return;
+    }
+
+    {
+        h2o_headers_t headers_vec = (h2o_headers_t){headers, num_headers, num_headers};
+        h2o_httpclient__add_cl_or_te_header(stream->super.pool, method, &headers_vec, body, props.content_length, NULL, stream->streaming.proceed_req != NULL);
+        headers = headers_vec.entries;
+        num_headers = headers_vec.size;
     }
 
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);

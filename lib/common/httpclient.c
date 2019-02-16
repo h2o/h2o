@@ -195,3 +195,58 @@ UseSocketPool:
     h2o_socketpool_connect(&client->_connect_req, connpool->socketpool, origin, ctx->loop, ctx->getaddr_receiver, alpn_protos,
                            on_pool_connect, client);
 }
+
+/*
+ * A request without neither Content-Length or Transfer-Encoding header implies a zero-length request body (see 6th rule of RFC 7230
+ * 3.3.3).
+ * OTOH, section 3.3.3 states:
+ *
+ *   A user agent SHOULD send a Content-Length in a request message when
+ *   no Transfer-Encoding is sent and the request method defines a meaning
+ *   for an enclosed payload body.  For example, a Content-Length header
+ *   field is normally sent in a POST request even when the value is 0
+ *   (indicating an empty payload body).  A user agent SHOULD NOT send a
+ *   Content-Length header field when the request message does not contain
+ *   a payload body and the method semantics do not anticipate such a
+ *   body.
+ *
+ * PUT and POST define a meaning for the payload body, let's emit a
+ * Content-Length header if it doesn't exist already, since the server
+ * might send a '411 Length Required' response.
+ *
+ * see also: ML thread starting at https://lists.w3.org/Archives/Public/ietf-http-wg/2016JulSep/0580.html
+ */
+static int req_requires_content_length(h2o_iovec_t method, h2o_headers_t *headers)
+{
+    int is_put_or_post =
+    (method.len >= 1 && method.base[0] == 'P' && (h2o_memis(method.base, method.len, H2O_STRLIT("POST")) ||
+                                                  h2o_memis(method.base, method.len, H2O_STRLIT("PUT"))));
+
+    return is_put_or_post && h2o_find_header(headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
+}
+
+static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
+{
+    h2o_iovec_t cl_buf;
+    cl_buf.base = h2o_mem_alloc_pool(pool, char, sizeof(H2O_UINT64_LONGEST_STR) - 1);
+    cl_buf.len = sprintf(cl_buf.base, "%zu", cl);
+    return cl_buf;
+}
+
+void h2o_httpclient__add_cl_or_te_header(h2o_mem_pool_t *pool, h2o_iovec_t method, h2o_headers_t *headers, h2o_iovec_t body, size_t content_length, int *chunked, int is_streaming)
+{
+    if (is_streaming) {
+        if (content_length != SIZE_MAX) {
+            h2o_iovec_t cl_buf = build_content_length(pool, content_length);
+            h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
+        } else if (chunked != NULL) {
+            h2o_add_header(pool, headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+            *chunked = 1;
+        }
+    } else {
+        if (body.base != NULL || req_requires_content_length(method, headers)) {
+            h2o_iovec_t cl_buf = build_content_length(pool, body.len);
+            h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
+        }
+    }
+}
