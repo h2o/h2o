@@ -110,7 +110,7 @@ static void request_write(struct st_h2o_http2client_conn_t *conn)
 {
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING)
         return;
-    if (conn->super.sock->_cb.write == NULL && !h2o_timer_is_linked(&conn->output.defer_timeout))
+    if (!h2o_socket_is_writing(conn->super.sock) && !h2o_timer_is_linked(&conn->output.defer_timeout))
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->output.defer_timeout);
 }
 
