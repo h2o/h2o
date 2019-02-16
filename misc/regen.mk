@@ -12,6 +12,7 @@ tokens:
 
 lib/handler/mruby/embedded.c.h: misc/embed_mruby_code.pl \
                                 lib/handler/mruby/embedded/core.rb \
+                                lib/handler/mruby/embedded/input_stream.rb \
                                 lib/handler/mruby/embedded/sender.rb \
                                 lib/handler/mruby/embedded/middleware.rb \
                                 lib/handler/mruby/embedded/http_request.rb \

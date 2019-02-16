@@ -141,6 +141,51 @@
     "\n"                                                                                                                           \
     "end\n"
 
+/* lib/handler/mruby/embedded/input_stream.rb */
+#define H2O_MRUBY_CODE_INPUT_STREAM                                                                                                \
+    "# Copyright (c) 2019 Ichito Nagata\n"                                                                                         \
+    "#\n"                                                                                                                          \
+    "# Permission is hereby granted, free of charge, to any person obtaining a copy\n"                                             \
+    "# of this software and associated documentation files (the \"Software\"), to\n"                                               \
+    "# deal in the Software without restriction, including without limitation the\n"                                               \
+    "# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n"                                              \
+    "# sell copies of the Software, and to permit persons to whom the Software is\n"                                               \
+    "# furnished to do so, subject to the following conditions:\n"                                                                 \
+    "#\n"                                                                                                                          \
+    "# The above copyright notice and this permission notice shall be included in\n"                                               \
+    "# all copies or substantial portions of the Software.\n"                                                                      \
+    "#\n"                                                                                                                          \
+    "# THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"                                             \
+    "# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"                                                 \
+    "# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"                                              \
+    "# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"                                                   \
+    "# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n"                                                  \
+    "# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n"                                             \
+    "# IN THE SOFTWARE.\n"                                                                                                         \
+    "\n"                                                                                                                           \
+    "module H2O\n"                                                                                                                 \
+    "\n"                                                                                                                           \
+    "  class InputStream\n"                                                                                                        \
+    "\n"                                                                                                                           \
+    "    def gets\n"                                                                                                               \
+    "      _h2o_input_stream_gets(self, $/)\n"                                                                                     \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def read(length = nil, buffer = nil)\n"                                                                                   \
+    "      _h2o_input_stream_read(self, length, buffer)\n"                                                                         \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def each\n"                                                                                                               \
+    "      while chunk = self.gets\n"                                                                                              \
+    "        yield chunk\n"                                                                                                        \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "end\n"                                                                                                                        \
+    "\n"
+
 /* lib/handler/mruby/embedded/sender.rb */
 #define H2O_MRUBY_CODE_SENDER                                                                                                      \
     "# Copyright (c) 2014 DeNA Co., Ltd.\n"                                                                                        \
@@ -282,10 +327,30 @@
     "      end\n"                                                                                                                  \
     "      @resp\n"                                                                                                                \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
     "    def _set_response(resp)\n"                                                                                                \
     "      @resp = resp\n"                                                                                                         \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def self.body_fiber_proc\n"                                                                                               \
+    "      proc {|body, req|\n"                                                                                                    \
+    "        fiber = Fiber.new do\n"                                                                                               \
+    "          sleep 0\n"                                                                                                          \
+    "          begin\n"                                                                                                            \
+    "            chunk = ''\n"                                                                                                     \
+    "            while body.read(4096, chunk)\n"                                                                                   \
+    "              req._write_chunk(chunk)\n"                                                                                      \
+    "            end\n"                                                                                                            \
+    "            _h2o__http_request_write_eos(req)\n"                                                                              \
+    "          rescue => e\n"                                                                                                      \
+    "            _h2o__http_request_write_cancel(req)\n"                                                                           \
+    "          end\n"                                                                                                              \
+    "        end\n"                                                                                                                \
+    "        fiber.resume\n"                                                                                                       \
+    "      }\n"                                                                                                                    \
+    "    end\n"                                                                                                                    \
     "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
     "\n"                                                                                                                           \
     "  class HttpInputStream\n"                                                                                                    \
     "    def each\n"                                                                                                               \

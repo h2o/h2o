@@ -475,6 +475,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__finish_child_fiber", finish_child_fiber_callback);
 
     h2o_mruby_sender_init_context(shared_ctx);
+    h2o_mruby_input_stream_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
     h2o_mruby_redis_init_context(shared_ctx);
     h2o_mruby_sleep_init_context(shared_ctx);
@@ -605,13 +606,6 @@ static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn
         l = (int)sprintf(buf, "%" PRIu16, (uint16_t)p);
         *port = h2o_mruby_new_str(mrb, buf, l);
     }
-}
-
-static void on_rack_input_free(mrb_state *mrb, const char *base, mrb_int len, void *_input_stream)
-{
-    /* reset ref to input_stream */
-    mrb_value *input_stream = _input_stream;
-    *input_stream = mrb_nil_value();
 }
 
 static int build_env_sort_header_cb(const void *_x, const void *_y)
@@ -753,14 +747,18 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
     mrb_hash_set(mrb, env, h2o_mruby_token_env_key(shared, H2O_TOKEN_HOST),
                  h2o_mruby_new_str(mrb, generator->req->authority.base, generator->req->authority.len));
+
     if (generator->req->entity.base != NULL) {
-        char buf[32];
-        int l = sprintf(buf, "%zu", generator->req->entity.len);
-        mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_CONTENT_LENGTH), h2o_mruby_new_str(mrb, buf, l));
-        generator->rack_input = mrb_input_stream_value(mrb, NULL, 0);
-        mrb_input_stream_set_data(mrb, generator->rack_input, generator->req->entity.base, (mrb_int)generator->req->entity.len, 0,
-                                  on_rack_input_free, &generator->rack_input);
-        mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_INPUT), generator->rack_input);
+        /* set CONTENT_LENGTH */
+        size_t content_length = generator->req->proceed_req == NULL ? generator->req->entity.len : generator->req->content_length;
+        if (content_length != SIZE_MAX) {
+            char buf[32];
+            int l = sprintf(buf, "%zu", content_length);
+            mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_CONTENT_LENGTH), h2o_mruby_new_str(mrb, buf, l));
+        }
+
+        generator->rack_input = h2o_mruby_input_stream_create(generator);
+        mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_INPUT), generator->rack_input->ref);
     }
     {
         mrb_value h, p;
@@ -866,17 +864,12 @@ int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_io
     return 0;
 }
 
-static void clear_rack_input(h2o_mruby_generator_t *generator)
-{
-    if (!mrb_nil_p(generator->rack_input))
-        mrb_input_stream_set_data(generator->ctx->shared->mrb, generator->rack_input, NULL, -1, 0, NULL, NULL);
-}
-
 static void on_generator_dispose(void *_generator)
 {
     h2o_mruby_generator_t *generator = _generator;
 
-    clear_rack_input(generator);
+    if (generator->rack_input != NULL)
+        h2o_mruby_input_stream_dispose(generator->rack_input);
     generator->req = NULL;
 
     if (!mrb_nil_p(generator->refs.generator))
@@ -902,7 +895,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->super.stop = NULL;
     generator->req = req;
     generator->ctx = ctx;
-    generator->rack_input = mrb_nil_value();
+    generator->rack_input = NULL;
     generator->sender = NULL;
 
     generator->error_stream = h2o_mem_alloc(sizeof(*generator->error_stream));
@@ -1112,6 +1105,7 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
     handler->super.on_context_dispose = on_context_dispose;
     handler->super.dispose = on_handler_dispose;
     handler->super.on_req = on_req;
+    handler->super.supports_request_streaming = 1;
     handler->config.source = h2o_strdup(NULL, vars->source.base, vars->source.len);
     if (vars->path != NULL)
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;

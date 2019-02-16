@@ -69,10 +69,14 @@ enum {
     /* used by sender.c */
     H2O_MRUBY_SENDER_PROC_EACH_TO_FIBER,
 
+    /* used by input_stream.c */
+    H2O_MRUBY_INPUT_STREAM_CLASS,
+
     /* used by http_request.c */
     H2O_MRUBY_HTTP_REQUEST_CLASS,
     H2O_MRUBY_HTTP_INPUT_STREAM_CLASS,
     H2O_MRUBY_HTTP_EMPTY_INPUT_STREAM_CLASS,
+    H2O_MRUBY_HTTP_REQUEST_BODY_FIBER_PROC,
 
     /* used by channel.c */
     H2O_MRUBY_CHANNEL_CLASS,
@@ -122,6 +126,7 @@ struct st_h2o_mruby_context_t {
 };
 
 typedef struct st_h2o_mruby_sender_t h2o_mruby_sender_t;
+typedef struct st_h2o_mruby_input_stream_t h2o_mruby_input_stream_t;
 typedef struct st_h2o_mruby_http_request_context_t h2o_mruby_http_request_context_t;
 typedef struct st_h2o_mruby_channel_context_t h2o_mruby_channel_context_t;
 typedef struct st_h2o_mruby_generator_t h2o_mruby_generator_t;
@@ -156,6 +161,22 @@ struct st_h2o_mruby_sender_t {
     unsigned char final_sent : 1;
 };
 
+struct st_h2o_mruby_input_stream_t {
+    h2o_mruby_generator_t *generator;
+    mrb_value ref;
+    h2o_buffer_t *buf; /* for streaming mode */
+    h2o_iovec_t entity; /* for non-streaming mode */
+    size_t pos;
+    mrb_value receiver;
+    struct {
+        size_t length;
+        mrb_value buffer;
+        mrb_value delimiter;
+    } args;
+    unsigned seen_eos : 1;
+    unsigned rewindable : 1;
+};
+
 typedef struct st_h2o_mruby_error_stream_t {
     h2o_mruby_context_t *ctx;
     h2o_mruby_generator_t *generator;
@@ -165,7 +186,7 @@ typedef struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
-    mrb_value rack_input;
+    h2o_mruby_input_stream_t *rack_input;
     h2o_mruby_sender_t *sender;
     h2o_mruby_error_stream_t *error_stream;
     struct {
@@ -252,6 +273,11 @@ void h2o_mruby_sender_do_send_buffer(h2o_mruby_generator_t *generator, h2o_doubl
  * close body object, called when responding is stopped or finally disposed
  */
 void h2o_mruby_sender_close_body(h2o_mruby_generator_t *generator);
+
+/* handler/mruby/input_stream.c */
+void h2o_mruby_input_stream_init_context(h2o_mruby_shared_context_t *ctx);
+h2o_mruby_input_stream_t *h2o_mruby_input_stream_create(h2o_mruby_generator_t *generator);
+void h2o_mruby_input_stream_dispose(h2o_mruby_input_stream_t *is);
 
 /* handler/mruby/http_request.c */
 void h2o_mruby_http_request_init_context(h2o_mruby_shared_context_t *ctx);

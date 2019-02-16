@@ -559,6 +559,7 @@ IF (WITH_MRUBY)
     LIST(APPEND STANDALONE_SOURCE_FILES
         lib/handler/mruby.c
         lib/handler/mruby/sender.c
+        lib/handler/mruby/input_stream.c
         lib/handler/mruby/http_request.c
         lib/handler/mruby/redis.c
         lib/handler/mruby/sleep.c
