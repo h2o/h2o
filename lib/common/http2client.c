@@ -946,13 +946,20 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_header_t *headers;
     size_t num_headers;
     h2o_iovec_t body;
-    h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
+    h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){SIZE_MAX};
     stream->super._cb.on_head =
         stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
                                      &stream->streaming.proceed_req, &props, &conn->super.origin_url);
     if (stream->super._cb.on_head == NULL) {
         close_stream(stream);
         return;
+    }
+
+    {
+        h2o_headers_t headers_vec = (h2o_headers_t){headers, num_headers, num_headers};
+        h2o_httpclient__add_cl_or_te_header(stream->super.pool, method, &headers_vec, body, props.content_length, NULL, stream->streaming.proceed_req != NULL);
+        headers = headers_vec.entries;
+        num_headers = headers_vec.size;
     }
 
     register_stream(stream, conn);

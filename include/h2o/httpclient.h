@@ -33,8 +33,8 @@ extern "C" {
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
 typedef struct st_h2o_httpclient_properties_t {
+    size_t content_length;
     h2o_iovec_t *proxy_protocol;
-    int *chunked;
     h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
 
@@ -198,6 +198,8 @@ extern const size_t h2o_httpclient__h1_size;
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
+
+void h2o_httpclient__add_cl_or_te_header(h2o_mem_pool_t *pool, h2o_iovec_t method, h2o_headers_t *headers, h2o_iovec_t body, size_t content_length, int *chunked, int is_streaming);
 
 #ifdef __cplusplus
 }
