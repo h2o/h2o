@@ -1297,4 +1297,4 @@ void h2o_httpclient__h2_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock
     on_connection_ready(stream, conn);
 }
 
-size_t h2o_httpclient__h2_size = sizeof(struct st_h2o_http2client_stream_t);
+const size_t h2o_httpclient__h2_size = sizeof(struct st_h2o_http2client_stream_t);
