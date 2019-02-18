@@ -31,8 +31,6 @@ struct global_entry {
 
 mrb_value mrb_vm_special_get(mrb_state*, mrb_sym);
 void mrb_vm_special_set(mrb_state*, mrb_sym, mrb_value);
-mrb_value mrb_vm_iv_get(mrb_state*, mrb_sym);
-void mrb_vm_iv_set(mrb_state*, mrb_sym, mrb_value);
 mrb_value mrb_vm_cv_get(mrb_state*, mrb_sym);
 void mrb_vm_cv_set(mrb_state*, mrb_sym, mrb_value);
 mrb_value mrb_vm_const_get(mrb_state*, mrb_sym);
@@ -42,8 +40,8 @@ MRB_API void mrb_const_set(mrb_state*, mrb_value, mrb_sym, mrb_value);
 MRB_API mrb_bool mrb_const_defined(mrb_state*, mrb_value, mrb_sym);
 MRB_API void mrb_const_remove(mrb_state*, mrb_value, mrb_sym);
 
-MRB_API mrb_bool mrb_iv_p(mrb_state *mrb, mrb_sym sym);
-MRB_API void mrb_iv_check(mrb_state *mrb, mrb_sym sym);
+MRB_API mrb_bool mrb_iv_name_sym_p(mrb_state *mrb, mrb_sym sym);
+MRB_API void mrb_iv_name_sym_check(mrb_state *mrb, mrb_sym sym);
 MRB_API mrb_value mrb_obj_iv_get(mrb_state *mrb, struct RObject *obj, mrb_sym sym);
 MRB_API void mrb_obj_iv_set(mrb_state *mrb, struct RObject *obj, mrb_sym sym, mrb_value v);
 MRB_API mrb_bool mrb_obj_iv_defined(mrb_state *mrb, struct RObject *obj, mrb_sym sym);
@@ -132,6 +130,10 @@ void mrb_gc_free_gv(mrb_state*);
 void mrb_gc_mark_iv(mrb_state*, struct RObject*);
 size_t mrb_gc_mark_iv_size(mrb_state*, struct RObject*);
 void mrb_gc_free_iv(mrb_state*, struct RObject*);
+
+/* return non zero to break the loop */
+typedef int (mrb_iv_foreach_func)(mrb_state*,mrb_sym,mrb_value,void*);
+MRB_API void mrb_iv_foreach(mrb_state *mrb, mrb_value obj, mrb_iv_foreach_func *func, void *p);
 
 MRB_END_DECL
 

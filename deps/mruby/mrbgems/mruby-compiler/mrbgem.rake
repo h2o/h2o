@@ -35,6 +35,6 @@ MRuby::Gem::Specification.new 'mruby-compiler' do |spec|
     gperf.run t.name, t.prerequisites.first
   end
 
-  file libfile("#{build.build_dir}/lib/libmruby_core") => core_objs
+  file build.libmruby_core_static => core_objs
   build.libmruby << core_objs
 end

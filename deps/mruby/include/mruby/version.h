@@ -27,7 +27,7 @@ MRB_BEGIN_DECL
 /*
  * The version of Ruby used by mruby.
  */
-#define MRUBY_RUBY_VERSION "1.9"
+#define MRUBY_RUBY_VERSION "2.0"
 
 /*
  * Ruby engine.
@@ -37,17 +37,17 @@ MRB_BEGIN_DECL
 /*
  * Major release version number.
  */
-#define MRUBY_RELEASE_MAJOR 1
+#define MRUBY_RELEASE_MAJOR 2
 
 /*
  * Minor release version number.
  */
-#define MRUBY_RELEASE_MINOR 4
+#define MRUBY_RELEASE_MINOR 0
 
 /*
  * Tiny release version number.
  */
-#define MRUBY_RELEASE_TEENY 1
+#define MRUBY_RELEASE_TEENY 0
 
 /*
  * The mruby version.
@@ -67,12 +67,12 @@ MRB_BEGIN_DECL
 /*
  * Release month.
  */
-#define MRUBY_RELEASE_MONTH 4
+#define MRUBY_RELEASE_MONTH 12
 
 /*
  * Release day.
  */
-#define MRUBY_RELEASE_DAY 27
+#define MRUBY_RELEASE_DAY 11
 
 /*
  * Release date as a string.

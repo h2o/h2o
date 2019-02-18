@@ -1,8 +1,9 @@
 module Kernel
   def singleton_method(name)
     m = method(name)
-    if m.owner != singleton_class
-      raise NameError, "undefined method `#{name}' for class `#{singleton_class}'"
+    sc = (class <<self; self; end)
+    if m.owner != sc
+      raise NameError, "undefined method `#{name}' for class `#{sc}'"
     end
     m
   end

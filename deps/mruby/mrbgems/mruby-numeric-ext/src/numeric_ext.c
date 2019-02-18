@@ -2,13 +2,10 @@
 #include <mruby.h>
 
 static inline mrb_int
-to_int(mrb_value x)
+to_int(mrb_state *mrb, mrb_value x)
 {
-  double f;
-
-  if (mrb_fixnum_p(x)) return mrb_fixnum(x);
-  f = mrb_float(x);
-  return (mrb_int)f;
+  x = mrb_to_int(mrb, x);
+  return mrb_fixnum(x);
 }
 
 /*
@@ -28,7 +25,7 @@ mrb_int_chr(mrb_state *mrb, mrb_value x)
   mrb_int chr;
   char c;
 
-  chr = to_int(x);
+  chr = to_int(mrb, x);
   if (chr >= (1 << CHAR_BIT)) {
     mrb_raisef(mrb, E_RANGE_ERROR, "%S out of char range", x);
   }
@@ -48,8 +45,8 @@ mrb_int_allbits(mrb_state *mrb, mrb_value self)
 {
   mrb_int n, m;
 
-  n = to_int(self);
   mrb_get_args(mrb, "i", &m);
+  n = to_int(mrb, self);
   return mrb_bool_value((n & m) == m);
 }
 
@@ -64,8 +61,8 @@ mrb_int_anybits(mrb_state *mrb, mrb_value self)
 {
   mrb_int n, m;
 
-  n = to_int(self);
   mrb_get_args(mrb, "i", &m);
+  n = to_int(mrb, self);
   return mrb_bool_value((n & m) != 0);
 }
 
@@ -80,8 +77,8 @@ mrb_int_nobits(mrb_state *mrb, mrb_value self)
 {
   mrb_int n, m;
 
-  n = to_int(self);
   mrb_get_args(mrb, "i", &m);
+  n = to_int(mrb, self);
   return mrb_bool_value((n & m) == 0);
 }
 

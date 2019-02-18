@@ -195,11 +195,11 @@ void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, voi
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
-extern size_t h2o_httpclient__h1_size;
+extern const size_t h2o_httpclient__h1_size;
 
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
-extern size_t h2o_httpclient__h2_size;
+extern const size_t h2o_httpclient__h2_size;
 
 void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb);

@@ -14,7 +14,7 @@
   struct RClass *c;\
   struct RBasic *gcnext
 
-#define MRB_FLAG_TEST(obj, flag) ((obj)->flags & flag)
+#define MRB_FLAG_TEST(obj, flag) ((obj)->flags & (flag))
 
 
 struct RBasic {

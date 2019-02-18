@@ -7,7 +7,7 @@ CMakeCache.txt
 CMakeFiles/
 Makefile
 build/
-mruby/
+./mruby/
 cmake_install.cmake
 xcuserdata
 *.xccheckout
