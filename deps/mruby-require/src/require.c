@@ -19,6 +19,11 @@
 
 #define E_LOAD_ERROR (mrb_class_get(mrb, "LoadError"))
 
+/* We can't use MRUBY_RELEASE_NO to determine if byte code implementation is old */
+#ifdef MKOP_A
+#define USE_MRUBY_OLD_BYTE_CODE
+#endif
+
 #if MRUBY_RELEASE_NO < 10000
 mrb_value mrb_yield_internal(mrb_state *mrb, mrb_value b, int argc, mrb_value *argv, mrb_value self, struct RClass *c);
 #define mrb_yield_with_class mrb_yield_internal
@@ -48,6 +53,7 @@ mrb_value mrb_yield_internal(mrb_state *mrb, mrb_value b, int argc, mrb_value *a
   }
 #endif
 
+#ifdef USE_MRUBY_OLD_BYTE_CODE
 static void
 replace_stop_with_return(mrb_state *mrb, mrb_irep *irep)
 {
@@ -58,6 +64,7 @@ replace_stop_with_return(mrb_state *mrb, mrb_irep *irep)
     irep->ilen++;
   }
 }
+#endif
 
 static int
 compile_rb2mrb(mrb_state *mrb0, const char *code, int code_len, const char *path, FILE* tmpfp)
@@ -97,7 +104,9 @@ eval_load_irep(mrb_state *mrb, mrb_irep *irep)
   int ai;
   struct RProc *proc;
 
+#ifdef USE_MRUBY_OLD_BYTE_CODE
   replace_stop_with_return(mrb, irep);
+#endif
   proc = mrb_proc_new(mrb, irep);
   mrb_irep_decref(mrb, irep);
   MRB_PROC_SET_TARGET_CLASS(proc, mrb->object_class);

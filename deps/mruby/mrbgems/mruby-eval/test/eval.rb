@@ -34,7 +34,7 @@ assert('Kernel.eval', '15.3.1.2.3') do
   }
   assert_equal(2) {
     a = 10
-    Kernel.eval 'def f(a); b=a.send(:+, 1); end'
+    Kernel.eval 'def f(a); b=a+1; end'
     f(1)
   }
 end
@@ -58,7 +58,7 @@ end
 
 assert('String instance_eval') do
   obj = Object.new
-  obj.instance_variable_set :@test, 'test'
+  obj.instance_eval{ @test = 'test' }
   assert_raise(ArgumentError) { obj.instance_eval(0) { } }
   assert_raise(ArgumentError) { obj.instance_eval('0', 'test', 0, 'test') }
   assert_equal(['test.rb', 10]) { obj.instance_eval('[__FILE__, __LINE__]', 'test.rb', 10)}

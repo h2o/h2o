@@ -38,7 +38,7 @@ puts [1,2,3]
 3
 ```
 
-#### mruby [1.4.1 (2018-4-27)]
+#### mruby [2.0.0 (2018-12-11)]
 
 ```
 [1, 2, 3]
@@ -61,7 +61,7 @@ end
 
 ```ZeroDivisionError``` is raised.
 
-#### mruby [1.4.1 (2018-4-27)]
+#### mruby [2.0.0 (2018-12-11)]
 
 No exception is raised.
 
@@ -119,7 +119,7 @@ false
 true
 ```
 
-#### mruby [1.4.1 (2018-4-27)]
+#### mruby [2.0.0 (2018-12-11)]
 
 ```
 true
@@ -142,7 +142,7 @@ defined?(Foo)
 nil
 ```
 
-#### mruby [1.4.1 (2018-4-27)]
+#### mruby [2.0.0 (2018-12-11)]
 
 ```NameError``` is raised.
 
@@ -159,7 +159,7 @@ alias $a $__a__
 
 ``` nil ```
 
-#### mruby [1.4.1 (2018-4-27)]
+#### mruby [2.0.0 (2018-12-11)]
 
 Syntax error
 
@@ -181,7 +181,7 @@ end
 ```ArgumentError``` is raised.
 The re-defined ```+``` operator does not accept any arguments.
 
-#### mruby [1.4.1 (2018-4-27)]
+#### mruby [2.0.0 (2018-12-11)]
 
 ``` 'ab' ```
 Behavior of the operator wasn't changed.
@@ -197,7 +197,7 @@ $ ruby -e 'puts Proc.new {}.binding'
 #<Binding:0x00000e9deabb9950>
 ```
 
-#### mruby [1.4.1 (2018-4-27)]
+#### mruby [2.0.0 (2018-12-11)]
 
 ```
 $ ./bin/mruby -e 'puts Proc.new {}.binding'
@@ -205,3 +205,45 @@ trace (most recent call last):
         [0] -e:1
 -e:1: undefined method 'binding' (NoMethodError)
 ```
+
+## Keyword arguments
+
+mruby keyword arguments behave slightly different from CRuby 2.5
+to make the behavior simpler and less confusing. Maybe in the
+future, the simpler behavior will be adopted to CRuby as well.
+
+#### Ruby [ruby 2.5.1p57 (2018-03-29 revision 63029)]
+
+```
+$ ruby -e 'def m(*r,**k) p [r,k] end; m("a"=>1,:b=>2)'
+[[{"a"=>1}], {:b=>2}]
+```
+
+#### mruby [mruby 2.0.0]
+
+```
+$ ./bin/mruby -e 'def m(*r,**k) p [r,k] end; m("a"=>1,:b=>2)'
+trace (most recent call last):
+	[0] -e:1
+-e:1: keyword argument hash with non symbol keys (ArgumentError)
+```
+
+## Argument Destructuring
+
+```ruby
+def m(a,(b,c),d); p [a,b,c,d]; end
+m(1,[2,3],4)  # => [1,2,3,4]
+```
+Destructured arguments (`b` and `c` in above example) cannot be accessed
+from the default expression of optional arguments and keyword arguments,
+since actual assignment is done after the evaluation of those default
+expressions. Thus:
+    
+```ruby
+def f(a,(b,c),d=b)
+  p [a,b,c,d]
+end
+f(1,[2,3])
+```
+
+CRuby gives `[1,2,3,nil]`. mruby raises `NoMethodError` for `b`.

@@ -81,7 +81,7 @@ typedef struct mrb_value {
 } while (0)
 
 #define SET_FLOAT_VALUE(mrb,r,v) do { \
-  if (v != v) { \
+  if ((v) != (v)) { \
     (r).value.ttt = 0x7ff80000; \
     (r).value.i = 0; \
   } \
