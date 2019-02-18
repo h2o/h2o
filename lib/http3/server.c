@@ -458,7 +458,7 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
     return 0;
 }
 
-int h2o_http3_server_on_stream_open(quicly_stream_t *qs)
+static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *qs)
 {
     static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
                                                         on_send_stop,      on_receive,    on_receive_reset};
@@ -494,6 +494,8 @@ int h2o_http3_server_on_stream_open(quicly_stream_t *qs)
     ++*get_state_counter(get_conn(stream), stream->state);
     return 0;
 }
+
+quicly_stream_open_cb h2o_http3_server_stream_open_cb = {on_stream_open};
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
                                           quicly_decoded_packet_t *packets, size_t num_packets)
@@ -532,12 +534,13 @@ SynFound : {
     quicly_conn_t *qconn;
 
     /* accept connection */
-    if (quicly_accept(&qconn, ctx->super.quic, sa, salen, packets + syn_index, ptls_iovec_init(NULL, 0),
+    if (quicly_accept(&qconn, ctx->super.quic, sa, salen, packets + syn_index, ptls_iovec_init(NULL, 0), &ctx->super.next_cid,
                       &conn->handshake_properties) != 0) {
         h2o_http3_dispose_conn(&conn->hq);
         free(conn);
         return NULL;
     }
+    ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->hq, qconn);
     /* handle the other packet */
     for (i = 0; i != num_packets; ++i) {

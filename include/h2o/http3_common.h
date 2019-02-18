@@ -103,6 +103,10 @@ struct st_h2o_http3_ctx_t {
      */
     quicly_context_t *quic;
     /**
+     *
+     */
+    quicly_cid_plaintext_t next_cid;
+    /**
      * list of connections (FIXME use hash or something)
      */
     h2o_linklist_t conns;

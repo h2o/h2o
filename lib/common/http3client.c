@@ -134,10 +134,12 @@ static void start_connect(struct st_h2o_hqclient_conn_t *conn, struct sockaddr *
 
     /* create QUIC connection context and attach */
     if ((ret = quicly_connect(&qconn, conn->ctx->quic->quic, conn->server.origin_url.host.base, sa, salen,
-                              &conn->handshake_properties, NULL /* TODO pass transport params */)) != 0) {
+                              &conn->ctx->quic->next_cid, &conn->handshake_properties, NULL /* TODO pass transport params */)) !=
+        0) {
         conn->super.quic = NULL; /* just in case */
         goto Fail;
     }
+    ++conn->ctx->quic->next_cid.master_id; /* FIXME check overlap */
     if ((ret = h2o_http3_setup(&conn->super, qconn)) != 0)
         goto Fail;
 
@@ -594,7 +596,7 @@ void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
     }
 }
 
-int h2o_httpclient_http3_on_stream_open(quicly_stream_t *qs)
+static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *qs)
 {
     if (quicly_stream_is_unidirectional(qs->stream_id)) {
         h2o_http3_on_create_unidirectional_stream(qs);
@@ -606,3 +608,5 @@ int h2o_httpclient_http3_on_stream_open(quicly_stream_t *qs)
     }
     return 0;
 }
+
+quicly_stream_open_cb h2o_httpclient_http3_stream_open_cb = {on_stream_open};

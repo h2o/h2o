@@ -260,13 +260,12 @@ static int open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egr
     return quicly_stream_sync_sendbuf((*stream)->quic, 1);
 }
 
-static h2o_http3_conn_t *find_by_cid(h2o_http3_ctx_t *ctx, ptls_iovec_t dest)
+static h2o_http3_conn_t *find_by_cid(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, quicly_decoded_packet_t *packet)
 {
     h2o_linklist_t *link;
     for (link = ctx->conns.next; link != &ctx->conns; link = link->next) {
         h2o_http3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http3_conn_t, conns_link, link);
-        const quicly_cid_t *conn_cid = quicly_get_host_cid(conn->quic);
-        if (h2o_memis(conn_cid->cid, conn_cid->len, dest.base, dest.len))
+        if (quicly_is_destination(conn->quic, sa, salen, packet))
             return conn;
     }
     return NULL;
@@ -275,7 +274,7 @@ static h2o_http3_conn_t *find_by_cid(h2o_http3_ctx_t *ctx, ptls_iovec_t dest)
 static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, quicly_decoded_packet_t *packets,
                             size_t num_packets)
 {
-    h2o_http3_conn_t *conn = find_by_cid(ctx, packets[0].cid.dest);
+    h2o_http3_conn_t *conn = find_by_cid(ctx, sa, salen, packets);
 
     if (conn != NULL) {
         size_t i;
@@ -340,14 +339,15 @@ static void on_read(h2o_socket_t *sock, const char *err)
             }
             size_t off = 0;
             while (off != dgrams[dgram_index].vec.iov_len) {
-                size_t plen = quicly_decode_packet(packets + packet_index, dgrams[dgram_index].vec.iov_base + off,
-                                                   dgrams[dgram_index].vec.iov_len - off, ctx->acceptor != NULL ? 8 : 0);
+                size_t plen = quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base + off,
+                                                   dgrams[dgram_index].vec.iov_len - off);
                 if (plen == SIZE_MAX)
                     break;
                 off += plen;
                 if (packet_index == sizeof(packets) / sizeof(packets[0]) - 1 ||
-                    !(packet_index == 0 || h2o_memis(packets[0].cid.dest.base, packets[0].cid.dest.len,
-                                                     packets[packet_index].cid.dest.base, packets[packet_index].cid.dest.len))) {
+                    !(packet_index == 0 ||
+                      h2o_memis(packets[0].cid.dest.encrypted.base, packets[0].cid.dest.encrypted.len,
+                                packets[packet_index].cid.dest.encrypted.base, packets[packet_index].cid.dest.encrypted.len))) {
                     process_packets(ctx, dgrams[dgram_index].mess.msg_name, dgrams[dgram_index].mess.msg_namelen, packets,
                                     packet_index + 1);
                     packet_index = 0;
@@ -413,12 +413,13 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, const uint8_t **_src, co
 void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
                             h2o_http3_accept_cb acceptor)
 {
-    assert(quic->on_stream_open != NULL);
+    assert(quic->stream_open != NULL);
 
     ctx->loop = loop;
     ctx->sock = sock;
     ctx->sock->data = ctx;
     ctx->quic = quic;
+    ctx->next_cid = (quicly_cid_plaintext_t){0}; /* FIXME set thread_id, etc. */
     h2o_linklist_init_anchor(&ctx->conns);
     ctx->acceptor = acceptor;
 
@@ -478,7 +479,7 @@ void h2o_http3_send(h2o_http3_conn_t *conn)
             for (i = 0; i != num_packets; ++i) {
                 if (send_one(fd, packets[i]) == -1)
                     perror("sendmsg failed");
-                quicly_default_free_packet(quicly_get_context(conn->quic), packets[i]);
+                quicly_default_free_packet_cb.cb(&quicly_default_free_packet_cb, packets[i]);
             }
             break;
         case QUICLY_ERROR_FREE_CONNECTION:
