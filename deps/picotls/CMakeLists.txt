@@ -38,8 +38,8 @@ IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
 ENDIF ()
 
 ADD_LIBRARY(picotls-core ${CORE_FILES})
-ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c)
-ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c t/picotls.c t/minicrypto.c lib/asn1.c lib/pembase64.c)
+ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c lib/ffx.c)
+ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c t/picotls.c t/minicrypto.c lib/asn1.c lib/pembase64.c lib/ffx.c)
 
 SET(TEST_EXES test-minicrypto.t)
 
@@ -52,7 +52,7 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core ${OPENSSL_LIBRARIES} resolv ${CLI_EXTRA_LIBS} ${CMAKE_DL_LIBS})
     ADD_EXECUTABLE(picotls-esni src/esni.c)
     TARGET_LINK_LIBRARIES(picotls-esni picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
-    ADD_EXECUTABLE(test-openssl.t ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/uecc.c lib/asn1.c lib/pembase64.c deps/picotest/picotest.c t/picotls.c t/openssl.c)
+    ADD_EXECUTABLE(test-openssl.t ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/uecc.c lib/asn1.c lib/pembase64.c lib/ffx.c deps/picotest/picotest.c t/picotls.c t/openssl.c)
     SET_TARGET_PROPERTIES(test-openssl.t PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
     TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
     SET(TEST_EXES ${TEST_EXES} test-openssl.t)
@@ -60,7 +60,7 @@ ELSE ()
     MESSAGE(WARNING "Disabling OpenSSL support (requires 1.0.1 or newer)")
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${TEST_EXES})
+ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${TEST_EXES} cli)
 
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
      SET(CMAKE_C_FLAGS "-D_GNU_SOURCE -pthread ${CMAKE_C_FLAGS}")
@@ -80,4 +80,20 @@ IF (BUILD_FUZZER)
     ADD_EXECUTABLE(fuzzer-asn1-type-and-length fuzz/fuzzer-asn1-type-and-length.c lib/asn1.c)
     SET_TARGET_PROPERTIES(fuzzer-asn1-type-and-length PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
     SET_TARGET_PROPERTIES(fuzzer-asn1-type-and-length PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
+
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
+    INCLUDE_DIRECTORIES(t include ${OPENSSL_INCLUDE_DIR})
+    ADD_DEFINITIONS(-DPTLS_FUZZ_HANDSHAKE=1)
+
+    ADD_EXECUTABLE(fuzz-server-hello fuzz/fuzz-server-hello.c)
+    SET_TARGET_PROPERTIES(fuzz-server-hello PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
+    SET_TARGET_PROPERTIES(fuzz-server-hello PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
+    TARGET_LINK_LIBRARIES(fuzz-server-hello ${OPENSSL_LIBRARIES} picotls-core picotls-openssl)
+
+    ADD_EXECUTABLE(fuzz-client-hello fuzz/fuzz-client-hello.c)
+    SET_TARGET_PROPERTIES(fuzz-client-hello PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
+    SET_TARGET_PROPERTIES(fuzz-client-hello PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
+    TARGET_LINK_LIBRARIES(fuzz-client-hello ${OPENSSL_LIBRARIES} picotls-core picotls-openssl)
+
+
 ENDIF()
