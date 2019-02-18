@@ -82,7 +82,6 @@
     "sS919x2o8l97kaYf\n"                                                                                                           \
     "-----END CERTIFICATE-----\n"
 
-static int64_t get_now(quicly_context_t *ctx);
 static void on_destroy(quicly_stream_t *stream);
 static int on_egress_stop(quicly_stream_t *stream, int err);
 static int on_ingress_reset(quicly_stream_t *stream, int err);
@@ -93,10 +92,12 @@ quicly_stream_callbacks_t stream_callbacks = {on_destroy,     quicly_streambuf_e
                                               on_egress_stop, quicly_streambuf_ingress_receive, on_ingress_reset};
 size_t on_destroy_callcnt;
 
-int64_t get_now(quicly_context_t *ctx)
+static int64_t get_now(quicly_now_cb *self)
 {
     return quic_now;
 }
+
+static quicly_now_cb get_now_cb = {get_now};
 
 void on_destroy(quicly_stream_t *stream)
 {
@@ -121,7 +122,14 @@ int on_ingress_reset(quicly_stream_t *stream, int err)
     return 0;
 }
 
-int on_stream_open(quicly_stream_t *stream)
+const quicly_cid_plaintext_t *new_master_id(void)
+{
+    static quicly_cid_plaintext_t master = {UINT32_MAX};
+    ++master.master_id;
+    return &master;
+}
+
+static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *stream)
 {
     test_streambuf_t *sbuf;
     int ret;
@@ -135,6 +143,8 @@ int on_stream_open(quicly_stream_t *stream)
 
     return 0;
 }
+
+quicly_stream_open_cb stream_open = {on_stream_open};
 
 static void test_vector(void)
 {
@@ -216,8 +226,8 @@ static void test_vector(void)
     ptls_iovec_t payload;
     int ret;
 
-    ok(quicly_decode_packet(&packet, datagram, sizeof(datagram), 0) == sizeof(datagram));
-    ret = setup_initial_encryption(&ingress, &egress, ptls_openssl_cipher_suites, packet.cid.dest, 0);
+    ok(quicly_decode_packet(&quic_ctx, &packet, datagram, sizeof(datagram)) == sizeof(datagram));
+    ret = setup_initial_encryption(&ingress, &egress, ptls_openssl_cipher_suites, packet.cid.dest.encrypted, 0);
     ok(ret == 0);
     payload = decrypt_packet(ingress.header_protection, &ingress.aead, &next_expected_pn, &packet, &pn);
     ok(payload.base != NULL);
@@ -233,17 +243,17 @@ void free_packets(quicly_datagram_t **packets, size_t cnt)
 {
     size_t i;
     for (i = 0; i != cnt; ++i)
-        quicly_default_free_packet(&quic_ctx, packets[i]);
+        quicly_default_free_packet_cb.cb(&quicly_default_free_packet_cb, packets[i]);
 }
 
-size_t decode_packets(quicly_decoded_packet_t *decoded, quicly_datagram_t **raw, size_t cnt, size_t host_cidl)
+size_t decode_packets(quicly_decoded_packet_t *decoded, quicly_datagram_t **raw, size_t cnt)
 {
     size_t ri, dc = 0;
 
     for (ri = 0; ri != cnt; ++ri) {
         size_t off = 0;
         do {
-            size_t dl = quicly_decode_packet(decoded + dc, raw[ri]->data.base + off, raw[ri]->data.len - off, host_cidl);
+            size_t dl = quicly_decode_packet(&quic_ctx, decoded + dc, raw[ri]->data.base + off, raw[ri]->data.len - off);
             assert(dl != SIZE_MAX);
             ++dc;
             off += dl;
@@ -270,7 +280,7 @@ size_t transmit(quicly_conn_t *src, quicly_conn_t *dst)
     ok(ret == 0);
 
     if (num_datagrams != 0) {
-        size_t num_packets = decode_packets(decoded, datagrams, num_datagrams, quicly_is_client(dst) ? 0 : 8);
+        size_t num_packets = decode_packets(decoded, datagrams, num_datagrams);
         for (i = 0; i != num_packets; ++i) {
             ret = quicly_receive(dst, decoded + i);
             ok(ret == 0 || ret == QUICLY_ERROR_PACKET_IGNORED);
@@ -329,8 +339,8 @@ int main(int argc, char **argv)
     quic_ctx = quicly_default_context;
     quic_ctx.tls = &tlsctx;
     quic_ctx.transport_params.max_streams_bidi = 10;
-    quic_ctx.on_stream_open = on_stream_open;
-    quic_ctx.now = get_now;
+    quic_ctx.stream_open = &stream_open;
+    quic_ctx.now = &get_now_cb;
 
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();

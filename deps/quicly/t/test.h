@@ -40,9 +40,10 @@ extern quicly_context_t quic_ctx;
 extern quicly_stream_callbacks_t stream_callbacks;
 extern size_t on_destroy_callcnt;
 
-int on_stream_open(quicly_stream_t *stream);
+const quicly_cid_plaintext_t *new_master_id(void);
+extern quicly_stream_open_cb stream_open;
 void free_packets(quicly_datagram_t **packets, size_t cnt);
-size_t decode_packets(quicly_decoded_packet_t *decoded, quicly_datagram_t **raw, size_t cnt, size_t host_cidl);
+size_t decode_packets(quicly_decoded_packet_t *decoded, quicly_datagram_t **raw, size_t cnt);
 int buffer_is(ptls_buffer_t *buf, const char *s);
 size_t transmit(quicly_conn_t *src, quicly_conn_t *dst);
 int max_data_is_equal(quicly_conn_t *client, quicly_conn_t *server);

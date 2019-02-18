@@ -76,6 +76,7 @@ extern "C" {
 #define QUICLY_STATELESS_RESET_TOKEN_LEN 16
 
 static uint16_t quicly_decode16(const uint8_t **src);
+static uint32_t quicly_decode24(const uint8_t **src);
 static uint32_t quicly_decode32(const uint8_t **src);
 static uint64_t quicly_decode64(const uint8_t **src);
 static uint64_t quicly_decodev(const uint8_t **src, const uint8_t *end);
@@ -229,6 +230,13 @@ inline uint16_t quicly_decode16(const uint8_t **src)
 {
     uint16_t v = (uint16_t)(*src)[0] << 8 | (*src)[1];
     *src += 2;
+    return v;
+}
+
+inline uint32_t quicly_decode24(const uint8_t **src)
+{
+    uint32_t v = (uint32_t)(*src)[0] << 16 | (uint32_t)(*src)[1] << 8 | (uint32_t)(*src)[2];
+    *src += 3;
     return v;
 }
 
