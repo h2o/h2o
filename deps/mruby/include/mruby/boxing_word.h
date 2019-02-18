@@ -45,6 +45,14 @@ enum mrb_special_consts {
 #define MRB_SYMBOL_FLAG   0x0e
 #define MRB_SPECIAL_SHIFT 8
 
+#if defined(MRB_64BIT)
+#define MRB_SYMBOL_BITSIZE  (sizeof(mrb_sym) * CHAR_BIT)
+#define MRB_SYMBOL_MAX      UINT32_MAX
+#else
+#define MRB_SYMBOL_BITSIZE  (sizeof(mrb_sym) * CHAR_BIT - MRB_SPECIAL_SHIFT)
+#define MRB_SYMBOL_MAX      (UINT32_MAX >> MRB_SPECIAL_SHIFT)
+#endif
+
 typedef union mrb_value {
   union {
     void *p;
@@ -54,7 +62,7 @@ typedef union mrb_value {
     };
     struct {
       unsigned int sym_flag : MRB_SPECIAL_SHIFT;
-      mrb_sym sym : (sizeof(mrb_sym) * CHAR_BIT);
+      mrb_sym sym : MRB_SYMBOL_BITSIZE;
     };
     struct RBasic *bp;
 #ifndef MRB_WITHOUT_FLOAT
@@ -121,13 +129,13 @@ mrb_type(mrb_value o)
 } while (0)
 
 #ifndef MRB_WITHOUT_FLOAT
-#define SET_FLOAT_VALUE(mrb,r,v) r = mrb_word_boxing_float_value(mrb, v)
+#define SET_FLOAT_VALUE(mrb,r,v) ((r) = mrb_word_boxing_float_value(mrb, v))
 #endif
-#define SET_CPTR_VALUE(mrb,r,v) r = mrb_word_boxing_cptr_value(mrb, v)
+#define SET_CPTR_VALUE(mrb,r,v) ((r) = mrb_word_boxing_cptr_value(mrb, v))
 #define SET_NIL_VALUE(r) BOXWORD_SET_VALUE(r, MRB_TT_FALSE, value.i, 0)
 #define SET_FALSE_VALUE(r) BOXWORD_SET_VALUE(r, MRB_TT_FALSE, value.i, 1)
 #define SET_TRUE_VALUE(r) BOXWORD_SET_VALUE(r, MRB_TT_TRUE, value.i, 1)
-#define SET_BOOL_VALUE(r,b) BOXWORD_SET_VALUE(r, b ? MRB_TT_TRUE : MRB_TT_FALSE, value.i, 1)
+#define SET_BOOL_VALUE(r,b) BOXWORD_SET_VALUE(r, (b) ? MRB_TT_TRUE : MRB_TT_FALSE, value.i, 1)
 #define SET_INT_VALUE(r,n) BOXWORD_SET_VALUE(r, MRB_TT_FIXNUM, value.i, (n))
 #define SET_SYM_VALUE(r,v) BOXWORD_SET_VALUE(r, MRB_TT_SYMBOL, value.sym, (v))
 #define SET_OBJ_VALUE(r,v) BOXWORD_SET_VALUE(r, (((struct RObject*)(v))->tt), value.p, (v))

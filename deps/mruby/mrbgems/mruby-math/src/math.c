@@ -161,6 +161,10 @@ erfc(double x)
 
 #endif
 
+#if defined __FreeBSD__ && !defined __FreeBSD_version
+#include <osreldate.h> /* for __FreeBSD_version */
+#endif
+
 #if (defined _MSC_VER && _MSC_VER < 1800) || defined __ANDROID__ || (defined __FreeBSD__  &&  __FreeBSD_version < 803000)
 
 double

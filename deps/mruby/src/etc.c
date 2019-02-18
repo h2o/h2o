@@ -75,6 +75,7 @@ mrb_obj_to_sym(mrb_state *mrb, mrb_value name)
       if (mrb_nil_p(name)) {
         name = mrb_inspect(mrb, name);
         mrb_raisef(mrb, E_TYPE_ERROR, "%S is not a symbol", name);
+        /* not reached */
       }
       /* fall through */
     case MRB_TT_STRING:

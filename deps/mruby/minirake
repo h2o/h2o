@@ -6,12 +6,10 @@
 
 require 'getoptlong'
 require 'fileutils'
-require 'fiber'
 
 $rake_fiber_table = {}
 $rake_jobs = 1
 $rake_failed = []
-$rake_root_fiber = Fiber.current
 
 class String
   def ext(newext='')
@@ -95,7 +93,7 @@ module MiniRake
     def done?; @done end
     def running?; @running end
 
-    # Invoke the task if it is needed.  Prerequites are invoked first.
+    # Invoke the task if it is needed. Prerequisites are invoked first.
     def invoke
       puts "Invoke #{name} (already=[#{@already_invoked}], needed=[#{needed?}])" if $trace
       return if @already_invoked
@@ -111,9 +109,13 @@ module MiniRake
 
       if needed?
         @running = true
-        return Fiber.new do
+        if $rake_root_fiber
+          return Fiber.new do
+            self.execute
+            $rake_root_fiber.transfer
+          end
+        else
           self.execute
-          $rake_root_fiber.transfer
         end
       end
 
@@ -308,7 +310,7 @@ module MiniRake
     def sh(cmd)
       puts cmd if $verbose
 
-      if $rake_jobs == 1 || Fiber.current == $rake_root_fiber
+      if !$rake_root_fiber || Fiber.current == $rake_root_fiber
         system(cmd) or fail "Command Failed: [#{cmd}]"
         return
       end
@@ -480,6 +482,12 @@ class RakeApp
   # Run the +rake+ application.
   def run
     handle_options
+
+    unless $rake_root_fiber
+      require 'fiber'
+      $rake_root_fiber = Fiber.current
+    end
+
     begin
       here = Dir.pwd
       while ! have_rakefile
@@ -590,7 +598,7 @@ class RakeApp
     wait_process(count + 1) if !$rake_fiber_table.empty? && exited.empty?
   end
 
-  end
+end
 
 if __FILE__ == $0 then
   RakeApp.new.run

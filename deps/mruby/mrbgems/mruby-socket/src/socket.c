@@ -10,6 +10,7 @@
   #include <winsock2.h>
   #include <ws2tcpip.h>
   #include <windows.h>
+  #include <winerror.h>
 
   #define SHUT_RDWR SD_BOTH
   #ifndef _SSIZE_T_DEFINED
@@ -300,7 +301,7 @@ mrb_basicsocket_getpeereid(mrb_state *mrb, mrb_value self)
   mrb_ary_push(mrb, ary, mrb_fixnum_value((mrb_int)egid));
   return ary;
 #else
-  mrb_raise(mrb, E_RUNTIME_ERROR, "getpeereid is not avaialble on this system");
+  mrb_raise(mrb, E_RUNTIME_ERROR, "getpeereid is not available on this system");
   return mrb_nil_value();
 #endif
 }

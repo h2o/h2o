@@ -14,23 +14,9 @@ enum_update_hash(mrb_state *mrb, mrb_value self)
   mrb_int hash;
   mrb_int index;
   mrb_int hv;
-  mrb_value item_hash;
 
-  mrb_get_args(mrb, "iio", &hash, &index, &item_hash);
-  if (mrb_fixnum_p(item_hash)) {
-    hv = mrb_fixnum(item_hash);
-  }
-#ifndef MRB_WITHOUT_FLOAT
-  else if (mrb_float_p(item_hash)) {
-    hv = (mrb_int)mrb_float(item_hash);
-  }
-#endif
-  else {
-    mrb_raise(mrb, E_TYPE_ERROR, "can't calculate hash");
-    /* not reached */
-    hv = 0;
-  }
-  hash ^= (hv << (index % 16));
+  mrb_get_args(mrb, "iii", &hash, &index, &hv);
+  hash ^= ((uint32_t)hv << (index % 16));
 
   return mrb_fixnum_value(hash);
 }

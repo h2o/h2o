@@ -41,7 +41,7 @@ usage(const char *name)
   "switches:",
   "-b           load and execute RiteBinary (mrb) file",
   "-c           check syntax only",
-  "-d           set debugging flags (set $DEBUG to true)"
+  "-d           set debugging flags (set $DEBUG to true)",
   "-e 'command' one line of script",
   "-r library   load the library before executing your script",
   "-v           print version number, then run in verbose mode",
@@ -258,7 +258,8 @@ main(int argc, char **argv)
     for (i = 0; i < args.libc; i++) {
       FILE *lfp = fopen(args.libv[i], args.mrbfile ? "rb" : "r");
       if (lfp == NULL) {
-        printf("Cannot open library file. (%s)\n", args.libv[i]);
+        printf("Cannot open library file: %s\n", args.libv[i]);
+        mrbc_context_free(mrb, c);
         cleanup(mrb, &args);
         return EXIT_FAILURE;
       }

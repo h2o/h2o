@@ -58,11 +58,16 @@
 # endif
 #endif
 
+/* define on big endian machines; used by MRB_NAN_BOXING, etc. */
+#ifndef MRB_ENDIAN_BIG
+# if (defined(BYTE_ORDER) && defined(BIG_ENDIAN) && BYTE_ORDER == BIG_ENDIAN) || \
+     (defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#  define MRB_ENDIAN_BIG
+# endif
+#endif
+
 /* represent mrb_value in boxed double; conflict with MRB_USE_FLOAT and MRB_WITHOUT_FLOAT */
 //#define MRB_NAN_BOXING
-
-/* define on big endian machines; used by MRB_NAN_BOXING */
-//#define MRB_ENDIAN_BIG
 
 /* represent mrb_value as a word (natural unit of data for the processor) */
 //#define MRB_WORD_BOXING
@@ -115,6 +120,7 @@
 
 /* -DMRB_ENABLE_XXXX to enable following features */
 //#define MRB_ENABLE_DEBUG_HOOK /* hooks for debugger */
+//#define MRB_ENABLE_ALL_SYMBOLS /* Symbols.all_symbols */
 
 /* end of configuration */
 

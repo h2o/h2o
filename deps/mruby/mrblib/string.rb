@@ -12,7 +12,7 @@ class String
   def each_line(rs = "\n", &block)
     return to_enum(:each_line, rs, &block) unless block
     return block.call(self) if rs.nil?
-    rs = rs.to_str
+    rs.__to_str
     offset = 0
     rs_len = rs.length
     this = dup
@@ -67,7 +67,7 @@ class String
       block = nil
     end
     if !replace.nil? || !block
-      replace = replace.to_str
+      replace.__to_str
     end
     offset = 0
     result = []
@@ -99,7 +99,7 @@ class String
     raise FrozenError, "can't modify frozen String" if frozen?
     return to_enum(:gsub!, *args) if args.length == 1 && !block
     str = self.gsub(*args, &block)
-    return nil if str == self
+    return nil unless self.index(args[0])
     self.replace(str)
   end
 
@@ -129,12 +129,12 @@ class String
     end
 
     pattern, replace = *args
-    pattern = pattern.to_str
+    pattern.__to_str
     if args.length == 2 && block
       block = nil
     end
     unless block
-      replace = replace.to_str
+      replace.__to_str
     end
     result = []
     this = dup
@@ -161,7 +161,7 @@ class String
   def sub!(*args, &block)
     raise FrozenError, "can't modify frozen String" if frozen?
     str = self.sub(*args, &block)
-    return nil if str == self
+    return nil unless self.index(args[0])
     self.replace(str)
   end
 
@@ -245,14 +245,13 @@ class String
   ##
   # ISO 15.2.10.5.3
   def =~(re)
-    raise TypeError, "type mismatch: String given" if re.respond_to? :to_str
     re =~ self
   end
 
   ##
   # ISO 15.2.10.5.27
   def match(re, &block)
-    if re.respond_to? :to_str
+    if String === re
       if Object.const_defined?(:Regexp)
         r = Regexp.new(re)
         r.match(self, &block)

@@ -510,6 +510,7 @@ check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value 
   mrb_sym sym;
   int32_t bpno;
   mrb_bool isCfunc;
+  struct mrb_insn_data insn;
 
   mrb_debug_context *dbg = mrb_debug_context_get(mrb);
 
@@ -517,11 +518,12 @@ check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value 
   bpno = dbg->method_bpno;
   dbg->method_bpno = 0;
 
-  switch(GET_OPCODE(*pc)) {
+  insn = mrb_decode_insn(pc);
+  switch(insn.insn) {
     case OP_SEND:
     case OP_SENDB:
-      c = mrb_class(mrb, regs[GETARG_A(*pc)]);
-      sym = irep->syms[GETARG_B(*pc)];
+      c = mrb_class(mrb, regs[insn.a]);
+      sym = irep->syms[insn.b];
       break;
     case OP_SUPER:
       c = mrb->c->ci->target_class->super;

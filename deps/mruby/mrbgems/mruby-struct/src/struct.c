@@ -24,19 +24,18 @@ struct_class(mrb_state *mrb)
 }
 
 static inline mrb_value
-struct_ivar_get(mrb_state *mrb, mrb_value c, mrb_sym id)
+struct_ivar_get(mrb_state *mrb, mrb_value cls, mrb_sym id)
 {
-  struct RClass* kclass;
+  struct RClass* c = mrb_class_ptr(cls);
   struct RClass* sclass = struct_class(mrb);
   mrb_value ans;
 
   for (;;) {
-    ans = mrb_iv_get(mrb, c, id);
+    ans = mrb_iv_get(mrb, mrb_obj_value(c), id);
     if (!mrb_nil_p(ans)) return ans;
-    kclass = RCLASS_SUPER(c);
-    if (kclass == 0 || kclass == sclass)
+    c = c->super;
+    if (c == sclass || c == 0)
       return mrb_nil_value();
-    c = mrb_obj_value(kclass);
   }
 }
 
@@ -214,7 +213,7 @@ make_struct(mrb_state *mrb, mrb_value name, mrb_value members, struct RClass *kl
   }
   else {
     /* old style: should we warn? */
-    name = mrb_str_to_str(mrb, name);
+    mrb_to_str(mrb, name);
     id = mrb_obj_to_sym(mrb, name);
     if (!is_const_id(mrb, mrb_sym2name_len(mrb, id, NULL))) {
       mrb_name_error(mrb, id, "identifier %S needs to be constant", name);
@@ -303,17 +302,19 @@ mrb_struct_s_def(mrb_state *mrb, mrb_value klass)
       }
     }
     rest = mrb_ary_new_from_values(mrb, argcnt, pargv);
-    for (i=0; i<RARRAY_LEN(rest); i++) {
+    for (i=0; i<argcnt; i++) {
       id = mrb_obj_to_sym(mrb, RARRAY_PTR(rest)[i]);
       mrb_ary_set(mrb, rest, i, mrb_symbol_value(id));
     }
-  }
-  st = make_struct(mrb, name, rest, mrb_class_ptr(klass));
-  if (!mrb_nil_p(b)) {
-    mrb_yield_with_class(mrb, b, 1, &st, st, mrb_class_ptr(st));
-  }
+    st = make_struct(mrb, name, rest, mrb_class_ptr(klass));
+    if (!mrb_nil_p(b)) {
+      mrb_yield_with_class(mrb, b, 1, &st, st, mrb_class_ptr(st));
+    }
 
-  return st;
+    return st;
+  }
+  /* not reached */
+  return mrb_nil_value();
 }
 
 static mrb_int
@@ -398,7 +399,7 @@ struct_aref_sym(mrb_state *mrb, mrb_value obj, mrb_sym id)
       return ptr[i];
     }
   }
-  mrb_raisef(mrb, E_INDEX_ERROR, "'%S' is not a struct member", mrb_sym2str(mrb, id));
+  mrb_name_error(mrb, id, "no member '%S' in struct", mrb_sym2str(mrb, id));
   return mrb_nil_value();       /* not reached */
 }
 

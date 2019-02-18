@@ -12,6 +12,7 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#define open  _open
 #define close _close
 #define unlink _unlink
 

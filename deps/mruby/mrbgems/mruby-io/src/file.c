@@ -115,7 +115,7 @@ mrb_file_s_unlink(mrb_state *mrb, mrb_value obj)
   mrb_get_args(mrb, "*", &argv, &argc);
   for (i = 0; i < argc; i++) {
     const char *utf8_path;
-    pathv = mrb_convert_type(mrb, argv[i], MRB_TT_STRING, "String", "to_str");
+    pathv = mrb_ensure_string_type(mrb, argv[i]);
     utf8_path = mrb_string_value_cstr(mrb, &pathv);
     path = mrb_locale_from_utf8(utf8_path, -1);
     if (UNLINK(path) < 0) {
@@ -345,11 +345,7 @@ mrb_file_mtime(mrb_state *mrb, mrb_value self)
   fd = (int)mrb_fixnum(mrb_io_fileno(mrb, self));
   if (fstat(fd, &st) == -1)
     return mrb_false_value();
-#ifndef MRB_WITHOUT_FLOAT
-  return mrb_funcall(mrb, obj, "at", 1, mrb_float_value(mrb, st.st_mtime));
-#else
   return mrb_funcall(mrb, obj, "at", 1, mrb_fixnum_value(st.st_mtime));
-#endif
 }
 
 mrb_value
