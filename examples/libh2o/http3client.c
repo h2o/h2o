@@ -153,6 +153,13 @@ int main(int argc, char **argv)
     quicly_context_t qctx = quicly_default_context;
     qctx.transport_params.max_streams_uni = 3;
     qctx.tls = &tlsctx;
+    {
+        uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
+        tlsctx.random_bytes(random_key, sizeof(random_key));
+        qctx.cid_encryptor = quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_sha256,
+                                                              ptls_iovec_init(random_key, sizeof(random_key)));
+        ptls_clear_memory(random_key, sizeof(random_key));
+    }
     qctx.stream_open = &h2o_httpclient_http3_on_stream_open;
     // qctx.on_conn_close = h2o_hq_on_conn_close;
     qctx.event_log.cb = quicly_new_default_event_logger(stderr);
