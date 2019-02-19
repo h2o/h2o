@@ -34,6 +34,8 @@
 #include "h2o/http3_common.h"
 #include "h2o/url.h"
 
+static int num_requests_inflight;
+
 static h2o_socket_t *create_socket(h2o_loop_t *loop)
 {
     int fd;
@@ -62,8 +64,11 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
-    if (errstr == h2o_httpclient_error_is_eos)
-        exit(0);
+    if (errstr == h2o_httpclient_error_is_eos) {
+        --num_requests_inflight;
+        if (num_requests_inflight == 0)
+            exit(0);
+    }
 
     return 0;
 }
@@ -120,13 +125,8 @@ int main(int argc, char **argv)
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_http3_ctx_t hqctx;
 
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s <url>\n", argv[0]);
-        exit(1);
-    }
-
-    if (h2o_url_parse(argv[1], strlen(argv[1]), &url) != 0) {
-        fprintf(stderr, "cannot parse url:%s\n", argv[1]);
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <url...>\n", argv[0]);
         exit(1);
     }
 
@@ -174,9 +174,16 @@ int main(int argc, char **argv)
     h2o_mem_pool_t pool;
     h2o_mem_init_pool(&pool);
 
-    h2o_httpclient_t *client;
-
-    h2o_httpclient_connect_h3(&client, &pool, &url, &ctx, &url, on_connect);
+    int i;
+    for (i = 1; i != argc; ++i) {
+        if (h2o_url_parse(argv[i], strlen(argv[i]), &url) != 0) {
+            fprintf(stderr, "cannot parse url:%s\n", argv[i]);
+            exit(1);
+        }
+        h2o_httpclient_t *client;
+        h2o_httpclient_connect_h3(&client, &pool, &url, &ctx, &url, on_connect);
+        ++num_requests_inflight;
+    }
 
     while (1)
         h2o_evloop_run(ctx.loop, INT32_MAX);
