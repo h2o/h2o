@@ -589,6 +589,10 @@ typedef struct st_quicly_decoded_packet_t {
              * the decrypted CID; note that the value is not authenticated
              */
             quicly_cid_plaintext_t plaintext;
+            /**
+             *
+             */
+            unsigned might_be_client_generated : 1;
         } dest;
         /**
          * source CID; {NULL, 0} if is a short header packet
