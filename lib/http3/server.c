@@ -497,6 +497,11 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 
 quicly_stream_open_t h2o_http3_server_on_stream_open = {stream_open_cb};
 
+static void on_h3_destroy(h2o_http3_conn_t *h3)
+{
+    h2o_fatal("net yet");
+}
+
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
                                           quicly_decoded_packet_t *packets, size_t num_packets)
 {
@@ -525,9 +530,10 @@ SynFound : {
             {NULL}                                                                                       /* http2 */
         }}                                                                                               /* loggers */
     };
+    static const h2o_http3_conn_callbacks_t h3_callbacks = {on_h3_destroy, handle_control_stream_frame};
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
-    h2o_http3_init_conn(&conn->hq, &ctx->super, handle_control_stream_frame);
+    h2o_http3_init_conn(&conn->hq, &ctx->super, &h3_callbacks);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->pending_reqs);
     h2o_timer_init(&conn->timeout, handle_pending_reqs);

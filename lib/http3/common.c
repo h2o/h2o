@@ -20,10 +20,15 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
+#include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include "picotls/openssl.h"
 #include "h2o/string_.h"
 #include "h2o/http3_common.h"
+#include "h2o/http3_internal.h"
 
 struct st_h2o_http3_ingress_unistream_t {
     /**
@@ -147,7 +152,7 @@ static int control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_htt
         frame.type == H2O_HTTP3_FRAME_TYPE_DATA)
         return H2O_HTTP3_ERROR_MALFORMED_FRAME(frame.type);
 
-    return conn->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length, err_desc);
+    return conn->callbacks->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length, err_desc);
 }
 
 static int unknown_stream_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -260,21 +265,103 @@ static int open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egr
     return quicly_stream_sync_sendbuf((*stream)->quic, 1);
 }
 
-static h2o_http3_conn_t *find_by_cid(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, quicly_decoded_packet_t *packet)
+/**
+ * keyed-hash to avoid collision attacks on unauthmap (FIXME switch to CMAC for better performance)
+ */
+static ptls_hash_context_t *accepting_hashkey_hashctx = NULL;
+
+static void init_accepting_hashkey_hashctx(void)
 {
-    h2o_linklist_t *link;
-    for (link = ctx->conns.next; link != &ctx->conns; link = link->next) {
-        h2o_http3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http3_conn_t, conns_link, link);
-        if (quicly_is_destination(conn->quic, sa, salen, packet))
-            return conn;
+    uint8_t random_bytes[PTLS_SHA256_DIGEST_SIZE];
+
+    ptls_openssl_random_bytes(random_bytes, sizeof(random_bytes));
+    accepting_hashkey_hashctx = ptls_hmac_create(&ptls_openssl_sha256, random_bytes, sizeof(random_bytes));
+    assert(accepting_hashkey_hashctx != NULL);
+}
+
+static uint64_t calc_accepting_hashkey(struct sockaddr *sa, ptls_iovec_t offered_cid)
+{
+    static pthread_once_t init_once = PTHREAD_ONCE_INIT;
+    uint8_t buf[1 + 16 + 4 + 1 + 18], *p = buf;
+    uint64_t md[PTLS_SHA256_DIGEST_SIZE / sizeof(uint64_t)];
+
+    *p++ = (uint8_t)sa->sa_family;
+    switch (sa->sa_family) {
+    case AF_INET: {
+        struct sockaddr_in *sin = (void *)sa;
+        H2O_BUILD_ASSERT(sizeof(sin->sin_addr) == 4);
+        memcpy(p, &sin->sin_addr, 4);
+        p += 4;
+        p = quicly_encode16(p, sin->sin_port);
+    } break;
+    case AF_INET6: {
+        struct sockaddr_in6 *sin6 = (void *)sa;
+        H2O_BUILD_ASSERT(sizeof(sin6->sin6_addr) == 16);
+        memcpy(p, &sin6->sin6_addr, 16);
+        p += 16;
+        p = quicly_encode16(p, sin6->sin6_port);
+    } break;
+    default:
+        h2o_fatal("unexpected sa_family");
+        break;
     }
+    *p++ = (uint8_t)offered_cid.len;
+    memcpy(p, offered_cid.base, offered_cid.len);
+    p += offered_cid.len;
+    assert(p <= buf + sizeof(buf));
+
+    pthread_once(&init_once, init_accepting_hashkey_hashctx);
+
+    accepting_hashkey_hashctx->update(accepting_hashkey_hashctx, buf, p - buf);
+    accepting_hashkey_hashctx->final(accepting_hashkey_hashctx, md, PTLS_HASH_FINAL_MODE_RESET);
+
+    return md[0];
+}
+
+static uint64_t calc_accepting_hashkey_from_conn(quicly_conn_t *conn)
+{
+    const quicly_cid_t *offered_cid = quicly_get_offered_cid(conn);
+    struct sockaddr *sa;
+    socklen_t salen;
+
+    quicly_get_peername(conn, &sa, &salen);
+    return calc_accepting_hashkey(sa, ptls_iovec_init(offered_cid->cid, offered_cid->len));
+}
+
+static h2o_http3_conn_t *find_connection(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen,
+                                         quicly_decoded_packet_t *packet)
+{
+    /* server receives Initial or 0-RTT packet (that uses client-generated CID) */
+    if (packet->cid.dest.might_be_client_generated) {
+        uint64_t key = calc_accepting_hashkey(sa, packet->cid.dest.encrypted);
+        khiter_t iter = kh_get_h2o_http3_unauthmap(ctx->conns_accepting, key);
+        if (iter != kh_end(ctx->conns_accepting)) {
+            h2o_http3_conn_t *conn = kh_val(ctx->conns_accepting, iter);
+            assert(!quicly_is_client(conn->quic));
+            if (quicly_is_destination(conn->quic, sa, salen, packet))
+                return conn;
+        }
+    }
+
+    /* lookup idmap if the decrypted cid passes authentication */
+    if (packet->cid.dest.plaintext.node_id == 0 && packet->cid.dest.plaintext.thread_id == 0) {
+        khiter_t iter = kh_get_h2o_http3_idmap(ctx->conns_by_id, packet->cid.dest.plaintext.master_id);
+        if (iter != kh_end(ctx->conns_by_id)) {
+            h2o_http3_conn_t *conn = kh_val(ctx->conns_by_id, iter);
+            if (quicly_is_destination(conn->quic, sa, salen, packet))
+                return conn;
+        }
+    }
+
+    /* FIXME create stateless reset map and recognize them */
+
     return NULL;
 }
 
 static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, quicly_decoded_packet_t *packets,
                             size_t num_packets)
 {
-    h2o_http3_conn_t *conn = find_by_cid(ctx, sa, salen, packets);
+    h2o_http3_conn_t *conn = find_connection(ctx, sa, salen, packets);
 
     if (conn != NULL) {
         size_t i;
@@ -420,19 +507,24 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
     ctx->sock->data = ctx;
     ctx->quic = quic;
     ctx->next_cid = (quicly_cid_plaintext_t){0}; /* FIXME set thread_id, etc. */
-    h2o_linklist_init_anchor(&ctx->conns);
+    ctx->conns_by_id = kh_init_h2o_http3_idmap();
+    ctx->conns_accepting = kh_init_h2o_http3_unauthmap();
     ctx->acceptor = acceptor;
 
     h2o_socket_read_start(ctx->sock, on_read);
 }
 
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx,
-                         h2o_http3_handle_control_stream_frame_cb handle_control_stream_frame)
+void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
 {
-    memset(conn, 0, sizeof(*conn));
-    conn->ctx = ctx;
-    conn->handle_control_stream_frame = handle_control_stream_frame;
-    h2o_linklist_insert(&conn->ctx->conns, &conn->conns_link);
+    h2o_socket_close(ctx->sock);
+    /* FIXME destroy each connection in the map? */
+    kh_destroy_h2o_http3_idmap(ctx->conns_by_id);
+    kh_destroy_h2o_http3_unauthmap(ctx->conns_accepting);
+}
+
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, h2o_http3_conn_callbacks_t *callbacks)
+{
+    *conn = (h2o_http3_conn_t){ctx, NULL, callbacks};
     h2o_timer_init(&conn->_timeout, on_timeout);
 }
 
@@ -442,9 +534,19 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
         h2o_qpack_destroy_decoder(conn->qpack.dec);
     if (conn->qpack.enc != NULL)
         h2o_qpack_destroy_encoder(conn->qpack.enc);
-    if (conn->quic != NULL)
+    if (conn->quic != NULL) {
+        khiter_t iter;
+        /* unregister from maps */
+        if ((iter = kh_get_h2o_http3_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id)) !=
+            kh_end(conn->ctx->conns_by_id))
+            kh_del_h2o_http3_idmap(conn->ctx->conns_by_id, iter);
+        if (!quicly_is_client(conn->quic)) {
+            uint64_t key = calc_accepting_hashkey_from_conn(conn->quic);
+            if ((iter = kh_get_h2o_http3_unauthmap(conn->ctx->conns_accepting, key)) != kh_end(conn->ctx->conns_accepting))
+                kh_del_h2o_http3_unauthmap(conn->ctx->conns_accepting, iter);
+        }
         quicly_free(conn->quic);
-    h2o_linklist_unlink(&conn->conns_link);
+    }
     h2o_timer_unlink(&conn->_timeout);
 }
 
@@ -455,6 +557,22 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     conn->quic = quic;
     *quicly_get_data(conn->quic) = conn;
     conn->qpack.dec = h2o_qpack_create_decoder(H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE, 100 /* FIXME */);
+
+    { /* register to the idmap */
+        int r;
+        khiter_t iter = kh_put_h2o_http3_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id, &r);
+        assert(iter != kh_end(conn->ctx->conns_by_id));
+        kh_val(conn->ctx->conns_by_id, iter) = conn;
+    }
+
+    /* register to accepting hashmap (FIXME unregister when ... droping the Initial and 0-RTT keys?) */
+    if (!quicly_is_client(conn->quic)) {
+        uint64_t key = calc_accepting_hashkey_from_conn(conn->quic);
+        int r;
+        khiter_t iter = kh_put_h2o_http3_unauthmap(conn->ctx->conns_accepting, key, &r);
+        assert(iter != kh_end(conn->ctx->conns_accepting));
+        kh_val(conn->ctx->conns_accepting, iter) = conn;
+    }
 
     if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, h2o_iovec_init(H2O_STRLIT("C\0\4")))) != 0 ||
         (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder, h2o_iovec_init(H2O_STRLIT("H")))) != 0 ||
@@ -483,7 +601,7 @@ void h2o_http3_send(h2o_http3_conn_t *conn)
             }
             break;
         case QUICLY_ERROR_FREE_CONNECTION:
-            h2o_http3_dispose_conn(conn);
+            conn->callbacks->destroy_connection(conn);
             return;
         default:
             fprintf(stderr, "quicly_send returned %d\n", ret);

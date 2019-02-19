@@ -176,7 +176,7 @@ int main(int argc, char **argv)
 
     h2o_httpclient_t *client;
 
-    h2o_httpclient_connect_hq(&client, &pool, &url, &ctx, &url, on_connect);
+    h2o_httpclient_connect_h3(&client, &pool, &url, &ctx, &url, on_connect);
 
     while (1)
         h2o_evloop_run(ctx.loop, INT32_MAX);

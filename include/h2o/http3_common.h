@@ -82,12 +82,11 @@ typedef struct st_h2o_http3_ctx_t h2o_http3_ctx_t;
 typedef struct st_h2o_http3_conn_t h2o_http3_conn_t;
 struct st_h2o_http3_ingress_unistream_t;
 struct st_h2o_http3_egress_unistream_t;
+struct kh_h2o_http3_idmap_s;
+struct kh_h2o_http3_unauthmap_s;
 
 typedef h2o_http3_conn_t *(*h2o_http3_accept_cb)(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen,
                                                  quicly_decoded_packet_t *packets, size_t num_packets);
-
-typedef int (*h2o_http3_handle_control_stream_frame_cb)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len,
-                                                        const char **err_desc);
 
 struct st_h2o_http3_ctx_t {
     /**
@@ -107,14 +106,25 @@ struct st_h2o_http3_ctx_t {
      */
     quicly_cid_plaintext_t next_cid;
     /**
-     * list of connections (FIXME use hash or something)
+     * hashmap of connections by quicly_cid_plaintext_t::master_id.
      */
-    h2o_linklist_t conns;
+    struct kh_h2o_http3_idmap_s *conns_by_id;
+    /**
+     * hashmap of connections being accepted. Exists to handle packets that do no tuse the server-generated CIDs. The unique key of
+     * the hashmap is (sockaddr, offered_cid).
+     */
+    struct kh_h2o_http3_unauthmap_s *conns_accepting;
     /**
      * callback to accept new connections (optional)
      */
     h2o_http3_accept_cb acceptor;
 };
+
+typedef const struct st_h2o_http3_conn_callbacks_t {
+    void (*destroy_connection)(h2o_http3_conn_t *conn);
+    int (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len,
+                                       const char **err_desc);
+} h2o_http3_conn_callbacks_t;
 
 struct st_h2o_http3_conn_t {
     /**
@@ -126,20 +136,16 @@ struct st_h2o_http3_conn_t {
      */
     quicly_conn_t *quic;
     /**
+     * callbacks
+     */
+    h2o_http3_conn_callbacks_t *callbacks;
+    /**
      * QPACK states
      */
     struct {
         h2o_qpack_encoder_t *enc;
         h2o_qpack_decoder_t *dec;
     } qpack;
-    /**
-     * callback for handling control stream frames
-     */
-    h2o_http3_handle_control_stream_frame_cb handle_control_stream_frame;
-    /**
-     * linklist between connections, anchor is h2o_http3_ctx_t::conns
-     */
-    h2o_linklist_t conns_link;
     /**
      * the "transport" timer. Applications must have separate timer.
      */
@@ -211,10 +217,13 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, const uint8_t **src, con
 void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
                             h2o_http3_accept_cb acceptor);
 /**
+ *
+ */
+void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx);
+/**
  * initializes a hq connection
  */
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx,
-                         h2o_http3_handle_control_stream_frame_cb handle_control_stream_frame);
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, h2o_http3_conn_callbacks_t *callbacks);
 /**
  *
  */

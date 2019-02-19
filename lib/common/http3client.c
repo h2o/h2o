@@ -23,12 +23,12 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include "khash.h"
 #include "quicly.h"
 #include "h2o/hostinfo.h"
 #include "h2o/httpclient.h"
-#include "h2o/http3_common.h"
 #include "h2o/http2_common.h"
+#include "h2o/http3_common.h"
+#include "h2o/http3_internal.h"
 
 #define H2O_HTTP3_ERROR_EOS H2O_HTTP3_ERROR_USER1 /* the client uses USER1 for signaling eos */
 
@@ -90,16 +90,17 @@ static void start_request(struct st_h2o_hqclient_req_t *req);
 
 static struct st_h2o_hqclient_conn_t *find_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
 {
-    h2o_linklist_t *link;
+    /* FIXME connections during name lookup cannot be found through ctx->quic; should use a dedicated map keyed by the origin */
+    h2o_http3_conn_t *super_conn;
 
-    for (link = ctx->quic->conns.next; link != &ctx->quic->conns; link = link->next) {
-        struct st_h2o_hqclient_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_hqclient_conn_t, super.conns_link, link);
+    kh_foreach_value(ctx->quic->conns_by_id, super_conn, {
+        struct st_h2o_hqclient_conn_t *conn = (void *)super_conn;
         /* FIXME check max_concurrent_streams, etc. */
         if (conn->server.origin_url.scheme == origin->scheme &&
             h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len, origin->authority.base,
                       origin->authority.len))
             return conn;
-    }
+    });
 
     return NULL;
 }
@@ -192,10 +193,11 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
 
 struct st_h2o_hqclient_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
 {
+    static const h2o_http3_conn_callbacks_t callbacks = {(void *)destroy_connection, handle_control_stream_frame};
     struct st_h2o_hqclient_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    memset(conn, 0, sizeof(*conn));
-    h2o_http3_init_conn(&conn->super, ctx->quic, handle_control_stream_frame);
+    h2o_http3_init_conn(&conn->super, ctx->quic, &callbacks);
+    memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     conn->server.origin_url = (h2o_url_t){origin->scheme, h2o_strdup(NULL, origin->authority.base, origin->authority.len),
                                           h2o_strdup(NULL, origin->host.base, origin->host.len)};
@@ -571,7 +573,7 @@ static void cancel_request(h2o_httpclient_t *_client)
     destroy_request(req);
 }
 
-void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb)
 {
     struct st_h2o_hqclient_conn_t *conn;

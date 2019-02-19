@@ -405,6 +405,7 @@
 		E9708B891E52C8560029E0A5 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
 		E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
 		E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22F71C040F6400405689 /* tunnel.c */; };
+		E9757709221BB7DC00D1EF74 /* http3_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = E9757708221BB78C00D1EF74 /* http3_internal.h */; };
 		E97EC88D213CE3130086AD64 /* hpack.h in Headers */ = {isa = PBXBuildFile; fileRef = E97EC88C213CE3130086AD64 /* hpack.h */; };
 		E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5861FD7BE2200DE4346 /* utf8_util.c */; };
 		E987E5D01FD7BE8D00DE4346 /* static_dict.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58C1FD7BE2300DE4346 /* static_dict.c */; };
@@ -1076,6 +1077,7 @@
 		E9708B061E49A3130029E0A5 /* sha256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha256.c; sourceTree = "<group>"; };
 		E9708B071E49A3130029E0A5 /* tassert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tassert.h; sourceTree = "<group>"; };
 		E9708B1B1E49A3480029E0A5 /* handy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = handy.h; sourceTree = "<group>"; };
+		E9757708221BB78C00D1EF74 /* http3_internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_internal.h; sourceTree = "<group>"; };
 		E97EC88C213CE3130086AD64 /* hpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hpack.h; sourceTree = "<group>"; };
 		E987E5551FD7BE1D00DE4346 /* bit_cost.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_cost.c; sourceTree = "<group>"; };
 		E987E5561FD7BE1D00DE4346 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
@@ -1799,6 +1801,7 @@
 				10AA2EB61A970EFC004322AC /* http2_internal.h */,
 				10AA2EB81A971280004322AC /* http2_scheduler.h */,
 				E9E50475214B3D28004DC170 /* http3_common.h */,
+				E9757708221BB78C00D1EF74 /* http3_internal.h */,
 				E9E5049321501CA5004DC170 /* http3_server.h */,
 				10A3D3D01B4CDBC700327CF9 /* memcached.h */,
 				10D0904219F0BA780043D458 /* linklist.h */,
@@ -2649,6 +2652,7 @@
 				E901C3EB213E1C3600D17C93 /* frame.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
 				10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */,
+				E9757709221BB7DC00D1EF74 /* http3_internal.h in Headers */,
 				08790DDF1D8015A400A04BC1 /* net.h in Headers */,
 				10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */,
 				E97EC88D213CE3130086AD64 /* hpack.h in Headers */,
