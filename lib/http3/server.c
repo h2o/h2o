@@ -271,7 +271,8 @@ static void register_pending_req(struct st_h2o_http3_server_stream_t *stream)
 
     h2o_linklist_insert(&conn->pending_reqs, &stream->link);
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
-    h2o_timer_link(conn->super.ctx->loop, 0, &conn->timeout);
+    if (!h2o_timer_is_linked(&conn->timeout))
+        h2o_timer_link(conn->super.ctx->loop, 0, &conn->timeout);
 }
 
 static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
