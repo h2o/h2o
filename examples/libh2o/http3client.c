@@ -153,9 +153,9 @@ int main(int argc, char **argv)
     quicly_context_t qctx = quicly_default_context;
     qctx.transport_params.max_streams_uni = 3;
     qctx.tls = &tlsctx;
-    qctx.stream_open = &h2o_httpclient_http3_stream_open_cb;
+    qctx.stream_open = &h2o_httpclient_http3_on_stream_open;
     // qctx.on_conn_close = h2o_hq_on_conn_close;
-    qctx.event_log.cb = quicly_new_default_event_log_cb(stderr);
+    qctx.event_log.cb = quicly_new_default_event_logger(stderr);
     qctx.event_log.mask = UINT64_MAX;
 
     h2o_http3_init_context(&hqctx, loop, sock, &qctx, NULL);

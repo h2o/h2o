@@ -205,7 +205,7 @@ extern const size_t h2o_httpclient__h2_size;
 
 void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb);
-extern quicly_stream_open_cb h2o_httpclient_http3_stream_open_cb;
+extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
 
 #endif
 

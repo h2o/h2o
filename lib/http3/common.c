@@ -479,7 +479,7 @@ void h2o_http3_send(h2o_http3_conn_t *conn)
             for (i = 0; i != num_packets; ++i) {
                 if (send_one(fd, packets[i]) == -1)
                     perror("sendmsg failed");
-                quicly_default_free_packet_cb.cb(&quicly_default_free_packet_cb, packets[i]);
+                conn->ctx->quic->packet_allocator->free_packet(conn->ctx->quic->packet_allocator, packets[i]);
             }
             break;
         case QUICLY_ERROR_FREE_CONNECTION:

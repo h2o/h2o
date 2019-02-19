@@ -596,7 +596,7 @@ void h2o_httpclient_connect_hq(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
     }
 }
 
-static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *qs)
+static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 {
     if (quicly_stream_is_unidirectional(qs->stream_id)) {
         h2o_http3_on_create_unidirectional_stream(qs);
@@ -609,4 +609,4 @@ static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *qs)
     return 0;
 }
 
-quicly_stream_open_cb h2o_httpclient_http3_stream_open_cb = {on_stream_open};
+quicly_stream_open_t h2o_httpclient_http3_on_stream_open = {stream_open_cb};

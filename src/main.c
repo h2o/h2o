@@ -1215,14 +1215,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 }
                 quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
                 *quic = quicly_default_context;
-                quic->encrypt_cid =
-                    quicly_new_default_encrypt_cid_cb(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init("deadbeef", 8));
-                quic->decrypt_cid =
-                    quicly_new_default_decrypt_cid_cb(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init("deadbeef", 8));
+                /* use a cutomized encrypt / decrypt function that uses the STEK */
+                quic->cid_encryptor =
+                    quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init("deadbeef", 8));
                 quic->transport_params.max_streams_uni = 3;
-                quic->event_log.cb = quicly_new_default_event_log_cb(stderr);
+                quic->event_log.cb = quicly_new_default_event_logger(stderr);
                 quic->event_log.mask = UINT64_MAX;
-                quic->stream_open = &h2o_http3_server_stream_open_cb;
+                quic->stream_open = &h2o_http3_server_on_stream_open;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
             }

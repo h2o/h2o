@@ -458,7 +458,7 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
     return 0;
 }
 
-static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *qs)
+static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 {
     static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
                                                         on_send_stop,      on_receive,    on_receive_reset};
@@ -495,7 +495,7 @@ static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *qs)
     return 0;
 }
 
-quicly_stream_open_cb h2o_http3_server_stream_open_cb = {on_stream_open};
+quicly_stream_open_t h2o_http3_server_on_stream_open = {stream_open_cb};
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
                                           quicly_decoded_packet_t *packets, size_t num_packets)
