@@ -115,6 +115,10 @@ struct st_h2o_http3_ctx_t {
      */
     struct kh_h2o_http3_unauthmap_s *conns_accepting;
     /**
+     * linklist of clients (see st_h2o_http3client_conn_t::clients_link)
+     */
+    h2o_linklist_t clients;
+    /**
      * callback to accept new connections (optional)
      */
     h2o_http3_accept_cb acceptor;

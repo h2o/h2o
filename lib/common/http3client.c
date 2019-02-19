@@ -42,7 +42,14 @@ struct st_h2o_http3client_conn_t {
     ptls_handshake_properties_t handshake_properties;
     h2o_timer_t timeout;
     h2o_hostinfo_getaddr_req_t *getaddr_req;
-    h2o_linklist_t pending_requests; /* linklist used to queue pending requests */
+    /**
+     * see h2o_http3_ctx_t::clients
+     */
+    h2o_linklist_t clients_link;
+    /**
+     * linklist used to queue pending requests
+     */
+    h2o_linklist_t pending_requests;
 };
 
 struct st_h2o_http3client_req_t {
@@ -88,25 +95,29 @@ static int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, 
                                           int err, const char **err_desc);
 static void start_request(struct st_h2o_http3client_req_t *req);
 
-static struct st_h2o_http3client_conn_t *find_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
+static struct st_h2o_http3client_conn_t *find_connection_for_origin(h2o_httpclient_ctx_t *ctx, const h2o_url_scheme_t *scheme,
+                                                                    h2o_iovec_t authority)
 {
-    /* FIXME connections during name lookup cannot be found through ctx->http3; should use a dedicated map keyed by the origin */
-    h2o_http3_conn_t *super_conn;
+    h2o_linklist_t *l;
 
-    kh_foreach_value(ctx->http3->conns_by_id, super_conn, {
-        struct st_h2o_http3client_conn_t *conn = (void *)super_conn;
-        /* FIXME check max_concurrent_streams, etc. */
-        if (conn->server.origin_url.scheme == origin->scheme &&
-            h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len, origin->authority.base,
-                      origin->authority.len))
+    /* FIXME:
+     * - check connection state(e.g., max_concurrent_streams, if received GOAWAY)
+     * - use hashmap
+     */
+    for (l = ctx->http3->clients.next; l != &ctx->http3->clients; l = l->next) {
+        struct st_h2o_http3client_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_conn_t, clients_link, l);
+        if (conn->server.origin_url.scheme == scheme &&
+            h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len, authority.base, authority.len))
             return conn;
-    });
+    }
 
     return NULL;
 }
 
 static void destroy_connection(struct st_h2o_http3client_conn_t *conn)
 {
+    if (h2o_linklist_is_linked(&conn->clients_link))
+        h2o_linklist_unlink(&conn->clients_link);
     /* FIXME pending_requests */
     if (conn->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(conn->getaddr_req);
@@ -204,6 +215,7 @@ struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h
     sprintf(conn->server.named_serv, "%" PRIu16, h2o_url_get_port(origin));
     conn->handshake_properties.client.negotiated_protocols.list = h2o_http3_alpn;
     conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn);
+    h2o_linklist_insert(&ctx->http3->clients, &conn->clients_link);
     h2o_linklist_init_anchor(&conn->pending_requests);
 
     conn->getaddr_req = h2o_hostinfo_getaddr(conn->ctx->getaddr_receiver, conn->server.origin_url.host,
@@ -579,7 +591,7 @@ void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
     struct st_h2o_http3client_conn_t *conn;
     struct st_h2o_http3client_req_t *req;
 
-    if ((conn = find_connection(ctx, target)) == NULL)
+    if ((conn = find_connection_for_origin(ctx, target->scheme, target->authority)) == NULL)
         conn = create_connection(ctx, target);
 
     req = h2o_mem_alloc(sizeof(*req));

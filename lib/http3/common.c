@@ -509,6 +509,7 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
     ctx->next_cid = (quicly_cid_plaintext_t){0}; /* FIXME set thread_id, etc. */
     ctx->conns_by_id = kh_init_h2o_http3_idmap();
     ctx->conns_accepting = kh_init_h2o_http3_unauthmap();
+    h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
 
     h2o_socket_read_start(ctx->sock, on_read);
@@ -516,6 +517,7 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
 
 void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
 {
+    assert(h2o_linklist_is_empty(&ctx->clients));
     h2o_socket_close(ctx->sock);
     /* FIXME destroy each connection in the map? */
     kh_destroy_h2o_http3_idmap(ctx->conns_by_id);
