@@ -82,7 +82,10 @@ typedef struct st_h2o_httpclient_ctx_t {
         int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
 
-    struct st_h2o_http3_ctx_t *quic; /* 1-to-(0|1) relationship */
+    /**
+     * 1-to-(0|1) relationship; NULL when h3 is not used
+     */
+    struct st_h2o_http3_ctx_t *http3;
 
 } h2o_httpclient_ctx_t;
 
