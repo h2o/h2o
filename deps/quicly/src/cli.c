@@ -254,7 +254,7 @@ static int client_on_receive(quicly_stream_t *stream, size_t off, const void *sr
     return 0;
 }
 
-static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *stream)
+static int on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
 {
     int ret;
 
@@ -264,9 +264,9 @@ static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *stream)
     return 0;
 }
 
-static quicly_stream_open_cb stream_open = {&on_stream_open};
+static quicly_stream_open_t stream_open = {&on_stream_open};
 
-static void on_closed_by_peer(quicly_closed_by_peer_cb *self, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason,
+static void on_closed_by_peer(quicly_closed_by_peer_t *self, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason,
                               size_t reason_len)
 {
     if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
@@ -282,7 +282,7 @@ static void on_closed_by_peer(quicly_closed_by_peer_cb *self, quicly_conn_t *con
     }
 }
 
-static quicly_closed_by_peer_cb closed_by_peer = {&on_closed_by_peer};
+static quicly_closed_by_peer_t closed_by_peer = {&on_closed_by_peer};
 
 static int send_one(int fd, quicly_datagram_t *p)
 {
@@ -316,7 +316,8 @@ static int send_pending(int fd, quicly_conn_t *conn)
                 if ((ret = send_one(fd, packets[i])) == -1)
                     perror("sendmsg failed");
                 ret = 0;
-                quicly_default_free_packet_cb.cb(&quicly_default_free_packet_cb, packets[i]);
+                quicly_packet_allocator_t *pa = quicly_get_context(conn)->packet_allocator;
+                pa->free_packet(pa, packets[i]);
             }
         }
     } while (ret == 0 && num_packets == sizeof(packets) / sizeof(packets[0]));
@@ -766,7 +767,7 @@ int main(int argc, char **argv)
             }
             setvbuf(fp, NULL, _IONBF, 0);
             ctx.event_log.mask = UINT64_MAX;
-            ctx.event_log.cb = quicly_new_default_event_log_cb(fp);
+            ctx.event_log.cb = quicly_new_default_event_logger(fp);
         } break;
         case 'i':
             if (sscanf(optarg, "%" PRId64, &request_interval) != 1) {
@@ -855,10 +856,8 @@ int main(int argc, char **argv)
             tlsctx.random_bytes(random_key, sizeof(random_key) - 1);
             cid_key = random_key;
         }
-        ctx.encrypt_cid =
-            quicly_new_default_encrypt_cid_cb(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, strlen(cid_key)));
-        ctx.decrypt_cid =
-            quicly_new_default_decrypt_cid_cb(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, strlen(cid_key)));
+        ctx.cid_encryptor =
+            quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, strlen(cid_key)));
     } else {
         /* client */
         if (ticket_file != NULL)

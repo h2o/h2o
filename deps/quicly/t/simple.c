@@ -393,7 +393,7 @@ static void test_rst_during_loss(void)
 
 static uint16_t test_close_error_code;
 
-static void test_closeed_by_peer(quicly_closed_by_peer_cb *self, quicly_conn_t *conn, int err, uint64_t frame_type,
+static void test_closeed_by_peer(quicly_closed_by_peer_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
                                  const char *reason, size_t reason_len)
 {
     ok(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
@@ -405,7 +405,7 @@ static void test_closeed_by_peer(quicly_closed_by_peer_cb *self, quicly_conn_t *
 
 static void test_close(void)
 {
-    quicly_closed_by_peer_cb closed_by_peer = {test_closeed_by_peer}, *orig_closed_by_peer = quic_ctx.closed_by_peer;
+    quicly_closed_by_peer_t closed_by_peer = {test_closeed_by_peer}, *orig_closed_by_peer = quic_ctx.closed_by_peer;
     quicly_datagram_t *datagram;
     size_t num_datagrams;
     int64_t client_timeout, server_timeout;

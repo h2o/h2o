@@ -173,35 +173,42 @@ typedef struct st_quicly_conn_t quicly_conn_t;
 typedef struct st_quicly_stream_t quicly_stream_t;
 
 #define QUICLY_CALLBACK_TYPE0(ret, name)                                                                                           \
-    typedef struct st_quicly_##name##_cb {                                                                                         \
-        ret (*cb)(struct st_quicly_##name##_cb * self);                                                                            \
-    } quicly_##name##_cb
+    typedef struct st_quicly_##name##_t {                                                                                          \
+        ret (*cb)(struct st_quicly_##name##_t * self);                                                                             \
+    } quicly_##name##_t
 
 #define QUICLY_CALLBACK_TYPE(ret, name, ...)                                                                                       \
-    typedef struct st_quicly_##name##_cb {                                                                                         \
-        ret (*cb)(struct st_quicly_##name##_cb * self, __VA_ARGS__);                                                               \
-    } quicly_##name##_cb
+    typedef struct st_quicly_##name##_t {                                                                                          \
+        ret (*cb)(struct st_quicly_##name##_t * self, __VA_ARGS__);                                                                \
+    } quicly_##name##_t
 
 /**
  * allocates a packet buffer
  */
-QUICLY_CALLBACK_TYPE(quicly_datagram_t *, alloc_packet, socklen_t salen, size_t payloadsize);
+typedef struct st_quicly_packet_allocator_t {
+    quicly_datagram_t *(*alloc_packet)(struct st_quicly_packet_allocator_t *self, socklen_t salen, size_t payloadsize);
+    void (*free_packet)(struct st_quicly_packet_allocator_t *self, quicly_datagram_t *packet);
+} quicly_packet_allocator_t;
+
 /**
- * frees a packet buffer
+ * CID encryption
  */
-QUICLY_CALLBACK_TYPE(void, free_packet, quicly_datagram_t *packet);
-/**
- * encrypts CID and/or generates a stateless reset token
- */
-QUICLY_CALLBACK_TYPE(void, encrypt_cid, quicly_cid_t *encrypted, void *stateless_reset_token,
-                     const quicly_cid_plaintext_t *plaintext);
-/**
- * decrypts CID. plaintext->thread_id should contain a randomly distributed number when validation fails, so that the value can be
- * used for distributing load among the threads within the process.
- * @param len length of encrypted bytes if known, or 0 if unknown (short header packet)
- * @return length of the CID, or SIZE_MAX if decryption failed
- */
-QUICLY_CALLBACK_TYPE(size_t, decrypt_cid, quicly_cid_plaintext_t *plaintext, const void *encrypted, size_t len);
+typedef struct st_quicly_cid_encryptor_t {
+    /**
+     * encrypts CID and/or generates a stateless reset token
+     */
+    void (*encrypt_cid)(struct st_quicly_cid_encryptor_t *self, quicly_cid_t *encrypted, void *stateless_reset_token,
+                        const quicly_cid_plaintext_t *plaintext);
+    /**
+     * decrypts CID. plaintext->thread_id should contain a randomly distributed number when validation fails, so that the value can
+     * be used for distributing load among the threads within the process.
+     * @param len length of encrypted bytes if known, or 0 if unknown (short header packet)
+     * @return length of the CID, or SIZE_MAX if decryption failed
+     */
+    size_t (*decrypt_cid)(struct st_quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *plaintext, const void *encrypted,
+                          size_t len);
+} quicly_cid_encryptor_t;
+
 /**
  * called when stream is being open. Application is expected to create it's corresponding state and tie it to stream->data.
  */
@@ -218,7 +225,8 @@ QUICLY_CALLBACK_TYPE0(int64_t, now);
 /**
  * for event logging
  */
-QUICLY_CALLBACK_TYPE(void, event_log, quicly_event_type_t type, const quicly_event_attribute_t *attributes, size_t num_attributes);
+QUICLY_CALLBACK_TYPE(void, event_logger, quicly_event_type_t type, const quicly_event_attribute_t *attributes,
+                     size_t num_attributes);
 
 typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
@@ -321,31 +329,23 @@ struct st_quicly_context_t {
     /**
      * callback for allocating memory for raw packet
      */
-    quicly_alloc_packet_cb *alloc_packet;
-    /**
-     * callback for freeing memory allocated by alloc_packet
-     */
-    quicly_free_packet_cb *free_packet;
+    quicly_packet_allocator_t *packet_allocator;
     /**
      *
      */
-    quicly_encrypt_cid_cb *encrypt_cid;
-    /**
-     *
-     */
-    quicly_decrypt_cid_cb *decrypt_cid;
+    quicly_cid_encryptor_t *cid_encryptor;
     /**
      * callback called when a new stream is opened by peer
      */
-    quicly_stream_open_cb *stream_open;
+    quicly_stream_open_t *stream_open;
     /**
      * callback called when a connection is closed by peer
      */
-    quicly_closed_by_peer_cb *closed_by_peer;
+    quicly_closed_by_peer_t *closed_by_peer;
     /**
      * returns current time in milliseconds
      */
-    quicly_now_cb *now;
+    quicly_now_t *now;
     /**
      * optional callback for debug logging
      */
@@ -358,7 +358,7 @@ struct st_quicly_context_t {
          * The callback. The value MUST be non-NULL when mask is set to non-zero. quicly_default_event_log is a functor provided by
          * by quicly that logs the events in JSON streaming format.
          */
-        quicly_event_log_cb *cb;
+        quicly_event_logger_t *cb;
     } event_log;
 };
 
@@ -798,41 +798,28 @@ static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
 /**
  *
  */
-extern quicly_alloc_packet_cb quicly_default_alloc_packet_cb;
+extern quicly_packet_allocator_t quicly_default_packet_allocator;
 /**
  *
  */
-extern quicly_free_packet_cb quicly_default_free_packet_cb;
-/**
- *
- */
-quicly_encrypt_cid_cb *quicly_new_default_encrypt_cid_cb(ptls_cipher_algorithm_t *cipher, ptls_hash_algorithm_t *hash,
+quicly_cid_encryptor_t *quicly_new_default_cid_encryptor(ptls_cipher_algorithm_t *cipher, ptls_hash_algorithm_t *hash,
                                                          ptls_iovec_t key);
 /**
  *
  */
-void quicly_free_default_encrypt_cid_cb(quicly_encrypt_cid_cb *self);
+void quicly_free_default_cid_enncryptor(quicly_cid_encryptor_t *self);
 /**
  *
  */
-quicly_decrypt_cid_cb *quicly_new_default_decrypt_cid_cb(ptls_cipher_algorithm_t *cipher, ptls_hash_algorithm_t *hash,
-                                                         ptls_iovec_t key);
+extern quicly_now_t quicly_default_now;
 /**
  *
  */
-void quicly_free_default_decrypt_cid_cb(quicly_decrypt_cid_cb *self);
+quicly_event_logger_t *quicly_new_default_event_logger(FILE *fp);
 /**
  *
  */
-extern quicly_now_cb quicly_default_now_cb;
-/**
- *
- */
-quicly_event_log_cb *quicly_new_default_event_log_cb(FILE *fp);
-/**
- *
- */
-void quicly_free_default_event_log_cb(quicly_event_log_cb *self);
+void quicly_free_default_event_logger(quicly_event_logger_t *self);
 /**
  *
  */

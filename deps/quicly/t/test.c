@@ -92,12 +92,12 @@ quicly_stream_callbacks_t stream_callbacks = {on_destroy,     quicly_streambuf_e
                                               on_egress_stop, quicly_streambuf_ingress_receive, on_ingress_reset};
 size_t on_destroy_callcnt;
 
-static int64_t get_now(quicly_now_cb *self)
+static int64_t get_now_cb(quicly_now_t *self)
 {
     return quic_now;
 }
 
-static quicly_now_cb get_now_cb = {get_now};
+static quicly_now_t get_now = {get_now_cb};
 
 void on_destroy(quicly_stream_t *stream)
 {
@@ -129,7 +129,7 @@ const quicly_cid_plaintext_t *new_master_id(void)
     return &master;
 }
 
-static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *stream)
+static int on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
 {
     test_streambuf_t *sbuf;
     int ret;
@@ -144,7 +144,7 @@ static int on_stream_open(quicly_stream_open_cb *self, quicly_stream_t *stream)
     return 0;
 }
 
-quicly_stream_open_cb stream_open = {on_stream_open};
+quicly_stream_open_t stream_open = {on_stream_open};
 
 static void test_vector(void)
 {
@@ -243,7 +243,7 @@ void free_packets(quicly_datagram_t **packets, size_t cnt)
 {
     size_t i;
     for (i = 0; i != cnt; ++i)
-        quicly_default_free_packet_cb.cb(&quicly_default_free_packet_cb, packets[i]);
+        quic_ctx.packet_allocator->free_packet(quic_ctx.packet_allocator, packets[i]);
 }
 
 size_t decode_packets(quicly_decoded_packet_t *decoded, quicly_datagram_t **raw, size_t cnt)
@@ -340,7 +340,7 @@ int main(int argc, char **argv)
     quic_ctx.tls = &tlsctx;
     quic_ctx.transport_params.max_streams_bidi = 10;
     quic_ctx.stream_open = &stream_open;
-    quic_ctx.now = &get_now_cb;
+    quic_ctx.now = &get_now;
 
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
