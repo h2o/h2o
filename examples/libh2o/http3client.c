@@ -36,8 +36,19 @@
 #include "h2o/http3_common.h"
 #include "h2o/url.h"
 
+struct st_request_t {
+    h2o_url_t url;
+    h2o_mem_pool_t pool;
+};
+
+static const uint64_t io_timeout = 5000; /* 5 seconds */
+static h2o_multithread_receiver_t getaddr_receiver;
 static h2o_http3_ctx_t h3ctx;
-static int num_requests_inflight;
+static h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout,
+                                   NULL, io_timeout,        1048576,    {{0}},      &h3ctx};
+static int num_requests_inflight, reissue_requests;
+
+static void issue_request(const char *urlstr);
 
 static h2o_socket_t *create_socket(h2o_loop_t *loop)
 {
@@ -58,6 +69,8 @@ static h2o_socket_t *create_socket(h2o_loop_t *loop)
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
+    struct st_request_t *req = client->data;
+
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         fprintf(stderr, "%s\n", errstr);
         exit(1);
@@ -68,6 +81,12 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_httpclient_error_is_eos) {
+        if (reissue_requests) {
+            char *urlstr = h2o_url_stringify(&req->pool, &req->url).base;
+            issue_request(urlstr);
+        }
+        h2o_mem_clear_pool(&req->pool);
+        free(req);
         --num_requests_inflight;
         if (num_requests_inflight == 0)
             h2o_http3_close_all_connections(&h3ctx);
@@ -113,7 +132,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     }
 
     *_method = h2o_iovec_init(H2O_STRLIT("GET"));
-    *url = *((h2o_url_t *)client->data);
+    *url = ((struct st_request_t *)client->data)->url;
     *headers = NULL;
     *num_headers = 0;
     *body = h2o_iovec_init(NULL, 0);
@@ -122,12 +141,29 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     return on_head;
 }
 
+void issue_request(const char *urlstr)
+{
+    struct st_request_t *req = h2o_mem_alloc(sizeof(*req));
+
+    h2o_mem_init_pool(&req->pool);
+    urlstr = h2o_strdup(&req->pool, urlstr, SIZE_MAX).base;
+    if (h2o_url_parse(urlstr, strlen(urlstr), &req->url) != 0) {
+        fprintf(stderr, "cannot parse url:%s\n", urlstr);
+        exit(1);
+    }
+
+    h2o_httpclient_t *client;
+    h2o_httpclient_connect_h3(&client, &req->pool, req, &ctx, &req->url, on_connect);
+    ++num_requests_inflight;
+}
+
 static void usage(const char *cmd)
 {
     printf("Usage: %s [options] url...\n"
            "\n"
            "Options:\n"
            "  -e event-log-file  file to log events\n"
+           "  -r                 reissue requests forever\n"
            "  -h                 print this help\n"
            "\n",
            cmd);
@@ -136,11 +172,10 @@ static void usage(const char *cmd)
 int main(int argc, char **argv)
 {
     /* setup */
-    h2o_loop_t *loop = h2o_evloop_create();
-    h2o_multithread_receiver_t getaddr_receiver;
-    h2o_multithread_queue_t *queue = h2o_multithread_create_queue(loop);
+    ctx.loop = h2o_evloop_create();
+    h2o_multithread_queue_t *queue = h2o_multithread_create_queue(ctx.loop);
     h2o_multithread_register_receiver(queue, &getaddr_receiver, h2o_hostinfo_getaddr_receiver);
-    h2o_socket_t *sock = create_socket(loop);
+    h2o_socket_t *sock = create_socket(ctx.loop);
     ptls_context_t tlsctx = {ptls_openssl_random_bytes,
                              &ptls_get_time,
                              ptls_openssl_key_exchanges,
@@ -170,7 +205,7 @@ int main(int argc, char **argv)
 
     { /* getopt */
     int ch;
-        while ((ch = getopt(argc, argv, "e:h")) != -1) {
+        while ((ch = getopt(argc, argv, "e:rh")) != -1) {
             switch (ch) {
             case 'e': {
                 FILE *fp;
@@ -182,6 +217,9 @@ int main(int argc, char **argv)
                 qctx.event_log.cb = quicly_new_default_event_logger(stderr);
                 qctx.event_log.mask = UINT64_MAX;
             } break;
+            case 'r':
+                reissue_requests = 1;
+                break;
             case 'h':
                 usage(argv[0]);
                 exit(0);
@@ -193,31 +231,16 @@ int main(int argc, char **argv)
         argv += optind;
     }
 
-    if (argc < 2) {
+    if (argc == 0) {
         fprintf(stderr, "Usage: %s <url...>\n", argv[0]);
         exit(1);
     }
 
-    h2o_http3_init_context(&h3ctx, loop, sock, &qctx, NULL);
-
-    uint64_t io_timeout = 5000; /* 5 seconds */
-    h2o_httpclient_ctx_t ctx = {loop, &getaddr_receiver, io_timeout, io_timeout, io_timeout,
-                                NULL, io_timeout,        1048576,    {{0}},      &h3ctx};
-
-    h2o_mem_pool_t pool;
-    h2o_mem_init_pool(&pool);
+    h2o_http3_init_context(&h3ctx, ctx.loop, sock, &qctx, NULL);
 
     int i;
-    for (i = 1; i != argc; ++i) {
-        h2o_url_t url;
-        if (h2o_url_parse(argv[i], strlen(argv[i]), &url) != 0) {
-            fprintf(stderr, "cannot parse url:%s\n", argv[i]);
-            exit(1);
-        }
-        h2o_httpclient_t *client;
-        h2o_httpclient_connect_h3(&client, &pool, &url, &ctx, &url, on_connect);
-        ++num_requests_inflight;
-    }
+    for (i = 0; i != argc; ++i)
+        issue_request(argv[i]);
 
     while (!(num_requests_inflight == 0 && h2o_http3_num_connections(&h3ctx) == 0))
         h2o_evloop_run(ctx.loop, INT32_MAX);
