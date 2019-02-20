@@ -19,6 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <errno.h>
+#include <getopt.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,21 +122,25 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     return on_head;
 }
 
+static void usage(const char *cmd)
+{
+    printf("Usage: %s [options] url...\n"
+           "\n"
+           "Options:\n"
+           "  -e event-log-file  file to log events\n"
+           "  -h                 print this help\n"
+           "\n",
+           cmd);
+}
+
 int main(int argc, char **argv)
 {
-    h2o_url_t url;
-    h2o_multithread_receiver_t getaddr_receiver;
-
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <url...>\n", argv[0]);
-        exit(1);
-    }
-
+    /* setup */
     h2o_loop_t *loop = h2o_evloop_create();
+    h2o_multithread_receiver_t getaddr_receiver;
     h2o_multithread_queue_t *queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(queue, &getaddr_receiver, h2o_hostinfo_getaddr_receiver);
     h2o_socket_t *sock = create_socket(loop);
-
     ptls_context_t tlsctx = {ptls_openssl_random_bytes,
                              &ptls_get_time,
                              ptls_openssl_key_exchanges,
@@ -161,9 +167,36 @@ int main(int argc, char **argv)
         ptls_clear_memory(random_key, sizeof(random_key));
     }
     qctx.stream_open = &h2o_httpclient_http3_on_stream_open;
-    // qctx.on_conn_close = h2o_hq_on_conn_close;
-    qctx.event_log.cb = quicly_new_default_event_logger(stderr);
-    qctx.event_log.mask = UINT64_MAX;
+
+    { /* getopt */
+    int ch;
+        while ((ch = getopt(argc, argv, "e:h")) != -1) {
+            switch (ch) {
+            case 'e': {
+                FILE *fp;
+                if ((fp = fopen(optarg, "w")) == NULL) {
+                    fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
+                    exit(1);
+                }
+                setvbuf(fp, NULL, _IONBF, 0);
+                qctx.event_log.cb = quicly_new_default_event_logger(stderr);
+                qctx.event_log.mask = UINT64_MAX;
+            } break;
+            case 'h':
+                usage(argv[0]);
+                exit(0);
+            default:
+                exit(1);
+            }
+        }
+        argc -= optind;
+        argv += optind;
+    }
+
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <url...>\n", argv[0]);
+        exit(1);
+    }
 
     h2o_http3_init_context(&h3ctx, loop, sock, &qctx, NULL);
 
@@ -176,6 +209,7 @@ int main(int argc, char **argv)
 
     int i;
     for (i = 1; i != argc; ++i) {
+        h2o_url_t url;
         if (h2o_url_parse(argv[i], strlen(argv[i]), &url) != 0) {
             fprintf(stderr, "cannot parse url:%s\n", argv[i]);
             exit(1);
