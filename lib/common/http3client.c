@@ -390,7 +390,7 @@ static void handle_input_error(struct st_h2o_http3client_req_t *req, int err)
     req->handle_input(req, &src, src_end, err, &err_desc);
 }
 
-static void on_stream_destroy(quicly_stream_t *qs)
+static void on_stream_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3client_req_t *req;
 

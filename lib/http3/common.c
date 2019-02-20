@@ -64,7 +64,7 @@ struct st_h2o_http3_egress_unistream_t {
 
 const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-17")}};
 
-static void ingress_unistream_on_destroy(quicly_stream_t *qs)
+static void ingress_unistream_on_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
     h2o_buffer_dispose(&stream->recvbuf);
@@ -195,7 +195,7 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
     return stream->handle_input(conn, stream, src, src_end, err_desc);
 }
 
-static void egress_unistream_on_destroy(quicly_stream_t *qs)
+static void egress_unistream_on_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_egress_unistream_t *stream = qs->data;
     h2o_buffer_dispose(&stream->sendbuf);
