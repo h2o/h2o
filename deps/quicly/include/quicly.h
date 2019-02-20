@@ -461,7 +461,7 @@ typedef struct st_quicly_stream_callbacks_t {
     /**
      * called when the stream is destroyed
      */
-    void (*on_destroy)(quicly_stream_t *stream);
+    void (*on_destroy)(quicly_stream_t *stream, int err);
     /**
      * called whenever data can be retired from the send buffer, specifying the amount that can be newly removed
      */

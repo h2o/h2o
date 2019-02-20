@@ -50,7 +50,7 @@ int quicly_streambuf_create(quicly_stream_t *stream, size_t sz)
     return 0;
 }
 
-void quicly_streambuf_destroy(quicly_stream_t *stream)
+void quicly_streambuf_destroy(quicly_stream_t *stream, int err)
 {
     quicly_streambuf_t *sbuf = stream->data;
 

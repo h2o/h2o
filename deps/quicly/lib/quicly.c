@@ -813,12 +813,12 @@ static struct st_quicly_conn_streamgroup_state_t *get_streamgroup_state(quicly_c
     }
 }
 
-static void destroy_stream(quicly_stream_t *stream)
+static void destroy_stream(quicly_stream_t *stream, int err)
 {
     quicly_conn_t *conn = stream->conn;
 
     if (stream->callbacks != NULL)
-        stream->callbacks->on_destroy(stream);
+        stream->callbacks->on_destroy(stream, err);
 
     khiter_t iter = kh_get(quicly_stream_t, conn->streams, stream->stream_id);
     assert(iter != kh_end(conn->streams));
@@ -837,12 +837,12 @@ static void destroy_stream(quicly_stream_t *stream)
     free(stream);
 }
 
-static void destroy_all_streams(quicly_conn_t *conn)
+static void destroy_all_streams(quicly_conn_t *conn, int err)
 {
     quicly_stream_t *stream;
     kh_foreach_value(conn->streams, stream, {
         /* TODO do we need to send reset signals to open streams? */
-        destroy_stream(stream);
+        destroy_stream(stream, err);
     });
 }
 
@@ -878,8 +878,8 @@ static int create_handshake_flow(quicly_conn_t *conn, size_t epoch)
     if ((stream = open_stream(conn, -(quicly_stream_id_t)(1 + epoch), 65536, 65536)) == NULL)
         return PTLS_ERROR_NO_MEMORY;
     if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0) {
-        destroy_stream(stream);
-        return PTLS_ERROR_NO_MEMORY;
+        destroy_stream(stream, ret);
+        return ret;
     }
     stream->callbacks = &crypto_stream_callbacks;
 
@@ -890,7 +890,7 @@ static void destroy_handshake_flow(quicly_conn_t *conn, size_t epoch)
 {
     quicly_stream_t *stream = quicly_get_stream(conn, -(quicly_stream_id_t)(1 + epoch));
     if (stream != NULL)
-        destroy_stream(stream);
+        destroy_stream(stream, 0);
 }
 
 static struct st_quicly_pn_space_t *alloc_pn_space(size_t sz)
@@ -1092,7 +1092,7 @@ void quicly_free(quicly_conn_t *conn)
 {
     LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_FREE);
 
-    destroy_all_streams(conn);
+    destroy_all_streams(conn, 0);
 
     quicly_maxsender_dispose(&conn->ingress.max_data.sender);
     if (conn->ingress.max_streams.uni != NULL)
@@ -1215,7 +1215,7 @@ static int apply_stream_frame(quicly_stream_t *stream, quicly_stream_frame_t *fr
         sched_stream_control(stream);
 
     if (stream_is_destroyable(stream))
-        destroy_stream(stream);
+        destroy_stream(stream, 0);
 
     return 0;
 }
@@ -1800,7 +1800,7 @@ static int on_ack_stream(quicly_conn_t *conn, const quicly_sent_packet_t *packet
                                           &bytes_to_shift)) != 0)
             return ret;
         if (stream_is_destroyable(stream)) {
-            destroy_stream(stream);
+            destroy_stream(stream, 0);
         } else if (bytes_to_shift != 0) {
             stream->callbacks->on_send_shift(stream, bytes_to_shift);
         }
@@ -1887,7 +1887,7 @@ static int on_ack_rst_stream(quicly_conn_t *conn, const quicly_sent_packet_t *pa
         if ((stream = quicly_get_stream(conn, sent->data.stream_state_sender.stream_id)) != NULL) {
             on_ack_stream_state_sender(&stream->_send_aux.rst.sender_state, event == QUICLY_SENTMAP_EVENT_ACKED);
             if (stream_is_destroyable(stream))
-                destroy_stream(stream);
+                destroy_stream(stream, 0);
         }
     }
 
@@ -2885,8 +2885,8 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
         if (quicly_sentmap_get(&iter)->packet_number == UINT64_MAX)
             return QUICLY_ERROR_FREE_CONNECTION;
         if (conn->super.state == QUICLY_STATE_CLOSING && conn->egress.send_ack_at <= now) {
-            destroy_all_streams(conn); /* delayed until the emission of CONNECTION_CLOSE frame to allow quicly_close to be called
-                                        * from a stream handler */
+            destroy_all_streams(conn, 0); /* delayed until the emission of CONNECTION_CLOSE frame to allow quicly_close to be called
+                                           * from a stream handler */
             if (conn->application != NULL && conn->application->one_rtt_writable) {
                 s.current.cipher = &conn->application->cipher.egress;
                 s.current.first_byte = QUICLY_QUIC_BIT;
@@ -3242,7 +3242,7 @@ static int handle_reset_stream_frame(quicly_conn_t *conn, quicly_reset_stream_fr
             0)
             return ret;
         if (stream_is_destroyable(stream))
-            destroy_stream(stream);
+            destroy_stream(stream, 0);
     }
 
     return 0;
@@ -3569,7 +3569,7 @@ static int handle_close(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_
     if (conn->super.ctx->closed_by_peer != NULL)
         conn->super.ctx->closed_by_peer->cb(conn->super.ctx->closed_by_peer, conn, err, frame_type,
                                             (const char *)reason_phrase.base, reason_phrase.len);
-    destroy_all_streams(conn);
+    destroy_all_streams(conn, err);
 
     return 0;
 }

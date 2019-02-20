@@ -82,7 +82,7 @@
     "sS919x2o8l97kaYf\n"                                                                                                           \
     "-----END CERTIFICATE-----\n"
 
-static void on_destroy(quicly_stream_t *stream);
+static void on_destroy(quicly_stream_t *stream, int err);
 static int on_egress_stop(quicly_stream_t *stream, int err);
 static int on_ingress_reset(quicly_stream_t *stream, int err);
 
@@ -99,7 +99,7 @@ static int64_t get_now_cb(quicly_now_t *self)
 
 static quicly_now_t get_now = {get_now_cb};
 
-void on_destroy(quicly_stream_t *stream)
+void on_destroy(quicly_stream_t *stream, int err)
 {
     test_streambuf_t *sbuf = stream->data;
     sbuf->is_detached = 1;
