@@ -34,6 +34,7 @@
 #include "h2o/http3_common.h"
 #include "h2o/url.h"
 
+static h2o_http3_ctx_t h3ctx;
 static int num_requests_inflight;
 
 static h2o_socket_t *create_socket(h2o_loop_t *loop)
@@ -67,7 +68,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     if (errstr == h2o_httpclient_error_is_eos) {
         --num_requests_inflight;
         if (num_requests_inflight == 0)
-            exit(0);
+            h2o_http3_close_all_connections(&h3ctx);
     }
 
     return 0;
@@ -84,7 +85,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         return NULL;
     }
 
-    printf("HTTP/QUIC %d %.*s\n", status, (int)msg.len, msg.base);
+    printf("HTTP/3 %d %.*s\n", status, (int)msg.len, msg.base);
     for (i = 0; i != num_headers; ++i)
         printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
     printf("\n");
@@ -123,7 +124,6 @@ int main(int argc, char **argv)
 {
     h2o_url_t url;
     h2o_multithread_receiver_t getaddr_receiver;
-    h2o_http3_ctx_t hqctx;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <url...>\n", argv[0]);
@@ -165,11 +165,11 @@ int main(int argc, char **argv)
     qctx.event_log.cb = quicly_new_default_event_logger(stderr);
     qctx.event_log.mask = UINT64_MAX;
 
-    h2o_http3_init_context(&hqctx, loop, sock, &qctx, NULL);
+    h2o_http3_init_context(&h3ctx, loop, sock, &qctx, NULL);
 
     uint64_t io_timeout = 5000; /* 5 seconds */
     h2o_httpclient_ctx_t ctx = {loop, &getaddr_receiver, io_timeout, io_timeout, io_timeout,
-                                NULL, io_timeout,        1048576,    {{0}},      &hqctx};
+                                NULL, io_timeout,        1048576,    {{0}},      &h3ctx};
 
     h2o_mem_pool_t pool;
     h2o_mem_init_pool(&pool);
@@ -185,8 +185,10 @@ int main(int argc, char **argv)
         ++num_requests_inflight;
     }
 
-    while (1)
+    while (!(num_requests_inflight == 0 && h2o_http3_num_connections(&h3ctx) == 0))
         h2o_evloop_run(ctx.loop, INT32_MAX);
+
+    h2o_http3_dispose_context(&h3ctx);
 
     return 0;
 }

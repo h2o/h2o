@@ -225,6 +225,14 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
  */
 void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx);
 /**
+ *
+ */
+void h2o_http3_close_all_connections(h2o_http3_ctx_t *ctx);
+/**
+ *
+ */
+size_t h2o_http3_num_connections(h2o_http3_ctx_t *ctx);
+/**
  * initializes a http3 connection
  */
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, h2o_http3_conn_callbacks_t *callbacks);

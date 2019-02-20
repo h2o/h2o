@@ -517,11 +517,41 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
 
 void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
 {
+    assert(kh_size(ctx->conns_by_id) == 0);
+    assert(kh_size(ctx->conns_accepting) == 0);
     assert(h2o_linklist_is_empty(&ctx->clients));
+
     h2o_socket_close(ctx->sock);
-    /* FIXME destroy each connection in the map? */
     kh_destroy_h2o_http3_idmap(ctx->conns_by_id);
     kh_destroy_h2o_http3_unauthmap(ctx->conns_accepting);
+}
+
+static void close_connection(h2o_http3_conn_t *conn)
+{
+    switch (quicly_get_state(conn->quic)) {
+    case QUICLY_STATE_FIRSTFLIGHT:
+        h2o_http3_dispose_conn(conn);
+        break;
+    case QUICLY_STATE_CONNECTED:
+        quicly_close(conn->quic, H2O_HTTP3_ERROR_NONE, "");
+        break;
+    default:
+        /* only need to wait for the socket close */
+        break;
+    }
+}
+
+void h2o_http3_close_all_connections(h2o_http3_ctx_t *ctx)
+{
+    h2o_http3_conn_t *conn;
+
+    kh_foreach_value(ctx->conns_by_id, conn, { close_connection(conn); });
+    kh_foreach_value(ctx->conns_accepting, conn, { close_connection(conn); });
+}
+
+size_t h2o_http3_num_connections(h2o_http3_ctx_t *ctx)
+{
+    return kh_size(ctx->conns_by_id) + kh_size(ctx->conns_accepting);
 }
 
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, h2o_http3_conn_callbacks_t *callbacks)

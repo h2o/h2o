@@ -500,7 +500,20 @@ quicly_stream_open_t h2o_http3_server_on_stream_open = {stream_open_cb};
 
 static void on_h3_destroy(h2o_http3_conn_t *h3)
 {
-    h2o_fatal("net yet");
+    struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
+
+    assert(quicly_num_streams(conn->h3.quic) == 0);
+    assert(conn->num_streams.recv_headers == 0);
+    assert(conn->num_streams.req_pending == 0);
+    assert(conn->num_streams.send_headers == 0);
+    assert(conn->num_streams.send_body == 0);
+    assert(conn->num_streams.close_wait == 0);
+    assert(h2o_linklist_is_empty(&conn->pending_reqs));
+
+    if (h2o_timer_is_linked(&conn->timeout))
+        h2o_timer_unlink(&conn->timeout);
+    h2o_http3_dispose_conn(&conn->h3);
+    free(conn);
 }
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
@@ -538,6 +551,7 @@ SynFound : {
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->pending_reqs);
     h2o_timer_init(&conn->timeout, handle_pending_reqs);
+    memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     quicly_conn_t *qconn;
 
     /* accept connection */
