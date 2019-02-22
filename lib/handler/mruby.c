@@ -868,9 +868,10 @@ static void on_generator_dispose(void *_generator)
 {
     h2o_mruby_generator_t *generator = _generator;
 
+    generator->req = NULL;
+
     if (generator->rack_input != NULL)
         h2o_mruby_input_stream_dispose(generator->rack_input);
-    generator->req = NULL;
 
     if (!mrb_nil_p(generator->refs.generator))
         DATA_PTR(generator->refs.generator) = NULL;
