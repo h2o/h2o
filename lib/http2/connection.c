@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "h2o.h"
+#include "h2o/hpack.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
@@ -452,10 +453,10 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     header_exists_map = 0;
-    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme,
-                                       &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path,
-                                       &stream->req.headers, &header_exists_map, &stream->req.content_length,
-                                       &stream->cache_digests, err_desc)) != 0) {
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
+                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
+                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
+                                       &stream->req.content_length, &stream->cache_digests, src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -503,9 +504,10 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     size_t dummy_content_length;
     int ret;
 
-    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme,
-                                       &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path,
-                                       &stream->req.headers, NULL, &dummy_content_length, NULL, err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
+                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
+                                       &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, src, len,
+                                       err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;

@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include "khash.h"
+#include "h2o/hpack.h"
 #include "h2o/httpclient.h"
 #include "h2o/http2_common.h"
 
@@ -285,8 +286,9 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
     assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
-    if ((ret = h2o_hpack_parse_response_headers(stream->super.pool, &stream->input.status, &stream->input.headers,
-                                                &conn->input.header_table, src, len, err_desc)) != 0) {
+    if ((ret =
+             h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table, &stream->input.status,
+                                      &stream->input.headers, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
