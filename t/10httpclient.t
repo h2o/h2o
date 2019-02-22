@@ -3,7 +3,7 @@ use warnings;
 use Test::More;
 use t::Util;
 
-my $fn = bindir() . "/examples-http1client";
+my $fn = bindir() . "/examples-httpclient";
 
 plan skip_all => 'http1client not found'
     unless -x $fn;
