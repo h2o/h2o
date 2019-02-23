@@ -345,7 +345,7 @@ static void handle_exception(h2o_mruby_context_t *ctx, h2o_mruby_generator_t *ge
     mrb_state *mrb = ctx->shared->mrb;
     assert(mrb->exc != NULL);
 
-    if (generator == NULL || generator->req->_generator != NULL) {
+    if (generator == NULL || generator->req == NULL || generator->req->_generator != NULL) {
         fprintf(stderr, "mruby raised: %s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
     } else {
         h2o_req_log_error(generator->req, H2O_MRUBY_MODULE_NAME, "mruby raised: %s\n",
@@ -870,11 +870,11 @@ static void on_generator_dispose(void *_generator)
 
     generator->req = NULL;
 
-    if (generator->rack_input != NULL)
-        h2o_mruby_input_stream_dispose(generator->rack_input);
-
     if (!mrb_nil_p(generator->refs.generator))
         DATA_PTR(generator->refs.generator) = NULL;
+
+    if (generator->rack_input != NULL)
+        h2o_mruby_input_stream_dispose(generator->rack_input);
 
     if (generator->error_stream != NULL)
         generator->error_stream->generator = NULL;
