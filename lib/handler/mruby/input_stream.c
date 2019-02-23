@@ -138,7 +138,11 @@ static int prepare_chunk(h2o_mruby_input_stream_t *is, mrb_value *chunk)
         if (mrb_nil_p(*chunk)) {
             *chunk = h2o_mruby_new_str(mrb, NULL, len);
         }
-        mrb_str_resize(mrb, *chunk, len);
+        if (RSTRING_LEN(*chunk) != len) {
+            mrb_str_resize(mrb, *chunk, len);
+        } else {
+            mrb_str_modify(mrb, RSTRING(*chunk));
+        }
         memcpy(RSTRING_PTR(*chunk), buf.base, len);
         consume_buffer(is, len);
         return 0;
