@@ -154,8 +154,8 @@ static int do_write_req(void *_is, h2o_iovec_t chunk, int is_end_stream)
     if (!mrb_nil_p(is->receiver)) {
         mrb_value chunk_str;
         if (prepare_chunk(is, &chunk_str) == 0) {
-            h2o_mruby_run_fiber(is->generator->ctx, detach_receiver(is), chunk_str, NULL);
             clear_args(is);
+            h2o_mruby_run_fiber(is->generator->ctx, detach_receiver(is), chunk_str, NULL);
         }
     }
 
