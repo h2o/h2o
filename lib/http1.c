@@ -372,6 +372,15 @@ static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *he
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
     }
 
+    /* path might contain absolute URL; if so, convert it */
+    if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {
+        h2o_url_t url;
+        if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
+            conn->req.input.path = url.path;
+            host = conn->req.authority;
+        }
+    }
+
     /* move host header to req->authority */
     if (host.base != NULL)
         conn->req.input.authority = host;

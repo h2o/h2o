@@ -37,6 +37,8 @@ static int body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int delay_interval_ms = 0;
+static int ssl_verify_none = 0;
+static int http2_ratio = -1;
 static int cur_body_size;
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -45,6 +47,28 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int header_requires_dup);
+
+static void on_exit_deferred(h2o_timer_t *entry)
+{
+    h2o_timer_unlink(entry);
+    exit(1);
+}
+static h2o_timer_t exit_deferred;
+
+static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
+{
+    char errbuf[2048];
+    va_list args;
+    va_start(args, fmt);
+    int errlen = vsnprintf(errbuf, sizeof(errbuf), fmt, args);
+    va_end(args);
+    fprintf(stderr, "%.*s\n", errlen, errbuf);
+
+    /* defer using zero timeout to send pending GOAWAY frame */
+    memset(&exit_deferred, 0, sizeof(exit_deferred));
+    exit_deferred.cb = on_exit_deferred;
+    h2o_timer_link(ctx->loop, 0, &exit_deferred);
+}
 
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
@@ -56,8 +80,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     /* parse URL */
     url_parsed = h2o_mem_alloc_pool(&pool, *url_parsed, 1);
     if (h2o_url_parse(url, SIZE_MAX, url_parsed) != 0) {
-        fprintf(stderr, "unrecognized type of URL: %s\n", url);
-        exit(1);
+        on_error(ctx, "unrecognized type of URL: %s", url);
+        return;
     }
 
     cur_body_size = body_size;
@@ -83,7 +107,11 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
 
         SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
         SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
-        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        if (ssl_verify_none) {
+            SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
+        } else {
+            SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        }
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
@@ -93,8 +121,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        fprintf(stderr, "%s\n", errstr);
-        exit(1);
+        on_error(client->ctx, errstr);
         return -1;
     }
 
@@ -112,17 +139,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static void print_status_line(int version, int status, h2o_iovec_t msg)
 {
-    size_t i;
-
-    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        fprintf(stderr, "%s\n", errstr);
-        exit(1);
-        return NULL;
-    }
-
     printf("HTTP/%d", (version >> 8));
     if ((version & 0xff) != 0) {
         printf(".%d", version & 0xff);
@@ -133,13 +151,30 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
     } else {
         printf("\n");
     }
-    for (i = 0; i != num_headers; ++i)
-        printf("%.*s: %.*s\n", (int)headers[i].name->len, headers[i].name->base, (int)headers[i].value.len, headers[i].value.base);
+}
+
+h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
+                               h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+{
+    size_t i;
+
+    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
+        on_error(client->ctx, errstr);
+        return NULL;
+    }
+
+    print_status_line(version, status, msg);
+
+    for (i = 0; i != num_headers; ++i) {
+        const char *name = headers[i].orig_name;
+        if (name == NULL)
+            name = headers[i].name->base;
+        printf("%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
+    }
     printf("\n");
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        fprintf(stderr, "no body\n");
-        exit(1);
+        on_error(client->ctx, "no body");
         return NULL;
     }
 
@@ -194,8 +229,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
                                   h2o_url_t *origin)
 {
     if (errstr != NULL) {
-        fprintf(stderr, "%s\n", errstr);
-        exit(1);
+        on_error(client->ctx, errstr);
         return NULL;
     }
 
@@ -238,13 +272,15 @@ int main(int argc, char **argv)
     h2o_multithread_receiver_t getaddr_receiver;
     uint64_t io_timeout = 5000; /* 5 seconds */
     h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout};
+    ctx.max_buffer_size = SIZE_MAX;
+
     int opt;
 
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    while ((opt = getopt(argc, argv, "t:m:b:c:i:")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:b:c:i:r:k")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
@@ -269,6 +305,12 @@ int main(int argc, char **argv)
         case 'i':
             delay_interval_ms = atoi(optarg);
             break;
+        case 'r':
+            http2_ratio = atoi(optarg);
+            break;
+        case 'k':
+            ssl_verify_none = 1;
+            break;
         default:
             usage(argv[0]);
             exit(EXIT_FAILURE);
@@ -287,6 +329,8 @@ int main(int argc, char **argv)
         iov_filler.len = chunk_size;
     }
     h2o_mem_init_pool(&pool);
+
+    ctx.http2.ratio = http2_ratio;
 
 /* setup context */
 #if H2O_USE_LIBUV

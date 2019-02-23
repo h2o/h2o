@@ -25,7 +25,7 @@ Download a release version from <a href="https://github.com/h2o/h2o/releases">th
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% cmake -DWITH_BUNDLED_SSL=on .
+% cmake .
 % make
 % sudo make install
 EOT
@@ -62,10 +62,6 @@ Following list shows the interesting arguments recognized by CMake.
 <dd>
 This option specifies the directory to which H2O will be installed (default: <code>/usr/local</code>).
 </dd>
-<dt><code>-DWITH_BUNDLED_SSL=<i>on</i>|<i>off</i></code></dt>
-<dd>
-This option instructs whether or not to use <a href="http://www.libressl.org/">LibreSSL</a> being bundled (default: <code>off</code> if <a href="https://www.openssl.org/">OpenSSL</a> version >= 1.0.2 is found, <code>on</code> if otherwise).  Read the section below for comparison between OpenSSL and LibreSSL.
-</dd>
 <dt><code>-DWITH_MRUBY=<i>on</i>|<i>off</i></code></dt>
 <dd>
 This option instructs whether or not to build the standalone server with support for <a href="configure/mruby.html">scripting using mruby</a>.
@@ -84,12 +80,12 @@ The difficulty in using OpenSSL is that the HTTP/2 specification requires the us
 </p>
 
 <p>
-Once you have installed OpenSSL 1.0.2, it is possible to build H2O that links against the library.  As an safeguard it is advised to use <code>-DWITH_BUNDLED_SSL</code> set to <code>off</code>, so that the server would not accidentally link against the bundled LibreSSL.
+Once you have installed OpenSSL 1.0.2, it is possible to build H2O that links against the library.
 CMake will search for OpenSSL by looking at the default search paths.
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% cmake -DWITH_BUNDLED_SSL=off
+% cmake .
 % make
 % sudo make install
 EOT
@@ -101,7 +97,7 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake -DWITH_BUNDLED_SSL=off
+% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake .
 % make
 % sudo make install
 EOT
@@ -112,7 +108,7 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake -DWITH_BUNDLED_SSL=off
+% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake .
 % make
 % sudo make install
 EOT

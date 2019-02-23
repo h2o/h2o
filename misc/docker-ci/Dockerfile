@@ -35,7 +35,7 @@ ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
 RUN sudo cpanm --notest Starlet Test::TCP Protocol::HTTP2
 
 # h2spec
-RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.1.1-b3a1814/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
+RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
