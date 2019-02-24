@@ -208,7 +208,11 @@ static struct theft_type_info random_buffer_info = {
         theft_seed seed = theft_seed_of_time();                                                                                    \
                                                                                                                                    \
         struct theft_run_config config = {                                                                                         \
-            .name = __func__, .prop1 = fn_, .type_info = {&random_buffer_info}, .seed = seed, .trials = 100,                       \
+            .name = __func__,                                                                                                      \
+            .prop1 = fn_,                                                                                                          \
+            .type_info = {&random_buffer_info},                                                                                    \
+            .seed = seed,                                                                                                          \
+            .trials = 100,                                                                                                         \
         };                                                                                                                         \
                                                                                                                                    \
         enum theft_run_res res = theft_run(&config);                                                                               \

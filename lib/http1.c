@@ -282,7 +282,8 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
 }
 
 static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
-                            h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect, ssize_t *entity_header_index)
+                        h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect,
+                        ssize_t *entity_header_index)
 {
     *entity_header_index = -1;
 
@@ -336,7 +337,7 @@ static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const stru
 }
 
 static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version,
-                             h2o_iovec_t *expect, ssize_t *entity_header_index)
+                         h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
 
@@ -351,7 +352,8 @@ static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *he
         conn->_ostr_final.super.send_informational = NULL;
 
     /* init headers */
-    if (init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect, entity_header_index) != 0)
+    if (init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
+                     entity_header_index) != 0)
         return -1;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */

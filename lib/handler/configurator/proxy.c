@@ -356,8 +356,9 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             return -1;
 
     if (self->vars->conf.keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+        h2o_configurator_errprintf(cmd, node,
+                                   "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
+                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
     }
 
