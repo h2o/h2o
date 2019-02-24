@@ -15,7 +15,7 @@ def transform(inf, outf):
     rframes = []
     for line in inf:
         trace = json.loads(line)
-        if len(trace["type"]) < 9 or trace["type"][:9] != "quictrace": continue
+        if len(trace["type"]) < 11 or trace["type"][:9] != "quictrace": continue
 
         # use first connection that is seen as the CID for the trace.
         # TODO: make this a cmdline parameter if multiple CIDs in trace.
@@ -23,7 +23,9 @@ def transform(inf, outf):
             cid = trace["conn"]
             qtr["destinationConnectionId"] = base64.b64encode(str(cid))
 
-        if trace["type"] == "quictrace-sent" or trace["type"] == "quictrace-recv":
+        event = trace["type"][10:]
+
+        if event == "sent" or event == "recv" or event == "lost":
             # close out previous received packet if it's still open
             if rframes:
                 packet = {}
@@ -34,8 +36,17 @@ def transform(inf, outf):
                 qtr["events"].append(packet)
                 rframes = []  # empty received frames list
 
-        # packet event
-        if trace["type"] == "quictrace-sent":
+        # packet lost
+        if event == "lost":
+            packet = {}
+            packet["eventType"] = "PACKET_LOST"
+            if start == -1: start = trace["time"]
+            packet["timeUs"] = str((trace["time"] - start) * 1000)
+            packet["packetNumber"] = str(trace["pn"])
+            qtr["events"].append(packet)
+
+        # packet send event
+        if event == "sent":
             packet = {}
             packet["eventType"] = "PACKET_SENT"
             if start == -1: start = trace["time"]
@@ -48,7 +59,7 @@ def transform(inf, outf):
             sframes = []  # empty sent frames list
 
         # STREAM frame sent
-        if trace["type"] == "quictrace-send-stream":
+        if event == "send-stream":
             info = {}
             info["streamId"] = str(trace["stream-id"])
             if (trace["stream-id"] < 0):
@@ -66,7 +77,7 @@ def transform(inf, outf):
             sframes.append(frame)
 
         # packet received
-        if trace["type"] == "quictrace-recv":
+        if event == "recv":
             if start == -1: start = trace["time"]
             rtime = trace["time"]
             rpn = trace["pn"]
@@ -74,7 +85,7 @@ def transform(inf, outf):
             acked = []
 
         # process ACK frame info
-        if trace["type"] == "quictrace-recv-ack":
+        if event == "recv-ack":
             if "ack-delay" not in trace:
                 # create ack block, add to list
                 block = {"firstPacket": str(trace["ack-block-begin"]), 

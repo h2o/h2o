@@ -725,6 +725,7 @@ static void usage(const char *cmd)
            "  -V                   verify peer using the default certificates\n"
            "  -v                   verbose mode (-vv emits packet dumps as well)\n"
            "  -x named-group       named group to be used (default: secp256r1)\n"
+           "  -X                   max bidirectional stream count (default: 100)\n"
            "  -h                   print this help\n"
            "\n",
            cmd);
@@ -745,7 +746,7 @@ int main(int argc, char **argv)
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
 
-    while ((ch = getopt(argc, argv, "a:C:c:k:e:i:l:Nnp:Rr:s:Vvx:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:C:c:k:e:i:l:Nnp:Rr:s:Vvx:X:h")) != -1) {
         switch (ch) {
         case 'a':
             set_alpn(&hs_properties, optarg);
@@ -831,6 +832,12 @@ int main(int argc, char **argv)
                 exit(1);
             }
         } break;
+        case 'X':
+            if (sscanf(optarg, "%" PRIu64, &ctx.transport_params.max_streams_bidi) != 1) {
+                fprintf(stderr, "failed to parse max streams count: %s\n", optarg);
+                exit(1);
+            }
+            break;
         default:
             usage(argv[0]);
             exit(1);

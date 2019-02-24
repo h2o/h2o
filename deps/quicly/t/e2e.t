@@ -86,6 +86,16 @@ subtest "stateless-reset" => sub {
     like $events, qr/"type":"stateless-reset-receive",/m;
 };
 
+subtest "blocked-streams" => sub {
+    my $guard = spawn_server(qw(-X 2));
+    my $resp = `$cli -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\nhello world\n";
+    $resp = `$cli -p /12.txt -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\nhello world\nhello world\n";
+    $resp = `$cli -p /12.txt -p /12.txt -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\nhello world\nhello world\nhello world\n";
+};
+
 done_testing;
 
 sub spawn_server {

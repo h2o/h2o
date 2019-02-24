@@ -30,24 +30,24 @@ static void test_basic(void)
     quicly_maxsender_init(&m, 100);
 
     /* basic checks */
-    ok(!quicly_maxsender_should_update(&m, 0, 100, 512));
-    ok(quicly_maxsender_should_update(&m, 0, 100, 1024));
-    ok(!quicly_maxsender_should_update(&m, 99, 100, 0));
-    ok(quicly_maxsender_should_update(&m, 100, 100, 0));
+    ok(!quicly_maxsender_should_send_max(&m, 0, 100, 512));
+    ok(quicly_maxsender_should_send_max(&m, 0, 100, 1024));
+    ok(!quicly_maxsender_should_send_max(&m, 99, 100, 0));
+    ok(quicly_maxsender_should_send_max(&m, 100, 100, 0));
 
     /* scenario */
-    ok(!quicly_maxsender_should_update(&m, 24, 100, 768));
-    ok(quicly_maxsender_should_update(&m, 25, 100, 768));
+    ok(!quicly_maxsender_should_send_max(&m, 24, 100, 768));
+    ok(quicly_maxsender_should_send_max(&m, 25, 100, 768));
     quicly_maxsender_record(&m, 125, &ackargs);
-    ok(!quicly_maxsender_should_update(&m, 49, 100, 768));
-    ok(quicly_maxsender_should_update(&m, 50, 100, 768));
+    ok(!quicly_maxsender_should_send_max(&m, 49, 100, 768));
+    ok(quicly_maxsender_should_send_max(&m, 50, 100, 768));
     quicly_maxsender_acked(&m, &ackargs);
-    ok(!quicly_maxsender_should_update(&m, 49, 100, 768));
-    ok(quicly_maxsender_should_update(&m, 50, 100, 768));
+    ok(!quicly_maxsender_should_send_max(&m, 49, 100, 768));
+    ok(quicly_maxsender_should_send_max(&m, 50, 100, 768));
     quicly_maxsender_record(&m, 150, &ackargs);
-    ok(!quicly_maxsender_should_update(&m, 74, 100, 768));
+    ok(!quicly_maxsender_should_send_max(&m, 74, 100, 768));
     quicly_maxsender_lost(&m, &ackargs);
-    ok(quicly_maxsender_should_update(&m, 74, 100, 768));
+    ok(quicly_maxsender_should_send_max(&m, 74, 100, 768));
 }
 
 void test_maxsender(void)

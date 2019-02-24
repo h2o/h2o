@@ -262,7 +262,7 @@ inline int quicly_loss_on_alarm(quicly_loss_t *r, uint64_t largest_sent, uint64_
 
 inline int quicly_loss_detect_loss(quicly_loss_t *r, uint64_t largest_pn, quicly_loss_do_detect_cb do_detect)
 {
-    uint32_t delay_until_lost = (r->rtt.latest > r->rtt.smoothed ? r->rtt.latest : r->rtt.smoothed) * 9 / 8;
+    uint32_t delay_until_lost = ((r->rtt.latest > r->rtt.smoothed ? r->rtt.latest : r->rtt.smoothed) * 9 + 7) / 8;
     int64_t loss_time;
     int ret;
 
