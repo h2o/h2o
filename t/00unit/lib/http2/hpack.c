@@ -314,9 +314,10 @@ static void test_hpack(void)
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_CACHE_CONTROL, NULL, H2O_STRLIT("private"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_DATE, NULL, H2O_STRLIT("Mon, 21 Oct 2013 20:13:21 GMT"));
         h2o_add_header(&pool, &res.headers, H2O_TOKEN_LOCATION, NULL, H2O_STRLIT("https://www.example.com"));
-        check_flatten(&header_table, &res, H2O_STRLIT("\x08\x03\x33\x30\x32\x58\x85\xae\xc3\x77\x1a\x4b\x61\x96\xd0\x7a\xbe\x94\x10"
-                                                      "\x54\xd4\x44\xa8\x20\x05\x95\x04\x0b\x81\x66\xe0\x82\xa6\x2d\x1b\xff\x6e\x91"
-                                                      "\x9d\x29\xad\x17\x18\x63\xc7\x8f\x0b\x97\xc8\xe9\xae\x82\xae\x43\xd3"));
+        check_flatten(&header_table, &res,
+                      H2O_STRLIT("\x08\x03\x33\x30\x32\x58\x85\xae\xc3\x77\x1a\x4b\x61\x96\xd0\x7a\xbe\x94\x10"
+                                 "\x54\xd4\x44\xa8\x20\x05\x95\x04\x0b\x81\x66\xe0\x82\xa6\x2d\x1b\xff\x6e\x91"
+                                 "\x9d\x29\xad\x17\x18\x63\xc7\x8f\x0b\x97\xc8\xe9\xae\x82\xae\x43\xd3"));
 
         memset(&res, 0, sizeof(res));
         res.status = 307;
@@ -497,16 +498,18 @@ void test_token_wo_hpack_id(void)
 
     h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries,
                                res.headers.size, NULL, SIZE_MAX);
-    ok(h2o_memis(buf->bytes + 9, buf->size - 9, H2O_STRLIT("\x88"     /* :status:200 */
-                                                           "\x40\x02" /* literal header w. incremental indexing, raw, TE */
-                                                           "te"
-                                                           "\x83" /* header value, huffman */
-                                                           "IP\x9f" /* test */)));
+    ok(h2o_memis(buf->bytes + 9, buf->size - 9,
+                 H2O_STRLIT("\x88"     /* :status:200 */
+                            "\x40\x02" /* literal header w. incremental indexing, raw, TE */
+                            "te"
+                            "\x83" /* header value, huffman */
+                            "IP\x9f" /* test */)));
     h2o_buffer_consume(&buf, buf->size);
     h2o_hpack_flatten_response(&buf, &table, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries,
                                res.headers.size, NULL, SIZE_MAX);
-    ok(h2o_memis(buf->bytes + 9, buf->size - 9, H2O_STRLIT("\x88" /* :status:200 */
-                                                           "\xbe" /* te: test, indexed */)));
+    ok(h2o_memis(buf->bytes + 9, buf->size - 9,
+                 H2O_STRLIT("\x88" /* :status:200 */
+                            "\xbe" /* te: test, indexed */)));
 
     h2o_buffer_dispose(&buf);
     h2o_hpack_dispose_header_table(&table);

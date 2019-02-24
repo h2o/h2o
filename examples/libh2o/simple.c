@@ -264,9 +264,8 @@ int main(int argc, char **argv)
     if (USE_MEMCACHED)
         h2o_multithread_register_receiver(ctx.queue, &libmemcached_receiver, h2o_memcached_receiver);
 
-    if (USE_HTTPS &&
-        setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key",
-                  "DEFAULT:!MD5:!DSS:!DES:!RC4:!RC2:!SEED:!IDEA:!NULL:!ADH:!EXP:!SRP:!PSK") != 0)
+    if (USE_HTTPS && setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key",
+                               "DEFAULT:!MD5:!DSS:!DES:!RC4:!RC2:!SEED:!IDEA:!NULL:!ADH:!EXP:!SRP:!PSK") != 0)
         goto Error;
 
     accept_ctx.ctx = &ctx;

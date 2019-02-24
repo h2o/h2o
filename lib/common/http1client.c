@@ -348,9 +348,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* call the callback. sock may be stealed */
     client->bytes_to_consume = rlen;
-    client->super._cb.on_body =
-        client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, version, http_status,
-                                  h2o_iovec_init(msg, msg_len), headers, num_headers, 1);
+    client->super._cb.on_body = client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, version,
+                                                          http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, 1);
 
     if (is_eos) {
         close_client(client);
@@ -564,7 +563,9 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     int chunked = 0;
     h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = {
-        &proxy_protocol, &chunked, &connection_header,
+        &proxy_protocol,
+        &chunked,
+        &connection_header,
     };
     h2o_iovec_t method;
     h2o_url_t url;

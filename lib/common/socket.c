@@ -74,7 +74,7 @@ struct st_h2o_socket_ssl_t {
                     enum {
                         ASYNC_RESUMPTION_STATE_COMPLETE = 0, /* just pass thru */
                         ASYNC_RESUMPTION_STATE_RECORD,       /* record first input, restore SSL state if it changes to REQUEST_SENT
-                                                                */
+                                                              */
                         ASYNC_RESUMPTION_STATE_REQUEST_SENT  /* async request has been sent, and is waiting for response */
                     } state;
                     SSL_SESSION *session_data;

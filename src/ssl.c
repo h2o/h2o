@@ -373,12 +373,13 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
     h2o_hex_encode(key_buf, ticket->cipher.key, key_len);
     h2o_hex_encode(key_buf + key_len * 2, ticket->hmac.key, block_size);
 
-    return snprintf(buf, bufsz, "- name: %s\n"
-                                "  cipher: %s\n"
-                                "  hash: %s\n"
-                                "  key: %s\n"
-                                "  not_before: %" PRIu64 "\n"
-                                "  not_after: %" PRIu64 "\n",
+    return snprintf(buf, bufsz,
+                    "- name: %s\n"
+                    "  cipher: %s\n"
+                    "  hash: %s\n"
+                    "  key: %s\n"
+                    "  not_before: %" PRIu64 "\n"
+                    "  not_after: %" PRIu64 "\n",
                     name_buf, OBJ_nid2sn(EVP_CIPHER_type(ticket->cipher.cipher)), OBJ_nid2sn(EVP_MD_type(ticket->hmac.md)), key_buf,
                     ticket->not_before, ticket->not_after);
 }
@@ -784,9 +785,10 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         **memcached_node, **redis_node, **lifetime;
 
     if (h2o_configurator_parse_mapping(
-            cmd, node, "mode:*", "cache-store:*,cache-memcached-num-threads:*,cache-memcached-prefix:s,cache-redis-prefix:s,"
-                                 "ticket-store:*,ticket-cipher:s,ticket-hash:s,ticket-memcached-prefix:s,ticket-redis-prefix:s,"
-                                 "ticket-file:s,memcached:m,redis:m,lifetime:*",
+            cmd, node, "mode:*",
+            "cache-store:*,cache-memcached-num-threads:*,cache-memcached-prefix:s,cache-redis-prefix:s,"
+            "ticket-store:*,ticket-cipher:s,ticket-hash:s,ticket-memcached-prefix:s,ticket-redis-prefix:s,"
+            "ticket-file:s,memcached:m,redis:m,lifetime:*",
             &mode_node, &cache_store, &cache_memcached_num_threads, &cache_memcached_prefix, &cache_redis_prefix, &ticket_store,
             &ticket_cipher, &ticket_hash, &ticket_memcached_prefix, &ticket_redis_prefix, &ticket_file, &memcached_node,
             &redis_node, &lifetime) != 0)
