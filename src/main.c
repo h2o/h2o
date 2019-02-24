@@ -1742,7 +1742,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (listener_config->quic != NULL) {
             listeners[i].hq = alloca(sizeof(*listeners[i].hq));
             h2o_http3_init_context(&listeners[i].hq->super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
-                                   listener_config->quic, h2o_http3_server_accept);
+                                   listener_config->quic, h2o_http3_server_accept, NULL);
             listeners[i].hq->accept_ctx = &listeners[i].accept_ctx;
         } else {
             listeners[i].hq = NULL;

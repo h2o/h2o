@@ -206,8 +206,11 @@ extern const size_t h2o_httpclient__h2_size;
 
 #ifdef quicly_h /* create http3client.h? */
 
+#include "h2o/http3_common.h"
+
 void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb);
+void h2o_httpclient_http3_notify_connection_update(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
 extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
 
 #endif

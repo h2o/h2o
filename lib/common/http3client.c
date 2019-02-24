@@ -610,6 +610,14 @@ void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
     }
 }
 
+void h2o_httpclient_http3_notify_connection_update(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *_conn)
+{
+    struct st_h2o_http3client_conn_t *conn = (void *)_conn;
+
+    if (h2o_timer_is_linked(&conn->timeout) && conn->timeout.cb == on_connect_timeout)
+        h2o_timer_unlink(&conn->timeout);
+}
+
 static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 {
     if (quicly_stream_is_unidirectional(qs->stream_id)) {

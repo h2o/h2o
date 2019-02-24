@@ -374,8 +374,11 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
     }
 
     /* for locality, emit packets belonging to the same connection NOW! */
-    if (conn != NULL)
+    if (conn != NULL) {
         h2o_http3_send(conn);
+        if (ctx->notify_conn_update != NULL)
+            ctx->notify_conn_update(ctx, conn);
+    }
 }
 
 static void on_read(h2o_socket_t *sock, const char *err)
@@ -498,7 +501,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, const uint8_t **_src, co
 }
 
 void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                            h2o_http3_accept_cb acceptor)
+                            h2o_http3_accept_cb acceptor, h2o_http3_notify_connection_update_cb notify_conn_update)
 {
     assert(quic->stream_open != NULL);
 
@@ -511,6 +514,7 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
     ctx->conns_accepting = kh_init_h2o_http3_unauthmap();
     h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
+    ctx->notify_conn_update = notify_conn_update;
 
     h2o_socket_read_start(ctx->sock, on_read);
 }

@@ -236,7 +236,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    h2o_http3_init_context(&h3ctx, ctx.loop, sock, &qctx, NULL);
+    h2o_http3_init_context(&h3ctx, ctx.loop, sock, &qctx, NULL, h2o_httpclient_http3_notify_connection_update);
 
     int i;
     for (i = 0; i != argc; ++i)
