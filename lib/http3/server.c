@@ -73,6 +73,14 @@ struct st_h2o_http3_server_conn_t {
     } num_streams;
 };
 
+struct st_h2o_http3_sendbuf_vec_t {
+    h2o_iovec_t vec;
+    /**
+     * if non-NULL, the memory should be freed by the h3 stack
+     */
+    void *free_ptr;
+};
+
 struct st_h2o_http3_server_stream_t {
     quicly_stream_t *quic;
     struct {
@@ -80,9 +88,10 @@ struct st_h2o_http3_server_stream_t {
         int (*handle_input)(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end);
     } recvbuf;
     struct {
-        H2O_VECTOR(h2o_iovec_t) vecs;
-        uint8_t data_frame_header_buf[9];
+        H2O_VECTOR(struct st_h2o_http3_sendbuf_vec_t) vecs;
         uint64_t final_size;
+        uint8_t data_frame_header_buf[9];
+        uint8_t proceed_called : 1;
     } sendbuf;
     enum h2o_http3_server_stream_state state;
     h2o_linklist_t link;
@@ -177,15 +186,18 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
     while (delta != 0) {
         assert(i < stream->sendbuf.vecs.size);
-        if (delta < stream->sendbuf.vecs.entries[i].len) {
-            stream->sendbuf.vecs.entries[i].base += delta;
-            stream->sendbuf.vecs.entries[i].len -= delta;
+        if (delta < stream->sendbuf.vecs.entries[i].vec.len) {
+            stream->sendbuf.vecs.entries[i].vec.base += delta;
+            stream->sendbuf.vecs.entries[i].vec.len -= delta;
             break;
         }
-        delta -= stream->sendbuf.vecs.entries[i].len;
+        delta -= stream->sendbuf.vecs.entries[i].vec.len;
         ++i;
     }
     if (i != 0) {
+        size_t j;
+        for (j = 0; j < i && stream->sendbuf.vecs.entries[j].free_ptr != NULL; ++j)
+            free(stream->sendbuf.vecs.entries[j].free_ptr);
         memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
                 (stream->sendbuf.vecs.size - i) * sizeof(stream->sendbuf.vecs.entries[0]));
         stream->sendbuf.vecs.size -= i;
@@ -194,7 +206,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     if (stream->sendbuf.vecs.size == 0) {
         switch (stream->send_state) {
         case H2O_SEND_STATE_IN_PROGRESS:
-            h2o_proceed_response(&stream->req);
+            assert(stream->sendbuf.proceed_called);
             break;
         case H2O_SEND_STATE_FINAL:
             assert(quicly_sendstate_transfer_complete(&stream->quic->sendstate));
@@ -215,9 +227,9 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
     /* find the start position */
     while (off != 0) {
         assert(i < stream->sendbuf.vecs.size);
-        if (off < stream->sendbuf.vecs.entries[i].len)
+        if (off < stream->sendbuf.vecs.entries[i].vec.len)
             break;
-        off -= stream->sendbuf.vecs.entries[i].len;
+        off -= stream->sendbuf.vecs.entries[i].vec.len;
         ++i;
     }
 
@@ -228,10 +240,10 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
             *wrote_all = 1;
             break;
         }
-        size_t sz = stream->sendbuf.vecs.entries[i].len - off;
+        size_t sz = stream->sendbuf.vecs.entries[i].vec.len - off;
         if (dst_end - dst < sz)
             sz = dst_end - dst;
-        memcpy(dst, stream->sendbuf.vecs.entries[i].base + off, sz);
+        memcpy(dst, stream->sendbuf.vecs.entries[i].vec.base + off, sz);
         dst += sz;
         /* prepare to write next */
         off = 0;
@@ -239,6 +251,20 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
     }
 
     *len = dst - (uint8_t *)_dst;
+
+    if (*wrote_all && stream->send_state == H2O_SEND_STATE_IN_PROGRESS && !stream->sendbuf.proceed_called) {
+        /* copy all non-copied entries in sendbuf and call proceed (TODO optimize) */
+        i = stream->sendbuf.vecs.size - 1;
+        do {
+            struct st_h2o_http3_sendbuf_vec_t *slot = stream->sendbuf.vecs.entries + i;
+            if (slot->free_ptr != NULL)
+                break;
+            slot->vec.base = slot->free_ptr = h2o_strdup(NULL, slot->vec.base, slot->vec.len).base;
+        } while (i-- != 0);
+        stream->sendbuf.proceed_called = 1;
+        h2o_proceed_response_deferred(&stream->req);
+    }
+
     return 0;
 }
 
@@ -382,7 +408,8 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream)
     });
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
-    stream->sendbuf.vecs.entries[stream->sendbuf.vecs.size++] = h2o_iovec_init(buf.entries, buf.size);
+    stream->sendbuf.vecs.entries[stream->sendbuf.vecs.size++] =
+        (struct st_h2o_http3_sendbuf_vec_t){h2o_iovec_init(buf.entries, buf.size), NULL};
     stream->sendbuf.final_size += buf.size;
 }
 
@@ -392,6 +419,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_iovec_t *bufs, si
     assert(&stream->req == _req);
 
     stream->send_state = _state;
+    stream->sendbuf.proceed_called = 0;
 
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
         write_response(stream);
@@ -412,10 +440,10 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_iovec_t *bufs, si
         /* write */
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
         stream->sendbuf.vecs.entries[stream->sendbuf.vecs.size++] =
-            h2o_iovec_init(stream->sendbuf.data_frame_header_buf, header_size);
+            (struct st_h2o_http3_sendbuf_vec_t){h2o_iovec_init(stream->sendbuf.data_frame_header_buf, header_size), NULL};
         stream->sendbuf.final_size += header_size;
-        memcpy(stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size, bufs, bufcnt * sizeof(h2o_iovec_t));
-        stream->sendbuf.vecs.size += bufcnt;
+        for (i = 0; i != bufcnt; ++i)
+            stream->sendbuf.vecs.entries[stream->sendbuf.vecs.size++] = (struct st_h2o_http3_sendbuf_vec_t){bufs[i], NULL};
         stream->sendbuf.final_size += size_total;
     }
 
@@ -431,6 +459,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_iovec_t *bufs, si
     }
 
     quicly_stream_sync_sendbuf(stream->quic, 1);
+    h2o_http3_schedule_timer(&get_conn(stream)->h3);
 }
 
 static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
@@ -479,6 +508,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->recvbuf.handle_input = handle_input_expect_headers;
     memset(&stream->sendbuf.vecs, 0, sizeof(stream->sendbuf.vecs));
     stream->sendbuf.final_size = 0;
+    stream->sendbuf.proceed_called = 0;
     stream->state = H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS;
     stream->link = (h2o_linklist_t){NULL};
     stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, NULL, do_send_informational};
