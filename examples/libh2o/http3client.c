@@ -41,11 +41,11 @@ struct st_request_t {
     h2o_mem_pool_t pool;
 };
 
-static const uint64_t io_timeout = 5000; /* 5 seconds */
+#define IO_TIMEOUT 5000 /* 5 seconds */
 static h2o_multithread_receiver_t getaddr_receiver;
 static h2o_http3_ctx_t h3ctx;
-static h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout,
-                                   NULL, io_timeout,        1048576,    {{0}},      &h3ctx};
+static h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, IO_TIMEOUT, IO_TIMEOUT, IO_TIMEOUT,
+                                   NULL, IO_TIMEOUT,        1048576,    {{0}},      &h3ctx};
 static int num_requests_inflight, reissue_requests;
 
 static void issue_request(const char *urlstr);
