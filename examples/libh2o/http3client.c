@@ -192,7 +192,7 @@ int main(int argc, char **argv)
                              1};
     quicly_amend_ptls_context(&tlsctx);
     quicly_context_t qctx = quicly_default_context;
-    qctx.transport_params.max_streams_uni = 3;
+    qctx.transport_params.max_streams_uni = 10;
     qctx.tls = &tlsctx;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
