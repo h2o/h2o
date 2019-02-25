@@ -146,6 +146,8 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
+    int soft_connection_limit;
+    int soft_connection_limit_min_age;
     size_t num_threads;
     int tfo_queues;
     time_t launch_time;
@@ -178,6 +180,8 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
+    -1,                                     /* soft_connection_limit */
+    30,                                     /* soft_connection_limit_min_age */
     0,                                      /* initialized in main() */
     0,                                      /* initialized in main() */
     0,                                      /* initialized in main() */
@@ -1220,6 +1224,16 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
 }
 
+static int on_config_soft_connection_limit(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit);
+}
+
+static int on_config_soft_connection_limit_min_age(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.soft_connection_limit_min_age);
+}
+
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_threads) != 0)
@@ -1562,14 +1576,21 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
     do {
         h2o_socket_t *sock;
-        if (num_connections(0) >= conf.max_connections) {
+        if (conf.soft_connection_limit > 0) {
+            int excess_connections = num_connections(0) - conf.soft_connection_limit;
+            if (excess_connections > 0) {
+                h2o_context_close_idle_connections(ctx->accept_ctx.ctx, excess_connections, conf.soft_connection_limit_min_age);
+            }
+        }
+
+        if (num_connections(0) >= conf.max_connections)
             /* The accepting socket is disactivated before entering the next in `run_loop`.
              * Note: it is possible that the server would accept at most `max_connections + num_threads` connections, since the
              * server does not check if the number of connections has exceeded _after_ epoll notifies of a new connection _but_
              * _before_ calling `accept`.  In other words t/40max-connections.t may fail.
              */
             break;
-        }
+
         if ((sock = h2o_evloop_socket_accept(listener)) == NULL) {
             break;
         }
@@ -1941,6 +1962,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
+        h2o_configurator_define_command(c, "soft-connection-limit", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit);
+        h2o_configurator_define_command(c, "soft-connection-limit.min-age", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit_min_age);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
