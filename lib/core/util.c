@@ -930,7 +930,7 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     "h2-14"
 
 const h2o_iovec_t h2o_http2_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {NULL}};
-const h2o_iovec_t h2o_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {H2O_STRLIT("http/1.1")}, {NULL}};
+const h2o_iovec_t h2o_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, ALPN_ENTRY("http/1.1"), {NULL}};
 
 const char h2o_http2_npn_protocols[] = NPN_PROTOCOLS_CORE;
 const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"
