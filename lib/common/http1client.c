@@ -458,7 +458,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
             return -1;
     }
 
-    if (client->sock->_cb.write != NULL)
+    if (h2o_socket_is_writing(client->sock))
         return 0;
 
     assert(client->_body_buf_in_flight == NULL || client->_body_buf_in_flight->size == 0);
@@ -627,12 +627,12 @@ static void do_update_window(h2o_httpclient_t *_client)
 {
     struct st_h2o_http1client_t *client = (void *)_client;
     if ((*client->super.buf)->size >= client->super.ctx->max_buffer_size) {
-        if (client->sock->_cb.read != NULL) {
+        if (h2o_socket_is_reading(client->sock)) {
             client->reader = client->sock->_cb.read;
             h2o_socket_read_stop(client->sock);
         }
     } else {
-        if (client->sock->_cb.read == NULL) {
+        if (!h2o_socket_is_reading(client->sock)) {
             h2o_socket_read_start(client->sock, client->reader);
         }
     }
