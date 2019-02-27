@@ -119,13 +119,15 @@ static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 static int do_pread(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t off)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t file_chunk_at = src->cb_arg[1];
     size_t bytes_read = 0;
     ssize_t rret;
 
     assert(off + dst.len <= src->len);
 
+    /* read */
     while (bytes_read < dst.len) {
-        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, src->cb_arg[1] + off + bytes_read)) ==
+        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, file_chunk_at + off + bytes_read)) ==
                    -1 &&
                errno == EINTR)
             ;
@@ -136,6 +138,9 @@ static int do_pread(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t 
         bytes_read += rret;
     }
 
+    /* close if sent all */
+    if (self->bytesleft == 0 && off + dst.len == src->len)
+        do_close(&self->super, req);
     return 1;
 }
 
@@ -158,10 +163,8 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
-    /* send (and close if done) */
+    /* send (closed in do_pread) */
     h2o_sendvec(req, &vec, 1, send_state);
-    if (send_state == H2O_SEND_STATE_FINAL)
-        do_close(&self->super, req);
 }
 
 static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
