@@ -78,13 +78,6 @@ static mrb_value detach_receiver(struct st_h2o_mruby_http_request_context_t *ctx
     return ret;
 }
 
-static int can_dispose_context(h2o_mruby_http_request_context_t *ctx)
-{
-#define IS_NIL_OR_DEAD(o) (mrb_nil_p(o) || mrb_object_dead_p(ctx->ctx->shared->mrb, mrb_basic_ptr(o)))
-    return IS_NIL_OR_DEAD(ctx->refs.request) && IS_NIL_OR_DEAD(ctx->refs.input_stream);
-#undef IS_NIL_OR_DEAD
-}
-
 static void dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
     /* ctx must be alive until generator gets disposed when shortcut used */
@@ -107,6 +100,18 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
     h2o_mem_clear_pool(&ctx->pool);
 
     free(ctx);
+}
+
+static int try_dispose_context(h2o_mruby_http_request_context_t *ctx)
+{
+#define IS_NIL_OR_DEAD(o) (mrb_nil_p(o) || mrb_object_dead_p(ctx->ctx->shared->mrb, mrb_basic_ptr(o)))
+    if (IS_NIL_OR_DEAD(ctx->refs.request) && IS_NIL_OR_DEAD(ctx->refs.input_stream)) {
+        ctx->client = NULL;
+        dispose_context(ctx);
+        return 1;
+    }
+    return 0;
+#undef IS_NIL_OR_DEAD
 }
 
 static void on_gc_dispose_request(mrb_state *mrb, void *_ctx)
@@ -386,11 +391,8 @@ static int do_on_body(h2o_httpclient_t *client, const char *errstr)
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
-    if (can_dispose_context(ctx)) {
-        ctx->client = NULL;
-        dispose_context(ctx);
+    if (try_dispose_context(ctx))
         return -1;
-    }
 
     int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
     mrb_gc_protect(ctx->ctx->shared->mrb, ctx->refs.input_stream);
@@ -438,11 +440,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                                       h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
-    if (can_dispose_context(ctx)) {
-        ctx->client = NULL;
-        dispose_context(ctx);
+    if (try_dispose_context(ctx))
         return NULL;
-    }
 
     int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
     mrb_gc_protect(ctx->ctx->shared->mrb, ctx->refs.request);
@@ -490,11 +489,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_url_t *origin)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
-    if (can_dispose_context(ctx)) {
-        ctx->client = NULL;
-        dispose_context(ctx);
+    if (try_dispose_context(ctx))
         return NULL;
-    }
 
     int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
     mrb_gc_protect(ctx->ctx->shared->mrb, ctx->refs.request);
