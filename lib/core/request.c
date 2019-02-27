@@ -487,7 +487,7 @@ int h2o_sendvec_fill_raw(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, si
 {
     assert(off + dst.len <= src->len);
     memcpy(dst.base, src->raw + off, dst.len);
-    return 0;
+    return 1;
 }
 
 static void do_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)

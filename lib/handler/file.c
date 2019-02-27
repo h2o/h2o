@@ -50,8 +50,8 @@ struct st_h2o_sendfile_generator_t {
     unsigned send_vary : 1;
     unsigned send_etag : 1;
     unsigned gunzip : 1;
-    char *buf;
     struct {
+        char *multirange_buf; /* multi-range mode uses push */
         size_t filesize;
         size_t range_count;
         size_t *range_infos;  /* size_t shows in pair. first is start offset, then length */
@@ -180,11 +180,11 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         size_t range_end = *range_cur + *(range_cur + 1) - 1;
         if (H2O_LIKELY(self->ranged.current_range != 0))
             used_buf =
-                sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                sprintf(self->ranged.multirange_buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
                         self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         else
             used_buf =
-                sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                sprintf(self->ranged.multirange_buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
                         self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         self->ranged.current_range++;
         self->file.off = *range_cur;
@@ -193,14 +193,14 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
     rlen = self->bytesleft;
     if (rlen + used_buf > MAX_BUF_SIZE)
         rlen = MAX_BUF_SIZE - used_buf;
-    while ((rret = pread(self->file.ref->fd, self->buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
+    while ((rret = pread(self->file.ref->fd, self->ranged.multirange_buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret == -1)
         goto Error;
     self->file.off += rret;
     self->bytesleft -= rret;
 
-    vec[0].base = self->buf;
+    vec[0].base = self->ranged.multirange_buf;
     vec[0].len = rret + used_buf;
     if (self->ranged.current_range == self->ranged.range_count && self->bytesleft == 0) {
         vec[1].base = h2o_mem_alloc_pool(&req->pool, char, sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n"));
@@ -375,13 +375,10 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     if (self->ranged.range_count == 1)
         self->file.off = self->ranged.range_infos[0];
 
-    size_t bufsz = MAX_BUF_SIZE;
-    if (self->bytesleft < bufsz)
-        bufsz = self->bytesleft;
-    self->buf = h2o_mem_alloc_pool(&req->pool, char, bufsz);
     if (self->ranged.range_count < 2)
         do_proceed(&self->super, req);
     else {
+        self->ranged.multirange_buf = h2o_mem_alloc_pool(&req->pool, char, MAX_BUF_SIZE);
         self->bytesleft = 0;
         self->super.proceed = do_multirange_proceed;
         do_multirange_proceed(&self->super, req);
