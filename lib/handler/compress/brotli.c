@@ -105,6 +105,7 @@ static void on_dispose(void *_self)
     BrotliEncoderDestroyInstance(self->state);
     shrink_buf(self, 0);
     free(self->bufs.entries);
+    free(self->super.push_buf);
 }
 
 h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_content_length,
@@ -113,7 +114,8 @@ h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quali
     struct st_brotli_context_t *self = h2o_mem_alloc_shared(pool, sizeof(struct st_brotli_context_t), on_dispose);
 
     self->super.name = h2o_iovec_init(H2O_STRLIT("br"));
-    self->super.transform = compress_;
+    self->super.do_transform = compress_;
+    self->super.push_buf = NULL;
     self->state = BrotliEncoderCreateInstance(NULL, NULL, NULL);
     memset(&self->bufs, 0, sizeof(self->bufs));
     self->buf_capacity = preferred_chunk_size;

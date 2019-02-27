@@ -117,7 +117,7 @@ static void do_process(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, siz
     *outbufcnt = outbufindex + 1;
 
     if (!h2o_send_state_is_in_progress(state)) {
-        if (self->super.transform == do_compress) {
+        if (self->super.do_transform == do_compress) {
             deflateEnd(&self->zs);
         } else {
             inflateEnd(&self->zs);
@@ -144,7 +144,7 @@ static void do_free(void *_self)
     size_t i;
 
     if (self->zs_is_open) {
-        if (self->super.transform == do_compress) {
+        if (self->super.do_transform == do_compress) {
             deflateEnd(&self->zs);
         } else {
             inflateEnd(&self->zs);
@@ -154,6 +154,7 @@ static void do_free(void *_self)
     for (i = 0; i != self->bufs.size; ++i)
         free(self->bufs.entries[i].raw);
     free(self->bufs.entries);
+    free(self->super.push_buf);
 }
 
 static struct st_gzip_context_t *gzip_open(h2o_mem_pool_t *pool)
@@ -161,7 +162,8 @@ static struct st_gzip_context_t *gzip_open(h2o_mem_pool_t *pool)
     struct st_gzip_context_t *self = h2o_mem_alloc_shared(pool, sizeof(*self), do_free);
 
     self->super.name = h2o_iovec_init(H2O_STRLIT("gzip"));
-    self->super.transform = NULL;
+    self->super.do_transform = NULL;
+    self->super.push_buf = NULL;
     self->zs.zalloc = alloc_cb;
     self->zs.zfree = free_cb;
     self->zs.opaque = NULL;
@@ -175,7 +177,7 @@ static struct st_gzip_context_t *gzip_open(h2o_mem_pool_t *pool)
 h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality)
 {
     struct st_gzip_context_t *self = gzip_open(pool);
-    self->super.transform = do_compress;
+    self->super.do_transform = do_compress;
     /* Z_BEST_SPEED for on-the-fly compression, memlevel set to 8 as suggested by the manual */
     deflateInit2(&self->zs, quality, Z_DEFLATED, WINDOW_BITS, 8, Z_DEFAULT_STRATEGY);
 
@@ -185,7 +187,9 @@ h2o_compress_context_t *h2o_compress_gzip_open(h2o_mem_pool_t *pool, int quality
 h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool)
 {
     struct st_gzip_context_t *self = gzip_open(pool);
-    self->super.transform = do_decompress;
+    self->super.name = h2o_iovec_init(H2O_STRLIT("gunzip"));
+    self->super.do_transform = do_decompress;
+    self->super.push_buf = NULL;
     inflateInit2(&self->zs, WINDOW_BITS);
 
     return &self->super;
