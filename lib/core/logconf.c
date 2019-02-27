@@ -546,7 +546,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRIu64, (uint64_t)req->bytes_sent);
+            pos += sprintf(pos, "%" PRIu64, req->bytes_sent);
             break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
             if (req->version == 0)

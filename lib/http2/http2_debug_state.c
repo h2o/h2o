@@ -152,7 +152,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                          "      \"flowIn\": %zd,\n"
                          "      \"flowOut\": %zd,\n"
                          "      \"dataIn\": %zu,\n"
-                         "      \"dataOut\": %zu,\n"
+                         "      \"dataOut\": %" PRIu64 ",\n"
                          "      \"created\": %" PRIu64 "\n"
                          "    },",
                          stream->stream_id, state_string, h2o_http2_window_get_avail(&stream->input_window.window),
