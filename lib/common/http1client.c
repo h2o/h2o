@@ -62,7 +62,14 @@ static void close_client(struct st_h2o_http1client_t *client)
             h2o_buffer_consume(&client->sock->input, client->sock->input->size);
             h2o_socketpool_return(client->super.connpool->socketpool, client->sock);
         } else {
-            h2o_socket_close(client->sock);
+            if (client->super.disable_socket_close) {
+                h2o_socket_export_t sockinfo;
+                h2o_socket_export(client->sock, &sockinfo);
+                sockinfo.fd = -1; /* causes EBADF, but never mind */
+                h2o_socket_dispose_export(&sockinfo);
+            } else {
+                h2o_socket_close(client->sock);
+            }
         }
     }
     if (h2o_timer_is_linked(&client->super._timeout))

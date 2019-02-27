@@ -151,6 +151,8 @@ struct st_h2o_httpclient_t {
         h2o_httpclient_head_cb on_head;
         h2o_httpclient_body_cb on_body;
     } _cb;
+
+	unsigned disable_socket_close : 1;
 };
 
 /**
@@ -198,6 +200,8 @@ extern const size_t h2o_httpclient__h1_size;
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
+
+void h2o_httpclient_connect_with_socket(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_socket_t *sock, h2o_httpclient_connect_cb cb);
 
 #ifdef __cplusplus
 }

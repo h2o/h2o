@@ -408,14 +408,15 @@ Close:
 
 void h2o_socket_dispose_export(h2o_socket_export_t *info)
 {
-    assert(info->fd != -1);
     if (info->ssl != NULL) {
         destroy_ssl(info->ssl);
         info->ssl = NULL;
     }
     h2o_buffer_dispose(&info->input);
-    close(info->fd);
-    info->fd = -1;
+    if (info->fd != -1) {
+        close(info->fd);
+        info->fd = -1;
+    }
 }
 
 int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
