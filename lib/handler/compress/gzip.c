@@ -29,19 +29,17 @@
 #define BUF_SIZE 8192
 #endif
 
-typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
-
 struct st_gzip_context_t {
     h2o_compress_context_t super;
     z_stream zs;
     int zs_is_open;
-    iovec_vector_t bufs;
+    H2O_VECTOR(h2o_sendvec_t) bufs;
 };
 
-static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                        h2o_iovec_t **outbufs, size_t *outbufcnt);
-static void do_decompress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                          h2o_iovec_t **outbufs, size_t *outbufcnt);
+static void do_compress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_sendvec_t **outbufs, size_t *outbufcnt);
+static void do_decompress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                          h2o_sendvec_t **outbufs, size_t *outbufcnt);
 
 static void *alloc_cb(void *_unused, unsigned int cnt, unsigned int sz)
 {
@@ -53,10 +51,10 @@ static void free_cb(void *_unused, void *p)
     free(p);
 }
 
-static void expand_buf(iovec_vector_t *bufs)
+static void expand_buf(struct st_gzip_context_t *self)
 {
-    h2o_vector_reserve(NULL, bufs, bufs->size + 1);
-    bufs->entries[bufs->size++] = h2o_iovec_init(h2o_mem_alloc(BUF_SIZE), 0);
+    h2o_vector_reserve(NULL, &self->bufs, self->bufs.size + 1);
+    h2o_sendvec_init_raw(self->bufs.entries + self->bufs.size++, h2o_mem_alloc(BUF_SIZE), 0);
 }
 
 typedef int (*processor)(z_streamp strm, int flush);
@@ -76,10 +74,10 @@ static size_t process_chunk(struct st_gzip_context_t *self, const void *src, siz
         if (self->bufs.entries[bufindex].len + 32 > BUF_SIZE) {
             ++bufindex;
             if (bufindex == self->bufs.size)
-                expand_buf(&self->bufs);
+                expand_buf(self);
             self->bufs.entries[bufindex].len = 0;
         }
-        self->zs.next_out = (void *)(self->bufs.entries[bufindex].base + self->bufs.entries[bufindex].len);
+        self->zs.next_out = (void *)(self->bufs.entries[bufindex].raw + self->bufs.entries[bufindex].len);
         self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[bufindex].len);
         ret = proc(&self->zs, flush);
         /* inflate() returns Z_BUF_ERROR if flush is set to Z_FINISH at the middle of the compressed data */
@@ -90,25 +88,29 @@ static size_t process_chunk(struct st_gzip_context_t *self, const void *src, siz
     return bufindex;
 }
 
-static void do_process(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                       h2o_iovec_t **outbufs, size_t *outbufcnt, processor proc)
+static void do_process(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                       h2o_sendvec_t **outbufs, size_t *outbufcnt, processor proc)
 {
     struct st_gzip_context_t *self = (void *)_self;
     size_t outbufindex;
-    h2o_iovec_t last_buf;
+    h2o_sendvec_t *last_buf;
 
     outbufindex = 0;
     self->bufs.entries[0].len = 0;
 
     if (inbufcnt != 0) {
         size_t i;
-        for (i = 0; i != inbufcnt - 1; ++i)
-            outbufindex = process_chunk(self, inbufs[i].base, inbufs[i].len, Z_NO_FLUSH, outbufindex, proc);
-        last_buf = inbufs[i];
+        for (i = 0; i != inbufcnt - 1; ++i) {
+            assert(inbufs[i].fill_cb == h2o_sendvec_fill_raw);
+            outbufindex = process_chunk(self, inbufs[i].raw, inbufs[i].len, Z_NO_FLUSH, outbufindex, proc);
+        }
+        assert(inbufs[i].fill_cb == h2o_sendvec_fill_raw);
+        last_buf = inbufs + i;
     } else {
-        last_buf = h2o_iovec_init(NULL, 0);
+        static const h2o_sendvec_t zero_buf = {0};
+        last_buf = (h2o_sendvec_t *)&zero_buf;
     }
-    outbufindex = process_chunk(self, last_buf.base, last_buf.len, h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH,
+    outbufindex = process_chunk(self, last_buf->raw, last_buf->len, h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH,
                                 outbufindex, proc);
 
     *outbufs = self->bufs.entries;
@@ -124,14 +126,14 @@ static void do_process(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_
     }
 }
 
-static void do_compress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                        h2o_iovec_t **outbufs, size_t *outbufcnt)
+static void do_compress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                        h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
     do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)deflate);
 }
 
-static void do_decompress(h2o_compress_context_t *_self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                          h2o_iovec_t **outbufs, size_t *outbufcnt)
+static void do_decompress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                          h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
     do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)inflate);
 }
@@ -150,7 +152,7 @@ static void do_free(void *_self)
     }
 
     for (i = 0; i != self->bufs.size; ++i)
-        free(self->bufs.entries[i].base);
+        free(self->bufs.entries[i].raw);
     free(self->bufs.entries);
 }
 
@@ -164,8 +166,8 @@ static struct st_gzip_context_t *gzip_open(h2o_mem_pool_t *pool)
     self->zs.zfree = free_cb;
     self->zs.opaque = NULL;
     self->zs_is_open = 1;
-    self->bufs = (iovec_vector_t){NULL};
-    expand_buf(&self->bufs);
+    memset(&self->bufs, 0, sizeof(self->bufs));
+    expand_buf(self);
 
     return self;
 }

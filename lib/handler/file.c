@@ -116,27 +116,42 @@ static void do_close(h2o_generator_t *_self, h2o_req_t *req)
     h2o_filecache_close_file(self->file.ref);
 }
 
+static int do_pread(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t off)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    size_t bytes_read = 0;
+    ssize_t rret;
+
+    assert(off + dst.len <= src->len);
+
+    while (bytes_read < dst.len) {
+        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, src->cb_arg[1] + off + bytes_read)) ==
+                   -1 &&
+               errno == EINTR)
+            ;
+        if (rret == -1) {
+            do_close(&self->super, req);
+            return 0;
+        }
+        bytes_read += rret;
+    }
+
+    return 1;
+}
+
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    size_t rlen;
-    ssize_t rret;
-    h2o_iovec_t vec;
+    h2o_sendvec_t vec;
     h2o_send_state_t send_state;
 
-    /* read the file */
-    rlen = self->bytesleft;
-    if (rlen > MAX_BUF_SIZE)
-        rlen = MAX_BUF_SIZE;
-    while ((rret = pread(self->file.ref->fd, self->buf, rlen, self->file.off)) == -1 && errno == EINTR)
-        ;
-    if (rret == -1) {
-        h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
-        do_close(&self->super, req);
-        return;
-    }
-    self->file.off += rret;
-    self->bytesleft -= rret;
+    vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
+    vec.fill_cb = do_pread;
+    vec.cb_arg[0] = (uint64_t)self;
+    vec.cb_arg[1] = self->file.off;
+
+    self->file.off += vec.len;
+    self->bytesleft -= vec.len;
     if (self->bytesleft == 0) {
         send_state = H2O_SEND_STATE_FINAL;
     } else {
@@ -144,9 +159,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     }
 
     /* send (and close if done) */
-    vec.base = self->buf;
-    vec.len = rret;
-    h2o_send(req, &vec, 1, send_state);
+    h2o_sendvec(req, &vec, 1, send_state);
     if (send_state == H2O_SEND_STATE_FINAL)
         do_close(&self->super, req);
 }
@@ -204,32 +217,6 @@ Error:
     h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
     do_close(&self->super, req);
     return;
-}
-
-static h2o_send_state_t do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    ssize_t rret;
-
-    if (self->bytesleft < buf->len)
-        buf->len = self->bytesleft;
-    while ((rret = pread(self->file.ref->fd, buf->base, buf->len, self->file.off)) == -1 && errno == EINTR)
-        ;
-    if (rret <= 0) {
-        buf->len = 0;
-        self->bytesleft = 0;
-        do_close(&self->super, req);
-        return H2O_SEND_STATE_ERROR;
-    } else {
-        buf->len = rret;
-        self->file.off += rret;
-        self->bytesleft -= rret;
-    }
-
-    if (self->bytesleft != 0)
-        return H2O_SEND_STATE_IN_PROGRESS;
-    do_close(&self->super, req);
-    return H2O_SEND_STATE_FINAL;
 }
 
 static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir,
@@ -312,7 +299,7 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
         h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 }
 
-static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
         h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
@@ -379,24 +366,22 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
             (void *)h2o_add_ostream(req, H2O_ALIGNOF(*decoder), sizeof(*decoder), &req->_ostr_top);
         decoder->decompressor = h2o_compress_gunzip_open(&req->pool);
         decoder->super.do_send = send_decompressed;
+        /* FIXME disable pull mode */
     }
 
     if (self->ranged.range_count == 1)
         self->file.off = self->ranged.range_infos[0];
-    if (req->_ostr_top->start_pull != NULL && self->ranged.range_count < 2) {
-        req->_ostr_top->start_pull(req->_ostr_top, do_pull);
-    } else {
-        size_t bufsz = MAX_BUF_SIZE;
-        if (self->bytesleft < bufsz)
-            bufsz = self->bytesleft;
-        self->buf = h2o_mem_alloc_pool(&req->pool, char, bufsz);
-        if (self->ranged.range_count < 2)
-            do_proceed(&self->super, req);
-        else {
-            self->bytesleft = 0;
-            self->super.proceed = do_multirange_proceed;
-            do_multirange_proceed(&self->super, req);
-        }
+
+    size_t bufsz = MAX_BUF_SIZE;
+    if (self->bytesleft < bufsz)
+        bufsz = self->bytesleft;
+    self->buf = h2o_mem_alloc_pool(&req->pool, char, bufsz);
+    if (self->ranged.range_count < 2)
+        do_proceed(&self->super, req);
+    else {
+        self->bytesleft = 0;
+        self->super.proceed = do_multirange_proceed;
+        do_multirange_proceed(&self->super, req);
     }
 }
 

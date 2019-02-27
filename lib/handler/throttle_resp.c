@@ -30,8 +30,6 @@
 #define ONE_SECOND 1000
 #endif
 
-typedef H2O_VECTOR(h2o_iovec_t) iovec_vector_t;
-
 typedef struct st_throttle_resp_t {
     h2o_ostream_t super;
     h2o_timer_t timeout_entry;
@@ -40,7 +38,7 @@ typedef struct st_throttle_resp_t {
     h2o_context_t *ctx;
     h2o_req_t *req;
     struct {
-        iovec_vector_t bufs;
+        H2O_VECTOR(h2o_sendvec_t) bufs;
         h2o_send_state_t stream_state;
     } state;
 } throttle_resp_t;
@@ -75,7 +73,7 @@ static void add_token(h2o_timer_t *entry)
         real_send(self);
 }
 
-static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+static void on_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     throttle_resp_t *self = (void *)_self;
     size_t i;

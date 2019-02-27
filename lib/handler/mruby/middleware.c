@@ -197,11 +197,15 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     return resp;
 }
 
-static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, size_t inbufcnt)
+static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_sendvec_t *inbufs, size_t inbufcnt)
 {
-    int i;
+    size_t i;
     for (i = 0; i != inbufcnt; ++i) {
-        h2o_buffer_append(&subreq->buf, inbufs[i].base, inbufs[i].len);
+        h2o_iovec_t dst = h2o_buffer_reserve(&subreq->buf, inbufs[i].len);
+        assert(dst.base != NULL && "no memory or disk space; FIXME bail out gracefully");
+        if (!(*inbufs[i].fill_cb)(&subreq->super, dst, inbufs + i, 0))
+            h2o_fatal("FIXME handle error from pull handler");
+        subreq->buf->size += inbufs[i].len;
     }
 }
 
@@ -216,7 +220,7 @@ static mrb_value detach_receiver(struct st_mruby_subreq_t *subreq)
 }
 
 static void send_response_shortcutted(struct st_mruby_subreq_t *subreq);
-static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_iovec_t *inbufs, size_t inbufcnt,
+static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_sendvec_t *inbufs, size_t inbufcnt,
                                 h2o_send_state_t state)
 {
     struct st_mruby_subreq_t *subreq = (void *)_subreq;

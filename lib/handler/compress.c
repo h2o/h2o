@@ -35,18 +35,32 @@ struct st_compress_filter_t {
 struct st_compress_encoder_t {
     h2o_ostream_t super;
     h2o_compress_context_t *compressor;
+    char *pull_buf;
 };
 
-static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
+    struct st_compress_encoder_t *self = (void *)_self;
+    h2o_sendvec_t flattened, *outbufs;
+    size_t outbufcnt;
+
     if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
-        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
+        h2o_ostream_send_next(&self->super, req, inbufs, inbufcnt, state);
         return;
     }
 
-    struct st_compress_encoder_t *self = (void *)_self;
-    h2o_iovec_t *outbufs;
-    size_t outbufcnt;
+    if (inbufcnt != 0 && inbufs->fill_cb != h2o_sendvec_fill_raw) {
+        assert(inbufcnt == 1);
+        if (self->pull_buf == NULL)
+            self->pull_buf = h2o_mem_alloc_pool(&req->pool, char,
+                                                h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : inbufs->len);
+        h2o_sendvec_init_raw(&flattened, self->pull_buf, inbufs->len);
+        if (!(*inbufs->fill_cb)(req, h2o_iovec_init(flattened.raw, flattened.len), inbufs, 0)) {
+            h2o_ostream_send_next(&self->super, req, NULL, 0, H2O_SEND_STATE_ERROR); /* FIXME is this the correct way? */
+            return;
+        }
+        inbufs = &flattened;
+    }
 
     self->compressor->transform(self->compressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
@@ -141,6 +155,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     encoder->super.do_send = do_send;
     slot = &encoder->super.next;
     encoder->compressor = compressor;
+    encoder->pull_buf = NULL;
 
     /* adjust preferred chunk size (compress by 8192 bytes) */
     if (req->preferred_chunk_size > BUF_SIZE)

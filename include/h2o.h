@@ -684,7 +684,30 @@ typedef enum h2o_send_state {
     H2O_SEND_STATE_ERROR,
 } h2o_send_state_t;
 
-typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
+/**
+ * the maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
+ * vector is used.
+ */
+#define H2O_PULL_SENDVEC_MAX_SIZE 65536
+
+typedef struct st_h2o_sendvec_t {
+    /**
+     * size of the vector
+     */
+    size_t len;
+    /**
+     * the callback used to fill the write out data from this vector. returns if the operation succeeded. When false is returned,
+     * the generator is considered as been error-closed by itself
+     */
+    int (*fill_cb)(h2o_req_t *req, h2o_iovec_t dst, struct st_h2o_sendvec_t *src, size_t off);
+    /**
+     *
+     */
+    union {
+        char *raw;
+        uint64_t cb_arg[2];
+    };
+} h2o_sendvec_t;
 
 /**
  * an output stream that may alter the output.
@@ -700,16 +723,11 @@ struct st_h2o_ostream_t {
      * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
      * sent.
      */
-    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
     /**
      * called by the core when there is a need to terminate the response abruptly
      */
     void (*stop)(struct st_h2o_ostream_t *self, h2o_req_t *req);
-    /**
-     * whether if the ostream supports "pull" interface
-     */
-    void (*start_pull)(struct st_h2o_ostream_t *self, h2o_ostream_pull_cb cb);
-
     /**
      * called by the core via h2o_send_informational
      */
@@ -1295,6 +1313,14 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
  */
 static int h2o_send_state_is_in_progress(h2o_send_state_t s);
 /**
+ *
+ */
+static void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ *
+ */
+int h2o_sendvec_fill_raw(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t off);
+/**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
  * @param req the request
@@ -1303,10 +1329,7 @@ static int h2o_send_state_is_in_progress(h2o_send_state_t s);
  * @param state describes if the output is final, has an error, or is in progress
  */
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
-/**
- * called by the connection layer to pull the content from generator (if pull mode is being used)
- */
-static h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
+void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *vecs, size_t veccnt, h2o_send_state_t state);
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
@@ -1329,7 +1352,7 @@ static void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot);
  * @param bufcnt length of the buffers array
  * @param state whether the output is in progress, final, or in error
  */
-void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 /**
  * called by the connection layer to request additional data to the generator
  */
@@ -1666,10 +1689,10 @@ typedef struct st_h2o_compress_context_t {
      */
     h2o_iovec_t name;
     /**
-     * compress or decompress callback
+     * compress or decompress callback (inbufs MUST be raw buffers)
      */
-    void (*transform)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                      h2o_iovec_t **outbufs, size_t *outbufcnt);
+    void (*transform)(struct st_h2o_compress_context_t *self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                      h2o_sendvec_t **outbufs, size_t *outbufcnt);
 } h2o_compress_context_t;
 
 typedef struct st_h2o_compress_args_t {
@@ -2035,14 +2058,11 @@ inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
     return s == H2O_SEND_STATE_IN_PROGRESS;
 }
 
-inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
+inline void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
 {
-    h2o_send_state_t send_state;
-    assert(req->_generator != NULL);
-    send_state = cb(req->_generator, req, buf);
-    if (!h2o_send_state_is_in_progress(send_state))
-        req->_generator = NULL;
-    return send_state;
+    vec->fill_cb = h2o_sendvec_fill_raw;
+    vec->raw = (char *)base;
+    vec->len = len;
 }
 
 inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)

@@ -97,8 +97,8 @@ struct st_h2o_http2_stream_t {
         size_t bytes_unnotified;
     } input_window;
     h2o_http2_priority_t received_priority;
-    H2O_VECTOR(h2o_iovec_t) _data;
-    h2o_ostream_pull_cb _pull_cb;
+    H2O_VECTOR(h2o_sendvec_t) _data;
+    size_t _data_off; /* offset within _data.entries[0] */
     /**
      * points to http2_conn_t::num_streams::* in which the stream is counted
      */
