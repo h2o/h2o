@@ -1,4 +1,4 @@
-/* Some stuff lifed from OpenSSH here. */
+/* Some stuff lifted from OpenSSH here. */
 /*
  * Copyright (c) 2003 Can Erkin Acar
  * Copyright (c) 2003 Anil Madhavapeddy <anil@recoil.org>
