@@ -44,6 +44,7 @@
 #include <sys/prctl.h>
 #endif
 #include "neverbleed.h"
+#include "privsep.h"
 
 #if (!defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010000fL)
 #define OPENSSL_1_1_API 1
@@ -337,17 +338,10 @@ struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
     }
 
     thdata->self_pid = self_pid;
-#ifdef SOCK_CLOEXEC
-    if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1)
-        dief("socket(2) failed");
-#else
-    if ((thdata->fd = socket(PF_UNIX, SOCK_STREAM, 0)) == -1)
-        dief("socket(2) failed");
-    set_cloexec(thdata->fd);
-#endif
-    while (connect(thdata->fd, (void *)&nb->sun_, sizeof(nb->sun_)) != 0)
-        if (errno != EINTR)
-            dief("failed to connect to privsep daemon");
+    thdata->fd = privsep_get_neverbleed_sock(&nb->sun_);
+    if (thdata->fd == -1) {
+            dief("failed to get connected socket from privsep daemon");
+    }
     while ((r = write(thdata->fd, nb->auth_token, sizeof(nb->auth_token))) == -1 && errno == EINTR)
         ;
     if (r != sizeof(nb->auth_token))

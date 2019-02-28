@@ -37,6 +37,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/prctl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -44,6 +45,7 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <linux/seccomp.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -58,6 +60,9 @@
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
+#include "sandbox.h"
+#include "privsep.h"
+
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/http1.h"
@@ -1657,6 +1662,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* make sure all threads are initialized before starting to serve requests */
     h2o_barrier_wait(&conf.startup_sync_barrier);
 
+    sandbox_set();
     /* the main loop */
     while (1) {
         if (conf.shutdown_requested)
@@ -2090,6 +2096,7 @@ int main(int argc, char **argv)
         argv += optind;
     }
 
+    priv_init();
     /* setup conf.server_starter */
     if ((conf.server_starter.num_fds = h2o_server_starter_get_fds(&conf.server_starter.fds)) == SIZE_MAX)
         exit(EX_CONFIG);
@@ -2255,7 +2262,6 @@ int main(int argc, char **argv)
     }
 
     fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
-
     assert(conf.num_threads != 0);
 
     /* start the threads */

@@ -143,6 +143,7 @@ INCLUDE_DIRECTORIES(
     deps/neverbleed
     deps/picohttpparser
     deps/picotest
+    deps/sandbox
     deps/yaml/include
     deps/yoml)
 
@@ -545,6 +546,8 @@ SET(STANDALONE_SOURCE_FILES
     ${LIBYAML_SOURCE_FILES}
     ${BROTLI_SOURCE_FILES}
     deps/neverbleed/neverbleed.c
+    deps/sandbox/sandbox.c
+    deps/sandbox/privsep.c
     src/main.c
     src/ssl.c)
 SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1")
