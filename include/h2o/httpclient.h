@@ -152,7 +152,7 @@ struct st_h2o_httpclient_t {
         h2o_httpclient_body_cb on_body;
     } _cb;
 
-	unsigned disable_socket_close : 1;
+	void (*close_socket)(h2o_httpclient_t *client, h2o_socket_t *sock, int can_keepalive);
 };
 
 /**

@@ -199,7 +199,6 @@ UseSocketPool:
 void h2o_httpclient_connect_with_socket(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_socket_t *sock, h2o_httpclient_connect_cb cb)
 {
     h2o_httpclient_t *client = create_client(pool, data, ctx, cb);
-	client->disable_socket_close = 1;
     if (_client != NULL)
         *_client = client;
 
