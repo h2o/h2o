@@ -60,8 +60,8 @@ static void compress_core(struct st_brotli_context_t *self, BrotliEncoderOperati
     self->bufs.entries[bufindex].len = self->buf_capacity - dstlen;
 }
 
-static void compress_(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                      h2o_sendvec_t **outbufs, size_t *outbufcnt)
+static h2o_send_state_t compress_(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                                  h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
     struct st_brotli_context_t *self = (void *)_self;
     BrotliEncoderOperation final_op = h2o_send_state_is_in_progress(state) ? BROTLI_OPERATION_FLUSH : BROTLI_OPERATION_FINISH;
@@ -96,6 +96,8 @@ static void compress_(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size
 
     *outbufs = self->bufs.entries;
     *outbufcnt = self->bufs.size - (self->bufs.entries[self->bufs.size - 1].len == 0);
+
+    return state;
 }
 
 static void on_dispose(void *_self)

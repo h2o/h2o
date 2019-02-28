@@ -48,7 +48,7 @@ static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs,
         return;
     }
 
-    h2o_compress_transform(self->compressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
+    state = h2o_compress_transform(self->compressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
 }
 
@@ -157,8 +157,8 @@ void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args)
     self->args = *args;
 }
 
-void h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
-                            h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt)
+h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
+                                        h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
     h2o_sendvec_t flattened;
 
@@ -167,11 +167,14 @@ void h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_se
         assert(inbufs->len <= H2O_PULL_SENDVEC_MAX_SIZE);
         if (self->push_buf == NULL)
             self->push_buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : inbufs->len);
-        if (!(*inbufs->fill_cb)(req, h2o_iovec_init(self->push_buf, inbufs->len), inbufs, 0))
-            h2o_fatal("FIXME handle error");
+        if (!(*inbufs->fill_cb)(req, h2o_iovec_init(self->push_buf, inbufs->len), inbufs, 0)) {
+            *outbufs = NULL;
+            *outbufcnt = 0;
+            return H2O_SEND_STATE_ERROR;
+        }
         h2o_sendvec_init_raw(&flattened, self->push_buf, inbufs->len);
         inbufs = &flattened;
     }
 
-    self->do_transform(self, inbufs, inbufcnt, state, outbufs, outbufcnt);
+    return self->do_transform(self, inbufs, inbufcnt, state, outbufs, outbufcnt);
 }

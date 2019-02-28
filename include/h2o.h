@@ -1691,8 +1691,8 @@ typedef struct st_h2o_compress_context_t {
     /**
      * compress or decompress callback (inbufs are raw buffers)
      */
-    void (*do_transform)(struct st_h2o_compress_context_t *self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                         h2o_sendvec_t **outbufs, size_t *outbufcnt);
+    h2o_send_state_t (*do_transform)(struct st_h2o_compress_context_t *self, h2o_sendvec_t *inbufs, size_t inbufcnt,
+                                     h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt);
     /**
      * push buffer
      */
@@ -1716,8 +1716,8 @@ void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args);
 /**
  * compresses given chunk
  */
-void h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
-                            h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt);
+h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
+                                        h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt);
 /**
  * instantiates the gzip compressor
  */

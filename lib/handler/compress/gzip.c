@@ -36,10 +36,10 @@ struct st_gzip_context_t {
     H2O_VECTOR(h2o_sendvec_t) bufs;
 };
 
-static void do_compress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                        h2o_sendvec_t **outbufs, size_t *outbufcnt);
-static void do_decompress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                          h2o_sendvec_t **outbufs, size_t *outbufcnt);
+static h2o_send_state_t do_compress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                                    h2o_sendvec_t **outbufs, size_t *outbufcnt);
+static h2o_send_state_t do_decompress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                                      h2o_sendvec_t **outbufs, size_t *outbufcnt);
 
 static void *alloc_cb(void *_unused, unsigned int cnt, unsigned int sz)
 {
@@ -88,8 +88,8 @@ static size_t process_chunk(struct st_gzip_context_t *self, const void *src, siz
     return bufindex;
 }
 
-static void do_process(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                       h2o_sendvec_t **outbufs, size_t *outbufcnt, processor proc)
+static h2o_send_state_t do_process(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                                   h2o_sendvec_t **outbufs, size_t *outbufcnt, processor proc)
 {
     struct st_gzip_context_t *self = (void *)_self;
     size_t outbufindex;
@@ -124,18 +124,20 @@ static void do_process(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, siz
         }
         self->zs_is_open = 0;
     }
+
+    return state;
 }
 
-static void do_compress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                        h2o_sendvec_t **outbufs, size_t *outbufcnt)
+static h2o_send_state_t do_compress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                                    h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
-    do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)deflate);
+    return do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)deflate);
 }
 
-static void do_decompress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                          h2o_sendvec_t **outbufs, size_t *outbufcnt)
+static h2o_send_state_t do_decompress(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
+                                      h2o_sendvec_t **outbufs, size_t *outbufcnt)
 {
-    do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)inflate);
+    return do_process(_self, inbufs, inbufcnt, state, outbufs, outbufcnt, (processor)inflate);
 }
 
 static void do_free(void *_self)

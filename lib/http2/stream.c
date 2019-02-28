@@ -135,8 +135,8 @@ static void commit_data_header(h2o_http2_conn_t *conn, h2o_http2_stream_t *strea
     }
 }
 
-static h2o_sendvec_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_sendvec_t *bufs, size_t bufcnt,
-                                     size_t *off_within_buf, h2o_send_state_t send_state)
+static h2o_sendvec_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_sendvec_t *bufs, size_t bufcnt,
+                                size_t *off_within_buf, h2o_send_state_t send_state)
 {
     h2o_iovec_t dst;
     size_t max_payload_size;
@@ -160,7 +160,7 @@ static h2o_sendvec_t *send_data_push(h2o_http2_conn_t *conn, h2o_http2_stream_t 
     while (bufcnt != 0) {
         size_t fill_size = sz_min(dst.len, bufs->len - *off_within_buf);
         if (!(*bufs->fill_cb)(&stream->req, h2o_iovec_init(dst.base, fill_size), bufs, *off_within_buf))
-            h2o_fatal("FIXME");
+            return NULL;
         dst.base += fill_size;
         dst.len -= fill_size;
         *off_within_buf += fill_size;
@@ -373,8 +373,13 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 
     h2o_send_state_t send_state = stream->send_state;
     h2o_sendvec_t *nextbuf =
-        send_data_push(conn, stream, stream->_data.entries, stream->_data.size, &stream->_data_off, stream->send_state);
-    if (nextbuf == stream->_data.entries + stream->_data.size) {
+        send_data(conn, stream, stream->_data.entries, stream->_data.size, &stream->_data_off, stream->send_state);
+    if (nextbuf == NULL) {
+        /* error */
+        stream->_data.size = 0;
+        stream->send_state = H2O_SEND_STATE_ERROR;
+        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+    } else if (nextbuf == stream->_data.entries + stream->_data.size) {
         /* sent all data */
         stream->_data.size = 0;
         if (stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL)
