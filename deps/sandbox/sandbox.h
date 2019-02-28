@@ -62,7 +62,10 @@
 #error "Unknown endianness"
 #endif
 
-/* Simple helpers to avoid manual errors (but larger BPF programs). */
+/* Simple helpers to avoid manual errors (but larger BPF programs). 
+ * From openssh:
+ * Copyright (c) 2012 Will Drewry <wad@dataspill.org>
+ */
 #define SC_DENY(_nr, _errno) \
     BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, (_nr), 0, 1), \
     BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ERRNO|(_errno))
