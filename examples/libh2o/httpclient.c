@@ -270,10 +270,18 @@ int main(int argc, char **argv)
 {
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
-    uint64_t io_timeout = 5000; /* 5 seconds */
-    h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, io_timeout, io_timeout, io_timeout};
-    ctx.max_buffer_size = SIZE_MAX;
 
+    const uint64_t timeout = 5000;    /* 5 seconds */
+    h2o_httpclient_ctx_t ctx = {
+        NULL, /* loop */
+        &getaddr_receiver,
+        timeout,                                 /* io_timeout */
+        timeout,                                 /* connect_timeout */
+        timeout,                                 /* first_byte_timeout */
+        NULL,                                    /* websocket_timeout */
+        0,                                       /* keepalive_timeout */
+        H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 /* max_buffer_size */
+    };
     int opt;
 
     SSL_load_error_strings();
