@@ -483,7 +483,15 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     }
 }
 
-int h2o_sendvec_fill_raw(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t off)
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
+{
+    static const h2o_sendvec_callbacks_t primitive_callbacks = {h2o_sendvec_flatten_raw};
+    vec->callbacks = &primitive_callbacks;
+    vec->raw = (char *)base;
+    vec->len = len;
+}
+
+int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
 {
     assert(off + dst.len <= src->len);
     memcpy(dst.base, src->raw + off, dst.len);
@@ -513,7 +521,7 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
 
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
-    assert(bufcnt == 0 || (bufs[0].fill_cb == h2o_sendvec_fill_raw || bufcnt == 1));
+    assert(bufcnt == 0 || (bufs[0].callbacks->flatten == &h2o_sendvec_flatten_raw || bufcnt == 1));
     do_sendvec(req, bufs, bufcnt, state);
 }
 

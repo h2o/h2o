@@ -203,7 +203,7 @@ static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_sendvec_t *inbufs,
     for (i = 0; i != inbufcnt; ++i) {
         char *dst = h2o_buffer_reserve(&subreq->buf, inbufs[i].len).base;
         assert(dst != NULL && "no memory or disk space; FIXME bail out gracefully");
-        if (!(*inbufs[i].fill_cb)(&subreq->super, h2o_iovec_init(dst, inbufs[i].len), inbufs + i, 0))
+        if (!(*inbufs[i].callbacks->flatten)(inbufs + i, &subreq->super, h2o_iovec_init(dst, inbufs[i].len), 0))
             h2o_fatal("FIXME handle error from pull handler");
         subreq->buf->size += inbufs[i].len;
     }

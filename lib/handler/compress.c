@@ -162,12 +162,12 @@ h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t 
 {
     h2o_sendvec_t flattened;
 
-    if (inbufcnt != 0 && inbufs->fill_cb != h2o_sendvec_fill_raw) {
+    if (inbufcnt != 0 && inbufs->callbacks->flatten != &h2o_sendvec_flatten_raw) {
         assert(inbufcnt == 1);
         assert(inbufs->len <= H2O_PULL_SENDVEC_MAX_SIZE);
         if (self->push_buf == NULL)
             self->push_buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : inbufs->len);
-        if (!(*inbufs->fill_cb)(req, h2o_iovec_init(self->push_buf, inbufs->len), inbufs, 0)) {
+        if (!(*inbufs->callbacks->flatten)(inbufs, req, h2o_iovec_init(self->push_buf, inbufs->len), 0)) {
             *outbufs = NULL;
             *outbufcnt = 0;
             return H2O_SEND_STATE_ERROR;

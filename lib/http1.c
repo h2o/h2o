@@ -780,7 +780,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     bytes_to_be_sent = 0;
     for (i = 0; i != inbufcnt; ++i) {
         bytes_to_be_sent += inbufs[i].len;
-        if (!pull_mode && inbufs[i].fill_cb != h2o_sendvec_fill_raw)
+        if (!pull_mode && inbufs[i].callbacks->flatten != h2o_sendvec_flatten_raw)
             pull_mode = IS_PULL;
     }
     assert(pull_mode == NOT_PULL || inbufcnt == 0 || (inbufcnt == 1 && inbufs[0].len <= H2O_PULL_SENDVEC_MAX_SIZE));
@@ -838,7 +838,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             bufs[bufcnt++] = h2o_iovec_init(inbufs[i].raw, inbufs[i].len);
     } else if (inbufcnt != 0) {
         assert(inbufcnt == 1);
-        if (!(inbufs->fill_cb(&conn->req, h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len), inbufs, 0))) {
+        if (!(inbufs->callbacks->flatten(inbufs, &conn->req, h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len),
+                                         0))) {
             /* error, close abruptly */
             send_state = H2O_SEND_STATE_ERROR;
         } else {

@@ -159,7 +159,7 @@ static h2o_sendvec_t *send_data(h2o_http2_conn_t *conn, h2o_http2_stream_t *stre
     }
     while (bufcnt != 0) {
         size_t fill_size = sz_min(dst.len, bufs->len - *off_within_buf);
-        if (!(*bufs->fill_cb)(&stream->req, h2o_iovec_init(dst.base, fill_size), bufs, *off_within_buf))
+        if (!(*bufs->callbacks->flatten)(bufs, &stream->req, h2o_iovec_init(dst.base, fill_size), *off_within_buf))
             return NULL;
         dst.base += fill_size;
         dst.len -= fill_size;

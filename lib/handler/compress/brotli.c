@@ -74,7 +74,7 @@ static h2o_send_state_t compress_(h2o_compress_context_t *_self, h2o_sendvec_t *
     /* encode chunks and flush */
     if (inbufcnt != 0) {
         for (i = 0; i < inbufcnt; ++i) {
-            assert(inbufs[i].fill_cb == h2o_sendvec_fill_raw);
+            assert(inbufs[i].callbacks->flatten == h2o_sendvec_flatten_raw);
             src = (void *)inbufs[i].raw;
             srclen = inbufs[i].len;
             BrotliEncoderOperation op = i + 1 == inbufcnt ? final_op : BROTLI_OPERATION_PROCESS;

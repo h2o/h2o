@@ -116,7 +116,7 @@ static void do_close(h2o_generator_t *_self, h2o_req_t *req)
     h2o_filecache_close_file(self->file.ref);
 }
 
-static int do_pread(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t off)
+static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
     uint64_t file_chunk_at = src->cb_arg[1];
@@ -146,12 +146,14 @@ static int do_pread(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t 
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread};
+
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;
     h2o_send_state_t send_state;
 
     vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
-    vec.fill_cb = do_pread;
+    vec.callbacks = &sendvec_callbacks;
     vec.cb_arg[0] = (uint64_t)self;
     vec.cb_arg[1] = self->file.off;
 

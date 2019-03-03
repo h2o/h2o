@@ -690,16 +690,30 @@ typedef enum h2o_send_state {
  */
 #define H2O_PULL_SENDVEC_MAX_SIZE 65536
 
-typedef struct st_h2o_sendvec_t {
+typedef struct st_h2o_sendvec_t h2o_sendvec_t;
+
+typedef struct st_h2o_sendvec_callbacks_t {
+    /**
+     * optional callback used to serialize the bytes held by the vector. Returns if the operation succeeded. When false is returned,
+     * the generator is considered as been error-closed by itself.  If the callback is NULL, the data is pre-flattened and available
+     * in `h2o_sendvec_t::raw`.
+     */
+    int (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
+} h2o_sendvec_callbacks_t;
+
+/**
+ * send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
+ * until it becomes necessary.
+ */
+struct st_h2o_sendvec_t {
+    /**
+     *
+     */
+    const h2o_sendvec_callbacks_t *callbacks;
     /**
      * size of the vector
      */
     size_t len;
-    /**
-     * the callback used to fill the write out data from this vector. returns if the operation succeeded. When false is returned,
-     * the generator is considered as been error-closed by itself
-     */
-    int (*fill_cb)(h2o_req_t *req, h2o_iovec_t dst, struct st_h2o_sendvec_t *src, size_t off);
     /**
      *
      */
@@ -707,7 +721,7 @@ typedef struct st_h2o_sendvec_t {
         char *raw;
         uint64_t cb_arg[2];
     };
-} h2o_sendvec_t;
+};
 
 /**
  * an output stream that may alter the output.
@@ -1315,11 +1329,11 @@ static int h2o_send_state_is_in_progress(h2o_send_state_t s);
 /**
  *
  */
-static void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
 /**
  *
  */
-int h2o_sendvec_fill_raw(h2o_req_t *req, h2o_iovec_t dst, h2o_sendvec_t *src, size_t off);
+int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
@@ -2065,13 +2079,6 @@ Found:
 inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
 {
     return s == H2O_SEND_STATE_IN_PROGRESS;
-}
-
-inline void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
-{
-    vec->fill_cb = h2o_sendvec_fill_raw;
-    vec->raw = (char *)base;
-    vec->len = len;
 }
 
 inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
