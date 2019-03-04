@@ -441,11 +441,17 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
 {
     struct st_h2o_http3client_req_t *req = qs->data;
     const uint8_t *src, *src_end;
-    size_t bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate), bytes_from_noncontiguous;
+    size_t bytes_available, bytes_from_noncontiguous;
     int is_eos, ret;
     const char *err_desc = NULL;
 
     assert(req->recvbuf.body->size + req->recvbuf.partial_frame->size == req->recvbuf.bytes_contiguous);
+
+    if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
+        bytes_available = (size_t)(req->quic->recvstate.eos - req->quic->recvstate.data_off);
+    } else {
+        bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
+    }
 
     if (req->recvbuf.noncontiguous->size == 0 && bytes_available == off + len) {
         /* fast path; there was no hole */
