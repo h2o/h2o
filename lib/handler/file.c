@@ -50,8 +50,8 @@ struct st_h2o_sendfile_generator_t {
     unsigned send_vary : 1;
     unsigned send_etag : 1;
     unsigned gunzip : 1;
-    char *buf;
     struct {
+        char *multirange_buf; /* multi-range mode uses push */
         size_t filesize;
         size_t range_count;
         size_t *range_infos;  /* size_t shows in pair. first is start offset, then length */
@@ -116,39 +116,57 @@ static void do_close(h2o_generator_t *_self, h2o_req_t *req)
     h2o_filecache_close_file(self->file.ref);
 }
 
+static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t file_chunk_at = src->cb_arg[1];
+    size_t bytes_read = 0;
+    ssize_t rret;
+
+    assert(off + dst.len <= src->len);
+
+    /* read */
+    while (bytes_read < dst.len) {
+        while ((rret = pread(self->file.ref->fd, dst.base + bytes_read, dst.len - bytes_read, file_chunk_at + off + bytes_read)) ==
+                   -1 &&
+               errno == EINTR)
+            ;
+        if (rret == -1) {
+            do_close(&self->super, req);
+            return 0;
+        }
+        bytes_read += rret;
+    }
+
+    /* close if sent all */
+    if (self->bytesleft == 0 && off + dst.len == src->len)
+        do_close(&self->super, req);
+    return 1;
+}
+
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread};
+
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    size_t rlen;
-    ssize_t rret;
-    h2o_iovec_t vec;
+    h2o_sendvec_t vec;
     h2o_send_state_t send_state;
 
-    /* read the file */
-    rlen = self->bytesleft;
-    if (rlen > MAX_BUF_SIZE)
-        rlen = MAX_BUF_SIZE;
-    while ((rret = pread(self->file.ref->fd, self->buf, rlen, self->file.off)) == -1 && errno == EINTR)
-        ;
-    if (rret == -1) {
-        h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
-        do_close(&self->super, req);
-        return;
-    }
-    self->file.off += rret;
-    self->bytesleft -= rret;
+    vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
+    vec.callbacks = &sendvec_callbacks;
+    vec.cb_arg[0] = (uint64_t)self;
+    vec.cb_arg[1] = self->file.off;
+
+    self->file.off += vec.len;
+    self->bytesleft -= vec.len;
     if (self->bytesleft == 0) {
         send_state = H2O_SEND_STATE_FINAL;
     } else {
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
-    /* send (and close if done) */
-    vec.base = self->buf;
-    vec.len = rret;
-    h2o_send(req, &vec, 1, send_state);
-    if (send_state == H2O_SEND_STATE_FINAL)
-        do_close(&self->super, req);
+    /* send (closed in do_pread) */
+    h2o_sendvec(req, &vec, 1, send_state);
 }
 
 static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
@@ -164,11 +182,11 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         size_t range_end = *range_cur + *(range_cur + 1) - 1;
         if (H2O_LIKELY(self->ranged.current_range != 0))
             used_buf =
-                sprintf(self->buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                sprintf(self->ranged.multirange_buf, "\r\n--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
                         self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         else
             used_buf =
-                sprintf(self->buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
+                sprintf(self->ranged.multirange_buf, "--%s\r\nContent-Type: %s\r\nContent-Range: bytes %zd-%zd/%zd\r\n\r\n",
                         self->ranged.boundary.base, self->ranged.mimetype.base, *range_cur, range_end, self->ranged.filesize);
         self->ranged.current_range++;
         self->file.off = *range_cur;
@@ -177,14 +195,14 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
     rlen = self->bytesleft;
     if (rlen + used_buf > MAX_BUF_SIZE)
         rlen = MAX_BUF_SIZE - used_buf;
-    while ((rret = pread(self->file.ref->fd, self->buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
+    while ((rret = pread(self->file.ref->fd, self->ranged.multirange_buf + used_buf, rlen, self->file.off)) == -1 && errno == EINTR)
         ;
     if (rret == -1)
         goto Error;
     self->file.off += rret;
     self->bytesleft -= rret;
 
-    vec[0].base = self->buf;
+    vec[0].base = self->ranged.multirange_buf;
     vec[0].len = rret + used_buf;
     if (self->ranged.current_range == self->ranged.range_count && self->bytesleft == 0) {
         vec[1].base = h2o_mem_alloc_pool(&req->pool, char, sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("--\r\n"));
@@ -204,32 +222,6 @@ Error:
     h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
     do_close(&self->super, req);
     return;
-}
-
-static h2o_send_state_t do_pull(h2o_generator_t *_self, h2o_req_t *req, h2o_iovec_t *buf)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    ssize_t rret;
-
-    if (self->bytesleft < buf->len)
-        buf->len = self->bytesleft;
-    while ((rret = pread(self->file.ref->fd, buf->base, buf->len, self->file.off)) == -1 && errno == EINTR)
-        ;
-    if (rret <= 0) {
-        buf->len = 0;
-        self->bytesleft = 0;
-        do_close(&self->super, req);
-        return H2O_SEND_STATE_ERROR;
-    } else {
-        buf->len = rret;
-        self->file.off += rret;
-        self->bytesleft -= rret;
-    }
-
-    if (self->bytesleft != 0)
-        return H2O_SEND_STATE_IN_PROGRESS;
-    do_close(&self->super, req);
-    return H2O_SEND_STATE_FINAL;
 }
 
 static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir,
@@ -312,7 +304,7 @@ static void add_headers_unconditional(struct st_h2o_sendfile_generator_t *self, 
         h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
 }
 
-static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
         h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
@@ -320,10 +312,10 @@ static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t 
     }
 
     struct st_gzip_decompress_t *self = (void *)_self;
-    h2o_iovec_t *outbufs;
+    h2o_sendvec_t *outbufs;
     size_t outbufcnt;
 
-    self->decompressor->transform(self->decompressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
+    state = h2o_compress_transform(self->decompressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
 }
 
@@ -379,24 +371,19 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
             (void *)h2o_add_ostream(req, H2O_ALIGNOF(*decoder), sizeof(*decoder), &req->_ostr_top);
         decoder->decompressor = h2o_compress_gunzip_open(&req->pool);
         decoder->super.do_send = send_decompressed;
+        /* FIXME disable pull mode */
     }
 
     if (self->ranged.range_count == 1)
         self->file.off = self->ranged.range_infos[0];
-    if (req->_ostr_top->start_pull != NULL && self->ranged.range_count < 2) {
-        req->_ostr_top->start_pull(req->_ostr_top, do_pull);
-    } else {
-        size_t bufsz = MAX_BUF_SIZE;
-        if (self->bytesleft < bufsz)
-            bufsz = self->bytesleft;
-        self->buf = h2o_mem_alloc_pool(&req->pool, char, bufsz);
-        if (self->ranged.range_count < 2)
-            do_proceed(&self->super, req);
-        else {
-            self->bytesleft = 0;
-            self->super.proceed = do_multirange_proceed;
-            do_multirange_proceed(&self->super, req);
-        }
+
+    if (self->ranged.range_count < 2)
+        do_proceed(&self->super, req);
+    else {
+        self->ranged.multirange_buf = h2o_mem_alloc_pool(&req->pool, char, MAX_BUF_SIZE);
+        self->bytesleft = 0;
+        self->super.proceed = do_multirange_proceed;
+        do_multirange_proceed(&self->super, req);
     }
 }
 

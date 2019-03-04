@@ -483,7 +483,22 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     }
 }
 
-void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
+{
+    static const h2o_sendvec_callbacks_t primitive_callbacks = {h2o_sendvec_flatten_raw};
+    vec->callbacks = &primitive_callbacks;
+    vec->raw = (char *)base;
+    vec->len = len;
+}
+
+int h2o_sendvec_flatten_raw(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
+{
+    assert(off + dst.len <= src->len);
+    memcpy(dst.base, src->raw + off, dst.len);
+    return 1;
+}
+
+static void do_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     assert(req->_generator != NULL);
 
@@ -491,6 +506,23 @@ void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t
         req->_generator = NULL;
 
     req->_ostr_top->do_send(req->_ostr_top, req, bufs, bufcnt, state);
+}
+
+void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+{
+    h2o_sendvec_t *vecs = alloca(sizeof(*vecs) * bufcnt);
+    size_t i;
+
+    for (i = 0; i != bufcnt; ++i)
+        h2o_sendvec_init_raw(vecs + i, bufs[i].base, bufs[i].len);
+
+    do_sendvec(req, vecs, bufcnt, state);
+}
+
+void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+{
+    assert(bufcnt == 0 || (bufs[0].callbacks->flatten == &h2o_sendvec_flatten_raw || bufcnt == 1));
+    do_sendvec(req, bufs, bufcnt, state);
 }
 
 h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t alignment, size_t sz)
@@ -507,7 +539,6 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_
     ostr->next = *slot;
     ostr->do_send = NULL;
     ostr->stop = NULL;
-    ostr->start_pull = NULL;
     ostr->send_informational = NULL;
 
     *slot = ostr;
@@ -547,7 +578,7 @@ void h2o_proceed_response_deferred(h2o_req_t *req)
     h2o_timer_link(req->conn->ctx->loop, 0, &req->_timeout_entry);
 }
 
-void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     if (!h2o_send_state_is_in_progress(state)) {
         assert(req->_ostr_top == ostream);

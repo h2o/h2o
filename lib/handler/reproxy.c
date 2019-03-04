@@ -21,7 +21,7 @@
  */
 #include "h2o.h"
 
-static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     /* nothing to do */
 }
