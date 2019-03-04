@@ -375,8 +375,9 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
 
     /* for locality, emit packets belonging to the same connection NOW! */
     if (conn != NULL) {
-        h2o_http3_send(conn);
-        if (ctx->notify_conn_update != NULL)
+        if (!h2o_http3_send(conn))
+            conn = NULL;
+        if (conn != NULL && ctx->notify_conn_update != NULL)
             ctx->notify_conn_update(ctx, conn);
     }
 }
@@ -619,7 +620,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     return 0;
 }
 
-void h2o_http3_send(h2o_http3_conn_t *conn)
+int h2o_http3_send(h2o_http3_conn_t *conn)
 {
     quicly_datagram_t *packets[16];
     size_t num_packets, i;
@@ -638,7 +639,7 @@ void h2o_http3_send(h2o_http3_conn_t *conn)
             break;
         case QUICLY_ERROR_FREE_CONNECTION:
             conn->callbacks->destroy_connection(conn);
-            return;
+            return 0;
         default:
             fprintf(stderr, "quicly_send returned %d\n", ret);
             abort();
@@ -646,6 +647,8 @@ void h2o_http3_send(h2o_http3_conn_t *conn)
     } while (num_packets == sizeof(packets) / sizeof(packets[0]));
 
     h2o_http3_schedule_timer(conn);
+
+    return 1;
 }
 
 int h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, size_t len)
