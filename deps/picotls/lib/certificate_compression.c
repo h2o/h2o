@@ -48,17 +48,22 @@ static const uint16_t algorithms[] = {PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BRO
 ptls_decompress_certificate_t ptls_decompress_certificate = {algorithms, decompress_certificate};
 
 static int emit_compressed_certificate(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
-                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context)
+                                       ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
 {
     ptls_emit_compressed_certificate_t *self = (void *)_self;
+    struct st_ptls_compressed_certificate_entry_t *entry;
     int ret;
 
     assert(context.len == 0 || !"precompressed mode can only be used for server certificates");
 
+    entry = &self->without_ocsp_status;
+    if (push_status_request && self->with_ocsp_status.uncompressed_length != 0)
+        entry = &self->with_ocsp_status;
+
     ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_COMPRESSED_CERTIFICATE, {
-        ptls_buffer_push16(emitter->buf, self->algo);
-        ptls_buffer_push24(emitter->buf, self->uncompressed_length);
-        ptls_buffer_push_block(emitter->buf, 3, { ptls_buffer_pushv(emitter->buf, self->buf.base, self->buf.len); });
+        ptls_buffer_push16(emitter->buf, PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI);
+        ptls_buffer_push24(emitter->buf, entry->uncompressed_length);
+        ptls_buffer_push_block(emitter->buf, 3, { ptls_buffer_pushv(emitter->buf, entry->bytes.base, entry->bytes.len); });
     });
 
     ret = 0;
@@ -67,13 +72,11 @@ Exit:
     return ret;
 }
 
-int ptls_init_compressed_certificate(ptls_emit_compressed_certificate_t *self, uint16_t algo, ptls_iovec_t *certificates,
-                                     size_t num_certificates, ptls_iovec_t ocsp_status)
+static int build_compressed(struct st_ptls_compressed_certificate_entry_t *entry, ptls_iovec_t *certificates,
+                            size_t num_certificates, ptls_iovec_t ocsp_status)
 {
     ptls_buffer_t uncompressed;
     int ret;
-
-    *self = (ptls_emit_compressed_certificate_t){{emit_compressed_certificate}, algo};
 
     ptls_buffer_init(&uncompressed, "", 0);
 
@@ -81,16 +84,16 @@ int ptls_init_compressed_certificate(ptls_emit_compressed_certificate_t *self, u
     if ((ret = ptls_build_certificate_message(&uncompressed, ptls_iovec_init(NULL, 0), certificates, num_certificates,
                                               ocsp_status)) != 0)
         goto Exit;
-    self->uncompressed_length = (uint32_t)uncompressed.off;
+    entry->uncompressed_length = (uint32_t)uncompressed.off;
 
     /* compress */
-    self->buf.len = uncompressed.off - 1;
-    if ((self->buf.base = malloc(self->buf.len)) == NULL) {
+    entry->bytes.len = uncompressed.off - 1;
+    if ((entry->bytes.base = malloc(entry->bytes.len)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
     if (BrotliEncoderCompress(BROTLI_MAX_QUALITY, BROTLI_DEFAULT_WINDOW, BROTLI_MODE_GENERIC, uncompressed.off, uncompressed.base,
-                              &self->buf.len, self->buf.base) != BROTLI_TRUE) {
+                              &entry->bytes.len, entry->bytes.base) != BROTLI_TRUE) {
         ret = PTLS_ERROR_COMPRESSION_FAILURE;
         goto Exit;
     }
@@ -98,8 +101,39 @@ int ptls_init_compressed_certificate(ptls_emit_compressed_certificate_t *self, u
     ret = 0;
 
 Exit:
-    if (ret != 0)
-        free(self->buf.base);
+    if (ret != 0) {
+        free(entry->bytes.base);
+        *entry = (struct st_ptls_compressed_certificate_entry_t){0};
+    }
     ptls_buffer_dispose(&uncompressed);
     return ret;
+}
+
+int ptls_init_compressed_certificate(ptls_emit_compressed_certificate_t *self, ptls_iovec_t *certificates, size_t num_certificates,
+                                     ptls_iovec_t ocsp_status)
+{
+    int ret;
+
+    *self = (ptls_emit_compressed_certificate_t){{emit_compressed_certificate}, PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI};
+
+    /* build entries */
+    if ((ret = build_compressed(&self->without_ocsp_status, certificates, num_certificates, ptls_iovec_init(NULL, 0))) != 0)
+        goto Exit;
+    if (ocsp_status.len != 0) {
+        if ((ret = build_compressed(&self->with_ocsp_status, certificates, num_certificates, ocsp_status)) != 0)
+            goto Exit;
+    }
+
+    ret = 0;
+
+Exit:
+    if (ret != 0)
+        ptls_dispose_compressed_certificate(self);
+    return ret;
+}
+
+void ptls_dispose_compressed_certificate(ptls_emit_compressed_certificate_t *self)
+{
+    free(self->with_ocsp_status.bytes.base);
+    free(self->without_ocsp_status.bytes.base);
 }
