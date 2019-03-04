@@ -34,14 +34,23 @@ extern "C" {
 typedef struct st_ptls_emit_compressed_certificate_t {
     ptls_emit_certificate_t super;
     uint16_t algo;
-    uint32_t uncompressed_length;
-    ptls_iovec_t buf;
+    struct st_ptls_compressed_certificate_entry_t {
+        uint32_t uncompressed_length;
+        ptls_iovec_t bytes;
+    } with_ocsp_status, without_ocsp_status;
 } ptls_emit_compressed_certificate_t;
 
 extern ptls_decompress_certificate_t ptls_decompress_certificate;
 
-int ptls_init_compressed_certificate(ptls_emit_compressed_certificate_t *ecc, uint16_t algo, ptls_iovec_t *certificates,
-                                     size_t num_certificates, ptls_iovec_t ocsp_status);
+/**
+ * initializes a certificate emitter that precompresses a certificate chain (and ocsp status)
+ */
+int ptls_init_compressed_certificate(ptls_emit_compressed_certificate_t *ecc, ptls_iovec_t *certificates, size_t num_certificates,
+                                     ptls_iovec_t ocsp_status);
+/**
+ *
+ */
+void ptls_dispose_compressed_certificate(ptls_emit_compressed_certificate_t *ecc);
 
 #ifdef __cplusplus
 }
