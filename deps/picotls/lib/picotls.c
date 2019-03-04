@@ -38,7 +38,6 @@
 #define PTLS_RECORD_VERSION_MAJOR 3
 #define PTLS_RECORD_VERSION_MINOR 3
 
-#define PTLS_HELLO_RANDOM_SIZE 32
 #define PTLS_ESNI_NONCE_SIZE 16
 
 #define PTLS_CONTENT_TYPE_CHANGE_CIPHER_SPEC 20
@@ -555,6 +554,28 @@ Exit:
     return ret;
 }
 
+#if PTLS_FUZZ_HANDSHAKE
+
+static size_t aead_encrypt(struct st_ptls_traffic_protection_t *ctx, void *output, const void *input, size_t inlen,
+                           uint8_t content_type)
+{
+    memcpy(output, input, inlen);
+    memcpy(output + inlen, &content_type, 1);
+    return inlen + 1 + 16;
+}
+
+static int aead_decrypt(struct st_ptls_traffic_protection_t *ctx, void *output, size_t *outlen, const void *input, size_t inlen)
+{
+    if (inlen < 16) {
+        return PTLS_ALERT_BAD_RECORD_MAC;
+    }
+    memcpy(output, input, inlen - 16);
+    *outlen = inlen - 16; /* removing the 16 bytes of tag */
+    return 0;
+}
+
+#else
+
 static void build_aad(uint8_t aad[5], size_t reclen)
 {
     aad[0] = PTLS_CONTENT_TYPE_APPDATA;
@@ -589,6 +610,8 @@ static int aead_decrypt(struct st_ptls_traffic_protection_t *ctx, void *output, 
     ++ctx->seq;
     return 0;
 }
+
+#endif /* #if PTLS_FUZZ_HANDSHAKE */
 
 #define buffer_push_record(buf, type, block)                                                                                       \
     do {                                                                                                                           \
@@ -753,6 +776,15 @@ int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end)
     *value = ntoh64(*src);
     *src += 8;
     return 0;
+}
+
+static void log_secret(ptls_t *tls, const char *type, ptls_iovec_t secret)
+{
+    if (tls->ctx->log_event != NULL) {
+        char hexbuf[PTLS_MAX_DIGEST_SIZE * 2 + 1];
+        ptls_hexdump(hexbuf, secret.base, secret.len);
+        tls->ctx->log_event->cb(tls->ctx->log_event, tls, type, "%s", hexbuf);
+    }
 }
 
 static void key_schedule_free(ptls_key_schedule_t *sched)
@@ -943,11 +975,8 @@ static int derive_exporter_secret(ptls_t *tls, int is_early)
     if ((ret = derive_secret(tls->key_schedule, *slot, is_early ? "e exp master" : "exp master")) != 0)
         return ret;
 
-    if (tls->ctx->log_secret != NULL) {
-        const char *log_label = is_early ? "EARLY_EXPORTER_SECRET" : "EXPORTER_SECRET";
-        tls->ctx->log_secret->cb(tls->ctx->log_secret, tls, log_label,
-                                 ptls_iovec_init(*slot, tls->key_schedule->hashes[0].algo->digest_size));
-    }
+    log_secret(tls, is_early ? "EARLY_EXPORTER_SECRET" : "EXPORTER_SECRET",
+               ptls_iovec_init(*slot, tls->key_schedule->hashes[0].algo->digest_size));
 
     return 0;
 }
@@ -1120,9 +1149,8 @@ static int setup_traffic_protection(ptls_t *tls, int is_enc, const char *secret_
         return PTLS_ERROR_NO_MEMORY; /* TODO obtain error from ptls_aead_new */
     ctx->seq = 0;
 
-    if (tls->ctx->log_secret != NULL)
-        tls->ctx->log_secret->cb(tls->ctx->log_secret, tls, log_labels[ptls_is_server(tls) == is_enc][epoch],
-                                 ptls_iovec_init(ctx->secret, tls->key_schedule->hashes[0].algo->digest_size));
+    log_secret(tls, log_labels[ptls_is_server(tls) == is_enc][epoch],
+               ptls_iovec_init(ctx->secret, tls->key_schedule->hashes[0].algo->digest_size));
     PTLS_DEBUGF("[%s] %02x%02x,%02x%02x\n", log_labels[ptls_is_server(tls)][epoch], (unsigned)ctx->secret[0],
                 (unsigned)ctx->secret[1], (unsigned)ctx->aead->static_iv[0], (unsigned)ctx->aead->static_iv[1]);
 
@@ -1747,7 +1775,7 @@ static int emit_esni_extension(struct st_ptls_esni_secret_t *esni, ptls_buffer_t
         if ((ret = emit_server_name_extension(buf, server_name)) != 0)
             goto Exit;
         /* pad */
-        if (buf->off - start_off < esni->client.padded_length + PTLS_ESNI_NONCE_SIZE) {
+        if (buf->off - start_off < (size_t)(esni->client.padded_length + PTLS_ESNI_NONCE_SIZE)) {
             size_t bytes_to_pad = esni->client.padded_length + PTLS_ESNI_NONCE_SIZE - (buf->off - start_off);
             if ((ret = ptls_buffer_reserve(buf, bytes_to_pad)) != 0)
                 goto Exit;
@@ -3253,7 +3281,10 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
             continue;
         *accept_early_data = 0;
         if (ch->psk.early_data_indication) {
+            /* accept early-data if abs(diff) between the reported age and the actual age is within += 10 seconds */
             int64_t delta = (now - issue_at) - (identity->obfuscated_ticket_age - age_add);
+            if (delta < 0)
+                delta = -delta;
             if (delta <= PTLS_EARLY_DATA_MAX_DELAY)
                 *accept_early_data = 1;
         }
@@ -5078,4 +5109,16 @@ int ptls_server_name_is_ipaddr(const char *name)
         return 1;
 #endif
     return 0;
+}
+
+void ptls_hexdump(char *dst, const void *_src, size_t len)
+{
+    const uint8_t *src = _src;
+    size_t i;
+
+    for (i = 0; i != len; ++i) {
+        *dst++ = "0123456789abcdef"[src[i] >> 4];
+        *dst++ = "0123456789abcdef"[src[i] & 0xf];
+    }
+    *dst++ = '\0';
 }
