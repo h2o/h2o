@@ -40,6 +40,7 @@
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
+    size_t refcnt;
     struct {
         h2o_filecache_ref_t *ref;
         off_t off;
@@ -113,7 +114,8 @@ static int tm_is_lessthan(struct tm *x, struct tm *y)
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    h2o_filecache_close_file(self->file.ref);
+    if (--self->refcnt == 0)
+        h2o_filecache_close_file(self->file.ref);
 }
 
 static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
@@ -144,9 +146,22 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
     return 1;
 }
 
+static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, ssize_t delta)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)vec->cb_arg[0];
+
+    if (delta > 0) {
+        assert(delta == 1);
+        ++self->refcnt;
+    } else {
+        assert(delta == -1);
+        do_close(&self->super, req);
+    }
+}
+
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {do_pread, sendvec_update_refcnt};
 
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     h2o_sendvec_t vec;
@@ -276,6 +291,7 @@ Opened:
     self = h2o_mem_alloc_pool(&req->pool, *self, 1);
     self->super.proceed = do_proceed;
     self->super.stop = do_close;
+    self->refcnt = 1;
     self->file.ref = fileref;
     self->file.off = 0;
     self->req = NULL;
