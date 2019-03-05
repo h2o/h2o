@@ -701,9 +701,9 @@ typedef struct st_h2o_sendvec_callbacks_t {
     int (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
     /**
      * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
-     * retransmission.
+     * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
      */
-    void (*update_refcnt)(h2o_sendvec_t *vec, h2o_req_t *req, ssize_t delta);
+    void (*update_refcnt)(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr);
 } h2o_sendvec_callbacks_t;
 
 /**

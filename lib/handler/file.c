@@ -146,15 +146,15 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
     return 1;
 }
 
-static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, ssize_t delta)
+static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)vec->cb_arg[0];
 
-    if (delta > 0) {
-        assert(delta == 1);
+    assert(self->refcnt != 0);
+
+    if (is_incr) {
         ++self->refcnt;
     } else {
-        assert(delta == -1);
         do_close(&self->super, req);
     }
 }

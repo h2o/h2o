@@ -112,7 +112,7 @@ static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
     for (i = 0; i != stream->sendbuf.vecs.size; ++i) {
         h2o_sendvec_t *vec = stream->sendbuf.vecs.entries + i;
         if (vec->callbacks->update_refcnt != NULL)
-            vec->callbacks->update_refcnt(vec, &stream->req, -1);
+            vec->callbacks->update_refcnt(vec, &stream->req, 0);
     }
 
     /* dispose the request */
@@ -188,9 +188,9 @@ static void on_stream_destroy(quicly_stream_t *qs, int err)
     free(stream);
 }
 
-static void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, ssize_t delta)
+static void allocated_vec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr)
 {
-    assert(delta == -1);
+    assert(!is_incr);
     free(vec->raw);
 }
 
@@ -198,8 +198,7 @@ static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         h2o_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
-        /* create a copy if it does not provide update_refcnt (we call update_refcnt in do_send for those that do provide the
-         * callback) */
+        /* create a copy if it does not provide update_refcnt (update_refcnt is already called in do_send, if available) */
         if (vec->callbacks->update_refcnt == NULL) {
             static const h2o_sendvec_callbacks_t vec_callbacks = {h2o_sendvec_flatten_raw, allocated_vec_update_refcnt};
             size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0;
@@ -233,7 +232,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     delta -= bytes_avail_in_first_vec;
     stream->sendbuf.off_within_first_vec = 0;
     if (stream->sendbuf.min_index_to_addref != 0)
-        stream->sendbuf.vecs.entries[0].callbacks->update_refcnt(stream->sendbuf.vecs.entries, &stream->req, -1);
+        stream->sendbuf.vecs.entries[0].callbacks->update_refcnt(stream->sendbuf.vecs.entries, &stream->req, 0);
 
     for (i = 1; delta != 0; ++i) {
         assert(i < stream->sendbuf.vecs.size);
@@ -243,7 +242,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
         }
         delta -= stream->sendbuf.vecs.entries[i].len;
         if (i < stream->sendbuf.min_index_to_addref)
-            stream->sendbuf.vecs.entries[i].callbacks->update_refcnt(stream->sendbuf.vecs.entries + i, &stream->req, -1);
+            stream->sendbuf.vecs.entries[i].callbacks->update_refcnt(stream->sendbuf.vecs.entries + i, &stream->req, 0);
     }
     memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
             (stream->sendbuf.vecs.size - i) * sizeof(stream->sendbuf.vecs.entries[0]));
