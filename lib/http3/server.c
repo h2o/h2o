@@ -296,7 +296,7 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
             sz = dst_end - dst;
         if (!(stream->sendbuf.vecs.entries[vec_index].callbacks->flatten)(stream->sendbuf.vecs.entries + vec_index, &stream->req,
                                                                           h2o_iovec_init(dst, sz), off + off_within_vec))
-            h2o_fatal("FIXME");
+            goto Error;
         dst += sz;
         /* prepare to write next */
         off = 0;
@@ -308,11 +308,18 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
 
     if (*wrote_all && stream->send_state == H2O_SEND_STATE_IN_PROGRESS && !stream->sendbuf.proceed_called) {
         if (!retain_sendvecs(stream))
-            h2o_fatal("FIXME");
+            goto Error;
         stream->sendbuf.proceed_called = 1;
         h2o_proceed_response_deferred(&stream->req);
     }
 
+    return 0;
+
+Error:
+    *len = 0;
+    *wrote_all = 1;
+    quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_INTERNAL);
+    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
     return 0;
 }
 
