@@ -2423,7 +2423,6 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     if ((ret = stream->callbacks->on_send_emit(stream, (size_t)(off - stream->sendstate.acked.ranges[0].end), s->dst, &len,
                                                &wrote_all)) != 0)
         return ret;
-    assert(len != 0);
     assert(len <= capacity);
 
     /* update s->dst, insert length if necessary */

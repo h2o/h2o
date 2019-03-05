@@ -80,7 +80,10 @@ int quicly_ranges_add(quicly_ranges_t *ranges, uint64_t start, uint64_t end)
 {
     size_t slot, end_slot;
 
-    assert(start < end);
+    assert(start <= end);
+
+    if (start == end)
+        return 0;
 
     if (ranges->num_ranges == 0) {
         return insert_at(ranges, start, end, 0);
@@ -117,7 +120,10 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
 {
     size_t shrink_from, slot;
 
-    assert(start < end);
+    assert(start <= end);
+
+    if (start == end)
+        return 0;
 
     if (ranges->num_ranges == 0) {
         return 0;
