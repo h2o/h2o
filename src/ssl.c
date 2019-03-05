@@ -31,10 +31,8 @@
 #include "h2o/hiredis_.h"
 #include "yoml-parser.h"
 #include "yrmcds.h"
-#if H2O_USE_PICOTLS
 #include "picotls.h"
 #include "picotls/openssl.h"
-#endif
 #include "h2o/file.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -314,14 +312,10 @@ static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned 
     return ticket_key_callback(key_name, iv, ctx, hctx, enc);
 }
 
-#if H2O_USE_PICOTLS
-
 static int encrypt_ticket_key_ptls(ptls_encrypt_ticket_t *self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
 {
     return (is_encrypt ? ptls_openssl_encrypt_ticket : ptls_openssl_decrypt_ticket)(dst, src, ticket_key_callback);
 }
-
-#endif
 
 static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
 {
@@ -988,14 +982,12 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
         for (i = 0; i != num_contexts; ++i) {
             SSL_CTX *ctx = contexts[i];
             SSL_CTX_set_tlsext_ticket_key_cb(ctx, ticket_key_callback_ossl);
-#if H2O_USE_PICOTLS
             ptls_context_t *pctx = h2o_socket_ssl_get_picotls_context(ctx);
             if (pctx != NULL) {
                 static ptls_encrypt_ticket_t encryptor = {encrypt_ticket_key_ptls};
                 pctx->ticket_lifetime = 86400 * 7; // FIXME conf.lifetime;
                 pctx->encrypt_ticket = &encryptor;
             }
-#endif
         }
     } else {
         size_t i;

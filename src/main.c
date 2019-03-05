@@ -50,11 +50,9 @@
 #ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
 #endif
-#if H2O_USE_PICOTLS
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 #include "picotls/openssl.h"
-#endif
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
@@ -79,18 +77,11 @@
 
 #define H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS 10
 
-#if defined(OPENSSL_NO_OCSP) && !H2O_USE_PICOTLS
-#define H2O_USE_OCSP 0
-#else
-#define H2O_USE_OCSP 1
-#endif
-
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
     SSL_CTX *ctx;
     h2o_iovec_t *http2_origin_frame;
-#if H2O_USE_OCSP
     struct {
         uint64_t interval;
         unsigned max_failures;
@@ -101,7 +92,6 @@ struct listener_ssl_config_t {
             h2o_buffer_t *data;
         } response;
     } ocsp_stapling;
-#endif
 };
 
 struct listener_config_t {
@@ -262,7 +252,6 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     return SSL_TLSEXT_ERR_OK;
 }
 
-#if H2O_USE_PICOTLS
 struct st_on_client_hello_ptls_t {
     ptls_on_client_hello_t super;
     struct listener_config_t *listener;
@@ -314,7 +303,6 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
 
     return ret;
 }
-#endif
 
 static void update_ocsp_stapling(struct listener_ssl_config_t *ssl_conf, h2o_buffer_t *resp)
 {
@@ -445,8 +433,6 @@ static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_conf)
 
 #endif
 
-#if H2O_USE_PICOTLS
-
 struct st_emit_certificate_ptls_t {
     ptls_emit_certificate_t super;
     struct listener_ssl_config_t *conf;
@@ -536,8 +522,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 
     return NULL;
 }
-
-#endif
 
 static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config, h2o_iovec_t host)
 {
@@ -832,7 +816,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 #endif
 
-#if H2O_USE_PICOTLS
     if (use_picotls) {
         const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
         if (errstr != NULL)
@@ -842,9 +825,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             assert(listener->quic->tls != NULL);
             quicly_amend_ptls_context(listener->quic->tls);
         }
-    } else
-#endif
-        if (listener->quic != NULL) {
+    } else if (listener->quic != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
         goto Error;
     }

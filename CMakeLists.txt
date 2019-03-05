@@ -103,8 +103,6 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
 
-OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
-
 FIND_PROGRAM(CCACHE ccache)
 IF (CCACHE)
     SET(WITH_CCACHE_DEFAULT "ON")
@@ -144,6 +142,10 @@ INCLUDE_DIRECTORIES(
     deps/neverbleed
     deps/picohttpparser
     deps/picotest
+    deps/picotls/deps/cifra/src/ext
+    deps/picotls/deps/cifra/src
+    deps/picotls/deps/micro-ecc
+    deps/picotls/include
     deps/quicly/include
     deps/yaml/include
     deps/yoml)
@@ -245,13 +247,26 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/c/enc/utf8_util.c
     lib/handler/compress/brotli.c)
 
-SET(PICOTLS_INCLUDE_DIRECTORIES
-    deps/picotls/deps/cifra/src/ext
-    deps/picotls/deps/cifra/src
-    deps/picotls/deps/micro-ecc
-    deps/picotls/include)
-
-SET(PICOTLS_SOURCE_FILES
+SET(LIB_SOURCE_FILES
+    deps/cloexec/cloexec.c
+    deps/dcc/cc.c
+    deps/dcc/cc_cubic.c
+    deps/dcc/cc_newreno.c
+    deps/hiredis/async.c
+    deps/hiredis/hiredis.c
+    deps/hiredis/net.c
+    deps/hiredis/read.c
+    deps/hiredis/sds.c
+    deps/libgkc/gkc.c
+    deps/libyrmcds/close.c
+    deps/libyrmcds/connect.c
+    deps/libyrmcds/recv.c
+    deps/libyrmcds/send.c
+    deps/libyrmcds/send_text.c
+    deps/libyrmcds/socket.c
+    deps/libyrmcds/strerror.c
+    deps/libyrmcds/text_mode.c
+    deps/picohttpparser/picohttpparser.c
     deps/picotls/deps/micro-ecc/uECC.c
     deps/picotls/deps/cifra/src/aes.c
     deps/picotls/deps/cifra/src/blockwise.c
@@ -269,16 +284,7 @@ SET(PICOTLS_SOURCE_FILES
     deps/picotls/lib/picotls.c
     deps/picotls/lib/cifra.c
     deps/picotls/lib/uecc.c
-    deps/picotls/lib/openssl.c)
-
-SET(QUIC_INCLUDE_DIRECTORIES
-    deps/dcc
-    deps/quicly/include)
-
-SET(QUIC_SOURCE_FILES
-    deps/dcc/cc.c
-    deps/dcc/cc_cubic.c
-    deps/dcc/cc_newreno.c
+    deps/picotls/lib/openssl.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c
@@ -287,33 +293,6 @@ SET(QUIC_SOURCE_FILES
     deps/quicly/lib/sendstate.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
-    lib/http3/qpack.c
-    lib/http3/common.c
-    lib/http3/server.c)
-
-SET(QUIC_UNIT_TEST_SOURCE_FILES
-    t/00unit/lib/http3/qpack.c)
-
-SET(QUIC_UNIT_TEST_REMOVE_FILES
-    lib/http3/qpack.c)
-
-SET(LIB_SOURCE_FILES
-    deps/cloexec/cloexec.c
-    deps/hiredis/async.c
-    deps/hiredis/hiredis.c
-    deps/hiredis/net.c
-    deps/hiredis/read.c
-    deps/hiredis/sds.c
-    deps/libgkc/gkc.c
-    deps/libyrmcds/close.c
-    deps/libyrmcds/connect.c
-    deps/libyrmcds/recv.c
-    deps/libyrmcds/send.c
-    deps/libyrmcds/send_text.c
-    deps/libyrmcds/socket.c
-    deps/libyrmcds/strerror.c
-    deps/libyrmcds/text_mode.c
-    deps/picohttpparser/picohttpparser.c
 
     lib/common/cache.c
     lib/common/file.c
@@ -321,6 +300,7 @@ SET(LIB_SOURCE_FILES
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/http2client.c
+    lib/common/http3client.c
     lib/common/httpclient.c
     lib/common/memcached.c
     lib/common/memory.c
@@ -394,7 +374,11 @@ SET(LIB_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c
     lib/http2/stream.c
-    lib/http2/http2_debug_state.c)
+    lib/http2/http2_debug_state.c
+
+    lib/http3/qpack.c
+    lib/http3/common.c
+    lib/http3/server.c)
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
@@ -507,7 +491,7 @@ ELSE ()
     SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF()
 
-ADD_EXECUTABLE(t-qif ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} lib/http3/qpack.c t/qif.c)
+ADD_EXECUTABLE(t-qif t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
     EXCLUDE_FROM_ALL 1)
@@ -528,7 +512,7 @@ IF (WSLAY_FOUND)
 ENDIF (WSLAY_FOUND)
 ADD_EXECUTABLE(examples-latency-optimization-evloop examples/libh2o/latency-optimization.c)
 ADD_EXECUTABLE(examples-httpclient-evloop examples/libh2o/httpclient.c)
-ADD_EXECUTABLE(examples-http3client-evloop ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} lib/common/http3client.c lib/http3/common.c lib/http3/qpack.c examples/libh2o/http3client.c)
+ADD_EXECUTABLE(examples-http3client-evloop lib/common/http3client.c lib/http3/common.c lib/http3/qpack.c examples/libh2o/http3client.c)
 ADD_EXECUTABLE(examples-socket-client-evloop examples/libh2o/socket-client.c)
 ADD_EXECUTABLE(examples-simple-evloop examples/libh2o/simple.c)
 ADD_EXECUTABLE(examples-websocket-evloop lib/websocket.c examples/libh2o/websocket.c)
@@ -608,13 +592,6 @@ IF (WITH_MRUBY)
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
-IF (WITH_PICOTLS)
-    LIST(APPEND STANDALONE_SOURCE_FILES ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES})
-    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_PICOTLS=1")
-    INCLUDE_DIRECTORIES(${PICOTLS_INCLUDE_DIRECTORIES} ${QUIC_INCLUDE_DIRECTORIES})
-    LIST(APPEND UNIT_TEST_SOURCE_FILES ${PICOTLS_SOURCE_FILES} ${QUIC_SOURCE_FILES} ${QUIC_UNIT_TEST_SOURCE_FILES})
-    LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES ${QUIC_UNIT_TEST_REMOVE_FILES})
-ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
 TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
