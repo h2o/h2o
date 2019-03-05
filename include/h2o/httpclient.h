@@ -76,8 +76,9 @@ typedef struct st_h2o_httpclient_ctx_t {
     struct {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         uint32_t max_concurrent_streams;
-
-        /* for weighted fair queueing */
+        /**
+         * ratio of requests to use HTTP/2; between 0 to 100
+         */
         int8_t ratio;
         int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
