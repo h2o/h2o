@@ -180,7 +180,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                 ptls_buffer_pushv(&ptbuf, bytebuf, ioret);
                 if (state == IN_HANDSHAKE) {
                     size_t send_amount = 0;
-                    if (hsprop->client.max_early_data_size != NULL) {
+                    if (server_name != NULL && hsprop->client.max_early_data_size != NULL) {
                         size_t max_can_be_sent = *hsprop->client.max_early_data_size;
                         if (max_can_be_sent > ptbuf.off)
                             max_can_be_sent = ptbuf.off;
@@ -305,7 +305,7 @@ static void usage(const char *cmd)
            "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
            "  -k key-file          specifies the credentials for signing the certificate\n"
-           "  -l log-file          file to log traffic secrets\n"
+           "  -l log-file          file to log events (incl. traffic secrets)\n"
            "  -n                   negotiates the key exchange method (i.e. wait for HRR)\n"
            "  -N named-group       named group to be used (default: secp256r1)\n"
            "  -s session-file      file to read/write the session ticket\n"
@@ -426,7 +426,7 @@ int main(int argc, char **argv)
             fclose(fp);
         } break;
         case 'l':
-            setup_log_secret(&ctx, optarg);
+            setup_log_event(&ctx, optarg);
             break;
         case 'v':
             setup_verify_certificate(&ctx);
@@ -459,8 +459,10 @@ int main(int argc, char **argv)
         case 'u':
             request_key_update = 1;
             break;
-        default:
+        case 'h':
             usage(argv[0]);
+            exit(0);
+        default:
             exit(1);
         }
     }
@@ -478,8 +480,8 @@ int main(int argc, char **argv)
 #if PICOTLS_USE_BROTLI
         if (ctx.decompress_certificate != NULL) {
             static ptls_emit_compressed_certificate_t ecc;
-            if (ptls_init_compressed_certificate(&ecc, PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI, ctx.certificates.list,
-                                                 ctx.certificates.count, ptls_iovec_init(NULL, 0)) != 0) {
+            if (ptls_init_compressed_certificate(&ecc, ctx.certificates.list, ctx.certificates.count, ptls_iovec_init(NULL, 0)) !=
+                0) {
                 fprintf(stderr, "failed to create a brotli-compressed version of the certificate chain.\n");
                 exit(1);
             }

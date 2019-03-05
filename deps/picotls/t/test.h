@@ -23,6 +23,7 @@
 #define test_h
 
 #include "picotls.h"
+#include "picotls/ffx.h"
 
 /* raw private key and certificate using secp256v1 */
 #define SECP256R1_PRIVATE_KEY                                                                                                      \
@@ -63,6 +64,39 @@
 
 extern ptls_context_t *ctx, *ctx_peer;
 extern ptls_verify_certificate_t *verify_certificate;
+
+struct st_ptls_ffx_test_variants_t {
+    ptls_cipher_algorithm_t *algo;
+    int bit_length;
+};
+extern struct st_ptls_ffx_test_variants_t ffx_variants[7];
+
+#define DEFINE_FFX_AES128_ALGORITHMS(backend)                                                                                      \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_aes128ctr, 31, 6, 16);                                                                   \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_aes128ctr, 53, 4, 16);                                                                   \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_aes128ctr, 125, 8, 16)
+#define DEFINE_FFX_CHACHA20_ALGORITHMS(backend)                                                                                    \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_chacha20, 32, 6, 32);                                                                    \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_chacha20, 57, 4, 32);                                                                    \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_chacha20, 256, 8, 32)
+
+#define ADD_FFX_ALGORITHM(a, bl)                                                                                                   \
+    do {                                                                                                                           \
+        size_t i;                                                                                                                  \
+        for (i = 0; ffx_variants[i].algo != NULL; ++i)                                                                             \
+            ;                                                                                                                      \
+        ffx_variants[i] = (struct st_ptls_ffx_test_variants_t){&(a), (bl)};                                                        \
+    } while (0)
+
+#define ADD_FFX_AES128_ALGORITHMS(backend)                                                                                         \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_aes128ctr_b125_r8, 125);                                                           \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_aes128ctr_b31_r6, 31);                                                             \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_aes128ctr_b53_r4, 53)
+
+#define ADD_FFX_CHACHA20_ALGORITHMS(backend)                                                                                       \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_chacha20_b256_r8, 256);                                                            \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_chacha20_b32_r6, 32);                                                              \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_chacha20_b57_r4, 57)
 
 void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_algorithm_t *server);
 void test_picotls(void);
