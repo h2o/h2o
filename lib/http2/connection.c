@@ -215,14 +215,18 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
     } while (ran_one_request && !h2o_linklist_is_empty(&conn->_pending_reqs));
 }
 
-static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+static int should_reset_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (!h2o_http2_stream_is_push(stream->stream_id) && stream->stream_id > conn->pull_stream_ids.max_open) {
-        /* this stream is opend after sending GOAWAY, so ignore it */
+        /* this stream is opened after sending GOAWAY, so ignore it */
         h2o_http2_stream_reset(conn, stream);
-        return;
+        return 1;
     }
+    return 0;
+}
 
+static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
     /* TODO schedule the pending reqs using the scheduler */
     h2o_linklist_insert(&conn->_pending_reqs, &stream->_link);
 
@@ -233,6 +237,9 @@ static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_st
 static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+
+    if (should_reset_stream(conn, stream))
+        return;
 
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
     if (!stream->blocked_by_server)
@@ -681,7 +688,8 @@ static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
         stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
         stream->req.write_req.cb = write_req_streaming_pre_dispatch;
         stream->req.proceed_req = proceed_request;
-        execute_or_enqueue_request_core(conn, stream);
+        if (!should_reset_stream(conn, stream))
+            execute_or_enqueue_request_core(conn, stream);
         return 0;
     }
 
