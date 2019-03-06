@@ -157,6 +157,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     }
 
     fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
+    fflush(stdout);
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
     if (errstr == h2o_httpclient_error_is_eos) {
@@ -172,15 +173,15 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
 
 static void print_status_line(int version, int status, h2o_iovec_t msg)
 {
-    printf("HTTP/%d", (version >> 8));
+    fprintf(stderr, "HTTP/%d", (version >> 8));
     if ((version & 0xff) != 0) {
-        printf(".%d", version & 0xff);
+        fprintf(stderr, ".%d", version & 0xff);
     }
-    printf(" %d", status);
+    fprintf(stderr, " %d", status);
     if (msg.len == 0) {
-        printf(" %.*s\n", (int)msg.len, msg.base);
+        fprintf(stderr, " %.*s\n", (int)msg.len, msg.base);
     } else {
-        printf("\n");
+        fprintf(stderr, "\n");
     }
 }
 
@@ -200,9 +201,10 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
         const char *name = headers[i].orig_name;
         if (name == NULL)
             name = headers[i].name->base;
-        printf("%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
+        fprintf(stderr, "%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
     }
-    printf("\n");
+    fprintf(stderr, "\n");
+    fflush(stderr);
 
     if (errstr == h2o_httpclient_error_is_eos) {
         on_error(client->ctx, "no body");
