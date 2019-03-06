@@ -42,7 +42,7 @@ static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
 static const char *url;
 static char *method = "GET";
-static int cnt_left = 3;
+static int cnt_left = 1;
 static int body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
