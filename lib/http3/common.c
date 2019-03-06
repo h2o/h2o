@@ -539,6 +539,7 @@ static void close_connection(h2o_http3_conn_t *conn)
         break;
     case QUICLY_STATE_CONNECTED:
         quicly_close(conn->quic, H2O_HTTP3_ERROR_NONE, "");
+        h2o_http3_schedule_timer(conn);
         break;
     default:
         /* only need to wait for the socket close */
