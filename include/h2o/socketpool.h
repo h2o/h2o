@@ -47,6 +47,8 @@ typedef struct st_h2o_socketpool_target_conf_t {
      * weight - 1 for load balancer, where weight is an integer within range [1, 256]
      */
     uint8_t weight_m1;
+
+    uint8_t sequential_addrinfo;
 } h2o_socketpool_target_conf_t;
 
 #define H2O_SOCKETPOOL_TARGET_MAX_WEIGHT 256

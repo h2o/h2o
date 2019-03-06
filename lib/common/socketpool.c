@@ -196,10 +196,11 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
         break;
     }
     target->_shared.leased_count = 0;
-    if (lb_target_conf != NULL)
-        target->conf.weight_m1 = lb_target_conf->weight_m1;
-    else {
+    if (lb_target_conf != NULL) {
+        target->conf = *lb_target_conf;
+    } else {
         target->conf.weight_m1 = 0;
+        target->conf.sequential_addrinfo = 0;
     }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
@@ -425,6 +426,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
 {
     h2o_socketpool_connect_request_t *req = _req;
+    uint32_t addrinfo_sel;
 
     assert(getaddr_req == req->getaddr_req);
     req->getaddr_req = NULL;
@@ -439,8 +441,12 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         call_connect_cb(req, errstr);
         return;
     }
-
-    struct addrinfo *selected = h2o_hostinfo_select_one(res, req->max_try_count - req->remaining_try_count);
+    if (req->pool->targets.entries[req->selected_target]->conf.sequential_addrinfo) {
+        addrinfo_sel = req->max_try_count - req->remaining_try_count;
+    } else {
+        addrinfo_sel = 0; /* random */
+    }
+    struct addrinfo *selected = h2o_hostinfo_select_one(res, addrinfo_sel);
     start_connect(req, selected->ai_addr, selected->ai_addrlen);
 }
 
