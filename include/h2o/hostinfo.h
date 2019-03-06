@@ -56,7 +56,7 @@ void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_lin
 /**
  * select one entry at random from the response
  */
-static struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res);
+static struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res, uint32_t try_count);
 
 /**
  * equiv. to inet_pton(AF_INET4)
@@ -65,7 +65,7 @@ int h2o_hostinfo_aton(h2o_iovec_t host, struct in_addr *addr);
 
 /* inline defs */
 
-inline struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res)
+inline struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res, uint32_t try_count)
 {
     if (res->ai_next == NULL)
         return res;
@@ -77,8 +77,7 @@ inline struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res)
         ++i;
     } while ((ai = ai->ai_next) != NULL);
 
-    /* choose one, distributed by rand() :-p */
-    i = rand() % i;
+    i = (try_count - 1) % i;
     for (ai = res; i != 0; ai = ai->ai_next, --i)
         ;
     return ai;

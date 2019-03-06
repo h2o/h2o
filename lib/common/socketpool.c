@@ -56,7 +56,8 @@ struct st_h2o_socketpool_connect_request_t {
     h2o_socket_t *sock;
     h2o_multithread_receiver_t *getaddr_receiver;
     size_t selected_target;
-    size_t remaining_try_count;
+    uint32_t remaining_try_count;
+    uint32_t max_try_count;
     struct {
         char *tried;
     } lb;
@@ -439,7 +440,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
-    struct addrinfo *selected = h2o_hostinfo_select_one(res);
+    struct addrinfo *selected = h2o_hostinfo_select_one(res, req->max_try_count - req->remaining_try_count);
     start_connect(req, selected->ai_addr, selected->ai_addrlen);
 }
 
@@ -552,9 +553,9 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (target == SIZE_MAX) {
         req->lb.tried = h2o_mem_alloc(sizeof(req->lb.tried[0]) * pool->targets.size);
         memset(req->lb.tried, 0, sizeof(req->lb.tried[0]) * pool->targets.size);
-        req->remaining_try_count = pool->targets.size;
+        req->max_try_count = req->remaining_try_count = (uint32_t)pool->targets.size;
     } else {
-        req->remaining_try_count = 1;
+        req->max_try_count = req->remaining_try_count = 1;
     }
     try_connect(req);
 }
