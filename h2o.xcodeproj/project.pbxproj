@@ -470,8 +470,6 @@
 		E9E50474214A5B9D004DC170 /* http3client.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50472214A5B8A004DC170 /* http3client.c */; };
 		E9E50479214C0385004DC170 /* common.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50476214C0385004DC170 /* common.c */; };
 		E9E5047A214EB26D004DC170 /* http3_common.h in Headers */ = {isa = PBXBuildFile; fileRef = E9E50475214B3D28004DC170 /* http3_common.h */; };
-		E9E50481214EBF2A004DC170 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
-		E9E5048A214EBF6A004DC170 /* http3client.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50489214EBF6A004DC170 /* http3client.c */; };
 		E9E5048B214EC57A004DC170 /* common.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E50476214C0385004DC170 /* common.c */; };
 		E9E5048C214EC57D004DC170 /* qpack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C439213E59A000D17C93 /* qpack.c */; };
 		E9E5048D214EC5DE004DC170 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
@@ -530,13 +528,6 @@
 			remoteInfo = h2o;
 		};
 		E918FC8521365A8C00CCB252 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 1079231419A320A700C52AD6;
-			remoteInfo = h2o;
-		};
-		E9E5047D214EBF2A004DC170 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1079230D19A320A700C52AD6 /* Project object */;
 			proxyType = 1;
@@ -628,15 +619,6 @@
 			runOnlyForDeploymentPostprocessing = 1;
 		};
 		E918FC332136583F00CCB252 /* CopyFiles */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = /usr/share/man/man1/;
-			dstSubfolderSpec = 0;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 1;
-		};
-		E9E50482214EBF2A004DC170 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = /usr/share/man/man1/;
@@ -1206,8 +1188,6 @@
 		E9E50472214A5B8A004DC170 /* http3client.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = http3client.c; sourceTree = "<group>"; };
 		E9E50475214B3D28004DC170 /* http3_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_common.h; sourceTree = "<group>"; };
 		E9E50476214C0385004DC170 /* common.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = common.c; sourceTree = "<group>"; };
-		E9E50488214EBF2A004DC170 /* examples-http3client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-http3client"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E9E50489214EBF6A004DC170 /* http3client.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = http3client.c; sourceTree = "<group>"; };
 		E9E5048F21501BBA004DC170 /* server.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = server.c; sourceTree = "<group>"; };
 		E9E5049321501CA5004DC170 /* http3_server.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_server.h; sourceTree = "<group>"; };
 		E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "40http2-h2spec.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1307,14 +1287,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				E918FC322136583F00CCB252 /* libh2o.a in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		E9E50480214EBF2A004DC170 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				E9E50481214EBF2A004DC170 /* libh2o.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1725,7 +1697,6 @@
 				10EA45DF1D0949BF00769A2B /* examples-latency-optimization */,
 				08790E101D8BD7F100A04BC1 /* examples-redis-client */,
 				E918FC392136583F00CCB252 /* proptest */,
-				E9E50488214EBF2A004DC170 /* examples-http3client */,
 				08819C2C218C9FA90057ED23 /* qif */,
 			);
 			name = Products;
@@ -1992,7 +1963,6 @@
 			isa = PBXGroup;
 			children = (
 				10D0906A19F38B850043D458 /* httpclient.c */,
-				E9E50489214EBF6A004DC170 /* http3client.c */,
 				10D0905219F0CB130043D458 /* socket-client.c */,
 				08790DF41D8BD72500A04BC1 /* redis-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
@@ -2876,24 +2846,6 @@
 			productReference = E918FC392136583F00CCB252 /* proptest */;
 			productType = "com.apple.product-type.tool";
 		};
-		E9E5047B214EBF2A004DC170 /* examples-http3client */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = E9E50483214EBF2A004DC170 /* Build configuration list for PBXNativeTarget "examples-http3client" */;
-			buildPhases = (
-				E9E5047E214EBF2A004DC170 /* Sources */,
-				E9E50480214EBF2A004DC170 /* Frameworks */,
-				E9E50482214EBF2A004DC170 /* CopyFiles */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				E9E5047C214EBF2A004DC170 /* PBXTargetDependency */,
-			);
-			name = "examples-http3client";
-			productName = simple;
-			productReference = E9E50488214EBF2A004DC170 /* examples-http3client */;
-			productType = "com.apple.product-type.tool";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -2925,7 +2877,6 @@
 				08790E031D8BD7F100A04BC1 /* examples-redis-client */,
 				10D0905C19F38B2E0043D458 /* examples-httpclient */,
 				10EA45D21D0949BF00769A2B /* examples-latency-optimization */,
-				E9E5047B214EBF2A004DC170 /* examples-http3client */,
 				08819C1F218C9FA90057ED23 /* qif */,
 			);
 		};
@@ -3394,14 +3345,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		E9E5047E214EBF2A004DC170 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				E9E5048A214EBF6A004DC170 /* http3client.c in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -3439,11 +3382,6 @@
 			isa = PBXTargetDependency;
 			target = 1079231419A320A700C52AD6 /* h2o */;
 			targetProxy = E918FC8521365A8C00CCB252 /* PBXContainerItemProxy */;
-		};
-		E9E5047C214EBF2A004DC170 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 1079231419A320A700C52AD6 /* h2o */;
-			targetProxy = E9E5047D214EBF2A004DC170 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -4796,112 +4734,6 @@
 			};
 			name = "libuv-release";
 		};
-		E9E50484214EBF2A004DC170 /* evloop-debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
-					/usr/local/lib,
-				);
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = (
-					"-lssl",
-					"-lcrypto",
-					"-lz",
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = "evloop-debug";
-		};
-		E9E50485214EBF2A004DC170 /* libuv-debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
-					/usr/local/lib,
-				);
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = (
-					"-lssl",
-					"-lcrypto",
-					"-luv",
-					"-lz",
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = "libuv-debug";
-		};
-		E9E50486214EBF2A004DC170 /* evloop-release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
-					/usr/local/lib,
-				);
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = (
-					"-lssl",
-					"-lcrypto",
-					"-lz",
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = "evloop-release";
-		};
-		E9E50487214EBF2A004DC170 /* libuv-release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				HEADER_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/include",
-					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
-					/usr/local/include,
-					include,
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"/usr/local/openssl-1.0.2/lib",
-					/usr/local/lib,
-				);
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = (
-					"-lssl",
-					"-lcrypto",
-					"-luv",
-					"-lz",
-				);
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = "libuv-release";
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -5033,17 +4865,6 @@
 				E918FC362136583F00CCB252 /* libuv-debug */,
 				E918FC372136583F00CCB252 /* evloop-release */,
 				E918FC382136583F00CCB252 /* libuv-release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = "evloop-release";
-		};
-		E9E50483214EBF2A004DC170 /* Build configuration list for PBXNativeTarget "examples-http3client" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				E9E50484214EBF2A004DC170 /* evloop-debug */,
-				E9E50485214EBF2A004DC170 /* libuv-debug */,
-				E9E50486214EBF2A004DC170 /* evloop-release */,
-				E9E50487214EBF2A004DC170 /* libuv-release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "evloop-release";
