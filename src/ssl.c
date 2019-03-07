@@ -331,12 +331,44 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
         altered = 1;
     }
 
+    /* Remove entries with colliding names, because QUIC requires a 1:1 match between key identifier (1 byte) and the key. Removal
+     * may have (negligible) negative effect on TLS resumption rate, but will not affect H2O instances that accept QUIC connections,
+     * as those instances would always detect and remove colliding entries (in this function) before using them. */
+    if (tickets->size > 1) {
+        size_t offending = 0, i;
+        do {
+            for (i = offending + 1; i < tickets->size; ++i)
+                if (tickets->entries[i]->name[0] == tickets->entries[offending]->name[0])
+                    break;
+            if (i < tickets->size) {
+                free_ticket(tickets->entries[offending]);
+                memmove(tickets->entries + offending, tickets->entries + offending + 1,
+                        sizeof(*tickets->entries) * (tickets->size - offending - 1));
+                --tickets->size;
+            } else {
+                ++offending;
+            }
+        } while (offending < tickets->size - 1);
+    }
+    if (tickets->size >= 256)
+        h2o_fatal("no space for unique QUIC key identifier");
+
     /* create new entry if necessary */
     has_valid_ticket = find_ticket_for_encryption(tickets, now) != NULL;
     if (!has_valid_ticket || (tickets->entries[0]->not_before + conf.lifetime / 4 < now)) {
         uint64_t not_before = has_valid_ticket ? now + 60 : now;
         struct st_session_ticket_t *ticket = new_ticket(conf.ticket.vars.generating.cipher, conf.ticket.vars.generating.md,
                                                         not_before, not_before + conf.lifetime - 1, 1);
+        /* avoid name collision */
+        while (1) {
+            size_t i;
+            for (i = 0; i < tickets->size; ++i)
+                if (tickets->entries[i]->name[0] == ticket->name[0])
+                    break;
+            if (i == tickets->size)
+                break;
+            ++ticket->name[0];
+        }
         h2o_vector_reserve(NULL, tickets, tickets->size + 1);
         memmove(tickets->entries + 1, tickets->entries, sizeof(tickets->entries[0]) * tickets->size);
         ++tickets->size;
