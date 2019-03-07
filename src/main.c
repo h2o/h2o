@@ -1049,26 +1049,28 @@ static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
-    yoml_t **ssl_node, **owner_node = NULL, **permission_node = NULL;
+    yoml_t **ssl_node = NULL, **quic_node = NULL, **owner_node = NULL, **permission_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         servname = node->data.scalar;
-        ssl_node = NULL;
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,quic:m,proxy-protocol:*",
+                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node, &quic_node,
                                            &proxy_protocol_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
-        if (type_node != NULL)
+        if (type_node != NULL) {
             type = (*type_node)->data.scalar;
+        } else if (quic_node != NULL) {
+            type = "quic";
+        }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
@@ -1084,6 +1086,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         struct sockaddr_un sa;
         int listener_is_new;
         struct listener_config_t *listener;
+
+        if (quic_node != NULL) {
+            h2o_configurator_errprintf(cmd, *quic_node, "QUIC support on UNIX domain socket is unavailable");
+            return -1;
+        }
         /* build sockaddr */
         memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
@@ -1125,6 +1132,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         /* TCP socket */
         struct addrinfo *res, *ai;
+        if (quic_node != NULL) {
+            h2o_configurator_errprintf(cmd, *quic_node, "QUIC cannot be used on a TCP socket");
+            return -1;
+        }
         if ((res = resolve_address(cmd, node, SOCK_STREAM, IPPROTO_TCP, hostname, servname)) == NULL)
             return -1;
         for (ai = res; ai != NULL; ai = ai->ai_next) {
@@ -1169,12 +1180,44 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
     } else if (strcmp(type, "quic") == 0) {
 
-        /* QUIC socket; FIXME add support for graceful restart (using server-starter?) and multi-threading */
+        /* QUIC socket */
+        yoml_t **event_log_node = NULL;
+        quicly_event_logger_t *event_logger = NULL;
+        uint64_t event_log_mask = UINT64_MAX;
+        struct addrinfo *res, *ai;
         if (ssl_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "QUIC endpoint must have an accompanying SSL configuration");
             return -1;
         }
-        struct addrinfo *res, *ai;
+        if (quic_node != NULL) {
+            if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "event-log:sm", &event_log_node) != 0)
+                return -1;
+            if (event_log_node != NULL) {
+                const char *event_log_fn;
+                FILE *event_log_fp;
+                if ((*event_log_node)->type == YOML_TYPE_SCALAR) {
+                    event_log_fn = (*event_log_node)->data.scalar;
+                } else {
+                    assert((*event_log_node)->type == YOML_TYPE_MAPPING);
+                    yoml_t **fn_node = NULL, **mask_node = NULL;
+                    if (h2o_configurator_parse_mapping(cmd, *event_log_node, "file:s", "mask:s", &fn_node, &mask_node) != 0)
+                        return -1;
+                    event_log_fn = (*fn_node)->data.scalar;
+                    if (mask_node != NULL) {
+                        if (sscanf((*mask_node)->data.scalar, "%" PRIu64, &event_log_mask) != 1) {
+                            h2o_configurator_errprintf(cmd, *mask_node, "failed to parse the mask number");
+                            return -1;
+                        }
+                    }
+                }
+                if ((event_log_fp = fopen(event_log_fn, "a")) == NULL) {
+                    h2o_configurator_errprintf(cmd, *event_log_node, "failed to open event log file:%s:%s\n", event_log_fn,
+                                               strerror(errno));
+                    return -1;
+                }
+                event_logger = quicly_new_default_event_logger(event_log_fp);
+            }
+        }
         if ((res = resolve_address(cmd, node, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
             return -1;
         for (ai = res; ai != NULL; ai = ai->ai_next) {
@@ -1199,8 +1242,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quic->cid_encryptor =
                     quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init("deadbeef", 8));
                 quic->transport_params.max_streams_uni = 10;
-                quic->event_log.cb = quicly_new_default_event_logger(stderr);
-                quic->event_log.mask = UINT64_MAX;
+                if (event_logger != NULL) {
+                    quic->event_log.cb = event_logger;
+                    quic->event_log.mask = event_log_mask;
+                }
                 quic->stream_open = &h2o_http3_server_on_stream_open;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
