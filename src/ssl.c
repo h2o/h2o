@@ -33,6 +33,7 @@
 #include "yrmcds.h"
 #include "picotls.h"
 #include "picotls/openssl.h"
+#include "quicly.h"
 #include "h2o/file.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
@@ -165,50 +166,52 @@ static void cache_init_defaults(void)
 
 struct st_session_ticket_t {
     unsigned char name[16];
-    struct {
-        const EVP_CIPHER *cipher;
-        unsigned char *key;
-    } cipher;
-    struct {
-        const EVP_MD *md;
-        unsigned char *key;
-    } hmac;
+    const EVP_CIPHER *cipher;
+    const EVP_MD *hmac;
     uint64_t not_before;
     uint64_t not_after;
+    unsigned char keybuf[1];
 };
 
 typedef H2O_VECTOR(struct st_session_ticket_t *) session_ticket_vector_t;
 
 static struct {
+    volatile unsigned generation; /* use atomic instruction; not governed by rwlock */
+    h2o_barrier_t *barrier;       /* optional, used by the core to block until QUIC encryption key becomes available */
     pthread_rwlock_t rwlock;
     session_ticket_vector_t tickets; /* sorted from newer to older */
-} session_tickets = {
+} session_tickets = {0, NULL,
 /* we need writer-preferred lock, but on linux PTHREAD_RWLOCK_INITIALIZER is reader-preferred */
 #ifdef PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
-    PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
+                     PTHREAD_RWLOCK_WRITER_NONRECURSIVE_INITIALIZER_NP
 #else
-    PTHREAD_RWLOCK_INITIALIZER
+                     PTHREAD_RWLOCK_INITIALIZER
 #endif
-    ,
-    {NULL} /* tickets */
 };
+
+static unsigned char *session_ticket_get_cipher_key(struct st_session_ticket_t *ticket)
+{
+    return ticket->keybuf;
+}
+
+static unsigned char *session_ticket_get_hmac_key(struct st_session_ticket_t *ticket)
+{
+    return ticket->keybuf + EVP_CIPHER_key_length(ticket->cipher);
+}
 
 static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EVP_MD *md, uint64_t not_before, uint64_t not_after,
                                               int fill_in)
 {
     int key_len = EVP_CIPHER_key_length(cipher), block_size = EVP_MD_block_size(md);
-    struct st_session_ticket_t *ticket = h2o_mem_alloc(sizeof(*ticket) + key_len + block_size);
+    struct st_session_ticket_t *ticket = h2o_mem_alloc(offsetof(struct st_session_ticket_t, keybuf) + key_len + block_size);
 
-    ticket->cipher.cipher = cipher;
-    ticket->cipher.key = (unsigned char *)ticket + sizeof(*ticket);
-    ticket->hmac.md = md;
-    ticket->hmac.key = ticket->cipher.key + key_len;
+    ticket->cipher = cipher;
+    ticket->hmac = md;
     ticket->not_before = not_before;
     ticket->not_after = not_after;
     if (fill_in) {
         RAND_bytes(ticket->name, sizeof(ticket->name));
-        RAND_bytes(ticket->cipher.key, key_len);
-        RAND_bytes(ticket->hmac.key, block_size);
+        RAND_bytes(ticket->keybuf, key_len + block_size);
     }
 
     return ticket;
@@ -216,8 +219,8 @@ static struct st_session_ticket_t *new_ticket(const EVP_CIPHER *cipher, const EV
 
 static void free_ticket(struct st_session_ticket_t *ticket)
 {
-    int key_len = EVP_CIPHER_key_length(ticket->cipher.cipher), block_size = EVP_MD_block_size(ticket->hmac.md);
-    h2o_mem_set_secure(ticket, 0, sizeof(*ticket) + key_len + block_size);
+    int key_len = EVP_CIPHER_key_length(ticket->cipher), block_size = EVP_MD_block_size(ticket->hmac);
+    h2o_mem_set_secure(ticket->keybuf, 0, key_len + block_size);
     free(ticket);
 }
 
@@ -271,9 +274,9 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
             ticket = temp_ticket = new_ticket(EVP_aes_256_cbc(), EVP_sha256(), 0, UINT64_MAX, 1);
         }
         memcpy(key_name, ticket->name, sizeof(ticket->name));
-        ret = EVP_EncryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
+        ret = EVP_EncryptInit_ex(ctx, ticket->cipher, NULL, session_ticket_get_cipher_key(ticket), iv);
         assert(ret);
-        ret = HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        ret = HMAC_Init_ex(hctx, session_ticket_get_hmac_key(ticket), EVP_MD_block_size(ticket->hmac), ticket->hmac, NULL);
         assert(ret);
         if (temp_ticket != NULL)
             free_ticket(ticket);
@@ -290,9 +293,9 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
         ret = 0;
         goto Exit;
     Found:
-        ret = EVP_DecryptInit_ex(ctx, ticket->cipher.cipher, NULL, ticket->cipher.key, iv);
+        ret = EVP_DecryptInit_ex(ctx, ticket->cipher, NULL, session_ticket_get_cipher_key(ticket), iv);
         assert(ret);
-        ret = HMAC_Init_ex(hctx, ticket->hmac.key, EVP_MD_block_size(ticket->hmac.md), ticket->hmac.md, NULL);
+        ret = HMAC_Init_ex(hctx, session_ticket_get_hmac_key(ticket), EVP_MD_block_size(ticket->hmac), ticket->hmac, NULL);
         assert(ret);
         /* Request renewal if the youngest key is active */
         if (i != 0 && session_tickets.tickets.entries[i - 1]->not_before <= time(NULL))
@@ -379,12 +382,38 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
     return altered;
 }
 
+static void register_session_tickets(void (*cb)(void *), void *arg)
+{
+    pthread_rwlock_wrlock(&session_tickets.rwlock);
+    (*cb)(arg);
+    assert(session_tickets.tickets.size != 0);
+    pthread_rwlock_unlock(&session_tickets.rwlock);
+    __sync_add_and_fetch(&session_tickets.generation, 1);
+    if (session_tickets.barrier != NULL) {
+        h2o_barrier_done(session_tickets.barrier);
+        session_tickets.barrier = NULL;
+    }
+}
+
+static void do_swap_register_session_tickets(void *p)
+{
+    h2o_mem_swap(&session_tickets.tickets, p, sizeof(session_tickets.tickets));
+}
+
+static void swap_register_session_tickets(session_ticket_vector_t *p)
+{
+    register_session_tickets(do_swap_register_session_tickets, p);
+}
+
+static void do_internal_update(void *unused)
+{
+    update_tickets(&session_tickets.tickets, time(NULL));
+}
+
 H2O_NORETURN static void *ticket_internal_updater(void *unused)
 {
     while (1) {
-        pthread_rwlock_wrlock(&session_tickets.rwlock);
-        update_tickets(&session_tickets.tickets, time(NULL));
-        pthread_rwlock_unlock(&session_tickets.rwlock);
+        register_session_tickets(do_internal_update, NULL);
         /* sleep for certain amount of time */
         sleep(120 - (h2o_rand() >> 16) % 7);
     }
@@ -394,10 +423,10 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
 {
     char *name_buf = alloca(sizeof(ticket->name) * 2 + 1);
     h2o_hex_encode(name_buf, ticket->name, sizeof(ticket->name));
-    int key_len = EVP_CIPHER_key_length(ticket->cipher.cipher), block_size = EVP_MD_block_size(ticket->hmac.md);
+    int key_len = EVP_CIPHER_key_length(ticket->cipher), block_size = EVP_MD_block_size(ticket->hmac);
     char *key_buf = alloca((key_len + block_size) * 2 + 1);
-    h2o_hex_encode(key_buf, ticket->cipher.key, key_len);
-    h2o_hex_encode(key_buf + key_len * 2, ticket->hmac.key, block_size);
+    h2o_hex_encode(key_buf, ticket->cipher, key_len);
+    h2o_hex_encode(key_buf + key_len * 2, ticket->hmac, block_size);
 
     return snprintf(buf, bufsz,
                     "- name: %s\n"
@@ -406,7 +435,7 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
                     "  key: %s\n"
                     "  not_before: %" PRIu64 "\n"
                     "  not_after: %" PRIu64 "\n",
-                    name_buf, OBJ_nid2sn(EVP_CIPHER_type(ticket->cipher.cipher)), OBJ_nid2sn(EVP_MD_type(ticket->hmac.md)), key_buf,
+                    name_buf, OBJ_nid2sn(EVP_CIPHER_type(ticket->cipher)), OBJ_nid2sn(EVP_MD_type(ticket->hmac)), key_buf,
                     ticket->not_before, ticket->not_after);
 }
 
@@ -495,8 +524,7 @@ static struct st_session_ticket_t *parse_ticket_entry(yoml_t *element, char *err
 
     ticket = new_ticket(cipher, hash, not_before, not_after, 0);
     memcpy(ticket->name, name, sizeof(ticket->name));
-    memcpy(ticket->cipher.key, key, EVP_CIPHER_key_length(cipher));
-    memcpy(ticket->hmac.key, key + EVP_CIPHER_key_length(cipher), EVP_MD_block_size(hash));
+    memcpy(ticket->keybuf, key, EVP_CIPHER_key_length(cipher) + EVP_MD_block_size(hash));
     return ticket;
 }
 
@@ -621,9 +649,7 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
     }
 
     /* store the results */
-    pthread_rwlock_wrlock(&session_tickets.rwlock);
-    h2o_mem_swap(&session_tickets.tickets, &tickets, sizeof(tickets));
-    pthread_rwlock_unlock(&session_tickets.rwlock);
+    swap_register_session_tickets(&tickets);
 
 Exit:
     free(tickets_serialized.base);
@@ -692,9 +718,7 @@ static int ticket_redis_update_tickets(redisContext *ctx, h2o_iovec_t key, time_
     }
 
     /* store the results */
-    pthread_rwlock_wrlock(&session_tickets.rwlock);
-    h2o_mem_swap(&session_tickets.tickets, &tickets, sizeof(tickets));
-    pthread_rwlock_unlock(&session_tickets.rwlock);
+    swap_register_session_tickets(&tickets);
 
 Exit:
     free(tickets_serialized.base);
@@ -1029,6 +1053,15 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts)
 #endif
 }
 
+void ssl_session_ticket_register_setup_barrier(h2o_barrier_t *barrier)
+{
+    if (conf.ticket.update_thread == NULL)
+        h2o_fatal("ticket-based encryption MUST be enabled when running QUIC");
+    assert(session_tickets.barrier == NULL);
+    h2o_barrier_add(barrier, 1);
+    session_tickets.barrier = barrier;
+}
+
 static pthread_mutex_t *mutexes;
 
 static void lock_callback(int mode, int n, const char *file, int line)
@@ -1078,3 +1111,77 @@ void init_openssl(void)
 #endif
     conf.lifetime = 3600; /* default value for session timeout is 1 hour */
 }
+
+struct st_quic_cid_key_t {
+    uint8_t name;
+    quicly_cid_encryptor_t *encryptor;
+};
+
+static __thread struct {
+    unsigned generation;
+    H2O_VECTOR(struct st_quic_cid_key_t) keys;
+} quic_cid_keys = {UINT_MAX /* the value needs to be one smaller than session_tickets.generation */};
+
+static void update_cid_keys(void)
+{
+    if (quic_cid_keys.generation == session_tickets.generation)
+        return;
+
+    /* we need to update. first, release all entries from quic_cid_keys */
+    while (quic_cid_keys.keys.size != 0)
+        quicly_free_default_cid_enncryptor(quic_cid_keys.keys.entries[--quic_cid_keys.keys.size].encryptor);
+
+    /* build quic_cid_keys while taking the read lock */
+    pthread_rwlock_rdlock(&session_tickets.rwlock);
+    assert(session_tickets.tickets.size != 0);
+    h2o_vector_reserve(NULL, &quic_cid_keys.keys, session_tickets.tickets.size);
+    for (; quic_cid_keys.keys.size != session_tickets.tickets.size; ++quic_cid_keys.keys.size) {
+        struct st_session_ticket_t *ticket = session_tickets.tickets.entries[quic_cid_keys.keys.size];
+        struct st_quic_cid_key_t *slot = quic_cid_keys.keys.entries + quic_cid_keys.keys.size;
+        slot->name = ticket->name[0];
+        slot->encryptor = quicly_new_default_cid_encryptor(
+            &ptls_openssl_bfecb, &ptls_openssl_sha256,
+            ptls_iovec_init(ticket->keybuf, EVP_CIPHER_key_length(ticket->cipher) + EVP_MD_block_size(ticket->hmac)));
+        assert(slot->encryptor != NULL);
+    }
+    pthread_rwlock_unlock(&session_tickets.rwlock);
+}
+
+static void encrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_t *encrypted, void *stateless_reset_token,
+                        const quicly_cid_plaintext_t *plaintext)
+{
+    struct st_quic_cid_key_t *key;
+    quicly_cid_t tmp_cid;
+
+    update_cid_keys();
+
+    key = quic_cid_keys.keys.entries;
+    key->encryptor->encrypt_cid(key->encryptor, &tmp_cid, stateless_reset_token, plaintext);
+    assert(tmp_cid.len < sizeof(tmp_cid.cid));
+    encrypted->cid[0] = key->name;
+    memcpy(encrypted->cid + 1, tmp_cid.cid, tmp_cid.len);
+    encrypted->len = tmp_cid.len + 1;
+}
+
+static size_t decrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *plaintext, const void *_encrypted, size_t len)
+{
+    const uint8_t *encrypted = _encrypted;
+    struct st_quic_cid_key_t *key;
+    size_t i, ret;
+
+    update_cid_keys();
+
+    for (i = 0; i != quic_cid_keys.keys.size; ++i) {
+        key = quic_cid_keys.keys.entries + i;
+        if (key->name == encrypted[0])
+            goto FoundKey;
+    }
+    return SIZE_MAX;
+
+FoundKey:
+    if ((ret = key->encryptor->decrypt_cid(key->encryptor, plaintext, encrypted + 1, len - 1)) == SIZE_MAX)
+        return ret;
+    return 1 + ret;
+}
+
+quicly_cid_encryptor_t quic_cid_encryptor = {encrypt_cid, decrypt_cid};

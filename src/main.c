@@ -1238,9 +1238,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 }
                 quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
                 *quic = quicly_default_context;
-                /* use a cutomized encrypt / decrypt function that uses the STEK */
-                quic->cid_encryptor =
-                    quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init("deadbeef", 8));
+                quic->cid_encryptor = &quic_cid_encryptor;
                 quic->transport_params.max_streams_uni = 10;
                 if (event_logger != NULL) {
                     quic->event_log.cb = event_logger;
@@ -2342,15 +2340,22 @@ int main(int argc, char **argv)
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
         size_t i, j;
+        int has_quic = 0;
         H2O_VECTOR(SSL_CTX *) ssl_contexts = {NULL};
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
                 h2o_vector_reserve(NULL, &ssl_contexts, ssl_contexts.size + 1);
                 ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->ctx;
             }
+            if (conf.listeners[i]->quic != NULL)
+                has_quic = 1;
         }
         ssl_setup_session_resumption(ssl_contexts.entries, ssl_contexts.size);
         free(ssl_contexts.entries);
+        /* when running QUIC, set barrier to wait for the retrieval of the session ticket encryption key, which is also used for CID
+         * encryption */
+        if (has_quic)
+            ssl_session_ticket_register_setup_barrier(&conf.startup_sync_barrier);
     }
 
     /* all setup should be complete by now */

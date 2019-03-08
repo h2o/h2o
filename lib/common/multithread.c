@@ -311,6 +311,11 @@ int h2o_barrier_done(h2o_barrier_t *barrier)
     return __sync_add_and_fetch(&barrier->_count, 0) == 0;
 }
 
+void h2o_barrier_add(h2o_barrier_t *barrier, size_t delta)
+{
+    __sync_add_and_fetch(&barrier->_count, delta);
+}
+
 void h2o_barrier_destroy(h2o_barrier_t *barrier)
 {
     while (__sync_add_and_fetch(&barrier->_out_of_wait, 0) != 0) {
