@@ -61,8 +61,8 @@ struct queue_t {
             int64_t arrival;
         } * elements;
     } ring;
-    int64_t delay_usec; /* propagation delay */
-    int64_t interval_usec;  /* serialization delay */
+    int64_t delay_usec;      /* propagation delay */
+    int64_t interval_usec;   /* serialization delay */
     int64_t congested_until; /* in usec */
     uint64_t num_forwarded;
     uint64_t num_dropped;
@@ -183,11 +183,11 @@ static void dequeue(struct queue_t *q, int up, int64_t now)
     }
     fprintf(stderr, "%" PRId64 ":%zu:%c:forward\n", now, q->ring.elements[q->ring.head].conn->cid, up ? 'u' : 'd');
     q->ring.head = (q->ring.head + 1) % q->ring.depth;
-    if (q->ring.head == q->ring.tail)  // empty queue
+    if (q->ring.head == q->ring.tail) // empty queue
         return;
-    q->congested_until = now + q->interval_usec;  // next packet serialization delay
+    q->congested_until = now + q->interval_usec; // next packet serialization delay
     if (q->ring.elements[q->ring.head].arrival + q->delay_usec > now)
-        q->congested_until += q->ring.elements[q->ring.head].arrival + q->delay_usec - now;  // remainder of propagation delay
+        q->congested_until += q->ring.elements[q->ring.head].arrival + q->delay_usec - now; // remainder of propagation delay
 }
 
 static int enqueue(struct queue_t *q, struct connection_t *conn, int64_t now)
@@ -201,7 +201,7 @@ static int enqueue(struct queue_t *q, struct connection_t *conn, int64_t now)
                             sizeof(q->ring.elements[q->ring.tail].data), 0, downstream ? NULL : (void *)&ss,
                             downstream ? NULL : &sslen)) <= 0)
         return 0;
-    
+
     if (!downstream) {
         conn = find_or_create_connection((void *)&ss, sslen);
     }
@@ -223,7 +223,7 @@ static int enqueue(struct queue_t *q, struct connection_t *conn, int64_t now)
     q->ring.elements[q->ring.tail].len = readlen;
     q->ring.elements[q->ring.tail].conn = conn;
     q->ring.elements[q->ring.tail].arrival = now;
-    
+
     size_t next_tail = (q->ring.tail + 1) % q->ring.depth;
     fprintf(stderr, "%" PRId64 ":%zu:%c:", now, q->ring.elements[q->ring.tail].conn->cid, downstream ? 'd' : 'u');
 
