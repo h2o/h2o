@@ -324,7 +324,7 @@ static socklen_t parse_hostport(h2o_mem_pool_t *pool, h2o_iovec_t host, h2o_iove
                 sin.sin_family = AF_INET;
                 sin.sin_port = htons(_port);
                 sin.sin_addr.s_addr = ntohl((d1 << 24) + (d2 << 16) + (d3 << 8) + d4);
-                *ss = *((struct sockaddr_storage *)&sin);
+                memcpy(ss, &sin, sizeof(sin));
                 return sizeof(sin);
             }
         }
