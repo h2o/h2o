@@ -425,8 +425,8 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
     h2o_hex_encode(name_buf, ticket->name, sizeof(ticket->name));
     int key_len = EVP_CIPHER_key_length(ticket->cipher), block_size = EVP_MD_block_size(ticket->hmac);
     char *key_buf = alloca((key_len + block_size) * 2 + 1);
-    h2o_hex_encode(key_buf, ticket->cipher, key_len);
-    h2o_hex_encode(key_buf + key_len * 2, ticket->hmac, block_size);
+    h2o_hex_encode(key_buf, session_ticket_get_cipher_key(ticket), key_len);
+    h2o_hex_encode(key_buf + key_len * 2, session_ticket_get_hmac_key(ticket), block_size);
 
     return snprintf(buf, bufsz,
                     "- name: %s\n"
