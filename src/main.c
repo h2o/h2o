@@ -1756,7 +1756,11 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
 
     if (node_id == NULL) {
         /* initial or 0-RTT packet, forward to thread_id being specified */
-        assert(thread_id != h3ctx->next_cid.thread_id && "happens only while in graceful restart (which is not supported yet)");
+        if (thread_id == h3ctx->next_cid.thread_id) {
+            assert(h3ctx->acceptor == NULL);
+            /* FIXME forward packets to the newer generation process */
+            return 1;
+        }
     } else {
         /* validate node_id (FIXME implement inter-node forwarding) */
         if (*node_id != ctx->http3.ctx.super.next_cid.node_id)
@@ -1970,12 +1974,18 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         fprintf(stderr, "received SIGTERM, gracefully shutting down\n");
 
     /* shutdown requested, unregister, close the listeners and notify the protocol handlers */
-    for (i = 0; i != conf.num_listeners; ++i)
-        h2o_socket_read_stop(listeners[i].sock);
+    for (i = 0; i != conf.num_listeners; ++i) {
+        if (conf.listeners[i]->quic.ctx == NULL)
+            h2o_socket_read_stop(listeners[i].sock);
+    }
     h2o_evloop_run(conf.threads[thread_index].ctx.loop, 0);
     for (i = 0; i != conf.num_listeners; ++i) {
-        h2o_socket_close(listeners[i].sock);
-        listeners[i].sock = NULL;
+        if (conf.listeners[i]->quic.ctx == NULL) {
+            h2o_socket_close(listeners[i].sock);
+            listeners[i].sock = NULL;
+        } else {
+            listeners[i].http3.ctx.super.acceptor = NULL;
+        }
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
 
