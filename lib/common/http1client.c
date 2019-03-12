@@ -265,6 +265,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
         /* fill-in the headers */
         for (i = 0; i != num_headers; ++i) {
+            if (src_headers[i].name_len == 0) {
+                /* reject multiline header */
+                on_error_before_head(client, "line folding of header fields is not supported");
+                return;
+            }
             const h2o_token_t *token;
             char *orig_name = h2o_strdup(client->super.pool, src_headers[i].name, src_headers[i].name_len).base;
             h2o_strtolower((char *)src_headers[i].name, src_headers[i].name_len);
@@ -343,9 +348,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* call the callback. sock may be stealed */
     client->bytes_to_consume = rlen;
-    client->super._cb.on_body =
-        client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, version, http_status,
-                                  h2o_iovec_init(msg, msg_len), headers, num_headers, 1);
+    client->super._cb.on_body = client->super._cb.on_head(&client->super, is_eos ? h2o_httpclient_error_is_eos : NULL, version,
+                                                          http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, 1);
 
     if (is_eos) {
         close_client(client);
@@ -454,7 +458,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
             return -1;
     }
 
-    if (client->sock->_cb.write != NULL)
+    if (h2o_socket_is_writing(client->sock))
         return 0;
 
     assert(client->_body_buf_in_flight == NULL || client->_body_buf_in_flight->size == 0);
@@ -559,7 +563,9 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     int chunked = 0;
     h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = {
-        &proxy_protocol, &chunked, &connection_header,
+        &proxy_protocol,
+        &chunked,
+        &connection_header,
     };
     h2o_iovec_t method;
     h2o_url_t url;
@@ -621,12 +627,12 @@ static void do_update_window(h2o_httpclient_t *_client)
 {
     struct st_h2o_http1client_t *client = (void *)_client;
     if ((*client->super.buf)->size >= client->super.ctx->max_buffer_size) {
-        if (client->sock->_cb.read != NULL) {
+        if (h2o_socket_is_reading(client->sock)) {
             client->reader = client->sock->_cb.read;
             h2o_socket_read_stop(client->sock);
         }
     } else {
-        if (client->sock->_cb.read == NULL) {
+        if (!h2o_socket_is_reading(client->sock)) {
             h2o_socket_read_start(client->sock, client->reader);
         }
     }
@@ -643,11 +649,18 @@ static h2o_socket_t *do_steal_socket(h2o_httpclient_t *_client)
     return sock;
 }
 
+static h2o_socket_t *do_get_socket(h2o_httpclient_t *_client)
+{
+    struct st_h2o_http1client_t *client = (void *)_client;
+    return client->sock;
+}
+
 static void setup_client(struct st_h2o_http1client_t *client, h2o_socket_t *sock, h2o_url_t *origin)
 {
     memset(&client->sock, 0, sizeof(*client) - offsetof(struct st_h2o_http1client_t, sock));
     client->super.cancel = do_cancel;
     client->super.steal_socket = do_steal_socket;
+    client->super.get_socket = do_get_socket;
     client->super.update_window = do_update_window;
     client->super.write_req = do_write_req;
     client->super.buf = &sock->input;
@@ -666,4 +679,4 @@ void h2o_httpclient__h1_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock
     on_connection_ready(client);
 }
 
-size_t h2o_httpclient__h1_size = sizeof(struct st_h2o_http1client_t);
+const size_t h2o_httpclient__h1_size = sizeof(struct st_h2o_http1client_t);

@@ -7,17 +7,10 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
   spec.add_dependency('mruby-compiler', :core => 'mruby-compiler')
 
   spec.test_rbfiles = Dir.glob("#{MRUBY_ROOT}/test/t/*.rb")
-  if build.cc.defines.flatten.include?("MRB_WITHOUT_FLOAT")
-    spec.test_rbfiles.delete("#{MRUBY_ROOT}/test/t/float.rb")
-  end
-
 
   clib = "#{build_dir}/mrbtest.c"
   mlib = clib.ext(exts.object)
   exec = exefile("#{build.build_dir}/bin/mrbtest")
-
-  libmruby = libfile("#{build.build_dir}/lib/libmruby")
-  libmruby_core = libfile("#{build.build_dir}/lib/libmruby_core")
 
   mrbtest_lib = libfile("#{build_dir}/mrbtest")
   mrbtest_objs = []
@@ -140,7 +133,7 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
   end
 
   unless build.build_mrbtest_lib_only?
-    file exec => [driver_obj, mlib, mrbtest_lib, libmruby_core, libmruby] do |t|
+    file exec => [driver_obj, mlib, mrbtest_lib, build.libmruby_static] do |t|
       gem_flags = build.gems.map { |g| g.linker.flags }
       gem_flags_before_libraries = build.gems.map { |g| g.linker.flags_before_libraries }
       gem_flags_after_libraries = build.gems.map { |g| g.linker.flags_after_libraries }
@@ -171,7 +164,7 @@ MRuby::Gem::Specification.new('mruby-test') do |spec|
   file clib => active_gems_path if active_gem_list != current_gem_list
 
   file mlib => clib
-  file clib => [init, build.mrbcfile] do |_t|
+  file clib => [init, build.mrbcfile, __FILE__] do |_t|
     _pp "GEN", "*.rb", "#{clib.relative_path}"
     FileUtils.mkdir_p File.dirname(clib)
     open(clib, 'w') do |f|

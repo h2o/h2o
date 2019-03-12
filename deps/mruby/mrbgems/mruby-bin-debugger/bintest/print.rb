@@ -317,7 +317,7 @@ TestConstNameSubClass.new.m()
 bp = nil
 SRC
 
-  # todo: wait for 'break' to be implimented
+  # todo: wait for 'break' to be implemented
   tc = []
   9.times { tc << {:cmd=>"s"} }
   tc << {:cmd=>"p CONST", :exp=>"super class"}

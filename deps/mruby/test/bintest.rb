@@ -20,6 +20,10 @@ def shellquote(s)
 end
 
 ARGV.each do |gem|
+  case gem
+  when '-v'; $mrbtest_verbose = true
+  end
+
   case RbConfig::CONFIG['host_os']
   when /mswin(?!ce)|mingw|bccwin/
     gem = gem.gsub('\\', '/')

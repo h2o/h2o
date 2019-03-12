@@ -286,6 +286,7 @@ int h2o_http2_decode_window_update_payload(h2o_http2_window_update_payload_t *pa
 {
     if (frame->length != 4) {
         *err_is_stream_level = 0;
+        *err_desc = "invalid WINDOW_UPDATE frame";
         return H2O_HTTP2_ERROR_FRAME_SIZE;
     }
 

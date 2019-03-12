@@ -11,17 +11,19 @@ istruct_test_initialize(mrb_state *mrb, mrb_value self)
   mrb_value object;
   mrb_get_args(mrb, "o", &object);
 
-  if (mrb_float_p(object))
-  {
-    snprintf(string, size, "float(%.3f)", mrb_float(object));
+  if (mrb_fixnum_p(object)) {
+    strncpy(string, "fixnum", size-1);
   }
-  else if (mrb_fixnum_p(object))
-  {
-    snprintf(string, size, "fixnum(%" MRB_PRId ")", mrb_fixnum(object));
+#ifndef MRB_WITHOUT_FLOAT
+  else if (mrb_float_p(object)) {
+    strncpy(string, "float", size-1);
   }
-  else if (mrb_string_p(object))
-  {
-    snprintf(string, size, "string(%s)", mrb_string_value_cstr(mrb, &object));
+#endif
+  else if (mrb_string_p(object)) {
+    strncpy(string, "string", size-1);
+  }
+  else {
+    strncpy(string, "anything", size-1);
   }
 
   string[size - 1] = 0; // force NULL at the end

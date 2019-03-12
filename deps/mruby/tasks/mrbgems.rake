@@ -5,7 +5,7 @@ MRuby.each_target do
     gems.check self
 
     # loader all gems
-    self.libmruby << objfile("#{build_dir}/mrbgems/gem_init")
+    self.libmruby_objs << objfile("#{build_dir}/mrbgems/gem_init")
     file objfile("#{build_dir}/mrbgems/gem_init") => ["#{build_dir}/mrbgems/gem_init.c", "#{build_dir}/LEGAL"]
     file "#{build_dir}/mrbgems/gem_init.c" => [MRUBY_CONFIG, __FILE__] do |t|
       FileUtils.mkdir_p "#{build_dir}/mrbgems"
@@ -18,7 +18,7 @@ MRuby.each_target do
         gem_init_calls = gem_func_gems.each_with_object('') do |g, s|
           s << "  GENERATED_TMP_mrb_#{g.funcname}_gem_init(mrb);\n"
         end
-        gem_final_calls = gem_func_gems.each_with_object('') do |g, s|
+        gem_final_calls = gem_func_gems.reverse_each.with_object('') do |g, s|
           s << "  GENERATED_TMP_mrb_#{g.funcname}_gem_final(mrb);\n"
         end
         f.puts %Q[/*]

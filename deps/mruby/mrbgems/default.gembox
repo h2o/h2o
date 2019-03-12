@@ -1,4 +1,7 @@
 MRuby::GemBox.new do |conf|
+  # Meta-programming features
+  conf.gem :core => "mruby-metaprog"
+
   # Use standard IO/File class
   conf.gem :core => "mruby-io"
 

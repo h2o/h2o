@@ -111,6 +111,19 @@ static void create_lookup_thread(void)
     ++queue.num_threads_idle;
 }
 
+static void dispatch_hostinfo_getaddr(h2o_hostinfo_getaddr_req_t *req)
+{
+    pthread_mutex_lock(&queue.mutex);
+
+    h2o_linklist_insert(&queue.pending, &req->_pending);
+
+    if (queue.num_threads_idle == 0 && queue.num_threads < h2o_hostinfo_max_threads)
+        create_lookup_thread();
+
+    pthread_cond_signal(&queue.cond);
+    pthread_mutex_unlock(&queue.mutex);
+}
+
 h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *receiver, h2o_iovec_t name, h2o_iovec_t serv,
                                                  int family, int socktype, int protocol, int flags, h2o_hostinfo_getaddr_cb cb,
                                                  void *cbdata)
@@ -132,22 +145,9 @@ h2o_hostinfo_getaddr_req_t *h2o_hostinfo_getaddr(h2o_multithread_receiver_t *rec
     req->_in.hints.ai_protocol = protocol;
     req->_in.hints.ai_flags = flags;
 
-    h2o__hostinfo_getaddr_dispatch(req);
+    dispatch_hostinfo_getaddr(req);
 
     return req;
-}
-
-void h2o__hostinfo_getaddr_dispatch(h2o_hostinfo_getaddr_req_t *req)
-{
-    pthread_mutex_lock(&queue.mutex);
-
-    h2o_linklist_insert(&queue.pending, &req->_pending);
-
-    if (queue.num_threads_idle == 0 && queue.num_threads < h2o_hostinfo_max_threads)
-        create_lookup_thread();
-
-    pthread_cond_signal(&queue.cond);
-    pthread_mutex_unlock(&queue.mutex);
 }
 
 void h2o_hostinfo_getaddr_cancel(h2o_hostinfo_getaddr_req_t *req)

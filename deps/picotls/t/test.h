@@ -23,6 +23,7 @@
 #define test_h
 
 #include "picotls.h"
+#include "picotls/ffx.h"
 
 /* raw private key and certificate using secp256v1 */
 #define SECP256R1_PRIVATE_KEY                                                                                                      \
@@ -50,10 +51,55 @@
     "\x1d\x99\x42\xe0\xa2\xb7\x75\xbb\x14\x03\x79\x9a\xf6\x07\xd8\xa5\xab\x2b\x3a\x70\x8b\x77\x85\x70\x8a\x98\x38\x9b\x35\x09\xf6" \
     "\x62\x6b\x29\x4a\xa7\xa7\xf9\x3b\xde\xd8\xc8\x90\x57\xf2\x76\x2a\x23\x0b\x01\x68\xc6\x9a\xf2"
 
+/* secp256r1 key that lasts until 2028 */
+#define ESNIKEYS                                                                                                                   \
+    "\xff\x01\xba\xd5\xad\xa2\x00\x45\x00\x17\x00\x41\x04\x3e\xee\xf7\x10\xe3\x75\x07\xa8\xfb\x3e\xfc\x62\x50\x24\x95\xa0\x61\x6e" \
+    "\xff\x6b\x63\x0f\xa3\xfd\xcc\x33\x36\xd0\xb1\x2d\x55\xba\xb0\x06\xbd\xb4\x29\x82\xc6\xd9\xee\x66\x84\xa9\x63\x94\x44\xbe\x04" \
+    "\xe7\xee\xcf\xab\xc2\xc9\xdd\x40\xe6\xc8\x89\x88\xed\x94\x86\x00\x04\x13\x01\x13\x03\x01\x04\x00\x00\x00\x00\x5c\x13\x5e\xd2" \
+    "\x00\x00\x00\x00\x6e\xdf\x61\xd1\x00\x00"
+#define ESNI_SECP256R1KEY                                                                                                          \
+    "-----BEGIN EC PARAMETERS-----\nBggqhkjOPQMBBw==\n-----END EC PARAMETERS-----\n-----BEGIN EC PRIVATE "                         \
+    "KEY-----\nMHcCAQEEIGrRVTfTXuOVewLt/g+Ugvg9XW/g4lGXrkZ8fdYaYuJCoAoGCCqGSM49\nAwEHoUQDQgAEPu73EON1B6j7PvxiUCSVoGFu/"            \
+    "2tjD6P9zDM20LEtVbqwBr20KYLG\n2e5mhKljlES+BOfuz6vCyd1A5siJiO2Uhg==\n-----END EC PRIVATE KEY-----\n"
+
 extern ptls_context_t *ctx, *ctx_peer;
 extern ptls_verify_certificate_t *verify_certificate;
 
+struct st_ptls_ffx_test_variants_t {
+    ptls_cipher_algorithm_t *algo;
+    int bit_length;
+};
+extern struct st_ptls_ffx_test_variants_t ffx_variants[7];
+
+#define DEFINE_FFX_AES128_ALGORITHMS(backend)                                                                                      \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_aes128ctr, 31, 6, 16);                                                                   \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_aes128ctr, 53, 4, 16);                                                                   \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_aes128ctr, 125, 8, 16)
+#define DEFINE_FFX_CHACHA20_ALGORITHMS(backend)                                                                                    \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_chacha20, 32, 6, 32);                                                                    \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_chacha20, 57, 4, 32);                                                                    \
+    PTLS_FFX_CIPHER_ALGO(ptls_##backend##_chacha20, 256, 8, 32)
+
+#define ADD_FFX_ALGORITHM(a, bl)                                                                                                   \
+    do {                                                                                                                           \
+        size_t i;                                                                                                                  \
+        for (i = 0; ffx_variants[i].algo != NULL; ++i)                                                                             \
+            ;                                                                                                                      \
+        ffx_variants[i] = (struct st_ptls_ffx_test_variants_t){&(a), (bl)};                                                        \
+    } while (0)
+
+#define ADD_FFX_AES128_ALGORITHMS(backend)                                                                                         \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_aes128ctr_b125_r8, 125);                                                           \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_aes128ctr_b31_r6, 31);                                                             \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_aes128ctr_b53_r4, 53)
+
+#define ADD_FFX_CHACHA20_ALGORITHMS(backend)                                                                                       \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_chacha20_b256_r8, 256);                                                            \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_chacha20_b32_r6, 32);                                                              \
+    ADD_FFX_ALGORITHM(ptls_ffx_ptls_##backend##_chacha20_b57_r4, 57)
+
 void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_algorithm_t *server);
 void test_picotls(void);
+void test_picotls_esni(ptls_key_exchange_context_t **keys);
 
 #endif

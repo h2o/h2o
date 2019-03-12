@@ -30,8 +30,15 @@ extern "C" {
 #include <inttypes.h>
 #include <sys/types.h>
 
+#ifndef PTLS_FUZZ_HANDSHAKE
+#define PTLS_FUZZ_HANDSHAKE 0
+#endif
+
+#define PTLS_HELLO_RANDOM_SIZE 32
+
 #define PTLS_AES128_KEY_SIZE 16
 #define PTLS_AES256_KEY_SIZE 32
+#define PTLS_AES_BLOCK_SIZE 16
 #define PTLS_AES_IV_SIZE 16
 #define PTLS_AESGCM_IV_SIZE 12
 #define PTLS_AESGCM_TAG_SIZE 16
@@ -40,6 +47,9 @@ extern "C" {
 #define PTLS_CHACHA20_IV_SIZE 16
 #define PTLS_CHACHA20POLY1305_IV_SIZE 12
 #define PTLS_CHACHA20POLY1305_TAG_SIZE 16
+
+#define PTLS_BLOWFISH_KEY_SIZE 16
+#define PTLS_BLOWFISH_BLOCK_SIZE 8
 
 #define PTLS_SHA256_BLOCK_SIZE 64
 #define PTLS_SHA256_DIGEST_SIZE 32
@@ -73,6 +83,9 @@ extern "C" {
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384 0x0805
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512 0x0806
 
+/* ESNI */
+#define PTLS_ESNI_VERSION_DRAFT02 0xff01
+
 /* error classes and macros */
 #define PTLS_ERROR_CLASS_SELF_ALERT 0
 #define PTLS_ERROR_CLASS_PEER_ALERT 0x100
@@ -82,6 +95,9 @@ extern "C" {
 #define PTLS_ALERT_TO_SELF_ERROR(e) ((e) + PTLS_ERROR_CLASS_SELF_ALERT)
 #define PTLS_ALERT_TO_PEER_ERROR(e) ((e) + PTLS_ERROR_CLASS_PEER_ALERT)
 #define PTLS_ERROR_TO_ALERT(e) ((e)&0xff)
+
+/* the HKDF prefix */
+#define PTLS_HKDF_EXPAND_LABEL_PREFIX "tls13 "
 
 /* alerts */
 #define PTLS_ALERT_LEVEL_WARNING 1
@@ -186,10 +202,17 @@ typedef struct st_ptls_buffer_t {
  */
 typedef struct st_ptls_key_exchange_context_t {
     /**
-     * called once per created context. Callee must free resources allocated to the context and set *keyex to NULL. Secret and
-     * peerkey will be NULL in case the exchange never happened.
+     * the underlying algorithm
      */
-    int (*on_exchange)(struct st_ptls_key_exchange_context_t **keyex, ptls_iovec_t *secret, ptls_iovec_t peerkey);
+    const struct st_ptls_key_exchange_algorithm_t *algo;
+    /**
+     * the public key
+     */
+    ptls_iovec_t pubkey;
+    /**
+     * If `release` is set, the callee frees resources allocated to the context and set *keyex to NULL
+     */
+    int (*on_exchange)(struct st_ptls_key_exchange_context_t **keyex, int release, ptls_iovec_t *secret, ptls_iovec_t peerkey);
 } ptls_key_exchange_context_t;
 
 /**
@@ -204,11 +227,16 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
      * creates a context for asynchronous key exchange. The function is called when ClientHello is generated. The on_exchange
      * callback of the created context is called when the client receives ServerHello.
      */
-    int (*create)(ptls_key_exchange_context_t **ctx, ptls_iovec_t *pubkey);
+    int (*create)(const struct st_ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **ctx);
     /**
      * implements synchronous key exchange. Called when receiving a ServerHello.
      */
-    int (*exchange)(ptls_iovec_t *pubkey, ptls_iovec_t *secret, ptls_iovec_t peerkey);
+    int (*exchange)(const struct st_ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *pubkey, ptls_iovec_t *secret,
+                    ptls_iovec_t peerkey);
+    /**
+     * crypto-specific data
+     */
+    intptr_t data;
 } ptls_key_exchange_algorithm_t;
 
 /**
@@ -228,6 +256,7 @@ typedef struct st_ptls_cipher_context_t {
 typedef const struct st_ptls_cipher_algorithm_t {
     const char *name;
     size_t key_size;
+    size_t block_size;
     size_t iv_size;
     size_t context_size;
     int (*setup_crypto)(ptls_cipher_context_t *ctx, int is_enc, const void *key);
@@ -261,6 +290,10 @@ typedef const struct st_ptls_aead_algorithm_t {
      * the underlying key stream
      */
     ptls_cipher_algorithm_t *ctr_cipher;
+    /**
+     * the underlying ecb cipher (might not be available)
+     */
+    ptls_cipher_algorithm_t *ecb_cipher;
     /**
      * key size
      */
@@ -358,6 +391,20 @@ typedef struct st_ptls_message_emitter_t {
     int (*commit_message)(struct st_ptls_message_emitter_t *self);
 } ptls_message_emitter_t;
 
+/**
+ * holds ESNIKeys and the private key (instantiated by ptls_esni_parse, freed using ptls_esni_dispose)
+ */
+typedef struct st_ptls_esni_context_t {
+    ptls_key_exchange_context_t **key_exchanges;
+    struct {
+        ptls_cipher_suite_t *cipher_suite;
+        uint8_t record_digest[PTLS_MAX_DIGEST_SIZE];
+    } * cipher_suites;
+    uint16_t padded_length;
+    uint64_t not_before;
+    uint64_t not_after;
+} ptls_esni_context_t;
+
 #define PTLS_CALLBACK_TYPE0(ret, name)                                                                                             \
     typedef struct st_ptls_##name##_t {                                                                                            \
         ret (*cb)(struct st_ptls_##name##_t * self);                                                                               \
@@ -391,6 +438,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
         const uint16_t *list;
         size_t count;
     } certificate_compression_algorithms;
+    /**
+     * if ESNI was used
+     */
+    uint8_t esni : 1;
 } ptls_on_client_hello_parameters_t;
 
 /**
@@ -406,7 +457,7 @@ PTLS_CALLBACK_TYPE(int, on_client_hello, ptls_t *tls, ptls_on_client_hello_param
  * callback to generate the certificate message. `ptls_context::certificates` are set when the callback is set to NULL.
  */
 PTLS_CALLBACK_TYPE(int, emit_certificate, ptls_t *tls, ptls_message_emitter_t *emitter, ptls_key_schedule_t *key_sched,
-                   ptls_iovec_t context);
+                   ptls_iovec_t context, int push_status_request);
 /**
  * when gerenating CertificateVerify, the core calls the callback to sign the handshake context using the certificate.
  */
@@ -431,9 +482,11 @@ PTLS_CALLBACK_TYPE(int, encrypt_ticket, ptls_t *tls, int is_encrypt, ptls_buffer
  */
 PTLS_CALLBACK_TYPE(int, save_ticket, ptls_t *tls, ptls_iovec_t input);
 /**
- * secret logginng
+ * event logging (incl. secret logging)
  */
-PTLS_CALLBACK_TYPE(void, log_secret, ptls_t *tls, const char *label, ptls_iovec_t secret);
+typedef struct st_ptls_log_event_t {
+    void (*cb)(struct st_ptls_log_event_t *self, ptls_t *tls, const char *type, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+} ptls_log_event_t;
 /**
  * reference counting
  */
@@ -457,6 +510,11 @@ typedef struct st_ptls_decompress_certificate_t {
     int (*cb)(struct st_ptls_decompress_certificate_t *self, ptls_t *tls, uint16_t algorithm, ptls_iovec_t output,
               ptls_iovec_t input);
 } ptls_decompress_certificate_t;
+/**
+ * provides access to the ESNI shared secret (Zx).  API is subject to change.
+ */
+PTLS_CALLBACK_TYPE(int, update_esni_key, ptls_t *tls, ptls_iovec_t secret, ptls_hash_algorithm_t *hash,
+                   const void *hashed_esni_contents);
 
 /**
  * the configuration
@@ -486,6 +544,10 @@ struct st_ptls_context_t {
         size_t count;
     } certificates;
     /**
+     * list of ESNI data terminated by NULL
+     */
+    ptls_esni_context_t **esni;
+    /**
      *
      */
     ptls_on_client_hello_t *on_client_hello;
@@ -510,9 +572,10 @@ struct st_ptls_context_t {
      */
     uint32_t max_early_data_size;
     /**
-     * the label prefix used in hkdf-expand-label (if NULL, uses "tls13 ")
+     * the field is obsolete; should be set to NULL for QUIC draft-17.  Note also that even though everybody did, it was incorrect
+     * to set the value to "quic " in the earlier versions of the draft.
      */
-    const char *hkdf_label_prefix;
+    const char *hkdf_label_prefix__obsolete;
     /**
      * if set, psk handshakes use (ec)dhe
      */
@@ -545,7 +608,7 @@ struct st_ptls_context_t {
     /**
      *
      */
-    ptls_log_secret_t *log_secret;
+    ptls_log_event_t *log_event;
     /**
      *
      */
@@ -558,6 +621,10 @@ struct st_ptls_context_t {
      *
      */
     ptls_decompress_certificate_t *decompress_certificate;
+    /**
+     *
+     */
+    ptls_update_esni_key_t *update_esni_key;
 };
 
 typedef struct st_ptls_raw_extension_t {
@@ -602,6 +669,10 @@ typedef struct st_ptls_handshake_properties_t {
              * negotiate the key exchange method before sending key_share
              */
             unsigned negotiate_before_key_exchange : 1;
+            /**
+             * ESNIKeys (the value of the TXT record, after being base64-"decoded")
+             */
+            ptls_iovec_t esni_keys;
         } client;
         struct {
             /**
@@ -1046,8 +1117,31 @@ static ptls_iovec_t ptls_iovec_init(const void *p, size_t len);
  * checks if a server name is an IP address.
  */
 int ptls_server_name_is_ipaddr(const char *name);
+/**
+ * loads a certificate chain to ptls_context_t::certificates. `certificate.list` and each element of the list is allocated by
+ * malloc.  It is the responsibility of the user to free them when discarding the TLS context.
+ */
+int ptls_load_certificates(ptls_context_t *ctx, char const *cert_pem_file);
+/**
+ *
+ */
+int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_iovec_t esni_keys,
+                           ptls_key_exchange_context_t **key_exchanges);
+/**
+ *
+ */
+void ptls_esni_dispose_context(ptls_esni_context_t *esni);
+/**
+ *
+ */
+void ptls_hexdump(char *dst, const void *src, size_t len);
+/**
+ * the default get_time callback
+ */
+extern ptls_get_time_t ptls_get_time;
 
 /* inline functions */
+
 inline ptls_iovec_t ptls_iovec_init(const void *p, size_t len)
 {
     /* avoid the "return (ptls_iovec_t){(uint8_t *)p, len};" construct because it requires C99
@@ -1110,10 +1204,6 @@ inline size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const vo
     ptls_aead__build_iv(ctx, iv, seq);
     return ctx->do_decrypt(ctx, output, input, inlen, iv, aad, aadlen);
 }
-
-int ptls_load_certificates(ptls_context_t *ctx, char const *cert_pem_file);
-
-extern ptls_get_time_t ptls_get_time;
 
 #define ptls_define_hash(name, ctx_type, init_func, update_func, final_func)                                                       \
                                                                                                                                    \

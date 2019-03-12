@@ -7,10 +7,10 @@ end
 
 assert('Integer#+', '15.2.8.3.1') do
   a = 1+1
-  b = 1+1.0 if class_defined?("Float")
+  b = 1+1.0 if Object.const_defined?(:Float)
 
   assert_equal 2, a
-  assert_equal 2.0, b if class_defined?("Float")
+  assert_equal 2.0, b if Object.const_defined?(:Float)
 
   assert_raise(TypeError){ 0+nil }
   assert_raise(TypeError){ 1+nil }
@@ -18,40 +18,38 @@ assert('Integer#+', '15.2.8.3.1') do
   c = Mrbtest::FIXNUM_MAX + 1
   d = Mrbtest::FIXNUM_MAX.__send__(:+, 1)
 
-  if class_defined?("Float")
-    e = Mrbtest::FIXNUM_MAX + 1.0
-    assert_equal Float, c.class
-    assert_equal Float, d.class
-    assert_float e, c
-    assert_float e, d
-  end
+  skip unless Object.const_defined?(:Float)
+  e = Mrbtest::FIXNUM_MAX + 1.0
+  assert_equal Float, c.class
+  assert_equal Float, d.class
+  assert_float e, c
+  assert_float e, d
 end
 
 assert('Integer#-', '15.2.8.3.2') do
   a = 2-1
-  b = 2-1.0 if class_defined?("Float")
+  b = 2-1.0 if Object.const_defined?(:Float)
 
   assert_equal 1, a
-  assert_equal 1.0, b if class_defined?("Float")
+  assert_equal 1.0, b if Object.const_defined?(:Float)
 
   c = Mrbtest::FIXNUM_MIN - 1
   d = Mrbtest::FIXNUM_MIN.__send__(:-, 1)
 
-  if class_defined?("Float")
-    e = Mrbtest::FIXNUM_MIN - 1.0
-    assert_equal Float, c.class
-    assert_equal Float, d.class
-    assert_float e, c
-    assert_float e, d
-  end
+  skip unless Object.const_defined?(:Float)
+  e = Mrbtest::FIXNUM_MIN - 1.0
+  assert_equal Float, c.class
+  assert_equal Float, d.class
+  assert_float e, c
+  assert_float e, d
 end
 
 assert('Integer#*', '15.2.8.3.3') do
   a = 1*1
-  b = 1*1.0 if class_defined?("Float")
+  b = 1*1.0 if Object.const_defined?(:Float)
 
   assert_equal 1, a
-  assert_equal 1.0, b if class_defined?("Float")
+  assert_equal 1.0, b if Object.const_defined?(:Float)
 
   assert_raise(TypeError){ 0*nil }
   assert_raise(TypeError){ 1*nil }
@@ -59,13 +57,12 @@ assert('Integer#*', '15.2.8.3.3') do
   c = Mrbtest::FIXNUM_MAX * 2
   d = Mrbtest::FIXNUM_MAX.__send__(:*, 2)
 
-  if class_defined?("Float")
-    e = Mrbtest::FIXNUM_MAX * 2.0
-    assert_equal Float, c.class
-    assert_equal Float, d.class
-    assert_float e, c
-    assert_float e, d
-  end
+  skip unless Object.const_defined?(:Float)
+  e = Mrbtest::FIXNUM_MAX * 2.0
+  assert_equal Float, c.class
+  assert_equal Float, d.class
+  assert_float e, c
+  assert_float e, d
 end
 
 assert('Integer#/', '15.2.8.3.4') do
@@ -226,8 +223,9 @@ assert('Integer#times', '15.2.8.3.22') do
 end
 
 assert('Integer#to_f', '15.2.8.3.23') do
+  skip unless Object.const_defined?(:Float)
   assert_equal 1.0, 1.to_f
-end if class_defined?("Float")
+end
 
 assert('Integer#to_i', '15.2.8.3.24') do
   assert_equal 1, 1.to_i
@@ -258,20 +256,4 @@ assert('Integer#divmod', '15.2.8.3.30') do
   assert_equal [-1,  2],  -3.divmod(5)
   assert_equal [-2, -1],  25.divmod(-13)
   assert_equal [ 1, -6], -13.divmod(-7)
-end
-
-# Not ISO specified
-
-assert('Integer#step') do
-  a = []
-  b = []
-  1.step(3) do |i|
-    a << i
-  end
-  1.step(6, 2) do |i|
-    b << i
-  end
-
-  assert_equal [1, 2, 3], a
-  assert_equal [1, 3, 5], b
 end

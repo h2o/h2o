@@ -47,6 +47,14 @@ typedef struct st_h2o_token_t {
     h2o_token_flags_t flags;
 } h2o_token_t;
 
+/**
+ * hpack static table entries
+ */
+typedef struct st_h2o_hpack_static_table_entry_t {
+    const h2o_token_t *name;
+    const h2o_iovec_t value;
+} h2o_hpack_static_table_entry_t;
+
 #ifndef H2O_MAX_TOKENS
 #define H2O_MAX_TOKENS 100
 #endif

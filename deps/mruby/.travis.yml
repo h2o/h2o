@@ -15,6 +15,5 @@ addons:
       - gperf
 
 env:
-    MRUBY_CONFIG=travis_config.rb
-env: MRUBY_CONFIG=travis_config.rb
+  - MRUBY_CONFIG=travis_config.rb
 script: "./minirake -j4 all test"

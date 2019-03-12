@@ -84,21 +84,45 @@
     "k0O8Q62ZxzjGJ7Zw6K3azXlH/BYE+CajxTUF+FKRRkkWL1GrFVUsYd9KLDAVry0=\n"                                                           \
     "-----END CERTIFICATE-----\n"
 
+static void test_bf(void)
+{
+#if PTLS_OPENSSL_HAVE_BF
+    /* vectors from http://www.herongyang.com/Blowfish/Perl-Crypt-Blowfish-Test-Vector-128-Bit-Key.html */
+    static const uint8_t key[PTLS_BLOWFISH_KEY_SIZE] = {0},
+                         plaintext[PTLS_BLOWFISH_BLOCK_SIZE] = {0x4e, 0xf9, 0x97, 0x45, 0x61, 0x98, 0xdd, 0x78},
+                         expected[PTLS_BLOWFISH_BLOCK_SIZE] = {0xe1, 0xc0, 0x30, 0xe7, 0x4c, 0x14, 0xd2, 0x61};
+    uint8_t actual[PTLS_BLOWFISH_BLOCK_SIZE];
+
+    /* encrypt */
+    memset(actual, 0, sizeof(actual));
+    ptls_cipher_context_t *ctx = ptls_cipher_new(&ptls_openssl_bfecb, 1, key);
+    ptls_cipher_encrypt(ctx, actual, plaintext, sizeof(actual));
+    ptls_cipher_free(ctx);
+    ok(memcmp(actual, expected, sizeof(actual)) == 0);
+
+    /* decrypt */
+    ctx = ptls_cipher_new(&ptls_openssl_bfecb, 0, key);
+    ptls_cipher_encrypt(ctx, actual, actual, sizeof(actual));
+    ptls_cipher_free(ctx);
+    ok(memcmp(actual, plaintext, sizeof(actual)) == 0);
+#endif
+}
+
 static void test_key_exchanges(void)
 {
     test_key_exchange(&ptls_openssl_secp256r1, &ptls_openssl_secp256r1);
     test_key_exchange(&ptls_openssl_secp256r1, &ptls_minicrypto_secp256r1);
     test_key_exchange(&ptls_minicrypto_secp256r1, &ptls_openssl_secp256r1);
 
-#ifdef PTLS_OPENSSL_HAS_SECP384R1
+#if PTLS_OPENSSL_HAVE_SECP384R1
     test_key_exchange(&ptls_openssl_secp384r1, &ptls_openssl_secp384r1);
 #endif
 
-#ifdef PTLS_OPENSSL_HAS_SECP521R1
+#if PTLS_OPENSSL_HAVE_SECP521R1
     test_key_exchange(&ptls_openssl_secp521r1, &ptls_openssl_secp521r1);
 #endif
 
-#ifdef PTLS_OPENSSL_HAS_X25519
+#if PTLS_OPENSSL_HAVE_X25519
     test_key_exchange(&ptls_openssl_x25519, &ptls_openssl_x25519);
     test_key_exchange(&ptls_openssl_x25519, &ptls_minicrypto_x25519);
     test_key_exchange(&ptls_minicrypto_x25519, &ptls_openssl_x25519);
@@ -150,9 +174,24 @@ static X509 *x509_from_pem(const char *pem)
 {
     BIO *bio = BIO_new_mem_buf((void *)pem, (int)strlen(pem));
     X509 *cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
-    assert(cert != NULL || !!"failed to load certificate");
+    assert(cert != NULL && "failed to load certificate");
     BIO_free(bio);
     return cert;
+}
+
+static ptls_key_exchange_context_t *key_from_pem(const char *pem)
+{
+    BIO *bio = BIO_new_mem_buf((void *)pem, (int)strlen(pem));
+    EVP_PKEY *pkey = PEM_read_bio_PrivateKey(bio, NULL, NULL, NULL);
+    assert(pkey != NULL && "failed to load private key");
+    BIO_free(bio);
+
+    ptls_key_exchange_context_t *ctx;
+    int ret = ptls_openssl_create_key_exchange(&ctx, pkey);
+    assert(ret == 0 && "failed to setup private key");
+
+    EVP_PKEY_free(pkey);
+    return ctx;
 }
 
 static void test_cert_verify(void)
@@ -214,6 +253,11 @@ static int verify_cert_cb(int ok, X509_STORE_CTX *ctx)
     return 1;
 }
 
+DEFINE_FFX_AES128_ALGORITHMS(openssl);
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+DEFINE_FFX_CHACHA20_ALGORITHMS(openssl);
+#endif
+
 int main(int argc, char **argv)
 {
     ptls_openssl_sign_certificate_t openssl_sign_certificate;
@@ -227,6 +271,8 @@ int main(int argc, char **argv)
     ENGINE_register_all_ciphers();
     ENGINE_register_all_digests();
 #endif
+
+    subtest("bf", test_bf);
 
     subtest("key-exchange", test_key_exchanges);
 
@@ -244,19 +290,27 @@ int main(int argc, char **argv)
                                   {&cert, 1},
                                   NULL,
                                   NULL,
+                                  NULL,
                                   &openssl_sign_certificate.super};
     assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
     ptls_context_t openssl_ctx_sha256only = openssl_ctx;
     ++openssl_ctx_sha256only.cipher_suites;
     assert(openssl_ctx_sha256only.cipher_suites[0]->hash->digest_size == 32); /* sha256 */
 
+    ptls_key_exchange_context_t *esni_private_keys[2] = {key_from_pem(ESNI_SECP256R1KEY), NULL};
+
     ctx = ctx_peer = &openssl_ctx;
     verify_certificate = &openssl_verify_certificate.super;
+    ADD_FFX_AES128_ALGORITHMS(openssl);
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+    ADD_FFX_CHACHA20_ALGORITHMS(openssl);
+#endif
 
     subtest("rsa-sign", test_rsa_sign);
     subtest("ecdsa-sign", test_ecdsa_sign);
     subtest("cert-verify", test_cert_verify);
     subtest("picotls", test_picotls);
+    test_picotls_esni(esni_private_keys);
 
     ctx = ctx_peer = &openssl_ctx_sha256only;
     subtest("picotls", test_picotls);
@@ -280,6 +334,7 @@ int main(int argc, char **argv)
                                      {&minicrypto_certificate, 1},
                                      NULL,
                                      NULL,
+                                     NULL,
                                      &minicrypto_sign_certificate.super};
     ctx = &openssl_ctx;
     ctx_peer = &minicrypto_ctx;
@@ -289,5 +344,6 @@ int main(int argc, char **argv)
     ctx_peer = &openssl_ctx;
     subtest("minicrypto vs.", test_picotls);
 
+    esni_private_keys[0]->on_exchange(esni_private_keys, 1, NULL, ptls_iovec_init(NULL, 0));
     return done_testing();
 }

@@ -40,9 +40,14 @@ typedef struct st_h2o_httpclient_properties_t {
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
-typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version,
-                                                         int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
+typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
+                                                         h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
                                                          int header_requires_dup);
+/**
+ * Called when the protocol stack is ready to issue a request. Application must set all the output parameters (i.e. all except
+ * `client`, `errstr`, `origin`) and return a callback that will be called when the protocol stack receives the response headers
+ * from the server.
+ */
 typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method,
                                                             h2o_url_t *url, const h2o_header_t **headers, size_t *num_headers,
                                                             h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
@@ -70,7 +75,7 @@ typedef struct st_h2o_httpclient_ctx_t {
     uint64_t connect_timeout;
     uint64_t first_byte_timeout;
     uint64_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
-    uint64_t keepalive_timeout;
+    uint64_t keepalive_timeout;  /* only used for http2 for now */
     size_t max_buffer_size;
 
     struct {
@@ -131,6 +136,10 @@ struct st_h2o_httpclient_t {
      */
     h2o_socket_t *(*steal_socket)(h2o_httpclient_t *client);
     /**
+     * returns a pointer to the underlying h2o_socket_t
+     */
+    h2o_socket_t *(*get_socket)(h2o_httpclient_t *client);
+    /**
      * callback that should be called when some data is fetched out from `buf`.
      */
     void (*update_window)(h2o_httpclient_t *client);
@@ -189,11 +198,11 @@ void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, voi
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
-extern size_t h2o_httpclient__h1_size;
+extern const size_t h2o_httpclient__h1_size;
 
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
-extern size_t h2o_httpclient__h2_size;
+extern const size_t h2o_httpclient__h2_size;
 
 #ifdef __cplusplus
 }

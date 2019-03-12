@@ -88,4 +88,6 @@
 #define H2O_TOKEN_X_REPROXY_URL (h2o__tokens + 61)
 #define H2O_TOKEN_X_TRAFFIC (h2o__tokens + 62)
 
+extern const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61];
+
 #endif

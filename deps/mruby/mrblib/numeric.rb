@@ -104,11 +104,11 @@ module Integral
     raise ArgumentError, "step can't be 0" if step == 0
     return to_enum(:step, num, step) unless block
 
-    i = if class_defined?("Float") && num.kind_of?(Float) then self.to_f else self end
+    i = __coerce_step_counter(num, step)
     if num == nil
       while true
         block.call(i)
-        i+=step
+        i += step
       end
       return self
     end
