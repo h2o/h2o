@@ -279,10 +279,10 @@ static void init_accepting_hashkey_hashctx(void)
     assert(accepting_hashkey_hashctx != NULL);
 }
 
-static uint64_t calc_accepting_hashkey(struct sockaddr *sa, ptls_iovec_t offered_cid)
+static uint64_t calc_accept_hashkey(struct sockaddr *sa)
 {
     static pthread_once_t init_once = PTHREAD_ONCE_INIT;
-    uint8_t buf[1 + 16 + 4 + 1 + 18], *p = buf;
+    uint8_t buf[1 + 16 + 4], *p = buf;
     uint64_t md[PTLS_SHA256_DIGEST_SIZE / sizeof(uint64_t)];
 
     *p++ = (uint8_t)sa->sa_family;
@@ -305,9 +305,6 @@ static uint64_t calc_accepting_hashkey(struct sockaddr *sa, ptls_iovec_t offered
         h2o_fatal("unexpected sa_family");
         break;
     }
-    *p++ = (uint8_t)offered_cid.len;
-    memcpy(p, offered_cid.base, offered_cid.len);
-    p += offered_cid.len;
     assert(p <= buf + sizeof(buf));
 
     pthread_once(&init_once, init_accepting_hashkey_hashctx);
@@ -315,76 +312,110 @@ static uint64_t calc_accepting_hashkey(struct sockaddr *sa, ptls_iovec_t offered
     accepting_hashkey_hashctx->update(accepting_hashkey_hashctx, buf, p - buf);
     accepting_hashkey_hashctx->final(accepting_hashkey_hashctx, md, PTLS_HASH_FINAL_MODE_RESET);
 
+    /* 0 is used as nonexist */
+    if (md[0] == 0)
+        md[0] = 1;
     return md[0];
 }
 
-static uint64_t calc_accepting_hashkey_from_conn(quicly_conn_t *conn)
+static void drop_from_acceptmap(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn)
 {
-    const quicly_cid_t *offered_cid = quicly_get_offered_cid(conn);
-    struct sockaddr *sa;
-    socklen_t salen;
-
-    quicly_get_peername(conn, &sa, &salen);
-    return calc_accepting_hashkey(sa, ptls_iovec_init(offered_cid->cid, offered_cid->len));
+    if (conn->_accept_hashkey != 0) {
+        khint_t iter;
+        if ((iter = kh_get_h2o_http3_acceptmap(ctx->conns_accepting, conn->_accept_hashkey)) != kh_end(ctx->conns_accepting))
+            kh_del_h2o_http3_acceptmap(ctx->conns_accepting, iter);
+        conn->_accept_hashkey = 0;
+    }
 }
 
-static h2o_http3_conn_t *find_connection(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen,
-                                         quicly_decoded_packet_t *packet)
+static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, uint8_t ttl,
+                            quicly_decoded_packet_t *packets, size_t num_packets)
 {
-    /* server receives Initial or 0-RTT packet (that uses client-generated CID) */
-    if (packet->cid.dest.might_be_client_generated) {
-        uint64_t key = calc_accepting_hashkey(sa, packet->cid.dest.encrypted);
-        khiter_t iter = kh_get_h2o_http3_unauthmap(ctx->conns_accepting, key);
-        if (iter != kh_end(ctx->conns_accepting)) {
-            h2o_http3_conn_t *conn = kh_val(ctx->conns_accepting, iter);
-            assert(!quicly_is_client(conn->quic));
-            if (quicly_is_destination(conn->quic, sa, salen, packet))
-                return conn;
-        }
-    }
+    h2o_http3_conn_t *conn = NULL;
 
-    /* lookup idmap if the decrypted cid passes authentication */
-    if (packet->cid.dest.plaintext.node_id == 0 && packet->cid.dest.plaintext.thread_id == 0) {
-        khiter_t iter = kh_get_h2o_http3_idmap(ctx->conns_by_id, packet->cid.dest.plaintext.master_id);
+    /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
+    if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&
+        packets[0].cid.dest.plaintext.thread_id == ctx->next_cid.thread_id) {
+        khiter_t iter = kh_get_h2o_http3_idmap(ctx->conns_by_id, packets[0].cid.dest.plaintext.master_id);
         if (iter != kh_end(ctx->conns_by_id)) {
-            h2o_http3_conn_t *conn = kh_val(ctx->conns_by_id, iter);
-            if (quicly_is_destination(conn->quic, sa, salen, packet))
-                return conn;
+            conn = kh_val(ctx->conns_by_id, iter);
+            /* CID-based matching on Initial and 0-RTT packets should only be applied for clients */
+            if (!quicly_is_client(conn->quic) && packets[0].cid.dest.might_be_client_generated)
+                conn = NULL;
+        } else if (!packets[0].cid.dest.might_be_client_generated) {
+            /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
+            quicly_send_stateless_reset(ctx->quic, sa, salen, &packets[0].cid.dest.plaintext);
+            return;
         }
+    } else if (!packets[0].cid.dest.might_be_client_generated) {
+        /* forward 1-RTT packets belonging to different nodes, threads */
+        if (ttl == 0)
+            return;
+        uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
+        if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
+                                                                 sa, salen, ttl, packets, num_packets))
+            return;
+        /* non-authenticating 1-RTT packets are potentially stateless resets (FIXME handle them) */
+        return;
     }
 
-    /* FIXME create stateless reset map and recognize them */
+    if (conn == NULL) {
+        /* Initial or 0-RTT packet, use 4-tuple to match the thread and the connection */
+        assert(packets[0].cid.dest.might_be_client_generated);
+        uint64_t accept_hashkey = calc_accept_hashkey(sa);
+        if (ctx->accept_thread_divisor != 0) {
+            uint32_t offending_thread = accept_hashkey % ctx->accept_thread_divisor;
+            if (offending_thread != ctx->next_cid.thread_id) {
+                if (ctx->forward_packets != NULL)
+                    ctx->forward_packets(ctx, NULL, offending_thread, sa, salen, ttl, packets, num_packets);
+                return;
+            }
+        }
+        khiter_t iter = kh_get_h2o_http3_acceptmap(ctx->conns_accepting, accept_hashkey);
+        if (iter == kh_end(ctx->conns_accepting)) {
+            /* a new connection for this thread (at least on this process); accept or delegate to newer process */
+            if (ctx->acceptor == NULL) {
+                /* This is the offending thread but it is not accepting, which means that the process (or the thread) is
+                 * gracefully shutting down.  Let the application process forward the packet to the next generation. */
+                if (ctx->forward_packets != NULL)
+                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, sa, salen, ttl, packets, num_packets);
+                return;
+            }
+            if ((conn = ctx->acceptor(ctx, sa, salen, packets, num_packets)) == NULL)
+                return;
+            conn->_accept_hashkey = accept_hashkey;
+            int r;
+            iter = kh_put_h2o_http3_acceptmap(conn->ctx->conns_accepting, accept_hashkey, &r);
+            assert(iter != kh_end(conn->ctx->conns_accepting));
+            kh_val(conn->ctx->conns_accepting, iter) = conn;
+            goto Respond;
+        }
+        conn = kh_val(ctx->conns_accepting, iter);
+        assert(!quicly_is_client(conn->quic));
+    }
 
-    return NULL;
-}
-
-static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, quicly_decoded_packet_t *packets,
-                            size_t num_packets)
-{
-    h2o_http3_conn_t *conn = find_connection(ctx, sa, salen, packets);
-
-    if (conn != NULL) {
+    { /* receive packets to the found connection */
+        assert(conn != NULL);
+        /* FIXME do we need this check? */
+        if (!quicly_is_destination(conn->quic, sa, salen, packets))
+            return;
         size_t i;
         for (i = 0; i != num_packets; ++i) {
-            /* FIXME process closure and errors */
+            /* FIXME process errors? */
             quicly_receive(conn->quic, packets + i);
         }
-    } else if (ctx->acceptor != NULL) {
-        conn = ctx->acceptor(ctx, sa, salen, packets, num_packets);
     }
 
+Respond:
     /* for locality, emit packets belonging to the same connection NOW! */
-    if (conn != NULL) {
-        if (!h2o_http3_send(conn))
-            conn = NULL;
-        if (conn != NULL && ctx->notify_conn_update != NULL)
-            ctx->notify_conn_update(ctx, conn);
-    }
+    if (!h2o_http3_send(conn))
+        conn = NULL;
+    if (conn != NULL && ctx->notify_conn_update != NULL)
+        ctx->notify_conn_update(ctx, conn);
 }
 
-static void on_read(h2o_socket_t *sock, const char *err)
+void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_preprocess_received_cb preprocess)
 {
-    h2o_http3_ctx_t *ctx = sock->data;
     int fd = h2o_socket_get_fd(sock);
 
     while (1) {
@@ -393,6 +424,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
             struct msghdr mess;
             struct sockaddr_storage sa;
             struct iovec vec;
+            uint8_t ttl;
         } dgrams[32];
         size_t dgram_index, num_dgrams;
         ssize_t rret;
@@ -412,6 +444,12 @@ static void on_read(h2o_socket_t *sock, const char *err)
             if (rret <= 0)
                 break;
             dgrams[dgram_index].vec.iov_len = rret;
+            if (preprocess != NULL && preprocess(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].ttl)) {
+                /* preprocessed */
+            } else {
+                dgrams[dgram_index].ttl = ctx->default_ttl;
+            }
+            assert(dgrams[dgram_index].sa.ss_family != AF_UNIX);
             bufpt += rret;
         }
         num_dgrams = dgram_index;
@@ -422,10 +460,12 @@ static void on_read(h2o_socket_t *sock, const char *err)
         quicly_decoded_packet_t packets[64];
         size_t packet_index = 0;
         for (dgram_index = 0; dgram_index != num_dgrams; ++dgram_index) {
-            if (packet_index != 0 && !(dgram_index == 0 || h2o_socket_compare_address(dgrams[dgram_index - 1].mess.msg_name,
-                                                                                      dgrams[dgram_index].mess.msg_name))) {
-                process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen, packets,
-                                packet_index);
+            if (packet_index != 0 &&
+                !(dgram_index == 0 ||
+                  h2o_socket_compare_address(dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index].mess.msg_name) != 0 ||
+                  dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)) {
+                process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen,
+                                dgrams[dgram_index - 1].ttl, packets, packet_index);
                 packet_index = 0;
             }
             size_t off = 0;
@@ -439,8 +479,8 @@ static void on_read(h2o_socket_t *sock, const char *err)
                     !(packet_index == 0 ||
                       h2o_memis(packets[0].cid.dest.encrypted.base, packets[0].cid.dest.encrypted.len,
                                 packets[packet_index].cid.dest.encrypted.base, packets[packet_index].cid.dest.encrypted.len))) {
-                    process_packets(ctx, dgrams[dgram_index].mess.msg_name, dgrams[dgram_index].mess.msg_namelen, packets,
-                                    packet_index + 1);
+                    process_packets(ctx, dgrams[dgram_index].mess.msg_name, dgrams[dgram_index].mess.msg_namelen,
+                                    dgrams[dgram_index].ttl, packets, packet_index + 1);
                     packet_index = 0;
                 } else {
                     ++packet_index;
@@ -448,9 +488,15 @@ static void on_read(h2o_socket_t *sock, const char *err)
             }
         }
         if (packet_index != 0)
-            process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen, packets,
-                            packet_index);
+            process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen,
+                            dgrams[dgram_index - 1].ttl, packets, packet_index);
     }
+}
+
+static void on_read(h2o_socket_t *sock, const char *err)
+{
+    h2o_http3_ctx_t *ctx = sock->data;
+    h2o_http3_read_socket(ctx, sock, NULL);
 }
 
 static void on_timeout(h2o_timer_t *timeout)
@@ -506,16 +552,16 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
 {
     assert(quic->stream_open != NULL);
 
-    ctx->loop = loop;
-    ctx->sock = sock;
-    ctx->sock->data = ctx;
-    ctx->quic = quic;
-    ctx->next_cid = (quicly_cid_plaintext_t){0}; /* FIXME set thread_id, etc. */
-    ctx->conns_by_id = kh_init_h2o_http3_idmap();
-    ctx->conns_accepting = kh_init_h2o_http3_unauthmap();
+    *ctx = (h2o_http3_ctx_t){loop,
+                             sock,
+                             quic,
+                             {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
+                             kh_init_h2o_http3_idmap(),
+                             kh_init_h2o_http3_acceptmap(),
+                             notify_conn_update};
+    sock->data = ctx;
     h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
-    ctx->notify_conn_update = notify_conn_update;
 
     h2o_socket_read_start(ctx->sock, on_read);
 }
@@ -528,7 +574,17 @@ void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
 
     h2o_socket_close(ctx->sock);
     kh_destroy_h2o_http3_idmap(ctx->conns_by_id);
-    kh_destroy_h2o_http3_unauthmap(ctx->conns_accepting);
+    kh_destroy_h2o_http3_acceptmap(ctx->conns_accepting);
+}
+
+void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_packets_cb)
+{
+    ctx->accept_thread_divisor = accept_thread_divisor;
+    ctx->next_cid.thread_id = thread_id;
+    ctx->next_cid.node_id = node_id;
+    ctx->forward_packets = forward_packets_cb;
+    ctx->default_ttl = ttl;
 }
 
 static void close_connection(h2o_http3_conn_t *conn)
@@ -578,11 +634,7 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
         if ((iter = kh_get_h2o_http3_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id)) !=
             kh_end(conn->ctx->conns_by_id))
             kh_del_h2o_http3_idmap(conn->ctx->conns_by_id, iter);
-        if (!quicly_is_client(conn->quic)) {
-            uint64_t key = calc_accepting_hashkey_from_conn(conn->quic);
-            if ((iter = kh_get_h2o_http3_unauthmap(conn->ctx->conns_accepting, key)) != kh_end(conn->ctx->conns_accepting))
-                kh_del_h2o_http3_unauthmap(conn->ctx->conns_accepting, iter);
-        }
+        drop_from_acceptmap(conn->ctx, conn);
         quicly_free(conn->quic);
     }
     h2o_timer_unlink(&conn->_timeout);
@@ -601,15 +653,6 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
         khiter_t iter = kh_put_h2o_http3_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id, &r);
         assert(iter != kh_end(conn->ctx->conns_by_id));
         kh_val(conn->ctx->conns_by_id, iter) = conn;
-    }
-
-    /* register to accepting hashmap (FIXME unregister when ... droping the Initial and 0-RTT keys?) */
-    if (!quicly_is_client(conn->quic)) {
-        uint64_t key = calc_accepting_hashkey_from_conn(conn->quic);
-        int r;
-        khiter_t iter = kh_put_h2o_http3_unauthmap(conn->ctx->conns_accepting, key, &r);
-        assert(iter != kh_end(conn->ctx->conns_accepting));
-        kh_val(conn->ctx->conns_accepting, iter) = conn;
     }
 
     if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, h2o_iovec_init(H2O_STRLIT("C\0\4")))) != 0 ||

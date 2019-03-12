@@ -88,6 +88,22 @@ struct kh_h2o_http3_unauthmap_s;
 typedef h2o_http3_conn_t *(*h2o_http3_accept_cb)(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen,
                                                  quicly_decoded_packet_t *packets, size_t num_packets);
 typedef void (*h2o_http3_notify_connection_update_cb)(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
+/**
+ * Forwards a packet to given node/thread.
+ * When `node_id` is NULL, the forwarded packet is an Initial or a 0-RTT packet.  Application should forward the packet to given
+ * thread, or if the thread points to the current thread (which happens when acceptor is set to NULL) forward the packet to the
+ * next generation process (graceful restart).
+ * When `node_id` is not NULL, the forwarded packet is an Handshake or a 1-RTT packet.  Application should forward the packet to
+ * given thread / node if the values are valid.  Otherwise, it should return false, which in turn triggers the code that checks if
+ * the packet is a stateless reset.
+ * @return true if packet was forwarded (or was forwardable), otherwise false
+ */
+typedef int (*h2o_http3_forward_packets_cb)(h2o_http3_ctx_t *ctx, const uint64_t *node_id, uint32_t thread_id, struct sockaddr *sa,
+                                            socklen_t salen, uint8_t ttl, quicly_decoded_packet_t *packets, size_t num_packets);
+/**
+ * preprocess a received datagram (e.g., rewrite the sockaddr). Returns if the packet was modified.
+ */
+typedef int (*h2o_http3_preprocess_received_cb)(h2o_http3_ctx_t *ctx, struct msghdr *msghdr, uint8_t *ttl);
 
 struct st_h2o_http3_ctx_t {
     /**
@@ -111,10 +127,13 @@ struct st_h2o_http3_ctx_t {
      */
     struct kh_h2o_http3_idmap_s *conns_by_id;
     /**
-     * hashmap of connections being accepted. Exists to handle packets that do no tuse the server-generated CIDs. The unique key of
-     * the hashmap is (sockaddr, offered_cid).
+     * hashmap of connections being accepted. Keyed by 4-tuple. Exists to handle packets that do not use the server-generated CIDs.
      */
-    struct kh_h2o_http3_unauthmap_s *conns_accepting;
+    struct kh_h2o_http3_acceptmap_s *conns_accepting;
+    /**
+     * callback to receive connection status changes (optional)
+     */
+    h2o_http3_notify_connection_update_cb notify_conn_update;
     /**
      * linklist of clients (see st_h2o_http3client_conn_t::clients_link)
      */
@@ -124,9 +143,17 @@ struct st_h2o_http3_ctx_t {
      */
     h2o_http3_accept_cb acceptor;
     /**
-     * callback to receive connection status changes (optional)
+     * 0 to disable load distribution of accepting connections by h2o (i.e. relies on the kernel's disbirution based on 4-tuple)
      */
-    h2o_http3_notify_connection_update_cb notify_conn_update;
+    uint32_t accept_thread_divisor;
+    /**
+     * callback to forward packets (optional)
+     */
+    h2o_http3_forward_packets_cb forward_packets;
+    /**
+     * TTL of a QUIC datagram. Used to prevent infinite forwarding of QUIC packets between nodes / threads.
+     */
+    uint8_t default_ttl;
 };
 
 typedef const struct st_h2o_http3_conn_callbacks_t {
@@ -171,6 +198,10 @@ struct st_h2o_http3_conn_t {
             struct st_h2o_http3_egress_unistream_t *qpack_decoder;
         } egress;
     } _control_streams;
+    /**
+     *
+     */
+    uint64_t _accept_hashkey;
 };
 
 #define h2o_http3_encode_frame(_pool_, _buf_, _type, _block)                                                                       \
@@ -229,6 +260,15 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
  *
  */
 void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx);
+/**
+ *
+ */
+void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+                                      uint8_t ttl, h2o_http3_forward_packets_cb forward_packets_cb);
+/**
+ *
+ */
+void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_preprocess_received_cb preprocess);
 /**
  *
  */

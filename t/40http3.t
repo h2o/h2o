@@ -14,30 +14,38 @@ my $quic_port = empty_port({
     proto => "udp",
 });
 
-my $guard = spawn_h2o(<< "EOT");
+sub doit {
+    my $num_threads = shift;
+    my $guard = spawn_h2o(<< "EOT");
 listen:
   type: quic
   port: $quic_port
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
-num-threads: 1
+num-threads: $num_threads
 hosts:
   default:
     paths:
       /:
         file.dir: t/assets/doc_root
 EOT
-
-subtest "hello world" => sub {
-    my $resp = `$client_prog -3 https://127.0.0.1:$quic_port 2>&1`;
-    like $resp, qr{^HTTP/.*\n\nhello\n$}s;
+    subtest "hello world" => sub {
+        my $resp = `$client_prog -3 https://127.0.0.1:$quic_port 2>&1`;
+        like $resp, qr{^HTTP/.*\n\nhello\n$}s;
+    };
+    subtest "large file" => sub {
+        my $resp = `$client_prog -3 https://127.0.0.1:$quic_port/halfdome.jpg 2> /dev/null`;
+        is md5_hex($resp), md5_file("t/assets/doc_root/halfdome.jpg");
+    };
 };
 
-subtest "large file" => sub {
-    my $resp = `$client_prog -3 https://127.0.0.1:$quic_port/halfdome.jpg 2> /dev/null`;
-    is md5_hex($resp), md5_file("t/assets/doc_root/halfdome.jpg");
+subtest "single-thread" => sub {
+    doit(1);
+};
+
+subtest "multi-thread" => sub {
+    doit(16);
 };
 
 done_testing;
-

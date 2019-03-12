@@ -25,6 +25,6 @@
 #include "khash.h"
 
 KHASH_MAP_INIT_INT(h2o_http3_idmap, h2o_http3_conn_t *);
-KHASH_MAP_INIT_INT64(h2o_http3_unauthmap, h2o_http3_conn_t *);
+KHASH_MAP_INIT_INT64(h2o_http3_acceptmap, h2o_http3_conn_t *);
 
 #endif
