@@ -265,25 +265,13 @@ static int open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egr
     return quicly_stream_sync_sendbuf((*stream)->quic, 1);
 }
 
-/**
- * keyed-hash to avoid collision attacks on unauthmap (FIXME switch to CMAC for better performance)
- */
-static ptls_hash_context_t *accepting_hashkey_hashctx = NULL;
-
-static void init_accepting_hashkey_hashctx(void)
-{
-    uint8_t random_bytes[PTLS_SHA256_DIGEST_SIZE];
-
-    ptls_openssl_random_bytes(random_bytes, sizeof(random_bytes));
-    accepting_hashkey_hashctx = ptls_hmac_create(&ptls_openssl_sha256, random_bytes, sizeof(random_bytes));
-    assert(accepting_hashkey_hashctx != NULL);
-}
-
 static uint64_t calc_accept_hashkey(struct sockaddr *sa)
 {
-    static pthread_once_t init_once = PTHREAD_ONCE_INIT;
-    uint8_t buf[1 + 16 + 4], *p = buf;
-    uint64_t md[PTLS_SHA256_DIGEST_SIZE / sizeof(uint64_t)];
+    struct {
+        uint8_t bytes[32];
+        uint64_t u64[4];
+    } buf = {{0}};
+    uint8_t *p = buf.bytes;
 
     *p++ = (uint8_t)sa->sa_family;
     switch (sa->sa_family) {
@@ -305,17 +293,31 @@ static uint64_t calc_accept_hashkey(struct sockaddr *sa)
         h2o_fatal("unexpected sa_family");
         break;
     }
-    assert(p <= buf + sizeof(buf));
+    assert(p <= buf.bytes + sizeof(buf));
 
-    pthread_once(&init_once, init_accepting_hashkey_hashctx);
+    static __thread EVP_CIPHER_CTX *cipher = NULL;
+    if (cipher == NULL) {
+        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+        static uint8_t key[PTLS_AES128_KEY_SIZE], key_ready = 0;
+        pthread_mutex_lock(&mutex);
+        if (!key_ready) {
+            ptls_openssl_random_bytes(key, sizeof(key));
+            key_ready = 1;
+        }
+        pthread_mutex_unlock(&mutex);
+        cipher = EVP_CIPHER_CTX_new();
+        EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
+    }
 
-    accepting_hashkey_hashctx->update(accepting_hashkey_hashctx, buf, p - buf);
-    accepting_hashkey_hashctx->final(accepting_hashkey_hashctx, md, PTLS_HASH_FINAL_MODE_RESET);
+    EVP_EncryptInit_ex(cipher, NULL, NULL, NULL, NULL);
+    int bytes_encrypted = sizeof(buf) + 16;
+    EVP_EncryptUpdate(cipher, buf.bytes, &bytes_encrypted, buf.bytes, sizeof(buf));
+    assert(bytes_encrypted == sizeof(buf));
 
     /* 0 is used as nonexist */
-    if (md[0] == 0)
-        md[0] = 1;
-    return md[0];
+    if (buf.u64[3] == 0)
+        buf.u64[3] = 1;
+    return buf.u64[3];
 }
 
 static void drop_from_acceptmap(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn)
