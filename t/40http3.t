@@ -2,8 +2,11 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use Net::EmptyPort qw(empty_port);
+use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
+
+my $tempdir = tempdir(CLEANUP => 1);
 
 my $client_prog = bindir() . "/examples-httpclient-evloop";
 plan skip_all => "$client_prog not found"
@@ -35,7 +38,14 @@ EOT
         like $resp, qr{^HTTP/.*\n\nhello\n$}s;
     };
     subtest "large file" => sub {
-        my $resp = `$client_prog -3 https://127.0.0.1:$quic_port/halfdome.jpg 2> /dev/null`;
+        my $resp = `$client_prog -3 https://127.0.0.1:$quic_port/halfdome.jpg 2> $tempdir/log`;
+        is $?, 0;
+        diag do {
+            open my $fh, '<', "$tempdir/log"
+                or die "failed to open $tempdir/log:$!";
+            local $/;
+            <$fh>;
+        } if $? != 0;
         is length($resp), (stat "t/assets/doc_root/halfdome.jpg")[7];
         is md5_hex($resp), md5_file("t/assets/doc_root/halfdome.jpg");
     };
