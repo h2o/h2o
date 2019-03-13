@@ -9,7 +9,7 @@ IF (OPENSSL_FOUND AND (OPENSSL_VERSION VERSION_LESS "1.0.2"))
 ENDIF ()
 
 SET(CMAKE_C_FLAGS "-std=c99 -Wall -O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
-INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR} deps/dcc deps/klib deps/picotls/include deps/picotest include)
+INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR} deps/klib deps/picotls/include deps/picotest include)
 
 SET(PICOTLS_OPENSSL_FILES
     deps/picotls/lib/openssl.c
@@ -17,11 +17,9 @@ SET(PICOTLS_OPENSSL_FILES
     deps/picotls/lib/picotls.c)
 
 SET(QUICLY_LIBRARY_FILES
-    deps/dcc/cc.c
-    deps/dcc/cc_cubic.c
-    deps/dcc/cc_newreno.c
     lib/frame.c
     lib/loss.c
+    lib/cc-reno.c
     lib/quicly.c
     lib/ranges.c
     lib/recvstate.c
@@ -53,6 +51,8 @@ ADD_EXECUTABLE(udpfw t/udpfw.c)
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove --exec "sh -c" -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS cli test.t)
+
+ADD_CUSTOM_TARGET(format clang-format -i `git ls-files include lib src t | egrep '\\.[ch]$$'`)
 
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
      SET(CMAKE_C_FLAGS "-D_GNU_SOURCE -pthread ${CMAKE_C_FLAGS}")

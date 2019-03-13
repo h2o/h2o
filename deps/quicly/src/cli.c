@@ -607,7 +607,7 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                      * because loop is prevented by authenticating the CID (by checking node_id and thread_id). If the peer is also
                      * sending a reset, then the next CID is highly likely to contain a non-authenticating CID, ... */
                     if (packet.cid.dest.plaintext.node_id == 0 && packet.cid.dest.plaintext.thread_id == 0) {
-                        quicly_datagram_t *dgram = quicly_send_stateless_reset(&ctx, &sa, salen, &packet.cid.dest.plaintext);
+                        quicly_datagram_t *dgram = quicly_send_stateless_reset(&ctx, &sa, salen, packet.cid.dest.encrypted.base);
                         if (send_one(fd, dgram) == -1)
                             perror("sendmsg failed");
                     }
@@ -777,7 +777,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'l':
-            setup_log_secret(ctx.tls, optarg);
+            setup_log_event(ctx.tls, optarg);
             break;
         case 'N':
             hs_properties.client.negotiate_before_key_exchange = 1;

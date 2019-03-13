@@ -120,10 +120,11 @@ struct st_quicly_sent_block_t {
  * 1. call quicly_sentmap_init_iter
  * 2. call quicly_sentmap_get to obtain the packet header that the iterator points to
  * 3. call quicly_sentmap_update to update the states of the packet that the iterator points to (as well as the state of the frames
- *    that were part of the packet).  The function is also used for discarding entries from the sent map.
+ *    that were part of the packet) and move the iterator to the next packet header.  The function is also used for discarding
+ * entries from the sent map.
  * 4. call quicly_sentmap_skip to move the iterator to the next packet header
  *
- * Note that quicly_sentmap_update also moves the iterator to the next packet header.
+ * Note that quicly_sentmap_update and quicly_sentmap_skip move the iterator to the next packet header.
  */
 typedef struct st_quicly_sentmap_t {
     /**

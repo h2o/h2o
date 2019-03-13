@@ -115,6 +115,8 @@ typedef enum en_quicly_event_type_t {
     QUICLY_EVENT_TYPE_QUICTRACE_SEND_STREAM,
     QUICLY_EVENT_TYPE_QUICTRACE_RECV_STREAM,
     QUICLY_EVENT_TYPE_QUICTRACE_RECV_ACK,
+    QUICLY_EVENT_TYPE_QUICTRACE_CC_ACK,
+    QUICLY_EVENT_TYPE_QUICTRACE_CC_LOST,
 } quicly_event_type_t;
 
 /**
@@ -153,6 +155,9 @@ typedef enum en_quicly_event_attribute_type_t {
     QUICLY_EVENT_ATTRIBUTE_CC_EXIT_RECOVERY,
     QUICLY_EVENT_ATTRIBUTE_ACKED_PACKETS,
     QUICLY_EVENT_ATTRIBUTE_ACKED_BYTES,
+    QUICLY_EVENT_ATTRIBUTE_MIN_RTT,
+    QUICLY_EVENT_ATTRIBUTE_SMOOTHED_RTT,
+    QUICLY_EVENT_ATTRIBUTE_LATEST_RTT,
     QUICLY_EVENT_ATTRIBUTE_STATE,
     QUICLY_EVENT_ATTRIBUTE_ERROR_CODE,
     QUICLY_EVENT_ATTRIBUTE_FRAME_TYPE,
@@ -209,7 +214,7 @@ typedef struct st_quicly_packet_allocator_t {
  */
 typedef struct st_quicly_cid_encryptor_t {
     /**
-     * encrypts CID and/or generates a stateless reset token
+     * encrypts CID and optionally generates a stateless reset token
      */
     void (*encrypt_cid)(struct st_quicly_cid_encryptor_t *self, quicly_cid_t *encrypted, void *stateless_reset_token,
                         const quicly_cid_plaintext_t *plaintext);
@@ -221,6 +226,10 @@ typedef struct st_quicly_cid_encryptor_t {
      */
     size_t (*decrypt_cid)(struct st_quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *plaintext, const void *encrypted,
                           size_t len);
+    /**
+     * generates a stateless reset token (returns if generated)
+     */
+    int (*generate_stateless_reset_token)(struct st_quicly_cid_encryptor_t *self, void *token, const void *cid);
 } quicly_cid_encryptor_t;
 
 /**
@@ -742,8 +751,7 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
 /**
  *
  */
-quicly_datagram_t *quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen,
-                                               const quicly_cid_plaintext_t *cid);
+quicly_datagram_t *quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen, const void *cid);
 /**
  *
  */

@@ -27,6 +27,8 @@
 
 #define QUICLY_NUM_PACKETS_BEFORE_ACK 2
 #define QUICLY_DELAYED_ACK_TIMEOUT 25 /* milliseconds */
+#define QUICLY_MAX_PACKET_SIZE 1280   /* must be >= 1200 bytes */
+#define QUICLY_AEAD_TAG_SIZE 16
 
 /* coexists with picotls error codes, assuming that int is at least 32-bits */
 #define QUICLY_ERROR_IS_QUIC(e) (((e) & ~0x1ffff) == 0x20000)

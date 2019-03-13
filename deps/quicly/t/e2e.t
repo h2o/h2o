@@ -10,6 +10,19 @@ use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep);
 
+sub complex ($$;$) {
+    my $s = shift;
+    my $cb = shift;
+    local $Test::Builder::Level = $Test::Builder::Level + 1;
+    local $_ = $s;
+    if ($cb->()) {
+        &pass;
+    } else {
+        &fail;
+        diag($s);
+    }
+}
+
 $ENV{BINARY_DIR} ||= ".";
 my $cli = "$ENV{BINARY_DIR}/cli";
 my $port = empty_port({
@@ -24,8 +37,10 @@ subtest "hello" => sub {
     is $resp, "hello world\n";
     subtest "events" => sub {
         my $events = slurp_file("$tempdir/events");
-        ok +($events =~ /"type":"transport-close-send",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)"/s
-             and $1 eq "packet-commit" and $2 eq "quictrace-sent" and $3 eq "send" and $4 eq "free");
+        complex $events, sub {
+            $_ =~ /"type":"transport-close-send",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)",.*?"type":"([^\"]*)"/s
+                and $1 eq 'packet-commit' and $2 eq 'quictrace-sent' and $3 eq 'send' and $4 eq 'free';
+        };
     };
 };
 
@@ -128,3 +143,5 @@ sub slurp_file {
         <$fh>;
     };
 }
+
+1;

@@ -30,11 +30,11 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include "khash.h"
-#include "cc.h"
 #include "quicly.h"
 #include "quicly/sentmap.h"
 #include "quicly/frame.h"
 #include "quicly/streambuf.h"
+#include "quicly/cc.h"
 
 #define QUICLY_QUIC_BIT 0x40
 #define QUICLY_LONG_HEADER_RESERVED_BITS 0xc
@@ -254,11 +254,7 @@ struct st_quicly_conn_t {
         /**
          *
          */
-        struct {
-            struct cc_var ccv;
-            uint64_t end_of_recovery;
-            unsigned in_first_rto : 1;
-        } cc;
+        quicly_cc_t cc;
     } egress;
     /**
      * crypto data
@@ -314,7 +310,7 @@ static int discard_sentmap_by_epoch(quicly_conn_t *conn, unsigned ack_epochs);
 
 const quicly_context_t quicly_default_context = {
     NULL,                      /* tls */
-    1280,                      /* max_packet_size */
+    QUICLY_MAX_PACKET_SIZE,    /* max_packet_size */
     &quicly_loss_default_conf, /* loss */
     {
         {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
@@ -343,13 +339,8 @@ static void update_now(quicly_context_t *ctx)
     static __thread int64_t base;
 
     now = ctx->now->cb(ctx->now);
-
-    assert(cc_hz == 100);
     if (base == 0)
         base = now;
-    int new_ticks = (int)((now - base) / 10);
-    if (cc_ticks != new_ticks)
-        cc_ticks = new_ticks;
 }
 
 static inline uint8_t get_epoch(uint8_t first_byte)
@@ -845,7 +836,7 @@ static void destroy_stream(quicly_stream_t *stream, int err)
 
     if (stream->stream_id < 0) {
         size_t epoch = -(1 + stream->stream_id);
-        if (epoch <= 2)
+        if (epoch <= QUICLY_EPOCH_HANDSHAKE)
             stream->conn->crypto.pending_flows &= ~(uint8_t)(1 << epoch);
     } else {
         struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(conn, stream->stream_id);
@@ -1037,7 +1028,7 @@ Exit:
 
 static int setup_handshake_space_and_flow(quicly_conn_t *conn, size_t epoch)
 {
-    struct st_quicly_handshake_space_t **space = epoch == 0 ? &conn->initial : &conn->handshake;
+    struct st_quicly_handshake_space_t **space = epoch == QUICLY_EPOCH_INITIAL ? &conn->initial : &conn->handshake;
     if ((*space = (void *)alloc_pn_space(sizeof(struct st_quicly_handshake_space_t))) == NULL)
         return PTLS_ERROR_NO_MEMORY;
     return create_handshake_flow(conn, epoch);
@@ -1067,10 +1058,10 @@ static int setup_application_space_and_flow(quicly_conn_t *conn, int setup_0rtt)
         return PTLS_ERROR_NO_MEMORY;
     if (setup_0rtt) {
         int ret;
-        if ((ret = create_handshake_flow(conn, 1)) != 0)
+        if ((ret = create_handshake_flow(conn, QUICLY_EPOCH_0RTT)) != 0)
             return ret;
     }
-    return create_handshake_flow(conn, 3);
+    return create_handshake_flow(conn, QUICLY_EPOCH_1RTT);
 }
 
 static int discard_initial_context(quicly_conn_t *conn)
@@ -1133,7 +1124,6 @@ void quicly_free(quicly_conn_t *conn)
         conn->egress.path_challenge.head = pending->next;
         free(pending);
     }
-    cc_destroy(&conn->egress.cc.ccv);
     quicly_sentmap_dispose(&conn->egress.sentmap);
 
     kh_destroy(quicly_stream_t, conn->streams);
@@ -1499,9 +1489,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     init_max_streams(&conn->_.egress.max_streams.bidi);
     conn->_.egress.path_challenge.tail_ref = &conn->_.egress.path_challenge.head;
     conn->_.egress.send_ack_at = INT64_MAX;
-    cc_init(&conn->_.egress.cc.ccv, &newreno_cc_algo, 1280 * 8, 1280);
-    conn->_.egress.cc.ccv.ccvc.ccv.snd_scale = 14; /* FIXME */
-    conn->_.egress.cc.end_of_recovery = UINT64_MAX;
+    quicly_cc_init(&conn->_.egress.cc);
     conn->_.crypto.tls = tls;
     if (handshake_properties != NULL) {
         assert(handshake_properties->additional_extensions == NULL);
@@ -1618,7 +1606,7 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
                          VEC_EVENT_ATTR(SCID, ptls_iovec_init(conn->super.host.src_cid.cid, conn->super.host.src_cid.len)),
                          INT_EVENT_ATTR(QUIC_VERSION, conn->super.version));
 
-    if ((ret = setup_handshake_space_and_flow(conn, 0)) != 0)
+    if ((ret = setup_handshake_space_and_flow(conn, QUICLY_EPOCH_INITIAL)) != 0)
         goto Exit;
     if ((ret = setup_initial_encryption(&conn->initial->cipher.ingress, &conn->initial->cipher.egress, ctx->tls->cipher_suites,
                                         ptls_iovec_init(server_cid->cid, server_cid->len), 1)) != 0)
@@ -1972,7 +1960,7 @@ static ssize_t round_send_window(ssize_t window)
 
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 {
-    if (round_send_window((ssize_t)cc_get_cwnd(&conn->egress.cc.ccv) - (ssize_t)conn->egress.sentmap.bytes_in_flight) > 0) {
+    if (quicly_cc_can_send(&conn->egress.cc, conn->egress.sentmap.bytes_in_flight)) {
         if (conn->crypto.pending_flows != 0 || quicly_linklist_is_linked(&conn->pending_link.control) ||
             quicly_linklist_is_linked(&conn->pending_link.stream_fin_only) ||
             quicly_linklist_is_linked(&conn->pending_link.stream_with_payload))
@@ -2040,7 +2028,7 @@ static int commit_send_packet(quicly_conn_t *conn, struct st_quicly_send_context
     /* the last packet of first-flight datagrams is padded to become 1280 bytes */
     if (!coalesced && (s->target.packet->data.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL &&
         conn->super.state == QUICLY_STATE_FIRSTFLIGHT) {
-        const size_t max_size = 1264; /* max UDP packet size excluding aead tag */
+        const size_t max_size = QUICLY_MAX_PACKET_SIZE - QUICLY_AEAD_TAG_SIZE;
         assert(quicly_is_client(conn));
         assert(s->dst - s->target.packet->data.base <= max_size);
         memset(s->dst, QUICLY_FRAME_TYPE_PADDING, s->target.packet->data.base + max_size - s->dst);
@@ -2085,7 +2073,7 @@ static int commit_send_packet(quicly_conn_t *conn, struct st_quicly_send_context
                          INT_EVENT_ATTR(LENGTH, s->target.packet->data.len), INT_EVENT_ATTR(ACK_ONLY, !s->target.ack_eliciting));
     LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_QUICTRACE_SEND, INT_EVENT_ATTR(PACKET_NUMBER, conn->egress.packet_number),
                          INT_EVENT_ATTR(LENGTH, s->target.packet->data.len),
-                         INT_EVENT_ATTR(PACKET_TYPE, get_epoch(s->target.packet->data.base[0])));
+                         INT_EVENT_ATTR(PACKET_TYPE, get_epoch(*s->target.first_byte_at)));
 
     ++conn->egress.packet_number;
     ++conn->super.num_packets.sent;
@@ -2579,6 +2567,7 @@ static int do_detect_loss(quicly_loss_t *ld, uint64_t largest_pn, uint32_t delay
             if (sent->packet_number != largest_newly_lost_pn) {
                 ++conn->super.num_packets.lost;
                 largest_newly_lost_pn = sent->packet_number;
+                quicly_cc_on_lost(&conn->egress.cc, sent->bytes_in_flight, sent->packet_number, conn->egress.packet_number);
                 LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_QUICTRACE_LOST, INT_EVENT_ATTR(PACKET_NUMBER, largest_newly_lost_pn));
                 LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_PACKET_LOST, INT_EVENT_ATTR(PACKET_NUMBER, largest_newly_lost_pn));
             }
@@ -2591,14 +2580,13 @@ static int do_detect_loss(quicly_loss_t *ld, uint64_t largest_pn, uint32_t delay
     }
     if (largest_newly_lost_pn != UINT64_MAX) {
         conn->egress.max_lost_pn = largest_newly_lost_pn + 1;
-        conn->egress.cc.end_of_recovery = conn->egress.packet_number - 1;
-        if (is_loss && conn->egress.loss.rto_count == 0) {
-            cc_cong_signal(&conn->egress.cc.ccv, CC_ECN, (uint32_t)conn->egress.sentmap.bytes_in_flight);
-            LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CC_CONGESTION, INT_EVENT_ATTR(MAX_LOST_PN, conn->egress.max_lost_pn),
-                                 INT_EVENT_ATTR(END_OF_RECOVERY, conn->egress.cc.end_of_recovery),
-                                 INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
-                                 INT_EVENT_ATTR(CWND, cc_get_cwnd(&conn->egress.cc.ccv)));
-        }
+        LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_QUICTRACE_CC_LOST, INT_EVENT_ATTR(MIN_RTT, conn->egress.loss.rtt.minimum),
+                             INT_EVENT_ATTR(SMOOTHED_RTT, conn->egress.loss.rtt.smoothed),
+                             INT_EVENT_ATTR(LATEST_RTT, conn->egress.loss.rtt.latest), INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd),
+                             INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight));
+        LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CC_CONGESTION, INT_EVENT_ATTR(MAX_LOST_PN, conn->egress.max_lost_pn),
+                             INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
+                             INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd));
     }
 
     /* schedule early retransmit alarm if there is a packet outstanding that is smaller than largest_pn */
@@ -2879,16 +2867,26 @@ static int send_connection_close(quicly_conn_t *conn, struct st_quicly_send_cont
     return 0;
 }
 
-static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *_tls, int is_enc, size_t epoch, const void *secret)
+static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, int is_enc, size_t epoch, const void *secret)
 {
-    quicly_conn_t *conn = *ptls_get_data_ptr(_tls);
-    ptls_cipher_suite_t *cipher = ptls_get_cipher(conn->crypto.tls);
+    quicly_conn_t *conn = *ptls_get_data_ptr(tls);
+    ptls_context_t *tlsctx = ptls_get_context(tls);
+    ptls_cipher_suite_t *cipher = ptls_get_cipher(tls);
     ptls_cipher_context_t **hp_slot;
     ptls_aead_context_t **aead_slot;
     int ret;
+    static const char *log_labels[2][4] = {
+        {NULL, "QUIC_CLIENT_EARLY_TRAFFIC_SECRET", "QUIC_CLIENT_HANDSHAKE_TRAFFIC_SECRET", "QUIC_CLIENT_TRAFFIC_SECRET_0"},
+        {NULL, NULL, "QUIC_SERVER_HANDSHAKE_TRAFFIC_SECRET", "QUIC_SERVER_TRAFFIC_SECRET_0"}};
 
     LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CRYPTO_UPDATE_SECRET, INT_EVENT_ATTR(IS_ENC, is_enc),
                          INT_EVENT_ATTR(EPOCH, epoch));
+
+    if (tlsctx->log_event != NULL) {
+        char hexbuf[PTLS_MAX_DIGEST_SIZE * 2 + 1];
+        ptls_hexdump(hexbuf, secret, cipher->hash->digest_size);
+        tlsctx->log_event->cb(tlsctx->log_event, tls, log_labels[ptls_is_server(tls) == is_enc][epoch], "%s", hexbuf);
+    }
 
 #define SELECT_CIPHER_CONTEXT(p)                                                                                                   \
     do {                                                                                                                           \
@@ -2918,7 +2916,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *_tls, 
             discard_sentmap_by_epoch(
                 conn, 1u << QUICLY_EPOCH_1RTT); /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
         }
-        if (conn->handshake == NULL && (ret = setup_handshake_space_and_flow(conn, 2)) != 0)
+        if (conn->handshake == NULL && (ret = setup_handshake_space_and_flow(conn, QUICLY_EPOCH_HANDSHAKE)) != 0)
             return ret;
         SELECT_CIPHER_CONTEXT(is_enc ? &conn->handshake->cipher.egress : &conn->handshake->cipher.ingress);
         break;
@@ -3004,7 +3002,7 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
         case 1: /* TLP (try to send new data when handshake is done, otherwise retire oldest handshake packets and retransmit) */
             LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CC_TLP,
                                  INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
-                                 INT_EVENT_ATTR(CWND, cc_get_cwnd(&conn->egress.cc.ccv)));
+                                 INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd));
             if (!ptls_handshake_is_complete(conn->crypto.tls)) {
                 if ((ret = mark_packets_as_lost(conn, s.min_packets_to_send)) != 0)
                     goto Exit;
@@ -3012,14 +3010,9 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
             break;
         case 2: /* RTO */ {
             uint32_t cc_type = 0;
-            if (!conn->egress.cc.in_first_rto) {
-                cc_type = CC_FIRST_RTO;
-                cc_cong_signal(&conn->egress.cc.ccv, cc_type, (uint32_t)conn->egress.sentmap.bytes_in_flight);
-                conn->egress.cc.in_first_rto = 1;
-            }
             LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CC_RTO, INT_EVENT_ATTR(CC_TYPE, cc_type),
                                  INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
-                                 INT_EVENT_ATTR(CWND, cc_get_cwnd(&conn->egress.cc.ccv)));
+                                 INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd));
             if ((ret = mark_packets_as_lost(conn, s.min_packets_to_send)) != 0)
                 goto Exit;
         } break;
@@ -3028,8 +3021,10 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
         }
     }
 
+    // TODO (jri): The following two blocks not need to be done. Extend the CC API to allow additional packets when TLP or RTO
+    // fires.
     { /* calculate send window */
-        uint32_t cwnd = cc_get_cwnd(&conn->egress.cc.ccv);
+        uint32_t cwnd = conn->egress.cc.cwnd;
         if (conn->egress.sentmap.bytes_in_flight < cwnd)
             s.send_window = cwnd - conn->egress.sentmap.bytes_in_flight;
     }
@@ -3142,8 +3137,7 @@ Exit:
     return ret;
 }
 
-quicly_datagram_t *quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen,
-                                               const quicly_cid_plaintext_t *cid)
+quicly_datagram_t *quicly_send_stateless_reset(quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen, const void *cid)
 {
     quicly_datagram_t *dgram;
 
@@ -3156,8 +3150,11 @@ quicly_datagram_t *quicly_send_stateless_reset(quicly_context_t *ctx, struct soc
     /* build stateless reset packet */
     ctx->tls->random_bytes(dgram->data.base, QUICLY_STATELESS_RESET_PACKET_MIN_LEN - QUICLY_STATELESS_RESET_TOKEN_LEN);
     dgram->data.base[0] = QUICLY_QUIC_BIT | (dgram->data.base[0] & ~QUICLY_LONG_HEADER_RESERVED_BITS);
-    ctx->cid_encryptor->encrypt_cid(
-        ctx->cid_encryptor, NULL, dgram->data.base + QUICLY_STATELESS_RESET_PACKET_MIN_LEN - QUICLY_STATELESS_RESET_TOKEN_LEN, cid);
+    if (!ctx->cid_encryptor->generate_stateless_reset_token(
+            ctx->cid_encryptor, dgram->data.base + QUICLY_STATELESS_RESET_PACKET_MIN_LEN - QUICLY_STATELESS_RESET_TOKEN_LEN, cid)) {
+        ctx->packet_allocator->free_packet(ctx->packet_allocator, dgram);
+        return NULL;
+    }
     dgram->data.len = QUICLY_STATELESS_RESET_PACKET_MIN_LEN;
 
     return dgram;
@@ -3320,7 +3317,7 @@ static int handle_ack_frame(quicly_conn_t *conn, size_t epoch, quicly_ack_frame_
     size_t segs_acked = 0, bytes_acked = 0;
     int ret;
 
-    if (epoch == 1)
+    if (epoch == QUICLY_EPOCH_0RTT)
         return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
 
     init_acks_iter(conn, &iter);
@@ -3378,31 +3375,24 @@ static int handle_ack_frame(quicly_conn_t *conn, size_t epoch, quicly_ack_frame_
         &conn->egress.loss, frame->largest_acknowledged, latest_rtt, ack_delay,
         0 /* this relies on the fact that we do not (yet) retransmit ACKs and therefore latest_rtt becoming UINT32_MAX */);
     /* OnPacketAckedCC */
-    uint32_t cc_type = 0;
     /* TODO (jri): this function should be called for every packet newly acked. (kazuho) I do not think so;
      * quicly_loss_on_packet_acked is NOT OnPacketAcked */
-    if (smallest_newly_acked != UINT64_MAX) {
-        if (quicly_loss_on_packet_acked(&conn->egress.loss, smallest_newly_acked)) {
-            cc_type = CC_RTO;
-            conn->egress.cc.in_first_rto = 0;
-        } else if (conn->egress.cc.in_first_rto) {
-            cc_type = CC_RTO_ERR;
-            conn->egress.cc.in_first_rto = 0;
-        }
+    if (smallest_newly_acked != UINT64_MAX)
+        quicly_loss_on_packet_acked(&conn->egress.loss, smallest_newly_acked);
+
+    if (bytes_acked > 0) {
+        quicly_cc_on_acked(&conn->egress.cc, (uint32_t)bytes_acked, frame->largest_acknowledged,
+                           conn->egress.sentmap.bytes_in_flight + bytes_acked);
+        LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_QUICTRACE_CC_ACK, INT_EVENT_ATTR(MIN_RTT, conn->egress.loss.rtt.minimum),
+                             INT_EVENT_ATTR(SMOOTHED_RTT, conn->egress.loss.rtt.smoothed),
+                             INT_EVENT_ATTR(LATEST_RTT, conn->egress.loss.rtt.latest), INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd),
+                             INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight));
     }
-    if (cc_type != 0)
-        cc_cong_signal(&conn->egress.cc.ccv, cc_type, (uint32_t)(conn->egress.sentmap.bytes_in_flight + bytes_acked));
-    int exit_recovery = frame->largest_acknowledged >= conn->egress.cc.end_of_recovery;
-    cc_ack_received(&conn->egress.cc.ccv, CC_ACK, (uint32_t)(conn->egress.sentmap.bytes_in_flight + bytes_acked),
-                    (uint16_t)segs_acked, (uint32_t)bytes_acked,
-                    conn->egress.loss.rtt.smoothed / 10 /* TODO better way of converting to cc_ticks */, exit_recovery);
+
     LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CC_ACK_RECEIVED, INT_EVENT_ATTR(PACKET_NUMBER, frame->largest_acknowledged),
                          INT_EVENT_ATTR(ACKED_PACKETS, segs_acked), INT_EVENT_ATTR(ACKED_BYTES, bytes_acked),
-                         INT_EVENT_ATTR(CC_TYPE, cc_type), INT_EVENT_ATTR(CC_EXIT_RECOVERY, exit_recovery),
-                         INT_EVENT_ATTR(CWND, cc_get_cwnd(&conn->egress.cc.ccv)),
+                         INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd),
                          INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight));
-    if (exit_recovery)
-        conn->egress.cc.end_of_recovery = UINT64_MAX;
 
     /* loss-detection  */
     quicly_loss_detect_loss(&conn->egress.loss, frame->largest_acknowledged, do_detect_loss);
@@ -3737,7 +3727,7 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *src,
         } break;
         default:
             /* 0-rtt, 1-rtt only frames */
-            if (!(epoch == 1 || epoch == 3)) {
+            if (!(epoch == QUICLY_EPOCH_0RTT || epoch == QUICLY_EPOCH_1RTT)) {
                 ret = QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
                 goto Exit;
             }
@@ -3898,7 +3888,7 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
     set_cid(&(*conn)->super.host.offered_cid, packet->cid.dest.encrypted);
     if (retry_odcid.len != 0)
         set_cid(&(*conn)->retry_odcid, retry_odcid);
-    if ((ret = setup_handshake_space_and_flow(*conn, 0)) != 0)
+    if ((ret = setup_handshake_space_and_flow(*conn, QUICLY_EPOCH_INITIAL)) != 0)
         goto Exit;
     (*conn)->initial->super.next_expected_packet_number = next_expected_pn;
     (*conn)->initial->cipher.ingress = ingress_cipher;
@@ -4256,6 +4246,14 @@ static int expand_cid_encryption_key(ptls_cipher_algorithm_t *cipher, ptls_hash_
     return ptls_hkdf_expand_label(hash, cid_key, cipher->key_size, key, "cid", ptls_iovec_init(NULL, 0), "");
 }
 
+static void generate_stateless_reset_token(struct st_quicly_default_encrypt_cid_t *self, void *token, const void *cid)
+{
+    uint8_t md[PTLS_MAX_DIGEST_SIZE];
+    self->stateless_reset_token_ctx->update(self->stateless_reset_token_ctx, cid, self->cid_encrypt_ctx->algo->block_size);
+    self->stateless_reset_token_ctx->final(self->stateless_reset_token_ctx, md, PTLS_HASH_FINAL_MODE_RESET);
+    memcpy(token, md, QUICLY_STATELESS_RESET_TOKEN_LEN);
+}
+
 static void default_encrypt_cid(quicly_cid_encryptor_t *_self, quicly_cid_t *encrypted, void *stateless_reset_token,
                                 const quicly_cid_plaintext_t *plaintext)
 {
@@ -4279,18 +4277,12 @@ static void default_encrypt_cid(quicly_cid_encryptor_t *_self, quicly_cid_t *enc
     assert(p - buf == self->cid_encrypt_ctx->algo->block_size);
 
     /* generate CID */
-    if (encrypted != NULL) {
-        ptls_cipher_encrypt(self->cid_encrypt_ctx, encrypted->cid, buf, self->cid_encrypt_ctx->algo->block_size);
-        encrypted->len = self->cid_encrypt_ctx->algo->block_size;
-    }
+    ptls_cipher_encrypt(self->cid_encrypt_ctx, encrypted->cid, buf, self->cid_encrypt_ctx->algo->block_size);
+    encrypted->len = self->cid_encrypt_ctx->algo->block_size;
 
     /* generate stateless reset token if requested */
-    if (stateless_reset_token != NULL) {
-        uint8_t md[PTLS_MAX_DIGEST_SIZE];
-        self->stateless_reset_token_ctx->update(self->stateless_reset_token_ctx, buf, p - 1 - buf); /* exclude path_id */
-        self->stateless_reset_token_ctx->final(self->stateless_reset_token_ctx, md, PTLS_HASH_FINAL_MODE_RESET);
-        memcpy(stateless_reset_token, md, QUICLY_STATELESS_RESET_TOKEN_LEN);
-    }
+    if (stateless_reset_token != NULL)
+        generate_stateless_reset_token(self, stateless_reset_token, encrypted->cid);
 }
 
 static size_t default_decrypt_cid(quicly_cid_encryptor_t *_self, quicly_cid_plaintext_t *plaintext, const void *encrypted,
@@ -4331,6 +4323,13 @@ static size_t default_decrypt_cid(quicly_cid_encryptor_t *_self, quicly_cid_plai
     return cid_len;
 }
 
+static int default_generate_stateless_reset_token(quicly_cid_encryptor_t *_self, void *token, const void *cid)
+{
+    struct st_quicly_default_encrypt_cid_t *self = (void *)_self;
+    generate_stateless_reset_token(self, token, cid);
+    return 1;
+}
+
 quicly_cid_encryptor_t *quicly_new_default_cid_encryptor(ptls_cipher_algorithm_t *cipher, ptls_hash_algorithm_t *hash,
                                                          ptls_iovec_t key)
 {
@@ -4357,8 +4356,11 @@ quicly_cid_encryptor_t *quicly_new_default_cid_encryptor(ptls_cipher_algorithm_t
     if ((self = malloc(sizeof(*self))) == NULL)
         goto Exit;
 
-    *self = (struct st_quicly_default_encrypt_cid_t){
-        {default_encrypt_cid, default_decrypt_cid}, cid_encrypt_ctx, cid_decrypt_ctx, stateless_reset_token_ctx};
+    *self =
+        (struct st_quicly_default_encrypt_cid_t){{default_encrypt_cid, default_decrypt_cid, default_generate_stateless_reset_token},
+                                                 cid_encrypt_ctx,
+                                                 cid_decrypt_ctx,
+                                                 stateless_reset_token_ctx};
     cid_encrypt_ctx = NULL;
     cid_decrypt_ctx = NULL;
     stateless_reset_token_ctx = NULL;
@@ -4596,7 +4598,9 @@ const char *quicly_event_type_names[] = {"connect",
                                          "quictrace-lost",
                                          "quictrace-send-stream",
                                          "quictrace-recv-stream",
-                                         "quictrace-recv-ack"};
+                                         "quictrace-recv-ack",
+                                         "quictrace-cc-ack",
+                                         "quictrace-cc-lost"};
 
 const char *quicly_event_attribute_names[] = {NULL,
                                               "time",
@@ -4618,7 +4622,7 @@ const char *quicly_event_attribute_names[] = {NULL,
                                               "ack-only",
                                               "max-lost-pn",
                                               "end-of-recovery",
-                                              "bytes-in-flight",
+                                              "inflight",
                                               "cwnd",
                                               "newly-acked",
                                               "first-octet",
@@ -4627,6 +4631,9 @@ const char *quicly_event_attribute_names[] = {NULL,
                                               "cc-exit-recovery",
                                               "acked-packets",
                                               "acked-bytes",
+                                              "min-rtt",
+                                              "smoothed-rtt",
+                                              "latest-rtt",
                                               "state",
                                               "error-code",
                                               "frame-type",

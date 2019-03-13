@@ -11,8 +11,11 @@ def transform(inf, outf):
     qtr = {}
     qtr["protocolVersion"] = "AAAA"
     qtr["events"] = []
+    packet = {}
     sframes = []
     rframes = []
+    state = {}
+
     for line in inf:
         trace = json.loads(line)
         if len(trace["type"]) < 11 or trace["type"][:9] != "quictrace": continue
@@ -26,6 +29,12 @@ def transform(inf, outf):
         event = trace["type"][10:]
 
         if event == "sent" or event == "recv" or event == "lost":
+            # if last loss was not posted, do it now (TSNH)
+            if packet and packet["eventType"] == "PACKET_LOST":
+               qtr["events"].append(packet)
+               packet = {}
+               print "WARNING: Packet lost but no transport state posted"
+
             # close out previous received packet if it's still open
             if rframes:
                 packet = {}
@@ -33,17 +42,39 @@ def transform(inf, outf):
                 packet["timeUs"] = str((rtime - start) * 1000)
                 packet["packetNumber"] = str(rpn)
                 packet["frames"] = rframes
+                packet["transportState"] = state
                 qtr["events"].append(packet)
-                rframes = []  # empty received frames list
+                # reset state
+                packet = {}
+                rframes = []
+                state = {}
 
         # packet lost
         if event == "lost":
+            # if last loss was not posted, do it now
+            if packet and packet["eventType"] == "PACKET_LOST":
+                qtr["events"].append(packet)
+            # record new loss
             packet = {}
             packet["eventType"] = "PACKET_LOST"
             if start == -1: start = trace["time"]
             packet["timeUs"] = str((trace["time"] - start) * 1000)
             packet["packetNumber"] = str(trace["pn"])
+            # don't post yet, wait to read transport state
+
+        # transport state after loss
+        if event == "cc-lost" and "eventType" in packet and packet["eventType"] == "PACKET_LOST":
+            state = {}
+            state["minRttUs"] = str(trace["min-rtt"] * 1000)
+            state["smoothedRttUs"] = str(trace["smoothed-rtt"] * 1000)
+            state["lastRttUs"] = str(trace["latest-rtt"] * 1000)
+            state["inFlightBytes"] = str(trace["inflight"])
+            state["cwndBytes"] = str(trace["cwnd"])
+            # post last lost packet with state
+            packet["transportState"] = state
             qtr["events"].append(packet)
+            # reset state
+            packet = {}
 
         # packet send event
         if event == "sent":
@@ -56,6 +87,8 @@ def transform(inf, outf):
             packet["encryptionLevel"] = epoch[trace["packet-type"]]
             packet["frames"] = sframes
             qtr["events"].append(packet)
+            # reset state
+            packet = {}
             sframes = []  # empty sent frames list
 
         # STREAM frame sent
@@ -83,6 +116,7 @@ def transform(inf, outf):
             rpn = trace["pn"]
             rframes = []
             acked = []
+            state = {}
 
         # process ACK frame info
         if event == "recv-ack":
@@ -92,7 +126,7 @@ def transform(inf, outf):
                          "lastPacket": str(trace["ack-block-end"])}
                 acked.append(block)
                 continue
-            # close out ACK frame processing
+            # "ack-delay" line closes out ACK frame processing
             ack_info = {}
             ack_info["ackDelayUs"]  = str(trace["ack-delay"])
             ack_info["ackedPackets"] = acked
@@ -101,13 +135,23 @@ def transform(inf, outf):
             frame["ackInfo"] = ack_info
             rframes.append(frame)
 
+        if event == "cc-ack":
+            state = {}
+            state["minRttUs"] = str(trace["min-rtt"] * 1000)
+            state["smoothedRttUs"] = str(trace["smoothed-rtt"] * 1000)
+            state["lastRttUs"] = str(trace["latest-rtt"] * 1000)
+            state["inFlightBytes"] = str(trace["inflight"])
+            state["cwndBytes"] = str(trace["cwnd"])
+            # state["pacingRateBps"] = str(trace[""])
+
     # close out last received packet if it's still open
     if rframes:
-        packet = {}
+        # packet = {}
         packet["eventType"] = "PACKET_RECEIVED"
         packet["timeUs"] = str((rtime - start) * 1000)
         packet["packetNumber"] = str(rpn)
         packet["frames"] = rframes
+        packet["transportState"] = state
         qtr["events"].append(packet)
 
     # finished processing

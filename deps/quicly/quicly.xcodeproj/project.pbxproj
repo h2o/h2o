@@ -25,6 +25,9 @@
 		E93E54BB1F69B750001C50FE /* loss.h in Headers */ = {isa = PBXBuildFile; fileRef = E93E54BA1F69B750001C50FE /* loss.h */; };
 		E93E54BD1F6CA76C001C50FE /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54BC1F6CA76C001C50FE /* loss.c */; };
 		E93E54BE1F6CA76C001C50FE /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54BC1F6CA76C001C50FE /* loss.c */; };
+		E98041C422383C5C008B9745 /* cc.h in Headers */ = {isa = PBXBuildFile; fileRef = E98041C322383C5C008B9745 /* cc.h */; };
+		E98041C622383C62008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
+		E98041C722383C7A008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
 		E984482C1EA48D1200390927 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E984482B1EA48D1200390927 /* picotls.h */; };
 		E984483A1EA48D7A00390927 /* libquicly.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E98448171EA48BD400390927 /* libquicly.a */; };
 		E984483B1EA48DD300390927 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448271EA48D0000390927 /* openssl.c */; };
@@ -47,15 +50,6 @@
 		E9D3CCCD21D22E7E00516202 /* streambuf.h in Headers */ = {isa = PBXBuildFile; fileRef = E9D3CCCC21D22E7E00516202 /* streambuf.h */; };
 		E9D3CCCF21D22F4300516202 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
 		E9D3CCD021D6D24000516202 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
-		E9D69D6E202680FE003A5F51 /* cc.h in Headers */ = {isa = PBXBuildFile; fileRef = E9D69D68202680FE003A5F51 /* cc.h */; };
-		E9D69D6F202680FE003A5F51 /* cc_cubic.h in Headers */ = {isa = PBXBuildFile; fileRef = E9D69D69202680FE003A5F51 /* cc_cubic.h */; };
-		E9D69D70202680FE003A5F51 /* cc.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D69D6A202680FE003A5F51 /* cc.c */; };
-		E9D69D71202680FE003A5F51 /* cc_int.h in Headers */ = {isa = PBXBuildFile; fileRef = E9D69D6B202680FE003A5F51 /* cc_int.h */; };
-		E9D69D72202680FE003A5F51 /* cc_cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D69D6C202680FE003A5F51 /* cc_cubic.c */; };
-		E9D69D73202680FE003A5F51 /* cc_newreno.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D69D6D202680FE003A5F51 /* cc_newreno.c */; };
-		E9D69D74202809BF003A5F51 /* cc.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D69D6A202680FE003A5F51 /* cc.c */; };
-		E9D69D75202809C3003A5F51 /* cc_cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D69D6C202680FE003A5F51 /* cc_cubic.c */; };
-		E9D69D76202809C6003A5F51 /* cc_newreno.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D69D6D202680FE003A5F51 /* cc_newreno.c */; };
 		E9F6A4201F3C0B6D0083F0B2 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */; };
 		E9F6A4211F3C0B6D0083F0B2 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */; };
 		E9F6A4271F3C3B050083F0B2 /* ranges.h in Headers */ = {isa = PBXBuildFile; fileRef = E9F6A4261F3C3B050083F0B2 /* ranges.h */; };
@@ -109,6 +103,8 @@
 		E93E54681F663849001C50FE /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E93E54BA1F69B750001C50FE /* loss.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = loss.h; sourceTree = "<group>"; };
 		E93E54BC1F6CA76C001C50FE /* loss.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
+		E98041C322383C5C008B9745 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
+		E98041C522383C62008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
 		E98448171EA48BD400390927 /* libquicly.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libquicly.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		E98448271EA48D0000390927 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
 		E98448281EA48D0000390927 /* picotls.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotls.c; sourceTree = "<group>"; };
@@ -133,12 +129,6 @@
 		E9CC44241EC1962700DC7D3E /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = test.c; sourceTree = "<group>"; };
 		E9D3CCCC21D22E7E00516202 /* streambuf.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = streambuf.h; sourceTree = "<group>"; };
 		E9D3CCCE21D22F4300516202 /* streambuf.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = streambuf.c; sourceTree = "<group>"; };
-		E9D69D68202680FE003A5F51 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
-		E9D69D69202680FE003A5F51 /* cc_cubic.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc_cubic.h; sourceTree = "<group>"; };
-		E9D69D6A202680FE003A5F51 /* cc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc.c; sourceTree = "<group>"; };
-		E9D69D6B202680FE003A5F51 /* cc_int.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc_int.h; sourceTree = "<group>"; };
-		E9D69D6C202680FE003A5F51 /* cc_cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc_cubic.c; sourceTree = "<group>"; };
-		E9D69D6D202680FE003A5F51 /* cc_newreno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc_newreno.c; sourceTree = "<group>"; };
 		E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ranges.c; sourceTree = "<group>"; };
 		E9F6A4261F3C3B050083F0B2 /* ranges.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ranges.h; sourceTree = "<group>"; };
 		E9F6A4281F3C3B3F0083F0B2 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
@@ -214,6 +204,7 @@
 		E984481F1EA48BF400390927 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				E98041C522383C62008B9745 /* cc-reno.c */,
 				E99F8C251F4E9EBF00C26B3D /* frame.c */,
 				E93E54BC1F6CA76C001C50FE /* loss.c */,
 				E98448411EA490A500390927 /* quicly.c */,
@@ -237,7 +228,6 @@
 		E98448211EA48C0300390927 /* deps */ = {
 			isa = PBXGroup;
 			children = (
-				E9D69D67202680B9003A5F51 /* dcc */,
 				E9CC44141EC195B800DC7D3E /* picotest */,
 				E9CC440F1EB85DFC00DC7D3E /* klib */,
 				E98448221EA48C0900390927 /* picotls */,
@@ -316,22 +306,10 @@
 			path = picotest;
 			sourceTree = "<group>";
 		};
-		E9D69D67202680B9003A5F51 /* dcc */ = {
-			isa = PBXGroup;
-			children = (
-				E9D69D68202680FE003A5F51 /* cc.h */,
-				E9D69D6A202680FE003A5F51 /* cc.c */,
-				E9D69D6B202680FE003A5F51 /* cc_int.h */,
-				E9D69D69202680FE003A5F51 /* cc_cubic.h */,
-				E9D69D6C202680FE003A5F51 /* cc_cubic.c */,
-				E9D69D6D202680FE003A5F51 /* cc_newreno.c */,
-			);
-			path = dcc;
-			sourceTree = "<group>";
-		};
 		E9F6A4251F3C3AF90083F0B2 /* quicly */ = {
 			isa = PBXGroup;
 			children = (
+				E98041C322383C5C008B9745 /* cc.h */,
 				E920D2201F44047C00799777 /* constants.h */,
 				E99F8C231F4E863200C26B3D /* frame.h */,
 				E9056C071F56965300E2B96C /* linklist.h */,
@@ -353,8 +331,7 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E9D69D6E202680FE003A5F51 /* cc.h in Headers */,
-				E9D69D6F202680FE003A5F51 /* cc_cubic.h in Headers */,
+				E98041C422383C5C008B9745 /* cc.h in Headers */,
 				E9CC44111EB85E0B00DC7D3E /* khash.h in Headers */,
 				E920D2231F4536CB00799777 /* maxsender.h in Headers */,
 				E920D2291F4951BA00799777 /* sentmap.h in Headers */,
@@ -367,7 +344,6 @@
 				E99F8C241F4E863200C26B3D /* frame.h in Headers */,
 				E92D43ED1F41DCF5002AC767 /* sendstate.h in Headers */,
 				E920D21C1F43DE4100799777 /* recvstate.h in Headers */,
-				E9D69D71202680FE003A5F51 /* cc_int.h in Headers */,
 				E920D2211F44047C00799777 /* constants.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -487,16 +463,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				E9F6A4201F3C0B6D0083F0B2 /* ranges.c in Sources */,
+				E98041C622383C62008B9745 /* cc-reno.c in Sources */,
 				E920D21E1F43E05000799777 /* recvstate.c in Sources */,
-				E9D69D70202680FE003A5F51 /* cc.c in Sources */,
 				E9F6A42E1F41375B0083F0B2 /* sendstate.c in Sources */,
-				E9D69D73202680FE003A5F51 /* cc_newreno.c in Sources */,
 				E93E54BD1F6CA76C001C50FE /* loss.c in Sources */,
 				E99F8C261F4E9EBF00C26B3D /* frame.c in Sources */,
 				E984483E1EA48E7200390927 /* cli.c in Sources */,
 				E98448421EA490A500390927 /* quicly.c in Sources */,
 				E920D22B1F49533800799777 /* sentmap.c in Sources */,
-				E9D69D72202680FE003A5F51 /* cc_cubic.c in Sources */,
 				E9D3CCCF21D22F4300516202 /* streambuf.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -524,8 +498,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				E99F8C291F4EAEF800C26B3D /* frame.c in Sources */,
+				E98041C722383C7A008B9745 /* cc-reno.c in Sources */,
 				E920D22C1F49533800799777 /* sentmap.c in Sources */,
-				E9D69D76202809C6003A5F51 /* cc_newreno.c in Sources */,
 				E920D2301F49EE0B00799777 /* loss.c in Sources */,
 				E93E54BE1F6CA76C001C50FE /* loss.c in Sources */,
 				E99B75E71F5CF96900CF503E /* maxsender.c in Sources */,
@@ -537,12 +511,10 @@
 				E93E546B1F663852001C50FE /* pembase64.c in Sources */,
 				E9D3CCD021D6D24000516202 /* streambuf.c in Sources */,
 				E9CC441B1EC195DF00DC7D3E /* openssl.c in Sources */,
-				E9D69D74202809BF003A5F51 /* cc.c in Sources */,
 				E9F6A42A1F3C3B7B0083F0B2 /* ranges.c in Sources */,
 				E99B75E91F5D259400CF503E /* stream-concurrency.c in Sources */,
 				E920D22E1F4981E500799777 /* sentmap.c in Sources */,
 				E9CC44261EC1963100DC7D3E /* picotest.c in Sources */,
-				E9D69D75202809C3003A5F51 /* cc_cubic.c in Sources */,
 				E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */,
 				E99F8C271F4E9F5D00C26B3D /* frame.c in Sources */,
 			);
