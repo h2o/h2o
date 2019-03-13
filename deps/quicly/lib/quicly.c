@@ -2341,7 +2341,7 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     quicly_sent_t *sent;
     uint8_t *frame_type_at;
     size_t capacity, len;
-    int ret, wrote_all;
+    int ret, wrote_all, is_fin;
 
     /* write frame type, stream_id and offset, calculate capacity */
     if (stream->stream_id < 0) {
@@ -2376,6 +2376,7 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
             s->dst += hp - header;
             end_off = off + 1;
             wrote_all = 1;
+            is_fin = 1;
             goto UpdateState;
         }
         if ((ret = allocate_ack_eliciting_frame(stream->conn, s, hp - header + 1, &sent, on_ack_stream)) != 0)
@@ -2435,17 +2436,13 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     }
 
     /* determine if the frame incorporates FIN */
-    int is_fin = 0;
     if (!stream->sendstate.is_open && end_off + 1 == stream->sendstate.size_committed) {
         assert(end_off + 1 == stream->sendstate.pending.ranges[stream->sendstate.pending.num_ranges - 1].end);
         assert(frame_type_at != NULL);
         is_fin = 1;
+    } else {
+        is_fin = 0;
     }
-
-    LOG_STREAM_EVENT(stream->conn, stream->stream_id, QUICLY_EVENT_TYPE_STREAM_SEND, INT_EVENT_ATTR(OFFSET, off),
-                     INT_EVENT_ATTR(LENGTH, end_off - off), INT_EVENT_ATTR(FIN, is_fin));
-    LOG_STREAM_EVENT(stream->conn, stream->stream_id, QUICLY_EVENT_TYPE_QUICTRACE_SEND_STREAM, INT_EVENT_ATTR(OFFSET, off),
-                     INT_EVENT_ATTR(LENGTH, end_off - off), INT_EVENT_ATTR(FIN, is_fin));
 
     /* set FIN bit if necessary (also adjusts end_off to include EOS byte) */
     if (is_fin) {
@@ -2454,6 +2451,10 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     }
 
 UpdateState:
+    LOG_STREAM_EVENT(stream->conn, stream->stream_id, QUICLY_EVENT_TYPE_STREAM_SEND, INT_EVENT_ATTR(OFFSET, off),
+                     INT_EVENT_ATTR(LENGTH, end_off - is_fin - off), INT_EVENT_ATTR(FIN, is_fin));
+    LOG_STREAM_EVENT(stream->conn, stream->stream_id, QUICLY_EVENT_TYPE_QUICTRACE_SEND_STREAM, INT_EVENT_ATTR(OFFSET, off),
+                     INT_EVENT_ATTR(LENGTH, end_off - is_fin - off), INT_EVENT_ATTR(FIN, is_fin));
     /* update sendstate */
     if (stream->sendstate.size_committed < end_off)
         stream->sendstate.size_committed = end_off;

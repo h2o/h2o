@@ -95,7 +95,7 @@ int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *a
     /* calculate number of bytes that can be retired from the send buffer */
     if (prev_sent_upto != state->acked.ranges[0].end) {
         uint64_t sent_upto = state->acked.ranges[0].end;
-        if (!state->is_open && state->pending.num_ranges == 0)
+        if (!state->is_open && sent_upto == state->size_committed)
             sent_upto -= 1;
         *bytes_to_shift = sent_upto - prev_sent_upto;
     } else {
