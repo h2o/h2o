@@ -36,6 +36,7 @@ EOT
     };
     subtest "large file" => sub {
         my $resp = `$client_prog -3 https://127.0.0.1:$quic_port/halfdome.jpg 2> /dev/null`;
+        is length($resp), (stat "t/assets/doc_root/halfdome.jpg")[7];
         is md5_hex($resp), md5_file("t/assets/doc_root/halfdome.jpg");
     };
 };
