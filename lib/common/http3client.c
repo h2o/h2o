@@ -244,9 +244,9 @@ static void destroy_request(struct st_h2o_http3client_req_t *req)
 static void close_stream(struct st_h2o_http3client_req_t *req, int err)
 {
     /* TODO are we expected to send two error codes? */
-    if (quicly_sendstate_transfer_complete(&req->quic->sendstate))
+    if (!quicly_sendstate_transfer_complete(&req->quic->sendstate))
         quicly_reset_stream(req->quic, err);
-    if (quicly_recvstate_transfer_complete(&req->quic->recvstate))
+    if (!quicly_recvstate_transfer_complete(&req->quic->recvstate))
         quicly_request_stop(req->quic, err);
     req->quic->data = NULL;
     req->quic = NULL;
