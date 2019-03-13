@@ -293,7 +293,7 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
     int ret;
 
     if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
-        if (ret != H2O_HTTP3_ERROR_INCOMPLETE)
+        if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
             return 0;
         req->super._cb.on_body(&req->super, "malformed frame");
         return ret;
