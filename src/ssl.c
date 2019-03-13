@@ -1163,25 +1163,41 @@ static void encrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_t *encrypted, v
     encrypted->len = tmp_cid.len + 1;
 }
 
+static struct st_quic_cid_key_t *find_cid_key(uint8_t key_id)
+{
+    size_t i;
+    for (i = 0; i != quic_cid_keys.keys.size; ++i) {
+        struct st_quic_cid_key_t *key = quic_cid_keys.keys.entries + i;
+        if (key->name == key_id)
+            return key;
+    }
+    return NULL;
+}
+
 static size_t decrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_plaintext_t *plaintext, const void *_encrypted, size_t len)
 {
     const uint8_t *encrypted = _encrypted;
     struct st_quic_cid_key_t *key;
-    size_t i, ret;
 
     update_cid_keys();
 
-    for (i = 0; i != quic_cid_keys.keys.size; ++i) {
-        key = quic_cid_keys.keys.entries + i;
-        if (key->name == encrypted[0])
-            goto FoundKey;
-    }
-    return SIZE_MAX;
-
-FoundKey:
-    if ((ret = key->encryptor->decrypt_cid(key->encryptor, plaintext, encrypted + 1, len - 1)) == SIZE_MAX)
-        return ret;
-    return 1 + ret;
+    if ((key = find_cid_key(encrypted[0])) == NULL)
+        return SIZE_MAX;
+    if ((len = key->encryptor->decrypt_cid(key->encryptor, plaintext, encrypted + 1, len != 0 ? len - 1 : 0)) == SIZE_MAX)
+        return SIZE_MAX;
+    return 1 + len;
 }
 
-quicly_cid_encryptor_t quic_cid_encryptor = {encrypt_cid, decrypt_cid};
+static int generate_stateless_reset_token(quicly_cid_encryptor_t *self, void *token, const void *_encrypted)
+{
+    const uint8_t *encrypted = _encrypted;
+    struct st_quic_cid_key_t *key;
+
+    update_cid_keys();
+
+    if ((key = find_cid_key(encrypted[0])) == NULL)
+        return 0;
+    return key->encryptor->generate_stateless_reset_token(key->encryptor, token, encrypted + 1);
+}
+
+quicly_cid_encryptor_t quic_cid_encryptor = {encrypt_cid, decrypt_cid, generate_stateless_reset_token};

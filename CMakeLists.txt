@@ -133,7 +133,6 @@ INCLUDE_DIRECTORIES(
     include
     deps/cloexec
     deps/brotli/c/include
-    deps/dcc
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -249,9 +248,6 @@ SET(BROTLI_SOURCE_FILES
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
-    deps/dcc/cc.c
-    deps/dcc/cc_cubic.c
-    deps/dcc/cc_newreno.c
     deps/hiredis/async.c
     deps/hiredis/hiredis.c
     deps/hiredis/net.c
@@ -285,6 +281,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/lib/cifra.c
     deps/picotls/lib/uecc.c
     deps/picotls/lib/openssl.c
+    deps/quicly/lib/cc-reno.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c

@@ -64,6 +64,23 @@ struct st_h2o_http3_egress_unistream_t {
 
 const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-17")}};
 
+static int send_one(int fd, quicly_datagram_t *p)
+{
+    int ret;
+    struct msghdr mess;
+    struct iovec vec;
+    memset(&mess, 0, sizeof(mess));
+    mess.msg_name = &p->sa;
+    mess.msg_namelen = p->salen;
+    vec.iov_base = p->data.base;
+    vec.iov_len = p->data.len;
+    mess.msg_iov = &vec;
+    mess.msg_iovlen = 1;
+    while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
+        ;
+    return ret;
+}
+
 static void ingress_unistream_on_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
@@ -346,7 +363,13 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
                 conn = NULL;
         } else if (!packets[0].cid.dest.might_be_client_generated) {
             /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
-            quicly_send_stateless_reset(ctx->quic, sa, salen, &packets[0].cid.dest.plaintext);
+            if (packets[0].octets.len >= QUICLY_STATELESS_RESET_PACKET_MIN_LEN) {
+                quicly_datagram_t *dgram = quicly_send_stateless_reset(ctx->quic, sa, salen, packets[0].cid.dest.encrypted.base);
+                if (dgram != NULL) {
+                    send_one(h2o_socket_get_fd(ctx->sock), dgram);
+                    ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
+                }
+            }
             return;
         }
     } else if (!packets[0].cid.dest.might_be_client_generated) {
@@ -505,23 +528,6 @@ static void on_timeout(h2o_timer_t *timeout)
 {
     h2o_http3_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http3_conn_t, _timeout, timeout);
     h2o_http3_send(conn);
-}
-
-static int send_one(int fd, quicly_datagram_t *p)
-{
-    int ret;
-    struct msghdr mess;
-    struct iovec vec;
-    memset(&mess, 0, sizeof(mess));
-    mess.msg_name = &p->sa;
-    mess.msg_namelen = p->salen;
-    vec.iov_base = p->data.base;
-    vec.iov_len = p->data.len;
-    mess.msg_iov = &vec;
-    mess.msg_iovlen = 1;
-    while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
-        ;
-    return ret;
 }
 
 int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, const uint8_t **_src, const uint8_t *src_end, const char **err_desc)

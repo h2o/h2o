@@ -265,18 +265,6 @@
 		E901C40D213E1C5500D17C93 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3EF213E1C4000D17C93 /* loss.c */; };
 		E901C40F213E1C5500D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
 		E901C410213E1C5500D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
-		E901C41C213E3C2800D17C93 /* cc_cubic.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C416213E3C2700D17C93 /* cc_cubic.h */; };
-		E901C41D213E3C2800D17C93 /* cc_int.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C417213E3C2700D17C93 /* cc_int.h */; };
-		E901C41E213E3C2800D17C93 /* cc.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C418213E3C2700D17C93 /* cc.c */; };
-		E901C41F213E3C2800D17C93 /* cc_newreno.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C419213E3C2700D17C93 /* cc_newreno.c */; };
-		E901C420213E3C2800D17C93 /* cc.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C41A213E3C2700D17C93 /* cc.h */; };
-		E901C421213E3C2800D17C93 /* cc_cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C41B213E3C2800D17C93 /* cc_cubic.c */; };
-		E901C422213E3C3B00D17C93 /* cc_cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C41B213E3C2800D17C93 /* cc_cubic.c */; };
-		E901C423213E3C3B00D17C93 /* cc_newreno.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C419213E3C2700D17C93 /* cc_newreno.c */; };
-		E901C424213E3C3B00D17C93 /* cc.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C418213E3C2700D17C93 /* cc.c */; };
-		E901C425213E3C3D00D17C93 /* cc_cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C41B213E3C2800D17C93 /* cc_cubic.c */; };
-		E901C426213E3C3D00D17C93 /* cc_newreno.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C419213E3C2700D17C93 /* cc_newreno.c */; };
-		E901C427213E3C3D00D17C93 /* cc.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C418213E3C2700D17C93 /* cc.c */; };
 		E901C428213E529000D17C93 /* aes.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AEC1E49A2910029E0A5 /* aes.c */; };
 		E901C429213E529F00D17C93 /* blockwise.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AF11E49A2B90029E0A5 /* blockwise.c */; };
 		E901C42A213E52A200D17C93 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
@@ -407,6 +395,9 @@
 		E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22F71C040F6400405689 /* tunnel.c */; };
 		E9757709221BB7DC00D1EF74 /* http3_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = E9757708221BB78C00D1EF74 /* http3_internal.h */; };
 		E97EC88D213CE3130086AD64 /* hpack.h in Headers */ = {isa = PBXBuildFile; fileRef = E97EC88C213CE3130086AD64 /* hpack.h */; };
+		E98042162238D35B008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
+		E98042172238D362008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
+		E98042182238D363008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
 		E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5861FD7BE2200DE4346 /* utf8_util.c */; };
 		E987E5D01FD7BE8D00DE4346 /* static_dict.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58C1FD7BE2300DE4346 /* static_dict.c */; };
 		E987E5D11FD7BE9200DE4346 /* metablock.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5801FD7BE2100DE4346 /* metablock.c */; };
@@ -988,12 +979,6 @@
 		E901C3F0213E1C4000D17C93 /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E901C3F2213E1C4000D17C93 /* ranges.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ranges.c; sourceTree = "<group>"; };
 		E901C3F3213E1C4000D17C93 /* quicly.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = quicly.c; sourceTree = "<group>"; };
-		E901C416213E3C2700D17C93 /* cc_cubic.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc_cubic.h; sourceTree = "<group>"; };
-		E901C417213E3C2700D17C93 /* cc_int.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc_int.h; sourceTree = "<group>"; };
-		E901C418213E3C2700D17C93 /* cc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc.c; sourceTree = "<group>"; };
-		E901C419213E3C2700D17C93 /* cc_newreno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc_newreno.c; sourceTree = "<group>"; };
-		E901C41A213E3C2700D17C93 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
-		E901C41B213E3C2800D17C93 /* cc_cubic.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cc_cubic.c; sourceTree = "<group>"; };
 		E901C439213E59A000D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
 		E901C43C213FAE0300D17C93 /* qpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = qpack.h; sourceTree = "<group>"; };
 		E901C43F2140CCB500D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
@@ -1062,6 +1047,7 @@
 		E9757708221BB78C00D1EF74 /* http3_internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_internal.h; sourceTree = "<group>"; };
 		E97EC88C213CE3130086AD64 /* hpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hpack.h; sourceTree = "<group>"; };
 		E98041C22230C45E008B9745 /* 40http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40http3.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E98042152238D35B008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
 		E987E5551FD7BE1D00DE4346 /* bit_cost.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_cost.c; sourceTree = "<group>"; };
 		E987E5561FD7BE1D00DE4346 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		E987E5571FD7BE1D00DE4346 /* brotli_bit_stream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = brotli_bit_stream.h; sourceTree = "<group>"; };
@@ -1708,7 +1694,6 @@
 			children = (
 				107E33ED1C7EAECD00AEF5F8 /* brotli */,
 				10FCC13B1B2E4A2C00F13674 /* cloexec */,
-				E901C415213E3C0B00D17C93 /* dcc */,
 				10F4197E1B64E6C300BEAEAC /* golombset */,
 				08B4D4391D75A2950079DFB5 /* hiredis */,
 				10FEF24B1D6FC8C800E11B1D /* libgkc */,
@@ -2241,6 +2226,7 @@
 		E901C3D7213E1BED00D17C93 /* lib */ = {
 			isa = PBXGroup;
 			children = (
+				E98042152238D35B008B9745 /* cc-reno.c */,
 				E901C3F0213E1C4000D17C93 /* frame.c */,
 				E901C3EF213E1C4000D17C93 /* loss.c */,
 				E901C3F3213E1C4000D17C93 /* quicly.c */,
@@ -2268,19 +2254,6 @@
 				E98884C521E7F3AF0060F010 /* streambuf.h */,
 			);
 			path = quicly;
-			sourceTree = "<group>";
-		};
-		E901C415213E3C0B00D17C93 /* dcc */ = {
-			isa = PBXGroup;
-			children = (
-				E901C41B213E3C2800D17C93 /* cc_cubic.c */,
-				E901C416213E3C2700D17C93 /* cc_cubic.h */,
-				E901C417213E3C2700D17C93 /* cc_int.h */,
-				E901C419213E3C2700D17C93 /* cc_newreno.c */,
-				E901C418213E3C2700D17C93 /* cc.c */,
-				E901C41A213E3C2700D17C93 /* cc.h */,
-			);
-			path = dcc;
 			sourceTree = "<group>";
 		};
 		E901C438213E593D00D17C93 /* http3 */ = {
@@ -2572,7 +2545,6 @@
 				1022E7C61CA8BCEB00CE2A05 /* yrmcds_portability.h in Headers */,
 				10D0904319F0BA780043D458 /* linklist.h in Headers */,
 				10EC2A361A0B4D370083514F /* socketpool.h in Headers */,
-				E901C41D213E3C2800D17C93 /* cc_int.h in Headers */,
 				105534EB1A42A87E00627ECB /* _templates.c.h in Headers */,
 				7D67C724204F8CA50049E935 /* httpclient.h in Headers */,
 				1079236A19A3210E00C52AD6 /* khash.h in Headers */,
@@ -2597,7 +2569,6 @@
 				E901C3E8213E1C3600D17C93 /* loss.h in Headers */,
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
 				108867751AD9069900987967 /* defaults.c.h in Headers */,
-				E901C41C213E3C2800D17C93 /* cc_cubic.h in Headers */,
 				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
 				7D2DF4EE20297EEF004AD361 /* header.h in Headers */,
 				1047A9FF1D0E6D5900CC4BCE /* rand.h in Headers */,
@@ -2642,7 +2613,6 @@
 				10D0903E19F0A8190043D458 /* socket.h in Headers */,
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
-				E901C420213E3C2800D17C93 /* cc.h in Headers */,
 				E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */,
 				0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
@@ -2908,7 +2878,6 @@
 				D081373A1FD400F4004679DF /* least_conn.c in Sources */,
 				08790DDC1D80154C00A04BC1 /* sds.c in Sources */,
 				107E34101C7EB13F00AEF5F8 /* gzip.c in Sources */,
-				E901C421213E3C2800D17C93 /* cc_cubic.c in Sources */,
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
 				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
@@ -2965,6 +2934,7 @@
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				08790DDA1D80153600A04BC1 /* net.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
+				E98042162238D35B008B9745 /* cc-reno.c in Sources */,
 				10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */,
 				E901C3FB213E1C4000D17C93 /* ranges.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
@@ -2995,7 +2965,6 @@
 				10C45D4F1CFD15FA0096DB06 /* throttle_resp.c in Sources */,
 				E9E5049021501BBA004DC170 /* server.c in Sources */,
 				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
-				E901C41E213E3C2800D17C93 /* cc.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
@@ -3012,7 +2981,6 @@
 				10FCC13E1B2E4A4500F13674 /* cloexec.c in Sources */,
 				105534DF1A3C7B9800627ECB /* proxy.c in Sources */,
 				10A3D4091B50DAB700327CF9 /* connect.c in Sources */,
-				E901C41F213E3C2800D17C93 /* cc_newreno.c in Sources */,
 				105534DD1A3C7AA900627ECB /* file.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -3048,7 +3016,6 @@
 				E901C42D213E52AB00D17C93 /* drbg.c in Sources */,
 				E987E5FA1FD8C04D00DE4346 /* metablock.c in Sources */,
 				E987E5FB1FD8C04D00DE4346 /* static_dict.c in Sources */,
-				E901C426213E3C3D00D17C93 /* cc_newreno.c in Sources */,
 				1079244C19A3266700C52AD6 /* memory.c in Sources */,
 				10FCC1401B2E59E600F13674 /* cloexec.c in Sources */,
 				105534C71A3BB29100627ECB /* string.c in Sources */,
@@ -3059,6 +3026,7 @@
 				107D4D481B5880BC004A9B21 /* loader.c in Sources */,
 				E901C406213E1C5400D17C93 /* quicly.c in Sources */,
 				105534C11A3B911300627ECB /* hpack.c in Sources */,
+				E98042172238D362008B9745 /* cc-reno.c in Sources */,
 				E901C42A213E52A200D17C93 /* chacha20.c in Sources */,
 				E987E5EB1FD8C01E00DE4346 /* dictionary.c in Sources */,
 				E987E5F01FD8C04D00DE4346 /* brotli_bit_stream.c in Sources */,
@@ -3085,7 +3053,6 @@
 				E987E5F31FD8C04D00DE4346 /* compress_fragment.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				E901C42B213E52A500D17C93 /* chash.c in Sources */,
-				E901C427213E3C3D00D17C93 /* cc.c in Sources */,
 				E98884D321E7F3D80060F010 /* recvstate.c in Sources */,
 				E901C432213E52BB00D17C93 /* poly1305.c in Sources */,
 				1070866A1B70A00F002B8F18 /* casper.c in Sources */,
@@ -3118,7 +3085,6 @@
 				10F9F2651AF4795D0056F26B /* redirect.c in Sources */,
 				E987E5F21FD8C04D00DE4346 /* compress_fragment_two_pass.c in Sources */,
 				E901C436213E52CA00D17C93 /* openssl.c in Sources */,
-				E901C425213E3C3D00D17C93 /* cc_cubic.c in Sources */,
 				E9E5049221501BC3004DC170 /* server.c in Sources */,
 				E901C407213E1C5400D17C93 /* ranges.c in Sources */,
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
@@ -3189,7 +3155,6 @@
 				E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */,
 				7DE1DB38212B1CC00055F500 /* ssl.c in Sources */,
 				7D937303202AC7BA005FE6AB /* server_timing.c in Sources */,
-				E901C423213E3C3B00D17C93 /* cc_newreno.c in Sources */,
 				E9708B531E52C7EE0029E0A5 /* config.c in Sources */,
 				08F320E11E7A9CBF0038FA5A /* read.c in Sources */,
 				E9708B801E52C84A0029E0A5 /* throttle_resp.c in Sources */,
@@ -3206,9 +3171,7 @@
 				E9708B3D1E52C7860029E0A5 /* recv.c in Sources */,
 				E98884D721E7F3D90060F010 /* recvstate.c in Sources */,
 				0812174E1E07B89600712F36 /* redis.c in Sources */,
-				E901C422213E3C3B00D17C93 /* cc_cubic.c in Sources */,
 				E9708B691E52C80F0029E0A5 /* http2_debug_state.c in Sources */,
-				E901C424213E3C3B00D17C93 /* cc.c in Sources */,
 				E9708B3E1E52C7860029E0A5 /* send.c in Sources */,
 				E9708B461E52C7DF0029E0A5 /* filecache.c in Sources */,
 				E9708B5F1E52C80F0029E0A5 /* errordoc.c in Sources */,
@@ -3222,6 +3185,7 @@
 				E901C40D213E1C5500D17C93 /* loss.c in Sources */,
 				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
 				E9708B5C1E52C80F0029E0A5 /* access_log.c in Sources */,
+				E98042182238D363008B9745 /* cc-reno.c in Sources */,
 				100A55101C2BB15600C4E3E0 /* http_request.c in Sources */,
 				E987E5D61FD7BEB500DE4346 /* backward_references.c in Sources */,
 				E9708B1E1E49BAC10029E0A5 /* blockwise.c in Sources */,
