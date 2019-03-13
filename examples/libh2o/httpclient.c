@@ -392,7 +392,7 @@ int main(int argc, char **argv)
             ssl_verify_none = 1;
             break;
         case '2':
-            if (sscanf(optarg, "%" PRId8, &ctx.http2.ratio) != 1 || !(0 <= ctx.http2.ratio && ctx.http2.ratio <= 100)) {
+            if (sscanf(optarg, "%" SCNd8, &ctx.http2.ratio) != 1 || !(0 <= ctx.http2.ratio && ctx.http2.ratio <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
                 exit(EXIT_FAILURE);
             }
