@@ -51,6 +51,7 @@ struct st_h2o_sendfile_generator_t {
     unsigned send_vary : 1;
     unsigned send_etag : 1;
     unsigned gunzip : 1;
+    unsigned read_last_byte : 1;
     struct {
         char *multirange_buf; /* multi-range mode uses push */
         size_t filesize;
@@ -141,8 +142,10 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
     }
 
     /* close if sent all */
-    if (self->bytesleft == 0 && off + dst.len == src->len)
+    if (self->bytesleft == 0 && off + dst.len == src->len && !self->read_last_byte) {
+        self->read_last_byte = 1;
         do_close(&self->super, req);
+    }
     return 1;
 }
 
@@ -302,6 +305,7 @@ Opened:
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0;
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
+    self->read_last_byte = 0;
 
     return self;
 }
