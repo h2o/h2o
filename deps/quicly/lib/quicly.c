@@ -2362,8 +2362,7 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
         } else {
             header[0] = QUICLY_FRAME_TYPE_STREAM_BASE;
         }
-        if (!stream->sendstate.is_open &&
-            off + 1 == stream->sendstate.pending.ranges[stream->sendstate.pending.num_ranges - 1].end) {
+        if (!stream->sendstate.is_open && off + 1 == stream->sendstate.size_committed) {
             /* special case for emitting FIN only */
             header[0] |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
             if ((ret = allocate_ack_eliciting_frame(stream->conn, s, hp - header, &sent, on_ack_stream)) != 0)
@@ -2400,8 +2399,10 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     }
     { /* cap the capacity to the current range */
         uint64_t range_capacity = stream->sendstate.pending.ranges[0].end - off;
-        if (stream->sendstate.pending.num_ranges == 1)
-            range_capacity -= !stream->sendstate.is_open;
+        if (!stream->sendstate.is_open && off + range_capacity == stream->sendstate.size_committed) {
+            assert(range_capacity > 1); /* see the special case above */
+            range_capacity -= 1;
+        }
         if (capacity > range_capacity)
             capacity = range_capacity;
     }
