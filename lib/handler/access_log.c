@@ -89,7 +89,7 @@ int h2o_access_log_open_log(const char *path)
         int mapped_fds[] = {pipefds[0], 0, /* map pipefds[0] to stdin */
                             -1};
         if ((pid = h2o_spawnp(argv[0], argv, mapped_fds, 0)) == -1) {
-            fprintf(stderr, "failed to open logger: %s:%s\n", path + 1, strerror(errno));
+            H2O_ERROR_PRINTF("failed to open logger: %s:%s\n", path + 1, strerror(errno));
             return -1;
         }
         /* close the read side of the pipefds and return the write side */
@@ -103,25 +103,25 @@ int h2o_access_log_open_log(const char *path)
         if (ret == 0 && (st.st_mode & S_IFMT) == S_IFSOCK) {
             struct sockaddr_un sa;
             if (strlen(path) >= sizeof(sa.sun_path)) {
-                fprintf(stderr, "path:%s is too long as a unix socket name", path);
+                H2O_ERROR_PRINTF("path:%s is too long as a unix socket name", path);
                 return -1;
             }
             if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
-                fprintf(stderr, "failed to create socket for log file:%s:%s\n", path, strerror(errno));
+                H2O_ERROR_PRINTF("failed to create socket for log file:%s:%s\n", path, strerror(errno));
                 return -1;
             }
             memset(&sa, 0, sizeof(sa));
             sa.sun_family = AF_UNIX;
             strcpy(sa.sun_path, path);
             if (connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == -1) {
-                fprintf(stderr, "failed to connect socket for log file:%s:%s\n", path, strerror(errno));
+                H2O_ERROR_PRINTF("failed to connect socket for log file:%s:%s\n", path, strerror(errno));
                 close(fd);
                 return -1;
             }
 
         } else {
             if ((fd = open(path, O_CREAT | O_WRONLY | O_APPEND | O_CLOEXEC, 0644)) == -1) {
-                fprintf(stderr, "failed to open log file:%s:%s\n", path, strerror(errno));
+                H2O_ERROR_PRINTF("failed to open log file:%s:%s\n", path, strerror(errno));
                 return -1;
             }
         }
@@ -141,7 +141,7 @@ h2o_access_log_filehandle_t *h2o_access_log_open_handle(const char *path, const 
     if (fmt == NULL)
         fmt = "%h %l %u %t \"%r\" %s %b \"%{Referer}i\" \"%{User-agent}i\"";
     if ((logconf = h2o_logconf_compile(fmt, escape, errbuf)) == NULL) {
-        fprintf(stderr, "%s\n", errbuf);
+        H2O_ERROR_PRINTF("%s\n", errbuf);
         return NULL;
     }
 

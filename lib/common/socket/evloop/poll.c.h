@@ -23,7 +23,7 @@
 #include <poll.h>
 
 #if 0
-#define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_LOG(...) H2O_ERROR_PRINTF(__VA_ARGS__)
 #else
 #define DEBUG_LOG(...)
 #endif

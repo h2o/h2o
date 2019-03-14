@@ -64,19 +64,19 @@ int h2o_setuidgid(const char *user)
         return -1;
     }
     if (pw == NULL) {
-        fprintf(stderr, "unknown user:%s\n", user);
+        H2O_ERROR_PRINTF("unknown user:%s\n", user);
         return -1;
     }
     if (setgid(pw->pw_gid) != 0) {
-        fprintf(stderr, "setgid(%d) failed:%s\n", (int)pw->pw_gid, strerror(errno));
+        H2O_ERROR_PRINTF("setgid(%d) failed:%s\n", (int)pw->pw_gid, strerror(errno));
         return -1;
     }
     if (initgroups(pw->pw_name, pw->pw_gid) != 0) {
-        fprintf(stderr, "initgroups(%s, %d) failed:%s\n", pw->pw_name, (int)pw->pw_gid, strerror(errno));
+        H2O_ERROR_PRINTF("initgroups(%s, %d) failed:%s\n", pw->pw_name, (int)pw->pw_gid, strerror(errno));
         return -1;
     }
     if (setuid(pw->pw_uid) != 0) {
-        fprintf(stderr, "setuid(%d) failed:%s\n", (int)pw->pw_uid, strerror(errno));
+        H2O_ERROR_PRINTF("setuid(%d) failed:%s\n", (int)pw->pw_uid, strerror(errno));
         return -1;
     }
 
@@ -92,7 +92,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
     if ((ports_env = getenv(SERVER_STARTER_PORT)) == NULL)
         return 0;
     if (ports_env[0] == '\0') {
-        fprintf(stderr, "$" SERVER_STARTER_PORT " is empty\n");
+        H2O_ERROR_PRINTF("$" SERVER_STARTER_PORT " is empty\n");
         return SIZE_MAX;
     }
 
@@ -101,11 +101,11 @@ size_t h2o_server_starter_get_fds(int **_fds)
         if ((end = strchr(start, ';')) == NULL)
             end = start + strlen(start);
         if ((eq = memchr(start, '=', end - start)) == NULL) {
-            fprintf(stderr, "invalid $" SERVER_STARTER_PORT ", an element without `=` in: %s\n", ports_env);
+            H2O_ERROR_PRINTF("invalid $" SERVER_STARTER_PORT ", an element without `=` in: %s\n", ports_env);
             goto Error;
         }
         if ((t = h2o_strtosize(eq + 1, end - eq - 1)) == SIZE_MAX) {
-            fprintf(stderr, "invalid file descriptor number in $" SERVER_STARTER_PORT ": %s\n", ports_env);
+            H2O_ERROR_PRINTF("invalid file descriptor number in $" SERVER_STARTER_PORT ": %s\n", ports_env);
             goto Error;
         }
         h2o_vector_reserve(NULL, &fds, fds.size + 1);
@@ -309,7 +309,7 @@ size_t h2o_numproc(void)
     int ncpu;
     size_t ncpu_sz = sizeof(ncpu);
     if (sysctl(name, sizeof(name) / sizeof(name[0]), &ncpu, &ncpu_sz, NULL, 0) != 0 || sizeof(ncpu) != ncpu_sz) {
-        fprintf(stderr, "[ERROR] failed to obtain number of CPU cores, assuming as one\n");
+        H2O_ERROR_PRINTF("[ERROR] failed to obtain number of CPU cores, assuming as one\n");
         ncpu = 1;
     }
     return ncpu;

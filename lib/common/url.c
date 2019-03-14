@@ -165,7 +165,7 @@ Rewrite:
         goto RewriteError;
     return ret;
 RewriteError:
-    fprintf(stderr, "failed to normalize path: `%.*s` => `%.*s`\n", (int)len, path, (int)ret.len, ret.base);
+    H2O_ERROR_PRINTF("failed to normalize path: `%.*s` => `%.*s`\n", (int)len, path, (int)ret.len, ret.base);
     ret = h2o_iovec_init("/", 1);
     return ret;
 }

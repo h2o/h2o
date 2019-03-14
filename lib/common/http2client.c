@@ -745,7 +745,7 @@ ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *sr
         if (hret != 0)
             ret = hret;
     } else {
-        fprintf(stderr, "skipping frame (type:%d)\n", frame.type);
+        H2O_ERROR_PRINTF("skipping frame (type:%d)\n", frame.type);
     }
 
     return ret;

@@ -525,11 +525,11 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         if (rret <= 0) {
             static long counter = 0;
             if (__sync_fetch_and_add(&counter, 1) == 0)
-                fprintf(stderr, "[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
+                H2O_ERROR_PRINTF("[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
         } else {
             static long counter = 0;
             if (__sync_fetch_and_add(&counter, 1) == 0)
-                fprintf(stderr, "[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
+                H2O_ERROR_PRINTF("[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
         }
         destroy_detached(entry);
         pthread_mutex_lock(&pool->_shared.mutex);

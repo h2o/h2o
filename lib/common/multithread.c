@@ -83,7 +83,7 @@ pthread_mutex_t h2o_conn_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void on_read(h2o_socket_t *sock, const char *err)
 {
     if (err != NULL) {
-        fprintf(stderr, "pipe error\n");
+        H2O_ERROR_PRINTF("pipe error\n");
         abort();
     }
 

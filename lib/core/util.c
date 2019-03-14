@@ -168,17 +168,17 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *memc, un
 
 static void on_redis_connect(void)
 {
-    fprintf(stderr, "connected to redis at %s:%" PRIu16 "\n", async_resumption_context.redis.host.base,
+    H2O_ERROR_PRINTF("connected to redis at %s:%" PRIu16 "\n", async_resumption_context.redis.host.base,
             async_resumption_context.redis.port);
 }
 
 static void on_redis_close(const char *errstr)
 {
     if (errstr == NULL) {
-        fprintf(stderr, "disconnected from redis at %s:%" PRIu16 "\n", async_resumption_context.redis.host.base,
+        H2O_ERROR_PRINTF("disconnected from redis at %s:%" PRIu16 "\n", async_resumption_context.redis.host.base,
                 async_resumption_context.redis.port);
     } else {
-        fprintf(stderr, "redis connection failure: %s\n", errstr);
+        H2O_ERROR_PRINTF("redis connection failure: %s\n", errstr);
     }
 }
 

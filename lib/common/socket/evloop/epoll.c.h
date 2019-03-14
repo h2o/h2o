@@ -25,7 +25,7 @@
 #include <sys/epoll.h>
 
 #if 0
-#define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_LOG(...) H2O_ERROR_PRINTF(__VA_ARGS__)
 #else
 #define DEBUG_LOG(...)
 #endif
@@ -144,7 +144,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
             pthread_mutex_lock(&lock);
             if (last_reported + 60 < now) {
                 last_reported = now;
-                fprintf(stderr, "ignoring epoll event (fd:%d,event:%x)\n", sock->fd, (int)events[i].events);
+                H2O_ERROR_PRINTF("ignoring epoll event (fd:%d,event:%x)\n", sock->fd, (int)events[i].events);
             }
             pthread_mutex_unlock(&lock);
         }
@@ -169,7 +169,7 @@ static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
     while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
         ;
     if (ret != 0)
-        fprintf(stderr, "socket_close: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
+        H2O_ERROR_PRINTF("socket_close: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
 }
 
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
@@ -182,7 +182,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
     while ((ret = epoll_ctl(loop->ep, EPOLL_CTL_DEL, sock->fd, NULL)) != 0 && errno == EINTR)
         ;
     if (ret != 0)
-        fprintf(stderr, "socket_export: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
+        H2O_ERROR_PRINTF("socket_export: epoll(DEL) returned error %d (fd=%d)\n", errno, sock->fd);
 }
 
 static void evloop_do_dispose(h2o_evloop_t *_loop)
@@ -198,7 +198,7 @@ h2o_evloop_t *h2o_evloop_create(void)
     loop->ep = epoll_create(10);
     while (fcntl(loop->ep, F_SETFD, FD_CLOEXEC) == -1) {
         if (errno != EAGAIN) {
-            fprintf(stderr, "h2o_evloop_create: failed to set FD_CLOEXEC to the epoll fd (errno=%d)\n", errno);
+            H2O_ERROR_PRINTF("h2o_evloop_create: failed to set FD_CLOEXEC to the epoll fd (errno=%d)\n", errno);
             abort();
         }
     }

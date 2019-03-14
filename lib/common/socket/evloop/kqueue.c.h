@@ -26,7 +26,7 @@
 #include <sys/time.h>
 
 #if 0
-#define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_LOG(...) H2O_ERROR_PRINTF(__VA_ARGS__)
 #else
 #define DEBUG_LOG(...)
 #endif
@@ -173,7 +173,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
     while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)
         ;
     if (ret == -1)
-        fprintf(stderr, "kevent returned error %d (fd=%d)", errno, sock->fd);
+        H2O_ERROR_PRINTF("kevent returned error %d (fd=%d)", errno, sock->fd);
 }
 
 static void evloop_do_dispose(h2o_evloop_t *_loop)

@@ -71,7 +71,7 @@ __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
 
 void h2o__fatal(const char *msg)
 {
-    fprintf(stderr, "fatal:%s\n", msg);
+    H2O_ERROR_PRINTF("fatal:%s\n", msg);
     abort();
 }
 
@@ -263,7 +263,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     char *tmpfn = alloca(strlen(inbuf->_prototype->mmap_settings->fn_template) + 1);
                     strcpy(tmpfn, inbuf->_prototype->mmap_settings->fn_template);
                     if ((fd = mkstemp(tmpfn)) == -1) {
-                        fprintf(stderr, "failed to create temporary file:%s:%s\n", tmpfn, strerror(errno));
+                        H2O_ERROR_PRINTF("failed to create temporary file:%s:%s\n", tmpfn, strerror(errno));
                         goto MapError;
                     }
                     unlink(tmpfn);

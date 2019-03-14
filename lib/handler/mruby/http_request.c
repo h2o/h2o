@@ -309,7 +309,7 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
         /* is async */
         mrb_funcall(mrb, ctx->refs.request, "_set_response", 1, resp);
         if (mrb->exc != NULL) {
-            fprintf(stderr, "_set_response failed\n");
+            H2O_ERROR_PRINTF("_set_response failed\n");
             abort();
         }
     } else {

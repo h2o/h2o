@@ -73,6 +73,13 @@ extern "C" {
 
 #define H2O_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 
+/**
+ * library users can use their own log method by define this macro
+ */
+#ifndef H2O_ERROR_PRINTF
+#define H2O_ERROR_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#endif
+
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
 /**
