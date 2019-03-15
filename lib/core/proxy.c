@@ -123,9 +123,9 @@ static h2o_iovec_t build_request_merge_headers(h2o_mem_pool_t *pool, h2o_iovec_t
  */
 static int req_requires_content_length(h2o_req_t *req)
 {
-    int is_put_or_post =
-        (req->method.len >= 1 && req->method.base[0] == 'P' && (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) ||
-                                                                h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
+    int is_put_or_post = (req->method.len >= 1 && req->method.base[0] == 'P' &&
+                          (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) ||
+                           h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
 
     return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
 }
@@ -538,8 +538,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     return on_body;
 }
 
-static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
-                  size_t num_headers)
+static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     size_t i;

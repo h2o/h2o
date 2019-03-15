@@ -306,7 +306,7 @@ typedef struct st_h2o_protocol_callbacks_t {
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
 typedef const struct st_h2o_status_handler_t {
     h2o_iovec_t name;
-    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
+    h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
 } h2o_status_handler_t;
@@ -686,10 +686,6 @@ typedef enum h2o_send_state {
 
 typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
 
-static inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
-{
-    return s == H2O_SEND_STATE_IN_PROGRESS;
-}
 /**
  * an output stream that may alter the output.
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
@@ -1294,7 +1290,10 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
  * binds configurations to the request
  */
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
-
+/**
+ *
+ */
+static int h2o_send_state_is_in_progress(h2o_send_state_t s);
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
@@ -2029,6 +2028,11 @@ inline void h2o_req_unsetenv(h2o_req_t *req, const char *name, size_t name_len)
 Found:
     memmove(req->env.entries + i, req->env.entries + i + 2, req->env.size - i - 2);
     req->env.size -= 2;
+}
+
+inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
+{
+    return s == H2O_SEND_STATE_IN_PROGRESS;
 }
 
 inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)

@@ -5,6 +5,7 @@
 #define ssize_t int
 #include <Winsock2.h>
 #include <ws2tcpip.h>
+#include <malloc.h>
 
 #ifndef gettimeofday
 #define gettimeofday wintimeofday

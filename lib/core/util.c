@@ -131,7 +131,8 @@ static struct {
     struct st_h2o_accept_data_t *(*create)(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
     void (*destroy)(struct st_h2o_accept_data_t *accept_data);
 } accept_data_callbacks = {
-    create_default_accept_data, destroy_default_accept_data,
+    create_default_accept_data,
+    destroy_default_accept_data,
 };
 
 static void memcached_resumption_on_get(h2o_iovec_t session_data, void *_accept_data)
@@ -929,11 +930,11 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     "h2-14"
 
 const h2o_iovec_t h2o_http2_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {NULL}};
-const h2o_iovec_t h2o_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {H2O_STRLIT("http/1.1")}, {NULL}};
+const h2o_iovec_t h2o_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, ALPN_ENTRY("http/1.1"), {NULL}};
 
 const char h2o_http2_npn_protocols[] = NPN_PROTOCOLS_CORE;
 const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"
-                                                   "http/1.1";
+                                                    "http/1.1";
 
 uint64_t h2o_connection_id = 0;
 

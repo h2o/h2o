@@ -161,7 +161,7 @@ static struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
         int _num_connections; /* number of currently handled incoming connections, should use atomic functions to update the value
-                                 */
+                               */
         char _unused2_avoir_false_sharing[32];
         unsigned long
             _num_sessions; /* total number of opened incoming connections, should use atomic functions to update the value */
@@ -379,8 +379,9 @@ static void *ocsp_updater_thread(void *_ssl_conf)
                         ssl_conf->certificate_file);
                 update_ocsp_stapling(ssl_conf, NULL);
             } else {
-                fprintf(stderr, "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
-                                "response for certificate file:%s\n",
+                fprintf(stderr,
+                        "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
+                        "response for certificate file:%s\n",
                         ssl_conf->certificate_file);
                 ++fail_cnt;
             }
@@ -466,9 +467,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 #else
         &ptls_minicrypto_x25519,
 #endif
-        &ptls_openssl_secp256r1,
-        NULL
-    };
+        &ptls_openssl_secp256r1, NULL};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
@@ -1840,18 +1839,19 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
         generation = "null";
 
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
-    ret.len = snprintf(ret.base, BUFSIZE, ",\n"
-                                          " \"server-version\": \"" H2O_VERSION "\",\n"
-                                          " \"openssl-version\": \"%s\",\n"
-                                          " \"current-time\": \"%s\",\n"
-                                          " \"restart-time\": \"%s\",\n"
-                                          " \"uptime\": %" PRIu64 ",\n"
-                                          " \"generation\": %s,\n"
-                                          " \"connections\": %d,\n"
-                                          " \"max-connections\": %d,\n"
-                                          " \"listeners\": %zu,\n"
-                                          " \"worker-threads\": %zu,\n"
-                                          " \"num-sessions\": %lu",
+    ret.len = snprintf(ret.base, BUFSIZE,
+                       ",\n"
+                       " \"server-version\": \"" H2O_VERSION "\",\n"
+                       " \"openssl-version\": \"%s\",\n"
+                       " \"current-time\": \"%s\",\n"
+                       " \"restart-time\": \"%s\",\n"
+                       " \"uptime\": %" PRIu64 ",\n"
+                       " \"generation\": %s,\n"
+                       " \"connections\": %d,\n"
+                       " \"max-connections\": %d,\n"
+                       " \"listeners\": %zu,\n"
+                       " \"worker-threads\": %zu,\n"
+                       " \"num-sessions\": %lu",
                        SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
                        num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads, num_sessions(0));
     assert(ret.len < BUFSIZE);
@@ -1866,9 +1866,10 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
 
     arg.outbuf = h2o_iovec_init(alloca(BUFSIZE - ret.len), BUFSIZE - ret.len);
     arg.err = 0;
-    arg.written = snprintf(arg.outbuf.base, arg.outbuf.len, ",\n"
-                                                            " \"jemalloc\": {\n"
-                                                            "   \"jemalloc-raw\": \"");
+    arg.written = snprintf(arg.outbuf.base, arg.outbuf.len,
+                           ",\n"
+                           " \"jemalloc\": {\n"
+                           "   \"jemalloc-raw\": \"");
     malloc_stats_print(extra_status_jemalloc_cb, &arg, "ga" /* omit general info, only aggregated stats */);
 
     if (arg.err || arg.written + 1 >= arg.outbuf.len) {
@@ -1888,12 +1889,13 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     if (!mallctl("stats.allocated", &allocated, &sz, NULL, 0) && !mallctl("stats.active", &active, &sz, NULL, 0) &&
         !mallctl("stats.metadata", &metadata, &sz, NULL, 0) && !mallctl("stats.resident", &resident, &sz, NULL, 0) &&
         !mallctl("stats.mapped", &mapped, &sz, NULL, 0)) {
-        arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written, ",\n"
-                                                                                             "   \"allocated\": %zu,\n"
-                                                                                             "   \"active\": %zu,\n"
-                                                                                             "   \"metadata\": %zu,\n"
-                                                                                             "   \"resident\": %zu,\n"
-                                                                                             "   \"mapped\": %zu }",
+        arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written,
+                                ",\n"
+                                "   \"allocated\": %zu,\n"
+                                "   \"active\": %zu,\n"
+                                "   \"metadata\": %zu,\n"
+                                "   \"resident\": %zu,\n"
+                                "   \"mapped\": %zu }",
                                 allocated, active, metadata, resident, mapped);
     }
     if (arg.written + 1 >= arg.outbuf.len) {
@@ -2169,7 +2171,7 @@ int main(int argc, char **argv)
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-                ) {
+            ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
             }
         }

@@ -499,7 +499,7 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
             if (numify)                                                                                                            \
                 val = h2o_mruby_to_int(mrb, val);                                                                                  \
             if (mrb->exc != NULL)                                                                                                  \
-            return -1;                                                                                                                \
+                return -1;                                                                                                         \
         }                                                                                                                          \
     } while (0)
 #define RETRIEVE_ENV_OBJ(val) RETRIEVE_ENV(val, 0, 0);
@@ -568,9 +568,10 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
         RETRIEVE_ENV_STR(reqenv);
         if (!mrb_nil_p(reqenv)) {
             h2o_vector_reserve(&data->subreq->super.pool, &data->subreq->super.env, data->subreq->super.env.size + 2);
-            data->subreq->super.env.entries[data->subreq->super.env.size] = h2o_strdup(&data->subreq->super.pool, keystr, keystr_len);
+            data->subreq->super.env.entries[data->subreq->super.env.size] =
+                h2o_strdup(&data->subreq->super.pool, keystr, keystr_len);
             data->subreq->super.env.entries[data->subreq->super.env.size + 1] =
-            h2o_strdup(&data->subreq->super.pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
+                h2o_strdup(&data->subreq->super.pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
             data->subreq->super.env.size += 2;
         }
     }
@@ -624,15 +625,26 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
     subreq->conn.super.callbacks = &callbacks;
 
-    struct st_mruby_env_foreach_data_t data = {
-        ctx, subreq,
-        {
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        }
-    };
+    struct st_mruby_env_foreach_data_t data = {ctx,
+                                               subreq,
+                                               {
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                               }};
 
     /* retrieve env variables */
     mrb_hash_foreach(mrb, mrb_hash_ptr(env), retrieve_env, &data);
@@ -722,13 +734,17 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->super.version = parse_protocol_version(RSTRING_PTR(data.env.server_protocol), RSTRING_LEN(data.env.server_protocol));
 
     if (!mrb_nil_p(data.env.server_addr) && !mrb_nil_p(data.env.server_port)) {
-        subreq->conn.server.host = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_addr), RSTRING_LEN(data.env.server_addr));
-        subreq->conn.server.port = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_port), RSTRING_LEN(data.env.server_port));
+        subreq->conn.server.host =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_addr), RSTRING_LEN(data.env.server_addr));
+        subreq->conn.server.port =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_port), RSTRING_LEN(data.env.server_port));
     }
 
     if (!mrb_nil_p(data.env.remote_addr) && !mrb_nil_p(data.env.remote_port)) {
-        subreq->conn.remote.host = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_addr), RSTRING_LEN(data.env.remote_addr));
-        subreq->conn.remote.port = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_port), RSTRING_LEN(data.env.remote_port));
+        subreq->conn.remote.host =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_addr), RSTRING_LEN(data.env.remote_addr));
+        subreq->conn.remote.port =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_port), RSTRING_LEN(data.env.remote_port));
     }
 
     if (!mrb_nil_p(data.env.remaining_delegations)) {

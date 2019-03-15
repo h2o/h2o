@@ -40,9 +40,14 @@ typedef struct st_h2o_httpclient_properties_t {
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
-typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version,
-                                                         int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
+typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
+                                                         h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
                                                          int header_requires_dup);
+/**
+ * Called when the protocol stack is ready to issue a request. Application must set all the output parameters (i.e. all except
+ * `client`, `errstr`, `origin`) and return a callback that will be called when the protocol stack receives the response headers
+ * from the server.
+ */
 typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method,
                                                             h2o_url_t *url, const h2o_header_t **headers, size_t *num_headers,
                                                             h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
@@ -70,7 +75,7 @@ typedef struct st_h2o_httpclient_ctx_t {
     uint64_t connect_timeout;
     uint64_t first_byte_timeout;
     uint64_t *websocket_timeout; /* NULL if upgrade to websocket is not allowed */
-    uint64_t keepalive_timeout;
+    uint64_t keepalive_timeout;  /* only used for http2 for now */
     size_t max_buffer_size;
 
     struct {

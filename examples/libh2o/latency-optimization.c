@@ -234,16 +234,17 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
 static void usage(const char *cmd)
 {
-    fprintf(stderr, "Usage: %s [opts] [<host>:]<port>\n"
-                    "Options: --listen             if set, waits for incoming connection. Otherwise,\n"
-                    "                              connects to the server running at given address\n"
-                    "         --reverse-role       if set, reverses the role bet. server and the\n"
-                    "                              client once the connection is established\n"
-                    "         --tls                use TLS\n"
-                    "         --block-size=octets  default write block size\n"
-                    "         --min-rtt=ms         minimum RTT to enable latency optimization\n"
-                    "         --max-cwnd=octets    maximum size of CWND to enable latency\n"
-                    "                              optimization\n",
+    fprintf(stderr,
+            "Usage: %s [opts] [<host>:]<port>\n"
+            "Options: --listen             if set, waits for incoming connection. Otherwise,\n"
+            "                              connects to the server running at given address\n"
+            "         --reverse-role       if set, reverses the role bet. server and the\n"
+            "                              client once the connection is established\n"
+            "         --tls                use TLS\n"
+            "         --block-size=octets  default write block size\n"
+            "         --min-rtt=ms         minimum RTT to enable latency optimization\n"
+            "         --max-cwnd=octets    maximum size of CWND to enable latency\n"
+            "                              optimization\n",
             cmd);
     exit(1);
 }

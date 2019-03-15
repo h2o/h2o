@@ -304,7 +304,8 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
 }
 
 static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
-                            h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect, ssize_t *entity_header_index)
+                        h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect,
+                        ssize_t *entity_header_index)
 {
     *entity_header_index = -1;
 
@@ -358,7 +359,7 @@ static int init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const stru
 }
 
 static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers, int minor_version,
-                             h2o_iovec_t *expect, ssize_t *entity_header_index)
+                         h2o_iovec_t *expect, ssize_t *entity_header_index)
 {
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
 
@@ -373,7 +374,8 @@ static int fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *he
         conn->_ostr_final.super.send_informational = NULL;
 
     /* init headers */
-    if (init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect, entity_header_index) != 0)
+    if (init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
+                     entity_header_index) != 0)
         return -1;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
@@ -1112,20 +1114,26 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
     return 0;
 }
 
+static const h2o_conn_callbacks_t h1_callbacks = {
+    get_sockname, /* stringify address */
+    get_peername, /* ditto */
+    NULL,         /* push */
+    get_socket,   /* get underlying socket */
+    NULL,         /* get debug state */
+    {{
+         {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
+         {log_request_index},                                                                     /* http1 */
+         {NULL}                                                                                   /* http2 */
+     }}};
+
+static int conn_is_h1(h2o_conn_t *conn)
+{
+        return conn->callbacks == &h1_callbacks;
+}
+
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-    static const h2o_conn_callbacks_t callbacks = {
-        get_sockname, /* stringify address */
-        get_peername, /* ditto */
-        NULL,         /* push */
-        get_socket,   /* get underlying socket */
-        NULL,         /* get debug state */
-        {{
-            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-            {log_request_index},                                                                     /* http1 */
-            {NULL}                                                                                   /* http2 */
-        }}};
-    struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &callbacks);
+    struct st_h2o_http1_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
 
     /* zero-fill all properties expect req */
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));
@@ -1141,9 +1149,9 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
 
 void h2o_http1_upgrade(h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_http1_upgrade_cb on_complete, void *user_data)
 {
-    struct st_h2o_http1_conn_t *conn = (void *)req->conn;
 
-    assert(req->version <= 0x200); /* TODO find a better way to assert instanceof(req->conn) == struct st_h2o_http1_conn_t */
+    assert(conn_is_h1(req->conn));
+    struct st_h2o_http1_conn_t *conn = (void *)req->conn;
 
     h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1));
 
