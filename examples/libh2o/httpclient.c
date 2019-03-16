@@ -163,6 +163,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
         if (--cnt_left != 0) {
             /* next attempt */
             h2o_mem_clear_pool(&pool);
+            ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
             start_request(client->ctx);
         }
     }
@@ -306,6 +307,7 @@ static void usage(const char *progname)
             "  -i <delay>   send interval between chunks (in msec; default: 0)\n"
             "  -k           skip peer verification\n"
             "  -m <method>  request method (default: GET)\n"
+            "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "\n",
             progname);
@@ -362,13 +364,19 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:b:c:i:k2:3E:")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:c:i:k2:3E:")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
             break;
         case 'm':
             method = optarg;
+            break;
+        case 'o':
+            if (freopen(optarg, "w", stdout) == NULL) {
+                fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'b':
             req_body_size = atoi(optarg);
