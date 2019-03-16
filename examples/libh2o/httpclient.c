@@ -43,12 +43,11 @@ static h2o_mem_pool_t pool;
 static const char *url;
 static char *method = "GET";
 static int cnt_left = 1;
-static int body_size = 0;
+static int req_body_size = 0, cur_req_body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int delay_interval_ms = 0;
 static int ssl_verify_none = 0;
-static int cur_body_size;
 static struct {
     ptls_context_t tls;
     quicly_context_t quic;
@@ -111,7 +110,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         return;
     }
 
-    cur_body_size = body_size;
+    cur_req_body_size = req_body_size;
 
     /* initiate the request */
     if (ctx->http3 != NULL) {
@@ -216,10 +215,10 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int
 
 int fill_body(h2o_iovec_t *reqbuf)
 {
-    if (cur_body_size > 0) {
+    if (cur_req_body_size > 0) {
         memcpy(reqbuf, &iov_filler, sizeof(*reqbuf));
-        reqbuf->len = MIN(iov_filler.len, cur_body_size);
-        cur_body_size -= reqbuf->len;
+        reqbuf->len = MIN(iov_filler.len, cur_req_body_size);
+        cur_req_body_size -= reqbuf->len;
         return 0;
     } else {
         *reqbuf = h2o_iovec_init(NULL, 0);
@@ -238,7 +237,7 @@ static void timeout_cb(h2o_timer_t *entry)
 
     fill_body(&reqbuf);
     h2o_timer_unlink(&tctx->_timeout);
-    tctx->client->write_req(tctx->client, reqbuf, cur_body_size <= 0);
+    tctx->client->write_req(tctx->client, reqbuf, cur_req_body_size <= 0);
     free(tctx);
 
     return;
@@ -246,7 +245,7 @@ static void timeout_cb(h2o_timer_t *entry)
 
 static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end_stream)
 {
-    if (cur_body_size > 0) {
+    if (cur_req_body_size > 0) {
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
         memset(tctx, 0, sizeof(*tctx));
@@ -273,9 +272,9 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (cur_body_size > 0) {
+    if (cur_req_body_size > 0) {
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
-        size_t clbuf_len = sprintf(clbuf, "%d", cur_body_size);
+        size_t clbuf_len = sprintf(clbuf, "%d", cur_req_body_size);
         h2o_headers_t headers_vec = (h2o_headers_t){NULL};
         h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
         *headers = headers_vec.entries;
@@ -372,8 +371,8 @@ int main(int argc, char **argv)
             method = optarg;
             break;
         case 'b':
-            body_size = atoi(optarg);
-            if (body_size <= 0) {
+            req_body_size = atoi(optarg);
+            if (req_body_size <= 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
                 exit(EXIT_FAILURE);
             }
@@ -432,7 +431,7 @@ int main(int argc, char **argv)
     }
     url = argv[0];
 
-    if (body_size != 0) {
+    if (req_body_size != 0) {
         iov_filler.base = h2o_mem_alloc(chunk_size);
         memset(iov_filler.base, 'a', chunk_size);
         iov_filler.len = chunk_size;
