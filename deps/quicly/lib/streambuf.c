@@ -89,7 +89,7 @@ int quicly_streambuf_egress_write(quicly_stream_t *stream, const void *src, size
     quicly_streambuf_t *sbuf = stream->data;
     int ret;
 
-    assert(stream->sendstate.is_open);
+    assert(quicly_sendstate_is_open(&stream->sendstate));
 
     ptls_buffer_pushv(&sbuf->egress.buf, src, len);
     sbuf->egress.max_stream_data += len;

@@ -287,8 +287,11 @@ struct st_quicly_conn_t {
             quicly_linklist_t bidi;
         } streams_blocked;
         quicly_linklist_t control;
-        quicly_linklist_t stream_fin_only;
-        quicly_linklist_t stream_with_payload;
+        struct {
+            quicly_linklist_t new_data;
+            quicly_linklist_t retransmit;
+            quicly_linklist_t fin_only;
+        } stream;
     } pending_link;
     /**
      * retry token
@@ -617,13 +620,17 @@ static void resched_stream_data(quicly_stream_t *stream)
         quicly_linklist_unlink(&stream->_send_aux.pending_link.stream);
 
     if (stream->sendstate.pending.num_ranges != 0) {
-        if (!stream->sendstate.is_open && stream->sendstate.pending.ranges[0].start + 1 == stream->sendstate.size_committed) {
+        if (!quicly_sendstate_is_open(&stream->sendstate) &&
+            stream->sendstate.pending.ranges[0].start >= stream->sendstate.final_size) {
             /* fin is the only thing to be sent, and it can be sent if window size is zero */
-            target = &stream->conn->pending_link.stream_fin_only;
-        } else {
-            /* check if we can send payload */
-            if (stream->sendstate.pending.ranges[0].start < stream->_send_aux.max_stream_data)
-                target = &stream->conn->pending_link.stream_with_payload;
+            assert(stream->sendstate.pending.ranges[0].start == stream->sendstate.final_size);
+            target = &stream->conn->pending_link.stream.fin_only;
+        } else if (stream->sendstate.pending.ranges[0].start < stream->_send_aux.max_stream_data) {
+            if (stream->sendstate.pending.ranges[0].start == stream->sendstate.size_inflight) {
+                target = &stream->conn->pending_link.stream.new_data;
+            } else {
+                target = &stream->conn->pending_link.stream.retransmit;
+            }
         }
     }
 
@@ -1131,8 +1138,9 @@ void quicly_free(quicly_conn_t *conn)
     assert(!quicly_linklist_is_linked(&conn->pending_link.streams_blocked.uni));
     assert(!quicly_linklist_is_linked(&conn->pending_link.streams_blocked.bidi));
     assert(!quicly_linklist_is_linked(&conn->pending_link.control));
-    assert(!quicly_linklist_is_linked(&conn->pending_link.stream_fin_only));
-    assert(!quicly_linklist_is_linked(&conn->pending_link.stream_with_payload));
+    assert(!quicly_linklist_is_linked(&conn->pending_link.stream.new_data));
+    assert(!quicly_linklist_is_linked(&conn->pending_link.stream.retransmit));
+    assert(!quicly_linklist_is_linked(&conn->pending_link.stream.fin_only));
 
     free_handshake_space(&conn->initial);
     free_handshake_space(&conn->handshake);
@@ -1503,8 +1511,9 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     quicly_linklist_init(&conn->_.pending_link.streams_blocked.uni);
     quicly_linklist_init(&conn->_.pending_link.streams_blocked.bidi);
     quicly_linklist_init(&conn->_.pending_link.control);
-    quicly_linklist_init(&conn->_.pending_link.stream_fin_only);
-    quicly_linklist_init(&conn->_.pending_link.stream_with_payload);
+    quicly_linklist_init(&conn->_.pending_link.stream.new_data);
+    quicly_linklist_init(&conn->_.pending_link.stream.retransmit);
+    quicly_linklist_init(&conn->_.pending_link.stream.fin_only);
 
     if (set_peeraddr(&conn->_, sa, salen) != 0) {
         quicly_free(&conn->_);
@@ -1961,9 +1970,16 @@ static ssize_t round_send_window(ssize_t window)
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 {
     if (quicly_cc_can_send(&conn->egress.cc, conn->egress.sentmap.bytes_in_flight)) {
-        if (conn->crypto.pending_flows != 0 || quicly_linklist_is_linked(&conn->pending_link.control) ||
-            quicly_linklist_is_linked(&conn->pending_link.stream_fin_only) ||
-            quicly_linklist_is_linked(&conn->pending_link.stream_with_payload))
+        if (conn->crypto.pending_flows != 0)
+            return 0;
+        if (quicly_linklist_is_linked(&conn->pending_link.control))
+            return 0;
+        if (conn->egress.max_data.sent < conn->egress.max_data.permitted &&
+            quicly_linklist_is_linked(&conn->pending_link.stream.new_data))
+            return 0;
+        if (quicly_linklist_is_linked(&conn->pending_link.stream.retransmit))
+            return 0;
+        if (quicly_linklist_is_linked(&conn->pending_link.stream.fin_only))
             return 0;
     }
 
@@ -2362,7 +2378,7 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
         } else {
             header[0] = QUICLY_FRAME_TYPE_STREAM_BASE;
         }
-        if (!stream->sendstate.is_open && off + 1 == stream->sendstate.size_committed) {
+        if (!quicly_sendstate_is_open(&stream->sendstate) && off == stream->sendstate.final_size) {
             /* special case for emitting FIN only */
             header[0] |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
             if ((ret = allocate_ack_eliciting_frame(stream->conn, s, hp - header, &sent, on_ack_stream)) != 0)
@@ -2373,7 +2389,7 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
             }
             memcpy(s->dst, header, hp - header);
             s->dst += hp - header;
-            end_off = off + 1;
+            end_off = off;
             wrote_all = 1;
             is_fin = 1;
             goto UpdateState;
@@ -2399,7 +2415,7 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     }
     { /* cap the capacity to the current range */
         uint64_t range_capacity = stream->sendstate.pending.ranges[0].end - off;
-        if (!stream->sendstate.is_open && off + range_capacity == stream->sendstate.size_committed) {
+        if (!quicly_sendstate_is_open(&stream->sendstate) && off + range_capacity > stream->sendstate.final_size) {
             assert(range_capacity > 1); /* see the special case above */
             range_capacity -= 1;
         }
@@ -2437,39 +2453,34 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     }
 
     /* determine if the frame incorporates FIN */
-    if (!stream->sendstate.is_open && end_off + 1 == stream->sendstate.size_committed) {
+    if (!quicly_sendstate_is_open(&stream->sendstate) && end_off == stream->sendstate.final_size) {
         assert(end_off + 1 == stream->sendstate.pending.ranges[stream->sendstate.pending.num_ranges - 1].end);
         assert(frame_type_at != NULL);
         is_fin = 1;
+        *frame_type_at |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
     } else {
         is_fin = 0;
     }
 
-    /* set FIN bit if necessary (also adjusts end_off to include EOS byte) */
-    if (is_fin) {
-        *frame_type_at |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
-        ++end_off;
-    }
-
 UpdateState:
     LOG_STREAM_EVENT(stream->conn, stream->stream_id, QUICLY_EVENT_TYPE_STREAM_SEND, INT_EVENT_ATTR(OFFSET, off),
-                     INT_EVENT_ATTR(LENGTH, end_off - is_fin - off), INT_EVENT_ATTR(FIN, is_fin));
+                     INT_EVENT_ATTR(LENGTH, end_off - off), INT_EVENT_ATTR(FIN, is_fin));
     LOG_STREAM_EVENT(stream->conn, stream->stream_id, QUICLY_EVENT_TYPE_QUICTRACE_SEND_STREAM, INT_EVENT_ATTR(OFFSET, off),
-                     INT_EVENT_ATTR(LENGTH, end_off - is_fin - off), INT_EVENT_ATTR(FIN, is_fin));
+                     INT_EVENT_ATTR(LENGTH, end_off - off), INT_EVENT_ATTR(FIN, is_fin));
     /* update sendstate */
-    if (stream->sendstate.size_committed < end_off)
-        stream->sendstate.size_committed = end_off;
-    if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, off, end_off)) != 0)
+    if (stream->sendstate.size_inflight < end_off)
+        stream->sendstate.size_inflight = end_off;
+    if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, off, end_off + is_fin)) != 0)
         return ret;
     if (wrote_all) {
-        if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, stream->sendstate.size_committed, UINT64_MAX)) != 0)
+        if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, stream->sendstate.size_inflight, UINT64_MAX)) != 0)
             return ret;
     }
 
     /* setup sentmap */
     sent->data.stream.stream_id = stream->stream_id;
     sent->data.stream.args.start = off;
-    sent->data.stream.args.end = end_off;
+    sent->data.stream.args.end = end_off + is_fin;
 
     return 0;
 }
@@ -2691,28 +2702,33 @@ static void open_blocked_streams(quicly_conn_t *conn, int uni)
 
 static int send_stream_frames(quicly_conn_t *conn, struct st_quicly_send_context_t *s)
 {
+#define SEND_ONE(anchor)                                                                                                           \
+    do {                                                                                                                           \
+        quicly_stream_t *stream = (void *)((char *)(anchor)->next - offsetof(quicly_stream_t, _send_aux.pending_link.stream));     \
+        if ((ret = send_stream_data(stream, s)) != 0)                                                                              \
+            goto Exit;                                                                                                             \
+        resched_stream_data(stream);                                                                                               \
+    } while (0)
+
     int ret = 0;
 
     /* fin-only STREAM frames */
-    while (s->num_packets != s->max_packets && quicly_linklist_is_linked(&conn->pending_link.stream_fin_only)) {
-        quicly_stream_t *stream =
-            (void *)((char *)conn->pending_link.stream_fin_only.next - offsetof(quicly_stream_t, _send_aux.pending_link.stream));
-        if ((ret = send_stream_data(stream, s)) != 0)
-            goto Exit;
-        resched_stream_data(stream);
-    }
-    /* STREAM frames with payload */
-    while (s->num_packets != s->max_packets && quicly_linklist_is_linked(&conn->pending_link.stream_with_payload) &&
-           conn->egress.max_data.sent < conn->egress.max_data.permitted) {
-        quicly_stream_t *stream = (void *)((char *)conn->pending_link.stream_with_payload.next -
-                                           offsetof(quicly_stream_t, _send_aux.pending_link.stream));
-        if ((ret = send_stream_data(stream, s)) != 0)
-            goto Exit;
-        resched_stream_data(stream);
+    while (s->num_packets != s->max_packets && quicly_linklist_is_linked(&conn->pending_link.stream.fin_only))
+        SEND_ONE(&conn->pending_link.stream.fin_only);
+    /* STREAMS with data (note: it's the reposibility of a more sophisticated, prioritized sender to schedule between new data and
+       retransmits) */
+    while (s->num_packets != s->max_packets && quicly_linklist_is_linked(&conn->pending_link.stream.retransmit))
+        SEND_ONE(&conn->pending_link.stream.retransmit);
+    while (s->num_packets != s->max_packets && quicly_linklist_is_linked(&conn->pending_link.stream.new_data)) {
+        if (!(conn->egress.max_data.sent < conn->egress.max_data.permitted))
+            break;
+        SEND_ONE(&conn->pending_link.stream.new_data);
     }
 
 Exit:
-    return 0;
+    return ret;
+
+#undef SEND_ONE
 }
 
 quicly_datagram_t *quicly_send_version_negotiation(quicly_context_t *ctx, struct sockaddr *sa, socklen_t salen,
@@ -3503,7 +3519,7 @@ static int handle_stop_sending_frame(quicly_conn_t *conn, quicly_stop_sending_fr
     if ((ret = get_stream_or_open_if_new(conn, frame->stream_id, &stream)) != 0 || stream == NULL)
         return ret;
 
-    if (stream->sendstate.is_open) {
+    if (quicly_sendstate_is_open(&stream->sendstate)) {
         /* reset the stream, then notify the application */
         int err = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(frame->app_error_code);
         quicly_reset_stream(stream, err);

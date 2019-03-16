@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
+use JSON;
 use Net::EmptyPort qw(empty_port);
 use POSIX ":sys_wait_h";
 use Scope::Guard qw(scope_guard);
@@ -109,6 +110,27 @@ subtest "blocked-streams" => sub {
     is $resp, "hello world\nhello world\nhello world\n";
     $resp = `$cli -p /12.txt -p /12.txt -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\nhello world\nhello world\nhello world\n";
+};
+
+subtest "max-data-crapped" => sub {
+    my $guard = spawn_server('-e', "$tempdir/events");
+    my $resp = `$cli -m 10 -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n";
+    undef $guard;
+    # build list of filtered events
+    open my $fh, "<", "$tempdir/events"
+        or die "failed to open file $tempdir/events:$!";
+    my $events = ":";
+    while (my $line = <$fh>) {
+        my $event = from_json($line);
+        if ($event->{type} =~ /^(send|receive|max-data-receive)$/) {
+            $events .= "$event->{type}:";
+        } elsif ($event->{type} eq 'stream-send') {
+            $events .= "stream-send\@$event->{'stream-id'}:";
+        }
+    }
+    # check that events are happening in expected order, without a busy loop to quicly_send
+    like $events, qr/:send:stream-send\@0:receive:max-data-receive:send:stream-send\@0:/;
 };
 
 done_testing;

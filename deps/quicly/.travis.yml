@@ -17,7 +17,7 @@ matrix:
         - sudo apt-get update --yes
         - sudo apt-get install --yes -f gcc-6 g++-6
         - sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 60 --slave /usr/bin/g++ g++ /usr/bin/g++-6
-        - sudo apt-get install libscope-guard-perl libtest-tcp-perl
+        - sudo apt-get install libjson-perl libscope-guard-perl libtest-tcp-perl
       script:
         # Cmake 2.8.12
         - curl -O https://cmake.org/files/v2.8/cmake-2.8.12.1.tar.gz
@@ -42,7 +42,8 @@ matrix:
         - label=osx/x86-64
       before_install: &bs_osx
         - curl -L https://cpanmin.us | sudo perl - App::cpanminus
-        - sudo cpanm --totest Scope::Guard
+        - sudo cpanm --notest JSON
+        - sudo cpanm --notest Scope::Guard
         - sudo cpanm --notest Test::TCP
       script:
         - cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl .

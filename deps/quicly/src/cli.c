@@ -153,11 +153,17 @@ static int send_file(quicly_stream_t *stream, int is_http1, const char *fn, cons
 
 static int send_sized_text(quicly_stream_t *stream, ptls_iovec_t path, int is_http1)
 {
-    unsigned size;
     if (!(path.len > 5 && path.base[0] == '/' && memcmp(path.base + path.len - 4, ".txt", 4) == 0))
         return 0;
-    if (sscanf((const char *)path.base + 1, "%u", &size) != 1)
-        return 0;
+    unsigned size = 0;
+    {
+        const char *p;
+        for (p = (const char *)path.base + 1; *p != '.'; ++p) {
+            if (!('0' <= *p && *p <= '9'))
+                return 0;
+            size = size * 10 + (*p - '0');
+        }
+    }
 
     send_header(stream, is_http1, 200, "text/plain; charset=utf-8");
     for (; size >= 12; size -= 12)
@@ -208,7 +214,7 @@ static int server_on_receive(quicly_stream_t *stream, size_t off, const void *sr
     if (send_sized_text(stream, path, is_http1))
         goto Sent;
 
-    if (!stream->sendstate.is_open)
+    if (!quicly_sendstate_is_open(&stream->sendstate))
         return 0;
 
     send_header(stream, is_http1, 404, "text/plain; charset=utf-8");
@@ -716,6 +722,8 @@ static void usage(const char *cmd)
            "  -e event-log-file    file to log events\n"
            "  -i interval          interval to reissue requests (in milliseconds)\n"
            "  -l log-file          file to log traffic secrets\n"
+           "  -M <bytes>           max stream data (in bytes; default: 1MB)\n"
+           "  -m <bytes>           max data (in bytes; default: 16MB)\n"
            "  -N                   enforce HelloRetryRequest (client-only)\n"
            "  -n                   enforce version negotiation (client-only)\n"
            "  -p path              path to request (can be set multiple times)\n"
@@ -746,7 +754,7 @@ int main(int argc, char **argv)
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
 
-    while ((ch = getopt(argc, argv, "a:C:c:k:e:i:l:Nnp:Rr:s:Vvx:X:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:C:c:k:e:i:l:M:m:Nnp:Rr:s:Vvx:X:h")) != -1) {
         switch (ch) {
         case 'a':
             set_alpn(&hs_properties, optarg);
@@ -778,6 +786,22 @@ int main(int argc, char **argv)
             break;
         case 'l':
             setup_log_event(ctx.tls, optarg);
+            break;
+        case 'M': {
+            uint64_t v;
+            if (sscanf(optarg, "%" PRIu64, &v) != 1) {
+                fprintf(stderr, "failed to parse max stream data:%s\n", optarg);
+                exit(1);
+            }
+            ctx.transport_params.max_stream_data.bidi_local = v;
+            ctx.transport_params.max_stream_data.bidi_remote = v;
+            ctx.transport_params.max_stream_data.uni = v;
+        } break;
+        case 'm':
+            if (sscanf(optarg, "%" PRIu64, &ctx.transport_params.max_data) != 1) {
+                fprintf(stderr, "failed to parse max data:%s\n", optarg);
+                exit(1);
+            }
             break;
         case 'N':
             hs_properties.client.negotiate_before_key_exchange = 1;

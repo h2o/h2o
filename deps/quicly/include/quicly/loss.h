@@ -204,11 +204,9 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
                     alarm_duration = tlp_alarm_duration;
             }
         }
-        if (r->alarm_at > last_retransmittable_sent_at + alarm_duration) {
-            r->alarm_at = last_retransmittable_sent_at + alarm_duration;
-            if (r->alarm_at < now)
-                r->alarm_at = now;
-        }
+        r->alarm_at = last_retransmittable_sent_at + alarm_duration;
+        if (r->alarm_at < now)
+            r->alarm_at = now;
     } else {
         r->alarm_at = INT64_MAX;
         r->loss_time = INT64_MAX;
