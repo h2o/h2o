@@ -508,16 +508,15 @@ Error:
     return SIZE_MAX;
 }
 
-uint64_t quicly_determine_packet_number(uint32_t bits, uint32_t mask, uint64_t next_expected)
+uint64_t quicly_determine_packet_number(uint32_t truncated, size_t num_bits, uint64_t expected)
 {
-    uint64_t actual = (next_expected & ~(uint64_t)mask) + bits;
+    uint64_t win = (uint64_t)1 << num_bits, candidate = (expected & ~(win - 1)) | truncated;
 
-    if (((bits - (uint32_t)next_expected) & mask) > (mask >> 1)) {
-        if (actual >= (uint64_t)mask + 1)
-            actual -= (uint64_t)mask + 1;
-    }
-
-    return actual;
+    if (candidate + win / 2 <= expected)
+        return candidate + win;
+    if (candidate > expected + win / 2 && candidate > win)
+        return candidate - win;
+    return candidate;
 }
 
 static void assert_consistency(quicly_conn_t *conn, int run_timers)
@@ -765,7 +764,6 @@ static void init_stream_properties(quicly_stream_t *stream, uint32_t initial_max
     stream->streams_blocked = 0;
 
     stream->_send_aux.max_stream_data = initial_max_stream_data_remote;
-    stream->_send_aux.max_sent = 0;
     stream->_send_aux.stop_sending.sender_state = QUICLY_SENDER_STATE_NONE;
     stream->_send_aux.stop_sending.error_code = 0;
     stream->_send_aux.rst.sender_state = QUICLY_SENDER_STATE_NONE;
@@ -1739,7 +1737,7 @@ static ptls_iovec_t decrypt_packet(ptls_cipher_context_t *header_protection, ptl
     }
 
     /* AEAD */
-    *pn = quicly_determine_packet_number(pnbits, (uint32_t)UINT32_MAX >> ((4 - pnlen) * 8), *next_expected_pn);
+    *pn = quicly_determine_packet_number(pnbits, pnlen * 8, *next_expected_pn);
     size_t aead_off = packet->encrypted_off + pnlen, ptlen;
     if ((ptlen = ptls_aead_decrypt(aead[aead_index], packet->octets.base + aead_off, packet->octets.base + aead_off,
                                    packet->octets.len - aead_off, *pn, packet->octets.base, aead_off)) == SIZE_MAX) {
@@ -2344,8 +2342,8 @@ static int send_stream_control_frames(quicly_stream_t *stream, struct st_quicly_
         if ((ret = prepare_stream_state_sender(stream, &stream->_send_aux.rst.sender_state, s, QUICLY_RST_FRAME_CAPACITY,
                                                on_ack_rst_stream)) != 0)
             return ret;
-        s->dst =
-            quicly_encode_rst_stream_frame(s->dst, stream->stream_id, stream->_send_aux.rst.error_code, stream->_send_aux.max_sent);
+        s->dst = quicly_encode_rst_stream_frame(s->dst, stream->stream_id, stream->_send_aux.rst.error_code,
+                                                stream->sendstate.size_inflight);
     }
 
     return 0;
@@ -2404,11 +2402,11 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
         if (off + capacity > stream->_send_aux.max_stream_data)
             capacity = stream->_send_aux.max_stream_data - off;
         /* cap by max_data */
-        if (off + capacity > stream->_send_aux.max_sent) {
-            uint64_t new_bytes = off + capacity - stream->_send_aux.max_sent;
+        if (off + capacity > stream->sendstate.size_inflight) {
+            uint64_t new_bytes = off + capacity - stream->sendstate.size_inflight;
             if (new_bytes > stream->conn->egress.max_data.permitted - stream->conn->egress.max_data.sent) {
                 size_t max_stream_data =
-                    stream->_send_aux.max_sent + stream->conn->egress.max_data.permitted - stream->conn->egress.max_data.sent;
+                    stream->sendstate.size_inflight + stream->conn->egress.max_data.permitted - stream->conn->egress.max_data.sent;
                 capacity = max_stream_data - off;
             }
         }
@@ -2446,12 +2444,6 @@ static int send_stream_data(quicly_stream_t *stream, struct st_quicly_send_conte
     s->dst += len;
     end_off = off + len;
 
-    /* adjust max_stream_data, max_data */
-    if (stream->stream_id >= 0 && end_off > stream->_send_aux.max_sent) {
-        stream->conn->egress.max_data.sent += end_off - stream->_send_aux.max_sent;
-        stream->_send_aux.max_sent = end_off;
-    }
-
     /* determine if the frame incorporates FIN */
     if (!quicly_sendstate_is_open(&stream->sendstate) && end_off == stream->sendstate.final_size) {
         assert(end_off + 1 == stream->sendstate.pending.ranges[stream->sendstate.pending.num_ranges - 1].end);
@@ -2467,9 +2459,12 @@ UpdateState:
                      INT_EVENT_ATTR(LENGTH, end_off - off), INT_EVENT_ATTR(FIN, is_fin));
     LOG_STREAM_EVENT(stream->conn, stream->stream_id, QUICLY_EVENT_TYPE_QUICTRACE_SEND_STREAM, INT_EVENT_ATTR(OFFSET, off),
                      INT_EVENT_ATTR(LENGTH, end_off - off), INT_EVENT_ATTR(FIN, is_fin));
-    /* update sendstate */
-    if (stream->sendstate.size_inflight < end_off)
+    /* update sendstate (and also MAX_DATA counter) */
+    if (stream->sendstate.size_inflight < end_off) {
+        if (stream->stream_id >= 0)
+            stream->conn->egress.max_data.sent += end_off - stream->sendstate.size_inflight;
         stream->sendstate.size_inflight = end_off;
+    }
     if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, off, end_off + is_fin)) != 0)
         return ret;
     if (wrote_all) {
@@ -4208,8 +4203,7 @@ void quicly_reset_stream(quicly_stream_t *stream, int err)
     assert(!quicly_sendstate_transfer_complete(&stream->sendstate));
 
     /* dispose sendbuf state */
-    quicly_sendstate_dispose(&stream->sendstate);
-    quicly_sendstate_init_closed(&stream->sendstate);
+    quicly_sendstate_reset(&stream->sendstate);
 
     /* setup RST_STREAM */
     stream->_send_aux.rst.sender_state = QUICLY_SENDER_STATE_SEND;

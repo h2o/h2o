@@ -82,6 +82,18 @@ int quicly_sendstate_shutdown(quicly_sendstate_t *state, uint64_t final_size)
     return 0;
 }
 
+void quicly_sendstate_reset(quicly_sendstate_t *state)
+{
+    int ret;
+
+    if (state->final_size == UINT64_MAX)
+        state->final_size = state->size_inflight;
+
+    ret = quicly_ranges_add(&state->acked, 0, state->final_size + 1);
+    assert(ret == 0 && "guaranteed to succeed, because the numebr of ranges never increases");
+    quicly_ranges_clear(&state->pending);
+}
+
 int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *args, int is_active, size_t *bytes_to_shift)
 {
     uint64_t prev_sent_upto = state->acked.ranges[0].end;

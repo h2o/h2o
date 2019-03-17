@@ -57,6 +57,7 @@ static int quicly_sendstate_transfer_complete(quicly_sendstate_t *state);
 static int quicly_sendstate_is_open(quicly_sendstate_t *state);
 int quicly_sendstate_activate(quicly_sendstate_t *state);
 int quicly_sendstate_shutdown(quicly_sendstate_t *state, uint64_t final_size);
+void quicly_sendstate_reset(quicly_sendstate_t *state);
 int quicly_sendstate_acked(quicly_sendstate_t *state, quicly_sendstate_sent_t *args, int is_active, size_t *bytes_to_shift);
 int quicly_sendstate_lost(quicly_sendstate_t *state, quicly_sendstate_sent_t *args);
 
