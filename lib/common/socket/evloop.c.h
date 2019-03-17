@@ -305,6 +305,12 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     link_to_statechanged(sock);
 }
 
+static int is_write_finished(h2o_socket_t *_sock)
+{
+    struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
+    return (sock->_wreq.cnt == 0) && (sock->_flags & H2O_SOCKET_FLAG_IS_WRITE_NOTIFY);
+}
+
 int h2o_socket_get_fd(h2o_socket_t *_sock)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;

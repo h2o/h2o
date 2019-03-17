@@ -381,7 +381,8 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
 
-    h2o_timer_unlink(&client->super._timeout);
+    if (h2o_timer_is_linked(&client->super._timeout))
+        h2o_timer_unlink(&client->super._timeout);
 
     if (err != NULL) {
         on_error_before_head(client, "I/O error (send request)");
@@ -609,9 +610,11 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_send_request);
     }
 
-    /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
-    client->super._timeout.cb = on_send_timeout;
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+    /* no need to set the timeout if all data has been written into TCP sendbuf */
+    if (!h2o_socket_write_finished(client->sock)) {
+        client->super._timeout.cb = on_send_timeout;
+        h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+    }
 
     client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
 }

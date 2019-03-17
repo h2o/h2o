@@ -194,6 +194,14 @@ void do_write(h2o_socket_t *_sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_
     uv_write(&sock->stream._wreq, (uv_stream_t *)sock->handle, (uv_buf_t *)bufs, (int)bufcnt, on_do_write_complete);
 }
 
+static int is_write_finished(h2o_socket_t *_sock)
+{
+    struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;
+
+    /*  FIXME: 'error' and 'bufs' are not public member in uv_write_t */
+    return sock->stream._wreq.error == 0 && sock->stream._wreq.bufs == NULL;
+}
+
 void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
 {
     struct st_h2o_uv_socket_t *sock = (struct st_h2o_uv_socket_t *)_sock;

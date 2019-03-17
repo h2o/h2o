@@ -994,7 +994,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
     assert(conn->output.buf_in_flight != NULL);
 
-    h2o_timer_unlink(&conn->io_timeout);
+    if (h2o_timer_is_linked(&conn->io_timeout))
+        h2o_timer_unlink(&conn->io_timeout);
 
     /* close by error if necessary */
     if (err != NULL) {
@@ -1149,8 +1150,10 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
         h2o_socket_write(conn->super.sock, &buf, 1, on_write_complete);
         conn->output.buf_in_flight = conn->output.buf;
         h2o_buffer_init(&conn->output.buf, &wbuf_buffer_prototype);
-        if (!h2o_timer_is_linked(&conn->io_timeout))
-            h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->io_timeout, &conn->io_timeout);
+        if (!h2o_timer_is_linked(&conn->io_timeout)) {
+            if (!h2o_socket_write_finished(conn->super.sock))
+                h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->io_timeout, &conn->io_timeout);
+        }
     }
 }
 

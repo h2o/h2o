@@ -711,6 +711,11 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     }
 }
 
+int h2o_socket_write_finished(h2o_socket_t *sock)
+{
+    return is_write_finished(sock);
+}
+
 void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_socket_cb cb;
