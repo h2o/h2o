@@ -248,7 +248,7 @@ struct st_quicly_conn_t {
          */
         int64_t last_retransmittable_sent_at;
         /**
-         *
+         * when to send an ACK, or other frames used for managing the connection
          */
         int64_t send_ack_at;
         /**
@@ -2974,6 +2974,12 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
 
     update_now(conn->super.ctx);
 
+    /* bail out if there's nothing is scheduled to be sent */
+    if (now < quicly_get_first_timeout(conn)) {
+        *num_packets = 0;
+        return 0;
+    }
+
     LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_SEND, INT_EVENT_ATTR(STATE, (int64_t)conn->super.state));
 
     if (conn->super.state >= QUICLY_STATE_CLOSING) {
@@ -3083,8 +3089,7 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
             if ((ret = send_max_streams(conn, 0, &s)) != 0)
                 goto Exit;
             /* send connection-level flow control frame */
-            if (quicly_maxsender_should_send_max(&conn->ingress.max_data.sender, conn->ingress.max_data.bytes_consumed,
-                                                 (uint32_t)conn->super.ctx->transport_params.max_data, 512)) {
+            if (should_send_max_data(conn)) {
                 quicly_sent_t *sent;
                 if ((ret = allocate_ack_eliciting_frame(conn, &s, QUICLY_MAX_DATA_FRAME_CAPACITY, &sent, on_ack_max_data)) != 0)
                     goto Exit;
@@ -3533,7 +3538,6 @@ static int handle_max_data_frame(quicly_conn_t *conn, quicly_max_data_frame_t *f
         return 0;
     conn->egress.max_data.permitted = frame->max_data;
 
-    /* TODO schedule for delivery */
     return 0;
 }
 
@@ -4131,6 +4135,10 @@ int quicly_receive(quicly_conn_t *conn, quicly_decoded_packet_t *packet)
                 conn->crypto.handshake_scheduled_for_discard = 1;
             }
         }
+        break;
+    case QUICLY_EPOCH_1RTT:
+        if (!is_ack_only && should_send_max_data(conn))
+            conn->egress.send_ack_at = 0;
         break;
     default:
         break;
