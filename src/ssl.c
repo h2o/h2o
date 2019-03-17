@@ -1124,27 +1124,31 @@ static __thread struct {
 
 static void update_cid_keys(void)
 {
-    if (quic_cid_keys.generation == session_tickets.generation)
-        return;
+    unsigned new_generation;
 
-    /* we need to update. first, release all entries from quic_cid_keys */
-    while (quic_cid_keys.keys.size != 0)
-        quicly_free_default_cid_enncryptor(quic_cid_keys.keys.entries[--quic_cid_keys.keys.size].encryptor);
+    while ((new_generation = session_tickets.generation) != quic_cid_keys.generation) {
+        /* we need to update. first, release all entries from quic_cid_keys */
+        while (quic_cid_keys.keys.size != 0)
+            quicly_free_default_cid_enncryptor(quic_cid_keys.keys.entries[--quic_cid_keys.keys.size].encryptor);
 
-    /* build quic_cid_keys while taking the read lock */
-    pthread_rwlock_rdlock(&session_tickets.rwlock);
-    assert(session_tickets.tickets.size != 0);
-    h2o_vector_reserve(NULL, &quic_cid_keys.keys, session_tickets.tickets.size);
-    for (; quic_cid_keys.keys.size != session_tickets.tickets.size; ++quic_cid_keys.keys.size) {
-        struct st_session_ticket_t *ticket = session_tickets.tickets.entries[quic_cid_keys.keys.size];
-        struct st_quic_cid_key_t *slot = quic_cid_keys.keys.entries + quic_cid_keys.keys.size;
-        slot->name = ticket->name[0];
-        slot->encryptor = quicly_new_default_cid_encryptor(
-            &ptls_openssl_bfecb, &ptls_openssl_sha256,
-            ptls_iovec_init(ticket->keybuf, EVP_CIPHER_key_length(ticket->cipher) + EVP_MD_block_size(ticket->hmac)));
-        assert(slot->encryptor != NULL);
+        /* build quic_cid_keys while taking the read lock */
+        pthread_rwlock_rdlock(&session_tickets.rwlock);
+        assert(session_tickets.tickets.size != 0);
+        h2o_vector_reserve(NULL, &quic_cid_keys.keys, session_tickets.tickets.size);
+        for (; quic_cid_keys.keys.size != session_tickets.tickets.size; ++quic_cid_keys.keys.size) {
+            struct st_session_ticket_t *ticket = session_tickets.tickets.entries[quic_cid_keys.keys.size];
+            struct st_quic_cid_key_t *slot = quic_cid_keys.keys.entries + quic_cid_keys.keys.size;
+            slot->name = ticket->name[0];
+            slot->encryptor = quicly_new_default_cid_encryptor(
+                &ptls_openssl_bfecb, &ptls_openssl_sha256,
+                ptls_iovec_init(ticket->keybuf, EVP_CIPHER_key_length(ticket->cipher) + EVP_MD_block_size(ticket->hmac)));
+            assert(slot->encryptor != NULL);
+        }
+        pthread_rwlock_unlock(&session_tickets.rwlock);
+
+        /* update our counter */
+        quic_cid_keys.generation = new_generation;
     }
-    pthread_rwlock_unlock(&session_tickets.rwlock);
 }
 
 static void encrypt_cid(quicly_cid_encryptor_t *self, quicly_cid_t *encrypted, void *stateless_reset_token,
