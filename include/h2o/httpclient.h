@@ -55,6 +55,8 @@ typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *cl
 typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg,
                                                h2o_header_t *headers, size_t num_headers);
 
+typedef void (*h2o_httpclient_finish_cb)(h2o_httpclient_t *client);
+
 typedef struct st_h2o_httpclient_connection_pool_t {
     /**
      * used to establish connections and pool those when h1 is used.
@@ -149,6 +151,11 @@ struct st_h2o_httpclient_t {
      */
     int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_stream);
 
+    /**
+     * callback that will be called after sending all request and receiving all response
+     */
+    h2o_httpclient_finish_cb on_finish;
+
     h2o_timer_t _timeout;
     h2o_socketpool_connect_request_t *_connect_req;
     union {
@@ -156,6 +163,9 @@ struct st_h2o_httpclient_t {
         h2o_httpclient_head_cb on_head;
         h2o_httpclient_body_cb on_body;
     } _cb;
+
+    unsigned _req_done : 1;
+    unsigned _res_done : 1;
 };
 
 /**
@@ -195,7 +205,7 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
  * TODO: create H1- or H2-specific connect function that works without the connection pool?
  */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb on_connect, h2o_httpclient_finish_cb on_finish);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 extern const size_t h2o_httpclient__h1_size;

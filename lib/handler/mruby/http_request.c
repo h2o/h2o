@@ -86,7 +86,6 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
     /* clear the refs */
     if (ctx->client != NULL) {
         ctx->client->cancel(ctx->client);
-        ctx->client = NULL;
     }
 
     if (!mrb_nil_p(ctx->refs.request))
@@ -106,7 +105,6 @@ static int try_dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
 #define IS_NIL_OR_DEAD(o) (mrb_nil_p(o) || mrb_object_dead_p(ctx->ctx->shared->mrb, mrb_basic_ptr(o)))
     if (IS_NIL_OR_DEAD(ctx->refs.request) && IS_NIL_OR_DEAD(ctx->refs.input_stream)) {
-        ctx->client = NULL;
         dispose_context(ctx);
         return 1;
     }
@@ -166,7 +164,6 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
         h2o_buffer_init(input, &h2o_socket_buffer_prototype);
         input = &sender->remaining;
         sender->client->shortcut = NULL;
-        sender->client = NULL;
     }
 
     if (!sender->super.final_sent && !sender->sending.inflight)
@@ -322,7 +319,6 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
-    ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
     h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
     memcpy(ctx->resp.after_closed->bytes + ctx->resp.after_closed->size, errstr, errstr_len);
@@ -502,6 +498,12 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     return cb;
 }
 
+static void on_finish(h2o_httpclient_t *client)
+{
+    struct st_h2o_mruby_http_request_context_t *ctx = client->data;
+    ctx->client = NULL;
+}
+
 static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
@@ -607,7 +609,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
 
     h2o_httpclient_connect(&ctx->client, &ctx->pool, ctx, &shared_ctx->ctx->proxy.client_ctx, &shared_ctx->ctx->proxy.connpool,
-                           &url, on_connect);
+                           &url, on_connect, on_finish);
 
     return ctx->refs.request;
 }
