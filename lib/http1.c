@@ -179,6 +179,7 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
 
 DECL_ENTITY_READ_SEND_ERROR_XXX(400)
 DECL_ENTITY_READ_SEND_ERROR_XXX(413)
+DECL_ENTITY_READ_SEND_ERROR_XXX(502)
 
 static void on_entity_read_complete(struct st_h2o_http1_conn_t *conn)
 {
@@ -205,8 +206,8 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
         if (ret == -2) {
             /* incomplete */
             if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, bufsz), 0) != 0) {
-                h2o_socket_read_stop(conn->sock);
-                h2o_send_error_502(&conn->req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
+                return;
             }
             h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
             conn->_req_body.bytes_received += bufsz;
@@ -218,8 +219,8 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     }
     /* complete */
     if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, bufsz), 1) != 0) {
-        h2o_socket_read_stop(conn->sock);
-        h2o_send_error_502(&conn->req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
+        return;
     }
     h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
     conn->_req_body.bytes_received += bufsz;
@@ -253,8 +254,8 @@ static void handle_content_length_entity_read(struct st_h2o_http1_conn_t *conn)
         return;
 
     if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, conn->sock->input->size), complete) != 0) {
-        h2o_socket_read_stop(conn->sock);
-        h2o_send_error_502(&conn->req, "Bad Gateway", "Bad Gateway", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
+        return;
     }
     conn->_req_body.bytes_received += conn->sock->input->size;
     h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
