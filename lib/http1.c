@@ -469,10 +469,10 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
         return -1;
     conn->req.entity = h2o_iovec_init(conn->_req_body.body->bytes, conn->_req_body.body->size);
 
-    if (is_end_entity)
+    if (is_end_entity) {
         conn->req.proceed_req = NULL;
-
-    h2o_process_request(&conn->req);
+        h2o_process_request(&conn->req);
+    }
     return 0;
 }
 
