@@ -277,6 +277,13 @@ static void preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t
     h2o_http2_scheduler_deactivate(&(*dst)->_scheduler);
 }
 
+static void finish_body_streaming(h2o_http2_stream_t *stream)
+{
+    h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
+    stream->_conn_stream_in_progress = 0;
+    conn->num_streams._request_body_in_progress--;
+}
+
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     preserve_stream_scheduler(conn, stream);
@@ -286,9 +293,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     kh_del(h2o_http2_stream_t, conn->streams, iter);
 
     if (stream->_conn_stream_in_progress) {
-        h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
-        stream->_conn_stream_in_progress = 0;
-        conn->num_streams._request_body_in_progress--;
+        finish_body_streaming(stream);
     }
 
     switch (stream->state) {
@@ -441,7 +446,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
         h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
 
     /* handle input */
-    if (is_end_stream) {
+    if (is_end_stream && stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING) {
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
         if (stream->req.proceed_req != NULL)
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
@@ -449,6 +454,16 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (stream->req.write_req.cb(stream->req.write_req.ctx, payload, is_end_stream) != 0) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
+        return;
+    }
+
+    if (is_end_stream) {
+        if (stream->_conn_stream_in_progress) {
+            finish_body_streaming(stream);
+        }
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
+            h2o_http2_stream_close(conn, stream);
+        }
     }
 }
 
@@ -726,7 +741,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
             return H2O_HTTP2_ERROR_PROTOCOL;
         }
     }
-    if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY) {
+    if (stream->state != H2O_HTTP2_STREAM_STATE_RECV_BODY && !stream->_conn_stream_in_progress) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         return 0;
