@@ -78,11 +78,11 @@ int h2o_access_log_open_log(const char *path)
         char *argv[4] = {"/bin/sh", "-c", (char *)(path + 1), NULL};
         /* create pipe */
         if (pipe(pipefds) != 0) {
-            perror("pipe failed");
+            h2o_perror("pipe failed");
             return -1;
         }
         if (fcntl(pipefds[1], F_SETFD, FD_CLOEXEC) == -1) {
-            perror("failed to set FD_CLOEXEC on pipefds[1]");
+            h2o_perror("failed to set FD_CLOEXEC on pipefds[1]");
             return -1;
         }
         /* spawn the logger */

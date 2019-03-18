@@ -102,7 +102,7 @@ static void create_lookup_thread(void)
             H2O_ERROR_PRINTF("failed to start first thread for getaddrinfo:%s\n", strerror(ret));
             abort();
         } else {
-            perror("pthread_create(for getaddrinfo)");
+            h2o_perror("pthread_create(for getaddrinfo)");
         }
         return;
     }

@@ -60,7 +60,7 @@ int h2o_setuidgid(const char *user)
 
     errno = 0;
     if (getpwnam_r(user, &pwbuf, buf, sizeof(buf), &pw) != 0) {
-        perror("getpwnam_r");
+        h2o_perror("getpwnam_r");
         return -1;
     }
     if (pw == NULL) {

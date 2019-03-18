@@ -263,7 +263,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     char *tmpfn = alloca(strlen(inbuf->_prototype->mmap_settings->fn_template) + 1);
                     strcpy(tmpfn, inbuf->_prototype->mmap_settings->fn_template);
                     if ((fd = mkstemp(tmpfn)) == -1) {
-                        H2O_ERROR_PRINTF("failed to create temporary file:%s:%s\n", tmpfn, strerror(errno));
+                        h2o_perror("failed to create temporary file");
                         goto MapError;
                     }
                     unlink(tmpfn);
@@ -277,11 +277,11 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 fallocate_ret = ftruncate(fd, new_allocsize);
 #endif
                 if (fallocate_ret != 0) {
-                    perror("failed to resize temporary file");
+                    h2o_perror("failed to resize temporary file");
                     goto MapError;
                 }
                 if ((newp = (void *)mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
-                    perror("mmap failed");
+                    h2o_perror("mmap failed");
                     goto MapError;
                 }
                 if (inbuf->_fd == -1) {

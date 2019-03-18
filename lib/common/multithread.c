@@ -102,7 +102,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
 
     fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (fd == -1) {
-        perror("eventfd");
+        h2o_perror("eventfd");
         abort();
     }
     queue->async.write = fd;
@@ -111,7 +111,7 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
     int fds[2];
 
     if (cloexec_pipe(fds) != 0) {
-        perror("pipe");
+        h2o_perror("pipe");
         abort();
     }
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
@@ -227,7 +227,7 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg)
 {
     if (pthread_create(tid, attr, func, arg) != 0) {
-        perror("pthread_create");
+        h2o_perror("pthread_create");
         abort();
     }
 }
