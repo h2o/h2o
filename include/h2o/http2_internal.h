@@ -123,13 +123,6 @@ struct st_h2o_http2_stream_t {
      */
     h2o_send_state_t send_state;
     /**
-     * structure used for request body processing; `body` is NULL unless request body IS expected
-     */
-    struct {
-        h2o_buffer_t *body;
-        size_t bytes_received;
-    } _req_body;
-    /**
      * the request object; placed at last since it is large and has it's own ctor
      */
     h2o_req_t req;

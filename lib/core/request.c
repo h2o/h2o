@@ -322,6 +322,9 @@ void h2o_dispose_request(h2o_req_t *req)
     if (req->error_logs != NULL)
         h2o_buffer_dispose(&req->error_logs);
 
+    if (req->_req_body.body != NULL)
+        h2o_buffer_dispose(&req->_req_body.body);
+
     h2o_mem_clear_pool(&req->pool);
 }
 
