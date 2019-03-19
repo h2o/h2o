@@ -420,7 +420,7 @@ inline int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
     h2o_iovec_t buf = h2o_buffer_reserve(dst, len);
     if (buf.base == NULL)
         return 0;
-    memcpy(buf.base, src, len);
+    h2o_memcpy(buf.base, src, len);
     (*dst)->size += len;
     return 1;
 }
