@@ -191,7 +191,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     if ((bufsz = conn->sock->input->size) == 0)
         return;
     ret = phr_decode_chunked(&reader->decoder, conn->sock->input->bytes, &bufsz);
-    if (ret != -1 && bufsz + conn->req._req_body.bytes_received >= conn->super.ctx->globalconf->max_request_entity_size) {
+    if (ret != -1 && bufsz + conn->req._body.bytes_received >= conn->super.ctx->globalconf->max_request_entity_size) {
         entity_read_send_error_413(conn, "Request Entity Too Large", "request entity is too large");
         return;
     }
@@ -203,7 +203,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
                 return;
             }
             h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
-            conn->req._req_body.bytes_received += bufsz;
+            conn->req._body.bytes_received += bufsz;
             return;
         }
         /* error */
@@ -216,7 +216,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
         return;
     }
     h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
-    conn->req._req_body.bytes_received += bufsz;
+    conn->req._body.bytes_received += bufsz;
     conn->req.proceed_req = NULL;
     on_entity_read_complete(conn);
 }
@@ -238,7 +238,7 @@ static void handle_content_length_entity_read(struct st_h2o_http1_conn_t *conn)
     int complete;
     struct st_h2o_http1_content_length_entity_reader *reader = (void *)conn->_req_entity_reader;
 
-    if (conn->req._req_body.bytes_received + conn->sock->input->size >= reader->content_length)
+    if (conn->req._body.bytes_received + conn->sock->input->size >= reader->content_length)
         complete = 1;
     else
         complete = 0;
@@ -250,7 +250,7 @@ static void handle_content_length_entity_read(struct st_h2o_http1_conn_t *conn)
         entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
         return;
     }
-    conn->req._req_body.bytes_received += conn->sock->input->size;
+    conn->req._body.bytes_received += conn->sock->input->size;
     h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
     if (complete) {
         conn->req.proceed_req = NULL;
@@ -459,9 +459,9 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, _req);
 
-    if (h2o_buffer_append(&conn->req._req_body.body, payload.base, payload.len) == 0)
+    if (h2o_buffer_append(&conn->req._body.body, payload.base, payload.len) == 0)
         return -1;
-    conn->req.entity = h2o_iovec_init(conn->req._req_body.body->bytes, conn->req._req_body.body->size);
+    conn->req.entity = h2o_iovec_init(conn->req._body.body->bytes, conn->req._body.body->size);
 
     if (is_end_entity) {
         conn->req.proceed_req = NULL;
@@ -474,9 +474,9 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, _req);
 
-    if (h2o_buffer_append(&conn->req._req_body.body, payload.base, payload.len) == 0)
+    if (h2o_buffer_append(&conn->req._body.body, payload.base, payload.len) == 0)
         return -1;
-    conn->req.entity = h2o_iovec_init(conn->req._req_body.body->bytes, conn->req._req_body.body->size);
+    conn->req.entity = h2o_iovec_init(conn->req._body.body->bytes, conn->req._body.body->size);
 
     /* mark that we have seen eos */
     if (is_end_stream)
@@ -492,9 +492,9 @@ static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity)
 
     if (!is_end_entity && (first_handler = h2o_get_first_handler(&conn->req)) != NULL &&
         first_handler->supports_request_streaming) {
-        if (h2o_buffer_append(&conn->req._req_body.body, payload.base, payload.len) == 0)
+        if (h2o_buffer_append(&conn->req._body.body, payload.base, payload.len) == 0)
             return -1;
-        conn->req.entity = h2o_iovec_init(conn->req._req_body.body->bytes, conn->req._req_body.body->size);
+        conn->req.entity = h2o_iovec_init(conn->req._body.body->bytes, conn->req._body.body->size);
         conn->req.write_req.cb = write_req_streaming_pre_dispatch;
         conn->req.proceed_req = proceed_request;
         h2o_process_request(&conn->req);
@@ -548,7 +548,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->req.write_req.cb = write_req_first;
             conn->req.write_req.ctx = &conn->req;
             h2o_buffer_consume(&conn->sock->input, reqlen);
-            h2o_buffer_init(&conn->req._req_body.body, &h2o_socket_buffer_prototype);
+            h2o_buffer_init(&conn->req._body.body, &h2o_socket_buffer_prototype);
             if (expect.base != NULL) {
                 static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
                 h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
@@ -669,7 +669,7 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
     /* handle next request */
     init_request(conn);
     h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
-    conn->req._req_body.bytes_received = 0;
+    conn->req._body.bytes_received = 0;
     conn->req.write_req.cb = NULL;
     conn->req.write_req.ctx = NULL;
     conn->req.proceed_req = NULL;

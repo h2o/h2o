@@ -1116,7 +1116,7 @@ struct st_h2o_req_t {
     struct {
         size_t bytes_received;
         h2o_buffer_t *body;
-    } _req_body;
+    } _body;
 
     /**
      * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
