@@ -181,11 +181,26 @@ static void on_entity_read_complete(struct st_h2o_http1_conn_t *conn)
     h2o_socket_read_stop(conn->sock);
 }
 
+static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t bufsz, int complete)
+{
+    if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, bufsz), complete) != 0) {
+        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
+        return;
+    }
+    h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
+    conn->req._body.bytes_received += bufsz;
+    if (complete) {
+        conn->req.proceed_req = NULL;
+        on_entity_read_complete(conn);
+    }
+}
+
 static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
 {
     struct st_h2o_http1_chunked_entity_reader *reader = (void *)conn->_req_entity_reader;
     size_t bufsz;
     ssize_t ret;
+    int complete = 0;
 
     /* decode the incoming data */
     if ((bufsz = conn->sock->input->size) == 0)
@@ -198,27 +213,15 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     if (ret < 0) {
         if (ret == -2) {
             /* incomplete */
-            if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, bufsz), 0) != 0) {
-                entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
-                return;
-            }
-            h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
-            conn->req._body.bytes_received += bufsz;
-            return;
+            goto Done;
         }
         /* error */
         entity_read_send_error_400(conn, "Invalid Request", "broken chunked-encoding");
         return;
     }
     /* complete */
-    if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, bufsz), 1) != 0) {
-        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
-        return;
-    }
-    h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
-    conn->req._body.bytes_received += bufsz;
-    conn->req.proceed_req = NULL;
-    on_entity_read_complete(conn);
+Done:
+    handle_one_body_fragment(conn, bufsz, complete);
 }
 
 static int create_chunked_entity_reader(struct st_h2o_http1_conn_t *conn)
@@ -246,16 +249,7 @@ static void handle_content_length_entity_read(struct st_h2o_http1_conn_t *conn)
     if (!complete && conn->sock->input->size == 0)
         return;
 
-    if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, conn->sock->input->size), complete) != 0) {
-        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
-        return;
-    }
-    conn->req._body.bytes_received += conn->sock->input->size;
-    h2o_buffer_consume(&conn->sock->input, conn->sock->input->size);
-    if (complete) {
-        conn->req.proceed_req = NULL;
-        on_entity_read_complete(conn);
-    }
+    handle_one_body_fragment(conn, conn->sock->input->size, complete);
 }
 
 static int create_content_length_entity_reader(struct st_h2o_http1_conn_t *conn, size_t content_length)
