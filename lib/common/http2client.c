@@ -1016,7 +1016,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         if (stream->streaming.proceed_req != NULL) {
             size_t bytes_written = stream->streaming.bytes_in_flight;
             stream->streaming.bytes_in_flight = 0;
-            stream->streaming.proceed_req(&stream->super, bytes_written, stream->streaming.done);
+            stream->streaming.proceed_req(&stream->super, bytes_written, stream->streaming.done); // TODO use send_state instead of bool
         }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {

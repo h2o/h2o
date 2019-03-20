@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 #include "h2o/header.h"
+#include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
 
@@ -38,7 +39,7 @@ typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
 
-typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
+typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
                                                          h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,

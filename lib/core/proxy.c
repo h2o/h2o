@@ -314,8 +314,8 @@ static void do_close(struct rp_generator_t *self)
      * Thus, to ensure to do closing things, both of dispose and stop callbacks call this function.
      */
     if (self->client != NULL) {
-        self->client->cancel(self->client);
-        detach_client(self);
+        h2o_httpclient_t *client = detach_client(self);
+        client->cancel(client);
     }
     h2o_timer_unlink(&self->send_headers_timeout);
 }
@@ -397,10 +397,12 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
         /* detach the content */
         self->last_content_before_send = *self->client->buf;
         h2o_buffer_init(self->client->buf, &h2o_socket_buffer_prototype);
-        self->res_done = 1;
-        if (self->req_done)
+        if (errstr == h2o_httpclient_error_is_eos) {
+            self->res_done = 1;
+            if (self->req_done)
+                detach_client(self);
+        } else {
             detach_client(self);
-        if (errstr != h2o_httpclient_error_is_eos) {
             h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
             self->had_body_error = 1;
         }
@@ -474,8 +476,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
-                    self->client->cancel(self->client);
-                    detach_client(self);
+                    h2o_httpclient_t *client = detach_client(self);
+                    client->cancel(client);
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
                     h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
                     return NULL;
@@ -573,14 +575,17 @@ static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t
     return 0;
 }
 
-static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end_stream)
+static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
     struct rp_generator_t *self = client->data;
     if (self == NULL) {
         return;
     }
+    if (!h2o_send_state_is_in_progress(send_state)) {
+        detach_client(self);
+    }
     if (self->src_req->proceed_req != NULL)
-        self->src_req->proceed_req(self->src_req, written, is_end_stream);
+        self->src_req->proceed_req(self->src_req, written, send_state);
 }
 
 static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)

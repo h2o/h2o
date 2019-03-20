@@ -89,16 +89,24 @@ static void close_client(struct st_h2o_http1client_t *client)
     assert(client->state.res == STREAM_STATE_CLOSED);
     if (client->state.req == STREAM_STATE_CLOSED) {
         close_client_now(client);
+    } else {
+        h2o_socket_read_stop(client->sock);
     }
 }
 
 static void on_error(struct st_h2o_http1client_t *client, const char *errstr)
 {
     client->_do_keepalive = 0;
-    if (client->state.res >= STREAM_STATE_OPEN) {
-        client->super._cb.on_body(&client->super, errstr);
-    } else {
+    switch (client->state.res) {
+    case STREAM_STATE_IDLE:
         client->super._cb.on_head(&client->super, errstr, 0, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
+        break;
+    case STREAM_STATE_OPEN:
+        client->super._cb.on_body(&client->super, errstr);
+        break;
+    case STREAM_STATE_CLOSED:
+        /* error happened after sending early response */
+        break;
     }
     close_client_now(client);
 }
@@ -436,7 +444,8 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1client_t *client = sock->data;
 
     if (client->_body_buf_in_flight != NULL) {
-        client->proceed_req(&client->super, client->_body_buf_in_flight->size, client->_body_buf_is_done);
+        h2o_send_state_t send_state = err != NULL ? H2O_SEND_STATE_ERROR : client->_body_buf_is_done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS;
+        client->proceed_req(&client->super, client->_body_buf_in_flight->size, send_state);
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
     }
 
