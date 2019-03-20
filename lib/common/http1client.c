@@ -444,8 +444,12 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1client_t *client = sock->data;
 
     if (client->_body_buf_in_flight != NULL) {
-        h2o_send_state_t send_state = err != NULL ? H2O_SEND_STATE_ERROR : client->_body_buf_is_done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS;
-        client->proceed_req(&client->super, client->_body_buf_in_flight->size, send_state);
+        /* is an error happened before finishing sending the response,
+           that error will be notified via on_head or on_body callback in on_send_request */
+        if (err == NULL || client->state.res == STREAM_STATE_CLOSED) {
+            h2o_send_state_t send_state = err != NULL ? H2O_SEND_STATE_ERROR : client->_body_buf_is_done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS;
+            client->proceed_req(&client->super, client->_body_buf_in_flight->size, send_state);
+        }
         h2o_buffer_consume(&client->_body_buf_in_flight, client->_body_buf_in_flight->size);
     }
 
