@@ -242,11 +242,10 @@ static void handle_content_length_entity_read(struct st_h2o_http1_conn_t *conn)
     int complete = 0;
     struct st_h2o_http1_content_length_entity_reader *reader = (void *)conn->_req_entity_reader;
 
-    if (conn->sock->input->size == 0)
-        return;
-
     if (conn->req._body.bytes_received + conn->sock->input->size >= reader->content_length)
         complete = 1;
+    if (!complete && conn->sock->input->size == 0)
+        return;
 
     handle_one_body_fragment(conn, conn->sock->input->size, complete);
 }
