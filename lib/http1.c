@@ -473,29 +473,23 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
 
     /* mark that we have seen eos */
     if (is_end_stream)
-        conn->req.proceed_req = NULL; 
+        conn->req.proceed_req = NULL;
 
     return 0;
 }
 
-static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity)
+static void on_body_streaming_selected(h2o_req_t *req, int streaming)
 {
-    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, _req);
-    h2o_handler_t *first_handler;
-
-    if (!is_end_entity && (first_handler = h2o_get_first_handler(&conn->req)) != NULL &&
-        first_handler->supports_request_streaming) {
-        if (h2o_buffer_append(&conn->req._body.body, payload.base, payload.len) == 0)
-            return -1;
-        conn->req.entity = h2o_iovec_init(conn->req._body.body->bytes, conn->req._body.body->size);
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
+    if (streaming) {
         conn->req.write_req.cb = write_req_streaming_pre_dispatch;
         conn->req.proceed_req = proceed_request;
         h2o_process_request(&conn->req);
-        return 0;
+        return;
     }
 
     conn->req.write_req.cb = write_req_non_streaming;
-    return write_req_non_streaming(&conn->req, payload, is_end_entity);
+    return;
 }
 
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
@@ -538,7 +532,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             if (create_entity_reader(conn, headers + entity_body_header_index) != 0) {
                 return;
             }
-            conn->req.write_req.cb = write_req_first;
+            conn->req.write_req.cb = h2o_write_req_first;
+            conn->req.write_req.on_body_streaming_selected = on_body_streaming_selected;
             conn->req.write_req.ctx = &conn->req;
             h2o_buffer_consume(&conn->sock->input, reqlen);
             h2o_buffer_init(&conn->req._body.body, &h2o_socket_buffer_prototype);
