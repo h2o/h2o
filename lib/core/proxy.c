@@ -427,8 +427,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
+    h2o_header_t *conn_header = NULL;
     size_t i;
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
+    int forward_close_connection = req->conn->ctx->globalconf->proxy.forward_close_connection;
     int seen_date_header = 0;
 
     self->src_req->timestamps.proxy = self->client->timings;
@@ -456,8 +458,11 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         h2o_iovec_t value = headers[i].value;
         if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
-            if (token->flags.proxy_should_drop_for_res)
+            if (token->flags.proxy_should_drop_for_res) {
+                if (token == H2O_TOKEN_CONNECTION)
+                    conn_header = &headers[i];
                 continue;
+            }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
@@ -523,6 +528,14 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         self->client = NULL;
         return NULL;
     }
+
+    if (forward_close_connection && conn_header != NULL) {
+        if (h2o_lcstris(conn_header->value.base, conn_header->value.len, H2O_STRLIT("close"))) {
+            if (self->src_req->version < 0x200)
+                self->src_req->http1_is_persistent = 0;
+        }
+    }
+
     /* declare the start of the response */
     h2o_start_response(req, &self->super);
 
