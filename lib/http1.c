@@ -200,7 +200,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     struct st_h2o_http1_chunked_entity_reader *reader = (void *)conn->_req_entity_reader;
     size_t bufsz;
     ssize_t ret;
-    int complete = 0;
+    int complete = 1;
 
     /* decode the incoming data */
     if ((bufsz = conn->sock->input->size) == 0)
@@ -213,6 +213,7 @@ static void handle_chunked_entity_read(struct st_h2o_http1_conn_t *conn)
     if (ret < 0) {
         if (ret == -2) {
             /* incomplete */
+            complete = 0;
             goto Done;
         }
         /* error */
