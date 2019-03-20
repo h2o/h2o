@@ -498,12 +498,6 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     return cb;
 }
 
-static void on_finish(h2o_httpclient_t *client)
-{
-    struct st_h2o_mruby_http_request_context_t *ctx = client->data;
-    ctx->client = NULL;
-}
-
 static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
@@ -609,7 +603,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
 
     h2o_httpclient_connect(&ctx->client, &ctx->pool, ctx, &shared_ctx->ctx->proxy.client_ctx, &shared_ctx->ctx->proxy.connpool,
-                           &url, on_connect, on_finish);
+                           &url, on_connect);
 
     return ctx->refs.request;
 }
