@@ -306,14 +306,15 @@ sub run_with_h2get {
     my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
     print $scriptfh $script;
     close($scriptfh);
-    return run_prog(bindir()."/h2get_bin/h2get $scriptfn https://127.0.0.1:$server->{tls_port}");
+    return run_prog(bindir()."/h2get_bin/h2get $scriptfn 127.0.0.1:$server->{tls_port}");
 }
 
 sub run_with_h2get_simple {
     my ($server, $script) = @_;
     my $settings = <<'EOS';
     h2g = H2.new
-    host = ARGV[0]
+    authority = ARGV[0]
+    host = "https://#{authority}"
     h2g.connect(host)
     h2g.send_prefix()
     h2g.send_settings()
