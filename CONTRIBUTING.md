@@ -15,3 +15,7 @@ that includes:
 * [Running Tests, Fuzzers](https://github.com/h2o/h2o/wiki/Running-Tests%2C-Fuzzers)
 * [Importing Third-party Code](https://github.com/h2o/h2o/wiki/Importing-Third-party-Code)
 * [Editing Documentation](https://github.com/h2o/h2o/wiki/Editing-Documentation)
+
+Reporting Security Issues
+---
+Please report vulnerabilities to h2o-vuln@googlegroups.com.
