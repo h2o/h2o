@@ -427,7 +427,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
-    h2o_header_t *conn_header = NULL;
     size_t i;
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int forward_close_connection = req->conn->ctx->globalconf->proxy.forward_close_connection;
@@ -459,8 +458,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
-                if (token == H2O_TOKEN_CONNECTION)
-                    conn_header = &headers[i];
+                if (forward_close_connection && token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200) {
+                    if (h2o_lcstris(headers[i].value.base, headers[i].value.len, H2O_STRLIT("close")))
+                        self->src_req->http1_is_persistent = 0;
+                }
                 continue;
             }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
@@ -527,13 +528,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         on_websocket_upgrade(self, *client_ctx->websocket_timeout);
         self->client = NULL;
         return NULL;
-    }
-
-    if (forward_close_connection && conn_header != NULL) {
-        if (h2o_lcstris(conn_header->value.base, conn_header->value.len, H2O_STRLIT("close"))) {
-            if (self->src_req->version < 0x200)
-                self->src_req->http1_is_persistent = 0;
-        }
     }
 
     /* declare the start of the response */
