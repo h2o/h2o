@@ -429,7 +429,7 @@ void h2o_mimemap_get_default_attributes(const char *mime, h2o_mime_attributes_t 
         MIME_IS("text/ecmascript") || MIME_IS("text/javascript")) {
         attr->is_compressible = 1;
         attr->priority = H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
-    } else if (MIME_IS("application/json") || MIME_STARTS_WITH("text/") || MIME_ENDS_WITH("+json") || MIME_ENDS_WITH("+xml")) {
+    } else if (MIME_IS("application/json") || MIME_IS("application/xml") || MIME_STARTS_WITH("text/") || MIME_ENDS_WITH("+json") || MIME_ENDS_WITH("+xml")) {
         attr->is_compressible = 1;
     }
 

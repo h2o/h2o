@@ -146,7 +146,7 @@ static void print_status_line(int version, int status, h2o_iovec_t msg)
         printf(".%d", version & 0xff);
     }
     printf(" %d", status);
-    if (msg.len == 0) {
+    if (msg.len != 0) {
         printf(" %.*s\n", (int)msg.len, msg.base);
     } else {
         printf("\n");
