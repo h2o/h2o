@@ -429,7 +429,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     h2o_req_t *req = self->src_req;
     size_t i;
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
-    int forward_close_connection = req->conn->ctx->globalconf->proxy.forward_close_connection;
     int seen_date_header = 0;
 
     self->src_req->timestamps.proxy = self->client->timings;
@@ -458,7 +457,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
-                if (forward_close_connection && token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200) {
+                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 && req->conn->ctx->globalconf->proxy.forward_close_connection) {
                     if (h2o_lcstris(headers[i].value.base, headers[i].value.len, H2O_STRLIT("close")))
                         self->src_req->http1_is_persistent = 0;
                 }
