@@ -88,6 +88,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
+static void reqread_start(struct st_h2o_http1_conn_t *conn);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
 const h2o_protocol_callbacks_t H2O_HTTP1_CALLBACKS = {
@@ -183,6 +184,8 @@ static void on_entity_read_complete(struct st_h2o_http1_conn_t *conn)
 
 static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fragment_size, size_t consume, int complete)
 {
+    set_timeout(conn, 0, NULL);
+    h2o_socket_read_stop(conn->sock);
     if (conn->req.write_req.cb(conn->req.write_req.ctx, h2o_iovec_init(conn->sock->input->bytes, fragment_size), complete) != 0) {
         entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
         return;
@@ -448,6 +451,8 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
 
 static void proceed_request(h2o_req_t *req, size_t written, int is_end_entity)
 {
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
+    reqread_start(conn);
     return;
 }
 
