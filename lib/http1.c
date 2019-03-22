@@ -652,7 +652,7 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         return;
     }
 
-    if (conn->req.proceed_req) {
+    if (conn->req.proceed_req != NULL) {
         conn->_req_entity_reader = NULL;
         set_timeout(conn, 0, NULL);
         h2o_socket_read_stop(conn->sock);
