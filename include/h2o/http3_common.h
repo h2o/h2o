@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include "quicly.h"
+#include "quicly/defaults.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/qpack.h"

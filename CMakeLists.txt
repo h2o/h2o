@@ -282,6 +282,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/lib/uecc.c
     deps/picotls/lib/openssl.c
     deps/quicly/lib/cc-reno.c
+    deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c

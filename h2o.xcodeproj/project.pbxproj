@@ -398,6 +398,11 @@
 		E98042162238D35B008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
 		E98042172238D362008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
 		E98042182238D363008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
+		E980423A22463044008B9745 /* defaults.h in Headers */ = {isa = PBXBuildFile; fileRef = E980423822463044008B9745 /* defaults.h */; };
+		E980423B22463044008B9745 /* cc.h in Headers */ = {isa = PBXBuildFile; fileRef = E980423922463044008B9745 /* cc.h */; };
+		E980423D2246304F008B9745 /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E980423C2246304F008B9745 /* defaults.c */; };
+		E980423E22463057008B9745 /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E980423C2246304F008B9745 /* defaults.c */; };
+		E980423F22463058008B9745 /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E980423C2246304F008B9745 /* defaults.c */; };
 		E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5861FD7BE2200DE4346 /* utf8_util.c */; };
 		E987E5D01FD7BE8D00DE4346 /* static_dict.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58C1FD7BE2300DE4346 /* static_dict.c */; };
 		E987E5D11FD7BE9200DE4346 /* metablock.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5801FD7BE2100DE4346 /* metablock.c */; };
@@ -1048,6 +1053,9 @@
 		E97EC88C213CE3130086AD64 /* hpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hpack.h; sourceTree = "<group>"; };
 		E98041C22230C45E008B9745 /* 40http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40http3.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E98042152238D35B008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
+		E980423822463044008B9745 /* defaults.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.h; sourceTree = "<group>"; };
+		E980423922463044008B9745 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
+		E980423C2246304F008B9745 /* defaults.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = defaults.c; sourceTree = "<group>"; };
 		E987E5551FD7BE1D00DE4346 /* bit_cost.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_cost.c; sourceTree = "<group>"; };
 		E987E5561FD7BE1D00DE4346 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		E987E5571FD7BE1D00DE4346 /* brotli_bit_stream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = brotli_bit_stream.h; sourceTree = "<group>"; };
@@ -2227,6 +2235,7 @@
 			isa = PBXGroup;
 			children = (
 				E98042152238D35B008B9745 /* cc-reno.c */,
+				E980423C2246304F008B9745 /* defaults.c */,
 				E901C3F0213E1C4000D17C93 /* frame.c */,
 				E901C3EF213E1C4000D17C93 /* loss.c */,
 				E901C3F3213E1C4000D17C93 /* quicly.c */,
@@ -2242,7 +2251,9 @@
 		E901C3D8213E1C1D00D17C93 /* quicly */ = {
 			isa = PBXGroup;
 			children = (
+				E980423922463044008B9745 /* cc.h */,
 				E901C3E3213E1C3600D17C93 /* constants.h */,
+				E980423822463044008B9745 /* defaults.h */,
 				E901C3E1213E1C3600D17C93 /* frame.h */,
 				E901C3E4213E1C3600D17C93 /* linklist.h */,
 				E901C3DE213E1C3600D17C93 /* loss.h */,
@@ -2588,6 +2599,7 @@
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
 				7DA3F5AF20E0B0400000222F /* token_table.h in Headers */,
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
+				E980423B22463044008B9745 /* cc.h in Headers */,
 				E9E5049421501CA5004DC170 /* http3_server.h in Headers */,
 				1058F6ED1D7CC99B00FFFFA3 /* openssl_backport.h in Headers */,
 				E98884C821E7F3AF0060F010 /* sendstate.h in Headers */,
@@ -2616,6 +2628,7 @@
 				E9BC76E51F00E70700EB7A09 /* salsa20.h in Headers */,
 				0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
+				E980423A22463044008B9745 /* defaults.h in Headers */,
 				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
 				1065E70E19BF6D9400686E72 /* uv-binding.c.h in Headers */,
 			);
@@ -2942,6 +2955,7 @@
 				10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */,
 				10AA2EA51A8D9999004322AC /* redirect.c in Sources */,
 				E98884CF21E7F3C80060F010 /* streambuf.c in Sources */,
+				E980423D2246304F008B9745 /* defaults.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
 				E98884D221E7F3C80060F010 /* recvstate.c in Sources */,
@@ -3088,6 +3102,7 @@
 				E9E5049221501BC3004DC170 /* server.c in Sources */,
 				E901C407213E1C5400D17C93 /* ranges.c in Sources */,
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
+				E980423E22463057008B9745 /* defaults.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
 				E901C431213E52B800D17C93 /* modes.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
@@ -3236,6 +3251,7 @@
 				E9708B851E52C8560029E0A5 /* connection.c in Sources */,
 				E9708B601E52C80F0029E0A5 /* fastcgi.c in Sources */,
 				E9708B621E52C80F0029E0A5 /* headers.c in Sources */,
+				E980423F22463058008B9745 /* defaults.c in Sources */,
 				E9708B581E52C7EE0029E0A5 /* proxy.c in Sources */,
 				E9708B881E52C8560029E0A5 /* stream.c in Sources */,
 				E9708B401E52C7860029E0A5 /* socket.c in Sources */,
