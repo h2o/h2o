@@ -20,6 +20,7 @@ SET(QUICLY_LIBRARY_FILES
     lib/frame.c
     lib/loss.c
     lib/cc-reno.c
+    lib/defaults.c
     lib/quicly.c
     lib/ranges.c
     lib/recvstate.c
@@ -45,6 +46,9 @@ TARGET_LINK_LIBRARIES(cli quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
 ADD_EXECUTABLE(test.t ${PICOTLS_OPENSSL_FILES} ${UNITTEST_SOURCE_FILES})
 TARGET_LINK_LIBRARIES(test.t quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+
+ADD_EXECUTABLE(examples-echo ${PICOTLS_OPENSSL_FILES} examples/echo.c)
+TARGET_LINK_LIBRARIES(examples-echo quicly ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
 ADD_EXECUTABLE(udpfw t/udpfw.c)
 

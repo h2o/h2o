@@ -29,6 +29,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include "quicly.h"
+#include "quicly/defaults.h"
 #include "quicly/streambuf.h"
 #include "../deps/picotls/t/util.h"
 

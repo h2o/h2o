@@ -48,7 +48,7 @@ extern "C" {
 #define QUICLY_LONG_HEADER_BIT 0x80
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff000011
+#define QUICLY_PROTOCOL_VERSION 0xff000012
 
 #define QUICLY_MAX_CID_LEN 18
 #define QUICLY_STATELESS_RESET_TOKEN_LEN 16
@@ -190,6 +190,7 @@ typedef struct st_quicly_cid_plaintext_t quicly_cid_plaintext_t;
 typedef struct st_quicly_context_t quicly_context_t;
 typedef struct st_quicly_conn_t quicly_conn_t;
 typedef struct st_quicly_stream_t quicly_stream_t;
+typedef struct st_quicly_send_context_t quicly_send_context_t;
 
 #define QUICLY_CALLBACK_TYPE0(ret, name)                                                                                           \
     typedef struct st_quicly_##name##_t {                                                                                          \
@@ -231,6 +232,36 @@ typedef struct st_quicly_cid_encryptor_t {
      */
     int (*generate_stateless_reset_token)(struct st_quicly_cid_encryptor_t *self, void *token, const void *cid);
 } quicly_cid_encryptor_t;
+
+/**
+ * stream scheduler
+ */
+typedef struct st_quicly_stream_scheduler_t {
+    /**
+     * returns if there's any data to send.  When `including_new_data` is set to true, the scheduler returns if there is any stream
+     * that have been registered.  When set to false, the scheduler should return if there is any stream registered by the
+     * `set_non_new_data` callback.
+     */
+    int (*can_send)(struct st_quicly_stream_scheduler_t *sched, quicly_conn_t *conn, int including_new_data);
+    /**
+     * Called by quicly to emit stream data.  The scheduler should repeatedly choose a stream and call `quicly_send_stream` until
+     * `quicly_can_send_stream` returns false.
+     */
+    int (*do_send)(struct st_quicly_stream_scheduler_t *sched, quicly_conn_t *conn, quicly_send_context_t *s);
+    /**
+     * Called by quicly to unregister a stream from the scheduler when there's nothing to be sent immediately on that stream.
+     */
+    void (*clear)(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *stream);
+    /**
+     * Called by quicly to notify the scheduler that the stream has new data to be sent.
+     */
+    void (*set_new_data)(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *stream);
+    /**
+     * Called by quicly to notify the scheduler that the stream has something other than new data to be sent (i.e. retransmits or
+     * FIN-only).
+     */
+    void (*set_non_new_data)(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *stream);
+} quicly_stream_scheduler_t;
 
 /**
  * called when stream is being open. Application is expected to create it's corresponding state and tie it to stream->data.
@@ -362,6 +393,10 @@ struct st_quicly_context_t {
      */
     quicly_stream_open_t *stream_open;
     /**
+     * callbacks for scheduling stream data
+     */
+    quicly_stream_scheduler_t *stream_scheduler;
+    /**
      * callback called when a connection is closed by peer
      */
     quicly_closed_by_peer_t *closed_by_peer;
@@ -449,6 +484,10 @@ struct _st_quicly_conn_public_t {
         socklen_t salen;
         quicly_transport_parameters_t transport_params;
     } peer;
+    struct {
+        quicly_linklist_t new_data;
+        quicly_linklist_t non_new_data;
+    } _default_scheduler;
     struct {
         uint64_t received, sent, lost, ack_received;
     } num_packets;
@@ -576,7 +615,7 @@ struct st_quicly_stream_t {
          */
         struct {
             quicly_linklist_t control; /* links to conn_t::control (or to conn_t::streams_blocked if the blocked flag is set) */
-            quicly_linklist_t stream;
+            quicly_linklist_t default_scheduler;
         } pending_link;
     } _send_aux;
     /**
@@ -644,8 +683,6 @@ typedef struct st_quicly_decoded_packet_t {
         QUICLY__DECODED_PACKET_CACHED_NOT_STATELESS_RESET
     } _is_stateless_reset_cached;
 } quicly_decoded_packet_t;
-
-extern const quicly_context_t quicly_default_context;
 
 /**
  *
@@ -730,6 +767,15 @@ int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase);
  *
  */
 int64_t quicly_get_first_timeout(quicly_conn_t *conn);
+/**
+ * checks if quicly_send_stream can be invoked
+ */
+int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s, int new_data);
+/**
+ * sends data of given stream. Called by stream scheduler.  Prior to calling the function each time, the scheduler should call
+ * `quicly_can_send_stream_data` to see if stream-level data can be sent.
+ */
+int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
  *
  */
@@ -820,32 +866,11 @@ static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
 /**
  *
  */
-extern quicly_packet_allocator_t quicly_default_packet_allocator;
-/**
- *
- */
-quicly_cid_encryptor_t *quicly_new_default_cid_encryptor(ptls_cipher_algorithm_t *cipher, ptls_hash_algorithm_t *hash,
-                                                         ptls_iovec_t key);
-/**
- *
- */
-void quicly_free_default_cid_enncryptor(quicly_cid_encryptor_t *self);
-/**
- *
- */
-extern quicly_now_t quicly_default_now;
-/**
- *
- */
-quicly_event_logger_t *quicly_new_default_event_logger(FILE *fp);
-/**
- *
- */
-void quicly_free_default_event_logger(quicly_event_logger_t *self);
-/**
- *
- */
 void quicly_amend_ptls_context(ptls_context_t *ptls);
+/**
+ *
+ */
+static void quicly_byte_to_hex(char *dst, uint8_t v);
 /**
  *
  */
@@ -953,6 +978,12 @@ inline void quicly_get_packet_stats(quicly_conn_t *conn, uint64_t *num_received,
     *num_lost = c->num_packets.lost;
     *num_ack_received = c->num_packets.ack_received;
     *num_bytes_sent = c->num_bytes_sent;
+}
+
+inline void quicly_byte_to_hex(char *dst, uint8_t v)
+{
+    dst[0] = "0123456789abcdef"[v >> 4];
+    dst[1] = "0123456789abcdef"[v & 0xf];
 }
 
 #ifdef __cplusplus

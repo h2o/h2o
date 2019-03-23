@@ -22,6 +22,10 @@
 #ifndef quicly_linklist_h
 #define quicly_linklist_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 
 typedef struct st_quicly_linklist_t {
@@ -73,5 +77,9 @@ inline void quicly_linklist_insert_list(quicly_linklist_t *prev, quicly_linklist
         quicly_linklist_init(l);
     }
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

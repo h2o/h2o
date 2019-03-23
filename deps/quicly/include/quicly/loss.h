@@ -22,6 +22,10 @@
 #ifndef quicly_loss_h
 #define quicly_loss_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -273,5 +277,9 @@ inline int quicly_loss_detect_loss(quicly_loss_t *r, uint64_t largest_pn, quicly
 
     return 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

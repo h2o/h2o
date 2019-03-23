@@ -22,6 +22,10 @@
 #ifndef quicly_sendstate_h
 #define quicly_sendstate_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "quicly/ranges.h"
 
 typedef struct st_quicly_sendstate_t {
@@ -72,5 +76,9 @@ inline int quicly_sendstate_is_open(quicly_sendstate_t *state)
 {
     return state->final_size == UINT64_MAX;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -22,6 +22,10 @@
 #ifndef quicly_recvstate_h
 #define quicly_recvstate_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include <stddef.h>
 #include "picotls.h"
@@ -62,5 +66,9 @@ inline size_t quicly_recvstate_bytes_available(quicly_recvstate_t *state)
     assert(state->data_off <= state->received.ranges[0].end);
     return state->received.ranges[0].end - state->data_off;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

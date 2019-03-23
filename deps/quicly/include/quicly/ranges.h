@@ -22,6 +22,10 @@
 #ifndef quicly_ranges_h
 #define quicly_ranges_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -62,5 +66,9 @@ inline void quicly_ranges_clear(quicly_ranges_t *ranges)
     ranges->num_ranges = 0;
     ranges->capacity = 1;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

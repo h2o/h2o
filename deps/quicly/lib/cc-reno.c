@@ -24,7 +24,7 @@
 
 #define QUICLY_INITIAL_WINDOW 10
 #define QUICLY_MIN_CWND 2
-#define QUICLY_RENO_BETA 0.8
+#define QUICLY_RENO_BETA 0.7
 
 void quicly_cc_init(quicly_cc_t *cc)
 {

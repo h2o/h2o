@@ -22,6 +22,10 @@
 #ifndef quicly_constants_h
 #define quicly_constants_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -62,5 +66,9 @@
 #define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 
 typedef int64_t quicly_stream_id_t;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

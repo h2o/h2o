@@ -22,6 +22,10 @@
 #ifndef quicly_maxsender_h
 #define quicly_maxsender_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -99,5 +103,9 @@ inline void quicly_maxsender_lost(quicly_maxsender_t *m, quicly_maxsender_sent_t
     if (--m->num_inflight == 0)
         m->max_sent = m->max_acked;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

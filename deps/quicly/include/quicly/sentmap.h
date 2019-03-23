@@ -22,6 +22,10 @@
 #ifndef quicly_sentmap_h
 #define quicly_sentmap_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <assert.h>
 #include <stdint.h>
 #include "quicly/constants.h"
@@ -248,5 +252,9 @@ inline const quicly_sent_packet_t *quicly_sentmap_get(quicly_sentmap_iter_t *ite
     assert(iter->p->acked == quicly_sentmap__type_packet);
     return &iter->p->data.packet;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
