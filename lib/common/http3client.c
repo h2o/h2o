@@ -293,8 +293,14 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
     int ret;
 
     if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
-        if (ret == H2O_HTTP3_ERROR_INCOMPLETE && err == 0)
-            return 0;
+        if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
+            /* incomplete */
+            if (err == 0)
+                return 0;
+            /* process the input using handle_input_data_payload if the frame is not partial */
+            if (*src == src_end)
+                goto Process;
+        }
         req->super._cb.on_body(&req->super, "malformed frame");
         return ret;
     }
@@ -308,11 +314,12 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
         return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
     }
 
-    req->handle_input = handle_input_data_payload;
     req->bytes_left_in_data_frame = frame.length;
 
+Process:
     /* unexpected close of DATA frame is handled by handle_input_data_payload. We rely on the function to detect if the DATA frame
      * is closed right after the frame header */
+    req->handle_input = handle_input_data_payload;
     return handle_input_data_payload(req, src, src_end, err, err_desc);
 }
 
