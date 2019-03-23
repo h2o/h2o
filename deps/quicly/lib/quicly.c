@@ -683,6 +683,7 @@ static int write_crypto_data(quicly_conn_t *conn, ptls_buffer_t *tlsbuf, size_t 
 
 int crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
+    quicly_conn_t *conn = stream->conn;
     size_t in_epoch = -(1 + stream->stream_id), epoch_offsets[5] = {0};
     ptls_iovec_t input;
     ptls_buffer_t output;
@@ -695,10 +696,10 @@ int crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src, 
 
     /* send handshake messages to picotls, and let it fill in the response */
     while ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
-        ret = ptls_handle_message(stream->conn->crypto.tls, &output, epoch_offsets, in_epoch, input.base, input.len,
-                                  &stream->conn->crypto.handshake_properties);
+        ret = ptls_handle_message(conn->crypto.tls, &output, epoch_offsets, in_epoch, input.base, input.len,
+                                  &conn->crypto.handshake_properties);
         quicly_streambuf_ingress_shift(stream, input.len);
-        LOG_CONNECTION_EVENT(stream->conn, QUICLY_EVENT_TYPE_CRYPTO_HANDSHAKE, INT_EVENT_ATTR(TLS_ERROR, ret));
+        LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CRYPTO_HANDSHAKE, INT_EVENT_ATTR(TLS_ERROR, ret));
         switch (ret) {
         case 0:
             break;
@@ -708,8 +709,18 @@ int crypto_stream_receive(quicly_stream_t *stream, size_t off, const void *src, 
         default:
             goto Exit;
         }
+        /* drop 0-RTT write key if 0-RTT is rejected by peer */
+        if (conn->application != NULL && !conn->application->one_rtt_writable && conn->application->cipher.egress.aead != NULL) {
+            assert(quicly_is_client(conn));
+            if (conn->crypto.handshake_properties.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED) {
+                dispose_cipher(&conn->application->cipher.egress);
+                conn->application->cipher.egress = (struct st_quicly_cipher_context_t){NULL};
+                discard_sentmap_by_epoch(
+                    conn, 1u << QUICLY_EPOCH_1RTT); /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
+            }
+        }
     }
-    write_crypto_data(stream->conn, &output, epoch_offsets);
+    write_crypto_data(conn, &output, epoch_offsets);
 
 Exit:
     ptls_buffer_dispose(&output);
@@ -2851,15 +2862,6 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
         }
         break;
     case QUICLY_EPOCH_HANDSHAKE:
-        if (is_enc && conn->application != NULL && quicly_is_client(conn) &&
-            !conn->crypto.handshake_properties.client.early_data_accepted_by_peer) {
-            /* 0-RTT is rejected */
-            assert(conn->application->cipher.egress.aead != NULL);
-            dispose_cipher(&conn->application->cipher.egress);
-            conn->application->cipher.egress = (struct st_quicly_cipher_context_t){NULL};
-            discard_sentmap_by_epoch(
-                conn, 1u << QUICLY_EPOCH_1RTT); /* retire all packets with ack_epoch == 3; they are all 0-RTT packets */
-        }
         if (conn->handshake == NULL && (ret = setup_handshake_space_and_flow(conn, QUICLY_EPOCH_HANDSHAKE)) != 0)
             return ret;
         SELECT_CIPHER_CONTEXT(is_enc ? &conn->handshake->cipher.egress : &conn->handshake->cipher.ingress);
@@ -4043,6 +4045,7 @@ int quicly_receive(quicly_conn_t *conn, quicly_decoded_packet_t *packet)
         if (quicly_is_client(conn) && conn->handshake != NULL && conn->handshake->cipher.egress.aead != NULL) {
             if ((ret = discard_initial_context(conn)) != 0)
                 goto Exit;
+            update_loss_alarm(conn);
         }
         break;
     case QUICLY_EPOCH_HANDSHAKE:
