@@ -88,6 +88,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 static void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state);
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
 static void reqread_on_read(h2o_socket_t *sock, const char *err);
+static void reqread_on_timeout(h2o_timer_t *entry);
 static void reqread_start(struct st_h2o_http1_conn_t *conn);
 static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 
@@ -452,7 +453,8 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
 static void proceed_request(h2o_req_t *req, size_t written, int is_end_entity)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
-    reqread_start(conn);
+    set_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
+    h2o_socket_read_start(conn->sock, reqread_on_read);
     return;
 }
 
@@ -467,6 +469,8 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
     if (is_end_entity) {
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
+    } else {
+        proceed_request(&conn->req, payload.len, is_end_entity);
     }
     return 0;
 }
