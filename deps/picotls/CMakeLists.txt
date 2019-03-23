@@ -34,11 +34,13 @@ IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_BROTLI=1")
     LIST(APPEND CORE_FILES
         lib/certificate_compression.c)
-    LIST(APPEND CLI_EXTRA_LIBS ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+    LIST(APPEND CORE_EXTRA_LIBS ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
 ENDIF ()
 
 ADD_LIBRARY(picotls-core ${CORE_FILES})
+TARGET_LINK_LIBRARIES(picotls-core ${CORE_EXTRA_LIBS})
 ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c lib/ffx.c)
+TARGET_LINK_LIBRARIES(picotls-minicrypto picotls-core)
 ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c t/picotls.c t/minicrypto.c lib/asn1.c lib/pembase64.c lib/ffx.c)
 
 SET(TEST_EXES test-minicrypto.t)
@@ -48,8 +50,9 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     MESSAGE(WARNING "Enabling OpenSSL support")
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
     ADD_LIBRARY(picotls-openssl lib/openssl.c)
+    TARGET_LINK_LIBRARIES(picotls-openssl ${OPENSSL_LIBRARIES} picotls-core ${CMAKE_DL_LIBS})
     ADD_EXECUTABLE(cli t/cli.c lib/pembase64.c)
-    TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core ${OPENSSL_LIBRARIES} resolv ${CLI_EXTRA_LIBS} ${CMAKE_DL_LIBS})
+    TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core resolv)
     ADD_EXECUTABLE(picotls-esni src/esni.c)
     TARGET_LINK_LIBRARIES(picotls-esni picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
     ADD_EXECUTABLE(test-openssl.t ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/uecc.c lib/asn1.c lib/pembase64.c lib/ffx.c deps/picotest/picotest.c t/picotls.c t/openssl.c)
@@ -73,27 +76,34 @@ IF (BUILD_FUZZER)
         MESSAGE(FATAL ERROR "The fuzzer needs clang as a compiler")
     ENDIF()
 
-    ADD_EXECUTABLE(fuzzer-asn1-validation fuzz/fuzzer-asn1-validation.c lib/asn1.c)
-    SET_TARGET_PROPERTIES(fuzzer-asn1-validation PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
-    SET_TARGET_PROPERTIES(fuzzer-asn1-validation PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
-
-    ADD_EXECUTABLE(fuzzer-asn1-type-and-length fuzz/fuzzer-asn1-type-and-length.c lib/asn1.c)
-    SET_TARGET_PROPERTIES(fuzzer-asn1-type-and-length PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
-    SET_TARGET_PROPERTIES(fuzzer-asn1-type-and-length PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
-
+    ADD_EXECUTABLE(fuzz-asn1 fuzz/fuzz-asn1.c)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
     INCLUDE_DIRECTORIES(t include ${OPENSSL_INCLUDE_DIR})
     ADD_DEFINITIONS(-DPTLS_FUZZ_HANDSHAKE=1)
-
     ADD_EXECUTABLE(fuzz-server-hello fuzz/fuzz-server-hello.c)
-    SET_TARGET_PROPERTIES(fuzz-server-hello PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
-    SET_TARGET_PROPERTIES(fuzz-server-hello PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
-    TARGET_LINK_LIBRARIES(fuzz-server-hello ${OPENSSL_LIBRARIES} picotls-core picotls-openssl)
-
     ADD_EXECUTABLE(fuzz-client-hello fuzz/fuzz-client-hello.c)
-    SET_TARGET_PROPERTIES(fuzz-client-hello PROPERTIES LINK_FLAGS "-fsanitize=fuzzer")
-    SET_TARGET_PROPERTIES(fuzz-client-hello PROPERTIES COMPILE_FLAGS "-fsanitize=fuzzer")
-    TARGET_LINK_LIBRARIES(fuzz-client-hello ${OPENSSL_LIBRARIES} picotls-core picotls-openssl)
 
+    IF (OSS_FUZZ)
+        # Use https://github.com/google/oss-fuzz compatible options
+        SET(LIB_FUZZER FuzzingEngine)
+        SET_TARGET_PROPERTIES(fuzz-asn1
+            fuzz-server-hello
+            fuzz-client-hello
+            PROPERTIES
+            LINKER_LANGUAGE CXX)
+    ELSE()
+        SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer-no-link")
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer-no-link")
+        SET_TARGET_PROPERTIES(fuzz-asn1
+            fuzz-server-hello
+            fuzz-client-hello
+            PROPERTIES
+            COMPILE_FLAGS "-fsanitize=fuzzer"
+            LINK_FLAGS "-fsanitize=fuzzer")
+    ENDIF (OSS_FUZZ)
+
+    TARGET_LINK_LIBRARIES(fuzz-asn1 picotls-minicrypto picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(fuzz-server-hello picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(fuzz-client-hello picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
 
 ENDIF()

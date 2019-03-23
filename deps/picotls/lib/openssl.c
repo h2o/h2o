@@ -712,9 +712,10 @@ static void cipher_encrypt(ptls_cipher_context_t *_ctx, void *output, const void
 static void cipher_decrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t _len)
 {
     struct cipher_context_t *ctx = (struct cipher_context_t *)_ctx;
-    int len = (int)_len, ret = EVP_DecryptUpdate(ctx->evp, output, &len, input, len);
+    /* EVP_DecryptUpdate tries to retain the last block, while EncryptUpdate does not */
+    int len = (int)_len, ret = EVP_EncryptUpdate(ctx->evp, output, &len, input, len);
     assert(ret);
-    /* OpenSSL 1.1.0i (or d?) seems to set outlen to zero when passing a 16-byte input to aes128ecb // assert(len == (int)_len); */
+    assert(len == (int)_len);
 }
 
 static int aes128ecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void *key)
