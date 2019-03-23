@@ -135,8 +135,9 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                 if (state == IN_HANDSHAKE) {
                     if ((ret = ptls_handshake(tls, &encbuf, bytebuf + off, &leftlen, hsprop)) == 0) {
                         state = IN_1RTT;
+                        assert(ptls_is_server(tls) || hsprop->client.early_data_acceptance != PTLS_EARLY_DATA_ACCEPTANCE_UNKNOWN);
                         /* release data sent as early-data, if server accepted it */
-                        if (hsprop->client.early_data_accepted_by_peer)
+                        if (hsprop->client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTED)
                             shift_buffer(&ptbuf, early_bytes_sent);
                         if (request_key_update)
                             ptls_update_key(tls, 1);
