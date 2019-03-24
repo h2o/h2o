@@ -3355,11 +3355,11 @@ static int handle_max_stream_data_frame(quicly_conn_t *conn, quicly_max_stream_d
 {
     quicly_stream_t *stream;
 
-    LOG_STREAM_EVENT(conn, frame->stream_id, QUICLY_EVENT_TYPE_MAX_STREAM_DATA_RECEIVE, INT_EVENT_ATTR(STREAM_ID, frame->stream_id),
+    LOG_STREAM_EVENT(conn, frame->stream_id, QUICLY_EVENT_TYPE_MAX_STREAM_DATA_RECEIVE,
                      INT_EVENT_ATTR(LIMIT, frame->max_stream_data));
 
     if (quicly_stream_is_unidirectional(frame->stream_id) &&
-        quicly_stream_is_client_initiated(frame->stream_id) == quicly_is_client(conn))
+        quicly_stream_is_client_initiated(frame->stream_id) != quicly_is_client(conn))
         return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
 
     if ((stream = quicly_get_stream(conn, frame->stream_id)) == NULL)
