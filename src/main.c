@@ -151,7 +151,7 @@ static struct {
     char *error_log;
     int max_connections;
     size_t num_threads;
-    size_t num_quic_threads;
+    ssize_t num_quic_threads;
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -1360,7 +1360,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_num_quic_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_quic_threads) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%zd", &conf.num_quic_threads) != 0)
         return -1;
     return 0;
 }
