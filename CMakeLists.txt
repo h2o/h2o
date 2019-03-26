@@ -287,6 +287,7 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
 
+    lib/common/tracing.c
     lib/common/cache.c
     lib/common/file.c
     lib/common/filecache.c
@@ -366,7 +367,9 @@ SET(LIB_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c
     lib/http2/stream.c
-    lib/http2/http2_debug_state.c)
+    lib/http2/http2_debug_state.c
+
+    lib/tracing/tracing.c)
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}

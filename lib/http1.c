@@ -1055,6 +1055,7 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
 
     init_request(conn);
     reqread_start(conn);
+    h2o_trace_newh1(connected_at, sock);
 }
 
 void h2o_http1_upgrade(h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_http1_upgrade_cb on_complete, void *user_data)

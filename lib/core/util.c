@@ -30,6 +30,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/hiredis_.h"
+#include "h2o/tracing.h"
 
 struct st_h2o_accept_data_t {
     h2o_accept_ctx_t *ctx;
@@ -348,6 +349,8 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
         goto Exit;
     }
 
+    h2o_trace_newssl(data->connected_at, sock);
+
     /* stats for handshake */
     struct timeval handshake_completed_at = h2o_gettimeofday(data->ctx->ctx->loop);
     int64_t handshake_time = h2o_timeval_subtract(&data->connected_at, &handshake_completed_at);
@@ -513,7 +516,9 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock)
 {
     struct timeval connected_at = h2o_gettimeofday(ctx->ctx->loop);
 
-    if (ctx->expect_proxy_line || ctx->ssl_ctx != NULL) {
+    if (ctx->tracing) {
+        h2o_tracing_accept(ctx, sock, connected_at);
+    } else if (ctx->expect_proxy_line || ctx->ssl_ctx != NULL) {
         sock->data = accept_data_callbacks.create(ctx, sock, connected_at);
         if (ctx->expect_proxy_line) {
             h2o_socket_read_start(sock, on_read_proxy_line);

@@ -629,6 +629,13 @@ struct st_h2o_context_t {
 
     struct {
         /**
+         * link-list of h2o_http1_conn_t
+         */
+        h2o_linklist_t _conns;
+    } tracing;
+
+    struct {
+        /**
          * counter for SSL errors
          */
         uint64_t errors;
@@ -1137,6 +1144,7 @@ typedef struct st_h2o_accept_ctx_t {
     h2o_iovec_t *http2_origin_frame;
     int expect_proxy_line;
     h2o_multithread_receiver_t *libmemcached_receiver;
+    int tracing;
 } h2o_accept_ctx_t;
 
 typedef struct st_h2o_doublebuffer_t {
@@ -1942,6 +1950,17 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf);
  * registers the configurator
  */
 void h2o_status_register_configurator(h2o_globalconf_t *conf);
+/**
+ * registers the tracing handlers
+*/
+void h2o_trace_init(void);
+void h2o_trace_req(h2o_req_t *req);
+void h2o_trace_res(h2o_req_t *req);
+void h2o_trace_newssl(struct timeval tv, h2o_socket_t *sock);
+void h2o_trace_newh1(struct timeval tv, h2o_socket_t *sock);
+void h2o_trace_newh2(struct timeval tv, h2o_socket_t *sock);
+void h2o_trace_proxyreq(h2o_req_t *req);
+void h2o_trace_proxyres(h2o_req_t *req);
 
 /* lib/handler/headers_util.c */
 

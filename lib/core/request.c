@@ -338,6 +338,8 @@ void h2o_process_request(h2o_req_t *req)
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
         setup_pathconf(req, hostconf);
     }
+
+    h2o_trace_req(req);
     call_handlers(req, req->pathconf->handlers.entries);
 }
 
@@ -481,6 +483,8 @@ void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator)
     } else {
         h2o_setup_next_ostream(req, &req->_ostr_top);
     }
+
+    h2o_trace_res(req);
 }
 
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)

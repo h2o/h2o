@@ -24,6 +24,7 @@
 #include <sys/time.h>
 #include "h2o.h"
 #include "h2o/memcached.h"
+#include "h2o/tracing.h"
 
 void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
 {
@@ -108,7 +109,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.http2.counter = -1;
     ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
     h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
-
+    h2o_linklist_init_anchor(&ctx->tracing._conns);
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
 

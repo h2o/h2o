@@ -110,6 +110,7 @@ struct listener_config_t {
     h2o_hostconf_t **hosts;
     H2O_VECTOR(struct listener_ssl_config_t *) ssl;
     int proxy_protocol;
+    int tracing;
 };
 
 struct listener_ctx_t {
@@ -844,7 +845,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol, int tracing)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -859,6 +860,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     listener->proxy_protocol = proxy_protocol;
+    listener->tracing = tracing;
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1015,6 +1017,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node, **owner_node = NULL, **permission_node = NULL;
     int proxy_protocol = 0;
+    int tracing = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -1023,10 +1026,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         ssl_node = NULL;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **tracing_mode;
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,tracing:*",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node) != 0)
+                                          &proxy_protocol_node, &tracing_mode) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1036,6 +1039,20 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
+        if (tracing_mode != NULL) {
+            if ((*tracing_mode)->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, node, "`tracing` must be a string");
+                return -1;
+            }
+            if (strcasecmp((*tracing_mode)->data.scalar, "ON") == 0) {
+                 tracing = 1;
+            } else if (strcasecmp((*tracing_mode)->data.scalar, "OFF") == 0) {
+                 tracing = 0;
+            } else {
+                 h2o_configurator_errprintf(cmd, node, "value of `tracing` must be either of: ON,OFF");
+                 return -1;
+            }
+        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
@@ -1075,7 +1092,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, tracing);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1128,7 +1145,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, tracing);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
@@ -1650,6 +1667,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
+        listeners[i].accept_ctx.tracing = listener_config->tracing;
     }
     /* and start listening */
     update_listener_state(listeners);

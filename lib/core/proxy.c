@@ -288,6 +288,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         via_buf = build_request_merge_headers(&req->pool, via_buf, added, ',');
         h2o_add_header(&req->pool, headers, H2O_TOKEN_VIA, NULL, via_buf.base, via_buf.len);
     }
+
+    h2o_trace_proxyreq(req);
 }
 
 static void do_close(struct rp_generator_t *self)
@@ -529,6 +531,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         return NULL;
     }
 
+    h2o_trace_proxyres(req);
+
     /* declare the start of the response */
     h2o_start_response(req, &self->super);
 
@@ -540,7 +544,6 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
     /* if httpclient has no received body at this time, immediately send only headers using zero timeout */
     h2o_timer_link(req->conn->ctx->loop, 0, &self->send_headers_timeout);
-
     return on_body;
 }
 
