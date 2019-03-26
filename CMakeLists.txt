@@ -68,6 +68,16 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
+CHECK_C_SOURCE_COMPILES("
+#define _GNU_SOURCE
+#include <sched.h>
+int main(void) {
+cpuset_t s;
+CPU_ZERO(&s);
+sched_setaffinity(0, sizeof(s), s);
+return 0;
+}" HAS_SCHED_SETAFFINITY)
+
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
 FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
@@ -754,6 +764,10 @@ ENDIF (BUILD_FUZZER)
 IF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_64BIT_ATOMICS")
 ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
+
+IF (HAS_SCHED_SETAFFINITY)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_HAS_SCHED_AFFINITY")
+ENDIF (HAS_SCHED_SETAFFINITY)
 
 # environment-specific tweaks
 IF (APPLE)

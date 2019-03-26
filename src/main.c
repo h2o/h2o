@@ -146,7 +146,6 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
-    cpu_set_t *cpu_set;
     size_t num_threads;
     int tfo_queues;
     time_t launch_time;
@@ -179,7 +178,6 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
-    0,                                      /* cpus to run on */
     0,                                      /* num_threads, initialized in main() */
     0,                                      /* tfo_queues, initialized in main() */
     0,                                      /* launch_time initialized in main() */
@@ -1233,9 +1231,11 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+#ifdef H2O_HAS_SCHED_SETAFFINITY
+
 static int on_config_cpu_list(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    static cpu_set_t set;
+    cpu_set_t set;
     char *cur, *p = NULL;
     char *conf_line = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
 
@@ -1268,10 +1268,23 @@ static int on_config_cpu_list(h2o_configurator_command_t *cmd, h2o_configurator_
             }
         }
     }
-    conf.cpu_set = &set;
+    if (sched_setaffinity(0, sizeof(set), &set)) {
+        h2o_configurator_errprintf(cmd, node, "failed to parse cpu list");
+        return -1;
+    }
 
     return 0;
 }
+
+#else
+
+static int on_config_cpu_list(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_configurator_errprintf(cmd, node, "[warning] ignoring `cpu-list`; the platform does not support `sched_setaffinity`");
+    return 0;
+}
+
+#endif /* H2O_HAS_SCHED_SETAFFINITY */
 
 static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
