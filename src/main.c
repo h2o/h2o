@@ -151,6 +151,7 @@ static struct {
     char *error_log;
     int max_connections;
     size_t num_threads;
+    size_t num_quic_threads;
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -183,6 +184,7 @@ static struct {
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
     0,                                      /* initialized in main() */
+    -1,                                     /* num_quic_threads, defaults to all */
     0,                                      /* initialized in main() */
     0,                                      /* initialized in main() */
     NULL,                                   /* thread_ids */
@@ -1356,6 +1358,13 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_num_quic_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_quic_threads) != 0)
+        return -1;
+    return 0;
+}
+
 static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_hostinfo_max_threads) != 0)
@@ -1933,7 +1942,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
         /* setup quic context and the unix socket to receive forwarded packets */
-        if (listener_config->quic.ctx != NULL) {
+        if ((conf.num_quic_threads == -1 || __sync_fetch_and_sub(&conf.num_quic_threads, 1) > 0) && listener_config->quic.ctx != NULL) {
             h2o_http3_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
                                    listener_config->quic.ctx, h2o_http3_server_accept, NULL);
             h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, (uint32_t)conf.num_threads, (uint32_t)thread_index, 0,
@@ -2251,6 +2260,7 @@ static void setup_configurators(void)
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
+        h2o_configurator_define_command(c, "num-quic-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_quic_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
