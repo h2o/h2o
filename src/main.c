@@ -146,6 +146,7 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
+    cpu_set_t *cpu_set;
     size_t num_threads;
     int tfo_queues;
     time_t launch_time;
@@ -178,9 +179,10 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
-    0,                                      /* initialized in main() */
-    0,                                      /* initialized in main() */
-    0,                                      /* initialized in main() */
+    0,                                      /* cpus to run on */
+    0,                                      /* num_threads, initialized in main() */
+    0,                                      /* tfo_queues, initialized in main() */
+    0,                                      /* launch_time initialized in main() */
     NULL,                                   /* thread_ids */
     0,                                      /* shutdown_requested */
     H2O_BARRIER_INITIALIZER(SIZE_MAX),      /* startup_sync_barrier */
@@ -1231,6 +1233,46 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_cpu_list(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    static cpu_set_t set;
+    char *cur, *p = NULL;
+    char *conf_line = h2o_strdup(NULL, node->data.scalar, SIZE_MAX).base;
+
+    CPU_ZERO(&set);
+    while ((cur = strtok_r(conf_line, ",", &p))) {
+        int ret, cpu_num, cpu_low, cpu_high;
+        ret = sscanf(cur, "%d", &cpu_num);
+        conf_line = NULL;
+        if (index(cur, '-') == NULL) {
+            ret = sscanf(cur, "%d", &cpu_num);
+            if (ret != 1 || cpu_num < 0) {
+                h2o_configurator_errprintf(cmd, node, "cpu number must be >=0");
+                return -1;
+            }
+            CPU_SET(cpu_num, &set);
+            continue;
+        } else {
+            ret = sscanf(cur, "%d-%d", &cpu_low, &cpu_high);
+            if (cpu_high < cpu_low) {
+                h2o_configurator_errprintf(cmd, node, "cpu ranges's high value must be an higher than lower value");
+                return -1;
+            }
+            if (ret == 2) {
+                int i;
+                for (i = cpu_low; i <= cpu_high; i++)
+                    CPU_SET(i, &set);
+            } else {
+                h2o_configurator_errprintf(cmd, node, "failed to parse cpu list");
+                return -1;
+            }
+        }
+    }
+    conf.cpu_set = &set;
+
+    return 0;
+}
+
 static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_hostinfo_max_threads) != 0)
@@ -1942,6 +1984,7 @@ static void setup_configurators(void)
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
+        h2o_configurator_define_command(c, "cpu-list", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_cpu_list);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
