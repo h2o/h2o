@@ -71,12 +71,13 @@ return 0;
 CHECK_C_SOURCE_COMPILES("
 #define _GNU_SOURCE
 #include <sched.h>
+#include <pthread.h>
 int main(void) {
 cpuset_t s;
 CPU_ZERO(&s);
-sched_setaffinity(0, sizeof(s), s);
+pthread_setaffinity_np(0, sizeof(s), s);
 return 0;
-}" HAS_SCHED_SETAFFINITY)
+}" HAS_PTHREAD_SETAFFINITY_NP)
 
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
@@ -765,9 +766,9 @@ IF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_64BIT_ATOMICS")
 ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
 
-IF (HAS_SCHED_SETAFFINITY)
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_HAS_SCHED_AFFINITY")
-ENDIF (HAS_SCHED_SETAFFINITY)
+IF (HAS_PTHREAD_SETAFFINITY_NP)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_HAS_PTHREAD_SETAFFINITY_NP")
+ENDIF (HAS_PTHREAD_SETAFFINITY_NP)
 
 # environment-specific tweaks
 IF (APPLE)
