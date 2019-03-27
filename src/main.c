@@ -63,6 +63,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/serverutil.h"
+#include "h2o/tracing.h"
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
@@ -116,6 +117,7 @@ struct listener_config_t {
 struct listener_ctx_t {
     h2o_accept_ctx_t accept_ctx;
     h2o_socket_t *sock;
+    h2o_socket_cb on_accept;
 };
 
 typedef struct st_resolve_tag_node_cache_entry_t {
@@ -1045,12 +1047,12 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 return -1;
             }
             if (strcasecmp((*tracing_mode)->data.scalar, "ON") == 0) {
-                 tracing = 1;
+                tracing = 1;
             } else if (strcasecmp((*tracing_mode)->data.scalar, "OFF") == 0) {
-                 tracing = 0;
+                tracing = 0;
             } else {
-                 h2o_configurator_errprintf(cmd, node, "value of `tracing` must be either of: ON,OFF");
-                 return -1;
+                h2o_configurator_errprintf(cmd, node, "value of `tracing` must be either of: ON,OFF");
+                return -1;
             }
         }
     } break;
@@ -1566,6 +1568,17 @@ static void on_socketclose(void *data)
     }
 }
 
+static void tracing_on_accept(h2o_socket_t *listener, const char *err)
+{
+    h2o_socket_t *sock;
+    if (err != NULL || (sock = h2o_evloop_socket_accept(listener)) == NULL) {
+        return;
+    }
+    h2o_socket_read_start(sock, h2o_tracing_on_read);
+    if (sock->input->size != 0)
+        h2o_tracing_on_data(sock);
+}
+
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -1595,9 +1608,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
-
         h2o_accept(&ctx->accept_ctx, sock);
-
     } while (--num_accepts != 0);
 }
 
@@ -1608,7 +1619,7 @@ static void update_listener_state(struct listener_ctx_t *listeners)
     if (num_connections(0) < conf.max_connections) {
         for (i = 0; i != conf.num_listeners; ++i) {
             if (!h2o_socket_is_reading(listeners[i].sock))
-                h2o_socket_read_start(listeners[i].sock, on_accept);
+                h2o_socket_read_start(listeners[i].sock, listeners[i].on_accept);
         }
     } else {
         for (i = 0; i != conf.num_listeners; ++i) {
@@ -1667,7 +1678,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
-        listeners[i].accept_ctx.tracing = listener_config->tracing;
+        listeners[i].on_accept = listener_config->tracing ? tracing_on_accept : on_accept;
     }
     /* and start listening */
     update_listener_state(listeners);

@@ -1144,7 +1144,6 @@ typedef struct st_h2o_accept_ctx_t {
     h2o_iovec_t *http2_origin_frame;
     int expect_proxy_line;
     h2o_multithread_receiver_t *libmemcached_receiver;
-    int tracing;
 } h2o_accept_ctx_t;
 
 typedef struct st_h2o_doublebuffer_t {
