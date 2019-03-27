@@ -291,6 +291,7 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
             entity_read_send_error_413(conn, "Request Entity Too Large", "request entity is too large");
             return -1;
         }
+        conn->req.content_length = content_length;
         return create_content_length_entity_reader(conn, (size_t)content_length);
     }
     /* failed */
