@@ -629,13 +629,6 @@ struct st_h2o_context_t {
 
     struct {
         /**
-         * link-list of h2o_http1_conn_t
-         */
-        h2o_linklist_t _conns;
-    } tracing;
-
-    struct {
-        /**
          * counter for SSL errors
          */
         uint64_t errors;
