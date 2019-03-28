@@ -36,12 +36,14 @@ hosts:
 EOT
 
 
+my $huge_file_size = 50 * 1024 * 1024;
+my $huge_file = create_data_file($huge_file_size);
 # test that we'll proxy content-length as content-length if possible
-open(CURL, "curl -s -d \@@{[DOC_ROOT]}/halfdome.jpg --http1.1 'http://127.0.0.1:$server->{port}' 2> /dev/null | ");
+open(CURL, "curl -s -d \@$huge_file --http1.1 'http://127.0.0.1:$server->{port}' 2> /dev/null | ");
 do_upstream("content-length");
 close(CURL);
 
-open(CURL, "curl -s -d \@@{[DOC_ROOT]}/halfdome.jpg -Htransfer-encoding:chunked --http1.1 'http://127.0.0.1:$server->{port}' 2> /dev/null | ");
+open(CURL, "curl -s -d \@$huge_file -Htransfer-encoding:chunked --http1.1 'http://127.0.0.1:$server->{port}' 2> /dev/null | ");
 do_upstream("transfer-encoding");
 close(CURL);
 
