@@ -99,10 +99,10 @@ static void create_lookup_thread(void)
     pthread_attr_setstacksize(&attr, 100 * 1024);
     if ((ret = pthread_create(&tid, NULL, lookup_thread_main, NULL)) != 0) {
         if (queue.num_threads == 0) {
-            fprintf(stderr, "failed to start first thread for getaddrinfo:%s\n", strerror(ret));
+            h2o_error_printf("failed to start first thread for getaddrinfo:%s\n", strerror(ret));
             abort();
         } else {
-            perror("pthread_create(for getaddrinfo)");
+            h2o_perror("pthread_create(for getaddrinfo)");
         }
         return;
     }
