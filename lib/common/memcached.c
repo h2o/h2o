@@ -227,8 +227,8 @@ static void connect_to_server(h2o_memcached_context_t *ctx, yrmcds *yrmcds)
 
     for (failcnt = 0; (err = yrmcds_connect(yrmcds, ctx->host, ctx->port)) != YRMCDS_OK; ++failcnt) {
         if (failcnt == 0) {
-            h2o_error_printf("[lib/common/memcached.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", ctx->host, ctx->port,
-                    yrmcds_strerror(err));
+            h2o_error_printf("[lib/common/memcached.c] failed to connect to memcached at %s:%" PRIu16 ", %s\n", ctx->host,
+                             ctx->port, yrmcds_strerror(err));
         }
         ++failcnt;
         usleep(2000000 + h2o_rand() % 3000000); /* sleep 2 to 5 seconds */
