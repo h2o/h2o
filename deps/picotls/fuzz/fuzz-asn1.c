@@ -33,10 +33,7 @@ static uint8_t feeder_next_byte(void)
 void count_printf(void *ctx, const char *format, ...)
 {
     int *c = ctx;
-    va_list argptr;
-    va_start(argptr, format);
-    c += vsnprintf(NULL, 0, format, argptr);
-    va_end(argptr);
+    c++;
     return;
 }
 

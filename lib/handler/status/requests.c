@@ -126,7 +126,7 @@ static void *requests_status_init(void)
     /* compile logconf */
     if ((rsc->logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL)
         /* log format compilation error is an internal logic flaw, therefore we need not send the details to the client */
-        fprintf(stderr, "[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
+        h2o_error_printf("[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
 
     rsc->req_data = (h2o_iovec_t){NULL};
     pthread_mutex_init(&rsc->mutex, NULL);

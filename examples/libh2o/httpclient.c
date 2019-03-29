@@ -178,7 +178,7 @@ static void print_status_line(int version, int status, h2o_iovec_t msg)
         fprintf(stderr, ".%d", version & 0xff);
     }
     fprintf(stderr, " %d", status);
-    if (msg.len == 0) {
+    if (msg.len != 0) {
         fprintf(stderr, " %.*s\n", (int)msg.len, msg.base);
     } else {
         fprintf(stderr, "\n");
@@ -338,7 +338,16 @@ int main(int argc, char **argv)
 {
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
-    h2o_httpclient_ctx_t ctx = {NULL, &getaddr_receiver, IO_TIMEOUT, IO_TIMEOUT, IO_TIMEOUT, NULL, IO_TIMEOUT, SIZE_MAX};
+    h2o_httpclient_ctx_t ctx = {
+        NULL, /* loop */
+        &getaddr_receiver,
+        IO_TIMEOUT,                              /* io_timeout */
+        IO_TIMEOUT,                              /* connect_timeout */
+        IO_TIMEOUT,                              /* first_byte_timeout */
+        NULL,                                    /* websocket_timeout */
+        IO_TIMEOUT,                              /* keepalive_timeout */
+        H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 /* max_buffer_size */
+    };
     int opt;
 
     SSL_load_error_strings();
