@@ -1,7 +1,6 @@
 #include "h2o.h"
 #include <h2o/sdt.h>
 #include <h2o/tracing.h>
-#include <fcntl.h>
 
 // tracer payload size
 #define PAYLOAD_SZ 150

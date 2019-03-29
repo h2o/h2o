@@ -544,6 +544,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
     /* if httpclient has no received body at this time, immediately send only headers using zero timeout */
     h2o_timer_link(req->conn->ctx->loop, 0, &self->send_headers_timeout);
+
     return on_body;
 }
 

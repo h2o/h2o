@@ -1031,7 +1031,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **tracing_mode;
         if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,tracing:*",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                          &proxy_protocol_node, &tracing_mode) != 0)
+                                           &proxy_protocol_node, &tracing_mode) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1608,7 +1608,9 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
+
         h2o_accept(&ctx->accept_ctx, sock);
+
     } while (--num_accepts != 0);
 }
 
