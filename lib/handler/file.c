@@ -604,7 +604,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
         return delegate_dynamic_request(req, script_name, path_info, rpath, slash_at, mime_type);
     }
     }
-    H2O_ERROR_PRINTF("unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
+    h2o_error_printf("unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
     abort();
 }
 

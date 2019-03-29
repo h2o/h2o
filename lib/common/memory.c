@@ -71,7 +71,7 @@ __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
 
 void h2o__fatal(const char *msg)
 {
-    H2O_ERROR_PRINTF("fatal:%s\n", msg);
+    h2o_error_printf("fatal:%s\n", msg);
     abort();
 }
 

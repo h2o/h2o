@@ -653,7 +653,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
         } break;
         default:
-            H2O_ERROR_PRINTF("logic flaw at %s:%d\n", __FILE__, __LINE__);
+            h2o_error_printf("logic flaw at %s:%d\n", __FILE__, __LINE__);
             abort();
         }
     }
@@ -1099,13 +1099,13 @@ void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, c
     char buf[1024];
     va_list args;
 
-    H2O_ERROR_PRINTF("[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
+    h2o_error_printf("[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
     if (cmd != NULL)
-        H2O_ERROR_PRINTF("in command %s, ", cmd->name);
+        h2o_error_printf("in command %s, ", cmd->name);
     va_start(args, reason);
     vsnprintf(buf, sizeof(buf), reason, args);
     va_end(args);
-    H2O_ERROR_PRINTF("%s\n", buf);
+    h2o_error_printf("%s\n", buf);
 }
 
 int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...)
@@ -1192,7 +1192,7 @@ static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned
     return NULL;
 
 Error:
-    H2O_ERROR_PRINTF("%s: detected invalid or missing type specifier; input is: %s\n", __FUNCTION__, start);
+    h2o_error_printf("%s: detected invalid or missing type specifier; input is: %s\n", __FUNCTION__, start);
     abort();
 }
 

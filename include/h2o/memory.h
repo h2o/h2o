@@ -77,8 +77,8 @@ extern "C" {
 /**
  * library users can use their own log method by define this macro
  */
-#ifndef H2O_ERROR_PRINTF
-#define H2O_ERROR_PRINTF(...) fprintf(stderr, __VA_ARGS__)
+#ifndef h2o_error_printf
+#define h2o_error_printf(...) fprintf(stderr, __VA_ARGS__)
 #endif
 
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
@@ -483,7 +483,7 @@ inline void h2o_perror(const char *msg)
 {
     char buf[256];
     strerror_r(errno, buf, sizeof(buf));
-    H2O_ERROR_PRINTF("%s: %s\n", msg, buf);
+    h2o_error_printf("%s: %s\n", msg, buf);
 }
 
 #ifdef __cplusplus
