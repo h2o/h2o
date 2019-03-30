@@ -29,6 +29,7 @@ extern "C" {
 #include <stdint.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
+#include "picotls.h"
 #include "h2o/cache.h"
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
@@ -254,6 +255,10 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
  * sets the remote address (used for overriding the value)
  */
 void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
+/**
+ *
+ */
+ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
 /**
  *
  */

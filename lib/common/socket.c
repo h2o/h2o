@@ -743,6 +743,11 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
     return len;
 }
 
+ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock)
+{
+    return sock->ssl != NULL ? sock->ssl->ptls : NULL;
+}
+
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {

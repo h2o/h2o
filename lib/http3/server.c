@@ -147,27 +147,42 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *_sa)
     return salen;
 }
 
+static ptls_t *get_ptls(h2o_conn_t *_conn)
+{
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    return quicly_get_tls(conn->h3.quic);
+}
+
 static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
 {
     return h2o_iovec_init(H2O_STRLIT("TLSv1.3"));
 }
 
-static h2o_iovec_t log_session_reused(h2o_req_t *_req)
+static h2o_iovec_t log_session_reused(h2o_req_t *req)
 {
-    /* FIXME */
-    return h2o_iovec_init(NULL, 0);
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    return ptls_is_psk_handshake(tls) ? h2o_iovec_init(H2O_STRLIT("1")) : h2o_iovec_init(H2O_STRLIT("0"));
 }
 
-static h2o_iovec_t log_cipher(h2o_req_t *_req)
+static h2o_iovec_t log_cipher(h2o_req_t *req)
 {
-    /* FIXME */
-    return h2o_iovec_init(NULL, 0);
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    ptls_cipher_suite_t *cipher = ptls_get_cipher(tls);
+    return cipher != NULL ? h2o_iovec_init(cipher->aead->name, strlen(cipher->aead->name)) : h2o_iovec_init(NULL, 0);
 }
 
-static h2o_iovec_t log_cipher_bits(h2o_req_t *_req)
+static h2o_iovec_t log_cipher_bits(h2o_req_t *req)
 {
-    /* FIXME */
-    return h2o_iovec_init(NULL, 0);
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    ptls_t *tls = quicly_get_tls(conn->h3.quic);
+    ptls_cipher_suite_t *cipher = ptls_get_cipher(tls);
+    if (cipher == NULL)
+        return h2o_iovec_init(NULL, 0);
+
+    char *buf = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT16_LONGEST_STR));
+    return h2o_iovec_init(buf, sprintf(buf, "%" PRIu16, (uint16_t)(cipher->aead->key_size * 8)));
 }
 
 static h2o_iovec_t log_session_id(h2o_req_t *_req)
@@ -626,6 +641,7 @@ SynFound : {
         get_peername,
         NULL, /* push */
         NULL, /* should expose is_early_data instead of get_socket, because QUIC shares single socket */
+        get_ptls,
         NULL, /* get debug state */
         {{
             {log_tls_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */

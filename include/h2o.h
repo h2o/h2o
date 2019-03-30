@@ -819,6 +819,10 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     h2o_socket_t *(*get_socket)(h2o_conn_t *_conn);
     /**
+     * Retruns picotls connection object used by the connection.
+     */
+    ptls_t *(*get_ptls)(h2o_conn_t *_conn);
+    /**
      * debug state callback (may be NULL)
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
@@ -1205,7 +1209,7 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
- *
+ * returns if the connection is still in early-data state (i.e., if there is a risk of received requests being a replay)
  */
 static int h2o_conn_is_early_data(h2o_conn_t *conn);
 /**
@@ -2045,8 +2049,8 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 
 inline int h2o_conn_is_early_data(h2o_conn_t *conn)
 {
-    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
-    return sock != NULL && sock->ssl != NULL && h2o_socket_ssl_is_early_data(sock);
+    ptls_t *tls = conn->callbacks->get_ptls(conn);
+    return tls != NULL ? !ptls_handshake_is_complete(tls) : 0;
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)

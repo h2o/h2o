@@ -1329,6 +1329,13 @@ static h2o_socket_t *get_socket(h2o_conn_t *_conn)
     return conn->sock;
 }
 
+static ptls_t *get_ptls(h2o_conn_t *_conn)
+{
+    struct st_h2o_http2_conn_t *conn = (void *)_conn;
+    assert(conn->sock != NULL && "it never becomes NULL, right?");
+    return h2o_socket_get_ptls(conn->sock);
+}
+
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1427,6 +1434,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_peername,              /* ditto */
         push_path,                 /* HTTP2 push */
         get_socket,                /* get underlying socket */
+        get_ptls,
         h2o_http2_get_debug_state, /* get debug state */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
