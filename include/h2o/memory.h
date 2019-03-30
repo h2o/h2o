@@ -171,6 +171,7 @@ extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 H2O_NORETURN void h2o__fatal(const char *msg);
 
 static void h2o_perror(const char *msg);
+static void h2o_strerror_r(int err, char *buf, size_t len);
 
 /**
  * A version of memcpy that can take a NULL @src to avoid UB
@@ -479,10 +480,24 @@ inline void *h2o_mem_set_secure(void *b, int c, size_t len)
     return h2o_mem__set_secure(b, c, len);
 }
 
+inline void h2o_strerror_r(int err, char *buf, size_t len)
+{
+#ifndef _GNU_SOURCE
+    strerror_r(err, buf, len);
+#else
+    char *p = strerror_r(err, buf, len);
+    if (p != buf) {
+        strncpy(buf, p, len - 1);
+        buf[len - 1] = '\0';
+    }
+#endif
+}
+
 inline void h2o_perror(const char *msg)
 {
-    char buf[256];
-    strerror_r(errno, buf, sizeof(buf));
+    char buf[128];
+
+    h2o_strerror_r(errno, buf, sizeof(buf));
     h2o_error_printf("%s: %s\n", msg, buf);
 }
 
