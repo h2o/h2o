@@ -22,9 +22,7 @@
 #include "quicly/loss.h"
 
 quicly_loss_conf_t quicly_loss_default_conf = {
-    QUICLY_LOSS_DEFAULT_MAX_TLPS,                   /* max_tlps */
     QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */
-    QUICLY_LOSS_DEFAULT_MIN_TLP_TIMEOUT,            /* min_tlp_timeout */
-    QUICLY_LOSS_DEFAULT_MIN_RTO_TIMEOUT,            /* min_rto_timeout */
-    QUICLY_LOSS_DEFAULT_INITIAL_RTT                 /* initial_rtt */
+    QUICLY_DEFAULT_MIN_PTO,                         /* min_pto */
+    QUICLY_DEFAULT_INITIAL_RTT                      /* initial_rtt */
 };

@@ -247,12 +247,12 @@ static int client_on_receive(quicly_stream_t *stream, size_t off, const void *sr
             if (request_interval != 0) {
                 enqueue_requests_at = ctx.now->cb(ctx.now) + request_interval;
             } else {
-                uint64_t num_received, num_sent, num_lost, num_ack_received, num_bytes_sent;
-                quicly_get_packet_stats(stream->conn, &num_received, &num_sent, &num_lost, &num_ack_received, &num_bytes_sent);
+                quicly_stats_t *stats = quicly_get_stats(stream->conn);
                 fprintf(stderr,
                         "packets: received: %" PRIu64 ", sent: %" PRIu64 ", lost: %" PRIu64 ", ack-received: %" PRIu64
-                        ", bytes-sent: %" PRIu64 "\n",
-                        num_received, num_sent, num_lost, num_ack_received, num_bytes_sent);
+                        ", bytes-received: %" PRIu64 ", bytes-sent: %" PRIu64 "\n",
+                        stats->num_packets.received, stats->num_packets.sent, stats->num_packets.lost,
+                        stats->num_packets.ack_received, stats->num_bytes.received, stats->num_bytes.sent);
                 quicly_close(stream->conn, 0, "");
             }
         }
@@ -475,12 +475,12 @@ static void on_signal(int signo)
     size_t i;
     for (i = 0; i != num_conns; ++i) {
         const quicly_cid_plaintext_t *master_id = quicly_get_master_id(conns[i]);
-        uint64_t num_received, num_sent, num_lost, num_ack_received, num_bytes_sent;
-        quicly_get_packet_stats(conns[i], &num_received, &num_sent, &num_lost, &num_ack_received, &num_bytes_sent);
+        quicly_stats_t *stats = quicly_get_stats(conns[i]);
         fprintf(stderr,
                 "conn:%08" PRIu32 ": received: %" PRIu64 ", sent: %" PRIu64 ", lost: %" PRIu64 ", ack-received: %" PRIu64
-                ", bytes-sent: %" PRIu64 "\n",
-                master_id->master_id, num_received, num_sent, num_lost, num_ack_received, num_bytes_sent);
+                ", bytes-received: %" PRIu64 ", bytes-sent: %" PRIu64 "\n",
+                master_id->master_id, stats->num_packets.received, stats->num_packets.sent, stats->num_packets.lost,
+                stats->num_packets.ack_received, stats->num_bytes.received, stats->num_bytes.sent);
     }
     if (signo == SIGINT)
         _exit(0);
@@ -880,7 +880,7 @@ int main(int argc, char **argv)
     if (ctx.tls->certificates.count != 0 || ctx.tls->sign_certificate != NULL) {
         /* server */
         if (ctx.tls->certificates.count == 0 || ctx.tls->sign_certificate == NULL) {
-            fprintf(stderr, "-ck and -k options must be used together\n");
+            fprintf(stderr, "-c and -k options must be used together\n");
             exit(1);
         }
         if (cid_key == NULL) {

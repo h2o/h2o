@@ -317,7 +317,7 @@ typedef struct st_quicly_transport_parameters_t {
     /**
      * in milliseconds; quicly ignores the value set for quicly_context_t::transport_parameters
      */
-    uint8_t max_ack_delay;
+    uint16_t max_ack_delay;
 } quicly_transport_parameters_t;
 
 struct st_quicly_cid_t {
@@ -447,6 +447,19 @@ struct st_quicly_conn_streamgroup_state_t {
     quicly_stream_id_t next_stream_id;
 };
 
+typedef struct st_quicly_stats_t {
+    struct {
+        uint64_t received;
+        uint64_t sent;
+        uint64_t lost;
+        uint64_t ack_received;
+    } num_packets;
+    struct {
+        uint64_t received;
+        uint64_t sent;
+    } num_bytes;
+} quicly_stats_t;
+
 struct _st_quicly_conn_public_t {
     quicly_context_t *ctx;
     quicly_state_t state;
@@ -483,15 +496,16 @@ struct _st_quicly_conn_public_t {
         struct sockaddr *sa;
         socklen_t salen;
         quicly_transport_parameters_t transport_params;
+        struct {
+            unsigned validated : 1;
+            unsigned send_probe : 1;
+        } address_validation;
     } peer;
     struct {
         quicly_linklist_t new_data;
         quicly_linklist_t non_new_data;
     } _default_scheduler;
-    struct {
-        uint64_t received, sent, lost, ack_received;
-    } num_packets;
-    uint64_t num_bytes_sent;
+    quicly_stats_t stats;
     uint32_t version;
     void *data;
 };
@@ -743,8 +757,7 @@ static void quicly_get_peername(quicly_conn_t *conn, struct sockaddr **sa, sockl
 /**
  *
  */
-static void quicly_get_packet_stats(quicly_conn_t *conn, uint64_t *num_received, uint64_t *num_sent, uint64_t *num_lost,
-                                    uint64_t *num_ack_received, uint64_t *num_bytes_sent);
+static quicly_stats_t *quicly_get_stats(quicly_conn_t *conn);
 /**
  *
  */
@@ -830,6 +843,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
 /**
  *
  */
+ptls_t *quicly_get_tls(quicly_conn_t *conn);
+/**
+ *
+ */
 quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id);
 /**
  *
@@ -859,6 +876,14 @@ static int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id);
  *
  */
 static int quicly_stream_is_unidirectional(quicly_stream_id_t stream_id);
+/**
+ *
+ */
+static int quicly_stream_has_send_side(int is_client, quicly_stream_id_t stream_id);
+/**
+ *
+ */
+static int quicly_stream_has_receive_side(int is_client, quicly_stream_id_t stream_id);
 /**
  *
  */
@@ -964,20 +989,29 @@ inline int quicly_stream_is_unidirectional(quicly_stream_id_t stream_id)
     return (stream_id & 2) != 0;
 }
 
+inline int quicly_stream_has_send_side(int is_client, quicly_stream_id_t stream_id)
+{
+    if (!quicly_stream_is_unidirectional(stream_id))
+        return 1;
+    return is_client == quicly_stream_is_client_initiated(stream_id);
+}
+
+inline int quicly_stream_has_receive_side(int is_client, quicly_stream_id_t stream_id)
+{
+    if (!quicly_stream_is_unidirectional(stream_id))
+        return 1;
+    return is_client != quicly_stream_is_client_initiated(stream_id);
+}
+
 inline int quicly_stream_is_self_initiated(quicly_stream_t *stream)
 {
     return quicly_stream_is_client_initiated(stream->stream_id) == quicly_is_client(stream->conn);
 }
 
-inline void quicly_get_packet_stats(quicly_conn_t *conn, uint64_t *num_received, uint64_t *num_sent, uint64_t *num_lost,
-                                    uint64_t *num_ack_received, uint64_t *num_bytes_sent)
+inline quicly_stats_t *quicly_get_stats(quicly_conn_t *conn)
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
-    *num_received = c->num_packets.received;
-    *num_sent = c->num_packets.sent;
-    *num_lost = c->num_packets.lost;
-    *num_ack_received = c->num_packets.ack_received;
-    *num_bytes_sent = c->num_bytes_sent;
+    return &c->stats;
 }
 
 inline void quicly_byte_to_hex(char *dst, uint8_t v)

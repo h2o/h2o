@@ -45,11 +45,6 @@ typedef struct st_quicly_cc_t {
 void quicly_cc_init(quicly_cc_t *cc);
 
 /**
- * Called to query the controller whether data can be sent. Returns 1 if yes, 0 otherwise.
- */
-int quicly_cc_can_send(quicly_cc_t *cc, uint32_t inflight);
-
-/**
  * Called when a packet is newly acknowledged.
  */
 void quicly_cc_on_acked(quicly_cc_t *cc, uint32_t bytes, uint64_t largest_acked, uint32_t inflight);

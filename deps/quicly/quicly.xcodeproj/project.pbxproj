@@ -126,6 +126,7 @@
 		E9804227223952FD008B9745 /* echo */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = echo; sourceTree = BUILT_PRODUCTS_DIR; };
 		E98042332244A539008B9745 /* defaults.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = defaults.h; sourceTree = "<group>"; };
 		E98042352244A5D7008B9745 /* defaults.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = defaults.c; sourceTree = "<group>"; };
+		E98047792248EA9C008B9745 /* util.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = util.h; sourceTree = "<group>"; };
 		E98448171EA48BD400390927 /* libquicly.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libquicly.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		E98448271EA48D0000390927 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
 		E98448281EA48D0000390927 /* picotls.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotls.c; sourceTree = "<group>"; };
@@ -206,6 +207,14 @@
 			path = examples;
 			sourceTree = "<group>";
 		};
+		E98047782248EA7C008B9745 /* t */ = {
+			isa = PBXGroup;
+			children = (
+				E98047792248EA9C008B9745 /* util.h */,
+			);
+			path = t;
+			sourceTree = "<group>";
+		};
 		E984480E1EA48BD400390927 = {
 			isa = PBXGroup;
 			children = (
@@ -280,6 +289,7 @@
 			children = (
 				E98448231EA48C0E00390927 /* include */,
 				E98448241EA48C6400390927 /* lib */,
+				E98047782248EA7C008B9745 /* t */,
 			);
 			path = picotls;
 			sourceTree = "<group>";

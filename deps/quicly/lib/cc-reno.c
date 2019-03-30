@@ -33,11 +33,6 @@ void quicly_cc_init(quicly_cc_t *cc)
     cc->ssthresh = UINT32_MAX;
 }
 
-int quicly_cc_can_send(quicly_cc_t *cc, uint32_t inflight)
-{
-    return inflight < cc->cwnd;
-}
-
 // TODO: Avoid increase if sender was application limited
 void quicly_cc_on_acked(quicly_cc_t *cc, uint32_t bytes, uint64_t largest_acked, uint32_t inflight)
 {

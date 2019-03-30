@@ -67,6 +67,8 @@ subtest "retry" => sub {
     like $events, qr/"type":"receive",.*"first-octet":245.*\n.*"type":"stream-lost",.*"stream-id":-1,.*"off":0,/, "CH deemed lost in response to retry";
 };
 
+unlink "$tempdir/session";
+
 subtest "0-rtt" => sub {
     my $guard = spawn_server();
     my $resp = `$cli -s $tempdir/session -p /12.txt 127.0.0.1 $port 2> /dev/null`;
@@ -131,6 +133,20 @@ subtest "max-data-crapped" => sub {
     }
     # check that events are happening in expected order, without a busy loop to quicly_send
     like $events, qr/:send:stream-send\@0:receive:max-data-receive:send:stream-send\@0:/;
+};
+
+unlink "$tempdir/session";
+
+subtest "0-rtt-vs-hrr" => sub {
+    plan skip_all => "no support for x25519, we need multiple key exchanges to run this test"
+        if `$cli -x x25519 2>&1` =~ /unknown key exchange/;
+    my $guard = spawn_server(qw(-x x25519));
+    my $resp = `$cli -x x25519 -x secp256r1 -s $tempdir/session -p /12.txt 127.0.0.1 $port 2> $tempdir/stderr.log; cat $tempdir/stderr.log`;
+    like $resp, qr/^hello world\n/s;
+    undef $guard;
+    $guard = spawn_server(qw(-x secp256r1));
+    $resp = `$cli -x x25519 -x secp256r1 -s $tempdir/session -p /12.txt 127.0.0.1 $port 2> $tempdir/stderr.log; cat $tempdir/stderr.log`;
+    like $resp, qr/^hello world\n/s;
 };
 
 done_testing;

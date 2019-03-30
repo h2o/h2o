@@ -30,8 +30,14 @@ extern "C" {
 #include <stdint.h>
 
 #define QUICLY_NUM_PACKETS_BEFORE_ACK 2
-#define QUICLY_DELAYED_ACK_TIMEOUT 25 /* milliseconds */
-#define QUICLY_MAX_PACKET_SIZE 1280   /* must be >= 1200 bytes */
+#define QUICLY_DELAYED_ACK_TIMEOUT 25   /* milliseconds */
+#define QUICLY_DEFAULT_MAX_ACK_DELAY 25 /* milliseconds */
+#define QUICLY_LOCAL_MAX_ACK_DELAY 25   /* milliseconds */
+#define QUICLY_DEFAULT_MIN_PTO 1        /* milliseconds */
+#define QUICLY_DEFAULT_INITIAL_RTT 100
+#define QUICLY_MAX_PTO_COUNT 16 /* 65 seconds under 1ms granurality */
+
+#define QUICLY_MAX_PACKET_SIZE 1280 /* must be >= 1200 bytes */
 #define QUICLY_AEAD_TAG_SIZE 16
 
 /* coexists with picotls error codes, assuming that int is at least 32-bits */

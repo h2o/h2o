@@ -21,6 +21,7 @@
  */
 #include <string.h>
 #include "picotls/openssl.h"
+#include "quicly/defaults.h"
 #include "test.h"
 
 static quicly_conn_t *client, *server;
@@ -87,7 +88,6 @@ static void test_even(void)
     size_t num_sent, num_received;
     int ret;
 
-    lossconf.max_tlps = 0;
     quic_ctx.loss = &lossconf;
 
     quic_now = 0;
@@ -135,14 +135,14 @@ static void test_even(void)
     /* server resends the contents of all the packets (in cleartext) */
     ret = transmit_cond(server, client, &num_sent, &num_received, cond_even_down, 0);
     ok(ret == 0);
-    ok(num_sent == 2);
+    ok(num_sent == 1);
     ok(num_received == 1);
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(!quicly_connection_is_ready(client));
 
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
 
-    /* client sends delayed-ack that gets accepted */
+    /* client arms the retransmit timer */
     ret = transmit_cond(client, server, &num_sent, &num_received, cond_even_up, 0);
     ok(ret == 0);
     ok(num_sent == 1);
@@ -151,6 +151,23 @@ static void test_even(void)
     quic_now += 1000;
 
     /* server resends the contents of all the packets (in cleartext) */
+    ret = transmit_cond(server, client, &num_sent, &num_received, cond_even_down, 0);
+    ok(ret == 0);
+    ok(num_sent == 1);
+    ok(num_received == 0);
+
+    ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
+    ok(!quicly_connection_is_ready(client));
+
+    /* client sends a probe, that gets lost */
+    ret = transmit_cond(client, server, &num_sent, &num_received, cond_even_up, 0);
+    ok(ret == 0);
+    ok(num_sent == 1);
+    ok(num_received == 0);
+
+    quic_now += 1000;
+
+    /* server retransmits the handshake packets */
     ret = transmit_cond(server, client, &num_sent, &num_received, cond_even_down, 0);
     ok(ret == 0);
     ok(num_sent == 1);
