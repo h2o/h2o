@@ -537,10 +537,11 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
 #undef PREFIX
         *p++ = '0' + (version & 0xff);
     } else {
-#define PROTO "HTTP/2"
-        memcpy(p, PROTO, sizeof(PROTO) - 1);
-        p += sizeof(PROTO) - 1;
-#undef PROTO
+#define PREFIX "HTTP/"
+        memcpy(p, PREFIX, sizeof(PREFIX) - 1);
+        p += sizeof(PREFIX) - 1;
+#undef PREFIX
+        *p++ = (version >> 8) + '0';
     }
 
     *p = '\0';
