@@ -2049,8 +2049,14 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 
 inline int h2o_conn_is_early_data(h2o_conn_t *conn)
 {
-    ptls_t *tls = conn->callbacks->get_ptls(conn);
-    return tls != NULL ? !ptls_handshake_is_complete(tls) : 0;
+    ptls_t *tls;
+    if (conn->callbacks->get_ptls == NULL)
+        return 0;
+    if ((tls = conn->callbacks->get_ptls(conn)) == NULL)
+        return 0;
+    if (ptls_handshake_is_complete(tls))
+        return 0;
+    return 1;
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)
