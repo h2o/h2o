@@ -413,3 +413,29 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
     (*list)[cnt++] = element;
     (*list)[cnt] = NULL;
 }
+
+void h2o_strerror_r(int err, char *buf, size_t len)
+{
+#ifndef _GNU_SOURCE
+    strerror_r(err, buf, len);
+#else
+    /**
+     * The GNU-specific strerror_r() returns a pointer to a string containing the error message.
+     * This may be either a pointer to a string that the function stores in  buf,
+     * or a pointer to some (immutable) static string (in which case buf is unused)
+     */
+    char *p = strerror_r(err, buf, len);
+    if (p != buf) {
+        strncpy(buf, p, len - 1);
+        buf[len - 1] = '\0';
+    }
+#endif
+}
+
+void h2o_perror(const char *msg)
+{
+    char buf[128];
+
+    h2o_strerror_r(errno, buf, sizeof(buf));
+    h2o_error_printf("%s: %s\n", msg, buf);
+}
