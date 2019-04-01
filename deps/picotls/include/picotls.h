@@ -625,12 +625,22 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_esni_key_t *update_esni_key;
+    /**
+     *
+     */
+    ptls_iovec_t pkey_buf;
 };
 
 typedef struct st_ptls_raw_extension_t {
     uint16_t type;
     ptls_iovec_t data;
 } ptls_raw_extension_t;
+
+typedef enum en_ptls_early_data_acceptance_t {
+    PTLS_EARLY_DATA_ACCEPTANCE_UNKNOWN = 0,
+    PTLS_EARLY_DATA_REJECTED,
+    PTLS_EARLY_DATA_ACCEPTED
+} ptls_early_data_acceptance_t;
 
 /**
  * optional arguments to client-driven handshake
@@ -661,10 +671,11 @@ typedef struct st_ptls_handshake_properties_t {
              */
             size_t *max_early_data_size;
             /**
-             * if early-data has been accepted by peer. For clients using `update_traffic_key` callback, the flag is set when the
-             * callback is called with (is_enc, epoch) set to (1, 2).
+             * If early-data has been accepted by peer, or if the state is still unknown. The state changes anytime after handshake
+             * keys become available. Applications can peek the tri-state variable every time it calls `ptls_hanshake` or
+             * `ptls_handle_message` to determine the result at the earliest moment. This is an output parameter.
              */
-            unsigned early_data_accepted_by_peer : 1;
+            ptls_early_data_acceptance_t early_data_acceptance;
             /**
              * negotiate the key exchange method before sending key_share
              */
