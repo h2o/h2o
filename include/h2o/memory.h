@@ -79,6 +79,8 @@ extern "C" {
  */
 #ifndef h2o_error_printf
 #define h2o_error_printf(...) fprintf(stderr, __VA_ARGS__)
+#else
+extern void libh2o_error_printf(const char *format, ...) __attribute__((format(printf, 1, 2)));
 #endif
 
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
