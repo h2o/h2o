@@ -171,7 +171,7 @@ extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 H2O_NORETURN void h2o__fatal(const char *msg);
 
 void h2o_perror(const char *msg);
-void h2o_strerror_r(int err, char *buf, size_t len);
+char *h2o_strerror_r(int err, char *buf, size_t len);
 
 /**
  * A version of memcpy that can take a NULL @src to avoid UB
