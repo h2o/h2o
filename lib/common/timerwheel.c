@@ -41,7 +41,7 @@
 #define ABORT_CORRUPT_TIMER(ctx, t, fmt, ...)                                                                                      \
     do {                                                                                                                           \
         REPORT_CORRUPT_TIMER(ctx, t, fmt, __VA_ARGS__);                                                                            \
-        abort();                                                                                                                   \
+        h2o_fatal("timerwheel");                                                                                                   \
     } while (0)
 
 struct st_h2o_timerwheel_t {

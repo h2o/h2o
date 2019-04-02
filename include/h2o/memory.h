@@ -167,8 +167,10 @@ extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 /**
  * prints an error message and aborts
  */
-#define h2o_fatal(msg) h2o__fatal(__FILE__ ":" H2O_TO_STR(__LINE__) ":" msg)
-H2O_NORETURN void h2o__fatal(const char *msg);
+H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
+#ifndef h2o_fatal
+#define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
+#endif
 
 void h2o_perror(const char *msg);
 char *h2o_strerror_r(int err, char *buf, size_t len);

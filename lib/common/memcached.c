@@ -245,12 +245,13 @@ static void reader_main(h2o_memcached_context_t *ctx)
     pthread_t writer_thread;
     yrmcds_response resp;
     yrmcds_error err;
+    int ret;
 
     /* connect to server and start the writer thread */
     connect_to_server(conn.ctx, &conn.yrmcds);
-    if (pthread_create(&writer_thread, NULL, writer_main, &conn) != 0) {
-        h2o_perror("pthread_create");
-        abort();
+    if ((ret = pthread_create(&writer_thread, NULL, writer_main, &conn)) != 0) {
+        char buf[128];
+        h2o_fatal("pthread_create: %s", h2o_strerror_r(ret, buf, sizeof(buf)));
     }
 
     pthread_mutex_lock(&conn.ctx->mutex);

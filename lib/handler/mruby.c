@@ -47,8 +47,7 @@
 
 void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, int line)
 {
-    h2o_error_printf("%s at file: \"%s\", line %d: %s\n", mess, file, line, RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
-    abort();
+    h2o_fatal("%s at file: \"%s\", line %d: %s\n", mess, file, line, RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
 }
 
 mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, int is_static, const char *file, int line)
@@ -109,12 +108,12 @@ void h2o_mruby_setup_globals(mrb_state *mrb)
     /* require core modules and include built-in libraries */
     h2o_mruby_eval_expr(mrb, "require \"#{$H2O_ROOT}/share/h2o/mruby/preloads.rb\"");
     if (mrb->exc != NULL) {
-        h2o_error_printf("an error occurred while loading %s/%s: %s\n", root, "share/h2o/mruby/preloads.rb",
-                         RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        const char *msg = "";
         if (mrb_obj_is_instance_of(mrb, mrb_obj_value(mrb->exc), mrb_class_get(mrb, "LoadError"))) {
-            h2o_error_printf("Did you forget to run `make install`?\n");
+            msg = "Did you forget to run `make install`?\n";
         }
-        abort();
+        h2o_fatal("an error occurred while loading %s/%s: %s\n%s", root, "share/h2o/mruby/preloads.rb",
+                  RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))), msg);
     }
 }
 
@@ -174,22 +173,19 @@ struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *co
 
     /* parse */
     if ((cxt = mrbc_context_new(mrb)) == NULL) {
-        h2o_error_printf("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
-        abort();
+        h2o_fatal("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
     }
     if (config->path != NULL)
         mrbc_filename(mrb, cxt, config->path);
     cxt->capture_errors = 1;
     cxt->lineno = config->lineno;
     if ((parser = mrb_parse_nstring(mrb, config->source.base, (int)config->source.len, cxt)) == NULL) {
-        h2o_error_printf("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
-        abort();
+        h2o_fatal("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
     }
     /* return erro if errbuf is supplied, or abort */
     if (parser->nerr != 0) {
         if (errbuf == NULL) {
-            h2o_error_printf("%s: internal error (unexpected state)\n", H2O_MRUBY_MODULE_NAME);
-            abort();
+            h2o_fatal("%s: internal error (unexpected state)\n", H2O_MRUBY_MODULE_NAME);
         }
         snprintf(errbuf, 256, "line %d:%s", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
         strcat(errbuf, "\n\n");
@@ -202,8 +198,7 @@ struct RProc *h2o_mruby_compile_code(mrb_state *mrb, h2o_mruby_config_vars_t *co
     }
     /* generate code */
     if ((proc = mrb_generate_code(mrb, parser)) == NULL) {
-        h2o_error_printf("%s: internal error (mrb_generate_code failed)\n", H2O_MRUBY_MODULE_NAME);
-        abort();
+        h2o_fatal("%s: internal error (mrb_generate_code failed)\n", H2O_MRUBY_MODULE_NAME);
     }
 
 Exit:
@@ -450,8 +445,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     /* init mruby in every thread */
     h2o_mruby_shared_context_t *shared_ctx = h2o_mem_alloc(sizeof(*shared_ctx));
     if ((shared_ctx->mrb = mrb_open()) == NULL) {
-        h2o_error_printf("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
-        abort();
+        h2o_fatal("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
     }
     shared_ctx->mrb->ud = shared_ctx;
     shared_ctx->ctx = ctx;
