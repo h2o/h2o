@@ -229,9 +229,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
                                   h2o_url_t *origin)
 {
     if (errstr != NULL) {
-        char buf[128];
-        on_error(client->ctx, "%s:%s", errstr,
-                 h2o_strerror_r(errno, buf, sizeof(buf)));
+        on_error(client->ctx, errstr);
         return NULL;
     }
 
