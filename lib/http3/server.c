@@ -640,7 +640,6 @@ SynFound : {
         get_sockname,
         get_peername,
         NULL, /* push */
-        NULL, /* should expose is_early_data instead of get_socket, because QUIC shares single socket */
         get_ptls,
         NULL, /* get debug state */
         {{

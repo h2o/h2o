@@ -1323,12 +1323,6 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
-static h2o_socket_t *get_socket(h2o_conn_t *_conn)
-{
-    h2o_http2_conn_t *conn = (void *)_conn;
-    return conn->sock;
-}
-
 static ptls_t *get_ptls(h2o_conn_t *_conn)
 {
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
@@ -1433,7 +1427,6 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_sockname,              /* stringify address */
         get_peername,              /* ditto */
         push_path,                 /* HTTP2 push */
-        get_socket,                /* get underlying socket */
         get_ptls,
         h2o_http2_get_debug_state, /* get debug state */
         {{

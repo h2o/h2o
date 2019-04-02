@@ -393,11 +393,6 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return conn->remote.len;
 }
 
-static h2o_socket_t *get_socket(h2o_conn_t *conn)
-{
-    return NULL;
-}
-
 static int handle_header_env_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *env_key, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
@@ -595,7 +590,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     static const h2o_conn_callbacks_t callbacks = {get_sockname, /* stringify address */
                                                    get_peername, /* ditto */
                                                    NULL,         /* push (no push in subrequest) */
-                                                   get_socket,   /* get underlying socket */
+                                                   NULL,         /* get ptls */
                                                    NULL,         /* get debug state */
                                                    {{{NULL}}}};
 

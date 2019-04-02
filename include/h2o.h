@@ -811,23 +811,19 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
     /**
-     * callback for server push (may be NULL)
+     * optional (i.e. may be NULL) callback for server push
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len, int is_critical);
     /**
-     * Return the underlying socket struct
-     */
-    h2o_socket_t *(*get_socket)(h2o_conn_t *_conn);
-    /**
-     * Retruns picotls connection object used by the connection.
+     * optional calldack that retruns picotls connection object used by the connection
      */
     ptls_t *(*get_ptls)(h2o_conn_t *_conn);
     /**
-     * debug state callback (may be NULL)
+     * debug state callback (optional)
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
-     * logging callbacks (may be NULL)
+     * logging callbacks (all of them are optional)
      */
     union {
         struct {
