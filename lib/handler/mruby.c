@@ -47,7 +47,7 @@
 
 void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, int line)
 {
-    h2o_fatal("%s at file: \"%s\", line %d: %s\n", mess, file, line, RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+    h2o__fatal(file, line, "%s:%s\n", mess, RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
 }
 
 mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, int is_static, const char *file, int line)
