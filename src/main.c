@@ -1877,6 +1877,18 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
+static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
+                                         quicly_decoded_packet_t *packets, size_t num_packets)
+{
+    if (num_connections(0) >= conf.max_connections) {
+        return NULL;
+    }
+    num_connections(1);
+    num_sessions(1);
+
+    return h2o_http3_server_accept(_ctx, sa, salen, packets, num_packets);
+}
+
 static void update_listener_state(struct listener_ctx_t *listeners)
 {
     size_t i;
@@ -1944,7 +1956,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         /* setup quic context and the unix socket to receive forwarded packets */
         if ((conf.num_quic_threads == 0 || thread_index < conf.num_quic_threads) && listener_config->quic.ctx != NULL) {
             h2o_http3_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
-                                   listener_config->quic.ctx, h2o_http3_server_accept, NULL);
+                                   listener_config->quic.ctx, on_http3_accept, NULL);
             h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, (uint32_t)conf.num_threads, (uint32_t)thread_index, 0,
                                              1, forward_quic_packets);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
