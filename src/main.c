@@ -1060,6 +1060,35 @@ static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t 
     return res;
 }
 
+static void notify_all_threads(void)
+{
+    unsigned i;
+    for (i = 0; i != conf.num_threads; ++i)
+        h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
+}
+
+
+static int num_connections(int delta)
+{
+    return __sync_fetch_and_add(&conf.state._num_connections, delta);
+}
+
+static unsigned long num_sessions(int delta)
+{
+    return __sync_fetch_and_add(&conf.state._num_sessions, delta);
+}
+
+static void on_http3_closed_by_peer(quicly_closed_by_peer_t *_self, quicly_conn_t *conn, int err, uint64_t frame_type,
+                                    const char *reason, size_t reason_len)
+{
+    int prev_num_connections = num_connections(-1);
+
+    if (prev_num_connections == conf.max_connections)
+        notify_all_threads();
+}
+
+static quicly_closed_by_peer_t closed_by_peer = {.cb = &on_http3_closed_by_peer};
+
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
@@ -1259,6 +1288,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     quic->event_log.mask = event_log_mask;
                 }
                 quic->stream_open = &h2o_http3_server_on_stream_open;
+                quic->closed_by_peer = &closed_by_peer;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
             }
@@ -1575,13 +1605,6 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
     free(arg->node_cache.entries);
 }
 
-static void notify_all_threads(void)
-{
-    unsigned i;
-    for (i = 0; i != conf.num_threads; ++i)
-        h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
-}
-
 static void on_sigterm(int signo)
 {
     conf.shutdown_requested = 1;
@@ -1820,16 +1843,6 @@ static void forwarded_quic_socket_on_read(h2o_socket_t *sock, const char *err)
 {
     struct listener_ctx_t *ctx = sock->data;
     h2o_http3_read_socket(&ctx->http3.ctx.super, sock, preprocess_quic_datagram);
-}
-
-static int num_connections(int delta)
-{
-    return __sync_fetch_and_add(&conf.state._num_connections, delta);
-}
-
-static unsigned long num_sessions(int delta)
-{
-    return __sync_fetch_and_add(&conf.state._num_sessions, delta);
 }
 
 static void on_socketclose(void *data)
