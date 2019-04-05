@@ -1078,13 +1078,19 @@ static unsigned long num_sessions(int delta)
     return __sync_fetch_and_add(&conf.state._num_sessions, delta);
 }
 
+static void on_connection_close(void) {
+    int prev_num_connections = num_connections(-1);
+
+    if (prev_num_connections == conf.max_connections) {
+        /* ready to accept new connections. wake up all the threads! */
+        notify_all_threads();
+    }
+}
+
 static void on_http3_closed_by_peer(quicly_closed_by_peer_t *_self, quicly_conn_t *conn, int err, uint64_t frame_type,
                                     const char *reason, size_t reason_len)
 {
-    int prev_num_connections = num_connections(-1);
-
-    if (prev_num_connections == conf.max_connections)
-        notify_all_threads();
+    on_connection_close();
 }
 
 static quicly_closed_by_peer_t closed_by_peer = {.cb = &on_http3_closed_by_peer};
@@ -1847,12 +1853,7 @@ static void forwarded_quic_socket_on_read(h2o_socket_t *sock, const char *err)
 
 static void on_socketclose(void *data)
 {
-    int prev_num_connections = num_connections(-1);
-
-    if (prev_num_connections == conf.max_connections) {
-        /* ready to accept new connections. wake up all the threads! */
-        notify_all_threads();
-    }
+    on_connection_close();
 }
 
 static void on_accept(h2o_socket_t *listener, const char *err)
