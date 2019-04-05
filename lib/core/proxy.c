@@ -701,6 +701,8 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
     req->timestamps.proxy = (h2o_httpclient_timings_t){{0}};
     h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
+    self->req_done = 0;
+    self->res_done = 0;
 
     return self;
 }
