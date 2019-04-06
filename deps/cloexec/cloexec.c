@@ -19,7 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <fcntl.h>
 #include "cloexec.h"
 
 pthread_mutex_t cloexec_mutex = PTHREAD_MUTEX_INITIALIZER;

@@ -25,7 +25,12 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <fcntl.h>
 #include <unistd.h>
+
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+extern int pipe2(int pipefd[2], int flags);
+#endif
 
 extern pthread_mutex_t cloexec_mutex;
 
