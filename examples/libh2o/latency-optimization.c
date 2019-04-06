@@ -202,10 +202,8 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     if (err != NULL) {
-        char buf[128];
         /* connection failed */
-        fprintf(stderr, "failed to connect to host:%s:%s\n", err,
-                h2o_strerror_r(errno, buf, sizeof(buf)));
+        fprintf(stderr, "failed to connect to host:%s\n", err);
         h2o_socket_close(sock);
         exit(1);
         return;

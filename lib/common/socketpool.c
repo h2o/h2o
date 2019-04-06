@@ -376,7 +376,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         req->sock = NULL;
-        errstr = err;
+        errstr = "connection failed"; /* shouldn't we return err? */
     } else {
         h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
         if (target_url->scheme->is_ssl) {
@@ -410,7 +410,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
             return;
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, h2o_socket_error_conn_fail);
+        call_connect_cb(req, "failed to connect to host");
         return;
     }
     close_data = h2o_mem_alloc(sizeof(*close_data));
