@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "h2o/memory.h"
@@ -69,9 +70,17 @@ void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
 
-void h2o__fatal(const char *msg)
+void h2o__fatal(const char *file, int line, const char *msg, ...)
 {
-    h2o_error_printf("fatal:%s\n", msg);
+    char buf[1024];
+    va_list args;
+
+    va_start(args, msg);
+    vsnprintf(buf, sizeof(buf), msg, args);
+    va_end(args);
+
+    h2o_error_printf("fatal:%s:%d:%s\n", file, line, buf);
+
     abort();
 }
 

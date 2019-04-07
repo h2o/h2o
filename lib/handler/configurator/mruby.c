@@ -45,8 +45,7 @@ static mrb_state *get_mrb(struct mruby_configurator_t *self)
     if (self->mrb == NULL) {
         self->mrb = mrb_open();
         if (self->mrb == NULL) {
-            h2o_error_printf("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
-            abort();
+            h2o_fatal("%s: no memory\n", H2O_MRUBY_MODULE_NAME);
         }
         h2o_mruby_setup_globals(self->mrb);
     }
