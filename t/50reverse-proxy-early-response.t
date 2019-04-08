@@ -12,7 +12,24 @@ plan skip_all => "h2get not found"
     unless h2get_exists();
 
 subtest 'upstream_h1' => sub {
-    subtest 'no_wait_body' => sub {
+    subtest 'not early response' => sub {
+        my $upstream_port = empty_port({ host => '0.0.0.0' });
+        my $upstream = create_h1_upstream($upstream_port, 0, 1024);
+        my $server = spawn_h2o(h2o_conf($upstream_port));
+        my $output = run_with_h2get_simple($server, <<"EOS");
+            @{[do_read_method()]}
+            req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                "content-length" => "#{1 + 1024}"
+            }
+            h2g.send_headers(req, 1, END_HEADERS)
+            h2g.send_data(1, 0, "a")
+            do_read(h2g, 100)
+            h2g.send_data(1, END_STREAM, "a" * 1024)
+            do_read(h2g, 100)
+EOS
+        like $output, qr/HEADERS frame .+':status' => '200'/s;
+    };
+    subtest 'no_drain_body' => sub {
         my $upstream_port = empty_port({ host => '0.0.0.0' });
         my $upstream = create_h1_upstream($upstream_port, 0);
         my $server = spawn_h2o(h2o_conf($upstream_port));
@@ -35,7 +52,7 @@ EOS
         like $output, qr/RST_STREAM frame .+error_code => 0/s;
     };
     
-    subtest 'wait_body' => sub {
+    subtest 'drain_body' => sub {
         my $upstream_port = empty_port({ host => '0.0.0.0' });
         my $upstream = create_h1_upstream($upstream_port, 1);
         my $server = spawn_h2o(h2o_conf($upstream_port));
@@ -130,7 +147,7 @@ EOT
 }
 
 sub create_h1_upstream {
-    my ($upstream_port, $wait_body, $wait_body_before_sending_header) = @_;
+    my ($upstream_port, $drain_body, $wait_body) = @_;
 
     my ($cout, $pin);
     pipe($pin, $cout);
@@ -167,8 +184,8 @@ sub create_h1_upstream {
         while ($client->sysread($chunk, 1) > 0) {
             $header .= $chunk;
             if ($header =~ /\r\n\r\n$/) {
-                while (length($body) < ($wait_body_before_sending_header || 0)) {
-                    if ($client->sysread($chunk, $wait_body_before_sending_header) > 0) {
+                while (length($body) < ($wait_body || 0)) {
+                    if ($client->sysread($chunk, $wait_body) > 0) {
                         $body .= $chunk;
                     }
                 }
@@ -182,7 +199,7 @@ sub create_h1_upstream {
                 last;
             }
         }
-        if ($wait_body) {
+        if ($drain_body) {
             while ($client->sysread($chunk, 1024) > 0) {
                 Time::HiRes::sleep(0.0001);
                 $body .= $chunk;

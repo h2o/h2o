@@ -581,7 +581,7 @@ static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_s
     if (self == NULL) {
         return;
     }
-    if (!h2o_send_state_is_in_progress(send_state)) {
+    if (send_state == H2O_SEND_STATE_ERROR) {
         detach_client(self);
     }
     if (self->src_req->proceed_req != NULL)
