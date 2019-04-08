@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "h2o/memory.h"
@@ -74,9 +75,17 @@ __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
 #endif
 
 
-void h2o__fatal(const char *msg)
+void h2o__fatal(const char *file, int line, const char *msg, ...)
 {
-    h2o_error_printf("fatal:%s\n", msg);
+    char buf[1024];
+    va_list args;
+
+    va_start(args, msg);
+    vsnprintf(buf, sizeof(buf), msg, args);
+    va_end(args);
+
+    h2o_error_printf("fatal:%s:%d:%s\n", file, line, buf);
+
     abort();
 }
 
@@ -417,4 +426,26 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
     *list = h2o_mem_realloc(*list, (cnt + 2) * sizeof(void *));
     (*list)[cnt++] = element;
     (*list)[cnt] = NULL;
+}
+
+char *h2o_strerror_r(int err, char *buf, size_t len)
+{
+#ifndef _GNU_SOURCE
+    strerror_r(err, buf, len);
+    return buf;
+#else
+    /**
+     * The GNU-specific strerror_r() returns a pointer to a string containing the error message.
+     * This may be either a pointer to a string that the function stores in  buf,
+     * or a pointer to some (immutable) static string (in which case buf is unused)
+     */
+    return strerror_r(err, buf, len);
+#endif
+}
+
+void h2o_perror(const char *msg)
+{
+    char buf[128];
+
+    h2o_error_printf("%s: %s\n", msg, h2o_strerror_r(errno, buf, sizeof(buf)));
 }

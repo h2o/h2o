@@ -531,6 +531,12 @@ enum {
     TEST_HANDSHAKE_KEY_UPDATE
 };
 
+static int on_extension_cb(ptls_on_extension_t *self, ptls_t *tls, uint8_t hstype, uint16_t exttype, ptls_iovec_t extdata)
+{
+    assert(extdata.base);
+    return 0;
+}
+
 static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int check_ch, int require_client_authentication)
 {
     ptls_t *client, *server;
@@ -559,6 +565,9 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         client_hs_prop.client.negotiated_protocols.count = sizeof(protocols) / sizeof(protocols[0]);
         ptls_set_server_name(client, "test.example.com", 0);
     }
+
+    static ptls_on_extension_t cb = {on_extension_cb};
+    ctx_peer->on_extension = &cb;
 
     if (require_client_authentication) {
         ctx_peer->require_client_authentication = 1;

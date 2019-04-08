@@ -198,8 +198,8 @@ h2o_evloop_t *h2o_evloop_create(void)
     loop->ep = epoll_create(10);
     while (fcntl(loop->ep, F_SETFD, FD_CLOEXEC) == -1) {
         if (errno != EAGAIN) {
-            h2o_error_printf("h2o_evloop_create: failed to set FD_CLOEXEC to the epoll fd (errno=%d)\n", errno);
-            abort();
+            char buf[128];
+            h2o_fatal("h2o_evloop_create: failed to set FD_CLOEXEC: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
     }
     pthread_mutex_unlock(&cloexec_mutex);
