@@ -11,31 +11,25 @@ use t::Util;
 plan skip_all => "h2get not found"
     unless h2get_exists();
 
-
 subtest 'upstream_h1' => sub {
     subtest 'no_wait_body' => sub {
         my $upstream_port = empty_port({ host => '0.0.0.0' });
         my $upstream = create_h1_upstream($upstream_port, 0);
-        my $server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      /:
-        proxy.timeout.keepalive: 100000
-        proxy.reverse.url: http://127.0.0.1:$upstream_port
-EOT
-
+        my $server = spawn_h2o(h2o_conf($upstream_port));
         my $output = run_with_h2get_simple($server, <<"EOS");
-@{[do_read_method()]}
-req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/" }
-h2g.send_headers(req, 1, END_HEADERS)
-h2g.send_data(1, 0, "a")
-do_read(h2g, 100)
-3.times {|n|
-  sleep 1
-  h2g.send_data(1, n == 3 ? END_STREAM : 0, "a" * 1024)
-  break if do_read(h2g, 100)
-}
+            @{[do_read_method()]}
+            req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/" }
+            h2g.send_headers(req, 1, END_HEADERS)
+            h2g.send_data(1, 0, "a")
+            do_read(h2g, 100)
+            3.times {|n|
+              sleep 1
+              h2g.send_data(1, n == 2 ? END_STREAM : 0, "a" * 1024)
+              if n != 2
+                eos, f = do_read(h2g, 100)
+                break if eos
+              end
+            }
 EOS
         like $output, qr/HEADERS frame .+':status' => '200'/s;
         like $output, qr/RST_STREAM frame .+error_code => 0/s;
@@ -44,27 +38,23 @@ EOS
     subtest 'wait_body' => sub {
         my $upstream_port = empty_port({ host => '0.0.0.0' });
         my $upstream = create_h1_upstream($upstream_port, 1);
-        my $server = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      /:
-        proxy.timeout.keepalive: 100000
-        proxy.reverse.url: http://127.0.0.1:$upstream_port
-EOT
+        my $server = spawn_h2o(h2o_conf($upstream_port));
         my $output = run_with_h2get_simple($server, <<"EOS");
-@{[do_read_method()]}
-req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
-    "content-length" => "#{1 + 1024 * 3}" # to avoid chunked encoding
-}
-h2g.send_headers(req, 1, END_HEADERS)
-h2g.send_data(1, 0, "a")
-do_read(h2g, 100)
-3.times {|n|
-  sleep 1
-  h2g.send_data(1, n == 3 ? END_STREAM : 0, "a" * 1024)
-  break if do_read(h2g, 100)
-}
+            @{[do_read_method()]}
+            req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                "content-length" => "#{1 + 1024 * 3}" # to avoid chunked encoding
+            }
+            h2g.send_headers(req, 1, END_HEADERS)
+            h2g.send_data(1, 0, "a")
+            do_read(h2g, 100)
+            3.times {|n|
+              sleep 1
+              h2g.send_data(1, n == 2 ? END_STREAM : 0, "a" * 1024)
+              if n != 2
+                eos, f = do_read(h2g, 100)
+                break if eos
+              end
+            }
 EOS
         like $output, qr/HEADERS frame .+':status' => '200'/s;
         unlike $output, qr/RST_STREAM frame/s;
@@ -78,12 +68,69 @@ EOS
         like $log, qr/accepted request 2/;
         like $log, qr/received @{[1 + 1024 * 3]} bytes/;
     };
+
+    subtest 'body send error before sending headers' => sub {
+        my $upstream_port = empty_port({ host => '0.0.0.0' });
+        my $upstream = create_h1_upstream($upstream_port, 1, 2);
+        my $server = spawn_h2o(h2o_conf($upstream_port));
+        local $SIG{ALRM} = sub { $upstream->{kill}->() };
+        Time::HiRes::alarm(0.5);
+        my $output = run_with_h2get_simple($server, <<"EOS");
+            @{[do_read_method()]}
+            req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                "content-length" => "#{1 + 1024}" # to avoid chunked encoding
+            }
+            h2g.send_headers(req, 1, END_HEADERS)
+            h2g.send_data(1, 0, "a")
+            sleep 1
+            do_read(h2g, 100)
+EOS
+        alarm(0);
+        like $output, qr/HEADERS frame .+':status' => '502'/s;
+        unlike $output, qr/RST_STREAM frame/s;
+    };
+
+    subtest 'body send error after sending headers' => sub {
+        my $upstream_port = empty_port({ host => '0.0.0.0' });
+        my $upstream = create_h1_upstream($upstream_port, 1);
+        my $server = spawn_h2o(h2o_conf($upstream_port));
+        local $SIG{ALRM} = sub { $upstream->{kill}->(); say STDERR "KILLED";};
+        Time::HiRes::alarm(0.5);
+        my $output = run_with_h2get_simple($server, <<"EOS");
+            @{[do_read_method()]}
+            req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                "content-length" => "#{1 + 1024}" # to avoid chunked encoding
+            }
+            h2g.send_headers(req, 1, END_HEADERS)
+            h2g.send_data(1, 0, "a")
+            do_read(h2g, 100)
+            sleep 3
+            h2g.send_data(1, 0, "a")
+            do_read(h2g, 100)
+EOS
+        alarm(0);
+        like $output, qr/HEADERS frame .+':status' => '200'/s;
+        like $output, qr/RST_STREAM frame/s;
+    };
 };
 
 done_testing;
 
+sub h2o_conf {
+    my ($upstream_port) = @_;
+    return << "EOT";
+http2-idle-timeout: 1000000
+hosts:
+  default:
+    paths:
+      /:
+        proxy.timeout.keepalive: 100000
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+}
+
 sub create_h1_upstream {
-    my ($upstream_port, $wait_body) = @_;
+    my ($upstream_port, $wait_body, $wait_body_before_sending_header) = @_;
 
     my ($cout, $pin);
     pipe($pin, $cout);
@@ -114,11 +161,17 @@ sub create_h1_upstream {
     my $req = 0;
     while (my $client = $server->accept) {
         say "accepted request @{[++$req]}";
-        my $buf = '';
+        my $header = '';
+        my $body = '';
         my $chunk;
         while ($client->sysread($chunk, 1) > 0) {
-            $buf .= $chunk;
-            if ($buf =~ /\r\n\r\n$/) {
+            $header .= $chunk;
+            if ($header =~ /\r\n\r\n$/) {
+                while (length($body) < ($wait_body_before_sending_header || 0)) {
+                    if ($client->sysread($chunk, $wait_body_before_sending_header) > 0) {
+                        $body .= $chunk;
+                    }
+                }
                 my $content = "hello";
                 $client->syswrite(join("\r\n", (
                     "HTTP/1.1 200 OK",
@@ -130,12 +183,11 @@ sub create_h1_upstream {
             }
         }
         if ($wait_body) {
-            $buf = '';
             while ($client->sysread($chunk, 1024) > 0) {
                 Time::HiRes::sleep(0.0001);
-                $buf .= $chunk;
+                $body .= $chunk;
             }
-            say "received @{[length($buf)]} bytes";
+            say "received @{[length($body)]} bytes";
         }
         sleep 1;
         $client->close;
@@ -148,16 +200,16 @@ sub do_read_method {
 def do_read(h2g, timeout)
     while true
         f = h2g.read(timeout)
-        return false if f == nil
+        return [false, nil] if f == nil
         puts f.to_s
         if f.type == "DATA" && f.len > 0
             h2g.send_window_update(0, f.len)
             h2g.send_window_update(f.stream_id, f.len)
         end
         if (f.type == "DATA" || f.type == "HEADERS") && f.is_end_stream
-            return true
+            return [true, f]
         elsif f.type == "RST_STREAM" || f.type == "GOAWAY"
-            return true
+            return [true, f]
         end
     end
 end
