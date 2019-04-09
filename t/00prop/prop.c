@@ -73,10 +73,6 @@ static enum theft_trial_res prop_wake_time_should_be_before_expiry(struct theft 
         return THEFT_TRIAL_FAIL;
     if (h2o_timerwheel_get_wake_at(ctx) != UINT64_MAX)
         return THEFT_TRIAL_FAIL;
-    wake_time = h2o_timerwheel_get_wake_at(ctx);
-    if (wake_time != UINT64_MAX) {
-        return THEFT_TRIAL_FAIL;
-    }
     h2o_timerwheel_destroy(ctx);
     return THEFT_TRIAL_PASS;
 }
@@ -212,7 +208,7 @@ static struct theft_type_info random_buffer_info = {
             .prop1 = fn_,                                                                                                          \
             .type_info = {&random_buffer_info},                                                                                    \
             .seed = seed,                                                                                                          \
-            .trials = 100,                                                                                                         \
+            .trials = 10000,                                                                                                         \
         };                                                                                                                         \
                                                                                                                                    \
         enum theft_run_res res = theft_run(&config);                                                                               \
