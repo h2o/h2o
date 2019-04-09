@@ -165,6 +165,8 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
 #define DECL_ENTITY_READ_SEND_ERROR_XXX(status_)                                                                                   \
     static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
     {                                                                                                                              \
+        if (conn->_ostr_final.sent_headers)                                                                                        \
+            return;                                                                                                                \
         conn->_req_entity_reader = NULL;                                                                                           \
         set_timeout(conn, 0, NULL);                                                                                                \
         h2o_socket_read_stop(conn->sock);                                                                                          \
@@ -668,8 +670,6 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         h2o_socket_read_stop(conn->sock);
     }
     /* handle next request */
-    if (conn->sock->input->bytes)
-        h2o_buffer_consume(&conn->sock->input, conn->_reqsize);
     init_request(conn);
     conn->req._body.bytes_received = 0;
     conn->req.write_req.cb = NULL;
