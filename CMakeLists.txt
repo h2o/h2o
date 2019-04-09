@@ -478,16 +478,6 @@ TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
-IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
-    INSTALL(TARGETS libh2o DESTINATION ${CMAKE_INSTALL_LIBDIR})
-ELSE ()
-    SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
-ENDIF ()
-IF (NOT WITHOUT_LIBS)
-    INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
-ELSE ()
-    SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
-ENDIF()
 
 ADD_EXECUTABLE(t-qif t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES
@@ -495,50 +485,50 @@ SET_TARGET_PROPERTIES(t-qif PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-qif libh2o-evloop ${EXTRA_LIBS})
 
-ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-httpclient examples-simple examples-socket-client)
+ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-httpclient-libuv examples-simple-libuv examples-socket-client-libuv)
 IF (WSLAY_FOUND)
-    ADD_DEPENDENCIES(lib-examples examples-websocket)
+    ADD_DEPENDENCIES(lib-examples examples-websocket-libuv)
 ENDIF (WSLAY_FOUND)
-ADD_EXECUTABLE(examples-httpclient examples/libh2o/httpclient.c)
-ADD_EXECUTABLE(examples-socket-client examples/libh2o/socket-client.c)
-ADD_EXECUTABLE(examples-simple examples/libh2o/simple.c)
-ADD_EXECUTABLE(examples-websocket lib/websocket.c examples/libh2o/websocket.c)
+ADD_EXECUTABLE(examples-httpclient-libuv src/httpclient.c)
+ADD_EXECUTABLE(examples-socket-client-libuv examples/libh2o/socket-client.c)
+ADD_EXECUTABLE(examples-simple-libuv examples/libh2o/simple.c)
+ADD_EXECUTABLE(examples-websocket-libuv lib/websocket.c examples/libh2o/websocket.c)
 
-ADD_CUSTOM_TARGET(lib-examples-evloop DEPENDS examples-httpclient-evloop examples-simple-evloop examples-socket-client-evloop examples-latency-optimization-evloop)
+ADD_CUSTOM_TARGET(lib-examples-evloop DEPENDS h2o-httpclient examples-simple-evloop examples-socket-client-evloop examples-latency-optimization-evloop)
 IF (WSLAY_FOUND)
     ADD_DEPENDENCIES(lib-examples-evloop examples-websocket-evloop)
 ENDIF (WSLAY_FOUND)
 ADD_EXECUTABLE(examples-latency-optimization-evloop examples/libh2o/latency-optimization.c)
-ADD_EXECUTABLE(examples-httpclient-evloop examples/libh2o/httpclient.c)
+ADD_EXECUTABLE(h2o-httpclient src/httpclient.c)
 ADD_EXECUTABLE(examples-socket-client-evloop examples/libh2o/socket-client.c)
 ADD_EXECUTABLE(examples-simple-evloop examples/libh2o/simple.c)
 ADD_EXECUTABLE(examples-websocket-evloop lib/websocket.c examples/libh2o/websocket.c)
 
-SET_TARGET_PROPERTIES(examples-httpclient PROPERTIES
-    EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-httpclient libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 
-SET_TARGET_PROPERTIES(examples-socket-client PROPERTIES
+SET_TARGET_PROPERTIES(examples-httpclient-libuv PROPERTIES
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-socket-client libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(examples-httpclient-libuv libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 
-SET_TARGET_PROPERTIES(examples-simple PROPERTIES
+SET_TARGET_PROPERTIES(examples-socket-client-libuv PROPERTIES
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-simple libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(examples-socket-client-libuv libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
 
-SET_TARGET_PROPERTIES(examples-websocket PROPERTIES
+SET_TARGET_PROPERTIES(examples-simple-libuv PROPERTIES
     EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-websocket libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
+TARGET_LINK_LIBRARIES(examples-simple-libuv libh2o ${LIBUV_LIBRARIES} ${EXTRA_LIBS})
+
+SET_TARGET_PROPERTIES(examples-websocket-libuv PROPERTIES
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(examples-websocket-libuv libh2o ${LIBUV_LIBRARIES} ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
 SET_TARGET_PROPERTIES(examples-latency-optimization-evloop PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-latency-optimization-evloop libh2o-evloop ${EXTRA_LIBS})
 
-SET_TARGET_PROPERTIES(examples-httpclient-evloop PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
-    EXCLUDE_FROM_ALL 1)
-TARGET_LINK_LIBRARIES(examples-httpclient-evloop libh2o-evloop ${EXTRA_LIBS})
+SET_TARGET_PROPERTIES(h2o-httpclient PROPERTIES
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+TARGET_LINK_LIBRARIES(h2o-httpclient libh2o-evloop ${EXTRA_LIBS})
 
 SET_TARGET_PROPERTIES(examples-socket-client-evloop PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
@@ -555,6 +545,18 @@ SET_TARGET_PROPERTIES(examples-websocket-evloop PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket-evloop libh2o-evloop ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
+IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
+    INSTALL(TARGETS libh2o DESTINATION ${CMAKE_INSTALL_LIBDIR})
+ELSE ()
+    SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
+ENDIF ()
+IF (NOT WITHOUT_LIBS)
+    INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    INSTALL(TARGETS h2o-httpclient DESTINATION ${CMAKE_INSTALL_BINDIR})
+ELSE ()
+    SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES EXCLUDE_FROM_ALL 1)
+    SET_TARGET_PROPERTIES(h2o-httpclient PROPERTIES EXCLUDE_FROM_ALL 1)
+ENDIF()
 
 # standalone server directly links to libh2o using evloop
 SET(STANDALONE_SOURCE_FILES

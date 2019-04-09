@@ -83,8 +83,7 @@ pthread_mutex_t h2o_conn_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void on_read(h2o_socket_t *sock, const char *err)
 {
     if (err != NULL) {
-        h2o_error_printf("pipe error\n");
-        abort();
+        h2o_fatal("on_read: %s", err);
     }
 
     h2o_buffer_consume(&sock->input, sock->input->size);
@@ -99,20 +98,20 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
      * much lower than that of a pipe, and only one file descriptor is required
      */
     int fd;
+    char buf[128];
 
     fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (fd == -1) {
-        h2o_perror("eventfd");
-        abort();
+        h2o_fatal("eventfd: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     queue->async.write = fd;
     queue->async.read = h2o_evloop_socket_create(loop, fd, 0);
 #else
     int fds[2];
+    char buf[128];
 
     if (cloexec_pipe(fds) != 0) {
-        h2o_perror("pipe");
-        abort();
+        h2o_fatal("pipe: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
     queue->async.write = fds[1];
@@ -226,9 +225,10 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 
 void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg)
 {
-    if (pthread_create(tid, attr, func, arg) != 0) {
-        h2o_perror("pthread_create");
-        abort();
+    int ret;
+    if ((ret = pthread_create(tid, attr, func, arg)) != 0) {
+        char buf[128];
+        h2o_fatal("pthread_create: %s", h2o_strerror_r(ret, buf, sizeof(buf)));
     }
 }
 

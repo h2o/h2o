@@ -8,7 +8,7 @@ use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $client_prog = bindir() . "/examples-httpclient-evloop";
+my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 

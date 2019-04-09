@@ -653,8 +653,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
         } break;
         default:
-            h2o_error_printf("logic flaw at %s:%d\n", __FILE__, __LINE__);
-            abort();
+            h2o_fatal("logic flaw");
         }
     }
 
@@ -1192,8 +1191,7 @@ static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned
     return NULL;
 
 Error:
-    h2o_error_printf("%s: detected invalid or missing type specifier; input is: %s\n", __FUNCTION__, start);
-    abort();
+    h2o_fatal("detected invalid or missing type specifier; input is: %s\n", start);
 }
 
 int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,
