@@ -58,7 +58,7 @@ struct st_h2o_http1_conn_t {
     h2o_timer_t _timeout_entry;
     uint64_t _req_index;
     size_t _prevreqlen;
-    size_t _reqsize;
+    size_t _headers_size;
     struct st_h2o_http1_req_entity_reader *_req_entity_reader;
     struct st_h2o_http1_finalostream_t _ostr_final;
     struct {
@@ -195,7 +195,6 @@ static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fr
     }
     h2o_buffer_consume(&conn->sock->input, consume);
     conn->req._body.bytes_received += fragment_size;
-    conn->_reqsize += consume;
     if (complete) {
         conn->req.proceed_req = NULL;
         on_entity_read_complete(conn);
@@ -527,7 +526,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 
     switch (reqlen) {
     default: // parse complete
-        conn->_reqsize = reqlen;
+        conn->_headers_size = reqlen;
         if (fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index) != 0) {
             set_timeout(conn, 0, NULL);
             send_bad_request(conn, "line folding of header fields is not supported");
@@ -550,6 +549,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->req.write_req.cb = h2o_write_req_first;
             conn->req.write_req.on_body_streaming_selected = on_body_streaming_selected;
             conn->req.write_req.ctx = &conn->req;
+            conn->_headers_size = 0;
             h2o_buffer_consume(&conn->sock->input, reqlen);
             h2o_buffer_init(&conn->req._body.body, &h2o_socket_buffer_prototype);
             if (expect.base != NULL) {
@@ -670,13 +670,15 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         h2o_socket_read_stop(conn->sock);
     }
     /* handle next request */
+    if (conn->_headers_size)
+        h2o_buffer_consume(&conn->sock->input, conn->_headers_size);
     init_request(conn);
     conn->req._body.bytes_received = 0;
     conn->req.write_req.cb = NULL;
     conn->req.write_req.ctx = NULL;
     conn->req.proceed_req = NULL;
     conn->_prevreqlen = 0;
-    conn->_reqsize = 0;
+    conn->_headers_size = 0;
     reqread_start(conn);
 }
 
@@ -718,18 +720,18 @@ static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
     h2o_http1_upgrade_cb cb = conn->upgrade.cb;
     void *data = conn->upgrade.data;
     h2o_socket_t *sock = NULL;
-    size_t reqsize = 0;
+    size_t headers_size = 0;
 
     /* destruct the connection (after detaching the socket) */
     if (err == 0) {
         sock = conn->sock;
-        reqsize = conn->_reqsize;
+        headers_size = conn->_headers_size;
         close_connection(conn, 0);
     } else {
         close_connection(conn, 1);
     }
 
-    cb(data, sock, reqsize);
+    cb(data, sock, headers_size);
 }
 
 static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_and_connection_len)
