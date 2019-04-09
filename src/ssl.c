@@ -34,6 +34,7 @@
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "quicly.h"
+#include "quicly/defaults.h"
 #include "h2o/file.h"
 #include "h2o.h"
 #include "h2o/configurator.h"
