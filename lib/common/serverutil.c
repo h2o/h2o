@@ -142,6 +142,9 @@ static char **build_spawn_env(void)
 pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int cloexec_mutex_is_locked)
 {
 #if defined(__linux__)
+#ifndef _GNU_SOURCE
+    extern int pipe2(int pipefd[2], int flags);
+#endif
 
     /* posix_spawnp of Linux does not return error if the executable does not exist, see
      * https://gist.github.com/kazuho/0c233e6f86d27d6e4f09

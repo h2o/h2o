@@ -53,6 +53,9 @@ Exit:
 int cloexec_pipe(int fds[2])
 {
 #ifdef __linux__
+#ifndef _GNU_SOURCE
+    extern int pipe2(int pipefd[2], int flags);
+#endif
     return pipe2(fds, O_CLOEXEC);
 #else
     int ret = -1;
