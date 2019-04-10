@@ -257,6 +257,11 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer);
  */
 static void h2o_buffer_dispose(h2o_buffer_t **buffer);
 /**
+ * allocates a buffer with h2o_buffer_try_reserve. aborts on allocation failure.
+ * @return buffer to which the next data should be stored
+ */
+h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+/**
  * allocates a buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
  * @param min_guarantee minimum number of bytes to reserve
@@ -264,7 +269,7 @@ static void h2o_buffer_dispose(h2o_buffer_t **buffer);
  * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
  * exponential backoff for already-allocated buffers.
  */
-h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **inbuf, size_t min_guarantee) __attribute__((warn_unused_result));
 /**
  * copies @len bytes from @src to @dst, calling h2o_buffer_reserve
  * @return 0 if the allocation failed, 1 otherwise
