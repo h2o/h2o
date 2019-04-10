@@ -1051,7 +1051,11 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     }
 
     { /* send SETTINGS and connection-level WINDOW_UPDATE */
-        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
+        h2o_iovec_t vec = h2o_buffer_try_reserve(&conn->_write.buf, SERVER_PREFACE.len);
+        if (vec.base == NULL) {
+            *err_desc = "failed to allocate memory";
+            return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
+        }
         memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
         conn->_write.buf->size += SERVER_PREFACE.len;
         if (conn->http2_origin_frame) {
@@ -1144,7 +1148,10 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
 
     if (conn->_http1_req_input->size > reqsize) {
         size_t remaining_bytes = conn->_http1_req_input->size - reqsize;
-        h2o_buffer_reserve(&sock->input, remaining_bytes);
+        if ((h2o_buffer_try_reserve(&sock->input, remaining_bytes)).base == NULL) {
+            on_read(conn->sock, "failed to allocate memory");
+            return;
+        }
         memcpy(sock->input->bytes, conn->_http1_req_input->bytes + reqsize, remaining_bytes);
         sock->input->size += remaining_bytes;
         on_read(conn->sock, NULL);
