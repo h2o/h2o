@@ -104,6 +104,19 @@ subtest "stateless-reset" => sub {
     like $events, qr/"type":"stateless-reset-receive",/m;
 };
 
+subtest "idle-timeout" => sub {
+    my $guard = spawn_server(qw(-I 1000 -e), "$tempdir/server-events");
+    my $resp = `$cli -e $tempdir/client-events -p /12.txt -i 2000 127.0.0.1 $port 2> /dev/null`;
+    # Because we start using idle timeout at the moment we dispose handshake key (currently 3PTO after handshake), there is an
+    # uncertainty in if the first request-response is covered by the idle timeout.  Therefore, we check if we have either one or
+    # to responses, add a sleep in case server timeouts after client does, pass the case where the server sends stateless-reset...
+    like $resp, qr/^hello world\n(|hello world\n|)$/s;
+    sleep 2;
+    undef $guard;
+    like slurp_file("$tempdir/client-events"), qr/"type":("idle-timeout"|"stateless-reset-receive"),/m;
+    like slurp_file("$tempdir/server-events"), qr/"type":"idle-timeout",/m;
+};
+
 subtest "blocked-streams" => sub {
     my $guard = spawn_server(qw(-X 2));
     my $resp = `$cli -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;

@@ -722,6 +722,7 @@ static void usage(const char *cmd)
            "                       server. If omitted, the command runs as a client.\n"
            "  -e event-log-file    file to log events\n"
            "  -i interval          interval to reissue requests (in milliseconds)\n"
+           "  -I timeout           idle timeout (in milliseconds; default: 600,000)\n"
            "  -l log-file          file to log traffic secrets\n"
            "  -M <bytes>           max stream data (in bytes; default: 1MB)\n"
            "  -m <bytes>           max data (in bytes; default: 16MB)\n"
@@ -755,7 +756,7 @@ int main(int argc, char **argv)
     setup_session_cache(ctx.tls);
     quicly_amend_ptls_context(ctx.tls);
 
-    while ((ch = getopt(argc, argv, "a:C:c:k:e:i:l:M:m:Nnp:Rr:s:Vvx:X:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:C:c:k:e:i:I:l:M:m:Nnp:Rr:s:Vvx:X:h")) != -1) {
         switch (ch) {
         case 'a':
             set_alpn(&hs_properties, optarg);
@@ -785,6 +786,11 @@ int main(int argc, char **argv)
                 exit(1);
             }
             break;
+        case 'I':
+            if (sscanf(optarg, "%" PRId64, &ctx.transport_params.idle_timeout) != 1) {
+                fprintf(stderr, "failed to parse idle timeout: %s\n", optarg);
+                exit(1);
+            }
         case 'l':
             setup_log_event(ctx.tls, optarg);
             break;

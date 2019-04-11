@@ -29,7 +29,7 @@ const quicly_context_t quicly_default_context = {
     {
         {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
         16 * 1024 * 1024,                                    /* max_data */
-        600,                                                 /* idle_timeout */
+        10 * 60 * 1000,                                      /* idle_timeout (10 minutes) */
         100,                                                 /* max_concurrent_streams_bidi */
         0                                                    /* max_concurrent_streams_uni */
     },
@@ -206,7 +206,7 @@ Exit:
     return &self->super;
 }
 
-void quicly_free_default_cid_enncryptor(quicly_cid_encryptor_t *_self)
+void quicly_free_default_cid_encryptor(quicly_cid_encryptor_t *_self)
 {
     struct st_quicly_default_encrypt_cid_t *self = (void *)_self;
 

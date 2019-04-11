@@ -36,10 +36,26 @@ struct st_quicly_conn_t;
 typedef struct st_quicly_sent_t quicly_sent_t;
 
 typedef struct st_quicly_sent_packet_t {
+    /**
+     *
+     */
     uint64_t packet_number;
+    /**
+     *
+     */
     int64_t sent_at;
-    uint8_t ack_epoch;        /* epoch to be acked in */
-    uint16_t bytes_in_flight; /* number of bytes in-flight for the packet (0 if not ACK-eliciting or once deemed lost) */
+    /**
+     * epoch to be acked in
+     */
+    uint8_t ack_epoch;
+    /**
+     *
+     */
+    uint8_t ack_eliciting : 1;
+    /**
+     * number of bytes in-flight for the packet (becomes zero once deemed lost)
+     */
+    uint16_t bytes_in_flight;
 } quicly_sent_packet_t;
 
 typedef enum en_quicly_sentmap_event_t {
@@ -209,6 +225,7 @@ inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_fligh
     assert(map->_pending_packet != NULL);
 
     if (bytes_in_flight != 0) {
+        map->_pending_packet->data.packet.ack_eliciting = 1;
         map->_pending_packet->data.packet.bytes_in_flight = bytes_in_flight;
         map->bytes_in_flight += bytes_in_flight;
     }

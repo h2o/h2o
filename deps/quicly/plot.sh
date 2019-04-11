@@ -8,5 +8,5 @@ if [ "$#" -ne 2 ]; then
 fi
 
 python quictrace-adapter.py $1 $2.json &&\
-$QT/bazel-bin/tools/transform_quic_trace --input_format=json < $2.json > $2.qtplot &&\
-$QT/bazel-bin/tools/render/render_trace $2.qtplot
+$QT/bazel-bin/tools/transform_quic_trace --input_format=json < $2.json > $2.qtr &&\
+$QT/bazel-bin/tools/render/render_trace $2.qtr
