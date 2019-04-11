@@ -599,7 +599,7 @@ static void close_connection(h2o_http3_conn_t *conn)
 {
     switch (quicly_get_state(conn->quic)) {
     case QUICLY_STATE_FIRSTFLIGHT:
-        h2o_http3_dispose_conn(conn);
+        conn->callbacks->destroy_connection(conn);
         break;
     case QUICLY_STATE_CONNECTED:
         quicly_close(conn->quic, H2O_HTTP3_ERROR_NONE, "");
