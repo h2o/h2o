@@ -1130,7 +1130,7 @@ static void update_cid_keys(void)
     while ((new_generation = session_tickets.generation) != quic_cid_keys.generation) {
         /* we need to update. first, release all entries from quic_cid_keys */
         while (quic_cid_keys.keys.size != 0)
-            quicly_free_default_cid_enncryptor(quic_cid_keys.keys.entries[--quic_cid_keys.keys.size].encryptor);
+            quicly_free_default_cid_encryptor(quic_cid_keys.keys.entries[--quic_cid_keys.keys.size].encryptor);
 
         /* build quic_cid_keys while taking the read lock */
         pthread_rwlock_rdlock(&session_tickets.rwlock);
