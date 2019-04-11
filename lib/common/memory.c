@@ -237,7 +237,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
     h2o_iovec_t reserved = h2o_buffer_try_reserve(_inbuf, min_guarantee);
     if (reserved.base == NULL) {
-        h2o_fatal("failed to reserve buffer");
+        h2o_fatal("failed to reserve buffer; capacity: %zu, min_gurantee: %zu", (*_inbuf)->capacity, min_guarantee);
     }
     return reserved;
 }
