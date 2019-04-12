@@ -157,7 +157,7 @@ struct st_h2o_http3_ctx_t {
     uint8_t default_ttl;
 };
 
-typedef const struct st_h2o_http3_conn_callbacks_t {
+typedef struct st_h2o_http3_conn_callbacks_t {
     void (*destroy_connection)(h2o_http3_conn_t *conn);
     int (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len,
                                        const char **err_desc);
@@ -175,7 +175,7 @@ struct st_h2o_http3_conn_t {
     /**
      * callbacks
      */
-    h2o_http3_conn_callbacks_t *callbacks;
+    const h2o_http3_conn_callbacks_t *callbacks;
     /**
      * QPACK states
      */
@@ -281,7 +281,7 @@ size_t h2o_http3_num_connections(h2o_http3_ctx_t *ctx);
 /**
  * initializes a http3 connection
  */
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, h2o_http3_conn_callbacks_t *callbacks);
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks);
 /**
  *
  */

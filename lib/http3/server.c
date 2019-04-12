@@ -621,7 +621,8 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
 }
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
-                                          quicly_decoded_packet_t *packets, size_t num_packets)
+                                          quicly_decoded_packet_t *packets, size_t num_packets,
+                                          const h2o_http3_conn_callbacks_t *h3_callbacks)
 {
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     size_t i, syn_index = SIZE_MAX;
@@ -648,10 +649,9 @@ SynFound : {
             {NULL}                                                                                       /* http2 */
         }}                                                                                               /* loggers */
     };
-    static const h2o_http3_conn_callbacks_t h3_callbacks = {on_h3_destroy, handle_control_stream_frame};
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
-    h2o_http3_init_conn(&conn->h3, &ctx->super, &h3_callbacks);
+    h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->pending_reqs);
     h2o_timer_init(&conn->timeout, handle_pending_reqs);
@@ -688,3 +688,4 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 }
 
 const h2o_protocol_callbacks_t H2O_HTTP3_SERVER_CALLBACKS = {initiate_graceful_shutdown, foreach_request};
+const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS = {on_h3_destroy, handle_control_stream_frame};

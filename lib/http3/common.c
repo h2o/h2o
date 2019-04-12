@@ -624,7 +624,7 @@ size_t h2o_http3_num_connections(h2o_http3_ctx_t *ctx)
     return kh_size(ctx->conns_by_id) + kh_size(ctx->conns_accepting);
 }
 
-void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, h2o_http3_conn_callbacks_t *callbacks)
+void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_http3_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks)
 {
     *conn = (h2o_http3_conn_t){ctx, NULL, callbacks};
     h2o_timer_init(&conn->_timeout, on_timeout);

@@ -151,7 +151,10 @@ static struct {
     char *error_log;
     int max_connections;
     size_t num_threads;
-    size_t num_quic_threads;
+    struct {
+        size_t num_threads;
+        h2o_http3_conn_callbacks_t conn_callbacks;
+    } quic;
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -184,7 +187,7 @@ static struct {
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
     0,                                      /* initialized in main() */
-    0,                                      /* num_quic_threads, defaults to all */
+    {0},                                    /* .quic = {num_threads (defaults to all), conn_callbacks (initialized in main()} */
     0,                                      /* initialized in main() */
     0,                                      /* initialized in main() */
     NULL,                                   /* thread_ids */
@@ -1087,13 +1090,11 @@ static void on_connection_close(void) {
     }
 }
 
-static void on_http3_closed_by_peer(quicly_closed_by_peer_t *_self, quicly_conn_t *conn, int err, uint64_t frame_type,
-                                    const char *reason, size_t reason_len)
+static void on_http3_conn_destroy(h2o_http3_conn_t *conn)
 {
     on_connection_close();
+    H2O_HTTP3_CONN_CALLBACKS.destroy_connection(conn);
 }
-
-static quicly_closed_by_peer_t closed_by_peer = {.cb = &on_http3_closed_by_peer};
 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -1294,7 +1295,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     quic->event_log.mask = event_log_mask;
                 }
                 quic->stream_open = &h2o_http3_server_on_stream_open;
-                quic->closed_by_peer = &closed_by_peer;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
             }
@@ -1396,7 +1396,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
 
 static int on_config_num_quic_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_quic_threads) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.quic.num_threads) != 0)
         return -1;
     return 0;
 }
@@ -1900,7 +1900,7 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr 
     num_connections(1);
     num_sessions(1);
 
-    return h2o_http3_server_accept(_ctx, sa, salen, packets, num_packets);
+    return h2o_http3_server_accept(_ctx, sa, salen, packets, num_packets, &conf.quic.conn_callbacks);
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)
@@ -1968,7 +1968,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
         /* setup quic context and the unix socket to receive forwarded packets */
-        if ((conf.num_quic_threads == 0 || thread_index < conf.num_quic_threads) && listener_config->quic.ctx != NULL) {
+        if ((conf.quic.num_threads == 0 || thread_index < conf.quic.num_threads) && listener_config->quic.ctx != NULL) {
             h2o_http3_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
                                    listener_config->quic.ctx, on_http3_accept, NULL);
             h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, (uint32_t)conf.num_threads, (uint32_t)thread_index, 0,
@@ -2335,6 +2335,8 @@ int main(int argc, char **argv)
     int error_log_fd = -1;
 
     conf.num_threads = h2o_numproc();
+    conf.quic.conn_callbacks = H2O_HTTP3_CONN_CALLBACKS;
+    conf.quic.conn_callbacks.destroy_connection = on_http3_conn_destroy;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
 
