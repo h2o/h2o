@@ -178,13 +178,6 @@ DECL_ENTITY_READ_SEND_ERROR_XXX(400)
 DECL_ENTITY_READ_SEND_ERROR_XXX(413)
 DECL_ENTITY_READ_SEND_ERROR_XXX(502)
 
-static void on_entity_read_complete(struct st_h2o_http1_conn_t *conn)
-{
-    conn->_req_entity_reader = NULL;
-    set_timeout(conn, 0, NULL);
-    h2o_socket_read_stop(conn->sock);
-}
-
 static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fragment_size, size_t consume, int complete)
 {
     set_timeout(conn, 0, NULL);
@@ -197,7 +190,7 @@ static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fr
     conn->req._req_body.bytes_received += fragment_size;
     if (complete) {
         conn->req.proceed_req = NULL;
-        on_entity_read_complete(conn);
+        conn->_req_entity_reader = NULL;
     }
 }
 
