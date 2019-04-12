@@ -421,10 +421,10 @@ struct st_h2o_globalconf_t {
          * keepalive timeout (in milliseconds)
          */
         uint64_t keepalive_timeout;
-	/**
-	 * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
-	 */
-	unsigned forward_close_connection: 1;
+        /**
+         * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
+         */
+        unsigned forward_close_connection : 1;
         /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */

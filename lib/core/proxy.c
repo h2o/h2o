@@ -457,7 +457,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
             if (token->flags.proxy_should_drop_for_res) {
-                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 && req->conn->ctx->globalconf->proxy.forward_close_connection) {
+                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 &&
+                    req->conn->ctx->globalconf->proxy.forward_close_connection) {
                     if (h2o_lcstris(headers[i].value.base, headers[i].value.len, H2O_STRLIT("close")))
                         self->src_req->http1_is_persistent = 0;
                 }
