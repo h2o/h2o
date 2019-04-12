@@ -658,11 +658,9 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
         return;
     }
 
-    if (conn->req.proceed_req != NULL) {
-        conn->_req_entity_reader = NULL;
-        set_timeout(conn, 0, NULL);
-        h2o_socket_read_stop(conn->sock);
-    }
+    assert(conn->req.proceed_req == NULL);
+    assert(conn->_req_entity_reader == NULL);
+
     /* handle next request */
     if (conn->_unconsumed_request_size)
         h2o_buffer_consume(&conn->sock->input, conn->_unconsumed_request_size);
