@@ -401,6 +401,10 @@ struct st_h2o_globalconf_t {
     } http2;
 
     struct {
+        h2o_protocol_callbacks_t callbacks;
+    } http3;
+
+    struct {
         /**
          * io timeout (in milliseconds)
          */
