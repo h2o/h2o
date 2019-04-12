@@ -1424,9 +1424,9 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
-        get_sockname,              /* stringify address */
-        get_peername,              /* ditto */
-        push_path,                 /* HTTP2 push */
+        get_sockname, /* stringify address */
+        get_peername, /* ditto */
+        push_path,    /* HTTP2 push */
         get_ptls,
         h2o_http2_get_debug_state, /* get debug state */
         {{

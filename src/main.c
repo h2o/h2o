@@ -1070,7 +1070,6 @@ static void notify_all_threads(void)
         h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
 }
 
-
 static int num_connections(int delta)
 {
     return __sync_fetch_and_add(&conf.state._num_connections, delta);
@@ -1081,7 +1080,8 @@ static unsigned long num_sessions(int delta)
     return __sync_fetch_and_add(&conf.state._num_sessions, delta);
 }
 
-static void on_connection_close(void) {
+static void on_connection_close(void)
+{
     int prev_num_connections = num_connections(-1);
 
     if (prev_num_connections == conf.max_connections) {
