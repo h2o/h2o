@@ -68,16 +68,19 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
+CMAKE_PUSH_CHECK_STATE()
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
 CHECK_C_SOURCE_COMPILES("
 #define _GNU_SOURCE
 #include <sched.h>
 #include <pthread.h>
 int main(void) {
-cpuset_t s;
+cpu_set_t s;
 CPU_ZERO(&s);
-pthread_setaffinity_np(0, sizeof(s), s);
+pthread_setaffinity_np(0, sizeof(s), &s);
 return 0;
 }" HAS_PTHREAD_SETAFFINITY_NP)
+CMAKE_POP_CHECK_STATE()
 
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()

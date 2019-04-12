@@ -146,7 +146,7 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
-    size_t num_threads;
+    H2O_VECTOR(int) thread_map; /* array size == number of threads to instantiate, the values indicate which CPU to pin, -1 if not */
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -155,7 +155,6 @@ static struct {
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
     } * threads;
-    int *cpu_list; /* cpu to bind to, one per H2O thread, terminated by -1, or NULL if unused */
     volatile sig_atomic_t shutdown_requested;
     h2o_barrier_t startup_sync_barrier;
     struct {
@@ -179,11 +178,10 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
-    0,                                      /* num_threads, initialized in main() */
+    {NULL},                                 /* thread_map, initialized in main() */
     0,                                      /* tfo_queues, initialized in main() */
     0,                                      /* launch_time initialized in main() */
     NULL,                                   /* thread_ids */
-    NULL,                                   /* cpu_list */
     0,                                      /* shutdown_requested */
     H2O_BARRIER_INITIALIZER(SIZE_MAX),      /* startup_sync_barrier */
     {{0}},                                  /* state */
@@ -1222,51 +1220,62 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
 }
 
-static void add_one_to_cpu_list(int **cpu_list, size_t *num_threads, int cpu)
-{
-    *num_threads += 1;
-    (*cpu_list) = realloc(*cpu_list, sizeof(**cpu_list) * (*num_threads + 1));
-    (*cpu_list)[*num_threads - 1] = cpu;
-    (*cpu_list)[*num_threads] = -1;
-}
-
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    size_t num_threads = 0;
+    free(conf.thread_map.entries);
+    memset(&conf.thread_map, 0, sizeof(conf.thread_map));
     if (node->type == YOML_TYPE_SCALAR) {
-        if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_threads) != 0)
+        int i;
+        if (h2o_configurator_scanf(cmd, node, "%zu", &num_threads) != 0)
             return -1;
+        h2o_vector_reserve(NULL, &conf.thread_map, num_threads);
+        for (i = 0; i < num_threads; i++)
+            conf.thread_map.entries[conf.thread_map.size++] = -1;
     } else if (node->type == YOML_TYPE_SEQUENCE) {
+#ifndef H2O_HAS_PTHREAD_SETAFFINITY_NP
+        fprintf(stderr, "[error] Can't handle a CPU list, this platform doesn't support `pthread_setaffinity_np`\n");
+        return -1;
+#endif
         /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
         int i;
-        conf.num_threads = 0;
         for (i = 0; i < node->data.sequence.size; i++) {
             char *cpu_spec;
-            if (node->data.sequence.elements[i]->type != YOML_TYPE_SCALAR)
-                goto InvalidSeq;
+            if (node->data.sequence.elements[i]->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, node, "CPUs in cpu sequence must be a scalar");
+                return -1;
+            }
             cpu_spec = node->data.sequence.elements[i]->data.scalar;
             if (index(cpu_spec, '-') == NULL) {
                 int pos, cpu_num;
-                if (sscanf(cpu_spec, "%d%n", &cpu_num, &pos) != 1 || pos != strlen(cpu_spec))
-                    goto InvalidSeq;
-                add_one_to_cpu_list(&conf.cpu_list, &conf.num_threads, cpu_num);
+                if (sscanf(cpu_spec, "%d%n", &cpu_num, &pos) != 1 || pos != strlen(cpu_spec)) {
+                    h2o_configurator_errprintf(cmd, node, "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
+                    return -1;
+                }
+                h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
+                conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
             } else {
                 int pos, cpu_low, cpu_high, cpu_num;
-                if (sscanf(cpu_spec, "%d-%d%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec) || cpu_low < 0 || cpu_high < 0 || cpu_low > cpu_high)
-                    goto InvalidSeq;
-                for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++)
-                    add_one_to_cpu_list(&conf.cpu_list, &conf.num_threads, cpu_num);
+                if (sscanf(cpu_spec, "%d-%d%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec) || cpu_low < 0 || cpu_high < 0) {
+                    h2o_configurator_errprintf(cmd, node, "Invalid range: CPUs must be specified as a positive number or as a range of positive numbers");
+                    return -1;
+                }
+                if (cpu_low > cpu_high) {
+                    h2o_configurator_errprintf(cmd, node, "CPUs must be specified as a positive number or as a range of positive numbers");
+                    return -1;
+                }
+                for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
+                    h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
+                    conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
+                }
             }
         }
     }
-    if (conf.num_threads == 0) {
+    if (conf.thread_map.size == 0) {
         h2o_configurator_errprintf(cmd, node, "num-threads must be >=1");
         return -1;
     }
     return 0;
-InvalidSeq:
-    h2o_configurator_errprintf(cmd, node, "cpus must be specified as sequence of positive integers or a ranges low-high");
-    return -1;
-
 }
 
 static int on_config_num_name_resolution_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -1482,7 +1491,7 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
 static void notify_all_threads(void)
 {
     unsigned i;
-    for (i = 0; i != conf.num_threads; ++i)
+    for (i = 0; i != conf.thread_map.size; ++i)
         h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
 }
 
@@ -1590,7 +1599,7 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
-    size_t num_accepts = conf.max_connections / 16 / conf.num_threads;
+    size_t num_accepts = conf.max_connections / 16 / conf.thread_map.size;
     if (num_accepts < 8)
         num_accepts = 8;
 
@@ -1663,21 +1672,16 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       h2o_memcached_receiver);
     conf.threads[thread_index].tid = pthread_self();
 
-    if (conf.cpu_list) {
-#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
+    if (conf.thread_map.entries[thread_index] >= 0) {
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
-        assert(conf.cpu_list[thread_index] >= 0);
-        CPU_SET(conf.cpu_list[thread_index], &cpu_set);
+        CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
         if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0) {
             static int once;
             if (__sync_fetch_and_add(&once, 1) == 0) {
-                fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.cpu_list[thread_index]);
+                fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
             }
         }
-#else /* H2O_HAS_PTHREAD_SETAFFINITY_NP */
-        fprintf(stderr, "[warning] ignoring CPU list, this platform doesn't support `pthread_setaffinity_np`\n");
-#endif /* H2O_HAS_PTHREAD_SETAFFINITY_NP */
     }
 
     /* setup listeners */
@@ -1908,7 +1912,7 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
                        " \"worker-threads\": %zu,\n"
                        " \"num-sessions\": %lu",
                        SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads, num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
@@ -2042,9 +2046,12 @@ static void setup_configurators(void)
 int main(int argc, char **argv)
 {
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
-    int error_log_fd = -1;
+    int n, error_log_fd = -1;
+    size_t num_threads = h2o_numproc();
 
-    conf.num_threads = h2o_numproc();
+    h2o_vector_reserve(NULL, &conf.thread_map, num_threads);
+    for (n = 0; n < num_threads; n++)
+        conf.thread_map.entries[conf.thread_map.size++] = -1;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
 
@@ -2309,15 +2316,15 @@ int main(int argc, char **argv)
         error_log_fd = -1;
     }
 
-    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.num_threads);
+    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
-    assert(conf.num_threads != 0);
+    assert(conf.thread_map.size != 0);
 
     /* start the threads */
-    conf.threads = alloca(sizeof(conf.threads[0]) * conf.num_threads);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.num_threads);
+    conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
     size_t i;
-    for (i = 1; i != conf.num_threads; ++i) {
+    for (i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
     }
