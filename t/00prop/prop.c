@@ -208,7 +208,7 @@ static struct theft_type_info random_buffer_info = {
             .prop1 = fn_,                                                                                                          \
             .type_info = {&random_buffer_info},                                                                                    \
             .seed = seed,                                                                                                          \
-            .trials = 10000,                                                                                                         \
+            .trials = 10000,                                                                                                       \
         };                                                                                                                         \
                                                                                                                                    \
         enum theft_run_res res = theft_run(&config);                                                                               \

@@ -272,7 +272,7 @@ int main(int argc, char **argv)
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
 
-    const uint64_t timeout = 5000;    /* 5 seconds */
+    const uint64_t timeout = 5000; /* 5 seconds */
     h2o_httpclient_ctx_t ctx = {
         NULL, /* loop */
         &getaddr_receiver,
