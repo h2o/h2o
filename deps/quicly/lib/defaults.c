@@ -29,7 +29,7 @@ const quicly_context_t quicly_default_context = {
     {
         {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
         16 * 1024 * 1024,                                    /* max_data */
-        10 * 60 * 1000,                                      /* idle_timeout (10 minutes) */
+        30 * 1000,                                           /* idle_timeout (30 seconds) */
         100,                                                 /* max_concurrent_streams_bidi */
         0                                                    /* max_concurrent_streams_uni */
     },

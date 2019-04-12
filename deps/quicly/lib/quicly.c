@@ -884,9 +884,9 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
         *consumed = conn->ingress.max_data.bytes_consumed;
 }
 
-static void update_idle_timeout(quicly_conn_t *conn, int is_in_send)
+static void update_idle_timeout(quicly_conn_t *conn, int is_in_receive)
 {
-    if (is_in_send && !conn->idle_timeout.should_rearm_on_send)
+    if (!is_in_receive && !conn->idle_timeout.should_rearm_on_send)
         return;
 
     int64_t idle_msec = INT64_MAX;
@@ -900,13 +900,9 @@ static void update_idle_timeout(quicly_conn_t *conn, int is_in_send)
     if (idle_msec == INT64_MAX)
         return;
 
-    conn->idle_timeout.at =
-        now + idle_msec + 3 * quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.ctx->transport_params.max_ack_delay);
-    if (is_in_send) {
-        conn->idle_timeout.should_rearm_on_send = 0;
-    } else {
-        conn->idle_timeout.should_rearm_on_send = 1;
-    }
+    uint32_t three_pto = 3 * quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.ctx->transport_params.max_ack_delay);
+    conn->idle_timeout.at = now + (idle_msec > three_pto ? idle_msec : three_pto);
+    conn->idle_timeout.should_rearm_on_send = is_in_receive;
 }
 
 static void update_loss_alarm(quicly_conn_t *conn)
@@ -3139,7 +3135,7 @@ Exit:
         update_loss_alarm(conn);
         *num_packets = s.num_packets;
         if (*num_packets != 0)
-            update_idle_timeout(conn, 1);
+            update_idle_timeout(conn, 0);
     }
     if (ret == 0)
         assert_consistency(conn, 1);
@@ -4134,7 +4130,7 @@ int quicly_receive(quicly_conn_t *conn, quicly_decoded_packet_t *packet)
         break;
     }
 
-    update_idle_timeout(conn, 0);
+    update_idle_timeout(conn, 1);
 
 Exit:
     switch (ret) {
