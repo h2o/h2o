@@ -486,7 +486,7 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
     return 0;
 }
 
-static void on_streaming_selected(h2o_req_t *req, int is_streaming)
+static void on_request_streaming_selected(h2o_req_t *req, int is_streaming)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
     if (is_streaming) {
@@ -541,7 +541,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             }
             conn->req.write_req.cb = h2o_write_req_first;
-            conn->req.write_req.on_streaming_selected = on_streaming_selected;
+            conn->req.write_req.on_streaming_selected = on_request_streaming_selected;
             conn->req.write_req.ctx = &conn->req;
             conn->_unconsumed_request_size = 0;
             h2o_buffer_consume(&conn->sock->input, reqlen);
