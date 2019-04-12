@@ -674,12 +674,12 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
     return 0;
 }
 
-static void on_streaming_selected(h2o_req_t *req, int streaming)
+static void on_streaming_selected(h2o_req_t *req, int is_streaming)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
-    if (streaming) {
+    if (is_streaming) {
         req->write_req.cb = write_req_streaming_pre_dispatch;
         req->proceed_req = proceed_request;
         if (!reset_stream_if_disregarded(conn, stream))

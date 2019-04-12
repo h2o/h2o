@@ -486,10 +486,10 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
     return 0;
 }
 
-static void on_streaming_selected(h2o_req_t *req, int streaming)
+static void on_streaming_selected(h2o_req_t *req, int is_streaming)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
-    if (streaming) {
+    if (is_streaming) {
         conn->req.write_req.cb = write_req_streaming_pre_dispatch;
         conn->req.proceed_req = proceed_request;
         h2o_process_request(&conn->req);
