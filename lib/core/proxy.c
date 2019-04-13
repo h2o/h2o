@@ -443,7 +443,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             h2o_start_response(req, &generator);
             h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
         } else {
-            h2o_send_error_502(req, "Gateway Error", errstr, 0);
+            h2o_send_error_502(req, "Gateway Error", errstr, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
         }
 
         return NULL;
@@ -468,7 +468,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
                     self->client = NULL;
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
-                    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
+                    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
                     return NULL;
                 }
                 goto Skip;
@@ -594,7 +594,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     if (errstr != NULL) {
         self->client = NULL;
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
-        h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
+        h2o_send_error_502(self->src_req, "Gateway Error", errstr, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
         return NULL;
     }
 
