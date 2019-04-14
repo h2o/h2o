@@ -1233,7 +1233,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
             conf.thread_map.entries[conf.thread_map.size++] = -1;
     } else if (node->type == YOML_TYPE_SEQUENCE) {
 #ifndef H2O_HAS_PTHREAD_SETAFFINITY_NP
-        fprintf(stderr, "[error] Can't handle a CPU list, this platform doesn't support `pthread_setaffinity_np`\n");
+        h2o_configurator_errprintf(cmd, node, "[error] Can't handle a CPU list, this platform doesn't support `pthread_setaffinity_np`\n");
         return -1;
 #endif
         /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
