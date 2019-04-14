@@ -637,13 +637,13 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
     assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
 
     /* if-non-match and if-modified-since */
-    if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
+    if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, -1)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
         size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
         if (h2o_filecache_compare_etag_strong(if_none_match->base, if_none_match->len, etag, etag_len))
             goto NotModified;
-    } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
+    } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, -1)) != -1) {
         h2o_iovec_t *ims_vec = &req->headers.entries[if_modified_since_header_index].value;
         struct tm ims_tm, *last_modified_tm;
         if (h2o_time_parse_rfc1123(ims_vec->base, ims_vec->len, &ims_tm) == 0) {
@@ -661,9 +661,9 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
     }
 
     /* range request */
-    if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
+    if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, -1)) != -1) {
         /* if range */
-        if ((if_range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_RANGE, SIZE_MAX)) != -1) {
+        if ((if_range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_RANGE, -1)) != -1) {
             h2o_iovec_t *if_range = &req->headers.entries[if_range_header_index].value;
             /* first try parse if-range as http-date */
             struct tm ir_tm, *last_modified_tm;

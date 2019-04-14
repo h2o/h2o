@@ -2,14 +2,14 @@
 
 static h2o_header_t *find_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
 {
-    size_t index;
+    ssize_t index;
 
     if (h2o_iovec_is_token(cmd->name)) {
-        index = h2o_find_header(headers, (void *)cmd->name, SIZE_MAX);
+        index = h2o_find_header(headers, (void *)cmd->name, -1);
     } else {
-        index = h2o_find_header_by_str(headers, cmd->name->base, cmd->name->len, SIZE_MAX);
+        index = h2o_find_header_by_str(headers, cmd->name->base, cmd->name->len, -1);
     }
-    if (index == SIZE_MAX)
+    if (index == -1)
         return NULL;
     return headers->entries + index;
 }
