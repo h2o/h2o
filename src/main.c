@@ -1241,26 +1241,27 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
         for (i = 0; i < node->data.sequence.size; i++) {
             char *cpu_spec;
             if (node->data.sequence.elements[i]->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "CPUs in cpu sequence must be a scalar");
+                h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "CPUs in cpu sequence must be a scalar");
                 return -1;
             }
             cpu_spec = node->data.sequence.elements[i]->data.scalar;
             if (index(cpu_spec, '-') == NULL) {
                 int pos, cpu_num;
                 if (sscanf(cpu_spec, "%d%n", &cpu_num, &pos) != 1 || pos != strlen(cpu_spec)) {
-                    h2o_configurator_errprintf(cmd, node, "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
+                    h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
                     return -1;
                 }
                 h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
                 conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
             } else {
-                int pos, cpu_low, cpu_high, cpu_num;
-                if (sscanf(cpu_spec, "%d-%d%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec) || cpu_low < 0 || cpu_high < 0) {
-                    h2o_configurator_errprintf(cmd, node, "Invalid range: CPUs must be specified as a positive number or as a range of positive numbers");
+                int pos;
+                unsigned cpu_low, cpu_high, cpu_num;
+                if (sscanf(cpu_spec, "%u-%u%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec)) {
+                    h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "Invalid range: CPUs must be specified as a positive number or as a range of positive numbers");
                     return -1;
                 }
                 if (cpu_low > cpu_high) {
-                    h2o_configurator_errprintf(cmd, node, "CPUs must be specified as a positive number or as a range of positive numbers");
+                    h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "CPUs must be specified as a positive number or as a range of positive numbers");
                     return -1;
                 }
                 for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
