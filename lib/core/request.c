@@ -712,7 +712,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
 
     /* parse the location URL */
     if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
-        /* TODO log fprintf(stderr, "[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
+        /* TODO log h2o_error_printf("[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
         h2o_send_error_deferred_502(req, "Gateway Error", "internal error", 0);
         return;
     }

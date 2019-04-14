@@ -430,7 +430,7 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
     mrb_value msgstr = h2o_mruby_new_str(mrb, concat.base, concat.len);
     mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
     if (mrb->exc != NULL) {
-        fprintf(stderr, "%s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        h2o_error_printf("%s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         mrb->exc = NULL;
     }
 }

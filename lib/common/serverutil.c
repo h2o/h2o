@@ -60,23 +60,23 @@ int h2o_setuidgid(const char *user)
 
     errno = 0;
     if (getpwnam_r(user, &pwbuf, buf, sizeof(buf), &pw) != 0) {
-        perror("getpwnam_r");
+        h2o_perror("getpwnam_r");
         return -1;
     }
     if (pw == NULL) {
-        fprintf(stderr, "unknown user:%s\n", user);
+        h2o_error_printf("unknown user:%s\n", user);
         return -1;
     }
     if (setgid(pw->pw_gid) != 0) {
-        fprintf(stderr, "setgid(%d) failed:%s\n", (int)pw->pw_gid, strerror(errno));
+        h2o_error_printf("setgid(%d) failed:%s\n", (int)pw->pw_gid, strerror(errno));
         return -1;
     }
     if (initgroups(pw->pw_name, pw->pw_gid) != 0) {
-        fprintf(stderr, "initgroups(%s, %d) failed:%s\n", pw->pw_name, (int)pw->pw_gid, strerror(errno));
+        h2o_error_printf("initgroups(%s, %d) failed:%s\n", pw->pw_name, (int)pw->pw_gid, strerror(errno));
         return -1;
     }
     if (setuid(pw->pw_uid) != 0) {
-        fprintf(stderr, "setuid(%d) failed:%s\n", (int)pw->pw_uid, strerror(errno));
+        h2o_error_printf("setuid(%d) failed:%s\n", (int)pw->pw_uid, strerror(errno));
         return -1;
     }
 
@@ -92,7 +92,7 @@ size_t h2o_server_starter_get_fds(int **_fds)
     if ((ports_env = getenv(SERVER_STARTER_PORT)) == NULL)
         return 0;
     if (ports_env[0] == '\0') {
-        fprintf(stderr, "$" SERVER_STARTER_PORT " is empty\n");
+        h2o_error_printf("$" SERVER_STARTER_PORT " is empty\n");
         return SIZE_MAX;
     }
 
@@ -101,11 +101,11 @@ size_t h2o_server_starter_get_fds(int **_fds)
         if ((end = strchr(start, ';')) == NULL)
             end = start + strlen(start);
         if ((eq = memchr(start, '=', end - start)) == NULL) {
-            fprintf(stderr, "invalid $" SERVER_STARTER_PORT ", an element without `=` in: %s\n", ports_env);
+            h2o_error_printf("invalid $" SERVER_STARTER_PORT ", an element without `=` in: %s\n", ports_env);
             goto Error;
         }
         if ((t = h2o_strtosize(eq + 1, end - eq - 1)) == SIZE_MAX) {
-            fprintf(stderr, "invalid file descriptor number in $" SERVER_STARTER_PORT ": %s\n", ports_env);
+            h2o_error_printf("invalid file descriptor number in $" SERVER_STARTER_PORT ": %s\n", ports_env);
             goto Error;
         }
         h2o_vector_reserve(NULL, &fds, fds.size + 1);
@@ -142,6 +142,9 @@ static char **build_spawn_env(void)
 pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int cloexec_mutex_is_locked)
 {
 #if defined(__linux__)
+#ifndef _GNU_SOURCE
+    extern int pipe2(int pipefd[2], int flags);
+#endif
 
     /* posix_spawnp of Linux does not return error if the executable does not exist, see
      * https://gist.github.com/kazuho/0c233e6f86d27d6e4f09
@@ -309,7 +312,7 @@ size_t h2o_numproc(void)
     int ncpu;
     size_t ncpu_sz = sizeof(ncpu);
     if (sysctl(name, sizeof(name) / sizeof(name[0]), &ncpu, &ncpu_sz, NULL, 0) != 0 || sizeof(ncpu) != ncpu_sz) {
-        fprintf(stderr, "[ERROR] failed to obtain number of CPU cores, assuming as one\n");
+        h2o_error_printf("[ERROR] failed to obtain number of CPU cores, assuming as one\n");
         ncpu = 1;
     }
     return ncpu;

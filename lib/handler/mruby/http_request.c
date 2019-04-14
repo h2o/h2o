@@ -309,8 +309,7 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
         /* is async */
         mrb_funcall(mrb, ctx->refs.request, "_set_response", 1, resp);
         if (mrb->exc != NULL) {
-            fprintf(stderr, "_set_response failed\n");
-            abort();
+            h2o_fatal("_set_response failed\n");
         }
     } else {
         /* send response to the waiting receiver */
@@ -416,7 +415,7 @@ static int headers_sort_cb(const void *_x, const void *_y)
 }
 
 static h2o_httpclient_body_cb do_on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+                                         h2o_header_t *headers, size_t num_headers, int header_requires_dup)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -454,9 +453,9 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 }
 
 static h2o_httpclient_head_cb do_on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
-                                         h2o_url_t *origin)
+                                            const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                            h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                            h2o_url_t *origin)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -495,7 +494,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
     mrb_gc_protect(ctx->ctx->shared->mrb, ctx->refs.request);
 
-    h2o_httpclient_head_cb cb = do_on_connect(client, errstr, method, url, headers, num_headers, body, proceed_req_cb, props, origin);
+    h2o_httpclient_head_cb cb =
+        do_on_connect(client, errstr, method, url, headers, num_headers, body, proceed_req_cb, props, origin);
 
     mrb_gc_arena_restore(ctx->ctx->shared->mrb, gc_arena);
 
