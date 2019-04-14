@@ -1237,7 +1237,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
 #endif
         /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
-        int i;
+        size_t i;
         for (i = 0; i < node->data.sequence.size; i++) {
             char *cpu_spec;
             if (node->data.sequence.elements[i]->type != YOML_TYPE_SCALAR) {
