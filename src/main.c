@@ -1222,9 +1222,7 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
 
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    size_t num_threads = 0;
-    free(conf.thread_map.entries);
-    memset(&conf.thread_map, 0, sizeof(conf.thread_map));
+    conf.thread_map.size = 0;
     if (node->type == YOML_TYPE_SCALAR) {
         int i;
         if (h2o_configurator_scanf(cmd, node, "%zu", &num_threads) != 0)
