@@ -146,7 +146,8 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
-    H2O_VECTOR(int) thread_map; /* array size == number of threads to instantiate, the values indicate which CPU to pin, -1 if not */
+    H2O_VECTOR(int) thread_map; /* array size == number of threads to instantiate,
+                                  the values indicate which CPU to pin, -1 if not */
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -1232,22 +1233,26 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
             conf.thread_map.entries[conf.thread_map.size++] = -1;
     } else if (node->type == YOML_TYPE_SEQUENCE) {
 #ifndef H2O_HAS_PTHREAD_SETAFFINITY_NP
-        h2o_configurator_errprintf(cmd, node, "[error] Can't handle a CPU list, this platform doesn't support `pthread_setaffinity_np`\n");
+        h2o_configurator_errprintf(cmd, node,
+                                   "[error] Can't handle a CPU list, this platform doesn't support `pthread_setaffinity_np`\n");
         return -1;
 #endif
         /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
         size_t i;
         for (i = 0; i < node->data.sequence.size; i++) {
             char *cpu_spec;
-            if (node->data.sequence.elements[i]->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "CPUs in cpu sequence must be a scalar");
+            yoml_t *seq_node = node->data.sequence.elements[i];
+            if (seq_node->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, seq_node, "CPUs in cpu sequence must be a scalar");
                 return -1;
             }
-            cpu_spec = node->data.sequence.elements[i]->data.scalar;
+            cpu_spec = seq_node->data.scalar;
             if (index(cpu_spec, '-') == NULL) {
                 int pos, cpu_num;
                 if (sscanf(cpu_spec, "%d%n", &cpu_num, &pos) != 1 || pos != strlen(cpu_spec)) {
-                    h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
+                    h2o_configurator_errprintf(
+                        cmd, seq_node,
+                        "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
                     return -1;
                 }
                 h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
@@ -1256,11 +1261,14 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
                 int pos;
                 unsigned cpu_low, cpu_high, cpu_num;
                 if (sscanf(cpu_spec, "%u-%u%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec)) {
-                    h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "Invalid range: CPUs must be specified as a positive number or as a range of positive numbers");
+                    h2o_configurator_errprintf(
+                        cmd, seq_node,
+                        "Invalid range: CPUs must be specified as a positive number or as a range of positive numbers");
                     return -1;
                 }
                 if (cpu_low > cpu_high) {
-                    h2o_configurator_errprintf(cmd, node->data.sequence.elements[i], "CPUs must be specified as a positive number or as a range of positive numbers");
+                    h2o_configurator_errprintf(cmd, seq_node,
+                                               "CPUs must be specified as a positive number or as a range of positive numbers");
                     return -1;
                 }
                 for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
