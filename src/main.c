@@ -1224,7 +1224,8 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
 {
     conf.thread_map.size = 0;
     if (node->type == YOML_TYPE_SCALAR) {
-        int i;
+        size_t num_threads = 0;
+        size_t i;
         if (h2o_configurator_scanf(cmd, node, "%zu", &num_threads) != 0)
             return -1;
         h2o_vector_reserve(NULL, &conf.thread_map, num_threads);
