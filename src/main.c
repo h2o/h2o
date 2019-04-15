@@ -1232,11 +1232,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
         for (i = 0; i < num_threads; i++)
             conf.thread_map.entries[conf.thread_map.size++] = -1;
     } else if (node->type == YOML_TYPE_SEQUENCE) {
-#ifndef H2O_HAS_PTHREAD_SETAFFINITY_NP
-        h2o_configurator_errprintf(cmd, node,
-                                   "[error] Can't handle a CPU list, this platform doesn't support `pthread_setaffinity_np`\n");
-        return -1;
-#endif
+#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
         /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
         size_t i;
         for (i = 0; i < node->data.sequence.size; i++) {
@@ -1277,6 +1273,11 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
                 }
             }
         }
+#else
+        h2o_configurator_errprintf(
+            cmd, node, "Can't handle a CPU list, this platform doesn't support thread pinning via `pthread_setaffinity_np`");
+        return -1;
+#endif
     }
     if (conf.thread_map.size == 0) {
         h2o_configurator_errprintf(cmd, node, "num-threads must be >=1");
