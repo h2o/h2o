@@ -1258,8 +1258,8 @@ static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd,
     }
     return 0;
 Error:
-    h2o_configurator_errprintf(cmd, node,
-                               "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
+    h2o_configurator_errprintf(
+        cmd, node, "Invalid CPU number: CPUs must be specified as a non-negative number or as a range of non-negative numbers");
     return -1;
 }
 
