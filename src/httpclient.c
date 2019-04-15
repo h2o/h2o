@@ -40,10 +40,18 @@
 
 static h2o_httpclient_connection_pool_t *connpool;
 static h2o_mem_pool_t pool;
-static const char *url;
-static char *method = "GET";
+struct {
+    const char *url;
+    const char *method;
+    struct {
+        h2o_iovec_t name;
+        h2o_iovec_t value;
+    } headers[256];
+    size_t num_headers;
+    size_t body_size;
+} req = {NULL, "GET"};
 static int cnt_left = 1;
-static int req_body_size = 0, cur_req_body_size = 0;
+static size_t cur_req_body_size = 0;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int delay_interval_ms = 0;
@@ -105,12 +113,12 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
 
     /* parse URL */
     url_parsed = h2o_mem_alloc_pool(&pool, *url_parsed, 1);
-    if (h2o_url_parse(url, SIZE_MAX, url_parsed) != 0) {
-        on_error(ctx, "unrecognized type of URL: %s", url);
+    if (h2o_url_parse(req.url, SIZE_MAX, url_parsed) != 0) {
+        on_error(ctx, "unrecognized type of URL: %s", req.url);
         return;
     }
 
-    cur_req_body_size = req_body_size;
+    cur_req_body_size = req.body_size;
 
     /* initiate the request */
     if (ctx->http3 != NULL) {
@@ -261,25 +269,25 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
                                   h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                   h2o_url_t *origin)
 {
+    h2o_headers_t headers_vec = {NULL};
+    size_t i;
     if (errstr != NULL) {
         on_error(client->ctx, errstr);
         return NULL;
     }
 
-    *_method = h2o_iovec_init(method, strlen(method));
+    *_method = h2o_iovec_init(req.method, strlen(req.method));
     *url = *((h2o_url_t *)client->data);
-    *headers = NULL;
-    *num_headers = 0;
+    for (i = 0; i != req.num_headers; ++i)
+        h2o_add_header_by_str(&pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
+                              req.headers[i].value.base, req.headers[i].value.len);
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
     if (cur_req_body_size > 0) {
         char *clbuf = h2o_mem_alloc_pool(&pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
-        size_t clbuf_len = sprintf(clbuf, "%d", cur_req_body_size);
-        h2o_headers_t headers_vec = (h2o_headers_t){NULL};
+        size_t clbuf_len = sprintf(clbuf, "%zu", cur_req_body_size);
         h2o_add_header(&pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
-        *headers = headers_vec.entries;
-        *num_headers = 1;
 
         *proceed_req_cb = proceed_request;
 
@@ -291,6 +299,8 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
         h2o_timer_link(client->ctx->loop, delay_interval_ms, &tctx->_timeout);
     }
 
+    *headers = headers_vec.entries;
+    *num_headers = headers_vec.size;
     return on_head;
 }
 
@@ -304,6 +314,8 @@ static void usage(const char *progname)
             "  -E <path>    QUIC event log file (default: none)\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
+            "  -H <name:value>\n"
+            "               adds a request header\n"
             "  -i <delay>   send interval between chunks (in msec; default: 0)\n"
             "  -k           skip peer verification\n"
             "  -m <method>  request method (default: GET)\n"
@@ -374,13 +386,13 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:i:k2:3E:h")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:c:H:i:k2:3E:h")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
             break;
         case 'm':
-            method = optarg;
+            req.method = optarg;
             break;
         case 'o':
             if (freopen(optarg, "w", stdout) == NULL) {
@@ -389,8 +401,8 @@ int main(int argc, char **argv)
             }
             break;
         case 'b':
-            req_body_size = atoi(optarg);
-            if (req_body_size <= 0) {
+            req.body_size = atoi(optarg);
+            if (req.body_size <= 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
                 exit(EXIT_FAILURE);
             }
@@ -402,6 +414,22 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case 'H': {
+            const char *colon, *value_start;
+            if ((colon = index(optarg, ':')) == NULL) {
+                fprintf(stderr, "no `:` found in -H\n");
+                exit(EXIT_FAILURE);
+            }
+            if (req.num_headers >= sizeof(req.headers) / sizeof(req.headers[0])) {
+                fprintf(stderr, "too many request headers\n");
+                exit(EXIT_FAILURE);
+            }
+            for (value_start = colon + 1; *value_start == ' ' || *value_start == '\t'; ++value_start)
+                ;
+            req.headers[req.num_headers].name = h2o_iovec_init(optarg, colon - optarg);
+            req.headers[req.num_headers].value = h2o_iovec_init(value_start, strlen(value_start));
+            ++req.num_headers;
+        } break;
         case 'i':
             delay_interval_ms = atoi(optarg);
             break;
@@ -450,9 +478,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "no URL\n");
         exit(EXIT_FAILURE);
     }
-    url = argv[0];
+    req.url = argv[0];
 
-    if (req_body_size != 0) {
+    if (req.body_size != 0) {
         iov_filler.base = h2o_mem_alloc(chunk_size);
         memset(iov_filler.base, 'a', chunk_size);
         iov_filler.len = chunk_size;
