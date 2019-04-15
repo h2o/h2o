@@ -1232,6 +1232,37 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
 }
 
+static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, node, "CPUs in cpu sequence must be a scalar");
+        return -1;
+    }
+
+    const char *cpu_spec = node->data.scalar;
+    unsigned cpu_low, cpu_high, cpu_num;
+    int pos;
+    if (index(cpu_spec, '-') == NULL) {
+        if (sscanf(cpu_spec, "%u%n", &cpu_low, &pos) != 1 || pos != strlen(cpu_spec))
+            goto Error;
+        cpu_high = cpu_low;
+    } else {
+        if (sscanf(cpu_spec, "%u-%u%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec))
+            goto Error;
+        if (cpu_low > cpu_high)
+            goto Error;
+    }
+    for (cpu_num = cpu_low; cpu_low <= cpu_high; cpu_num++) {
+        h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
+        conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
+    }
+    return 0;
+Error:
+    h2o_configurator_errprintf(cmd, node,
+                               "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
+    return -1;
+}
+
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     conf.thread_map.size = 0;
@@ -1243,46 +1274,12 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
         for (i = 0; i < num_threads; i++)
             conf.thread_map.entries[conf.thread_map.size++] = -1;
     } else if (node->type == YOML_TYPE_SEQUENCE) {
-#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
         /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
+#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
         size_t i;
         for (i = 0; i < node->data.sequence.size; i++) {
-            char *cpu_spec;
-            yoml_t *seq_node = node->data.sequence.elements[i];
-            if (seq_node->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, seq_node, "CPUs in cpu sequence must be a scalar");
+            if (on_config_num_threads_add_cpu(cmd, ctx, node->data.sequence.elements[i]) != 0)
                 return -1;
-            }
-            cpu_spec = seq_node->data.scalar;
-            if (index(cpu_spec, '-') == NULL) {
-                int pos, cpu_num;
-                if (sscanf(cpu_spec, "%d%n", &cpu_num, &pos) != 1 || pos != strlen(cpu_spec)) {
-                    h2o_configurator_errprintf(
-                        cmd, seq_node,
-                        "Invalid CPU number: CPUs must be specified as a positive number or as a range of positive numbers");
-                    return -1;
-                }
-                h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
-                conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
-            } else {
-                int pos;
-                unsigned cpu_low, cpu_high, cpu_num;
-                if (sscanf(cpu_spec, "%u-%u%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec)) {
-                    h2o_configurator_errprintf(
-                        cmd, seq_node,
-                        "Invalid range: CPUs must be specified as a positive number or as a range of positive numbers");
-                    return -1;
-                }
-                if (cpu_low > cpu_high) {
-                    h2o_configurator_errprintf(cmd, seq_node,
-                                               "CPUs must be specified as a positive number or as a range of positive numbers");
-                    return -1;
-                }
-                for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
-                    h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
-                    conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
-                }
-            }
         }
 #else
         h2o_configurator_errprintf(
