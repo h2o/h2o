@@ -309,6 +309,7 @@ static void usage(const char *progname)
             "  -m <method>  request method (default: GET)\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
+            "  -h           prints this help\n"
             "\n",
             progname);
 }
@@ -373,7 +374,7 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:i:k2:3E:")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:c:i:k2:3E:h")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
@@ -433,8 +434,11 @@ int main(int argc, char **argv)
             h3ctx.quic.event_log.cb = quicly_new_default_event_logger(fp);
             h3ctx.quic.event_log.mask = UINT64_MAX;
         } break;
-        default:
+        case 'h':
             usage(argv[0]);
+            exit(0);
+            break;
+        default:
             exit(EXIT_FAILURE);
             break;
         }
