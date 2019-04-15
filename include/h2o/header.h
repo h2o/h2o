@@ -106,7 +106,7 @@ ssize_t h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const
 /**
  * deletes a header from list
  */
-void h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
+ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor);
 
 /* inline definitions */
 
