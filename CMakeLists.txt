@@ -68,6 +68,20 @@ __sync_add_and_fetch(&a, 1);
 return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
+CMAKE_PUSH_CHECK_STATE()
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+CHECK_C_SOURCE_COMPILES("
+#define _GNU_SOURCE
+#include <sched.h>
+#include <pthread.h>
+int main(void) {
+cpu_set_t s;
+CPU_ZERO(&s);
+pthread_setaffinity_np(0, sizeof(s), &s);
+return 0;
+}" HAS_PTHREAD_SETAFFINITY_NP)
+CMAKE_POP_CHECK_STATE()
+
 # Find out if libc provices backtrace()
 CMAKE_PUSH_CHECK_STATE()
 FIND_LIBRARY(LIBC_BACKTRACE_LIB "execinfo")
@@ -755,6 +769,10 @@ ENDIF (BUILD_FUZZER)
 IF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_64BIT_ATOMICS")
 ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
+
+IF (HAS_PTHREAD_SETAFFINITY_NP)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_HAS_PTHREAD_SETAFFINITY_NP")
+ENDIF (HAS_PTHREAD_SETAFFINITY_NP)
 
 # environment-specific tweaks
 IF (APPLE)
