@@ -562,16 +562,16 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
     h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
     h2o_httpclient_properties_t props = {
-        SIZE_MAX, &proxy_protocol, &connection_header
+        &proxy_protocol, &connection_header
     };
     h2o_iovec_t method;
     h2o_url_t url;
     h2o_header_t *headers;
     size_t num_headers;
-    h2o_iovec_t body;
+    h2o_httpclient_req_body_t body = {.streaming.content_length = SIZE_MAX};
 
     client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
-                                                             &num_headers, &body, &client->proceed_req, &props, client->_origin);
+                                                             &num_headers, &body, &props, client->_origin);
 
     if (client->super._cb.on_head == NULL) {
         close_client(client);
@@ -581,7 +581,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     {
         h2o_headers_t headers_vec = (h2o_headers_t){headers, num_headers, num_headers};
         int chunked = 0;
-        h2o_httpclient__add_cl_or_te_header(client->super.pool, method, &headers_vec, body, props.content_length, &chunked, client->proceed_req != NULL);
+        h2o_httpclient__add_cl_or_te_header(client->super.pool, method, &headers_vec, &body, &chunked);
         headers = headers_vec.entries;
         num_headers = headers_vec.size;
         client->_is_chunked = chunked;
@@ -595,21 +595,22 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
-    if (client->proceed_req != NULL) {
-        if (body.base != NULL) {
+    if (body.type == H2O_HTTPCLIENT_REQ_BODY_STREAMING) {
+        client->proceed_req = body.streaming.proceed;
+        if (body.streaming.first.base != NULL) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-            if (h2o_buffer_append(&client->_body_buf, body.base, body.len) == 0) {
+            if (h2o_buffer_append(&client->_body_buf, body.streaming.first.base, body.streaming.first.len) == 0) {
                 on_send_request(client->sock, "Internal error");
                 return;
             }
         }
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_req_body_done);
-    } else {
+    } else if (body.type == H2O_HTTPCLIENT_REQ_BODY_VEC) {
+        assert(body.vec.base != NULL);
         if (client->_is_chunked) {
-            assert(body.base != NULL);
-            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body);
-        } else if (body.base != NULL) {
-            reqbufs[reqbufcnt++] = body;
+            reqbufcnt += encode_chunk(client, reqbufs + reqbufcnt, body.vec);
+        } else {
+            reqbufs[reqbufcnt++] = body.vec;
         }
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_send_request);
     }

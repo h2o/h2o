@@ -140,8 +140,6 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         }
     }
 
-    props->content_length = req->content_length;
-
     /* headers */
     /* rewrite headers if necessary */
     h2o_headers_t req_headers = req->headers;
@@ -523,9 +521,8 @@ static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 }
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
-                                         h2o_url_t *origin)
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_httpclient_req_body_t *body,
+                                         h2o_httpclient_properties_t *props, h2o_url_t *origin)
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
@@ -570,15 +567,18 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     if (reprocess_if_too_early)
         req->reprocess_if_too_early = 1;
 
-    *body = h2o_iovec_init(NULL, 0);
-    *proceed_req_cb = NULL;
-    if (self->src_req->entity.base != NULL) {
-        *body = self->src_req->entity;
-        if (self->src_req->proceed_req != NULL) {
-            *proceed_req_cb = proceed_request;
-            self->src_req->write_req.cb = write_req;
-            self->src_req->write_req.ctx = self;
-        }
+    if (self->src_req->entity.base == NULL) {
+        body->type = H2O_HTTPCLIENT_REQ_BODY_NONE;
+    } else if (self->src_req->proceed_req == NULL) {
+        body->type = H2O_HTTPCLIENT_REQ_BODY_VEC;
+        body->vec = self->src_req->entity;
+    } else {
+        body->type = H2O_HTTPCLIENT_REQ_BODY_STREAMING;
+        body->streaming.proceed = proceed_request;
+        body->streaming.first = self->src_req->entity;
+        body->streaming.content_length = self->src_req->content_length;
+        self->src_req->write_req.cb = write_req;
+        self->src_req->write_req.ctx = self;
     }
     self->client->informational_cb = on_1xx;
     return on_head;

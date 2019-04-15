@@ -47,7 +47,7 @@ static void close_client(h2o_httpclient_t *client)
 static void on_connect_error(h2o_httpclient_t *client, const char *errstr)
 {
     assert(errstr != NULL);
-    client->_cb.on_connect(client, errstr, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL);
+    client->_cb.on_connect(client, errstr, NULL, NULL, NULL, 0, NULL, NULL, NULL);
     close_client(client);
 }
 
@@ -233,20 +233,25 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
     return cl_buf;
 }
 
-void h2o_httpclient__add_cl_or_te_header(h2o_mem_pool_t *pool, h2o_iovec_t method, h2o_headers_t *headers, h2o_iovec_t body, size_t content_length, int *chunked, int is_streaming)
+void h2o_httpclient__add_cl_or_te_header(h2o_mem_pool_t *pool, h2o_iovec_t method, h2o_headers_t *headers, h2o_httpclient_req_body_t *body, int *chunked)
 {
-    if (is_streaming) {
-        if (content_length != SIZE_MAX) {
-            h2o_iovec_t cl_buf = build_content_length(pool, content_length);
-            h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
-        } else if (chunked != NULL) {
-            h2o_add_header(pool, headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
-            *chunked = 1;
-        }
-    } else {
-        if (body.base != NULL || req_requires_content_length(method, headers)) {
-            h2o_iovec_t cl_buf = build_content_length(pool, body.len);
-            h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
-        }
+    switch (body->type) {
+        case H2O_HTTPCLIENT_REQ_BODY_NONE:
+            break;
+        case H2O_HTTPCLIENT_REQ_BODY_VEC:
+            if (req_requires_content_length(method, headers)) {
+                h2o_iovec_t cl_buf = build_content_length(pool, body->vec.len);
+                h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
+            }
+            break;
+        case H2O_HTTPCLIENT_REQ_BODY_STREAMING:
+            if (body->streaming.content_length != SIZE_MAX) {
+                h2o_iovec_t cl_buf = build_content_length(pool, body->streaming.content_length);
+                h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, cl_buf.base, cl_buf.len);
+            } else if (chunked != NULL) {
+                h2o_add_header(pool, headers, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+                *chunked = 1;
+            }
+            break;
     }
 }
