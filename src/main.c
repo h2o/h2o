@@ -138,7 +138,12 @@ static struct {
     run_mode_t run_mode;
     struct {
         int *fds;
-        char *bound_fd_map; /* has `num_fds` elements, set to 1 if fd[index] was bound to one of the listeners */
+        /**
+         * List of booleans corresponding to each element of `server_starter.fds` indicating if a H2O listener has been mapped to
+         * the file descriptor. The list is used to check if all the file descriptors opened by Server::Starter have been assigned
+         * H2O listeners.
+         */
+        char *bound_fd_map;
         size_t num_fds;
     } server_starter;
     struct listener_config_t **listeners;
@@ -146,8 +151,10 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
-    H2O_VECTOR(int) thread_map; /* array size == number of threads to instantiate,
-                                  the values indicate which CPU to pin, -1 if not */
+    /**
+     * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
+     */
+    H2O_VECTOR(int) thread_map;
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -161,11 +168,15 @@ static struct {
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
-        int _num_connections; /* number of currently handled incoming connections, should use atomic functions to update the value
-                               */
+        /**
+         * Number of currently handled incoming connections. Should use atomic functions to update the value.
+         */
+        int _num_connections;
         char _unused2_avoir_false_sharing[32];
-        unsigned long
-            _num_sessions; /* total number of opened incoming connections, should use atomic functions to update the value */
+        /**
+         * Total number of opened incoming connections. Should use atomic functions to update the value.
+         */
+        unsigned long _num_sessions;
         char _unused3_avoir_false_sharing[32];
     } state;
     char *crash_handler;
