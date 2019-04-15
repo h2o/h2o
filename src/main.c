@@ -1252,7 +1252,7 @@ static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd,
         if (cpu_low > cpu_high)
             goto Error;
     }
-    for (cpu_num = cpu_low; cpu_low <= cpu_high; cpu_num++) {
+    for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
         h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
         conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
     }
