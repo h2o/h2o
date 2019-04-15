@@ -1680,6 +1680,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     conf.threads[thread_index].tid = pthread_self();
 
     if (conf.thread_map.entries[thread_index] >= 0) {
+#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
         cpu_set_t cpu_set;
         CPU_ZERO(&cpu_set);
         CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
@@ -1689,6 +1690,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                 fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
             }
         }
+#else
+        h2o_fatal("internal error; thread pinning not available even though specified");
+#endif
     }
 
     /* setup listeners */
