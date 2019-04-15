@@ -381,8 +381,9 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     }
 
     /* handle final response */
-    if ((req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, 0, status,
-                                                         h2o_iovec_init(NULL, 0), headers.entries, headers.size, 0)) == NULL)
+    if ((req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, 0x300,
+                                                         status, h2o_iovec_init(NULL, 0), headers.entries, headers.size, 0)) ==
+        NULL)
         return frame_is_eos ? 0 : H2O_HTTP3_ERROR_INTERNAL;
 
     /* handle body */
