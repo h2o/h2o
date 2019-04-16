@@ -900,6 +900,7 @@ typedef struct st_h2o_filereq_t {
 
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
+typedef void (*h2o_on_request_streaming_selected_cb)(h2o_req_t *, int is_streaming);
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
@@ -1113,7 +1114,15 @@ struct st_h2o_req_t {
     struct {
         h2o_write_req_cb cb;
         void *ctx;
+        h2o_on_request_streaming_selected_cb on_streaming_selected;
     } write_req;
+    /**
+     * structure used for request body processing; `body` is NULL unless request body IS expected
+     */
+    struct {
+        size_t bytes_received;
+        h2o_buffer_t *body;
+    } _req_body;
 
     /**
      * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
@@ -1552,7 +1561,10 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
  * sends 1xx response
  */
 void h2o_send_informational(h2o_req_t *req);
-
+/**
+ *
+ */
+int h2o_write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity);
 /**
  * logs an error
  */
