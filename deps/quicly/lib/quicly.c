@@ -2099,8 +2099,7 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
         ptls_cipher_init(s->target.cipher->header_protection, s->dst_payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE);
         ptls_cipher_encrypt(s->target.cipher->header_protection, hpmask, hpmask, sizeof(hpmask));
         *s->target.first_byte_at ^= hpmask[0] & (QUICLY_PACKET_IS_LONG_HEADER(*s->target.first_byte_at) ? 0xf : 0x1f);
-        size_t i;
-        for (i = 0; i != QUICLY_SEND_PN_SIZE; ++i)
+        for (typeof(QUICLY_SEND_PN_SIZE) i = 0; i != QUICLY_SEND_PN_SIZE; ++i)
             s->dst_payload_from[i - QUICLY_SEND_PN_SIZE] ^= hpmask[i + 1];
     }
 
