@@ -129,7 +129,8 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_iovec_t _s = (link_escaped);
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
-            h2o_buffer_reserve(&_, _s.len);
+            if ((h2o_buffer_try_reserve(&_, _s.len)).base == NULL)
+	        return NULL;
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
@@ -145,7 +146,8 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             h2o_iovec_t _s = (label_escaped);
             if (_s.len != 0 && _s.base[_s.len - 1] == '\n')
                 --_s.len;
-            h2o_buffer_reserve(&_, _s.len);
+            if ((h2o_buffer_try_reserve(&_, _s.len)).base == NULL)
+                return NULL;
             memcpy(_->bytes + _->size, _s.base, _s.len);
             _->size += _s.len;
         }
