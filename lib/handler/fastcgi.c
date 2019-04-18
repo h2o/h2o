@@ -562,8 +562,7 @@ static void append_content(struct st_fcgi_generator_t *generator, const void *sr
         }
         generator->leftsize -= len;
     }
-
-    h2o_iovec_t reserved = h2o_buffer_reserve(&generator->resp.receiving, len);
+    h2o_iovec_t reserved = h2o_buffer_try_reserve(&generator->resp.receiving, len);
     memcpy(reserved.base, src, len);
     generator->resp.receiving->size += len;
 }
