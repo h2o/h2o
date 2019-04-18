@@ -68,8 +68,6 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
 void h2o_http2_stream_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     h2o_http2_conn_unregister_stream(conn, stream);
-    if (stream->_req_body.body != NULL)
-        h2o_buffer_dispose(&stream->_req_body.body);
     if (stream->cache_digests != NULL)
         h2o_cache_digests_destroy(stream->cache_digests);
     h2o_dispose_request(&stream->req);

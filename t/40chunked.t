@@ -36,8 +36,8 @@ EOT
     my @list = split("\r\n", $body);
     my $content = '';
     while (scalar(@list) >= 2) {
-        my ($len, $data) = splice(@list, 0, 2);
-        is length($data), $len;
+        my ($hlen, $data) = splice(@list, 0, 2);
+        is length($data), hex $hlen;
         $content .= $data;
     }
     is $content, join("", (1..30));
