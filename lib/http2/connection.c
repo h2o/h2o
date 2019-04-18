@@ -648,7 +648,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_s
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
 
-    if (h2o_buffer_append(&stream->_req_body.body, payload.base, payload.len) == 0)
+    if (h2o_buffer_try_append(&stream->_req_body.body, payload.base, payload.len) == 0)
         return -1;
     proceed_request(&stream->req, payload.len, is_end_stream);
 
@@ -662,9 +662,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_s
 static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int is_end_stream)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
-
-    if (h2o_buffer_append(&stream->_req_body.body, payload.base, payload.len) == 0)
-        return -1;
+    h2o_buffer_append(&stream->_req_body.body, payload.base, payload.len);
     stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
 
     /* mark that we have seen eos */
