@@ -112,7 +112,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 
     /* poll */
     max_wait = adjust_max_wait(&loop->super, max_wait);
-    nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+    while ((nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait)) == -1 && errno == EINTR)
+      ;
     update_now(&loop->super);
     if (nevents == -1)
         return -1;
