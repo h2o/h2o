@@ -219,6 +219,8 @@ static int reset_stream_if_disregarded(h2o_http2_conn_t *conn, h2o_http2_stream_
 {
     if (!h2o_http2_stream_is_push(stream->stream_id) && stream->stream_id > conn->pull_stream_ids.max_open) {
         /* this stream is opened after sending GOAWAY, so ignore it */
+        if (stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING && !h2o_linklist_is_linked(&stream->_link))
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         h2o_http2_stream_reset(conn, stream);
         return 1;
     }
@@ -448,6 +450,8 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
     if (stream->req.write_req.cb(stream->req.write_req.ctx, payload, is_end_stream) != 0) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        if (stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING && !h2o_linklist_is_linked(&stream->_link))
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         h2o_http2_stream_reset(conn, stream);
     }
 }
