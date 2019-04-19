@@ -155,6 +155,7 @@ static struct {
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
      */
     H2O_VECTOR(int) thread_map;
+    int accept_rr; /* round-robin accept for linsteners in event loop thread */
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -178,6 +179,12 @@ static struct {
          */
         unsigned long _num_sessions;
         char _unused3_avoir_false_sharing[32];
+        /**
+         * Total number of 'on_accept' called counter. used when'accept-rr' config is ON, Should use atomic functions to update the
+         * value.
+         */
+        unsigned long _num_on_accepts;
+        char _unused4_avoir_false_sharing[32];
     } state;
     char *crash_handler;
     int crash_handler_wait_pipe_close;
@@ -191,6 +198,7 @@ static struct {
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
     {NULL},                                 /* thread_map, initialized in main() */
+    0,                                      /* accept_rr, initialized in main() */
     0,                                      /* tfo_queues, initialized in main() */
     0,                                      /* launch_time initialized in main() */
     NULL,                                   /* thread_ids */
@@ -1274,7 +1282,7 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
         for (i = 0; i < num_threads; i++)
             conf.thread_map.entries[conf.thread_map.size++] = -1;
     } else if (node->type == YOML_TYPE_SEQUENCE) {
-        /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
+    /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
 #ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
         size_t i;
         for (i = 0; i < node->data.sequence.size; i++) {
@@ -1291,6 +1299,17 @@ static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "num-threads must be >=1");
         return -1;
     }
+    return 0;
+}
+
+static int on_config_accept_rr(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t v;
+
+    if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.accept_rr = (int)v;
     return 0;
 }
 
@@ -1511,6 +1530,11 @@ static void notify_all_threads(void)
         h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
 }
 
+static void notify_one_threads(size_t i)
+{
+    h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
+}
+
 static void on_sigterm(int signo)
 {
     conf.shutdown_requested = 1;
@@ -1602,6 +1626,11 @@ static unsigned long num_sessions(int delta)
     return __sync_fetch_and_add(&conf.state._num_sessions, delta);
 }
 
+static unsigned long num_on_accepts(int delta)
+{
+    return __sync_fetch_and_add(&conf.state._num_on_accepts, delta);
+}
+
 static void on_socketclose(void *data)
 {
     int prev_num_connections = num_connections(-1);
@@ -1645,11 +1674,18 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         h2o_accept(&ctx->accept_ctx, sock);
 
     } while (--num_accepts != 0);
+
+    if (conf.accept_rr)
+        notify_one_threads((num_on_accepts(1) + 1) % conf.thread_map.size);
 }
 
-static void update_listener_state(struct listener_ctx_t *listeners)
+static void update_listener_state(struct listener_ctx_t *listeners, size_t thread_index)
 {
     size_t i;
+
+    if (conf.accept_rr && ((num_on_accepts(0) % conf.thread_map.size) != thread_index)) {
+        goto read_stop;
+    }
 
     if (num_connections(0) < conf.max_connections) {
         for (i = 0; i != conf.num_listeners; ++i) {
@@ -1657,6 +1693,7 @@ static void update_listener_state(struct listener_ctx_t *listeners)
                 h2o_socket_read_start(listeners[i].sock, on_accept);
         }
     } else {
+    read_stop:
         for (i = 0; i != conf.num_listeners; ++i) {
             if (h2o_socket_is_reading(listeners[i].sock))
                 h2o_socket_read_stop(listeners[i].sock);
@@ -1731,7 +1768,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */
-    update_listener_state(listeners);
+    update_listener_state(listeners, thread_index);
 
     /* make sure all threads are initialized before starting to serve requests */
     h2o_barrier_wait(&conf.startup_sync_barrier);
@@ -1740,7 +1777,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     while (1) {
         if (conf.shutdown_requested)
             break;
-        update_listener_state(listeners);
+        update_listener_state(listeners, thread_index);
         /* run the loop once */
         h2o_evloop_run(conf.threads[thread_index].ctx.loop, INT32_MAX);
         h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
@@ -2023,6 +2060,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
                                         on_config_num_name_resolution_threads);
+        h2o_configurator_define_command(c, "accept-rr", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_accept_rr);
         h2o_configurator_define_command(c, "tcp-fastopen", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_tcp_fastopen);
         h2o_configurator_define_command(c, "ssl-session-resumption",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
@@ -2336,9 +2374,12 @@ int main(int argc, char **argv)
         error_log_fd = -1;
     }
 
-    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
-
     assert(conf.thread_map.size != 0);
+    if (conf.accept_rr && conf.thread_map.size < 2) {
+        fprintf(stderr, "ignore 'accept-rr' because only %zu threads\n", conf.thread_map.size);
+        conf.accept_rr = 0;
+    }
+    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
     /* start the threads */
     conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
