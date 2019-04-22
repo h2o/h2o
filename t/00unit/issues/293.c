@@ -52,10 +52,10 @@ static void check(const h2o_url_scheme_t *scheme, const char *host, const char *
     h2o_loopback_run_loop(conn);
     ok(conn->req.res.status == 200);
 
-    size_t index = h2o_find_header_by_str(&conn->req.res.headers, H2O_STRLIT("x-authority"), SIZE_MAX);
-    ok(index != SIZE_MAX);
+    ssize_t index = h2o_find_header_by_str(&conn->req.res.headers, H2O_STRLIT("x-authority"), -1);
+    ok(index != -1);
 
-    if (index != SIZE_MAX) {
+    if (index != -1) {
         ok(h2o_memis(conn->req.res.headers.entries[index].value.base, conn->req.res.headers.entries[index].value.len, expected,
                      strlen(expected)));
     }

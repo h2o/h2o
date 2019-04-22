@@ -65,8 +65,8 @@ static int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y
  * searches for a header of given name (fast, by comparing tokens)
  * @param headers header list
  * @param token name of the header to search for
- * @param cursor index of the last match (or set SIZE_MAX to start a new search)
- * @return index of the found header (or SIZE_MAX if not found)
+ * @param cursor index of the last match (or set -1 to start a new search)
+ * @return index of the found header (or -1 if not found)
  */
 ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor);
 /**
@@ -74,8 +74,8 @@ ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, 
  * @param headers header list
  * @param name name of the header to search for
  * @param name_len length of the name
- * @param cursor index of the last match (or set SIZE_MAX to start a new search)
- * @return index of the found header (or SIZE_MAX if not found)
+ * @param cursor index of the last match (or set -1 to start a new search)
+ * @return index of the found header (or -1 if not found)
  */
 ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, size_t name_len, ssize_t cursor);
 /**

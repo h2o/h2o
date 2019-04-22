@@ -1004,7 +1004,7 @@ static void send_response_shortcutted(struct st_mruby_subreq_t *subreq)
         h2o_mruby_set_response_header(generator->ctx->shared, header->name, header->value, generator->req);
     }
     /* add date: if it's missing from the response */
-    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)
+    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, -1) == -1)
         h2o_resp_add_date_header(generator->req);
 
     /* setup body sender */
