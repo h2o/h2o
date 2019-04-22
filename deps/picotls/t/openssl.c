@@ -91,20 +91,20 @@ static void test_bf(void)
     static const uint8_t key[PTLS_BLOWFISH_KEY_SIZE] = {0},
                          plaintext[PTLS_BLOWFISH_BLOCK_SIZE] = {0x4e, 0xf9, 0x97, 0x45, 0x61, 0x98, 0xdd, 0x78},
                          expected[PTLS_BLOWFISH_BLOCK_SIZE] = {0xe1, 0xc0, 0x30, 0xe7, 0x4c, 0x14, 0xd2, 0x61};
-    uint8_t actual[PTLS_BLOWFISH_BLOCK_SIZE];
+    uint8_t encrypted[PTLS_BLOWFISH_BLOCK_SIZE], decrypted[PTLS_BLOWFISH_BLOCK_SIZE];
 
     /* encrypt */
-    memset(actual, 0, sizeof(actual));
     ptls_cipher_context_t *ctx = ptls_cipher_new(&ptls_openssl_bfecb, 1, key);
-    ptls_cipher_encrypt(ctx, actual, plaintext, sizeof(actual));
+    ptls_cipher_encrypt(ctx, encrypted, plaintext, PTLS_BLOWFISH_BLOCK_SIZE);
     ptls_cipher_free(ctx);
-    ok(memcmp(actual, expected, sizeof(actual)) == 0);
+    ok(memcmp(encrypted, expected, PTLS_BLOWFISH_BLOCK_SIZE) == 0);
 
     /* decrypt */
     ctx = ptls_cipher_new(&ptls_openssl_bfecb, 0, key);
-    ptls_cipher_encrypt(ctx, actual, actual, sizeof(actual));
+    ptls_cipher_encrypt(ctx, decrypted, "deadbeef", PTLS_BLOWFISH_BLOCK_SIZE);
+    ptls_cipher_encrypt(ctx, decrypted, encrypted, PTLS_BLOWFISH_BLOCK_SIZE);
     ptls_cipher_free(ctx);
-    ok(memcmp(actual, plaintext, sizeof(actual)) == 0);
+    ok(memcmp(decrypted, plaintext, PTLS_BLOWFISH_BLOCK_SIZE) == 0);
 #endif
 }
 

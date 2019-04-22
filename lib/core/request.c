@@ -322,6 +322,9 @@ void h2o_dispose_request(h2o_req_t *req)
     if (req->error_logs != NULL)
         h2o_buffer_dispose(&req->error_logs);
 
+    if (req->_req_body.body != NULL)
+        h2o_buffer_dispose(&req->_req_body.body);
+
     h2o_mem_clear_pool(&req->pool);
 }
 
@@ -712,7 +715,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
 
     /* parse the location URL */
     if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
-        /* TODO log fprintf(stderr, "[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
+        /* TODO log h2o_error_printf("[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
         h2o_send_error_deferred_502(req, "Gateway Error", "internal error", 0);
         return;
     }
@@ -798,4 +801,23 @@ Clear:
     /* clear status and headers */
     req->res.status = 0;
     req->res.headers = (h2o_headers_t){NULL, 0, 0};
+}
+
+int h2o_write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity)
+{
+    h2o_req_t *req = _req;
+    h2o_handler_t *first_handler;
+
+    /* if possible, switch to either streaming request body mode */
+    if (!is_end_entity && (first_handler = h2o_get_first_handler(req)) != NULL &&
+        first_handler->supports_request_streaming) {
+        if (h2o_buffer_append(&req->_req_body.body, payload.base, payload.len) == 0)
+            return -1;
+        req->entity = h2o_iovec_init(req->_req_body.body->bytes, req->_req_body.body->size);
+        req->write_req.on_streaming_selected(req, 1);
+        return 0;
+    }
+
+    req->write_req.on_streaming_selected(req, 0);
+    return req->write_req.cb(req->write_req.ctx, payload, is_end_entity);
 }

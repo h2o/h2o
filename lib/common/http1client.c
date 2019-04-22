@@ -558,7 +558,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
     } while (0)
 #define APPEND(s, l)                                                                                                               \
     do {                                                                                                                           \
-        memcpy(buf.base + offset, (s), (l));                                                                                       \
+        h2o_memcpy(buf.base + offset, (s), (l));                                                                                   \
         offset += (l);                                                                                                             \
     } while (0)
 #define APPEND_STRLIT(lit) APPEND((lit), sizeof(lit) - 1)

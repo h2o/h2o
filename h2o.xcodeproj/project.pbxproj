@@ -1813,7 +1813,6 @@
 		10BF213E1A087CDF008F7129 /* libh2o */ = {
 			isa = PBXGroup;
 			children = (
-				10D0906A19F38B850043D458 /* httpclient.c */,
 				10D0905219F0CB130043D458 /* socket-client.c */,
 				08790DF41D8BD72500A04BC1 /* redis-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
@@ -1973,6 +1972,7 @@
 		10F417D419C190DD00B6E31A /* src */ = {
 			isa = PBXGroup;
 			children = (
+				10D0906A19F38B850043D458 /* httpclient.c */,
 				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
 				107D4D4D1B58970D004A9B21 /* ssl.c */,

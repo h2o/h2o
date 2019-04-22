@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,13 @@ extern "C" {
 #define H2O_TO_STR(n) H2O_TO__STR(n)
 
 #define H2O_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
+
+/**
+ * library users can use their own log method by define this macro
+ */
+#ifndef h2o_error_printf
+#define h2o_error_printf(...) fprintf(stderr, __VA_ARGS__)
+#endif
 
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
@@ -159,8 +167,13 @@ extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 /**
  * prints an error message and aborts
  */
-#define h2o_fatal(msg) h2o__fatal(__FILE__ ":" H2O_TO_STR(__LINE__) ":" msg)
-H2O_NORETURN void h2o__fatal(const char *msg);
+H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
+#ifndef h2o_fatal
+#define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
+#endif
+
+void h2o_perror(const char *msg);
+char *h2o_strerror_r(int err, char *buf, size_t len);
 
 /**
  * A version of memcpy that can take a NULL @src to avoid UB
@@ -420,7 +433,7 @@ inline int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
     h2o_iovec_t buf = h2o_buffer_reserve(dst, len);
     if (buf.base == NULL)
         return 0;
-    memcpy(buf.base, src, len);
+    h2o_memcpy(buf.base, src, len);
     (*dst)->size += len;
     return 1;
 }
