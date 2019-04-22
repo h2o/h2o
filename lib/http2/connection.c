@@ -653,8 +653,8 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
     }
 
     if (send_state == H2O_SEND_STATE_ERROR) {
-        /* error while streaming request body after early response */
-        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_NONE);
+        /* error while streaming request body */
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
         h2o_http2_stream_reset(conn, stream);
         return;
     }
