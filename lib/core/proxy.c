@@ -476,8 +476,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
-                    h2o_httpclient_t *client = detach_client(self);
-                    client->cancel(client);
+                    detach_client(self);
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
                     h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
                     return NULL;
