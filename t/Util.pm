@@ -5,15 +5,18 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
 use IO::Socket::INET;
+use IO::Socket::SSL;
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
 use Path::Tiny;
+use Protocol::HTTP2::Connection;
+use Protocol::HTTP2::Constants;
 use Scope::Guard qw(scope_guard);
 use Test::More;
 use Time::HiRes qw(sleep);
 
 use base qw(Exporter);
-our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger);
+our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger spawn_forked spawn_h2_server);
 
 use constant ASSETS_DIR => 't/assets';
 use constant DOC_ROOT   => ASSETS_DIR . "/doc_root";
@@ -303,6 +306,27 @@ sub run_with_h2get {
     my ($server, $script) = @_;
     plan skip_all => "h2get not found"
         unless h2get_exists();
+    my $helper_code = <<"EOR";
+class H2
+    def read_loop(timeout)
+        while true
+            f = self.read(timeout)
+            return nil if f == nil
+            puts f.to_s
+            if f.type == "DATA" && f.len > 0
+                self.send_window_update(0, f.len)
+                self.send_window_update(f.stream_id, f.len)
+            end
+            if (f.type == "DATA" || f.type == "HEADERS") && f.is_end_stream
+                return f
+            elsif f.type == "RST_STREAM" || f.type == "GOAWAY"
+                return f
+            end
+        end
+    end
+end
+EOR
+    $script = "$helper_code\n$script";
     my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
     print $scriptfh $script;
     close($scriptfh);
@@ -374,6 +398,102 @@ sub wait_debugger {
     }
     print STDERR "no debugger attached\n";
     undef;
+}
+
+sub spawn_forked {
+    my ($code) = @_;
+
+    my ($cout, $pin);
+    pipe($pin, $cout);
+
+    my $pid = fork;
+    if ($pid) {
+        close $cout;
+        my $upstream; $upstream = +{
+            pid => $pid,
+            kill => sub {
+                return unless defined $pid;
+                kill 'KILL', $pid;
+                undef $pid;
+            },
+            guard => Scope::Guard->new(sub { $upstream->{kill}->() }),
+            stdout => $pin,
+        };
+        return $upstream;
+    }
+    close $pin;
+    open(STDOUT, '>&=', fileno($cout)) or die $!;
+
+    $code->();
+    exit;
+}
+
+sub spawn_h2_server {
+    my ($upstream_port, $stream_state_cbs, $stream_frame_cbs) = @_;
+    my $server = spawn_forked(sub {
+        my $conn; $conn = Protocol::HTTP2::Connection->new(Protocol::HTTP2::Constants::SERVER,
+            on_new_peer_stream => sub {
+                my $stream_id = shift;
+                for my $state (keys %{ $stream_state_cbs || +{} }) {
+                    my $cb = $stream_state_cbs->{$state};
+                    $conn->stream_cb($stream_id, $state, sub {
+                        $cb->($conn, $stream_id);
+                    });
+                }
+                for my $type (keys %{ $stream_frame_cbs || +{} }) {
+                    my $cb = $stream_frame_cbs->{$type};
+                    $conn->stream_frame_cb($stream_id, $type, sub {
+                        $cb->($conn, $stream_id, shift);
+                    });
+                }
+            },
+        );
+        $conn->{_state} = +{};
+        $conn->enqueue(Protocol::HTTP2::Constants::SETTINGS, 0, 0, +{});
+        my $upstream = IO::Socket::SSL->new(
+            LocalAddr => '127.0.0.1',
+            LocalPort => $upstream_port,
+            Listen => 1,
+            ReuseAddr => 1,
+            SSL_cert_file => 'examples/h2o/server.crt',
+            SSL_key_file => 'examples/h2o/server.key',
+            SSL_alpn_protocols => ['h2'],
+        ) or die "cannot create socket: $!";
+        my $sock = $upstream->accept or die "cannot accept socket: $!";
+
+        my $input = '';
+        while (!$conn->{_state}->{closed}) {
+            my $offset = 0;
+            my $buf;
+            my $r = $sock->read($buf, 1);
+            next unless $r;
+            $input .= $buf;
+
+            unless ($conn->preface) {
+                my $len = $conn->preface_decode(\$input, 0);
+                unless (defined($len)) {
+                    die 'invalid preface';
+                }
+                next unless $len;
+                $conn->preface(1);
+                $offset += $len;
+            }
+
+            while (my $len = $conn->frame_decode(\$input, $offset)) {
+                $offset += $len;
+            }
+            substr($input, 0, $offset) = '' if $offset;
+
+            if (my $after_read = delete($conn->{_state}->{after_read})) {
+                $after_read->();
+            }
+
+            while (my $frame = $conn->dequeue) {
+                $sock->write($frame);
+            }
+        }
+    });
+    return $server;
 }
 
 1;
