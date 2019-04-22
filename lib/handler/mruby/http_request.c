@@ -86,6 +86,7 @@ static void dispose_context(h2o_mruby_http_request_context_t *ctx)
     /* clear the refs */
     if (ctx->client != NULL) {
         ctx->client->cancel(ctx->client);
+        ctx->client = NULL;
     }
 
     if (!mrb_nil_p(ctx->refs.request))
@@ -105,6 +106,7 @@ static int try_dispose_context(h2o_mruby_http_request_context_t *ctx)
 {
 #define IS_NIL_OR_DEAD(o) (mrb_nil_p(o) || mrb_object_dead_p(ctx->ctx->shared->mrb, mrb_basic_ptr(o)))
     if (IS_NIL_OR_DEAD(ctx->refs.request) && IS_NIL_OR_DEAD(ctx->refs.input_stream)) {
+        ctx->client = NULL;
         dispose_context(ctx);
         return 1;
     }
@@ -164,6 +166,7 @@ static void on_shortcut_notify(h2o_mruby_generator_t *generator)
         h2o_buffer_init(input, &h2o_socket_buffer_prototype);
         input = &sender->remaining;
         sender->client->shortcut = NULL;
+        sender->client = NULL;
     }
 
     if (!sender->super.final_sent && !sender->sending.inflight)
@@ -319,6 +322,7 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
 
 static void post_error(struct st_h2o_mruby_http_request_context_t *ctx, const char *errstr)
 {
+    ctx->client = NULL;
     size_t errstr_len = strlen(errstr);
     h2o_buffer_reserve(&ctx->resp.after_closed, errstr_len);
     memcpy(ctx->resp.after_closed->bytes + ctx->resp.after_closed->size, errstr, errstr_len);
