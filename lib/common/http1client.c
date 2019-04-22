@@ -183,7 +183,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
-static void on_req_chunked(h2o_socket_t *sock, const char *err)
+static void on_body_chunked(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
     h2o_buffer_t *inbuf;
@@ -342,7 +342,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
             if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("chunked"))) {
                 /* precond: _body_decoder.chunked is zero-filled */
                 client->_body_decoder.chunked.decoder.consume_trailer = 1;
-                reader = on_req_chunked;
+                reader = on_body_chunked;
             } else if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("identity"))) {
                 /* continue */
             } else {
@@ -355,7 +355,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
                 on_error(client, "invalid content-length");
                 return;
             }
-            if (reader != on_req_chunked)
+            if (reader != on_body_chunked)
                 reader = on_body_content_length;
         }
     }
@@ -404,7 +404,7 @@ static void on_head_timeout(h2o_timer_t *entry)
     on_error(client, "I/O timeout");
 }
 
-static void on_send_request(h2o_socket_t *sock, const char *err)
+static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
 
@@ -418,7 +418,7 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
     if (client->_is_chunked) {
         client->_is_chunked = 0;
         h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n"));
-        h2o_socket_write(client->sock, &last, 1, on_send_request);
+        h2o_socket_write(client->sock, &last, 1, on_whole_request_sent);
         return;
     }
 
@@ -445,7 +445,7 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
 
     if (client->_body_buf_in_flight != NULL) {
         /* is an error happened before finishing sending the response,
-           that error will be notified via on_head or on_body callback in on_send_request */
+           that error will be notified via on_head or on_body callback in on_whole_request_sent */
         if (err == NULL || client->state.res == STREAM_STATE_CLOSED) {
             h2o_send_state_t send_state = err != NULL ? H2O_SEND_STATE_ERROR : client->_body_buf_is_done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS;
             client->proceed_req(&client->super, client->_body_buf_in_flight->size, send_state);
@@ -454,14 +454,14 @@ static void on_req_body_done(h2o_socket_t *sock, const char *err)
     }
 
     if (err) {
-        on_send_request(client->sock, err);
+        on_whole_request_sent(client->sock, err);
         return;
     }
 
     if (client->_body_buf != NULL && client->_body_buf->size != 0) {
         do_write_req(&client->super, h2o_iovec_init(NULL, 0), client->_body_buf_is_done);
     } else if (client->_body_buf_is_done) {
-        on_send_request(client->sock, NULL);
+        on_whole_request_sent(client->sock, NULL);
     }
 }
 
@@ -641,7 +641,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         if (body.base != NULL) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
             if (h2o_buffer_append(&client->_body_buf, body.base, body.len) == 0) {
-                on_send_request(client->sock, "Internal error");
+                on_whole_request_sent(client->sock, "Internal error");
                 return;
             }
         }
@@ -653,7 +653,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         } else if (body.base != NULL) {
             reqbufs[reqbufcnt++] = body;
         }
-        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_send_request);
+        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_whole_request_sent);
     }
 
     /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
