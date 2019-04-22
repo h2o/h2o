@@ -41,7 +41,7 @@ static void alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size, uv_buf_t
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
 
-    h2o_iovec_t buf = h2o_buffer_reserve(&sock->super.input, 4096);
+    h2o_iovec_t buf = h2o_buffer_try_reserve(&sock->super.input, 4096);
     memcpy(_buf, &buf, sizeof(buf));
 }
 
@@ -49,7 +49,7 @@ static void alloc_inbuf_ssl(uv_handle_t *handle, size_t suggested_size, uv_buf_t
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
 
-    h2o_iovec_t buf = h2o_buffer_reserve(&sock->super.ssl->input.encrypted, 4096);
+    h2o_iovec_t buf = h2o_buffer_try_reserve(&sock->super.ssl->input.encrypted, 4096);
     memcpy(_buf, &buf, sizeof(buf));
 }
 
