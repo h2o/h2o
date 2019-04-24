@@ -89,7 +89,7 @@ static void doit(int use_enc_stream)
     h2o_qpack_destroy_encoder(enc);
 }
 
-void test_lib__quic_qpack(void)
+void test_lib__http3_qpack(void)
 {
     doit(0);
     doit(1);
