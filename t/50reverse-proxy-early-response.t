@@ -210,7 +210,7 @@ sub create_h1_upstream {
                 }
                 say "received @{[length($body)]} bytes";
             }
-            sleep 1;
+            Time::HiRes::sleep(0.1);
             $client->close;
         }
         $server->close;
@@ -226,6 +226,7 @@ sub create_h2_upstream {
         $conn->send_headers($stream_id, [ ':status' => 200 ], 1);
         unless ($opts->{drain_body}) {
             $conn->{_state}->{closed} = 1;
+            $conn->{_state}->{after_write} = sub { Time::HiRes::sleep(0.1) };
         }
         $send_headers = undef;
     };

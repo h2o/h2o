@@ -491,6 +491,10 @@ sub spawn_h2_server {
             while (my $frame = $conn->dequeue) {
                 $sock->write($frame);
             }
+
+            if (my $after_write = delete($conn->{_state}->{after_write})) {
+                $after_write->();
+            }
         }
     });
     return $server;
