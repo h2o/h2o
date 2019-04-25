@@ -446,7 +446,7 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
     h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
-static void proceed_request(h2o_req_t *req, size_t written, int is_end_entity)
+static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
     set_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
