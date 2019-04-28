@@ -293,7 +293,7 @@ void h2o_buffer__dispose_linked(void *p);
  * @param new_capacity the capacity of the buffer after the function returns
  */
 #define h2o_vector_reserve(pool, vector, new_capacity)                                                                             \
-    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), H2O_ALIGNOF((vector)->entries[0]), sizeof((vector)->entries[0]), \
+    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), H2O_ALIGNOF(__typeof__((vector)->entries[0])), sizeof((vector)->entries[0]), \
                         (new_capacity))
 static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size,
                                 size_t new_capacity);

@@ -369,12 +369,14 @@ inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 
 inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
+    (void) pool;
     const char *s = h2o_socket_get_ssl_protocol_version(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }
 
 inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
+    (void) pool;
     switch (h2o_socket_get_ssl_session_reused(sock)) {
     case 0:
         return h2o_iovec_init(H2O_STRLIT("0"));
@@ -387,6 +389,7 @@ inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem
 
 inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
+    (void) pool;
     const char *s = h2o_socket_get_ssl_cipher(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }

@@ -2196,7 +2196,9 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
         }                                                                                                                          \
         *delta_usec = h2o_timeval_subtract((from), (until));                                                                       \
         return 1;                                                                                                                  \
-    }
+    }                                                                                                                              \
+                                                                                                                                   \
+    static inline int h2o_time_compute_##name(struct st_h2o_req_t *req, int64_t *delta_usec)
 
 COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
 COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at,
