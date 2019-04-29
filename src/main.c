@@ -180,6 +180,10 @@ static struct {
          * Number of currently handled incoming connections. Should use atomic functions to update the value.
          */
         int _num_connections;
+        /**
+         * Number of currently handled incoming QUIC connections.
+         */
+        int _num_quic_connections;
         char _unused2_avoir_false_sharing[32];
         /**
          * Total number of opened incoming connections. Should use atomic functions to update the value.
@@ -1087,6 +1091,11 @@ static int num_connections(int delta)
     return __sync_fetch_and_add(&conf.state._num_connections, delta);
 }
 
+static int num_quic_connections(int delta)
+{
+    return __sync_fetch_and_add(&conf.state._num_quic_connections, delta);
+}
+
 static unsigned long num_sessions(int delta)
 {
     return __sync_fetch_and_add(&conf.state._num_sessions, delta);
@@ -1105,6 +1114,8 @@ static void on_connection_close(void)
 static void on_http3_conn_destroy(h2o_http3_conn_t *conn)
 {
     on_connection_close();
+    num_quic_connections(-1);
+
     H2O_HTTP3_CONN_CALLBACKS.destroy_connection(conn);
 }
 
@@ -1961,6 +1972,7 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr 
         return NULL;
     }
     num_connections(1);
+    num_quic_connections(1);
     num_sessions(1);
 
     return h2o_http3_server_accept(_ctx, sa, salen, packets, num_packets, &conf.quic.conn_callbacks);
