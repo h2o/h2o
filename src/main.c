@@ -155,6 +155,7 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
+    int max_quic_connections;
     /**
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
      */
@@ -202,6 +203,7 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
+    256,                                    /* max_quic_connections (25% of max_connections) */
     {NULL},                                 /* thread_map, initialized in main() */
     {0},                                    /* .quic = {num_threads (0 defaults to all), conn_callbacks (initialized in main()} */
     0,                                      /* tfo_queues, initialized in main() */
@@ -1406,6 +1408,19 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
 }
 
+static int on_config_max_quic_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections) != 0)
+        return -1;
+
+    if (conf.max_quic_connections > conf.max_connections) {
+        h2o_configurator_errprintf(cmd, node, "max_quic_connections: %d must be less than or equal to max_connections: %d",
+                                   conf.max_quic_connections, conf.max_connections);
+        return -1;
+    }
+    return 0;
+}
+
 static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -1968,7 +1983,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
                                          quicly_decoded_packet_t *packets, size_t num_packets)
 {
-    if (num_connections(0) >= conf.max_connections) {
+    if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections) {
         return NULL;
     }
     num_connections(1);
@@ -2376,6 +2391,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
+        h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-quic-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_quic_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
