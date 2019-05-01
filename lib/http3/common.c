@@ -159,17 +159,20 @@ static int control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_htt
     h2o_http3_read_frame_t frame;
     int ret;
 
-    if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
-        if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
-            ret = 0;
-        return ret;
-    }
+    do {
+        if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
+            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
+                ret = 0;
+            break;
+        }
+        if (h2o_http3_has_received_settings(conn) == (frame.type == H2O_HTTP3_FRAME_TYPE_SETTINGS) ||
+            frame.type == H2O_HTTP3_FRAME_TYPE_DATA)
+            return H2O_HTTP3_ERROR_MALFORMED_FRAME(frame.type);
+        if ((ret = conn->callbacks->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length, err_desc)) != 0)
+            break;
+    } while (*src != src_end);
 
-    if (h2o_http3_has_received_settings(conn) == (frame.type == H2O_HTTP3_FRAME_TYPE_SETTINGS) ||
-        frame.type == H2O_HTTP3_FRAME_TYPE_DATA)
-        return H2O_HTTP3_ERROR_MALFORMED_FRAME(frame.type);
-
-    return conn->callbacks->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length, err_desc);
+    return ret;
 }
 
 static int unknown_stream_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
