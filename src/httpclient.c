@@ -368,7 +368,7 @@ int main(int argc, char **argv)
     OpenSSL_add_all_algorithms();
 
     quicly_amend_ptls_context(&h3ctx.tls);
-    h3ctx.quic = quicly_default_context;
+    h3ctx.quic = quicly_performant_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
     h3ctx.quic.tls = &h3ctx.tls;
     {

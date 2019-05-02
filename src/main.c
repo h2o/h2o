@@ -1299,7 +1299,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     break;
                 }
                 quicly_context_t *quic = h2o_mem_alloc(sizeof(*quic));
-                *quic = quicly_default_context;
+                *quic = quicly_performant_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->transport_params.max_streams_uni = 10;
                 if (event_logger != NULL) {
