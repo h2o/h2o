@@ -39,6 +39,10 @@
 #define H2O_HTTP3_FRAME_TYPE_GOAWAY 7
 #define H2O_HTTP3_FRAME_TYPE_MAX_PUSH_ID 13
 
+#define H2O_HTTP3_STREAM_TYPE_CONTROL 'C'
+#define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 'H'
+#define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 'h'
+
 #define H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE 1
 #define H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS 3
 #define H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE 6
@@ -48,6 +52,8 @@
 
 #define H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE 4096
 #define H2O_HTTP3_MAX_HEADER_TABLE_SIZE ((1 << 30) + 1)
+#define H2O_HTTP3_MAX_PLACEHOLDERS 10
+#define H2O_HTTP3_DEFAULT_WEIGHT 16
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0)
 #define H2O_HTTP3_ERROR_WRONG_SETTING_DIRECTION QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1)
@@ -205,6 +211,13 @@ struct st_h2o_http3_conn_t {
         h2o_qpack_encoder_t *enc;
         h2o_qpack_decoder_t *dec;
     } qpack;
+    /**
+     *
+     */
+    struct {
+        uint64_t num_placeholders;
+        uint64_t max_header_list_size;
+    } peer_settings;
     /**
      * the "transport" timer. Applications must have separate timer.
      */

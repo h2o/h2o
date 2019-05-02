@@ -30,6 +30,23 @@
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
 
+/* Firefox-like tree is used to prioritize the requests:
+ *
+ * Root --+--(256)-- BLOCKING streams
+ *        |
+ *        +--(  1)-- NONCRITICAL --+--(  32)-- NORMAL streams
+ *                   placeholder   |
+ *                   (0)           +--(  16)-- NONBLOCKING streams
+ *                                 |
+ *                                 +--(   1)-- DELAYED streams
+ */
+#define H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_ID 0
+#define H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_WEIGHT 1
+#define H2O_HTTP3CLIENT_BLOCKING_STREAM_WEIGHT 256
+#define H2O_HTTP3CLIENT_NORMAL_STREAM_WEIGHT 32
+#define H2O_HTTP3CLIENT_NONBLOCKING_STREAM_WEIGHT 16
+#define H2O_HTTP3CLIENT_DELAYED_STREAM_WEIGHT 1
+
 #define H2O_HTTP3_ERROR_EOS H2O_HTTP3_ERROR_USER1 /* the client uses USER1 for signaling eos */
 
 struct st_h2o_http3client_conn_t {
@@ -188,6 +205,22 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
     case H2O_HTTP3_FRAME_TYPE_SETTINGS:
         if ((ret = h2o_http3_handle_settings_frame(&conn->super, payload, len, err_desc)) != 0)
             return ret;
+        /* create noncritical placeholder if possible (TODO rebind requests inflight, if they should be belonging to the placeholder
+         * being created) */
+        if (conn->super.peer_settings.num_placeholders != 0) {
+            static const h2o_http3_priority_frame_t noncritical_placeholder = {
+                {H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER, H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_ID} /* prioritized_element */,
+                {H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT} /* attached to root */,
+                H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_WEIGHT /* weight=1 */
+            };
+            uint8_t base[H2O_HTTP3_PRIORITY_FRAME_CAPACITY], *dst = base;
+            dst = h2o_http3_encode_priority_frame(dst, &noncritical_placeholder);
+            struct st_h2o_http3_egress_unistream_t *control_stream = conn->super._control_streams.egress.control;
+            h2o_buffer_append(&conn->super._control_streams.egress.control->sendbuf, base, dst - base);
+            if ((ret = quicly_stream_sync_sendbuf(control_stream->quic, 1)) != 0)
+                goto Exit;
+        }
+        /* issue requests */
         while (!h2o_linklist_is_empty(&conn->pending_requests)) {
             struct st_h2o_http3client_req_t *req =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
@@ -199,7 +232,9 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
         break;
     }
 
-    return 0;
+    ret = 0;
+Exit:
+    return ret;
 }
 
 struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
@@ -549,6 +584,41 @@ static int on_receive_reset(quicly_stream_t *qs, int err)
     return 0;
 }
 
+static void emit_priority_frame(struct st_h2o_http3client_req_t *req, h2o_byte_vector_t *buf,
+                                h2o_httpclient_precedence_t precedence)
+{
+    h2o_http3_priority_frame_t frame = {{H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT}}; /* prioritized = this stream */
+
+    if (precedence == H2O_HTTPCLIENT_PRECEDENCE_BLOCKING) {
+        frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT; /* root */
+        frame.weight_m1 = H2O_HTTP3CLIENT_BLOCKING_STREAM_WEIGHT - 1;
+    } else {
+        if (req->conn->super.peer_settings.num_placeholders != 0) {
+            frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER;
+            frame.dependency.id_ = H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_ID;
+        } else {
+            frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT; /* root */
+        }
+        switch (precedence) {
+        case H2O_HTTPCLIENT_PRECEDENCE_NORMAL:
+            frame.weight_m1 = H2O_HTTP3CLIENT_NORMAL_STREAM_WEIGHT - 1;
+            break;
+        case H2O_HTTPCLIENT_PRECEDENCE_NONBLOCKING:
+            frame.weight_m1 = H2O_HTTP3CLIENT_NONBLOCKING_STREAM_WEIGHT - 1;
+            break;
+        case H2O_HTTPCLIENT_PRECEDENCE_DELAYED:
+            frame.weight_m1 = H2O_HTTP3CLIENT_NONBLOCKING_STREAM_WEIGHT - 1;
+            break;
+        default:
+            assert(!"FIXME");
+            break;
+        }
+    }
+
+    h2o_vector_reserve(req->super.pool, buf, buf->size + H2O_HTTP3_PRIORITY_FRAME_CAPACITY);
+    buf->size += h2o_http3_encode_priority_frame(buf->entries + buf->size, &frame) - buf->entries;
+}
+
 void start_request(struct st_h2o_http3client_req_t *req)
 {
     h2o_iovec_t method;
@@ -579,6 +649,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
 
     /* TODO optimize */
     h2o_byte_vector_t buf = {NULL};
+    emit_priority_frame(req, &buf, props.precedence);
     h2o_http3_encode_frame(req->super.pool, &buf, H2O_HTTP3_FRAME_TYPE_HEADERS, {
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, &buf, method, url.scheme,
                                   url.authority, url.path, headers, num_headers);
