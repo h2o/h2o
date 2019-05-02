@@ -22,10 +22,34 @@
 #include <sys/time.h>
 #include "quicly/defaults.h"
 
-const quicly_context_t quicly_default_context = {
-    NULL,                      /* tls */
-    QUICLY_MAX_PACKET_SIZE,    /* max_packet_size */
-    &quicly_loss_default_conf, /* loss */
+/* profile that employs IETF specified values */
+const quicly_context_t quicly_spec_context = {
+    NULL,                   /* tls */
+    QUICLY_MAX_PACKET_SIZE, /* max_packet_size */
+    &quicly_loss_spec_conf, /* loss */
+    {
+        {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
+        16 * 1024 * 1024,                                    /* max_data */
+        30 * 1000,                                           /* idle_timeout (30 seconds) */
+        100,                                                 /* max_concurrent_streams_bidi */
+        0                                                    /* max_concurrent_streams_uni */
+    },
+    0, /* enforce_version_negotiation */
+    0, /* is_clustered */
+    &quicly_default_packet_allocator,
+    NULL,
+    NULL, /* on_stream_open */
+    &quicly_default_stream_scheduler,
+    NULL, /* on_conn_close */
+    &quicly_default_now,
+    {0, NULL}, /* event_log */
+};
+
+/* profile with a focus on reducing latency for the HTTP use case */
+const quicly_context_t quicly_performant_context = {
+    NULL,                         /* tls */
+    QUICLY_MAX_PACKET_SIZE,       /* max_packet_size */
+    &quicly_loss_performant_conf, /* loss */
     {
         {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
         16 * 1024 * 1024,                                    /* max_data */
@@ -216,10 +240,10 @@ void quicly_free_default_cid_encryptor(quicly_cid_encryptor_t *_self)
     free(self);
 }
 
-static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *_conn, int including_new_data)
+static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *_conn, int new_data_allowed)
 {
     struct _st_quicly_conn_public_t *conn = (struct _st_quicly_conn_public_t *)_conn;
-    if (including_new_data) {
+    if (new_data_allowed) {
         if (quicly_linklist_is_linked(&conn->_default_scheduler.new_data))
             return 1;
     }
@@ -264,9 +288,11 @@ static void default_stream_scheduler_clear(quicly_stream_scheduler_t *self, quic
 
 static void schedule_to_slot(quicly_linklist_t *slot, quicly_stream_t *stream)
 {
+    /* TODO Add logic that refrains from re-registering the object to the same slot. Otherwise, arrival of additional data moves a
+     * stream that is already in the send list to the end of the list */
     if (quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler))
         quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
-    quicly_linklist_insert(slot, &stream->_send_aux.pending_link.default_scheduler);
+    quicly_linklist_insert(slot->prev, &stream->_send_aux.pending_link.default_scheduler);
 }
 
 static void default_stream_scheduler_set_new_data(quicly_stream_scheduler_t *self, quicly_stream_t *stream)

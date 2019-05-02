@@ -84,8 +84,7 @@ typedef enum en_quicly_event_type_t {
     QUICLY_EVENT_TYPE_CRYPTO_DECRYPT,
     QUICLY_EVENT_TYPE_CRYPTO_HANDSHAKE,
     QUICLY_EVENT_TYPE_CRYPTO_UPDATE_SECRET,
-    QUICLY_EVENT_TYPE_CC_TLP,
-    QUICLY_EVENT_TYPE_CC_RTO,
+    QUICLY_EVENT_TYPE_PTO,
     QUICLY_EVENT_TYPE_CC_ACK_RECEIVED,
     QUICLY_EVENT_TYPE_CC_CONGESTION,
     QUICLY_EVENT_TYPE_STREAM_SEND,
@@ -149,9 +148,9 @@ typedef enum en_quicly_event_attribute_type_t {
     QUICLY_EVENT_ATTRIBUTE_END_OF_RECOVERY,
     QUICLY_EVENT_ATTRIBUTE_BYTES_IN_FLIGHT,
     QUICLY_EVENT_ATTRIBUTE_CWND,
+    QUICLY_EVENT_ATTRIBUTE_NUM_PTO,
     QUICLY_EVENT_ATTRIBUTE_NEWLY_ACKED,
     QUICLY_EVENT_ATTRIBUTE_FIRST_OCTET,
-    QUICLY_EVENT_ATTRIBUTE_CC_TYPE,
     QUICLY_EVENT_ATTRIBUTE_CC_END_OF_RECOVERY,
     QUICLY_EVENT_ATTRIBUTE_CC_EXIT_RECOVERY,
     QUICLY_EVENT_ATTRIBUTE_ACKED_PACKETS,
@@ -239,11 +238,11 @@ typedef struct st_quicly_cid_encryptor_t {
  */
 typedef struct st_quicly_stream_scheduler_t {
     /**
-     * returns if there's any data to send.  When `including_new_data` is set to true, the scheduler returns if there is any stream
+     * returns if there's any data to send.  When `new_data_allowed` is set to true, the scheduler returns if there is any stream
      * that have been registered.  When set to false, the scheduler should return if there is any stream registered by the
      * `set_non_new_data` callback.
      */
-    int (*can_send)(struct st_quicly_stream_scheduler_t *sched, quicly_conn_t *conn, int including_new_data);
+    int (*can_send)(struct st_quicly_stream_scheduler_t *sched, quicly_conn_t *conn, int new_data_allowed);
     /**
      * Called by quicly to emit stream data.  The scheduler should repeatedly choose a stream and call `quicly_send_stream` until
      * `quicly_can_send_stream` returns false.
@@ -448,17 +447,31 @@ struct st_quicly_conn_streamgroup_state_t {
     quicly_stream_id_t next_stream_id;
 };
 
+/**
+ * Values that do not need to be gathered upon the invocation of `quicly_get_stats`. We use typedef to define the same fields in
+ * the same order for quicly_stats_t and `struct st_quicly_public_conn_t::stats`.
+ */
+#define QUICLY_STATS_PREBUILT_FIELDS                                                                                               \
+    struct {                                                                                                                       \
+        uint64_t received;                                                                                                         \
+        uint64_t sent;                                                                                                             \
+        uint64_t lost;                                                                                                             \
+        uint64_t ack_received;                                                                                                     \
+    } num_packets;                                                                                                                 \
+    struct {                                                                                                                       \
+        uint64_t received;                                                                                                         \
+        uint64_t sent;                                                                                                             \
+    } num_bytes
+
 typedef struct st_quicly_stats_t {
-    struct {
-        uint64_t received;
-        uint64_t sent;
-        uint64_t lost;
-        uint64_t ack_received;
-    } num_packets;
-    struct {
-        uint64_t received;
-        uint64_t sent;
-    } num_bytes;
+    /**
+     * The pre-built fields. This MUST be the first member of `quicly_stats_t` so that we can use `memcpy`.
+     */
+    QUICLY_STATS_PREBUILT_FIELDS;
+    /**
+     * RTT
+     */
+    quicly_rtt_t rtt;
 } quicly_stats_t;
 
 struct _st_quicly_conn_public_t {
@@ -506,7 +519,9 @@ struct _st_quicly_conn_public_t {
         quicly_linklist_t new_data;
         quicly_linklist_t non_new_data;
     } _default_scheduler;
-    quicly_stats_t stats;
+    struct {
+        QUICLY_STATS_PREBUILT_FIELDS;
+    } stats;
     uint32_t version;
     void *data;
 };
@@ -758,7 +773,7 @@ static void quicly_get_peername(quicly_conn_t *conn, struct sockaddr **sa, sockl
 /**
  *
  */
-static quicly_stats_t *quicly_get_stats(quicly_conn_t *conn);
+int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats);
 /**
  *
  */
@@ -845,6 +860,10 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
  *
  */
 ptls_t *quicly_get_tls(quicly_conn_t *conn);
+/**
+ *
+ */
+quicly_stream_id_t quicly_get_ingress_max_streams(quicly_conn_t *conn, int uni);
 /**
  *
  */
@@ -1007,12 +1026,6 @@ inline int quicly_stream_has_receive_side(int is_client, quicly_stream_id_t stre
 inline int quicly_stream_is_self_initiated(quicly_stream_t *stream)
 {
     return quicly_stream_is_client_initiated(stream->stream_id) == quicly_is_client(stream->conn);
-}
-
-inline quicly_stats_t *quicly_get_stats(quicly_conn_t *conn)
-{
-    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
-    return &c->stats;
 }
 
 inline void quicly_byte_to_hex(char *dst, uint8_t v)
