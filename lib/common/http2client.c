@@ -641,8 +641,7 @@ static int handle_goaway_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2
     kh_foreach_value(conn->streams, stream, {
         if (stream->stream_id > payload.last_stream_id) {
             call_callback_with_error(stream, h2o_httpclient_error_refused_stream);
-        } else {
-            call_callback_with_error(stream, "GOAWAY received");
+            close_stream(stream);
         }
     });
 
