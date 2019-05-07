@@ -41,8 +41,7 @@ const quicly_context_t quicly_spec_context = {
     NULL, /* on_stream_open */
     &quicly_default_stream_scheduler,
     NULL, /* on_conn_close */
-    &quicly_default_now,
-    {0, NULL}, /* event_log */
+    &quicly_default_now
 };
 
 /* profile with a focus on reducing latency for the HTTP use case */
@@ -64,8 +63,7 @@ const quicly_context_t quicly_performant_context = {
     NULL, /* on_stream_open */
     &quicly_default_stream_scheduler,
     NULL, /* on_conn_close */
-    &quicly_default_now,
-    {0, NULL}, /* event_log */
+    &quicly_default_now
 };
 
 static quicly_datagram_t *default_alloc_packet(quicly_packet_allocator_t *self, socklen_t salen, size_t payloadsize)
@@ -329,80 +327,3 @@ static int64_t default_now(quicly_now_t *self)
 }
 
 quicly_now_t quicly_default_now = {default_now};
-
-struct st_quicly_default_event_log_t {
-    quicly_event_logger_t super;
-    FILE *fp;
-};
-
-static void default_event_log(quicly_event_logger_t *_self, quicly_event_type_t type, const quicly_event_attribute_t *attributes,
-                              size_t num_attributes)
-{
-    struct st_quicly_default_event_log_t *self = (void *)_self;
-    ptls_buffer_t buf;
-    uint8_t smallbuf[256];
-    size_t i, j;
-
-    ptls_buffer_init(&buf, smallbuf, sizeof(smallbuf));
-
-#define EMIT(s)                                                                                                                    \
-    do {                                                                                                                           \
-        const char *_s = (s);                                                                                                      \
-        size_t _l = strlen(_s);                                                                                                    \
-        if (ptls_buffer_reserve(&buf, _l) != 0)                                                                                    \
-            goto Exit;                                                                                                             \
-        memcpy(buf.base + buf.off, _s, _l);                                                                                        \
-        buf.off += _l;                                                                                                             \
-    } while (0)
-
-    EMIT("{\"type\":\"");
-    EMIT(quicly_event_type_names[type]);
-    EMIT("\"");
-    for (i = 0; i != num_attributes; ++i) {
-        const quicly_event_attribute_t *attr = attributes + i;
-        if (attr->type == QUICLY_EVENT_ATTRIBUTE_NULL)
-            continue;
-        EMIT(", \"");
-        EMIT(quicly_event_attribute_names[attr->type]);
-        if (QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MIN <= attr->type && attr->type < QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MAX) {
-            char int64buf[sizeof("-9223372036854775808")];
-            sprintf(int64buf, "\":%" PRId64, attr->value.i);
-            EMIT(int64buf);
-        } else if (QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MIN <= attr->type && attr->type < QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MAX) {
-            EMIT("\":\"");
-            if (ptls_buffer_reserve(&buf, attr->value.v.len * 2) != 0)
-                goto Exit;
-            for (j = 0; j != attr->value.v.len; ++j) {
-                quicly_byte_to_hex((void *)(buf.base + buf.off), attr->value.v.base[j]);
-                buf.off += 2;
-            }
-            EMIT("\"");
-        } else {
-            assert(!"unexpected type");
-        }
-    }
-    EMIT("}\n");
-
-#undef EMIT
-
-    fwrite(buf.base, 1, buf.off, self->fp);
-
-Exit:
-    ptls_buffer_dispose(&buf);
-}
-
-quicly_event_logger_t *quicly_new_default_event_logger(FILE *fp)
-{
-    struct st_quicly_default_event_log_t *self;
-
-    if ((self = malloc(sizeof(*self))) == NULL)
-        return NULL;
-    *self = (struct st_quicly_default_event_log_t){{default_event_log}, fp};
-    return &self->super;
-}
-
-void quicly_free_default_event_logger(quicly_event_logger_t *_self)
-{
-    struct st_quicly_default_event_log_t *self = (void *)_self;
-    free(self);
-}

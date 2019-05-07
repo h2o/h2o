@@ -723,7 +723,6 @@ static void usage(const char *cmd)
            "  -c certificate-file\n"
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
-           "  -e event-log-file         file to log events\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
            "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
            "  -l log-file               file to log traffic secrets\n"
@@ -774,16 +773,6 @@ int main(int argc, char **argv)
         case 'k':
             load_private_key(ctx.tls, optarg);
             break;
-        case 'e': {
-            FILE *fp;
-            if ((fp = fopen(optarg, "w")) == NULL) {
-                fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
-                exit(1);
-            }
-            setvbuf(fp, NULL, _IONBF, 0);
-            ctx.event_log.mask = UINT64_MAX;
-            ctx.event_log.cb = quicly_new_default_event_logger(fp);
-        } break;
         case 'i':
             if (sscanf(optarg, "%" SCNd64, &request_interval) != 1) {
                 fprintf(stderr, "failed to parse request interval: %s\n", optarg);

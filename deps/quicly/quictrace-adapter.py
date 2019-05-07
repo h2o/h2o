@@ -17,6 +17,8 @@ def transform(inf, outf):
     state = {}
 
     for line in inf:
+        if line[0] != "{":
+            continue
         trace = json.loads(line)
         if len(trace["type"]) < 11 or trace["type"][:9] != "quictrace": continue
 

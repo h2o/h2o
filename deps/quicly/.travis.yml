@@ -35,11 +35,12 @@ matrix:
         - make
         - make install
         - cd ..
-        - cmake -DOPENSSL_ROOT_DIR=$HOME/openssl-build .
+        - cmake -DOPENSSL_ROOT_DIR=$HOME/openssl-build -DWITH_DTRACE=OFF .
         - make && make check
     - os: osx
+      osx_image: xcode6.4
       env:
-        - label=osx/x86-64
+        - label=osx10.10/x86-64-dtrace
       before_install: &bs_osx
         - curl -L https://cpanmin.us | sudo perl - App::cpanminus
         - sudo cpanm --notest JSON
@@ -50,7 +51,7 @@ matrix:
         - make && make check
     - os: osx
       env:
-        - label=osx/i386
+        - label=osx10.10/i386
       before_install: *bs_osx
       script:
         - curl -O https://www.openssl.org/source/openssl-1.1.0i.tar.gz
@@ -60,5 +61,5 @@ matrix:
         - make
         - make install
         - cd ..
-        - cmake -DCMAKE_C_FLAGS=-m32 -DOPENSSL_ROOT_DIR=$HOME/openssl-build .
+        - cmake -DCMAKE_C_FLAGS=-m32 -DOPENSSL_ROOT_DIR=$HOME/openssl-build -DWITH_DTRACE=OFF .
         - make && make check

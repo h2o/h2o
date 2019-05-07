@@ -120,6 +120,10 @@
 		E93E54681F663849001C50FE /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E93E54BA1F69B750001C50FE /* loss.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = loss.h; sourceTree = "<group>"; };
 		E93E54BC1F6CA76C001C50FE /* loss.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
+		E95EBCCB227EC07C0022C32D /* CMakeLists.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CMakeLists.txt; sourceTree = "<group>"; };
+		E95EBCCD227EC13F0022C32D /* probes.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = probes.d; sourceTree = "<group>"; };
+		E95EBCCF227ECB4B0022C32D /* build_libFuzzer.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = build_libFuzzer.sh; sourceTree = "<group>"; };
+		E95EBCD5227F3F1F0022C32D /* probe2trace.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = probe2trace.pl; sourceTree = "<group>"; };
 		E98041C322383C5C008B9745 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
 		E98041C522383C62008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
 		E980421A223952D2008B9745 /* echo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = echo.c; sourceTree = "<group>"; };
@@ -199,6 +203,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E95EBCCE227ECB380022C32D /* misc */ = {
+			isa = PBXGroup;
+			children = (
+				E95EBCCF227ECB4B0022C32D /* build_libFuzzer.sh */,
+				E95EBCD5227F3F1F0022C32D /* probe2trace.pl */,
+			);
+			path = misc;
+			sourceTree = "<group>";
+		};
 		E9804219223952A2008B9745 /* examples */ = {
 			isa = PBXGroup;
 			children = (
@@ -218,9 +231,12 @@
 		E984480E1EA48BD400390927 = {
 			isa = PBXGroup;
 			children = (
+				E95EBCCB227EC07C0022C32D /* CMakeLists.txt */,
 				E98448211EA48C0300390927 /* deps */,
 				E984481E1EA48BEE00390927 /* include */,
 				E984481F1EA48BF400390927 /* lib */,
+				E95EBCCE227ECB380022C32D /* misc */,
+				E95EBCCD227EC13F0022C32D /* probes.d */,
 				E98448201EA48BFC00390927 /* src */,
 				E9CC44121EC1926000DC7D3E /* t */,
 				E9804219223952A2008B9745 /* examples */,
