@@ -31,6 +31,9 @@
 #include <sys/time.h>
 #endif
 #include "picotls.h"
+#if PICOTLS_USE_DTRACE
+#include "picotls-probes.h"
+#endif
 
 #define PTLS_MAX_PLAINTEXT_RECORD_SIZE 16384
 #define PTLS_MAX_ENCRYPTED_RECORD_SIZE (16384 + 256)
@@ -89,6 +92,17 @@
 
 #ifndef PTLS_MEMORY_DEBUG
 #define PTLS_MEMORY_DEBUG 0
+#endif
+
+#if PICOTLS_USE_DTRACE
+#define PTLS_PROBE(LABEL, ...)                                                                                                     \
+    do {                                                                                                                           \
+        if (PTLS_UNLIKELY(PICOTLS_PICOTLS_##LABEL##_ENABLED())) {                                                                  \
+            PICOTLS_PICOTLS_##LABEL(__VA_ARGS__);                                                                                  \
+        }                                                                                                                          \
+    } while (0)
+#else
+#define PTLS_PROBE(LABEL, ...)
 #endif
 
 /**
@@ -783,11 +797,12 @@ int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end)
 
 static void log_secret(ptls_t *tls, const char *type, ptls_iovec_t secret)
 {
-    if (tls->ctx->log_event != NULL) {
-        char hexbuf[PTLS_MAX_DIGEST_SIZE * 2 + 1];
-        ptls_hexdump(hexbuf, secret.base, secret.len);
-        tls->ctx->log_event->cb(tls->ctx->log_event, tls, type, "%s", hexbuf);
-    }
+    char hexbuf[PTLS_MAX_DIGEST_SIZE * 2 + 1];
+
+    PTLS_PROBE(NEW_SECRET, tls, type, ptls_hexdump(hexbuf, secret.base, secret.len));
+
+    if (tls->ctx->log_event != NULL)
+        tls->ctx->log_event->cb(tls->ctx->log_event, tls, type, "%s", ptls_hexdump(hexbuf, secret.base, secret.len));
 }
 
 static void key_schedule_free(ptls_key_schedule_t *sched)
@@ -1176,6 +1191,12 @@ static int commission_handshake_secret(ptls_t *tls)
     tls->pending_handshake_secret = NULL;
 
     return setup_traffic_protection(tls, is_enc, NULL, 2, 1);
+}
+
+static inline void log_client_random(ptls_t *tls)
+{
+    PTLS_PROBE(CLIENT_RANDOM, tls,
+               ptls_hexdump(alloca(sizeof(tls->client_random) * 2 + 1), tls->client_random, sizeof(tls->client_random)));
 }
 
 #define SESSION_IDENTIFIER_MAGIC "ptls0001" /* the number should be changed upon incompatible format change */
@@ -3527,6 +3548,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     /* handle client_random, SNI, ESNI */
     if (!is_second_flight) {
         memcpy(tls->client_random, ch.random_bytes, sizeof(tls->client_random));
+        log_client_random(tls);
         ptls_iovec_t server_name = {NULL};
         int is_esni = 0;
         if (ch.esni.cipher != NULL && tls->ctx->esni != NULL) {
@@ -4078,17 +4100,20 @@ ptls_t *ptls_new(ptls_context_t *ctx, int is_server)
     if (!is_server) {
         tls->state = PTLS_STATE_CLIENT_HANDSHAKE_START;
         tls->ctx->random_bytes(tls->client_random, sizeof(tls->client_random));
+        log_client_random(tls);
         tls->ctx->random_bytes(tls->client.legacy_session_id, sizeof(tls->client.legacy_session_id));
     } else {
         tls->state = PTLS_STATE_SERVER_EXPECT_CLIENT_HELLO;
         tls->server.early_data_skipped_bytes = UINT32_MAX;
     }
 
+    PTLS_PROBE(NEW, tls, is_server);
     return tls;
 }
 
 void ptls_free(ptls_t *tls)
 {
+    PTLS_PROBE(FREE, tls);
     ptls_buffer_dispose(&tls->recvbuf.rec);
     ptls_buffer_dispose(&tls->recvbuf.mess);
     free_exporter_master_secret(tls, 1);
@@ -4327,6 +4352,9 @@ static int handle_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter
         assert(!"unexpected state");
         break;
     }
+
+    PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
+               message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
 
     return ret;
 }
@@ -5198,8 +5226,9 @@ int ptls_server_name_is_ipaddr(const char *name)
     return 0;
 }
 
-void ptls_hexdump(char *dst, const void *_src, size_t len)
+char *ptls_hexdump(char *buf, const void *_src, size_t len)
 {
+    char *dst = buf;
     const uint8_t *src = _src;
     size_t i;
 
@@ -5208,4 +5237,5 @@ void ptls_hexdump(char *dst, const void *_src, size_t len)
         *dst++ = "0123456789abcdef"[src[i] & 0xf];
     }
     *dst++ = '\0';
+    return buf;
 }

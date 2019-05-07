@@ -238,6 +238,11 @@
 		106530FE1DAD8A3C005B2C60 /* cli.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cli.c; sourceTree = "<group>"; };
 		10EACB171DCEAF0F00CA0341 /* libpicotls-minicrypto.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libpicotls-minicrypto.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E949EF272073629300511ECA /* minicrypto-pem.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "minicrypto-pem.c"; sourceTree = "<group>"; };
+		E95EBCC0227B71170022C32D /* probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = probes.d; sourceTree = "<group>"; };
+		E95EBCC3227E82E00022C32D /* dump-github-repository.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "dump-github-repository.pl"; sourceTree = "<group>"; };
+		E95EBCC5227E82FF0022C32D /* bpftrace.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = bpftrace.d; sourceTree = "<group>"; };
+		E95EBCC6227E82FF0022C32D /* dtrace.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = dtrace.d; sourceTree = "<group>"; };
+		E95EBCCA227EA0180022C32D /* dtrace-utils.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = "dtrace-utils.cmake"; sourceTree = "<group>"; };
 		E97577002212405300D1EF74 /* ffx.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ffx.h; sourceTree = "<group>"; };
 		E97577022212405D00D1EF74 /* ffx.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ffx.c; sourceTree = "<group>"; };
 		E97577072213148800D1EF74 /* e2e.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = e2e.t; sourceTree = "<group>"; };
@@ -363,10 +368,13 @@
 		106530A91D9985E0005B2C60 = {
 			isa = PBXGroup;
 			children = (
+				E95EBCC9227E9FF30022C32D /* cmake */,
 				E9E4B12C2181927900514B47 /* CMakeLists.txt */,
 				106530E11D9B4000005B2C60 /* deps */,
 				106530BC1D998616005B2C60 /* include */,
 				106530BD1D998624005B2C60 /* lib */,
+				E95EBCC2227E82BA0022C32D /* misc */,
+				E95EBCC0227B71170022C32D /* probes.d */,
 				E992F79920E99A080008154D /* src */,
 				106530C41D9B1A0E005B2C60 /* t */,
 				106530B31D9985E0005B2C60 /* Products */,
@@ -454,6 +462,32 @@
 				E9E4B1292180514000514B47 /* certificate_compression.h */,
 			);
 			path = picotls;
+			sourceTree = "<group>";
+		};
+		E95EBCC2227E82BA0022C32D /* misc */ = {
+			isa = PBXGroup;
+			children = (
+				E95EBCC4227E82F20022C32D /* dtrace */,
+				E95EBCC3227E82E00022C32D /* dump-github-repository.pl */,
+			);
+			path = misc;
+			sourceTree = "<group>";
+		};
+		E95EBCC4227E82F20022C32D /* dtrace */ = {
+			isa = PBXGroup;
+			children = (
+				E95EBCC5227E82FF0022C32D /* bpftrace.d */,
+				E95EBCC6227E82FF0022C32D /* dtrace.d */,
+			);
+			path = dtrace;
+			sourceTree = "<group>";
+		};
+		E95EBCC9227E9FF30022C32D /* cmake */ = {
+			isa = PBXGroup;
+			children = (
+				E95EBCCA227EA0180022C32D /* dtrace-utils.cmake */,
+			);
+			path = cmake;
 			sourceTree = "<group>";
 		};
 		E992F79920E99A080008154D /* src */ = {

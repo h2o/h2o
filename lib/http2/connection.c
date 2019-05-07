@@ -793,7 +793,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         h2o_buffer_init(&stream->req._req_body.body, &h2o_socket_buffer_prototype);
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
-        /* request is complete, handle it */
+        /* request headers are complete, handle it */
         return handle_incoming_request(conn, stream, payload.headers, payload.headers_len, err_desc);
     }
 
