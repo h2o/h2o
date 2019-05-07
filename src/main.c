@@ -1243,42 +1243,13 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     } else if (strcmp(type, "quic") == 0) {
 
         /* QUIC socket */
-        yoml_t **event_log_node = NULL;
-        quicly_event_logger_t *event_logger = NULL;
-        uint64_t event_log_mask = UINT64_MAX;
         struct addrinfo *res, *ai;
         if (ssl_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "QUIC endpoint must have an accompanying SSL configuration");
             return -1;
         }
         if (quic_node != NULL) {
-            if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "event-log:sm", &event_log_node) != 0)
-                return -1;
-            if (event_log_node != NULL) {
-                const char *event_log_fn;
-                FILE *event_log_fp;
-                if ((*event_log_node)->type == YOML_TYPE_SCALAR) {
-                    event_log_fn = (*event_log_node)->data.scalar;
-                } else {
-                    assert((*event_log_node)->type == YOML_TYPE_MAPPING);
-                    yoml_t **fn_node = NULL, **mask_node = NULL;
-                    if (h2o_configurator_parse_mapping(cmd, *event_log_node, "file:s", "mask:s", &fn_node, &mask_node) != 0)
-                        return -1;
-                    event_log_fn = (*fn_node)->data.scalar;
-                    if (mask_node != NULL) {
-                        if (sscanf((*mask_node)->data.scalar, "%" PRIu64, &event_log_mask) != 1) {
-                            h2o_configurator_errprintf(cmd, *mask_node, "failed to parse the mask number");
-                            return -1;
-                        }
-                    }
-                }
-                if ((event_log_fp = fopen(event_log_fn, "a")) == NULL) {
-                    h2o_configurator_errprintf(cmd, *event_log_node, "failed to open event log file:%s:%s\n", event_log_fn,
-                                               strerror(errno));
-                    return -1;
-                }
-                event_logger = quicly_new_default_event_logger(event_log_fp);
-            }
+            /* no customization yet */
         }
         if ((res = resolve_address(cmd, node, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
             return -1;
@@ -1302,10 +1273,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 *quic = quicly_performant_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->transport_params.max_streams_uni = 10;
-                if (event_logger != NULL) {
-                    quic->event_log.cb = event_logger;
-                    quic->event_log.mask = event_log_mask;
-                }
                 quic->stream_open = &h2o_http3_server_on_stream_open;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
