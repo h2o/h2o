@@ -163,14 +163,14 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
 #undef ADD_OBSERVATION
 }
 
-void on_context_init(struct st_h2o_logger_t *self, h2o_context_t *ctx)
+static void on_context_init(struct st_h2o_logger_t *self, h2o_context_t *ctx)
 {
     struct st_duration_stats_t *duration_stats = h2o_mem_alloc(sizeof(struct st_duration_stats_t));
     duration_stats_init(duration_stats);
     h2o_context_set_logger_context(ctx, self, duration_stats);
 }
 
-void on_context_dispose(struct st_h2o_logger_t *self, h2o_context_t *ctx)
+static void on_context_dispose(struct st_h2o_logger_t *self, h2o_context_t *ctx)
 {
     struct st_duration_stats_t *duration_stats;
     duration_stats = h2o_context_get_logger_context(ctx, self);
