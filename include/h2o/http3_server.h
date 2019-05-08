@@ -45,5 +45,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr
  *
  */
 extern quicly_stream_open_t h2o_http3_server_on_stream_open;
+/**
+ *
+ */
+extern quicly_stream_scheduler_t h2o_http3_server_stream_scheduler;
 
 #endif
