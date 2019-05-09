@@ -39,6 +39,10 @@ struct st_duration_stats_t {
 
 struct st_duration_agg_stats_t {
     struct st_duration_stats_t stats;
+    /**
+     * average event loop latency per worker thread
+     */
+    H2O_VECTOR(uint64_t) evloop_latency;
     pthread_mutex_t mutex;
 };
 
@@ -64,6 +68,11 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
         ADD_DURATION(response_time);
         ADD_DURATION(total_time);
 #undef ADD_DURATION
+        if (agg_stats->evloop_latency.capacity <= ctx->thread_index) {
+            h2o_vector_reserve(NULL, &agg_stats->evloop_latency, ctx->thread_index + 1);
+        }
+        agg_stats->evloop_latency.entries[ctx->thread_index] = h2o_evloop_get_execution_time(ctx->loop);
+        agg_stats->evloop_latency.size++;
         pthread_mutex_unlock(&agg_stats->mutex);
     }
 }
@@ -85,6 +94,7 @@ static void *durations_status_init(void)
 
     agg_stats = h2o_mem_alloc(sizeof(*agg_stats));
 
+    memset(&agg_stats->evloop_latency, 0, sizeof(agg_stats->evloop_latency));
     duration_stats_init(&agg_stats->stats);
     pthread_mutex_init(&agg_stats->mutex, NULL);
 
@@ -125,12 +135,17 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
             "request-total-time") "," DURATION_FMT("process-time") "," DURATION_FMT("response-time") "," DURATION_FMT("duration"),
         DURATION_VALS(connect_time), DURATION_VALS(header_time), DURATION_VALS(body_time), DURATION_VALS(request_total_time),
         DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(total_time));
-
-#undef BUFSIZE
 #undef DURATION_FMT
 #undef DURATION_VALS
-
+    ret.len += sprintf(ret.base + ret.len, ",\n\"evloop-latency\": [");
+    for(int i = 0; i < agg_stats->evloop_latency.size; i++) {
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%llu,", agg_stats->evloop_latency.entries[i]);
+    }
+    /* overwrite the final comma */
+    ret.len += snprintf(ret.base + ret.len - 1, BUFSIZE - ret.len, "]\n") - 1;
+#undef BUFSIZE
     duration_stats_free(&agg_stats->stats);
+    free(agg_stats->evloop_latency.entries);
     pthread_mutex_destroy(&agg_stats->mutex);
 
     free(agg_stats);
