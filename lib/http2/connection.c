@@ -647,16 +647,18 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
 
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        finish_body_streaming(stream);
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
+            h2o_http2_stream_close(conn, stream);
+        }
+        return;
+    }
+
     if (h2o_send_state_is_in_progress(send_state)) {
         assert(written != 0);
         update_stream_input_window(conn, stream, written);
-    }
-
-    if (send_state == H2O_SEND_STATE_ERROR) {
-        /* error while streaming request body */
-        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
-        h2o_http2_stream_reset(conn, stream);
-        return;
     }
 
     if (stream->blocked_by_server && h2o_http2_window_get_avail(&stream->input_window.window) > 0) {

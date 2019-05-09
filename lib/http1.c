@@ -195,13 +195,19 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
 #define DECL_ENTITY_READ_SEND_ERROR_XXX(status_)                                                                                   \
     static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
     {                                                                                                                              \
-        if (conn->_ostr_final.state > OSTREAM_STATE_HEAD)                                                                                        \
-            return;                                                                                                                \
+        conn->req.proceed_req = NULL;                                                                                              \
         conn->_req_entity_reader = NULL;                                                                                           \
         set_timeout(conn, 0, NULL);                                                                                                \
         h2o_socket_read_stop(conn->sock);                                                                                          \
-        conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                       \
-        h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                          \
+        if (conn->_ostr_final.state == OSTREAM_STATE_HEAD) {                                                                       \
+            conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                   \
+            h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                      \
+        } else {                                                                                                                   \
+            conn->req.http1_is_persistent = 0;                                                                                     \
+            if (conn->_ostr_final.state == OSTREAM_STATE_DONE) {                                                                   \
+                cleanup_connection(conn);                                                                                          \
+            }                                                                                                                      \
+        }                                                                                                                          \
     }
 
 DECL_ENTITY_READ_SEND_ERROR_XXX(400)
@@ -482,6 +488,12 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
 static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
+
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
+        return;
+    }
+
     set_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
     return;
@@ -499,7 +511,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, payload.len, is_end_entity);
+        proceed_request(&conn->req, payload.len, is_end_entity ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
     }
     return 0;
 }
