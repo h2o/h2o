@@ -562,7 +562,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         if (self->req_done)
             detach_client(self);
         h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
-        return NULL;
+        return NULL; /* TODO this returning NULL causes keepalive to be disabled in http1client. is this what we intended? */
     }
 
     /* if httpclient has no received body at this time, immediately send only headers using zero timeout */
