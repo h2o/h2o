@@ -42,6 +42,7 @@ EOS
                 $client->send_data('a' x 1024) or die $!;
                 my $output = $client->read(1000);
                 like $output, qr{HTTP/1.1 200 }is;
+                sleep 1;
                 ok $client->is_alive;
             }
         };
@@ -76,6 +77,7 @@ EOS
                     Time::HiRes::sleep(0.01);
                 }
                 like $output, qr{HTTP/1.1 200 }is;
+                sleep 1;
                 ok ! $client->is_alive;
             }
         };
@@ -110,6 +112,7 @@ EOS
                 $client->send_data('a' x 1024) or die $!;
                 $client->send_data('a' x 1024) or die $!;
                 like $output, qr{HTTP/1.1 200 }is;
+                sleep 1;
                 ok $client->is_alive;
             }
 
@@ -152,6 +155,7 @@ EOS
                 sleep 1;
                 my $output = $client->read(1000);
                 like $output, qr{HTTP/1.1 502 }is;
+                sleep 1;
                 ok ! $client->is_alive;
             }
             Time::HiRes::alarm(0);
@@ -188,6 +192,7 @@ EOS
                     Time::HiRes::sleep(0.01);
                 }
                 like $output, qr{HTTP/1.1 200 }is;
+                sleep 1;
                 ok ! $client->is_alive;
             }
             Time::HiRes::alarm(0);
