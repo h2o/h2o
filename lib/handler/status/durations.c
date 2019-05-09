@@ -35,14 +35,15 @@ struct st_duration_stats_t {
     struct gkc_summary *process_time;
     struct gkc_summary *response_time;
     struct gkc_summary *total_time;
-};
 
-struct st_duration_agg_stats_t {
-    struct st_duration_stats_t stats;
     /**
      * average event loop latency per worker thread
      */
     H2O_VECTOR(uint64_t) evloop_latency_ms;
+};
+
+struct st_duration_agg_stats_t {
+    struct st_duration_stats_t stats;
     pthread_mutex_t mutex;
 };
 
@@ -68,11 +69,11 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
         ADD_DURATION(response_time);
         ADD_DURATION(total_time);
 #undef ADD_DURATION
-        if (agg_stats->evloop_latency_ms.capacity <= ctx->thread_index) {
-            h2o_vector_reserve(NULL, &agg_stats->evloop_latency_ms, ctx->thread_index + 1);
+        if (agg_stats->stats.evloop_latency_ms.capacity <= ctx->thread_index) {
+            h2o_vector_reserve(NULL, &agg_stats->stats.evloop_latency_ms, ctx->thread_index + 1);
         }
-        agg_stats->evloop_latency_ms.entries[ctx->thread_index] = h2o_evloop_get_execution_time(ctx->loop);
-        agg_stats->evloop_latency_ms.size++;
+        agg_stats->stats.evloop_latency_ms.entries[ctx->thread_index] = h2o_evloop_get_execution_time(ctx->loop);
+        agg_stats->stats.evloop_latency_ms.size++;
         pthread_mutex_unlock(&agg_stats->mutex);
     }
 }
@@ -86,6 +87,7 @@ static void duration_stats_init(struct st_duration_stats_t *stats)
     stats->process_time = gkc_summary_alloc(GK_EPSILON);
     stats->response_time = gkc_summary_alloc(GK_EPSILON);
     stats->total_time = gkc_summary_alloc(GK_EPSILON);
+    memset(&stats->evloop_latency_ms, 0, sizeof(stats->evloop_latency_ms));
 }
 
 static void *durations_status_init(void)
@@ -94,7 +96,6 @@ static void *durations_status_init(void)
 
     agg_stats = h2o_mem_alloc(sizeof(*agg_stats));
 
-    memset(&agg_stats->evloop_latency_ms, 0, sizeof(agg_stats->evloop_latency_ms));
     duration_stats_init(&agg_stats->stats);
     pthread_mutex_init(&agg_stats->mutex, NULL);
 
@@ -138,14 +139,14 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
 #undef DURATION_FMT
 #undef DURATION_VALS
     ret.len += sprintf(ret.base + ret.len, ",\n\"evloop-latency-ms\": [");
-    for(int i = 0; i < agg_stats->evloop_latency_ms.size; i++) {
-        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%llu,", agg_stats->evloop_latency_ms.entries[i]);
+    for(int i = 0; i < agg_stats->stats.evloop_latency_ms.size; i++) {
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%llu,", agg_stats->stats.evloop_latency_ms.entries[i]);
     }
     /* overwrite the final comma */
     ret.len += snprintf(ret.base + ret.len - 1, BUFSIZE - ret.len, "]\n") - 1;
 #undef BUFSIZE
     duration_stats_free(&agg_stats->stats);
-    free(agg_stats->evloop_latency_ms.entries);
+    free(agg_stats->stats.evloop_latency_ms.entries);
     pthread_mutex_destroy(&agg_stats->mutex);
 
     free(agg_stats);
