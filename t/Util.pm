@@ -405,10 +405,13 @@ sub spawn_forked {
 
     my ($cout, $pin);
     pipe($pin, $cout);
+    my ($cerr, $pin2);
+    pipe($pin2, $cerr);
 
     my $pid = fork;
     if ($pid) {
         close $cout;
+        close $cerr;
         my $upstream; $upstream = +{
             pid => $pid,
             kill => sub {
@@ -418,11 +421,14 @@ sub spawn_forked {
             },
             guard => Scope::Guard->new(sub { $upstream->{kill}->() }),
             stdout => $pin,
+            stderr => $pin2,
         };
         return $upstream;
     }
     close $pin;
+    close $pin2;
     open(STDOUT, '>&=', fileno($cout)) or die $!;
+    open(STDERR, '>&=', fileno($cerr)) or die $!;
 
     $code->();
     exit;

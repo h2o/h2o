@@ -13,7 +13,7 @@ use t::Util;
 for my $comb (0..3) {
     my $up_is_h2 = $comb & 0b01;
     my $down_is_h2 = $comb & 0b10;
-    my $subtest_name = join(' x ', ($down_is_h2 ? 'h2 down' : 'h1 down'), ($up_is_h2 ? 'h2 up' : 'h1 up'));
+    my $subtest_name = "($comb) " . ($up_is_h2 ? 'h2 up' : 'h1 up') . ' x ' . ($down_is_h2 ? 'h2 down' : 'h1 down');
 
     subtest $subtest_name, sub {
         plan skip_all => "h2get not found" if $down_is_h2 && !h2get_exists();
@@ -34,15 +34,18 @@ for my $comb (0..3) {
                     h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
+                unlike $output, qr/RST_STREAM frame/s;
             } else {
                 my $client = H1Client->new($server);
-                $client->send_headers('POST', '/', ['content-length' => 1 + 1024]);
-                $client->send_data('a');
-                $client->send_data('a' x 1024);
-                my $output = $client->read(100);
+                $client->send_headers('POST', '/', ['content-length' => 1 + 1024]) or die $!;
+                $client->send_data('a') or die $!;
+                $client->send_data('a' x 1024) or die $!;
+                my $output = $client->read(1000);
                 like $output, qr{HTTP/1.1 200 }is;
+                ok $client->is_alive;
             }
         };
+
         subtest 'no_drain_body' => sub {
             my $upstream_port = empty_port({ host => '0.0.0.0' });
             my $upstream = create_upstream($upstream_port, $up_is_h2);
@@ -54,23 +57,26 @@ EOS
                     h2g.send_headers(req, 1, END_HEADERS)
                     h2g.send_data(1, 0, "a")
                     h2g.read_loop(100)
-                    3.times {|n|
-                      sleep 1
-                      h2g.send_data(1, n == 2 ? END_STREAM : 0, "a" * 1024)
-                      if n != 2
-                        break if h2g.read_loop(100)
-                      end
-                    }
+                    sleep 1
+                    # at this time h2o doesn't know the upstream connection is already closed
+                    # so write 10 times to ensure we can get a write error
+                    10.times { h2g.send_data(1, END_STREAM, "a" * 1024) }
+                    h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
-                like $output, qr/RST_STREAM frame/s;
+                like $output, qr/RST_STREAM frame .+error_code => 5/s;
             } else {
                 my $client = H1Client->new($server);
-                $client->send_headers('POST', '/', []);
-                $client->send_data('a');
-                $client->send_data('a' x 1024);
-                my $output = $client->read(100);
+                $client->send_headers('POST', '/', ['transfer-encoding' => 'chunked']) or die $!;
+                $client->send_data("1\r\na\r\n") or die $!;
+                my $output = $client->read(1000);
+                Time::HiRes::sleep(0.1);
+                for (1..10) {
+                    $client->send_data("400\r\n" . 'a' x 1024 . "\r\n", 1000) or last;
+                    Time::HiRes::sleep(0.01);
+                }
                 like $output, qr{HTTP/1.1 200 }is;
+                ok ! $client->is_alive;
             }
         };
 
@@ -82,30 +88,29 @@ EOS
             if ($down_is_h2) {
                 my $output = run_with_h2get_simple($server, <<"EOS");
                     req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
-                        "content-length" => "#{1 + 1024 * 3}" # to avoid chunked encoding
+                        "content-length" => "#{1 + 1024 * 2}"
                     }
                     h2g.send_headers(req, 1, END_HEADERS)
                     h2g.send_data(1, 0, "a")
                     h2g.read_loop(100)
-                    3.times {|n|
-                      sleep 1
-                      h2g.send_data(1, n == 2 ? END_STREAM : 0, "a" * 1024)
-                      if n != 2
-                        break if h2g.read_loop(100)
-                      end
-                    }
+                    sleep 1
+                    h2g.send_data(1, 0, "a" * 1024)
+                    h2g.read_loop(100)
+                    sleep 1
+                    h2g.send_data(1, END_STREAM, "a" * 1024)
+                    h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
                 unlike $output, qr/RST_STREAM frame/s;
             } else {
                 my $client = H1Client->new($server);
-                $client->send_headers('POST', '/', ['content-length' => 1 + 1024 * 3]);
-                $client->send_data('a');
-                my $output = $client->read(100);
-                $client->send_data('a' x 1024);
-                $client->send_data('a' x 1024);
-                $client->send_data('a' x 1024);
+                $client->send_headers('POST', '/', ['content-length' => 1 + 1024 * 2]) or die $!;
+                $client->send_data('a') or die $!;
+                my $output = $client->read(1000);
+                $client->send_data('a' x 1024) or die $!;
+                $client->send_data('a' x 1024) or die $!;
                 like $output, qr{HTTP/1.1 200 }is;
+                ok $client->is_alive;
             }
 
             if ($up_is_h2) {
@@ -117,7 +122,7 @@ EOS
 
                 $upstream->{kill}->();
                 my $log = join('', readline($upstream->{stdout}));
-                like $log, qr/received @{[1 + 1024 * 3]} bytes/;
+                like $log, qr/received @{[1 + 1024 * 2]} bytes/;
                 like $log, qr/accepted request 2/;
             }
         };
@@ -139,14 +144,15 @@ EOS
                     h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '502'/s;
-                unlike $output, qr/RST_STREAM frame/s;
+                like $output, qr/RST_STREAM frame .+error_code => 5/s;
             } else {
                 my $client = H1Client->new($server);
-                $client->send_headers('POST', '/', ['content-length' => 1 + 1024]);
-                $client->send_data('a');
+                $client->send_headers('POST', '/', ['content-length' => 1 + 1024]) or die $!;
+                $client->send_data('a') or die $!;
                 sleep 1;
-                my $output = $client->read(100);
+                my $output = $client->read(1000);
                 like $output, qr{HTTP/1.1 502 }is;
+                ok ! $client->is_alive;
             }
             Time::HiRes::alarm(0);
         };
@@ -166,23 +172,23 @@ EOS
                     h2g.send_data(1, 0, "a")
                     h2g.read_loop(100)
                     sleep 1
-                    # write 10 times to ensure we can get a write error
-                    10.times {
-                        h2g.send_data(1, 0, "a" * 1024)
-                    }
+                    10.times { h2g.send_data(1, 0, "a" * 1024) }
                     h2g.read_loop(100)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
-                like $output, qr/RST_STREAM frame/s;
+                like $output, qr/RST_STREAM frame .+error_code => 5/s;
             } else {
                 my $client = H1Client->new($server);
-                $client->send_headers('POST', '/', ['content-length' => 1 + 1024 * 1]);
-                $client->send_data('a');
+                $client->send_headers('POST', '/', ['content-length' => 1 + 1024 * 10]) or die $!;
+                $client->send_data('a') or die $!;
                 sleep 1;
-                # ditto
-                $client->send_data('a' x 1024) for (1..10);
                 my $output = $client->read(100);
+                for (1..10) {
+                    $client->send_data('a' x 1024, 1000) or last;
+                    Time::HiRes::sleep(0.01);
+                }
                 like $output, qr{HTTP/1.1 200 }is;
+                ok ! $client->is_alive;
             }
             Time::HiRes::alarm(0);
         };
@@ -231,7 +237,7 @@ sub create_h1_upstream {
             Proto => 'tcp',
             Listen => 1,
             Reuse => 1
-        );
+        ) or die $!;
         my $req = 0;
         while (my $client = $server->accept) {
             say "accepted request @{[++$req]}";
@@ -275,31 +281,37 @@ sub create_h2_upstream {
     my ($upstream_port, $opts) = @_;
     my $upstream;
     my $data_size = 0;
-    my $send_headers; $send_headers = sub {
+    my $send_response; $send_response = sub {
         my ($conn, $stream_id) = @_;
         $conn->send_headers($stream_id, [ ':status' => 200 ], 0);
-        # $conn->send_data($stream_id, 'hello', 1);
+        $conn->send_data($stream_id, 'hello', 1);
+        $conn->{_state}->{after_write} = sub { Time::HiRes::sleep(0.2) };
         unless ($opts->{drain_body}) {
             $conn->{_state}->{closed} = 1;
-            $conn->{_state}->{after_write} = sub { Time::HiRes::sleep(0.1) };
         }
-        $send_headers = undef;
+        $send_response = undef;
     };
     $upstream = spawn_h2_server($upstream_port, +{}, +{
         &HEADERS => sub {
             my ($conn, $stream_id, $headers) = @_;
-            return unless $send_headers;
+            return unless $send_response;
             if (!$opts->{wait_body}) {
-                $send_headers->($conn, $stream_id);
+                $conn->{_state}->{after_read} = sub {
+                    $send_response->($conn, $stream_id);
+                };
             }
         },
         &DATA => sub {
             my ($conn, $stream_id, $data) = @_;
-            return unless $send_headers;
+            my $s = $conn->stream($stream_id) or die 'oops';
+            $s->{data} .= $data;
+            return unless $send_response;
             if ($opts->{wait_body}) {
                 $data_size += length($data);
                 if ($data_size >= $opts->{wait_body}) {
-                    $send_headers->($conn, $stream_id);
+                    $conn->{_state}->{after_read} = sub {
+                        $send_response->($conn, $stream_id);
+                    };
                 }
             }
         },
@@ -307,37 +319,92 @@ sub create_h2_upstream {
 }
 
 package H1Client;
+use IO::Select;
+use Socket;
+use Errno qw(EAGAIN EWOULDBLOCK);
+use Test::More;
+use Scope::Guard;
+
 sub new {
     my ($class, $server) = @_;
-    my $sock = IO::Socket::SSL->new(
-        PeerHost => '127.0.0.1',
-        PeerPort => $server->{tls_port},
-        Blocking => 0,
-        SSL_verify_mode => 0,
-    ) or die "failed to create h1client: $!";
-    return bless {
-        sock => $sock,
-        guard => Scope::Guard->new(sub { $sock->close }),
+
+    my $self; $self = bless {
+        sock => undef,
+        # guard => Scope::Guard->new(sub { diag 'GUARD HAPPEN'; $self->close }),
     }, $class;
+
+    my $retry = 5;
+    my $last_error = '';
+    while (1) {
+        if ($retry-- == 0) {
+            die "failed to create h1client: $last_error";
+        }
+        $self->{sock} = IO::Socket::INET->new(
+            PeerHost => '127.0.0.1',
+            PeerPort => $server->{port},
+            Blocking => 0,
+        );
+        if (! $self->{sock}) {
+            $last_error = $! if $!;
+        } else {
+            Time::HiRes::sleep(0.1);
+            if (! $self->is_alive) {
+                $last_error = 'not alive';
+            } elsif (! defined $self->write('')) { # ENOTCONN
+                $last_error = $! if $!;
+            } else {
+                last;
+            }
+            $self->close;
+        }
+        diag "socket retrying.. $retry: $last_error";
+        Time::HiRes::sleep(0.1);
+    }
+
+    $self;
+}
+
+sub DESTROY {
+    my ($self) = @_;
+    $self->close;
 }
 
 sub send_headers {
-    my ($self, $method, $path, $headers) = @_;
-    $self->{sock}->syswrite("$method $path HTTP/1.1\r\n");
+    my ($self, $method, $path, $headers, $timeout) = @_;
+    my $wlen = 0;
+    my $l;
+    $l = $self->write("$method $path HTTP/1.1\r\n", $timeout) or return $l;
+    $wlen += $l;
     while (my @pair = splice(@$headers, 0, 2)) {
-        $self->{sock}->syswrite("@{[$pair[0]]}: @{[$pair[1]]}\r\n");
+        $l = $self->write("@{[$pair[0]]}: @{[$pair[1]]}\r\n", $timeout) or return $l;
+        $wlen += $l;
     }
-    $self->{sock}->syswrite("\r\n");
+    $l = $self->write("\r\n", $timeout) or return $l;
+    $wlen += $l;
+    return $wlen;
 }
 
 sub send_data {
-    my ($self, $data) = @_;
-    $self->{sock}->syswrite($data);
+    my ($self, $data, $timeout) = @_;
+    $self->write($data, $timeout);
+}
+
+sub write {
+    my ($self, $data, $timeout) = @_;
+    return undef unless $self->{sock};
+    local $SIG{PIPE} = 'IGNORE';
+    my $sock = $self->{sock};
+    return $sock->syswrite($data) unless $timeout;
+    my $s = IO::Select->new($sock);
+    ($sock) = $s->can_write($timeout / 1000);
+    return undef unless $sock;
+    my $ret = $sock->syswrite($data);
+    $ret;
 }
 
 sub read {
     my ($self, $timeout) = @_;
-    use IO::Select;
+    return undef unless $self->{sock};
     my $s = IO::Select->new($self->{sock});
     my ($sock) = $s->can_read($timeout / 1000);
     return undef unless $sock;
@@ -347,5 +414,19 @@ sub read {
         $buf .= $chunk;
     }
     $buf;
+}
+
+sub is_alive {
+    my ($self) = @_;
+    return undef unless $self->{sock};
+    my $buf;
+    my $ret = $self->{sock}->recv($buf, 1, MSG_PEEK);
+    return $ret || ($! == EAGAIN || $! == EWOULDBLOCK);
+}
+
+sub close {
+    my ($self) = @_;
+    $self->{sock}->close if $self->{sock};
+    $self->{sock} = undef;
 }
 
