@@ -5,6 +5,7 @@ use Test::More;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
 use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states :limits :endpoints);
 use Scope::Guard;
+use Time::HiRes;
 use t::Util;
 $|=1;
 
@@ -81,6 +82,7 @@ subtest 'invalid content-length' => sub {
     like $headers, qr{^HTTP/[0-9.]+ 502}is;
     ok check_port($server->{port}), 'live check';
 
+    Time::HiRes::sleep(0.1);
     $upstream->{kill}->();
     my $log = join('', readline($upstream->{stdout}));
     like $log, qr{Receive reset stream with error code CANCEL};
