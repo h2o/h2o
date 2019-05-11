@@ -53,8 +53,12 @@ h2o_http2_stream_t *h2o_http2_stream_open(h2o_http2_conn_t *conn, uint32_t strea
     /* init request */
     h2o_init_request(&stream->req, &conn->super, src_req);
     stream->req.version = 0x200;
-    if (src_req != NULL)
+    if (src_req != NULL) {
         memset(&stream->req.upgrade, 0, sizeof(stream->req.upgrade));
+        /* steal request body */
+        stream->req._req_body = src_req->_req_body;
+        src_req->_req_body.body = NULL;
+    }
     stream->req._ostr_top = &stream->_ostr_final;
 
     h2o_http2_conn_register_stream(conn, stream);

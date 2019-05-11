@@ -464,7 +464,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
 
     if (is_end_entity) {
         conn->req.proceed_req = NULL;
-        h2o_process_request(&conn->req);
+        process_request(conn);
     } else {
         proceed_request(&conn->req, payload.len, is_end_entity);
     }
