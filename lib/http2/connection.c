@@ -774,21 +774,25 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         *err_desc = "invalid stream id in HEADERS frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
-    if (!(conn->pull_stream_ids.max_open < frame->stream_id)) {
-        if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL &&
-            stream->state >= H2O_HTTP2_STREAM_STATE_RECV_BODY) {
-            /* is a trailer */
-            if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0) {
-                *err_desc = "trailing HEADERS frame MUST have END_STREAM flag set";
-                return H2O_HTTP2_ERROR_PROTOCOL;
-            }
-            if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0)
-                goto PREPARE_FOR_CONTINUATION;
-            return handle_trailing_headers(conn, stream, payload.headers, payload.headers_len, err_desc);
-        } else {
-            *err_desc = "invalid stream id in HEADERS frame";
+    if (frame->stream_id <= conn->pull_stream_ids.max_open) {
+        if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL) {
+            *err_desc = "closed stream id in HEADERS frame";
             return H2O_HTTP2_ERROR_STREAM_CLOSED;
         }
+        if (stream->state < H2O_HTTP2_STREAM_STATE_RECV_BODY ||
+            (stream->state > H2O_HTTP2_STREAM_STATE_RECV_BODY && !stream->_conn_stream_in_progress)) {
+            *err_desc = "invalid stream id in HEADERS frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
+
+        /* is a trailer */
+        if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0) {
+            *err_desc = "trailing HEADERS frame MUST have END_STREAM flag set";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
+        if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0)
+            goto PREPARE_FOR_CONTINUATION;
+        return handle_trailing_headers(conn, stream, payload.headers, payload.headers_len, err_desc);
     }
     if (frame->stream_id == payload.priority.dependency) {
         *err_desc = "stream cannot depend on itself";
