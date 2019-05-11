@@ -1132,8 +1132,12 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     /* setup inbound */
     h2o_socket_read_start(conn->sock, on_read);
 
-    /* handle the request */
-    execute_or_enqueue_request(conn, h2o_http2_conn_get_stream(conn, 1));
+    /* handle the request (except for OPTIONS upgrade) */
+    h2o_http2_stream_t *upgrade_stream = h2o_http2_conn_get_stream(conn, 1);
+    h2o_iovec_t method = upgrade_stream->req.input.method;
+    if (!h2o_memis(method.base, method.len, H2O_STRLIT("OPTIONS"))) {
+        execute_or_enqueue_request(conn, upgrade_stream);
+    }
 
     if (conn->_http1_req_input->size > reqsize) {
         size_t remaining_bytes = conn->_http1_req_input->size - reqsize;
