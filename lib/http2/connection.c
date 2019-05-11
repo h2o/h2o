@@ -776,13 +776,12 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     }
     if (!(conn->pull_stream_ids.max_open < frame->stream_id)) {
         if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) != NULL &&
-            stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY) {
+            stream->state >= H2O_HTTP2_STREAM_STATE_RECV_BODY) {
             /* is a trailer */
             if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0) {
                 *err_desc = "trailing HEADERS frame MUST have END_STREAM flag set";
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
-            stream->req.entity = h2o_iovec_init(stream->req._req_body.body->bytes, stream->req._req_body.body->size);
             if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0)
                 goto PREPARE_FOR_CONTINUATION;
             return handle_trailing_headers(conn, stream, payload.headers, payload.headers_len, err_desc);
