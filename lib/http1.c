@@ -148,13 +148,18 @@ static void set_timeout(struct st_h2o_http1_conn_t *conn, uint64_t timeout, h2o_
         h2o_timer_link(conn->super.ctx->loop, timeout, &conn->_timeout_entry);
 }
 
-static void process_request(struct st_h2o_http1_conn_t *conn)
+static int should_upgrade_to_http2(struct st_h2o_http1_conn_t *conn)
 {
-    if (conn->sock->ssl == NULL && conn->req.upgrade.base != NULL && conn->super.ctx->globalconf->http1.upgrade_to_http2 &&
+    return (conn->sock->ssl == NULL && conn->req.upgrade.base != NULL && conn->super.ctx->globalconf->http1.upgrade_to_http2 &&
         conn->req.upgrade.len >= 3 && h2o_lcstris(conn->req.upgrade.base, 3, H2O_STRLIT("h2c")) &&
         (conn->req.upgrade.len == 3 ||
          (conn->req.upgrade.len == 6 && (memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-14")) == 0 ||
-                                         memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-16")) == 0)))) {
+                                         memcmp(conn->req.upgrade.base + 3, H2O_STRLIT("-16")) == 0))));
+}
+
+static void process_request(struct st_h2o_http1_conn_t *conn)
+{
+    if (should_upgrade_to_http2(conn)) {
         if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) == 0) {
             return;
         }
@@ -540,7 +545,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             if (create_entity_reader(conn, headers + entity_body_header_index) != 0) {
                 return;
             }
-            conn->req.write_req.cb = h2o_write_req_first;
+            conn->req.write_req.cb = should_upgrade_to_http2(conn) ? write_req_non_streaming : h2o_write_req_first;
             conn->req.write_req.on_streaming_selected = on_request_streaming_selected;
             conn->req.write_req.ctx = &conn->req;
             conn->_unconsumed_request_size = 0;
