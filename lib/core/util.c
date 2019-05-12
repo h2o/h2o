@@ -944,3 +944,105 @@ void h2o_cleanup_thread(void)
     h2o_mem_clear_recycle(&h2o_http2_wbuf_buffer_prototype.allocator);
     h2o_mem_clear_recycle(&h2o_socket_buffer_prototype.allocator);
 }
+
+#if H2O_USE_DTRACE && defined(__linux__)
+#include <linux/bpf.h>
+#include <linux/unistd.h>
+#include "h2o-probes.h"
+
+struct keyType {
+    u_int8_t ipa[16];
+    u_int8_t ipb[16];
+    long porta;
+    long portb;
+};
+
+inline int open_map(int *map_fd)
+{
+    char path[] = "/sys/fs/bpf/h2o_map";
+    union bpf_attr attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.pathname = (__u64)(unsigned long)&path[0];
+
+    *map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    return *map_fd;
+}
+
+inline int lookup_map(int *map_fd, const void *key, const void *value)
+{
+    union bpf_attr attr;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.map_fd = *map_fd;
+    attr.key = (__u64)(unsigned long)key;
+    attr.value = (__u64)(unsigned long)value;
+
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
+}
+
+inline void read_ip_port(struct sockaddr *sa, void *ip, long *port)
+{
+    if (sa->sa_family == AF_INET) {
+        struct sockaddr_in *sin = (void *)sa;
+        memcpy(ip, &sin->sin_addr, sizeof(sin->sin_addr));
+        *port = sin->sin_port;
+    } else if (sa->sa_family == AF_INET6) {
+        struct sockaddr_in6 *sin = (void *)sa;
+        memcpy(ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
+        *port = sin->sin6_port;
+    }
+}
+
+char h2o_trace_check_map(h2o_socket_t *sock, int *map_fd, int num_procs)
+{
+    // check for tracing enablement
+    if (H2O_UNLIKELY(!H2O_H2O_CONN_TRACING_ENABLED())) {
+
+        // cleanup opened map if it was opened
+        if (H2O_UNLIKELY(*map_fd > 0))
+            *map_fd = close(*map_fd);
+
+        return 0;
+    }
+
+    // try open map if not opened
+    if (*map_fd <= 0 && open_map(map_fd) <= 0)
+        return 1; // map can't be opened, fallback accepting probe
+
+    struct sockaddr_storage loc;
+    struct sockaddr_storage rem;
+    struct keyType key;
+    memset(&key, 0, sizeof(key));
+
+    // as PER_CPU maps are used, the lookup will return 1 value per cpu
+    __u64 vals[num_procs];
+    memset(&vals, 0, sizeof(vals));
+
+    // get sock/peer ip/ports
+    h2o_socket_getsockname(sock, (void *)&loc);
+    h2o_socket_getpeername(sock, (void *)&rem);
+
+    // read ip/ports, put parsed val into key structure
+    read_ip_port((void *)&loc, &key.ipa, &key.porta);
+    read_ip_port((void *)&rem, &key.ipb, &key.portb);
+
+    // lookup map for our key
+    if (lookup_map(map_fd, &key, &vals) == -1)
+        return 0; // key not in map, or errored - return 0
+
+    // return 1 if value present in map
+    for (int i = 0; i < num_procs; i++)
+        if (vals[i] > 0)
+            return 1;
+
+    // 0 otherwise - should never be called
+    H2O_H2O_CONN_TRACING(); // dummy call to a trace only used for checking enablement
+    return 0;
+}
+#else
+char h2o_trace_check_map(h2o_socket_t *sock, int *map_fd, int num_procs)
+{
+    return 1;
+}
+#endif

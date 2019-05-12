@@ -1429,7 +1429,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         }} /* loggers */
     };
 
-    h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &callbacks);
+    h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), sock, ctx, hosts, connected_at, &callbacks);
 
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->sock = sock;

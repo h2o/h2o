@@ -31,23 +31,30 @@
 #include "picotls.h"
 #include "h2o-probes.h"
 
+#define H2O_PROBE_CONN(label, _conn, ...)                                                                                          \
+    do {                                                                                                                           \
+        if (PTLS_UNLIKELY((*_conn).is_traced)) {                                                                                   \
+            H2O_PROBE(label, _conn, __VA_ARGS__);                                                                                  \
+        }                                                                                                                          \
+    } while (0)
+
 #define H2O_PROBE(label, ...)                                                                                                      \
     do {                                                                                                                           \
         if (PTLS_UNLIKELY(H2O_H2O_##label##_ENABLED())) {                                                                          \
             H2O_H2O_##label(__VA_ARGS__);                                                                                          \
         }                                                                                                                          \
     } while (0)
+
 #define H2O_PROBE_HEXDUMP(s, l)                                                                                                    \
     ({                                                                                                                             \
         size_t _l = (l);                                                                                                           \
         ptls_hexdump(alloca(_l * 2 + 1), (s), _l);                                                                                 \
     })
-
 #else
 
+#define H2O_PROBE_CONN(label, conn, ...)
 #define H2O_PROBE(label, ...)
 #define H2O_PROBE_HEXDUMP(s, l)
 
 #endif
-
 #endif

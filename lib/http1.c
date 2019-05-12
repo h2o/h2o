@@ -527,8 +527,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             send_bad_request(conn, "line folding of header fields is not supported");
             return;
         }
+
+        H2O_PROBE_CONN(RECEIVE_REQUEST_HEADERS, &conn->super, conn->_req_index, &conn->req.input.method, &conn->req.input.authority,
+                       &conn->req.input.path, conn->req.version, conn->req.headers.entries, conn->req.headers.size);
+
         H2O_PROBE(RECEIVE_REQUEST_HEADERS, &conn->super, conn->_req_index, &conn->req.input.method, &conn->req.input.authority,
                   &conn->req.input.path, conn->req.version, conn->req.headers.entries, conn->req.headers.size);
+
         if (entity_body_header_index != -1) {
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {
@@ -1127,7 +1132,7 @@ static int conn_is_h1(h2o_conn_t *conn)
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     struct st_h2o_http1_conn_t *conn =
-        (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
+        (void *)h2o_create_connection(sizeof(*conn), sock, ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
 
     /* zero-fill all properties expect req */
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));

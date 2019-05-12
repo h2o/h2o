@@ -2269,6 +2269,8 @@ int main(int argc, char **argv)
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);
 
+    conf.globalconf.num_procs = num_procs;
+
     /* setuid */
     if (conf.globalconf.user != NULL) {
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
