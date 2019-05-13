@@ -472,7 +472,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
             struct st_h2o_http3_server_stream_t *stream = qs->data;
             assert(stream != NULL);
             if (!h2o_http2_scheduler_is_open(&stream->scheduler))
-                h2o_http2_scheduler_open(&stream->scheduler, &conn->scheduler.root, H2O_HTTP3_DEFAULT_WEIGHT, 0, 1);
+                h2o_http2_scheduler_open(&stream->scheduler, &conn->scheduler.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
             *node = &stream->scheduler.node;
         } else {
             if (id / 4 >= quicly_get_ingress_max_streams(conn->h3.quic, 0)) {
@@ -480,7 +480,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
                 return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
             }
             h2o_http2_scheduler_openref_t *queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
-            h2o_http2_scheduler_open(queued_ref, &conn->scheduler.root, H2O_HTTP3_DEFAULT_WEIGHT, 0, 1);
+            h2o_http2_scheduler_open(queued_ref, &conn->scheduler.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
             if (conn->scheduler.queued_reqs == NULL) {
                 conn->scheduler.queued_reqs = kh_init(h2o_http3_queued_priority);
                 assert(conn->scheduler.queued_reqs != NULL);
@@ -507,7 +507,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
         }
         ref = conn->scheduler.placeholders + id;
         if (!h2o_http2_scheduler_is_open(ref))
-            h2o_http2_scheduler_open(ref, &conn->scheduler.root, H2O_HTTP3_DEFAULT_WEIGHT, 0, 1);
+            h2o_http2_scheduler_open(ref, &conn->scheduler.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
         *node = &ref->node;
 
     } break;
