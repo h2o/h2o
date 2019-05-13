@@ -467,7 +467,7 @@ h2o_evloop_t *create_evloop(size_t sz)
     loop->_statechanged.tail_ref = &loop->_statechanged.head;
     update_now(loop);
     /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
-    loop->_timeouts = h2o_timerwheel_create(3, loop->_now);
+    loop->_timeouts = h2o_timerwheel_create(3, loop->_now_ms);
 
     return loop;
 }
@@ -476,7 +476,7 @@ void update_now(h2o_evloop_t *loop)
 {
     gettimeofday(&loop->_tv_at, NULL);
     loop->_now_ns = (uint64_t)(loop->_tv_at.tv_sec * 1000000 + loop->_tv_at.tv_usec) * 1000;
-    loop->_now = loop->_now_ns / 1000000;
+    loop->_now_ms = loop->_now_ns / 1000000;
 }
 
 int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
@@ -485,10 +485,10 @@ int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait)
 
     update_now(loop);
 
-    if (wake_at <= loop->_now) {
+    if (wake_at <= loop->_now_ms) {
         max_wait = 0;
     } else {
-        uint64_t delta = wake_at - loop->_now;
+        uint64_t delta = wake_at - loop->_now_ms;
         if (delta < max_wait)
             max_wait = (int32_t)delta;
     }
@@ -607,7 +607,7 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
     while (1) {
         h2o_linklist_t expired;
         h2o_linklist_init_anchor(&expired);
-        h2o_timerwheel_get_expired(loop->_timeouts, loop->_now, &expired);
+        h2o_timerwheel_get_expired(loop->_timeouts, loop->_now_ms, &expired);
         if (h2o_linklist_is_empty(&expired))
             break;
         do {
@@ -623,7 +623,7 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 
     if (h2o_sliding_counter_is_running(&loop->exec_time_counter)) {
         update_now(loop);
-        h2o_sliding_counter_stop(&loop->exec_time_counter, loop->_now);
+        h2o_sliding_counter_stop(&loop->exec_time_counter, loop->_now_ms);
     }
 
     return 0;

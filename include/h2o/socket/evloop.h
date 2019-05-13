@@ -42,7 +42,7 @@ typedef struct st_h2o_evloop_t {
         struct st_h2o_evloop_socket_t *head;
         struct st_h2o_evloop_socket_t **tail_ref;
     } _statechanged;
-    uint64_t _now;
+    uint64_t _now_ms;
     uint64_t _now_ns;
     struct timeval _tv_at;
     h2o_timerwheel_t *_timeouts;
@@ -80,7 +80,7 @@ static inline struct timeval h2o_gettimeofday(h2o_evloop_t *loop)
 
 static inline uint64_t h2o_now(h2o_evloop_t *loop)
 {
-    return loop->_now;
+    return loop->_now_ms;
 }
 
 static inline uint64_t h2o_now_nanosec(h2o_evloop_t *loop)
@@ -95,7 +95,7 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 
 inline void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer)
 {
-    h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now + delay_ticks);
+    h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now_ms + delay_ticks);
 }
 
 #endif
