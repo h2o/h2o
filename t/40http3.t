@@ -23,6 +23,8 @@ sub doit {
 listen:
   type: quic
   port: $quic_port
+  quic:
+    event-log: /dev/stderr
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt

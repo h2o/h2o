@@ -509,8 +509,11 @@ static void assert_consistency(quicly_conn_t *conn, int run_timers)
     } else {
         assert(conn->egress.loss.loss_time == INT64_MAX);
     }
-    if (run_timers)
+    if (run_timers) {
+        if (!(now < conn->egress.loss.alarm_at || !conn->super.peer.address_validation.validated))
+            fprintf(stderr, "now=%" PRId64 ", alarm_at=%" PRId64 ", validated: %d\n", now, conn->egress.loss.alarm_at, conn->super.peer.address_validation.validated);
         assert(now < conn->egress.loss.alarm_at || !conn->super.peer.address_validation.validated);
+    }
 }
 
 static void init_max_streams(struct st_quicly_max_streams_t *m)
@@ -3045,15 +3048,19 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
     }
 
     /* handle timeouts */
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
     if (conn->egress.loss.alarm_at <= now) {
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
         if ((ret = quicly_loss_on_alarm(&conn->egress.loss, conn->egress.packet_number - 1,
                                         conn->egress.loss.largest_acked_packet_plus1 - 1, do_detect_loss, &min_packets_to_send,
                                         &restrict_sending)) != 0)
             goto Exit;
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
         assert(min_packets_to_send > 0);
         assert(min_packets_to_send <= s.max_packets);
 
         if (restrict_sending) {
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
             /* PTO  (try to send new data when handshake is done, otherwise retire oldest handshake packets and retransmit) */
             LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_PTO, INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
                                  INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd), INT_EVENT_ATTR(NUM_PTO, conn->egress.loss.pto_count));
@@ -3077,6 +3084,7 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
 
     s.send_window = calc_send_window(conn, min_packets_to_send * conn->super.ctx->max_packet_size, restrict_sending);
     if (s.send_window == 0) {
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
         ret = 0;
         goto Exit;
     }
@@ -3145,6 +3153,7 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
             goto Exit;
     }
 
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
     if (s.target.packet != NULL)
         commit_send_packet(conn, &s, 0);
 
@@ -3154,11 +3163,13 @@ Exit:
         ret = 0;
     if (ret == 0) {
         conn->egress.send_ack_at = INT64_MAX; /* we have sent ACKs for every epoch (or before address validation) */
+fprintf(stderr, "%s:%d,%zu\n", __FUNCTION__, __LINE__, s.num_packets);
         update_loss_alarm(conn);
         *num_packets = s.num_packets;
         if (*num_packets != 0)
             update_idle_timeout(conn, 0);
     }
+fprintf(stderr, "%s:%d,%zu\n", __FUNCTION__, __LINE__, s.num_packets);
     if (ret == 0)
         assert_consistency(conn, 1);
     return ret;

@@ -188,9 +188,13 @@ inline void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, u
     quicly_rtt_init(&r->rtt, conf, initial_rtt);
 }
 
+#include <stdio.h>
+#include <inttypes.h>
+
 inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last_retransmittable_sent_at, int has_outstanding,
                                      int can_send_stream_data, uint64_t total_bytes_sent)
 {
+fprintf(stderr, "%s:%d (now=%" PRId64 ", last_retransmittable_sent_at=%" PRId64 ", has_outstanding=%d, can_send_stream_data=%d\n", __FUNCTION__, __LINE__, now, last_retransmittable_sent_at, has_outstanding, can_send_stream_data);
     if (!has_outstanding) {
         /* Do not set alarm if there's no data oustanding */
         r->alarm_at = INT64_MAX;
@@ -202,8 +206,10 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
     if (r->loss_time != INT64_MAX) {
         /* time-threshold loss detection */
         alarm_duration = r->loss_time - last_retransmittable_sent_at;
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
     } else if (r->rtt.smoothed == 0) {
         alarm_duration = 2 * r->rtt.latest; /* should contain initial rtt */
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
     } else {
         /* PTO alarm */
         /* the bitshift below is fine; it would take more than a millenium to overflow either alarm_duration or pto_count, even when
@@ -219,6 +225,7 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
          */
         if (!can_send_stream_data && r->total_bytes_sent < total_bytes_sent && r->conf->num_speculative_ptos > 0 &&
             r->pto_count <= 0) {
+fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
             /* New tail, defined as (i) sender is not in PTO recovery, (ii) there is no stream data to send, and
              * (iii) new application data was sent since the last tail. Move the pto_count back to kick off speculative probing. */
             if (r->pto_count == 0)
@@ -228,6 +235,7 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
         }
         alarm_duration = quicly_rtt_get_pto(&r->rtt, *r->max_ack_delay, r->conf->min_pto);
         if (r->pto_count < 0 && !can_send_stream_data) {
+fprintf(stderr, "%s:%d: alarm_duration=%" PRId64 ", pto_count=%d\n", __FUNCTION__, __LINE__, alarm_duration, r->pto_count);
             /* Speculative probes sent under an RTT do not need to account for ack delay, since there is no expectation
              * of an ack being received before the probe is sent. */
             alarm_duration = quicly_rtt_get_pto(&r->rtt, 0, r->conf->min_pto);
@@ -237,6 +245,7 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
         } else if (r->pto_count >= 0)
             alarm_duration <<= r->pto_count;
     }
+fprintf(stderr, "%s:%d:alarm_at=%" PRId64 ", alarm_duration=%" PRId64 "\n", __FUNCTION__, __LINE__, r->alarm_at, alarm_duration);
     r->alarm_at = last_retransmittable_sent_at + alarm_duration;
     if (r->alarm_at < now)
         r->alarm_at = now;
