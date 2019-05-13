@@ -214,7 +214,7 @@ struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h
                                           h2o_strdup(NULL, origin->host.base, origin->host.len)};
     sprintf(conn->server.named_serv, "%" PRIu16, h2o_url_get_port(origin));
     conn->handshake_properties.client.negotiated_protocols.list = h2o_http3_alpn;
-    conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn);
+    conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]);
     h2o_linklist_insert(&ctx->http3->clients, &conn->clients_link);
     h2o_linklist_init_anchor(&conn->pending_requests);
 

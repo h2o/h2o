@@ -242,7 +242,7 @@ typedef struct st_h2o_http3_read_frame_t {
     uint64_t length;
 } h2o_http3_read_frame_t;
 
-const ptls_iovec_t h2o_http3_alpn[1];
+extern const ptls_iovec_t h2o_http3_alpn[1];
 
 /**
  * creates a unidirectional stream object
