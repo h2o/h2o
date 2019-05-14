@@ -156,6 +156,11 @@ static struct {
     char *error_log;
     int max_connections;
     /**
+     * In addition to max_connections, maximum number of H3 connections can be further capped by this configuration variable.
+     * Can be set to INT_MAX so that only max_connections would be used.
+     */
+    int max_quic_connections;
+    /**
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
      */
     H2O_VECTOR(int) thread_map;
@@ -180,12 +185,18 @@ static struct {
          * Number of currently handled incoming connections. Should use atomic functions to update the value.
          */
         int _num_connections;
+        /* unused buffers exist to avoid false sharing of the cache line */
         char _unused2_avoir_false_sharing[32];
+        /**
+         * Number of currently handled incoming QUIC connections.
+         */
+        int _num_quic_connections;
+        char _unused3_avoir_false_sharing[32];
         /**
          * Total number of opened incoming connections. Should use atomic functions to update the value.
          */
         unsigned long _num_sessions;
-        char _unused3_avoir_false_sharing[32];
+        char _unused4_avoir_false_sharing[32];
     } state;
     char *crash_handler;
     int crash_handler_wait_pipe_close;
@@ -198,6 +209,7 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
+    INT_MAX,                                /* max_quic_connections (INT_MAX = i.e., allow up to max_connections) */
     {NULL},                                 /* thread_map, initialized in main() */
     {0},                                    /* .quic = {num_threads (0 defaults to all), conn_callbacks (initialized in main()} */
     0,                                      /* tfo_queues, initialized in main() */
@@ -1087,6 +1099,11 @@ static int num_connections(int delta)
     return __sync_fetch_and_add(&conf.state._num_connections, delta);
 }
 
+static int num_quic_connections(int delta)
+{
+    return __sync_fetch_and_add(&conf.state._num_quic_connections, delta);
+}
+
 static unsigned long num_sessions(int delta)
 {
     return __sync_fetch_and_add(&conf.state._num_sessions, delta);
@@ -1105,6 +1122,8 @@ static void on_connection_close(void)
 static void on_http3_conn_destroy(h2o_http3_conn_t *conn)
 {
     on_connection_close();
+    num_quic_connections(-1);
+
     H2O_HTTP3_CONN_CALLBACKS.destroy_connection(conn);
 }
 
@@ -1393,6 +1412,11 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
+}
+
+static int on_config_max_quic_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections);
 }
 
 static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -1957,10 +1981,11 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
                                          quicly_decoded_packet_t *packets, size_t num_packets)
 {
-    if (num_connections(0) >= conf.max_connections) {
+    if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections) {
         return NULL;
     }
     num_connections(1);
+    num_quic_connections(1);
     num_sessions(1);
 
     return h2o_http3_server_accept(_ctx, sa, salen, packets, num_packets, &conf.quic.conn_callbacks);
@@ -2364,6 +2389,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
+        h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
         h2o_configurator_define_command(c, "num-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_threads);
         h2o_configurator_define_command(c, "num-quic-threads", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_num_quic_threads);
         h2o_configurator_define_command(c, "num-name-resolution-threads", H2O_CONFIGURATOR_FLAG_GLOBAL,
