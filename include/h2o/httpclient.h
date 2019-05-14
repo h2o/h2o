@@ -32,10 +32,40 @@ extern "C" {
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
+/**
+ * let's the client uses Firefox-like priority tree
+ */
+typedef enum en_h2o_httpclient_precedence_t {
+    /**
+     * like HTML
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_NORMAL,
+    /**
+     * like blocking CSS, JS
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_BLOCKING,
+    /**
+     * like image
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_NONBLOCKING,
+    /**
+     * like <script async>
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_DELAYED
+} h2o_httpclient_precedence_t;
+
+/**
+ * Additional properties related to the HTTP request being issued.
+ * When the connect callback is being called, the properties of the objects are set to their initial values. Applications MAY alter
+ * the properties to achieve desirable behavior. The reason we require the protocol stacks to initialize the values to their default
+ * values instead of requiring applications to set all the values correctly is to avoid requiring applications making changes
+ * every time a new field is added to the object.
+ */
 typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *proxy_protocol;
     int *chunked;
     h2o_iovec_t *connection_header;
+    h2o_httpclient_precedence_t precedence;
 } h2o_httpclient_properties_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);

@@ -301,6 +301,9 @@
 		E918FC9221365AB700CCB252 /* theft.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC492136598300CCB252 /* theft.c */; };
 		E918FC9321365ABC00CCB252 /* prop.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC3B213658BE00CCB252 /* prop.c */; };
 		E927CD632074855D00D4797E /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E927CD612074855300D4797E /* sha512.c */; };
+		E93C7F96226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
+		E93C7F98226EBEC9007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F95226EBEC9007BF39A /* frame.c */; };
+		E93C7F9A22701806007BF39A /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E93C7F9922701806007BF39A /* frame.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
 		E9708AE61E49A2420029E0A5 /* cifra.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD81E499E040029E0A5 /* cifra.c */; };
 		E9708AE71E49A2420029E0A5 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
@@ -1020,6 +1023,8 @@
 		E918FC5D2136598500CCB252 /* theft_autoshrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_autoshrink_internal.h; sourceTree = "<group>"; };
 		E918FC5E2136598600CCB252 /* theft_shrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink_internal.h; sourceTree = "<group>"; };
 		E927CD612074855300D4797E /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha512.c; sourceTree = "<group>"; };
+		E93C7F95226EBEC9007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
+		E93C7F9922701806007BF39A /* frame.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
 		E9708AD91E499E040029E0A5 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
 		E9708ADA1E499E040029E0A5 /* picotls.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotls.c; sourceTree = "<group>"; };
@@ -2270,6 +2275,7 @@
 		E901C438213E593D00D17C93 /* http3 */ = {
 			isa = PBXGroup;
 			children = (
+				E93C7F95226EBEC9007BF39A /* frame.c */,
 				E901C439213E59A000D17C93 /* qpack.c */,
 				E9E50476214C0385004DC170 /* common.c */,
 				E9E5048F21501BBA004DC170 /* server.c */,
@@ -2281,6 +2287,7 @@
 			isa = PBXGroup;
 			children = (
 				E901C43F2140CCB500D17C93 /* qpack.c */,
+				E93C7F9922701806007BF39A /* frame.c */,
 			);
 			path = http3;
 			sourceTree = "<group>";
@@ -2955,6 +2962,7 @@
 				10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */,
 				10AA2EA51A8D9999004322AC /* redirect.c in Sources */,
 				E98884CF21E7F3C80060F010 /* streambuf.c in Sources */,
+				E93C7F96226EBEC9007BF39A /* frame.c in Sources */,
 				E980423D2246304F008B9745 /* defaults.c in Sources */,
 				101B670C19ADD3380084A351 /* access_log.c in Sources */,
 				10BA72AA19AAD6300059392A /* stream.c in Sources */,
@@ -3060,6 +3068,7 @@
 				1024A4001D23606300EB13F1 /* cache_digests.c in Sources */,
 				E987E5F61FD8C04D00DE4346 /* entropy_encode.c in Sources */,
 				105534C91A3BB41C00627ECB /* proxy.c in Sources */,
+				E93C7F9A22701806007BF39A /* frame.c in Sources */,
 				107D4D461B5880BC004A9B21 /* dumper.c in Sources */,
 				107D4D451B5880BC004A9B21 /* api.c in Sources */,
 				E901C428213E529000D17C93 /* aes.c in Sources */,
@@ -3180,6 +3189,7 @@
 				E987E5D71FD7BEB500DE4346 /* bit_cost.c in Sources */,
 				E9708B631E52C80F0029E0A5 /* headers_util.c in Sources */,
 				E9708B541E52C7EE0029E0A5 /* configurator.c in Sources */,
+				E93C7F98226EBEC9007BF39A /* frame.c in Sources */,
 				E9708B6D1E52C8250029E0A5 /* gzip.c in Sources */,
 				E98884DA21E7F3D90060F010 /* streambuf.c in Sources */,
 				10756E2C1AC126420009BF57 /* emitter.c in Sources */,

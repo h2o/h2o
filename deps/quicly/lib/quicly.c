@@ -576,7 +576,7 @@ static void sched_stream_control(quicly_stream_t *stream)
     assert(stream->stream_id >= 0);
 
     if (!quicly_linklist_is_linked(&stream->_send_aux.pending_link.control))
-        quicly_linklist_insert(&stream->conn->pending_link.control, &stream->_send_aux.pending_link.control);
+        quicly_linklist_insert(stream->conn->pending_link.control.prev, &stream->_send_aux.pending_link.control);
 }
 
 static void resched_stream_data(quicly_stream_t *stream)
@@ -608,6 +608,7 @@ static void resched_stream_data(quicly_stream_t *stream)
             if (stream->sendstate.pending.ranges[0].start == stream->sendstate.size_inflight) {
                 scheduler->set_new_data(scheduler, stream);
             } else {
+                assert(stream->sendstate.pending.ranges[0].start < stream->sendstate.size_inflight);
                 scheduler->set_non_new_data(scheduler, stream);
             }
             goto Scheduling_Done;
@@ -874,6 +875,23 @@ ptls_t *quicly_get_tls(quicly_conn_t *conn)
     return conn->crypto.tls;
 }
 
+int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
+{
+    /* copy the pre-built stats fields */
+    memcpy(stats, &conn->super.stats, sizeof(conn->super.stats));
+
+    /* set or generate the non-pre-built stats fields here */
+    stats->rtt = conn->egress.loss.rtt;
+
+    return 0;
+}
+
+quicly_stream_id_t quicly_get_ingress_max_streams(quicly_conn_t *conn, int uni)
+{
+    quicly_maxsender_t *maxsender = uni ? conn->ingress.max_streams.uni : conn->ingress.max_streams.bidi;
+    return maxsender->max_committed;
+}
+
 void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed)
 {
     if (send_permitted != NULL)
@@ -900,15 +918,20 @@ static void update_idle_timeout(quicly_conn_t *conn, int is_in_receive)
     if (idle_msec == INT64_MAX)
         return;
 
-    uint32_t three_pto = 3 * quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.ctx->transport_params.max_ack_delay);
+    uint32_t three_pto = 3 * quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.ctx->transport_params.max_ack_delay,
+                                                conn->egress.loss.conf->min_pto);
     conn->idle_timeout.at = now + (idle_msec > three_pto ? idle_msec : three_pto);
     conn->idle_timeout.should_rearm_on_send = is_in_receive;
 }
 
 static void update_loss_alarm(quicly_conn_t *conn)
 {
-    quicly_loss_update_alarm(&conn->egress.loss, now, conn->egress.last_retransmittable_sent_at,
-                             conn->egress.sentmap.bytes_in_flight != 0 || conn->super.peer.address_validation.send_probe);
+    quicly_loss_update_alarm(
+        &conn->egress.loss, now, conn->egress.last_retransmittable_sent_at,
+        conn->egress.sentmap.bytes_in_flight != 0 || conn->super.peer.address_validation.send_probe,
+        conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn,
+                                                    conn->egress.max_data.sent < conn->egress.max_data.permitted),
+        conn->egress.max_data.sent);
 }
 
 static int create_handshake_flow(quicly_conn_t *conn, size_t epoch)
@@ -1227,7 +1250,8 @@ static int apply_stream_frame(quicly_stream_t *stream, quicly_stream_frame_t *fr
         if (stream->recvstate.received.ranges[stream->recvstate.received.num_ranges - 1].end < max_stream_data) {
             uint64_t newly_received =
                 max_stream_data - stream->recvstate.received.ranges[stream->recvstate.received.num_ranges - 1].end;
-            if (stream->conn->ingress.max_data.bytes_consumed + newly_received > stream->conn->ingress.max_data.sender.max_sent)
+            if (stream->conn->ingress.max_data.bytes_consumed + newly_received >
+                stream->conn->ingress.max_data.sender.max_committed)
                 return QUICLY_TRANSPORT_ERROR_FLOW_CONTROL;
             stream->conn->ingress.max_data.bytes_consumed += newly_received;
             /* FIXME send MAX_DATA if necessary */
@@ -1984,8 +2008,15 @@ static ssize_t round_send_window(ssize_t window)
     return window;
 }
 
-static size_t calc_send_window(quicly_conn_t *conn)
+/* Helper function to compute send window based on:
+ * * state of peer validation,
+ * * current cwnd,
+ * * minimum send requirements in |min_bytes_to_send|, and
+ * * if sending is to be restricted to the minimum, indicated in |restrict_sending|
+ */
+static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, int restrict_sending)
 {
+    /* If address is unvalidated, limit sending to 3x bytes received */
     if (!conn->super.peer.address_validation.validated) {
         uint64_t window = conn->super.stats.num_bytes.received * 3;
         if (window <= conn->super.stats.num_bytes.sent)
@@ -1993,20 +2024,21 @@ static size_t calc_send_window(quicly_conn_t *conn)
         return window - conn->super.stats.num_bytes.sent;
     }
 
-    if (conn->egress.cc.cwnd <= conn->egress.sentmap.bytes_in_flight)
-        return 0;
-    return conn->egress.cc.cwnd - conn->egress.sentmap.bytes_in_flight;
+    /* Validated address. Ensure there's enough window to send minimum number of packets */
+    if (!restrict_sending && conn->egress.cc.cwnd > conn->egress.sentmap.bytes_in_flight + min_bytes_to_send)
+        return conn->egress.cc.cwnd - conn->egress.sentmap.bytes_in_flight;
+    return min_bytes_to_send;
 }
 
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 {
-    if (calc_send_window(conn) > 0) {
+    if (calc_send_window(conn, 0, 0) > 0) {
         if (conn->crypto.pending_flows != 0)
             return 0;
         if (quicly_linklist_is_linked(&conn->pending_link.control))
             return 0;
-        int including_new_data = conn->egress.max_data.sent < conn->egress.max_data.permitted;
-        if (conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn, including_new_data))
+        int new_data_allowed = conn->egress.max_data.sent < conn->egress.max_data.permitted;
+        if (conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn, new_data_allowed))
             return 0;
     } else if (!conn->super.peer.address_validation.validated) {
         return conn->idle_timeout.at;
@@ -2048,8 +2080,6 @@ struct st_quicly_send_context_t {
     size_t max_packets;
     /* number of datagrams currently stored in |packets| */
     size_t num_packets;
-    /* minimum packets that need to be sent */
-    size_t min_packets_to_send;
     /* the currently available window for sending (in bytes) */
     ssize_t send_window;
     /* location where next frame should be written */
@@ -2590,12 +2620,11 @@ static int mark_packets_as_lost(quicly_conn_t *conn, size_t count)
  * application timer should be set for loss detection. if no timer is required,
  * loss_time is set to INT64_MAX.
  */
-static int do_detect_loss(quicly_loss_t *ld, uint64_t largest_pn, uint32_t delay_until_lost, int64_t *loss_time)
+static int do_detect_loss(quicly_loss_t *ld, uint64_t largest_acked, uint32_t delay_until_lost, int64_t *loss_time)
 {
     quicly_conn_t *conn = (void *)((char *)ld - offsetof(quicly_conn_t, egress.loss));
     quicly_sentmap_iter_t iter;
     const quicly_sent_packet_t *sent;
-    int64_t sent_before = now - delay_until_lost;
     uint64_t largest_newly_lost_pn = UINT64_MAX;
     int ret;
 
@@ -2603,11 +2632,12 @@ static int do_detect_loss(quicly_loss_t *ld, uint64_t largest_pn, uint32_t delay
 
     init_acks_iter(conn, &iter);
 
-    /* mark packets as lost if they are smaller than the largest_pn and outside
-     * the early retransmit window. in other words, packets that are not ready
-     * to be marked as lost according to the early retransmit timer.
+    /* Mark packets as lost if they are smaller than the largest_acked and outside either time-threshold or packet-threshold windows.
      */
-    while ((sent = quicly_sentmap_get(&iter))->packet_number < largest_pn && sent->sent_at <= sent_before) {
+    while ((sent = quicly_sentmap_get(&iter))->packet_number < largest_acked &&
+           (sent->sent_at <= now - delay_until_lost || /* time threshold */
+            (largest_acked >= QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD &&
+             sent->packet_number <= largest_acked - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD))) { /* packet threshold */
         if (sent->bytes_in_flight != 0 && conn->egress.max_lost_pn <= sent->packet_number) {
             if (sent->packet_number != largest_newly_lost_pn) {
                 ++conn->super.stats.num_packets.lost;
@@ -2633,8 +2663,8 @@ static int do_detect_loss(quicly_loss_t *ld, uint64_t largest_pn, uint32_t delay
                              INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd));
     }
 
-    /* schedule early retransmit alarm if there is a packet outstanding that is smaller than largest_pn */
-    while (sent->packet_number < largest_pn && sent->sent_at != INT64_MAX) {
+    /* schedule time-threshold alarm if there is a packet outstanding that is smaller than largest_acked */
+    while (sent->packet_number < largest_acked && sent->sent_at != INT64_MAX) {
         if (sent->bytes_in_flight != 0) {
             *loss_time = sent->sent_at + delay_until_lost;
             break;
@@ -2971,7 +3001,8 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
 int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_packets)
 {
     quicly_send_context_t s = {{NULL, -1}, {NULL, NULL, NULL}, packets, *num_packets};
-    int ret;
+    int restrict_sending = 0, ret;
+    size_t min_packets_to_send = 0;
 
     update_now(conn->super.ctx);
 
@@ -3015,15 +3046,17 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
 
     /* handle timeouts */
     if (conn->egress.loss.alarm_at <= now) {
-        if ((ret = quicly_loss_on_alarm(&conn->egress.loss, conn->egress.packet_number - 1, conn->egress.loss.largest_acked_packet,
-                                        do_detect_loss, &s.min_packets_to_send)) != 0)
+        if ((ret = quicly_loss_on_alarm(&conn->egress.loss, conn->egress.packet_number - 1,
+                                        conn->egress.loss.largest_acked_packet_plus1 - 1, do_detect_loss, &min_packets_to_send,
+                                        &restrict_sending)) != 0)
             goto Exit;
-        if (s.min_packets_to_send > 0) {
+        assert(min_packets_to_send > 0);
+        assert(min_packets_to_send <= s.max_packets);
+
+        if (restrict_sending) {
             /* PTO  (try to send new data when handshake is done, otherwise retire oldest handshake packets and retransmit) */
-            LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_CC_RTO, INT_EVENT_ATTR(CC_TYPE, 0),
-                                 INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
-                                 INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd));
-            /* TODO (jri): if r->pto_count > MAX_PTO, close connection */
+            LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_PTO, INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
+                                 INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd), INT_EVENT_ATTR(NUM_PTO, conn->egress.loss.pto_count));
             if (ptls_handshake_is_complete(conn->crypto.tls) &&
                 conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn,
                                                             conn->egress.max_data.sent < conn->egress.max_data.permitted)) {
@@ -3031,7 +3064,7 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
                  * in fact sends nothing) */
             } else {
                 /* mark something inflight as lost */
-                if ((ret = mark_packets_as_lost(conn, s.min_packets_to_send)) != 0)
+                if ((ret = mark_packets_as_lost(conn, min_packets_to_send)) != 0)
                     goto Exit;
             }
         }
@@ -3042,21 +3075,10 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
         return QUICLY_ERROR_FREE_CONNECTION;
     }
 
-    /* TODO (jri): The following three blocks not need to be done. Extend the CC API to allow additional packets when PTO fires.
-     * NOTE (kazuho): the change might need to go into calc_send_window. */
-    s.send_window = calc_send_window(conn);
-
-    /* before address validation, nothing can be sent when the window size is zero */
-    if (s.send_window == 0 && !conn->super.peer.address_validation.validated) {
+    s.send_window = calc_send_window(conn, min_packets_to_send * conn->super.ctx->max_packet_size, restrict_sending);
+    if (s.send_window == 0) {
         ret = 0;
         goto Exit;
-    }
-
-    /* If PTO, ensure there's enough send_window to send */
-    if (s.min_packets_to_send != 0) {
-        assert(s.min_packets_to_send <= s.max_packets);
-        if (s.send_window < s.min_packets_to_send * conn->super.ctx->max_packet_size)
-            s.send_window = s.min_packets_to_send * conn->super.ctx->max_packet_size;
     }
 
     /* send handshake flows */
@@ -3246,6 +3268,11 @@ static int get_stream_or_open_if_new(quicly_conn_t *conn, uint64_t stream_id, qu
         goto Exit;
 
     if (quicly_stream_is_client_initiated(stream_id) != quicly_is_client(conn)) {
+        /* check if stream id is within the bounds */
+        if (stream_id / 4 >= quicly_get_ingress_max_streams(conn, quicly_stream_is_unidirectional(stream_id))) {
+            ret = QUICLY_TRANSPORT_ERROR_STREAM_LIMIT;
+            goto Exit;
+        }
         /* open new streams upto given id */
         struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(conn, stream_id);
         if (group->next_stream_id <= stream_id) {
@@ -3425,7 +3452,7 @@ static int handle_data_blocked_frame(quicly_conn_t *conn, quicly_data_blocked_fr
 {
     LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_DATA_BLOCKED_RECEIVE, INT_EVENT_ATTR(LIMIT, frame->offset));
 
-    quicly_maxsender_reset(&conn->ingress.max_data.sender, 0);
+    quicly_maxsender_request_transmit(&conn->ingress.max_data.sender);
     if (should_send_max_data(conn))
         conn->egress.send_ack_at = 0;
 
@@ -3443,7 +3470,7 @@ static int handle_stream_data_blocked_frame(quicly_conn_t *conn, quicly_stream_d
         return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
 
     if ((stream = quicly_get_stream(conn, frame->stream_id)) != NULL) {
-        quicly_maxsender_reset(&stream->_send_aux.max_stream_data_sender, 0);
+        quicly_maxsender_request_transmit(&stream->_send_aux.max_stream_data_sender);
         if (should_send_max_stream_data(stream))
             sched_stream_control(stream);
     }
@@ -3458,7 +3485,7 @@ static int handle_streams_blocked_frame(quicly_conn_t *conn, int uni, quicly_str
 
     quicly_maxsender_t *maxsender = uni ? conn->ingress.max_streams.uni : conn->ingress.max_streams.bidi;
     if (maxsender != NULL) {
-        quicly_maxsender_reset(maxsender, 0);
+        quicly_maxsender_request_transmit(maxsender);
         if (should_send_max_streams(conn, uni))
             conn->egress.send_ack_at = 0;
     }
@@ -4306,8 +4333,7 @@ const char *quicly_event_type_names[] = {"connect",
                                          "crypto-decrypt",
                                          "crypto-handshake",
                                          "crypto-update-secret",
-                                         "cc-tlp",
-                                         "cc-rto",
+                                         "pto",
                                          "cc-ack-received",
                                          "cc-congestion",
                                          "stream-send",
@@ -4363,9 +4389,9 @@ const char *quicly_event_attribute_names[] = {NULL,
                                               "end-of-recovery",
                                               "inflight",
                                               "cwnd",
+                                              "pto-count",
                                               "newly-acked",
                                               "first-octet",
-                                              "cc-type",
                                               "cc-end-of-recovery",
                                               "cc-exit-recovery",
                                               "acked-packets",

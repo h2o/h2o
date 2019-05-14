@@ -32,9 +32,22 @@ extern "C" {
 #include "quicly/constants.h"
 
 typedef struct st_quicly_maxsender_t {
-    int64_t max_sent;
+    /**
+     * maximum value being announced (never decreases)
+     */
+    int64_t max_committed;
+    /**
+     * maximum value being acked by peer
+     */
     int64_t max_acked;
+    /**
+     * number of maximums inflight
+     */
     size_t num_inflight;
+    /**
+     *
+     */
+    unsigned force_send : 1;
 } quicly_maxsender_t;
 
 typedef struct st_quicly_maxsender_sent_t {
@@ -43,7 +56,7 @@ typedef struct st_quicly_maxsender_sent_t {
 
 static void quicly_maxsender_init(quicly_maxsender_t *m, int64_t initial_value);
 static void quicly_maxsender_dispose(quicly_maxsender_t *m);
-static void quicly_maxsender_reset(quicly_maxsender_t *m, int64_t initial_value);
+static void quicly_maxsender_request_transmit(quicly_maxsender_t *m);
 static int quicly_maxsender_should_send_max(quicly_maxsender_t *m, int64_t buffered_from, uint32_t window_size,
                                             uint32_t update_ratio);
 static int quicly_maxsender_should_send_blocked(quicly_maxsender_t *m, int64_t local_max);
@@ -55,39 +68,43 @@ static void quicly_maxsender_lost(quicly_maxsender_t *m, quicly_maxsender_sent_t
 
 inline void quicly_maxsender_init(quicly_maxsender_t *m, int64_t initial_value)
 {
-    m->max_sent = initial_value;
+    m->max_committed = initial_value;
     m->max_acked = initial_value;
     m->num_inflight = 0;
+    m->force_send = 0;
 }
 
 inline void quicly_maxsender_dispose(quicly_maxsender_t *m)
 {
 }
 
-inline void quicly_maxsender_reset(quicly_maxsender_t *m, int64_t initial_value)
+inline void quicly_maxsender_request_transmit(quicly_maxsender_t *m)
 {
-    m->max_sent = initial_value;
-    m->max_acked = initial_value;
+    m->force_send = 1;
 }
 
 inline int quicly_maxsender_should_send_max(quicly_maxsender_t *m, int64_t buffered_from, uint32_t window_size,
                                             uint32_t update_ratio)
 {
+    if (m->force_send)
+        return 1;
+
     /* ratio is permil (1/1024) */
     int64_t threshold = buffered_from + ((int64_t)window_size * update_ratio) / 1024;
-    return m->max_sent <= threshold;
+    return (m->num_inflight != 0 ? m->max_committed : m->max_acked) <= threshold;
 }
 
 inline int quicly_maxsender_should_send_blocked(quicly_maxsender_t *m, int64_t local_max)
 {
-    return m->max_sent < local_max;
+    return m->max_committed < local_max;
 }
 
 inline void quicly_maxsender_record(quicly_maxsender_t *m, int64_t value, quicly_maxsender_sent_t *sent)
 {
-    if (m->max_sent < value)
-        m->max_sent = value;
+    assert(value >= m->max_committed);
+    m->max_committed = value;
     ++m->num_inflight;
+    m->force_send = 0;
     sent->value = value;
 }
 
@@ -100,8 +117,7 @@ inline void quicly_maxsender_acked(quicly_maxsender_t *m, quicly_maxsender_sent_
 
 inline void quicly_maxsender_lost(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent)
 {
-    if (--m->num_inflight == 0)
-        m->max_sent = m->max_acked;
+    --m->num_inflight;
 }
 
 #ifdef __cplusplus

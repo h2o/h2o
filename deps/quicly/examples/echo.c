@@ -313,7 +313,7 @@ int main(int argc, char **argv)
     int ch, fd;
 
     /* setup quic context */
-    ctx = quicly_default_context;
+    ctx = quicly_spec_context;
     ctx.tls = &tlsctx;
     quicly_amend_ptls_context(ctx.tls);
     ctx.stream_open = &stream_open;

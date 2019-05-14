@@ -23,8 +23,21 @@
 #define h2o__http3_internal_h
 
 #include "khash.h"
+#include "quicly.h"
+#include "h2o/memory.h"
 
 KHASH_MAP_INIT_INT(h2o_http3_idmap, h2o_http3_conn_t *);
 KHASH_MAP_INIT_INT64(h2o_http3_acceptmap, h2o_http3_conn_t *);
+
+struct st_h2o_http3_egress_unistream_t {
+    /**
+     * back pointer
+     */
+    quicly_stream_t *quic;
+    /**
+     *
+     */
+    h2o_buffer_t *sendbuf;
+};
 
 #endif

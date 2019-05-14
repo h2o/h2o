@@ -21,8 +21,16 @@
  */
 #include "quicly/loss.h"
 
-quicly_loss_conf_t quicly_loss_default_conf = {
+quicly_loss_conf_t quicly_loss_spec_conf = {
     QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */
     QUICLY_DEFAULT_MIN_PTO,                         /* min_pto */
-    QUICLY_DEFAULT_INITIAL_RTT                      /* initial_rtt */
+    QUICLY_DEFAULT_INITIAL_RTT,                     /* initial_rtt */
+    0                                               /* number of speculative PTOs */
+};
+
+quicly_loss_conf_t quicly_loss_performant_conf = {
+    QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */
+    QUICLY_DEFAULT_MIN_PTO,                         /* min_pto */
+    QUICLY_DEFAULT_INITIAL_RTT,                     /* initial_rtt */
+    2                                               /* number of speculative PTOs */
 };

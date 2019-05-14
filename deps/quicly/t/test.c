@@ -340,7 +340,7 @@ int main(int argc, char **argv)
                                     0,
                                     NULL,
                                     1};
-    quic_ctx = quicly_default_context;
+    quic_ctx = quicly_spec_context;
     quic_ctx.tls = &tlsctx;
     quic_ctx.transport_params.max_streams_bidi = 10;
     quic_ctx.stream_open = &stream_open;
