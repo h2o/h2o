@@ -62,6 +62,11 @@ static inline uint64_t h2o_now(h2o_loop_t *loop)
     return uv_now(loop);
 }
 
+static inline uint64_t h2o_now_nanosec(h2o_loop_t *loop)
+{
+    return uv_now(loop) * 1000000;
+}
+
 inline void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb)
 {
     memset(timer, 0, sizeof(*timer));
