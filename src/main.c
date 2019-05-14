@@ -155,6 +155,10 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
+    /**
+     * In addition to max_connections, maximum number of H3 connections can be further capped by this configuration variable.
+     * Can be set to INT_MAX so that only max_connections would be used.
+     */
     int max_quic_connections;
     /**
      * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
@@ -205,7 +209,7 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
-    256,                                    /* max_quic_connections (25% of max_connections) */
+    INT_MAX,                                /* max_quic_connections (INT_MAX = i.e., allow up to max_connections) */
     {NULL},                                 /* thread_map, initialized in main() */
     {0},                                    /* .quic = {num_threads (0 defaults to all), conn_callbacks (initialized in main()} */
     0,                                      /* tfo_queues, initialized in main() */
@@ -1412,15 +1416,7 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
 
 static int on_config_max_quic_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections) != 0)
-        return -1;
-
-    if (conf.max_quic_connections > conf.max_connections) {
-        h2o_configurator_errprintf(cmd, node, "max_quic_connections: %d must be less than or equal to max_connections: %d",
-                                   conf.max_quic_connections, conf.max_connections);
-        return -1;
-    }
-    return 0;
+    return h2o_configurator_scanf(cmd, node, "%d", &conf.max_quic_connections);
 }
 
 static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
