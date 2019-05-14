@@ -181,16 +181,18 @@ static struct {
          * Number of currently handled incoming connections. Should use atomic functions to update the value.
          */
         int _num_connections;
+        /* unused buffers exist to avoid false sharing of the cache line */
+        char _unused2_avoir_false_sharing[32];
         /**
          * Number of currently handled incoming QUIC connections.
          */
         int _num_quic_connections;
-        char _unused2_avoir_false_sharing[32];
+        char _unused3_avoir_false_sharing[32];
         /**
          * Total number of opened incoming connections. Should use atomic functions to update the value.
          */
         unsigned long _num_sessions;
-        char _unused3_avoir_false_sharing[32];
+        char _unused4_avoir_false_sharing[32];
     } state;
     char *crash_handler;
     int crash_handler_wait_pipe_close;
