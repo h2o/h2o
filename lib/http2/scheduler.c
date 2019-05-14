@@ -188,13 +188,14 @@ static void convert_to_exclusive(h2o_http2_scheduler_node_t *parent, h2o_http2_s
 }
 
 void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *parent, uint16_t weight,
-                              int exclusive)
+                              int exclusive, int initialized_implicitly)
 {
     init_node(&ref->node, parent);
     ref->weight = weight;
     ref->_all_link = (h2o_linklist_t){NULL};
     ref->_active_cnt = 0;
     ref->_self_is_active = 0;
+    ref->initialized_implicitly = initialized_implicitly;
     ref->_queue_node = (h2o_http2_scheduler_queue_node_t){{NULL}};
 
     h2o_linklist_insert(&parent->_all_refs, &ref->_all_link);
@@ -251,6 +252,7 @@ void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_
     dst->_all_link = (h2o_linklist_t){NULL};
     dst->_active_cnt = src->_active_cnt;
     dst->_self_is_active = src->_self_is_active;
+    dst->initialized_implicitly = src->initialized_implicitly;
     dst->_queue_node._link = (h2o_linklist_t){NULL};
     dst->_queue_node._deficit = src->_queue_node._deficit;
 
@@ -310,14 +312,17 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
     assert(1 <= weight);
     assert(weight <= 257);
 
+    ref->initialized_implicitly = 0;
+
     /* do nothing if there'd be no change at all */
     if (ref->node._parent == new_parent && ref->weight == weight && !exclusive)
         return;
 
     ref->weight = weight;
 
-    { /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16
-         5.3.3) */
+    /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16
+       5.3.3) */
+    if (!h2o_linklist_is_empty(&ref->node._all_refs)) {
         h2o_http2_scheduler_node_t *t;
         for (t = new_parent; t->_parent != NULL; t = t->_parent) {
             if (t->_parent == &ref->node) {

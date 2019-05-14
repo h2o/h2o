@@ -20,8 +20,12 @@
  * IN THE SOFTWARE.
  */
 #include <sys/socket.h>
+#include "khash.h"
+#include "h2o/http2_scheduler.h"
 #include "h2o/http3_common.h"
 #include "h2o/http3_server.h"
+
+#define H2O_HTTP3_MAX_PLACEHOLDERS 10
 
 enum h2o_http3_server_stream_state {
     /**
@@ -45,6 +49,13 @@ enum h2o_http3_server_stream_state {
      */
     H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT
 };
+
+struct st_h2o_http3_priority_node_t {
+    h2o_http2_scheduler_openref_t ref;
+    quicly_stream_id_t id_;
+};
+
+KHASH_MAP_INIT_INT64(h2o_http3_queued_priority, h2o_http2_scheduler_openref_t *);
 
 struct st_h2o_http3_server_conn_t {
     h2o_conn_t super;
@@ -71,6 +82,14 @@ struct st_h2o_http3_server_conn_t {
         };
         uint32_t counters[1];
     } num_streams;
+    /**
+     * scheduler
+     */
+    struct {
+        h2o_http2_scheduler_node_t root;
+        h2o_http2_scheduler_openref_t placeholders[H2O_HTTP3_MAX_PLACEHOLDERS];
+        kh_h2o_http3_queued_priority_t *queued_reqs;
+    } scheduler;
 };
 
 struct st_h2o_http3_server_stream_t {
@@ -91,6 +110,7 @@ struct st_h2o_http3_server_stream_t {
     h2o_linklist_t link;
     h2o_ostream_t ostr_final;
     h2o_send_state_t send_state;
+    h2o_http2_scheduler_openref_t scheduler;
     h2o_req_t req;
 };
 
@@ -196,6 +216,8 @@ static void on_stream_destroy(quicly_stream_t *qs, int err)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
     --*get_state_counter(get_conn(stream), stream->state);
+    if (h2o_http2_scheduler_is_open(&stream->scheduler))
+        h2o_http2_scheduler_close(&stream->scheduler);
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
     if (stream->state != H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
@@ -433,6 +455,75 @@ static int on_receive_reset(quicly_stream_t *qs, int err)
     return 0;
 }
 
+static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2_scheduler_node_t **node,
+                              h2o_http3_priority_element_type_t type, int64_t id, h2o_http2_scheduler_node_t *self,
+                              const char **err_desc)
+{
+    switch (type) {
+    case H2O_HTTP3_PRIORITY_ELEMENT_TYPE_REQUEST_STREAM: {
+
+        /* Return the scheduler node of an existing request stream, or create a queued entry and returns that */
+        quicly_stream_t *qs;
+        if (!(quicly_stream_is_client_initiated(id) && !quicly_stream_is_unidirectional(id))) {
+            *err_desc = "invalid request stream id in PRIORITY frame";
+            return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+        }
+        if ((qs = quicly_get_stream(conn->h3.quic, id)) != NULL) {
+            struct st_h2o_http3_server_stream_t *stream = qs->data;
+            assert(stream != NULL);
+            if (!h2o_http2_scheduler_is_open(&stream->scheduler))
+                h2o_http2_scheduler_open(&stream->scheduler, &conn->scheduler.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
+            *node = &stream->scheduler.node;
+        } else {
+            if (id / 4 >= quicly_get_ingress_max_streams(conn->h3.quic, 0)) {
+                *err_desc = "invalid request stream id in PRIORITY frame";
+                return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+            }
+            h2o_http2_scheduler_openref_t *queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
+            h2o_http2_scheduler_open(queued_ref, &conn->scheduler.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
+            if (conn->scheduler.queued_reqs == NULL) {
+                conn->scheduler.queued_reqs = kh_init(h2o_http3_queued_priority);
+                assert(conn->scheduler.queued_reqs != NULL);
+            }
+            int r;
+            khiter_t iter = kh_put(h2o_http3_queued_priority, conn->scheduler.queued_reqs, id, &r);
+            assert(iter != kh_end(conn->scheduler.queued_reqs));
+            kh_val(conn->scheduler.queued_reqs, iter) = queued_ref;
+        }
+
+    } break;
+
+    case H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PUSH_STREAM:
+        *err_desc = "unexpectedly found a push stream id in PRIORITY frame";
+        return H2O_HTTP3_ERROR_GENERAL;
+
+    case H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER: {
+
+        /* return a placeholder, initializing it to the default values if it is not open yet */
+        h2o_http2_scheduler_openref_t *ref;
+        if (id >= H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS) {
+            *err_desc = "invalid placeholder id found in PRIORITY frame";
+            return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+        }
+        ref = conn->scheduler.placeholders + id;
+        if (!h2o_http2_scheduler_is_open(ref))
+            h2o_http2_scheduler_open(ref, &conn->scheduler.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
+        *node = &ref->node;
+
+    } break;
+
+    case H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT:
+        if (self == NULL) {
+            *err_desc = "invalid depedency type in PRIORITY frame";
+            return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+        }
+        *node = self;
+        break;
+    }
+
+    return 0;
+}
+
 static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -442,12 +533,40 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
 
-    /* read haeders frame */
+    /* read the HEADERS frame (or a frame that precedes that) */
     if ((ret = h2o_http3_read_frame(&frame, src, src_end, &err_desc)) != 0)
         return ret;
-    if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS)
-        return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+    if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS) {
+        switch (frame.type) {
+        case H2O_HTTP3_FRAME_TYPE_PRIORITY: {
+            h2o_http3_priority_frame_t priority_frame;
+            h2o_http2_scheduler_node_t *parent;
+            if ((ret = h2o_http3_decode_priority_frame(&priority_frame, frame.payload, frame.length, &err_desc)) != 0)
+                return ret;
+            if ((ret = get_scheduler_node(conn, &parent, priority_frame.dependency.type, priority_frame.dependency.id_,
+                                          &conn->scheduler.root, &err_desc)) != 0)
+                return ret;
+            if (!h2o_http2_scheduler_is_open(&stream->scheduler)) {
+                h2o_http2_scheduler_open(&stream->scheduler, parent, priority_frame.weight_m1 + 1, 0, 0);
+            } else if (stream->scheduler.initialized_implicitly) {
+                h2o_http2_scheduler_rebind(&stream->scheduler, parent, priority_frame.weight_m1 + 1, 0);
+            }
+        } break;
+        case H2O_HTTP3_FRAME_TYPE_DATA:
+            return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+        default:
+            break;
+        }
+        return 0;
+    }
 
+    if (!h2o_http2_scheduler_is_open(&stream->scheduler)) {
+        h2o_http2_scheduler_open(&stream->scheduler, &conn->scheduler.root, H2O_HTTP3_DEFAULT_WEIGHT, 0, 0);
+    } else if (stream->scheduler.initialized_implicitly) {
+        assert(h2o_http2_scheduler_get_parent(&stream->scheduler) == &conn->scheduler.root);
+        assert(h2o_http2_scheduler_get_weight(&stream->scheduler) == H2O_HTTP3_DEFAULT_WEIGHT);
+        stream->scheduler.initialized_implicitly = 0;
+    }
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.headers, &header_exists_map,
@@ -557,6 +676,19 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
         if ((ret = h2o_http3_handle_settings_frame(&conn->h3, payload, len, err_desc)) != 0)
             return ret;
         break;
+    case H2O_HTTP3_FRAME_TYPE_PRIORITY: {
+        h2o_http3_priority_frame_t frame;
+        h2o_http2_scheduler_node_t *prioritized, *dependency;
+        if ((ret = h2o_http3_decode_priority_frame(&frame, payload, len, err_desc)) != 0)
+            return ret;
+        if ((ret = get_scheduler_node(conn, &prioritized, frame.prioritized.type, frame.prioritized.id_, NULL, err_desc)) != 0)
+            return ret;
+        if ((ret = get_scheduler_node(conn, &dependency, frame.dependency.type, frame.dependency.id_, &conn->scheduler.root,
+                                      err_desc)) != 0)
+            return ret;
+        h2o_http2_scheduler_rebind(H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, node, prioritized), dependency,
+                                   frame.weight_m1 + 1, 0);
+    } break;
     default:
         break;
     }
@@ -577,6 +709,9 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 
     assert(quicly_stream_is_client_initiated(qs->stream_id));
 
+    struct st_h2o_http3_server_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
+
     /* create new stream and start handling the request */
     struct st_h2o_http3_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
     stream->quic = qs;
@@ -587,9 +722,20 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->link = (h2o_linklist_t){NULL};
     stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, do_send_informational};
     stream->send_state = H2O_SEND_STATE_IN_PROGRESS;
-    h2o_init_request(&stream->req,
-                     &H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(stream->quic->conn))->super,
-                     NULL);
+
+    if (conn->scheduler.queued_reqs != NULL) {
+        khiter_t iter = kh_get(h2o_http3_queued_priority, conn->scheduler.queued_reqs, stream->quic->stream_id);
+        if (iter != kh_end(conn->scheduler.queued_reqs)) {
+            h2o_http2_scheduler_openref_t *v = kh_val(conn->scheduler.queued_reqs, iter);
+            h2o_http2_scheduler_relocate(&stream->scheduler, v);
+            kh_del(h2o_http3_queued_priority, conn->scheduler.queued_reqs, iter);
+            goto SchedulerReady;
+        }
+    }
+    memset(&stream->scheduler, 0, sizeof(stream->scheduler)); /* delayed until receipt of HEADERS frame (at the maximum) */
+SchedulerReady:
+
+    h2o_init_request(&stream->req, &conn->super, NULL);
     stream->req.version = 0x0300;
     stream->req._ostr_top = &stream->ostr_final;
 
@@ -613,6 +759,22 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
     assert(conn->num_streams.send_body == 0);
     assert(conn->num_streams.close_wait == 0);
     assert(h2o_linklist_is_empty(&conn->pending_reqs));
+
+    if (conn->scheduler.queued_reqs != NULL) {
+        h2o_http2_scheduler_openref_t *ref;
+        kh_foreach_value(conn->scheduler.queued_reqs, ref, {
+            h2o_http2_scheduler_close(ref);
+            free(ref);
+        });
+        kh_destroy(h2o_http3_queued_priority, conn->scheduler.queued_reqs);
+    }
+    {
+        size_t i;
+        for (i = 0; i != sizeof(conn->scheduler.placeholders) / sizeof(conn->scheduler.placeholders[0]); ++i)
+            if (h2o_http2_scheduler_is_open(conn->scheduler.placeholders + i))
+                h2o_http2_scheduler_close(conn->scheduler.placeholders + i);
+    }
+    h2o_http2_scheduler_dispose(&conn->scheduler.root);
 
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
@@ -656,6 +818,9 @@ SynFound : {
     h2o_linklist_init_anchor(&conn->pending_reqs);
     h2o_timer_init(&conn->timeout, handle_pending_reqs);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
+    h2o_http2_scheduler_init(&conn->scheduler.root);
+    memset(&conn->scheduler.placeholders, 0, sizeof(conn->scheduler.placeholders));
+    conn->scheduler.queued_reqs = NULL;
     quicly_conn_t *qconn;
 
     /* accept connection */

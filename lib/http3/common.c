@@ -46,17 +46,6 @@ struct st_h2o_http3_ingress_unistream_t {
                         const uint8_t *src_end, const char **err_desc);
 };
 
-struct st_h2o_http3_egress_unistream_t {
-    /**
-     * back pointer
-     */
-    quicly_stream_t *quic;
-    /**
-     *
-     */
-    h2o_buffer_t *sendbuf;
-};
-
 /**
  * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this
  */
@@ -192,15 +181,15 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
     }
 
     switch (**src) {
-    case 'C':
+    case H2O_HTTP3_STREAM_TYPE_CONTROL:
         conn->_control_streams.ingress.control = stream;
         stream->handle_input = control_stream_handle_input;
         break;
-    case 'H':
+    case H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER:
         conn->_control_streams.ingress.qpack_encoder = stream;
         stream->handle_input = qpack_encoder_stream_handle_input;
         break;
-    case 'h':
+    case H2O_HTTP3_STREAM_TYPE_QPACK_DECODER:
         conn->_control_streams.ingress.qpack_decoder = stream;
         stream->handle_input = qpack_decoder_stream_handle_input;
         break;
@@ -666,7 +655,15 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
         kh_val(conn->ctx->conns_by_id, iter) = conn;
     }
 
-    if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, h2o_iovec_init(H2O_STRLIT("C\0\4")))) != 0 ||
+    /* control stream type and empty SETTINGS */
+    static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, 0, H2O_HTTP3_FRAME_TYPE_SETTINGS};
+    static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL,       3,
+                                                  H2O_HTTP3_FRAME_TYPE_SETTINGS,       0,
+                                                  H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS, H2O_HTTP3_MAX_PLACEHOLDERS};
+    h2o_iovec_t first_flight = quicly_is_client(conn->quic) ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
+                                                            : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
+
+    if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, first_flight)) != 0 ||
         (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder, h2o_iovec_init(H2O_STRLIT("H")))) != 0 ||
         (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_decoder, h2o_iovec_init(H2O_STRLIT("h")))) != 0)
         return ret;
@@ -751,6 +748,14 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         if ((value = quicly_decodev(&src, src_end)) == UINT64_MAX)
             goto Malformed;
         switch (id) {
+        case H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE:
+            conn->peer_settings.max_header_list_size = (uint64_t)value;
+            break;
+        case H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS:
+            if (!quicly_is_client(conn->quic))
+                goto Malformed;
+            conn->peer_settings.num_placeholders = (uint64_t)value;
+            break;
         case H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE:
             header_table_size = (uint32_t)value;
             break;

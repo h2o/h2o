@@ -51,7 +51,8 @@ typedef struct st_h2o_http2_scheduler_openref_t {
     uint16_t weight;
     h2o_linklist_t _all_link; /* linked to _all_refs */
     size_t _active_cnt;       /* COUNT(active_streams_in_dependents) + _self_is_active */
-    int _self_is_active;
+    unsigned _self_is_active : 1;
+    unsigned initialized_implicitly : 1;
     h2o_http2_scheduler_queue_node_t _queue_node;
 } h2o_http2_scheduler_openref_t;
 
@@ -77,7 +78,7 @@ void h2o_http2_scheduler_dispose(h2o_http2_scheduler_node_t *root);
  * opens a reference with given parent as its dependency
  */
 void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *parent, uint16_t weight,
-                              int exclusive);
+                              int exclusive, int initialized_implicitly);
 /**
  * closes a reference.  All the dependents are raised to become the dependents of the parent of the reference being closed.
  */
