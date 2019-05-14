@@ -475,7 +475,7 @@ h2o_evloop_t *create_evloop(size_t sz)
 void update_now(h2o_evloop_t *loop)
 {
     gettimeofday(&loop->_tv_at, NULL);
-    loop->_now_nanosec = (uint64_t)(loop->_tv_at.tv_sec * 1000000 + loop->_tv_at.tv_usec) * 1000;
+    loop->_now_nanosec = ((uint64_t)loop->_tv_at.tv_sec * 1000000 + loop->_tv_at.tv_usec) * 1000;
     loop->_now_millisec = loop->_now_nanosec / 1000000;
 }
 
