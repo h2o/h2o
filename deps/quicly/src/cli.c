@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -148,20 +149,73 @@ static void send_header(quicly_stream_t *stream, int is_http1, int status, const
     send_str(stream, buf);
 }
 
+static int flatten_file_vec(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
+{
+    int fd = (int)vec->cbdata;
+    ssize_t rret;
+
+    /* FIXME handle partial read */
+    while ((rret = pread(fd, dst, len, off)) == -1 && errno == EINTR)
+        ;
+
+    return rret == len ? 0 : QUICLY_TRANSPORT_ERROR_INTERNAL; /* should return application-level error */
+}
+
+static void discard_file_vec(quicly_sendbuf_vec_t *vec)
+{
+    int fd = (int)vec->cbdata;
+    close(fd);
+}
+
 static int send_file(quicly_stream_t *stream, int is_http1, const char *fn, const char *mime_type)
 {
-    FILE *fp;
-    char buf[1024];
-    size_t n;
+    static const quicly_streambuf_sendvec_callbacks_t send_file_callbacks = {flatten_file_vec, discard_file_vec};
+    int fd;
+    struct stat st;
 
-    if ((fp = fopen(fn, "rb")) == NULL)
+    if ((fd = open(fn, O_RDONLY)) == -1)
         return 0;
-    send_header(stream, is_http1, 200, mime_type);
-    while ((n = fread(buf, 1, sizeof(buf), fp)) != 0)
-        quicly_streambuf_egress_write(stream, buf, n);
-    fclose(fp);
+    if (fstat(fd, &st) != 0) {
+        close(fd);
+        return 0;
+    }
 
+    send_header(stream, is_http1, 200, mime_type);
+    quicly_sendbuf_vec_t vec = {&send_file_callbacks, (size_t)st.st_size, (void *)(intptr_t)fd};
+    quicly_streambuf_egress_write_vec(stream, &vec);
     return 1;
+}
+
+/**
+ * This function is an implementation of the quicly_sendbuf_flatten_vec_cb callback.  Refer to the doc-comments of the callback type
+ * for the API.
+ */
+static int flatten_sized_text(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
+{
+    static const char pattern[] =
+        "hello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
+        "world\nhello world\nhello world\nhello world\nhello world\nhello world\n";
+
+    const char *src = pattern + off % 12;
+    assert(src + len - pattern <= sizeof(pattern) - 1); /* pattern is bigger than MTU size */
+    memcpy(dst, src, len);
+    return 0;
+
+#undef PATTERN
 }
 
 static int send_sized_text(quicly_stream_t *stream, ptls_iovec_t path, int is_http1)
@@ -179,10 +233,9 @@ static int send_sized_text(quicly_stream_t *stream, ptls_iovec_t path, int is_ht
     }
 
     send_header(stream, is_http1, 200, "text/plain; charset=utf-8");
-    for (; size >= 12; size -= 12)
-        quicly_streambuf_egress_write(stream, "hello world\n", 12);
-    if (size != 0)
-        quicly_streambuf_egress_write(stream, "hello world", size);
+    static const quicly_streambuf_sendvec_callbacks_t callbacks = {flatten_sized_text};
+    quicly_sendbuf_vec_t vec = {&callbacks, size, NULL};
+    quicly_streambuf_egress_write_vec(stream, &vec);
     return 1;
 }
 
@@ -830,13 +883,13 @@ int main(int argc, char **argv)
             enforce_retry = 1;
             break;
         case 'r':
-            if (sscanf(optarg, "%" SCNu32, &ctx.loss->default_initial_rtt) != 1) {
+            if (sscanf(optarg, "%" SCNu32, &ctx.loss.default_initial_rtt) != 1) {
                 fprintf(stderr, "invalid argument passed to `-r`\n");
                 exit(1);
             }
             break;
         case 'S':
-            if (sscanf(optarg, "%" SCNu8, &ctx.loss->num_speculative_ptos) != 1) {
+            if (sscanf(optarg, "%" SCNu8, &ctx.loss.num_speculative_ptos) != 1) {
                 fprintf(stderr, "invalid argument passed to `-S`\n");
                 exit(1);
             }
