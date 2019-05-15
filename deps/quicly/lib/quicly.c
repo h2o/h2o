@@ -3157,6 +3157,7 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
      */
     if (s.num_packets == 0 && conn->egress.loss.alarm_at <= now) {
         assert(conn->egress.loss.alarm_at == now);
+        fprintf(stderr, "******REDOING!!!!*************\n");
         if ((ret = do_send(conn, &s)) != 0)
             return ret;
     }
