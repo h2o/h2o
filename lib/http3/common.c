@@ -149,7 +149,8 @@ static int control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_htt
     int ret;
 
     do {
-        if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
+        if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->quic), H2O_HTTP3_STREAM_TYPE_CONTROL, src, src_end,
+                                        err_desc)) != 0) {
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
                 ret = 0;
             break;
@@ -522,7 +523,8 @@ static void on_timeout(h2o_timer_t *timeout)
     h2o_http3_send(conn);
 }
 
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, const uint8_t **_src, const uint8_t *src_end, const char **err_desc)
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, int stream_type, const uint8_t **_src,
+                         const uint8_t *src_end, const char **err_desc)
 {
     const uint8_t *src = *_src;
 
@@ -532,6 +534,8 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, const uint8_t **_src, co
         return H2O_HTTP3_ERROR_INCOMPLETE;
     frame->type = *src++;
     frame->_header_size = (uint8_t)(src - *_src);
+
+    /* read the content of the frame (unless it's a DATA frame) */
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
         if (frame->length >= MAX_FRAME_SIZE) {
             *err_desc = "H3 frame too large";
@@ -542,6 +546,53 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, const uint8_t **_src, co
         frame->payload = src;
         src += frame->length;
     }
+
+    /* validate frame type */
+    switch (frame->type) {
+#define FRAME(id, req_clnt, req_srvr, ctl_clnt, ctl_srvr)                                                                          \
+    case H2O_HTTP3_FRAME_TYPE_##id:                                                                                                \
+        switch (stream_type) {                                                                                                     \
+        case H2O_HTTP3_STREAM_TYPE_REQUEST:                                                                                        \
+            if (req_clnt && !is_client)                                                                                            \
+                goto Validation_Success;                                                                                           \
+            if (req_srvr && is_client)                                                                                             \
+                goto Validation_Success;                                                                                           \
+            break;                                                                                                                 \
+        case H2O_HTTP3_STREAM_TYPE_CONTROL:                                                                                        \
+            if (ctl_clnt && !is_client)                                                                                            \
+                goto Validation_Success;                                                                                           \
+            if (ctl_srvr && is_client)                                                                                             \
+                goto Validation_Success;                                                                                           \
+            break;                                                                                                                 \
+        default:                                                                                                                   \
+            h2o_fatal("enxpected stream type");                                                                                    \
+            break;                                                                                                                 \
+        }                                                                                                                          \
+        break
+        /* clang-format off */
+        /*   +----------------+-------------+-------------+
+         *   |                | req-stream  | ctrl-stream |
+         *   |     frame      +------+------+------+------+
+         *   |                |client|server|client|server|
+         *   +----------------+------+------+------+------+ */
+        FRAME( DATA           ,    1 ,    1 ,    0 ,    0 );
+        FRAME( HEADERS        ,    1 ,    1 ,    0 ,    0 );
+        FRAME( PRIORITY       ,    1 ,    0 ,    1 ,    0 );
+        FRAME( CANCEL_PUSH    ,    0 ,    0 ,    1 ,    1 );
+        FRAME( SETTINGS       ,    0 ,    0 ,    1 ,    1 );
+        FRAME( PUSH_PROMISE   ,    0 ,    1 ,    0 ,    0 );
+        FRAME( GOAWAY         ,    0 ,    0 ,    1 ,    1 );
+        FRAME( MAX_PUSH_ID    ,    0 ,    0 ,    1 ,    0 );
+        FRAME( DUPLICATE_PUSH ,    0 ,    1 ,    0 ,    0 );
+        /*   +----------------+------+------+------+------+ */
+        /* clang-format on */
+#undef FRAME
+    default:
+        /* ignore extension frames that we do not handle */
+        goto Validation_Success;
+    }
+    return H2O_HTTP3_ERROR_WRONG_STREAM;
+Validation_Success:;
 
     *_src = src;
     return 0;

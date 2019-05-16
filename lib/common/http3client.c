@@ -327,7 +327,7 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
     h2o_http3_read_frame_t frame;
     int ret;
 
-    if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
+    if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
         if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
             /* incomplete */
             if (err == 0)
@@ -369,7 +369,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     int ret, frame_is_eos;
 
     /* read HEADERS frame */
-    if ((ret = h2o_http3_read_frame(&frame, src, src_end, err_desc)) != 0) {
+    if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
         if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
             if (err != 0) {
                 on_error_before_head(req, err == H2O_HTTP3_ERROR_NONE ? "unexpected close" : "reset by peer");

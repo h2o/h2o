@@ -534,7 +534,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     size_t header_ack_len;
 
     /* read the HEADERS frame (or a frame that precedes that) */
-    if ((ret = h2o_http3_read_frame(&frame, src, src_end, &err_desc)) != 0)
+    if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, &err_desc)) != 0)
         return ret;
     if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS) {
         switch (frame.type) {
