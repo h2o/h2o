@@ -251,6 +251,7 @@ struct st_h2o_http3_conn_t {
         h2o_vector_reserve(_pool, _buf, _buf->size + 9);                                                                           \
         _buf->size += 2;                                                                                                           \
         size_t _payload_off = _buf->size;                                                                                          \
+        _buf->entries[_payload_off - 2] = (_type);                                                                                 \
         do {                                                                                                                       \
             _block                                                                                                                 \
         } while (0);                                                                                                               \
@@ -261,11 +262,10 @@ struct st_h2o_http3_conn_t {
             memmove(_buf->entries + _payload_off + _vlen - 1, _buf->entries + _payload_off, _buf->size - _payload_off);            \
             _payload_off += _vlen - 1;                                                                                             \
             _buf->size += _vlen - 1;                                                                                               \
-            memmove(_buf->entries + _payload_off - _vlen - 1, _vbuf, _vlen);                                                       \
+            memmove(_buf->entries + _payload_off - _vlen, _vbuf, _vlen);                                                           \
         } else {                                                                                                                   \
-            _buf->entries[_payload_off - 2] = _vbuf[0];                                                                            \
+            _buf->entries[_payload_off - 1] = _vbuf[0];                                                                            \
         }                                                                                                                          \
-        _buf->entries[_payload_off - 1] = (_type);                                                                                 \
     } while (0)
 
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
@@ -275,7 +275,7 @@ struct st_h2o_http3_conn_t {
     } while (0)
 
 typedef struct st_h2o_http3_read_frame_t {
-    uint8_t type;
+    uint64_t type;
     uint8_t _header_size;
     const uint8_t *payload;
     uint64_t length;

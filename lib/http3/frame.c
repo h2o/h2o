@@ -25,15 +25,15 @@ uint8_t *h2o_http3_encode_priority_frame(uint8_t *dst, const h2o_http3_priority_
 {
     uint8_t *base = dst;
 
-    ++dst; /* skip length; determined laterwards */
     *dst++ = H2O_HTTP3_FRAME_TYPE_PRIORITY;
+    ++dst; /* skip length; determined laterwards */
     *dst++ = ((uint8_t)frame->prioritized.type << 6) | ((uint8_t)frame->dependency.type << 4);
     if (frame->prioritized.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT)
         dst = quicly_encodev(dst, frame->prioritized.id_);
     if (frame->dependency.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT)
         dst = quicly_encodev(dst, frame->dependency.id_);
     *dst++ = frame->weight_m1;
-    *base = dst - (base + 2);
+    base[1] = dst - (base + 2);
 
     assert(dst - base < H2O_HTTP3_PRIORITY_FRAME_CAPACITY);
     return dst;

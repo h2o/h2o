@@ -528,11 +528,10 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, int strea
 {
     const uint8_t *src = *_src;
 
+    if ((frame->type = quicly_decodev(&src, src_end)) == UINT64_MAX)
+        return H2O_HTTP3_ERROR_INCOMPLETE;
     if ((frame->length = quicly_decodev(&src, src_end)) == UINT64_MAX)
         return H2O_HTTP3_ERROR_INCOMPLETE;
-    if (src == src_end)
-        return H2O_HTTP3_ERROR_INCOMPLETE;
-    frame->type = *src++;
     frame->_header_size = (uint8_t)(src - *_src);
 
     /* read the content of the frame (unless it's a DATA frame) */
@@ -707,9 +706,8 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     }
 
     /* control stream type and empty SETTINGS */
-    static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, 0, H2O_HTTP3_FRAME_TYPE_SETTINGS};
-    static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL,       3,
-                                                  H2O_HTTP3_FRAME_TYPE_SETTINGS,       0,
+    static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
+    static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 3, 0,
                                                   H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS, H2O_HTTP3_MAX_PLACEHOLDERS};
     h2o_iovec_t first_flight = quicly_is_client(conn->quic) ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
                                                             : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
