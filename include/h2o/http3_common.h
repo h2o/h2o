@@ -40,11 +40,11 @@
 #define H2O_HTTP3_FRAME_TYPE_MAX_PUSH_ID 13
 #define H2O_HTTP3_FRAME_TYPE_DUPLICATE_PUSH 14
 
-#define H2O_HTTP3_STREAM_TYPE_CONTROL 'C'
-#define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 'H'
-#define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 'h'
-#define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 'P'
-#define H2O_HTTP3_STREAM_TYPE_REQUEST -1 /* internal type */
+#define H2O_HTTP3_STREAM_TYPE_CONTROL 0
+#define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 1
+#define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 2
+#define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 3
+#define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000 /* internal type */
 
 #define H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE 1
 #define H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS 3
@@ -290,8 +290,8 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs);
 /**
  * returns a frame header (if BODY frame) or an entire frame
  */
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, int stream_type, const uint8_t **src, const uint8_t *src_end,
-                         const char **err_desc);
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **src,
+                         const uint8_t *src_end, const char **err_desc);
 /**
  * initializes the context
  */

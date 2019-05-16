@@ -181,7 +181,12 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
         return 0;
     }
 
-    switch (**src) {
+    /* read the type, or just return if incomplete */
+    uint64_t type;
+    if ((type = quicly_decodev(src, src_end)) == UINT64_MAX)
+        return 0;
+
+    switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
         conn->_control_streams.ingress.control = stream;
         stream->handle_input = control_stream_handle_input;
@@ -200,7 +205,6 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
             unknown_stream_type_handle_input; /* TODO reconsider quicly API; do we need to read data after sending STOP_SENDING? */
         break;
     }
-    ++*src;
 
     return stream->handle_input(conn, stream, src, src_end, err_desc);
 }
@@ -523,7 +527,7 @@ static void on_timeout(h2o_timer_t *timeout)
     h2o_http3_send(conn);
 }
 
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, int stream_type, const uint8_t **_src,
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **_src,
                          const uint8_t *src_end, const char **err_desc)
 {
     const uint8_t *src = *_src;
