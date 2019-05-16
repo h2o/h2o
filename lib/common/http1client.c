@@ -105,9 +105,9 @@ static void on_error(struct st_h2o_http1client_t *client, const char *errstr)
         client->super._cb.on_body(&client->super, errstr);
         break;
     case STREAM_STATE_CLOSED:
-        /* error happened after sending early response */
-        assert(client->proceed_req != NULL);
-        client->proceed_req(&client->super, 0, H2O_SEND_STATE_ERROR);
+        if (client->proceed_req != NULL) {
+            client->proceed_req(&client->super, 0, H2O_SEND_STATE_ERROR);
+        }
         break;
     }
     close_client(client);

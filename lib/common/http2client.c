@@ -263,9 +263,9 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         stream->super._cb.on_body(&stream->super, errstr);
         break;
     case STREAM_STATE_CLOSED:
-        /* error happened after sending early response */
-        assert(stream->streaming.proceed_req != NULL);
-        stream->streaming.proceed_req(&stream->super, 0, H2O_SEND_STATE_ERROR);
+        if (stream->streaming.proceed_req != NULL) {
+            stream->streaming.proceed_req(&stream->super, 0, H2O_SEND_STATE_ERROR);
+        }
         break;
     }
 }
