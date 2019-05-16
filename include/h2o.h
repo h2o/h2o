@@ -1282,6 +1282,11 @@ void h2o_replay_request_deferred(h2o_req_t *req);
  */
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
 /**
+ * indicates whether the response is being sent or not
+ * @param req the request
+ */
+static int h2o_is_sending_response(h2o_req_t *req);
+/**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request
  * @param alignment of the memory to be allocated for the ostream filter
@@ -2012,6 +2017,11 @@ inline void h2o_proceed_response(h2o_req_t *req)
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, H2O_SEND_STATE_FINAL);
     }
+}
+
+inline int h2o_is_sending_response(h2o_req_t *req)
+{
+    return req->_generator != NULL;
 }
 
 inline h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name_len, int allocate_if_not_found)

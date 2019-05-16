@@ -199,7 +199,7 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
         conn->_req_entity_reader = NULL;                                                                                           \
         set_timeout(conn, 0, NULL);                                                                                                \
         h2o_socket_read_stop(conn->sock);                                                                                          \
-        if (conn->_ostr_final.state == OSTREAM_STATE_HEAD) {                                                                       \
+        if (!h2o_is_sending_response(&conn->req) && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {                               \
             conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                   \
             h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                      \
         } else {                                                                                                                   \
