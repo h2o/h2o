@@ -753,9 +753,7 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     int sign = (**src & 0x80) != 0;
     if (decode_int(&ctx->base_index, src, src_end, 7) != 0)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
-    if (sign && ctx->base_index == 0)
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
-    ctx->base_index = sign == 0 ? ctx->largest_ref + ctx->base_index : ctx->largest_ref - ctx->base_index;
+    ctx->base_index = sign == 0 ? ctx->largest_ref + ctx->base_index : ctx->largest_ref - ctx->base_index - 1;
 
     /* is the stream blocked? */
     if (ctx->largest_ref >= qpack->table.base_offset + qpack->table.last - qpack->table.first) {
@@ -1205,7 +1203,7 @@ static void commit_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
             p = h2o_hpack_encode_int(p, ctx->base_index - ctx->largest_ref, 7);
         } else {
             *p = 0x80;
-            p = h2o_hpack_encode_int(p, ctx->largest_ref - ctx->base_index, 7);
+            p = h2o_hpack_encode_int(p, ctx->largest_ref - ctx->base_index - 1, 7);
         }
         prefix_len = p - prefix;
     }
