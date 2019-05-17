@@ -62,8 +62,8 @@ static void test_priority(void)
 
     /* decode */
     ok(encoded_len == 1 + 1 + 1 + 2 + 1);
-    ok(encoded[0] == encoded_len - 2);
-    ok(encoded[1] == H2O_HTTP3_FRAME_TYPE_PRIORITY);
+    ok(encoded[0] == H2O_HTTP3_FRAME_TYPE_PRIORITY);
+    ok(encoded[1] == encoded_len - 2);
     memset(&frame, 0, sizeof(frame));
     ret = h2o_http3_decode_priority_frame(&frame, (const uint8_t *)encoded + 2, encoded_len - 2, &err_desc);
     ok(ret == 0);
@@ -80,8 +80,8 @@ static void test_priority(void)
 
     /* decode */
     ok(encoded_len == 1 + 1 + 1 + 2 + 4 + 1);
-    ok(encoded[0] == encoded_len - 2);
-    ok(encoded[1] == H2O_HTTP3_FRAME_TYPE_PRIORITY);
+    ok(encoded[0] == H2O_HTTP3_FRAME_TYPE_PRIORITY);
+    ok(encoded[1] == encoded_len - 2);
     memset(&frame, 0, sizeof(frame));
     ret = h2o_http3_decode_priority_frame(&frame, (const uint8_t *)encoded + 2, encoded_len - 2, &err_desc);
     ok(ret == 0);
