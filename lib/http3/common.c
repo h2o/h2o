@@ -51,7 +51,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-18")}};
+const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-20")}};
 
 static int send_one(int fd, quicly_datagram_t *p)
 {
@@ -181,7 +181,12 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
         return 0;
     }
 
-    switch (**src) {
+    /* read the type, or just return if incomplete */
+    uint64_t type;
+    if ((type = quicly_decodev(src, src_end)) == UINT64_MAX)
+        return 0;
+
+    switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
         conn->_control_streams.ingress.control = stream;
         stream->handle_input = control_stream_handle_input;
@@ -200,7 +205,6 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
             unknown_stream_type_handle_input; /* TODO reconsider quicly API; do we need to read data after sending STOP_SENDING? */
         break;
     }
-    ++*src;
 
     return stream->handle_input(conn, stream, src, src_end, err_desc);
 }
@@ -523,16 +527,15 @@ static void on_timeout(h2o_timer_t *timeout)
     h2o_http3_send(conn);
 }
 
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, int stream_type, const uint8_t **_src,
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **_src,
                          const uint8_t *src_end, const char **err_desc)
 {
     const uint8_t *src = *_src;
 
+    if ((frame->type = quicly_decodev(&src, src_end)) == UINT64_MAX)
+        return H2O_HTTP3_ERROR_INCOMPLETE;
     if ((frame->length = quicly_decodev(&src, src_end)) == UINT64_MAX)
         return H2O_HTTP3_ERROR_INCOMPLETE;
-    if (src == src_end)
-        return H2O_HTTP3_ERROR_INCOMPLETE;
-    frame->type = *src++;
     frame->_header_size = (uint8_t)(src - *_src);
 
     /* read the content of the frame (unless it's a DATA frame) */
@@ -707,9 +710,8 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     }
 
     /* control stream type and empty SETTINGS */
-    static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, 0, H2O_HTTP3_FRAME_TYPE_SETTINGS};
-    static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL,       3,
-                                                  H2O_HTTP3_FRAME_TYPE_SETTINGS,       0,
+    static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
+    static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 2,
                                                   H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS, H2O_HTTP3_MAX_PLACEHOLDERS};
     h2o_iovec_t first_flight = quicly_is_client(conn->quic) ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
                                                             : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
@@ -792,9 +794,9 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
     assert(!h2o_http3_has_received_settings(conn));
 
     while (src != src_end) {
-        uint16_t id;
+        uint64_t id;
         uint64_t value;
-        if (ptls_decode16(&id, &src, src_end) != 0)
+        if ((id = quicly_decodev(&src, src_end)) == UINT64_MAX)
             goto Malformed;
         if ((value = quicly_decodev(&src, src_end)) == UINT64_MAX)
             goto Malformed;

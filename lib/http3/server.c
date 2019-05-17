@@ -629,9 +629,10 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     if (bufcnt != 0) {
         /* build DATA frame header */
-        size_t header_size =
-            quicly_encodev(stream->sendbuf.data_frame_header_buf, size_total) - stream->sendbuf.data_frame_header_buf;
+        size_t header_size = 0;
         stream->sendbuf.data_frame_header_buf[header_size++] = H2O_HTTP3_FRAME_TYPE_DATA;
+        header_size =
+            quicly_encodev(stream->sendbuf.data_frame_header_buf + header_size, size_total) - stream->sendbuf.data_frame_header_buf;
         /* write */
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
         h2o_sendvec_init_raw(stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++, stream->sendbuf.data_frame_header_buf,

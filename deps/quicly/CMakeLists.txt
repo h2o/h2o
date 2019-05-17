@@ -18,7 +18,6 @@ SET(PICOTLS_OPENSSL_FILES
 
 SET(QUICLY_LIBRARY_FILES
     lib/frame.c
-    lib/loss.c
     lib/cc-reno.c
     lib/defaults.c
     lib/quicly.c

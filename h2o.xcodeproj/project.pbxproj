@@ -253,16 +253,13 @@
 		E901C3EB213E1C3600D17C93 /* frame.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E1213E1C3600D17C93 /* frame.h */; };
 		E901C3ED213E1C3600D17C93 /* constants.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E3213E1C3600D17C93 /* constants.h */; };
 		E901C3EE213E1C3600D17C93 /* linklist.h in Headers */ = {isa = PBXBuildFile; fileRef = E901C3E4213E1C3600D17C93 /* linklist.h */; };
-		E901C3F8213E1C4000D17C93 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3EF213E1C4000D17C93 /* loss.c */; };
 		E901C3F9213E1C4000D17C93 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F0213E1C4000D17C93 /* frame.c */; };
 		E901C3FB213E1C4000D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
 		E901C3FC213E1C4000D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
 		E901C403213E1C5400D17C93 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F0213E1C4000D17C93 /* frame.c */; };
-		E901C404213E1C5400D17C93 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3EF213E1C4000D17C93 /* loss.c */; };
 		E901C406213E1C5400D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
 		E901C407213E1C5400D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
 		E901C40C213E1C5500D17C93 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F0213E1C4000D17C93 /* frame.c */; };
-		E901C40D213E1C5500D17C93 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3EF213E1C4000D17C93 /* loss.c */; };
 		E901C40F213E1C5500D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
 		E901C410213E1C5500D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
 		E901C428213E529000D17C93 /* aes.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AEC1E49A2910029E0A5 /* aes.c */; };
@@ -983,7 +980,6 @@
 		E901C3E1213E1C3600D17C93 /* frame.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = frame.h; sourceTree = "<group>"; };
 		E901C3E3213E1C3600D17C93 /* constants.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = constants.h; sourceTree = "<group>"; };
 		E901C3E4213E1C3600D17C93 /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
-		E901C3EF213E1C4000D17C93 /* loss.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E901C3F0213E1C4000D17C93 /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		E901C3F2213E1C4000D17C93 /* ranges.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = ranges.c; sourceTree = "<group>"; };
 		E901C3F3213E1C4000D17C93 /* quicly.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = quicly.c; sourceTree = "<group>"; };
@@ -2242,7 +2238,6 @@
 				E98042152238D35B008B9745 /* cc-reno.c */,
 				E980423C2246304F008B9745 /* defaults.c */,
 				E901C3F0213E1C4000D17C93 /* frame.c */,
-				E901C3EF213E1C4000D17C93 /* loss.c */,
 				E901C3F3213E1C4000D17C93 /* quicly.c */,
 				E901C3F2213E1C4000D17C93 /* ranges.c */,
 				E98884CE21E7F3C80060F010 /* recvstate.c */,
@@ -2941,7 +2936,6 @@
 				7D9372FF202AC717005FE6AB /* server_timing.c in Sources */,
 				10835E011C9A6C2400197E59 /* logconf.c in Sources */,
 				107923C519A3217300C52AD6 /* http1.c in Sources */,
-				E901C3F8213E1C4000D17C93 /* loss.c in Sources */,
 				10AA2EA71A8DA93C004322AC /* redirect.c in Sources */,
 				10FEF24A1D6FC6F600E11B1D /* durations.c in Sources */,
 				10AA2EA11A88082E004322AC /* url.c in Sources */,
@@ -3052,7 +3046,6 @@
 				E901C42A213E52A200D17C93 /* chacha20.c in Sources */,
 				E987E5EB1FD8C01E00DE4346 /* dictionary.c in Sources */,
 				E987E5F01FD8C04D00DE4346 /* brotli_bit_stream.c in Sources */,
-				E901C404213E1C5400D17C93 /* loss.c in Sources */,
 				107E34221C7FEE2200AEF5F8 /* brotli.c in Sources */,
 				E901C403213E1C5400D17C93 /* frame.c in Sources */,
 				105534C31A3B917000627ECB /* mimemap.c in Sources */,
@@ -3207,7 +3200,6 @@
 				E98884D821E7F3D90060F010 /* sendstate.c in Sources */,
 				E98884D921E7F3D90060F010 /* sentmap.c in Sources */,
 				E9708B7B1E52C83D0029E0A5 /* reproxy.c in Sources */,
-				E901C40D213E1C5500D17C93 /* loss.c in Sources */,
 				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
 				E9708B5C1E52C80F0029E0A5 /* access_log.c in Sources */,
 				E98042182238D363008B9745 /* cc-reno.c in Sources */,

@@ -40,18 +40,16 @@
 #define H2O_HTTP3_FRAME_TYPE_MAX_PUSH_ID 13
 #define H2O_HTTP3_FRAME_TYPE_DUPLICATE_PUSH 14
 
-#define H2O_HTTP3_STREAM_TYPE_CONTROL 'C'
-#define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 'H'
-#define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 'h'
-#define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 'P'
-#define H2O_HTTP3_STREAM_TYPE_REQUEST -1 /* internal type */
+#define H2O_HTTP3_STREAM_TYPE_CONTROL 0
+#define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 1
+#define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 2
+#define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 3
+#define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000 /* internal type */
 
 #define H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE 1
-#define H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS 3
 #define H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
-#define H2O_HTTP3_SETTINGS_GREASE_MASK 0xf0f0
-#define H2O_HTTP3_SETTINGS_GREASE_PATTERN 0x0a0a
+#define H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS 9
 
 #define H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE 4096
 #define H2O_HTTP3_MAX_HEADER_TABLE_SIZE ((1 << 30) + 1)
@@ -251,6 +249,7 @@ struct st_h2o_http3_conn_t {
         h2o_vector_reserve(_pool, _buf, _buf->size + 9);                                                                           \
         _buf->size += 2;                                                                                                           \
         size_t _payload_off = _buf->size;                                                                                          \
+        _buf->entries[_payload_off - 2] = (_type);                                                                                 \
         do {                                                                                                                       \
             _block                                                                                                                 \
         } while (0);                                                                                                               \
@@ -261,11 +260,10 @@ struct st_h2o_http3_conn_t {
             memmove(_buf->entries + _payload_off + _vlen - 1, _buf->entries + _payload_off, _buf->size - _payload_off);            \
             _payload_off += _vlen - 1;                                                                                             \
             _buf->size += _vlen - 1;                                                                                               \
-            memmove(_buf->entries + _payload_off - _vlen - 1, _vbuf, _vlen);                                                       \
+            memmove(_buf->entries + _payload_off - _vlen, _vbuf, _vlen);                                                           \
         } else {                                                                                                                   \
-            _buf->entries[_payload_off - 2] = _vbuf[0];                                                                            \
+            _buf->entries[_payload_off - 1] = _vbuf[0];                                                                            \
         }                                                                                                                          \
-        _buf->entries[_payload_off - 1] = (_type);                                                                                 \
     } while (0)
 
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
@@ -275,7 +273,7 @@ struct st_h2o_http3_conn_t {
     } while (0)
 
 typedef struct st_h2o_http3_read_frame_t {
-    uint8_t type;
+    uint64_t type;
     uint8_t _header_size;
     const uint8_t *payload;
     uint64_t length;
@@ -290,8 +288,8 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs);
 /**
  * returns a frame header (if BODY frame) or an entire frame
  */
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, int stream_type, const uint8_t **src, const uint8_t *src_end,
-                         const char **err_desc);
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **src,
+                         const uint8_t *src_end, const char **err_desc);
 /**
  * initializes the context
  */

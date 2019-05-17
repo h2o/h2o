@@ -143,12 +143,12 @@ static int transmit_cond(quicly_conn_t *src, quicly_conn_t *dst, size_t *num_sen
 
 static void test_even(void)
 {
-    quicly_loss_conf_t lossconf = quicly_loss_spec_conf;
+    quicly_loss_conf_t lossconf = QUICLY_LOSS_SPEC_CONF;
     struct loss_cond_t cond_down, cond_up;
     size_t num_sent, num_received;
     int ret;
 
-    quic_ctx.loss = &lossconf;
+    quic_ctx.loss = lossconf;
     init_cond_even(&cond_down);
     init_cond_even(&cond_up);
 
@@ -238,7 +238,7 @@ static void test_even(void)
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(client));
 
-    quic_ctx.loss = &quicly_loss_spec_conf;
+    quic_ctx.loss = QUICLY_LOSS_SPEC_CONF;
 }
 
 struct loss_cond_t loss_cond_down, loss_cond_up;
