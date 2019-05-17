@@ -23,8 +23,6 @@
 		E93E546A1F663851001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
 		E93E546B1F663852001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
 		E93E54BB1F69B750001C50FE /* loss.h in Headers */ = {isa = PBXBuildFile; fileRef = E93E54BA1F69B750001C50FE /* loss.h */; };
-		E93E54BD1F6CA76C001C50FE /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54BC1F6CA76C001C50FE /* loss.c */; };
-		E93E54BE1F6CA76C001C50FE /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54BC1F6CA76C001C50FE /* loss.c */; };
 		E98041C422383C5C008B9745 /* cc.h in Headers */ = {isa = PBXBuildFile; fileRef = E98041C322383C5C008B9745 /* cc.h */; };
 		E98041C622383C62008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
 		E98041C722383C7A008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
@@ -119,7 +117,6 @@
 		E92D43EC1F41DCF5002AC767 /* sendstate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sendstate.h; sourceTree = "<group>"; };
 		E93E54681F663849001C50FE /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E93E54BA1F69B750001C50FE /* loss.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = loss.h; sourceTree = "<group>"; };
-		E93E54BC1F6CA76C001C50FE /* loss.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E98041C322383C5C008B9745 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
 		E98041C522383C62008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
 		E980421A223952D2008B9745 /* echo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = echo.c; sourceTree = "<group>"; };
@@ -255,7 +252,6 @@
 				E98041C522383C62008B9745 /* cc-reno.c */,
 				E98042352244A5D7008B9745 /* defaults.c */,
 				E99F8C251F4E9EBF00C26B3D /* frame.c */,
-				E93E54BC1F6CA76C001C50FE /* loss.c */,
 				E98448411EA490A500390927 /* quicly.c */,
 				E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */,
 				E920D21D1F43E05000799777 /* recvstate.c */,
@@ -548,7 +544,6 @@
 				E920D21E1F43E05000799777 /* recvstate.c in Sources */,
 				E98042362244A5D7008B9745 /* defaults.c in Sources */,
 				E9F6A42E1F41375B0083F0B2 /* sendstate.c in Sources */,
-				E93E54BD1F6CA76C001C50FE /* loss.c in Sources */,
 				E99F8C261F4E9EBF00C26B3D /* frame.c in Sources */,
 				E98448421EA490A500390927 /* quicly.c in Sources */,
 				E920D22B1F49533800799777 /* sentmap.c in Sources */,
@@ -583,7 +578,6 @@
 				E98041C722383C7A008B9745 /* cc-reno.c in Sources */,
 				E920D22C1F49533800799777 /* sentmap.c in Sources */,
 				E920D2301F49EE0B00799777 /* loss.c in Sources */,
-				E93E54BE1F6CA76C001C50FE /* loss.c in Sources */,
 				E99B75E71F5CF96900CF503E /* maxsender.c in Sources */,
 				E9F6A42F1F41375B0083F0B2 /* sendstate.c in Sources */,
 				E920D2251F49412900799777 /* simple.c in Sources */,

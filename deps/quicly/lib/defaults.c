@@ -26,7 +26,7 @@
 const quicly_context_t quicly_spec_context = {
     NULL,                   /* tls */
     QUICLY_MAX_PACKET_SIZE, /* max_packet_size */
-    &quicly_loss_spec_conf, /* loss */
+    QUICLY_LOSS_SPEC_CONF,  /* loss */
     {
         {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
         16 * 1024 * 1024,                                    /* max_data */
@@ -49,7 +49,7 @@ const quicly_context_t quicly_spec_context = {
 const quicly_context_t quicly_performant_context = {
     NULL,                         /* tls */
     QUICLY_MAX_PACKET_SIZE,       /* max_packet_size */
-    &quicly_loss_performant_conf, /* loss */
+    QUICLY_LOSS_PERFORMANT_CONF,  /* loss */
     {
         {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
         16 * 1024 * 1024,                                    /* max_data */

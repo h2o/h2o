@@ -518,7 +518,7 @@ static void tiny_connection_window(void)
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
 
-    ok(client_streambuf->super.egress.buf.off == 0);
+    ok(client_streambuf->super.egress.vecs.size == 0);
 
     quic_ctx.transport_params.max_data = max_data_orig;
 }

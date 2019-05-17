@@ -48,7 +48,7 @@ extern "C" {
 #define QUICLY_LONG_HEADER_BIT 0x80
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff000012
+#define QUICLY_PROTOCOL_VERSION 0xff000014
 
 #define QUICLY_MAX_CID_LEN 18
 #define QUICLY_STATELESS_RESET_TOKEN_LEN 16
@@ -299,7 +299,7 @@ typedef struct st_quicly_transport_parameters_t {
      */
     uint64_t max_data;
     /**
-     * in seconds
+     * in milliseconds
      */
     uint64_t idle_timeout;
     /**
@@ -367,7 +367,7 @@ struct st_quicly_context_t {
     /**
      * loss detection parameters
      */
-    quicly_loss_conf_t *loss;
+    quicly_loss_conf_t loss;
     /**
      * transport parameters
      */
