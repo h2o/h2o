@@ -26,7 +26,7 @@ FUNCTION (DEFINE_DTRACE_DEPENDENCIES d_file prefix)
     ADD_CUSTOM_COMMAND(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.h
         COMMAND dtrace -o ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.h -s ${d_file} -h
-        DEPENDS ${d-file})
+        DEPENDS ${d_file})
     IF (DTRACE_USES_OBJFILE)
         ADD_CUSTOM_COMMAND(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${prefix}-probes.o
