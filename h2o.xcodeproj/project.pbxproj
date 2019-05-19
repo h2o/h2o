@@ -261,6 +261,10 @@
 		E918FC9221365AB700CCB252 /* theft.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC492136598300CCB252 /* theft.c */; };
 		E918FC9321365ABC00CCB252 /* prop.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC3B213658BE00CCB252 /* prop.c */; };
 		E927CD632074855D00D4797E /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E927CD612074855300D4797E /* sha512.c */; };
+		E95E954022914F0600215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953F22914F0600215ACD /* picotls-probes.d */; };
+		E95E954122914F1500215ACD /* h2o-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCD72281148C0022C32D /* h2o-probes.d */; };
+		E95E954222914F1600215ACD /* h2o-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCD72281148C0022C32D /* h2o-probes.d */; };
+		E95E954322914F1C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953F22914F0600215ACD /* picotls-probes.d */; };
 		E95EBCDA228117620022C32D /* probes.h in Headers */ = {isa = PBXBuildFile; fileRef = E95EBCD9228117620022C32D /* probes.h */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
 		E9708AE61E49A2420029E0A5 /* cifra.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD81E499E040029E0A5 /* cifra.c */; };
@@ -912,7 +916,8 @@
 		E918FC5D2136598500CCB252 /* theft_autoshrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_autoshrink_internal.h; sourceTree = "<group>"; };
 		E918FC5E2136598600CCB252 /* theft_shrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink_internal.h; sourceTree = "<group>"; };
 		E927CD612074855300D4797E /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha512.c; sourceTree = "<group>"; };
-		E95EBCD72281148C0022C32D /* probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = probes.d; sourceTree = "<group>"; };
+		E95E953F22914F0600215ACD /* picotls-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "picotls-probes.d"; sourceTree = "<group>"; };
+		E95EBCD72281148C0022C32D /* h2o-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "h2o-probes.d"; sourceTree = "<group>"; };
 		E95EBCD9228117620022C32D /* probes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = probes.h; sourceTree = "<group>"; };
 		E9708AD81E499E040029E0A5 /* cifra.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = cifra.c; sourceTree = "<group>"; };
 		E9708AD91E499E040029E0A5 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
@@ -1530,7 +1535,7 @@
 				E9CD04281F8F1D7500524877 /* CONTRIBUTING.md */,
 				E9CD042A1F8F1D8A00524877 /* LICENSE */,
 				E9CD04291F8F1D7F00524877 /* README.md */,
-				E95EBCD72281148C0022C32D /* probes.d */,
+				E95EBCD72281148C0022C32D /* h2o-probes.d */,
 				1079231E19A3210D00C52AD6 /* deps */,
 				10583BEC1AE5A353004A3AD6 /* doc */,
 				1079239E19A3215F00C52AD6 /* include */,
@@ -2136,6 +2141,7 @@
 				E9708AE91E49A2610029E0A5 /* deps */,
 				E9708ADE1E499E100029E0A5 /* include */,
 				E9708AD71E499DEA0029E0A5 /* lib */,
+				E95E953F22914F0600215ACD /* picotls-probes.d */,
 			);
 			path = picotls;
 			sourceTree = "<group>";
@@ -2634,6 +2640,7 @@
 				D081373A1FD400F4004679DF /* least_conn.c in Sources */,
 				08790DDC1D80154C00A04BC1 /* sds.c in Sources */,
 				107E34101C7EB13F00AEF5F8 /* gzip.c in Sources */,
+				E95E954222914F1600215ACD /* h2o-probes.d in Sources */,
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
 				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
@@ -2684,6 +2691,7 @@
 				08790DDA1D80153600A04BC1 /* net.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */,
+				E95E954022914F0600215ACD /* picotls-probes.d in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */,
@@ -2861,6 +2869,7 @@
 				E9708B731E52C82A0029E0A5 /* expires.c in Sources */,
 				E987E5D91FD7BEB500DE4346 /* brotli_bit_stream.c in Sources */,
 				E9708B591E52C7EE0029E0A5 /* request.c in Sources */,
+				E95E954322914F1C00215ACD /* picotls-probes.d in Sources */,
 				E9708B861E52C8560029E0A5 /* frame.c in Sources */,
 				E9708B201E49BACA0029E0A5 /* curve25519.c in Sources */,
 				E987E5EA1FD7EBD100DE4346 /* dictionary.c in Sources */,
@@ -2963,6 +2972,7 @@
 				E9708B761E52C8330029E0A5 /* headers.c in Sources */,
 				E927CD632074855D00D4797E /* sha512.c in Sources */,
 				E9708B871E52C8560029E0A5 /* hpack.c in Sources */,
+				E95E954122914F1500215ACD /* h2o-probes.d in Sources */,
 				E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */,
 				E9708B841E52C8560029E0A5 /* casper.c in Sources */,
 				E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */,
@@ -3201,6 +3211,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -3344,6 +3359,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -3519,6 +3539,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -3535,6 +3560,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -4029,9 +4059,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"H2O_USE_PICOTLS=1",
 					"$(inherited)",
+					"H2O_USE_PICOTLS=1",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -4101,6 +4132,12 @@
 		10F417D119C1907B00B6E31A /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"H2O_USE_PICOTLS=1",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
