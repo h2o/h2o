@@ -3769,7 +3769,7 @@ static int handle_transport_close_frame(quicly_conn_t *conn, struct st_quicly_ha
         return ret;
 
     LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_TRANSPORT_CLOSE_RECEIVE, INT_EVENT_ATTR(ERROR_CODE, frame.error_code),
-                         INT_EVENT_ATTR(FRAME_TYPE, (int64_t)state->frame_type),
+                         INT_EVENT_ATTR(FRAME_TYPE, (int64_t)frame.frame_type),
                          VEC_EVENT_ATTR(REASON_PHRASE, frame.reason_phrase));
     return handle_close(conn, QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(frame.error_code), frame.frame_type, frame.reason_phrase);
 }
