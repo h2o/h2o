@@ -211,7 +211,7 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
             static const h2o_http3_priority_frame_t noncritical_placeholder = {
                 {H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER, H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_ID} /* prioritized_element */,
                 {H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT} /* attached to root */,
-                H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_WEIGHT /* weight=1 */
+                H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_WEIGHT - 1 /* weight=1, converted to weight_m1 */
             };
             uint8_t base[H2O_HTTP3_PRIORITY_FRAME_CAPACITY], *dst = base;
             dst = h2o_http3_encode_priority_frame(dst, &noncritical_placeholder);
