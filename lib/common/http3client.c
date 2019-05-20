@@ -345,8 +345,7 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
         break;
     default:
         /* FIXME handle push_promise, trailers */
-        req->super._cb.on_body(&req->super, "unexpected frame");
-        return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+        return 0;
     }
 
     req->bytes_left_in_data_frame = frame.length;
@@ -382,8 +381,13 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     }
     frame_is_eos = *src == src_end && err != 0;
     if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS) {
-        on_error_before_head(req, "unexpected frame");
-        return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+        switch (frame.type) {
+        case H2O_HTTP3_FRAME_TYPE_DATA:
+            *err_desc = "received DATA frame before HEADERS";
+            return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+        default:
+            return 0;
+        }
     }
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
                                         header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0) {
