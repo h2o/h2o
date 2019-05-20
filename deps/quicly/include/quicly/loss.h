@@ -53,20 +53,20 @@ typedef struct quicly_loss_conf_t {
 #define QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE (1024 / 8)
 
 #define QUICLY_LOSS_SPEC_CONF                                                                                                      \
-    ((quicly_loss_conf_t){                                                                                                         \
+    {                                                                                                                              \
         QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */                                           \
         QUICLY_DEFAULT_MIN_PTO,                         /* min_pto */                                                              \
         QUICLY_DEFAULT_INITIAL_RTT,                     /* initial_rtt */                                                          \
         0                                               /* number of speculative PTOs */                                           \
-    })
+    }
 
 #define QUICLY_LOSS_PERFORMANT_CONF                                                                                                \
-    ((quicly_loss_conf_t){                                                                                                         \
+    {                                                                                                                              \
         QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */                                           \
         QUICLY_DEFAULT_MIN_PTO,                         /* min_pto */                                                              \
         QUICLY_DEFAULT_INITIAL_RTT,                     /* initial_rtt */                                                          \
         2                                               /* number of speculative PTOs */                                           \
-    })
+    }
 
 typedef struct quicly_rtt_t {
     uint32_t minimum;

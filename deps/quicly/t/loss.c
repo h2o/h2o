@@ -238,7 +238,7 @@ static void test_even(void)
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(client));
 
-    quic_ctx.loss = QUICLY_LOSS_SPEC_CONF;
+    quic_ctx.loss = (quicly_loss_conf_t)QUICLY_LOSS_SPEC_CONF;
 }
 
 struct loss_cond_t loss_cond_down, loss_cond_up;

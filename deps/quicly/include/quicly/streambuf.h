@@ -141,25 +141,25 @@ inline void quicly_sendbuf_init(quicly_sendbuf_t *sb)
 
 inline void quicly_streambuf_egress_shift(quicly_stream_t *stream, size_t delta)
 {
-    quicly_streambuf_t *sbuf = stream->data;
+    quicly_streambuf_t *sbuf = (quicly_streambuf_t *)stream->data;
     quicly_sendbuf_shift(stream, &sbuf->egress, delta);
 }
 
 inline int quicly_streambuf_egress_write(quicly_stream_t *stream, const void *src, size_t len)
 {
-    quicly_streambuf_t *sbuf = stream->data;
+    quicly_streambuf_t *sbuf = (quicly_streambuf_t *)stream->data;
     return quicly_sendbuf_write(stream, &sbuf->egress, src, len);
 }
 
 inline int quicly_streambuf_egress_write_vec(quicly_stream_t *stream, quicly_sendbuf_vec_t *vec)
 {
-    quicly_streambuf_t *sbuf = stream->data;
+    quicly_streambuf_t *sbuf = (quicly_streambuf_t *)stream->data;
     return quicly_sendbuf_write_vec(stream, &sbuf->egress, vec);
 }
 
 inline void quicly_streambuf_ingress_shift(quicly_stream_t *stream, size_t delta)
 {
-    quicly_streambuf_t *sbuf = stream->data;
+    quicly_streambuf_t *sbuf = (quicly_streambuf_t *)stream->data;
     quicly_recvbuf_shift(stream, &sbuf->ingress, delta);
 }
 
