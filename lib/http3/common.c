@@ -232,7 +232,7 @@ static int egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void *
     } else {
         *wrote_all = 0;
     }
-    memcpy(dst, stream->sendbuf->bytes, *len);
+    memcpy(dst, stream->sendbuf->bytes + off, *len);
     return 0;
 }
 
