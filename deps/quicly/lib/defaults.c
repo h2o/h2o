@@ -240,76 +240,105 @@ void quicly_free_default_cid_encryptor(quicly_cid_encryptor_t *_self)
     free(self);
 }
 
-static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *_conn, int new_data_allowed)
+/**
+ * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
+ */
+static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn, int conn_is_saturated)
 {
-    struct _st_quicly_conn_public_t *conn = (struct _st_quicly_conn_public_t *)_conn;
-    if (new_data_allowed) {
-        if (quicly_linklist_is_linked(&conn->_default_scheduler.new_data))
-            return 1;
+    struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)conn)->_default_scheduler;
+
+    if (!conn_is_saturated) {
+        /* not saturated */
+        quicly_linklist_insert_list(&sched->active, &sched->blocked);
+    } else {
+        /* The code below is disabled, because H2O's scheduler doesn't allow you to "walk" the priority tree without actually
+         * running the round robin, and we want quicly's default to behave like H2O so that we can catch errors.  The downside is
+         * that there'd be at most one spurious call of `quicly_send` when the connection is saturated, but that should be fine.
+         */
+        if (0) {
+            /* Saturated. Lazily move such streams to the "blocked" list, at the same time checking if anything can be sent. */
+            while (quicly_linklist_is_linked(&sched->active)) {
+                quicly_stream_t *stream =
+                    (void *)((char *)(sched->active.next - offsetof(quicly_stream_t, _send_aux.pending_link.default_scheduler)));
+                if (quicly_sendstate_can_send(&stream->sendstate, NULL))
+                    return 1;
+                quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
+                quicly_linklist_insert(sched->blocked.prev, &stream->_send_aux.pending_link.default_scheduler);
+            }
+        }
     }
-    if (quicly_linklist_is_linked(&conn->_default_scheduler.non_new_data))
-        return 1;
+
+    return quicly_linklist_is_linked(&sched->active);
+}
+
+static void link_stream(struct st_quicly_default_scheduler_state_t *sched, quicly_stream_t *stream, int conn_is_flow_capped)
+{
+    if (!quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler)) {
+        quicly_linklist_t *slot = &sched->active;
+        if (conn_is_flow_capped && !quicly_sendstate_can_send(&stream->sendstate, NULL))
+            slot = &sched->blocked;
+        quicly_linklist_insert(slot->prev, &stream->_send_aux.pending_link.default_scheduler);
+    }
+}
+
+/**
+ * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
+ */
+static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn, quicly_send_context_t *s)
+{
+    struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)conn)->_default_scheduler;
+    int conn_is_flow_capped = quicly_is_flow_capped(conn), ret = 0;
+
+    while (quicly_can_send_stream_data((quicly_conn_t *)conn, s) && quicly_linklist_is_linked(&sched->active)) {
+        /* detach the first active stream */
+        quicly_stream_t *stream =
+            (void *)((char *)sched->active.next - offsetof(quicly_stream_t, _send_aux.pending_link.default_scheduler));
+        quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
+        /* relink the stream to the blocked list if necessary */
+        if (conn_is_flow_capped && !quicly_sendstate_can_send(&stream->sendstate, NULL)) {
+            quicly_linklist_insert(sched->blocked.prev, &stream->_send_aux.pending_link.default_scheduler);
+            continue;
+        }
+        /* send! */
+        if ((ret = quicly_send_stream(stream, s)) != 0) {
+            /* FIXME Stop quicly_send_stream emitting SENDBUF_FULL (happpens when CWND is congested). Otherwise, we need to make
+             * adjustments to the scheduler after popping a stream */
+            if (ret == QUICLY_ERROR_SENDBUF_FULL) {
+                assert(quicly_sendstate_can_send(&stream->sendstate, &stream->_send_aux.max_stream_data));
+                link_stream(sched, stream, conn_is_flow_capped);
+            }
+            break;
+        }
+        /* reschedule */
+        conn_is_flow_capped = quicly_is_flow_capped(conn);
+        if (quicly_sendstate_can_send(&stream->sendstate, &stream->_send_aux.max_stream_data))
+            link_stream(sched, stream, conn_is_flow_capped);
+    }
+
+    return ret;
+}
+
+/**
+ * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
+ */
+static int default_stream_scheduler_update_state(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
+{
+    struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)stream->conn)->_default_scheduler;
+
+    if (quicly_sendstate_can_send(&stream->sendstate, &stream->_send_aux.max_stream_data)) {
+        /* activate if not */
+        link_stream(sched, stream, quicly_is_flow_capped(stream->conn));
+    } else {
+        /* disactivate if active */
+        if (quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler))
+            quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
+    }
+
     return 0;
 }
 
-static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *_conn, quicly_send_context_t *s)
-{
-#define SEND_ONE(anchor)                                                                                                           \
-    do {                                                                                                                           \
-        quicly_stream_t *stream =                                                                                                  \
-            (void *)((char *)(anchor)->next - offsetof(quicly_stream_t, _send_aux.pending_link.default_scheduler));                \
-        if ((ret = quicly_send_stream(stream, s)) != 0)                                                                            \
-            goto Exit;                                                                                                             \
-    } while (0)
-
-    struct _st_quicly_conn_public_t *conn = (struct _st_quicly_conn_public_t *)_conn;
-    int ret = 0;
-
-    /* retransmits and fin-only STREAM frames */
-    while (quicly_can_send_stream_data((quicly_conn_t *)conn, s, 0) &&
-           quicly_linklist_is_linked(&conn->_default_scheduler.non_new_data))
-        SEND_ONE(&conn->_default_scheduler.non_new_data);
-    /* STREAMS with data */
-    while (quicly_can_send_stream_data((quicly_conn_t *)conn, s, 1) &&
-           quicly_linklist_is_linked(&conn->_default_scheduler.new_data)) {
-        SEND_ONE(&conn->_default_scheduler.new_data);
-    }
-
-Exit:
-    return ret;
-
-#undef SEND_ONE
-}
-
-static void default_stream_scheduler_clear(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
-{
-    quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
-}
-
-static void schedule_to_slot(quicly_linklist_t *slot, quicly_stream_t *stream)
-{
-    /* TODO Add logic that refrains from re-registering the object to the same slot. Otherwise, arrival of additional data moves a
-     * stream that is already in the send list to the end of the list */
-    if (quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler))
-        quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
-    quicly_linklist_insert(slot->prev, &stream->_send_aux.pending_link.default_scheduler);
-}
-
-static void default_stream_scheduler_set_new_data(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
-{
-    struct _st_quicly_conn_public_t *conn = (struct _st_quicly_conn_public_t *)stream->conn;
-    schedule_to_slot(&conn->_default_scheduler.new_data, stream);
-}
-
-static void default_stream_scheduler_set_non_new_data(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
-{
-    struct _st_quicly_conn_public_t *conn = (struct _st_quicly_conn_public_t *)stream->conn;
-    schedule_to_slot(&conn->_default_scheduler.non_new_data, stream);
-}
-
 quicly_stream_scheduler_t quicly_default_stream_scheduler = {default_stream_scheduler_can_send, default_stream_scheduler_do_send,
-                                                             default_stream_scheduler_clear, default_stream_scheduler_set_new_data,
-                                                             default_stream_scheduler_set_non_new_data};
+                                                             default_stream_scheduler_update_state};
 
 quicly_stream_t *quicly_default_alloc_stream(quicly_context_t *ctx)
 {
