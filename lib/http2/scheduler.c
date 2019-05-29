@@ -48,7 +48,7 @@ static int queue_is_empty(h2o_http2_scheduler_queue_t *queue)
 static void queue_set(h2o_http2_scheduler_queue_t *queue, h2o_http2_scheduler_queue_node_t *node, uint16_t weight)
 {
     /* holds 257 entries of offsets (multiplied by 65536) where nodes with weights between 1..257 should go into
-     * each entry (expect for weight=256) is calculated as: round(N / weight), where N is adjusted so that the
+     * each entry (except for weight=256) is calculated as: round(N / weight), where N is adjusted so that the
      * value would become 63*65536 for weight=0.
      * weight=257 is used internally to send data before any of the streams being pulled, and therefore has the offset set to zero.
      */

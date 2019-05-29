@@ -651,7 +651,7 @@ IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile)
                         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft"
                         BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/theft"
                         CONFIGURE_COMMAND "true"
-                        BUILD_COMMAND cd "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft" && make "BUILD=${CMAKE_CURRENT_BINARY_DIR}/theft"
+                        BUILD_COMMAND cd "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft" && ${CMAKE_MAKE_PROGRAM} "BUILD=${CMAKE_CURRENT_BINARY_DIR}/theft"
                         INSTALL_COMMAND "true")
     SET_TARGET_PROPERTIES(build-theft PROPERTIES EXCLUDE_FROM_ALL TRUE)
     LINK_DIRECTORIES("${CMAKE_CURRENT_BINARY_DIR}/theft")
@@ -684,12 +684,12 @@ IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(check t-00unit-libuv.t lib-examples)
 ENDIF ()
 
-ADD_CUSTOM_TARGET(doc make -f ../misc/doc.mk all BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+ADD_CUSTOM_TARGET(doc ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk all BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
     DEPENDS h2o)
-ADD_CUSTOM_TARGET(doc-clean make -f ../misc/doc.mk clean
+ADD_CUSTOM_TARGET(doc-clean ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk clean
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc)
-ADD_CUSTOM_TARGET(doc-publish make -f ../misc/doc.mk publish BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+ADD_CUSTOM_TARGET(doc-publish ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk publish BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
     DEPENDS h2o)
 
@@ -700,7 +700,7 @@ IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt)
                         CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/h2get_bin
-                        BUILD_COMMAND make
+                        BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
                         INSTALL_COMMAND true)
     SET_TARGET_PROPERTIES(h2get PROPERTIES EXCLUDE_FROM_ALL TRUE)
     ADD_DEPENDENCIES(check h2get)
@@ -710,7 +710,7 @@ ExternalProject_Add(picotls-cli
                     CONFIGURE_COMMAND ${CMAKE_COMMAND} -DOPENSSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/deps/picotls
                     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/deps/picotls
                     BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/picotls
-                    BUILD_COMMAND make cli
+                    BUILD_COMMAND ${CMAKE_MAKE_PROGRAM} cli
                     INSTALL_COMMAND true)
 SET_TARGET_PROPERTIES(picotls-cli PROPERTIES EXCLUDE_FROM_ALL TRUE)
 ADD_DEPENDENCIES(check picotls-cli)
