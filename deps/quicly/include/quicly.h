@@ -765,7 +765,11 @@ static int quicly_is_client(quicly_conn_t *conn);
 /**
  *
  */
-static quicly_stream_id_t quicly_get_next_stream_id(quicly_conn_t *conn, int uni);
+static quicly_stream_id_t quicly_get_host_next_stream_id(quicly_conn_t *conn, int uni);
+/**
+ *
+ */
+static quicly_stream_id_t quicly_get_peer_next_stream_id(quicly_conn_t *conn, int uni);
 /**
  *
  */
@@ -981,10 +985,16 @@ inline int quicly_is_client(quicly_conn_t *conn)
     return (c->host.bidi.next_stream_id & 1) == 0;
 }
 
-inline quicly_stream_id_t quicly_get_next_stream_id(quicly_conn_t *conn, int uni)
+inline quicly_stream_id_t quicly_get_host_next_stream_id(quicly_conn_t *conn, int uni)
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
     return uni ? c->host.uni.next_stream_id : c->host.bidi.next_stream_id;
+}
+
+inline quicly_stream_id_t quicly_get_peer_next_stream_id(quicly_conn_t *conn, int uni)
+{
+    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
+    return uni ? c->peer.uni.next_stream_id : c->peer.bidi.next_stream_id;
 }
 
 inline void quicly_get_peername(quicly_conn_t *conn, struct sockaddr **sa, socklen_t *salen)
