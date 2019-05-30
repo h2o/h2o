@@ -499,10 +499,6 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
                 /* create new entry */
                 queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
                 h2o_http2_scheduler_open(queued_ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
-                if (conn->scheduler.reqs.queued == NULL) {
-                    conn->scheduler.reqs.queued = kh_init(h2o_http3_queued_priority);
-                    assert(conn->scheduler.reqs.queued != NULL);
-                }
                 kh_val(conn->scheduler.reqs.queued, iter) = queued_ref;
             }
             *node = &queued_ref->node;
@@ -741,17 +737,15 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, do_send_informational};
     stream->send_state = H2O_SEND_STATE_IN_PROGRESS;
 
-    if (conn->scheduler.reqs.queued != NULL) {
-        khiter_t iter = kh_get(h2o_http3_queued_priority, conn->scheduler.reqs.queued, stream->quic->stream_id);
-        if (iter != kh_end(conn->scheduler.reqs.queued)) {
-            h2o_http2_scheduler_openref_t *v = kh_val(conn->scheduler.reqs.queued, iter);
-            h2o_http2_scheduler_relocate(&stream->scheduler.ref, v);
-            kh_del(h2o_http3_queued_priority, conn->scheduler.reqs.queued, iter);
-            goto SchedulerReady;
-        }
+    /* transplant the priority in the queue, or lazy-initialize the scheduler until the receipt of HEADERS frame (at the maximum) */
+    khiter_t iter = kh_get(h2o_http3_queued_priority, conn->scheduler.reqs.queued, stream->quic->stream_id);
+    if (iter != kh_end(conn->scheduler.reqs.queued)) {
+        h2o_http2_scheduler_openref_t *v = kh_val(conn->scheduler.reqs.queued, iter);
+        h2o_http2_scheduler_relocate(&stream->scheduler.ref, v);
+        kh_del(h2o_http3_queued_priority, conn->scheduler.reqs.queued, iter);
+    } else {
+        memset(&stream->scheduler, 0, sizeof(stream->scheduler));
     }
-    memset(&stream->scheduler, 0, sizeof(stream->scheduler)); /* delayed until receipt of HEADERS frame (at the maximum) */
-SchedulerReady:
 
     h2o_init_request(&stream->req, &conn->super, NULL);
     stream->req.version = 0x0300;
@@ -956,7 +950,7 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
     assert(conn->num_streams.close_wait == 0);
     assert(h2o_linklist_is_empty(&conn->pending_reqs));
 
-    if (conn->scheduler.reqs.queued != NULL) {
+    {
         h2o_http2_scheduler_openref_t *ref;
         kh_foreach_value(conn->scheduler.reqs.queued, ref, {
             h2o_http2_scheduler_close(ref);
@@ -1019,7 +1013,8 @@ SynFound : {
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     h2o_http2_scheduler_init(&conn->scheduler.reqs.root);
     memset(&conn->scheduler.reqs.placeholders, 0, sizeof(conn->scheduler.reqs.placeholders));
-    conn->scheduler.reqs.queued = NULL;
+    conn->scheduler.reqs.queued = kh_init(h2o_http3_queued_priority);
+    assert(conn->scheduler.reqs.queued != NULL);
     conn->scheduler.uni = 0;
     h2o_linklist_init_anchor(&conn->scheduler.conn_blocked.reqs);
     conn->scheduler.conn_blocked.uni = 0;
