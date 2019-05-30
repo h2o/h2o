@@ -488,20 +488,23 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
                 h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
             *node = &stream->scheduler.ref.node;
         } else {
-            h2o_http2_scheduler_openref_t *queued_ref;
             int r;
             khiter_t iter = kh_put(h2o_http3_queued_priority, conn->scheduler.reqs.freestanding, id, &r);
             assert(iter != kh_end(conn->scheduler.reqs.freestanding));
             if (r == 0) {
                 /* the entry exists */
-                queued_ref = kh_val(conn->scheduler.reqs.freestanding, iter);
-            } else {
+                *node = &kh_val(conn->scheduler.reqs.freestanding, iter)->node;
+            } else if (id >= quicly_get_peer_next_stream_id(conn->h3.quic, 0)) {
                 /* create new entry */
-                queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
+                h2o_http2_scheduler_openref_t *queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
                 h2o_http2_scheduler_open(queued_ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
                 kh_val(conn->scheduler.reqs.freestanding, iter) = queued_ref;
+                *node = &queued_ref->node;
+            } else {
+                /* the stream has been closed and the PRIORITY information is no longer available (TODO consider returning orphan
+                 * placeholder) */
+                *node = self;
             }
-            *node = &queued_ref->node;
         }
 
     } break;
@@ -692,16 +695,17 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
         break;
     case H2O_HTTP3_FRAME_TYPE_PRIORITY: {
         h2o_http3_priority_frame_t frame;
-        h2o_http2_scheduler_node_t *prioritized, *dependency;
+        h2o_http2_scheduler_node_t *dependency, *prioritized;
         if ((ret = h2o_http3_decode_priority_frame(&frame, payload, len, err_desc)) != 0)
-            return ret;
-        if ((ret = get_scheduler_node(conn, &prioritized, frame.prioritized.type, frame.prioritized.id_, NULL, err_desc)) != 0)
             return ret;
         if ((ret = get_scheduler_node(conn, &dependency, frame.dependency.type, frame.dependency.id_, &conn->scheduler.reqs.root,
                                       err_desc)) != 0)
             return ret;
-        h2o_http2_scheduler_rebind(H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, node, prioritized), dependency,
-                                   frame.weight_m1 + 1, 0);
+        if ((ret = get_scheduler_node(conn, &prioritized, frame.prioritized.type, frame.prioritized.id_, NULL, err_desc)) != 0)
+            return ret;
+        if (prioritized != NULL)
+            h2o_http2_scheduler_rebind(H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, node, prioritized), dependency,
+                                       frame.weight_m1 + 1, 0);
     } break;
     default:
         break;
