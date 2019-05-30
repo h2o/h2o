@@ -488,16 +488,24 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
                 h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
             *node = &stream->scheduler.ref.node;
         } else {
-            h2o_http2_scheduler_openref_t *queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
-            h2o_http2_scheduler_open(queued_ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
-            if (conn->scheduler.reqs.queued == NULL) {
-                conn->scheduler.reqs.queued = kh_init(h2o_http3_queued_priority);
-                assert(conn->scheduler.reqs.queued != NULL);
-            }
+            h2o_http2_scheduler_openref_t *queued_ref;
             int r;
             khiter_t iter = kh_put(h2o_http3_queued_priority, conn->scheduler.reqs.queued, id, &r);
             assert(iter != kh_end(conn->scheduler.reqs.queued));
-            kh_val(conn->scheduler.reqs.queued, iter) = queued_ref;
+            if (r == 0) {
+                /* the entry exists */
+                queued_ref = kh_val(conn->scheduler.reqs.queued, iter);
+            } else {
+                /* create new entry */
+                queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
+                h2o_http2_scheduler_open(queued_ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
+                if (conn->scheduler.reqs.queued == NULL) {
+                    conn->scheduler.reqs.queued = kh_init(h2o_http3_queued_priority);
+                    assert(conn->scheduler.reqs.queued != NULL);
+                }
+                kh_val(conn->scheduler.reqs.queued, iter) = queued_ref;
+            }
+            *node = &queued_ref->node;
         }
 
     } break;
