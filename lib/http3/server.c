@@ -93,11 +93,14 @@ struct st_h2o_http3_server_conn_t {
              */
             h2o_http2_scheduler_openref_t placeholders[H2O_HTTP3_MAX_PLACEHOLDERS];
             /**
-             *
+             * Hashtable of request priority nodes that are unassociated to the streams.  The entries are either priority
+             * information of streams that are to be created (in this case, the value of the hashtable is allocated), or that of the
+             * streams that have already been closed (in which case, the values point to closed_streams.entries[].ref).
              */
             kh_h2o_http3_freestanding_priority_t *freestanding;
             /**
-             * list of streams that have gone into freestanding after being closed.
+             * List of streams that have gone into freestanding after being closed.  Slots are used in the ascending order.  Unused
+             * slots have id of -1.
              */
             struct st_h2o_http3_closed_priorities_t {
                 struct {
