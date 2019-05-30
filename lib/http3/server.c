@@ -954,6 +954,10 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
     assert(conn->num_streams.close_wait == 0);
     assert(h2o_linklist_is_empty(&conn->pending_reqs));
 
+    if (h2o_timer_is_linked(&conn->timeout))
+        h2o_timer_unlink(&conn->timeout);
+    h2o_http3_dispose_conn(&conn->h3);
+
     {
         h2o_http2_scheduler_openref_t *ref;
         kh_foreach_value(conn->scheduler.reqs.freestanding, ref, {
@@ -969,13 +973,8 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
                 h2o_http2_scheduler_close(conn->scheduler.reqs.placeholders + i);
     }
     h2o_http2_scheduler_dispose(&conn->scheduler.reqs.root);
-    assert(conn->scheduler.uni == 0);
     assert(h2o_linklist_is_empty(&conn->scheduler.conn_blocked.reqs));
-    assert(conn->scheduler.conn_blocked.uni == 0);
 
-    if (h2o_timer_is_linked(&conn->timeout))
-        h2o_timer_unlink(&conn->timeout);
-    h2o_http3_dispose_conn(&conn->h3);
     free(conn);
 }
 
