@@ -476,7 +476,8 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
 
         /* Return the scheduler node of an existing request stream, or create a queued entry and returns that */
         quicly_stream_t *qs;
-        if (!(quicly_stream_is_client_initiated(id) && !quicly_stream_is_unidirectional(id))) {
+        if (!(quicly_stream_is_client_initiated(id) && !quicly_stream_is_unidirectional(id) &&
+              id / 4 < quicly_get_ingress_max_streams(conn->h3.quic, 0))) {
             *err_desc = "invalid request stream id in PRIORITY frame";
             return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
         }
@@ -487,10 +488,6 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
                 h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
             *node = &stream->scheduler.ref.node;
         } else {
-            if (id / 4 >= quicly_get_ingress_max_streams(conn->h3.quic, 0)) {
-                *err_desc = "invalid request stream id in PRIORITY frame";
-                return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
-            }
             h2o_http2_scheduler_openref_t *queued_ref = h2o_mem_alloc(sizeof(*queued_ref));
             h2o_http2_scheduler_open(queued_ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
             if (conn->scheduler.reqs.queued == NULL) {
