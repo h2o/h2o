@@ -946,7 +946,7 @@ static void create_ossl(h2o_socket_t *sock)
 }
 
 static SSL_SESSION *on_async_resumption_get(SSL *ssl,
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+#if !defined(LIBRESSL_VERSION_NUMBER) ? OPENSSL_VERSION_NUMBER >= 0x1010000fL : LIBRESSL_VERSION_NUMBER > 0x2070000f
                                             const
 #endif
                                             unsigned char *data,
