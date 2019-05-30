@@ -51,11 +51,6 @@ enum h2o_http3_server_stream_state {
     H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT
 };
 
-struct st_h2o_http3_priority_node_t {
-    h2o_http2_scheduler_openref_t ref;
-    quicly_stream_id_t id_;
-};
-
 KHASH_MAP_INIT_INT64(h2o_http3_queued_priority, h2o_http2_scheduler_openref_t *);
 
 struct st_h2o_http3_server_conn_t {
