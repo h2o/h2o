@@ -851,12 +851,10 @@ static int scheduler_do_send_stream(h2o_http2_scheduler_openref_t *ref, int *sti
 
 Exit:
     return ret;
-ActiveBlocked : {
-    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)(stream->req.conn);
-    h2o_linklist_insert(&conn->scheduler.conn_blocked.reqs, &stream->scheduler.conn_blocked);
+ActiveBlocked:
+    h2o_linklist_insert(&get_conn(stream)->scheduler.conn_blocked.reqs, &stream->scheduler.conn_blocked);
     *still_is_active = 0;
     goto Exit;
-}
 }
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
@@ -969,9 +967,8 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
             break;
         case CONN_BLOCKED:
             if (!h2o_linklist_is_linked(&stream->scheduler.conn_blocked)) {
-                struct st_h2o_http3_server_conn_t *conn = (void *)stream->req.conn;
                 h2o_http2_scheduler_deactivate(&stream->scheduler.ref);
-                h2o_linklist_insert(&conn->scheduler.conn_blocked.reqs, &stream->scheduler.conn_blocked);
+                h2o_linklist_insert(&get_conn(stream)->scheduler.conn_blocked.reqs, &stream->scheduler.conn_blocked);
             }
             break;
         }
