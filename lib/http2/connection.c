@@ -621,7 +621,7 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
 
     /* setup the scheduler */
     if (!scheduler_is_open) {
-        h2o_http2_scheduler_open(&stream->_scheduler, parent_sched, priority->weight, priority->exclusive, 0);
+        h2o_http2_scheduler_open(&stream->_scheduler, parent_sched, priority->weight, priority->exclusive);
     } else {
         h2o_http2_scheduler_rebind(&stream->_scheduler, parent_sched, priority->weight, priority->exclusive);
     }
@@ -1521,9 +1521,9 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     stream->received_priority.dependency = src_stream->stream_id;
     stream->push.parent_stream_id = src_stream->stream_id;
     if (is_critical) {
-        h2o_http2_scheduler_open(&stream->_scheduler, &conn->scheduler, 257, 0, 0);
+        h2o_http2_scheduler_open(&stream->_scheduler, &conn->scheduler, 257, 0);
     } else {
-        h2o_http2_scheduler_open(&stream->_scheduler, &src_stream->_scheduler.node, 16, 0, 0);
+        h2o_http2_scheduler_open(&stream->_scheduler, &src_stream->_scheduler.node, 16, 0);
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
 
@@ -1619,7 +1619,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     /* open the stream, now that the function is guaranteed to succeed */
     stream = h2o_http2_stream_open(http2conn, 1, req, &h2o_http2_default_priority);
-    h2o_http2_scheduler_open(&stream->_scheduler, &http2conn->scheduler, h2o_http2_default_priority.weight, 0, 0);
+    h2o_http2_scheduler_open(&stream->_scheduler, &http2conn->scheduler, h2o_http2_default_priority.weight, 0);
     h2o_http2_stream_prepare_for_request(http2conn, stream);
 
     /* send response */
