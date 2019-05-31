@@ -1321,6 +1321,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->transport_params.max_streams_uni = 10;
+                quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
                 if (event_logger != NULL) {
                     quic->event_log.cb = event_logger;
                     quic->event_log.mask = event_log_mask;

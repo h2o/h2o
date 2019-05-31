@@ -609,26 +609,7 @@ static void resched_stream_data(quicly_stream_t *stream)
         return;
 
     quicly_stream_scheduler_t *scheduler = stream->conn->super.ctx->stream_scheduler;
-
-    if (stream->sendstate.pending.num_ranges != 0) {
-        if (!quicly_sendstate_is_open(&stream->sendstate) &&
-            stream->sendstate.pending.ranges[0].start >= stream->sendstate.final_size) {
-            /* fin is the only thing to be sent, and it can be sent if window size is zero */
-            assert(stream->sendstate.pending.ranges[0].start == stream->sendstate.final_size);
-            scheduler->set_non_new_data(scheduler, stream);
-            goto Scheduling_Done;
-        } else if (stream->sendstate.pending.ranges[0].start < stream->_send_aux.max_stream_data) {
-            if (stream->sendstate.pending.ranges[0].start == stream->sendstate.size_inflight) {
-                scheduler->set_new_data(scheduler, stream);
-            } else {
-                assert(stream->sendstate.pending.ranges[0].start < stream->sendstate.size_inflight);
-                scheduler->set_non_new_data(scheduler, stream);
-            }
-            goto Scheduling_Done;
-        }
-    }
-    scheduler->clear(scheduler, stream);
-Scheduling_Done:;
+    scheduler->update_state(scheduler, stream);
 }
 
 static int should_send_max_data(quicly_conn_t *conn)
@@ -938,14 +919,17 @@ static void update_idle_timeout(quicly_conn_t *conn, int is_in_receive)
     conn->idle_timeout.should_rearm_on_send = is_in_receive;
 }
 
+static int scheduler_can_send(quicly_conn_t *conn)
+{
+    int conn_is_saturated = !(conn->egress.max_data.sent < conn->egress.max_data.permitted);
+    return conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn, conn_is_saturated);
+}
+
 static void update_loss_alarm(quicly_conn_t *conn)
 {
-    quicly_loss_update_alarm(
-        &conn->egress.loss, now, conn->egress.last_retransmittable_sent_at,
-        conn->egress.sentmap.bytes_in_flight != 0 || conn->super.peer.address_validation.send_probe,
-        conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn,
-                                                    conn->egress.max_data.sent < conn->egress.max_data.permitted),
-        conn->egress.max_data.sent);
+    quicly_loss_update_alarm(&conn->egress.loss, now, conn->egress.last_retransmittable_sent_at,
+                             conn->egress.sentmap.bytes_in_flight != 0 || conn->super.peer.address_validation.send_probe,
+                             scheduler_can_send(conn), conn->egress.max_data.sent);
 }
 
 static int create_handshake_flow(quicly_conn_t *conn, size_t epoch)
@@ -1190,8 +1174,8 @@ void quicly_free(quicly_conn_t *conn)
     assert(!quicly_linklist_is_linked(&conn->pending_link.streams_blocked.uni));
     assert(!quicly_linklist_is_linked(&conn->pending_link.streams_blocked.bidi));
     assert(!quicly_linklist_is_linked(&conn->pending_link.control));
-    assert(!quicly_linklist_is_linked(&conn->super._default_scheduler.new_data));
-    assert(!quicly_linklist_is_linked(&conn->super._default_scheduler.non_new_data));
+    assert(!quicly_linklist_is_linked(&conn->super._default_scheduler.active));
+    assert(!quicly_linklist_is_linked(&conn->super._default_scheduler.blocked));
 
     free_handshake_space(&conn->initial);
     free_handshake_space(&conn->handshake);
@@ -1384,7 +1368,6 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
                 }
                 found_id_bits |= ID_TO_BIT(id);
             }
-            found_id_bits |= ID_TO_BIT(id);
             ptls_decode_open_block(src, end, 2, {
                 switch (id) {
                 case QUICLY_TRANSPORT_PARAMETER_ID_ORIGINAL_CONNECTION_ID: {
@@ -1526,8 +1509,8 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     } else {
         conn->_.super.version = QUICLY_PROTOCOL_VERSION;
     }
-    quicly_linklist_init(&conn->_.super._default_scheduler.new_data);
-    quicly_linklist_init(&conn->_.super._default_scheduler.non_new_data);
+    quicly_linklist_init(&conn->_.super._default_scheduler.active);
+    quicly_linklist_init(&conn->_.super._default_scheduler.blocked);
     conn->_.streams = kh_init(quicly_stream_t);
     quicly_maxsender_init(&conn->_.ingress.max_data.sender, conn->_.super.ctx->transport_params.max_data);
     if (conn->_.super.ctx->transport_params.max_streams_uni != 0) {
@@ -2019,8 +2002,7 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn)
             return 0;
         if (quicly_linklist_is_linked(&conn->pending_link.control))
             return 0;
-        int new_data_allowed = conn->egress.max_data.sent < conn->egress.max_data.permitted;
-        if (conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn, new_data_allowed))
+        if (scheduler_can_send(conn))
             return 0;
     } else if (!conn->super.peer.address_validation.validated) {
         return conn->idle_timeout.at;
@@ -2385,13 +2367,14 @@ static int send_stream_control_frames(quicly_stream_t *stream, quicly_send_conte
     return 0;
 }
 
-int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s, int new_data)
+int quicly_is_flow_capped(quicly_conn_t *conn)
 {
-    if (s->num_packets == s->max_packets)
-        return 0;
-    if (new_data && !(conn->egress.max_data.sent < conn->egress.max_data.permitted))
-        return 0;
-    return 1;
+    return !(conn->egress.max_data.sent < conn->egress.max_data.permitted);
+}
+
+int quicly_can_send_stream_data(quicly_conn_t *conn, quicly_send_context_t *s)
+{
+    return s->num_packets < s->max_packets;
 }
 
 int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
@@ -2522,7 +2505,6 @@ UpdateState:
     sent->data.stream.args.start = off;
     sent->data.stream.args.end = end_off + is_fin;
 
-    resched_stream_data(stream);
     return 0;
 }
 
@@ -2848,6 +2830,7 @@ static int send_handshake_flow(quicly_conn_t *conn, size_t epoch, quicly_send_co
         assert(stream != NULL);
         if ((ret = quicly_send_stream(stream, s)) != 0)
             goto Exit;
+        resched_stream_data(stream);
     }
 
     /* send probe if requested */
@@ -2996,12 +2979,10 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
         assert(min_packets_to_send <= s->max_packets);
 
         if (restrict_sending) {
-            /* PTO  (try to send new data when handshake is done, otherwise retire oldest handshake packets and retransmit) */
+            /* PTO (try to send new data when handshake is done, otherwise retire oldest handshake packets and retransmit) */
             LOG_CONNECTION_EVENT(conn, QUICLY_EVENT_TYPE_PTO, INT_EVENT_ATTR(BYTES_IN_FLIGHT, conn->egress.sentmap.bytes_in_flight),
                                  INT_EVENT_ATTR(CWND, conn->egress.cc.cwnd), INT_EVENT_ATTR(NUM_PTO, conn->egress.loss.pto_count));
-            if (ptls_handshake_is_complete(conn->crypto.tls) &&
-                conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn,
-                                                            conn->egress.max_data.sent < conn->egress.max_data.permitted)) {
+            if (ptls_handshake_is_complete(conn->crypto.tls) && scheduler_can_send(conn)) {
                 /* we have something to send (TODO we might want to make sure that we emit something even when the stream scheduler
                  * in fact sends nothing) */
             } else {
