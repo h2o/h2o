@@ -597,6 +597,16 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
     return 0;
 }
 
+static void init_priority_of_request_stream(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream,
+                                            h2o_http2_scheduler_node_t *parent, uint16_t weight)
+{
+    if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref)) {
+        h2o_http2_scheduler_open(&stream->scheduler.ref, parent, weight, 0);
+    } else if (h2o_http2_scheduler_get_parent(&stream->scheduler.ref) == conn->scheduler.reqs.orphan_placeholder) {
+        h2o_http2_scheduler_rebind(&stream->scheduler.ref, parent, weight, 0);
+    }
+}
+
 static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -619,11 +629,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
             if ((ret = get_scheduler_node(conn, &parent, priority_frame.dependency.type, priority_frame.dependency.id_,
                                           &conn->scheduler.reqs.root, &err_desc)) != 0)
                 return ret;
-            if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref)) {
-                h2o_http2_scheduler_open(&stream->scheduler.ref, parent, priority_frame.weight_m1 + 1, 0);
-            } else if (h2o_http2_scheduler_get_parent(&stream->scheduler.ref) == conn->scheduler.reqs.orphan_placeholder) {
-                h2o_http2_scheduler_rebind(&stream->scheduler.ref, parent, priority_frame.weight_m1 + 1, 0);
-            }
+            init_priority_of_request_stream(conn, stream, parent, priority_frame.weight_m1 + 1);
         } break;
         case H2O_HTTP3_FRAME_TYPE_DATA:
             return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
@@ -633,11 +639,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         return 0;
     }
 
-    if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref)) {
-        h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT, 0);
-    } else if (h2o_http2_scheduler_get_parent(&stream->scheduler.ref) == conn->scheduler.reqs.orphan_placeholder) {
-        h2o_http2_scheduler_rebind(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT, 0);
-    }
+    init_priority_of_request_stream(conn, stream, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT);
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.headers, &header_exists_map,
