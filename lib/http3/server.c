@@ -530,7 +530,7 @@ static h2o_http2_scheduler_openref_t *get_freestanding_scheduler_ref(struct st_h
         if (r != 0) {
             /* iter points to a newly created entry; instantiate */
             h2o_http2_scheduler_openref_t *ref = h2o_mem_alloc(sizeof(*ref));
-            h2o_http2_scheduler_open(ref, get_orphan_placeholder(conn), H2O_HTTP3_DEFAULT_WEIGHT, 0, 1);
+            h2o_http2_scheduler_open(ref, get_orphan_placeholder(conn), H2O_HTTP3_DEFAULT_WEIGHT, 0);
             kh_val(conn->scheduler.reqs.freestanding, iter) = ref;
         }
     } else {
@@ -561,7 +561,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
             struct st_h2o_http3_server_stream_t *stream = qs->data;
             assert(stream != NULL);
             if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref))
-                h2o_http2_scheduler_open(&stream->scheduler.ref, get_orphan_placeholder(conn), H2O_HTTP3_DEFAULT_WEIGHT, 0, 1);
+                h2o_http2_scheduler_open(&stream->scheduler.ref, get_orphan_placeholder(conn), H2O_HTTP3_DEFAULT_WEIGHT, 0);
             *node = &stream->scheduler.ref.node;
         } else {
             h2o_http2_scheduler_openref_t *ref =
@@ -620,8 +620,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
                                           &conn->scheduler.reqs.root, &err_desc)) != 0)
                 return ret;
             if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref)) {
-                h2o_http2_scheduler_open(&stream->scheduler.ref, parent, priority_frame.weight_m1 + 1, 0, 0);
-            } else if (stream->scheduler.ref.initialized_implicitly) {
+                h2o_http2_scheduler_open(&stream->scheduler.ref, parent, priority_frame.weight_m1 + 1, 0);
+            } else if (h2o_http2_scheduler_get_parent(&stream->scheduler.ref) == conn->scheduler.reqs.orphan_placeholder) {
                 h2o_http2_scheduler_rebind(&stream->scheduler.ref, parent, priority_frame.weight_m1 + 1, 0);
             }
         } break;
@@ -634,8 +634,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref)) {
-        h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT, 0, 0);
-    } else if (stream->scheduler.ref.initialized_implicitly) {
+        h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT, 0);
+    } else if (h2o_http2_scheduler_get_parent(&stream->scheduler.ref) == conn->scheduler.reqs.orphan_placeholder) {
         h2o_http2_scheduler_rebind(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT, 0);
     }
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
