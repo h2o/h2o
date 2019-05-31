@@ -89,6 +89,10 @@ struct st_h2o_http3_server_conn_t {
              */
             h2o_http2_scheduler_node_t root;
             /**
+             * the orphan placeholder
+             */
+            h2o_http2_scheduler_node_t *orphan_placeholder;
+            /**
              * Hashtable of placeholders (ids are negated and subtracted by one) or request priority nodes unassociated to streams.
              * In case the entries are of the streams that have already been closed, the values point to
              * `closed_streams.entries[].ref`, otherwise the values point to allocated memory; see `get_freestanding_scheduler_ref`.
@@ -505,6 +509,15 @@ static int on_receive_reset(quicly_stream_t *qs, int err)
     return 0;
 }
 
+static h2o_http2_scheduler_node_t *get_orphan_placeholder(struct st_h2o_http3_server_conn_t *conn)
+{
+    if (conn->scheduler.reqs.orphan_placeholder == NULL) {
+        conn->scheduler.reqs.orphan_placeholder = h2o_mem_alloc(sizeof(*conn->scheduler.reqs.orphan_placeholder));
+        h2o_http2_scheduler_init(conn->scheduler.reqs.orphan_placeholder);
+    }
+    return conn->scheduler.reqs.orphan_placeholder;
+}
+
 static h2o_http2_scheduler_openref_t *get_freestanding_scheduler_ref(struct st_h2o_http3_server_conn_t *conn, int64_t id,
                                                                      int create_if_not_found)
 {
@@ -517,7 +530,7 @@ static h2o_http2_scheduler_openref_t *get_freestanding_scheduler_ref(struct st_h
         if (r != 0) {
             /* iter points to a newly created entry; instantiate */
             h2o_http2_scheduler_openref_t *ref = h2o_mem_alloc(sizeof(*ref));
-            h2o_http2_scheduler_open(ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
+            h2o_http2_scheduler_open(ref, get_orphan_placeholder(conn), H2O_HTTP3_DEFAULT_WEIGHT, 0, 1);
             kh_val(conn->scheduler.reqs.freestanding, iter) = ref;
         }
     } else {
@@ -548,14 +561,13 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
             struct st_h2o_http3_server_stream_t *stream = qs->data;
             assert(stream != NULL);
             if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref))
-                h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_IMPLICIT_WEIGHT, 0, 1);
+                h2o_http2_scheduler_open(&stream->scheduler.ref, get_orphan_placeholder(conn), H2O_HTTP3_DEFAULT_WEIGHT, 0, 1);
             *node = &stream->scheduler.ref.node;
         } else {
             h2o_http2_scheduler_openref_t *ref =
                 get_freestanding_scheduler_ref(conn, id, id >= quicly_get_peer_next_stream_id(conn->h3.quic, 0));
-            /* ref being NULL means that the stream has been closed and the PRIORITY information is no longer available (TODO
-             * consider returning orphan placeholder) */
-            *node = ref != NULL ? &ref->node : self;
+            /* ref being NULL means that the stream has been closed and the PRIORITY information is no longer available */
+            *node = ref != NULL ? &ref->node : get_orphan_placeholder(conn);
         }
 
     } break;
@@ -624,9 +636,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (!h2o_http2_scheduler_is_open(&stream->scheduler.ref)) {
         h2o_http2_scheduler_open(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT, 0, 0);
     } else if (stream->scheduler.ref.initialized_implicitly) {
-        assert(h2o_http2_scheduler_get_parent(&stream->scheduler.ref) == &conn->scheduler.reqs.root);
-        assert(h2o_http2_scheduler_get_weight(&stream->scheduler.ref) == H2O_HTTP3_DEFAULT_WEIGHT);
-        stream->scheduler.ref.initialized_implicitly = 0;
+        h2o_http2_scheduler_rebind(&stream->scheduler.ref, &conn->scheduler.reqs.root, H2O_HTTP3_DEFAULT_WEIGHT, 0);
     }
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
@@ -831,7 +841,13 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
          * spurious call to quicly_send. */
     }
 
-    return conn->scheduler.uni != 0 || h2o_http2_scheduler_is_active(&conn->scheduler.reqs.root);
+    if (conn->scheduler.uni != 0)
+        return 1;
+    if (h2o_http2_scheduler_is_active(&conn->scheduler.reqs.root))
+        return 1;
+    if (conn->scheduler.reqs.orphan_placeholder != NULL && h2o_http2_scheduler_is_active(conn->scheduler.reqs.orphan_placeholder))
+        return 1;
+    return 0;
 }
 
 static int scheduler_do_send_stream(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg)
@@ -909,6 +925,12 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
         } else if (h2o_http2_scheduler_is_active(&conn->scheduler.reqs.root)) {
             /* 1 and part of 4 is done by h2o_http2_scheduler_run, the rest is done by shceduler_do_send_stream */
             if ((ret = h2o_http2_scheduler_run(&conn->scheduler.reqs.root, scheduler_do_send_stream, s)) != 0 &&
+                ret != QUICLY_ERROR_SENDBUF_FULL)
+                goto Exit;
+        } else if (conn->scheduler.reqs.orphan_placeholder != NULL &&
+                   h2o_http2_scheduler_is_active(conn->scheduler.reqs.orphan_placeholder)) {
+            /* ditto */
+            if ((ret = h2o_http2_scheduler_run(conn->scheduler.reqs.orphan_placeholder, scheduler_do_send_stream, s)) != 0 &&
                 ret != QUICLY_ERROR_SENDBUF_FULL)
                 goto Exit;
         } else {
@@ -1027,6 +1049,10 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
         kh_destroy(h2o_http3_freestanding_priority, conn->scheduler.reqs.freestanding);
     }
     h2o_http2_scheduler_dispose(&conn->scheduler.reqs.root);
+    if (conn->scheduler.reqs.orphan_placeholder != NULL) {
+        h2o_http2_scheduler_dispose(conn->scheduler.reqs.orphan_placeholder);
+        free(conn->scheduler.reqs.orphan_placeholder);
+    }
     assert(h2o_linklist_is_empty(&conn->scheduler.conn_blocked.reqs));
 
     free(conn);
@@ -1069,6 +1095,7 @@ SynFound : {
     h2o_timer_init(&conn->timeout, handle_pending_reqs);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     h2o_http2_scheduler_init(&conn->scheduler.reqs.root);
+    conn->scheduler.reqs.orphan_placeholder = NULL;
     conn->scheduler.reqs.freestanding = kh_init(h2o_http3_freestanding_priority);
     assert(conn->scheduler.reqs.freestanding != NULL);
     {
