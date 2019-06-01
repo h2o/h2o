@@ -1132,7 +1132,7 @@ static int conn_is_h1(h2o_conn_t *conn)
 void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     struct st_h2o_http1_conn_t *conn =
-        (void *)h2o_create_connection(sizeof(*conn), sock, ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
+        (void *)h2o_create_connection(sizeof(*conn), ctx->ctx, ctx->hosts, connected_at, &h1_callbacks);
 
     /* zero-fill all properties expect req */
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_http1_conn_t, req) - sizeof(conn->super));

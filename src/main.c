@@ -2067,10 +2067,10 @@ int main(int argc, char **argv)
 {
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
     int n, error_log_fd = -1;
-    size_t num_procs = h2o_numproc();
+    h2o_num_procs = h2o_numproc();
 
-    h2o_vector_reserve(NULL, &conf.thread_map, num_procs);
-    for (n = 0; n < num_procs; n++)
+    h2o_vector_reserve(NULL, &conf.thread_map, h2o_num_procs);
+    for (n = 0; n < h2o_num_procs; n++)
         conf.thread_map.entries[conf.thread_map.size++] = -1;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
@@ -2268,8 +2268,6 @@ int main(int argc, char **argv)
     }
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);
-
-    conf.globalconf.num_procs = num_procs;
 
     /* setuid */
     if (conf.globalconf.user != NULL) {

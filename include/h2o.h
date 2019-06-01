@@ -344,10 +344,6 @@ struct st_h2o_globalconf_t {
      * setuid user (or NULL)
      */
     char *user;
-    /**
-     * number of cpus
-     */
-    size_t num_procs;
 
     /**
      * SSL handshake timeout
@@ -587,10 +583,6 @@ struct st_h2o_context_t {
      * flag indicating if shutdown has been requested
      */
     int shutdown_requested;
-    /**
-     * tracer map fd
-     */
-    int map_fd;
 
     struct {
         /**
@@ -843,10 +835,6 @@ struct st_h2o_conn_t {
      * connection id
      */
     uint64_t id;
-    /**
-     * flag to track if connection is being traced
-     */
-    char is_traced;
     /**
      * callbacks
      */
@@ -1186,8 +1174,8 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 /**
  * creates a new connection
  */
-static h2o_conn_t *h2o_create_connection(size_t sz, h2o_socket_t *sock, h2o_context_t *ctx, h2o_hostconf_t **hosts,
-                                         struct timeval connected_at, const h2o_conn_callbacks_t *callbacks);
+static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                         const h2o_conn_callbacks_t *callbacks);
 /**
  *
  */
@@ -1202,9 +1190,14 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, uns
 void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsigned expiration, const char *prefix);
 
 /**
- * helper to check if connection is to be traced
+ * helper to return if the socket is to be traced
  */
-char h2o_trace_check_map(h2o_socket_t *sock, int *map_fd, int num_procs);
+int h2o_tracing_is_conn_traced(h2o_conn_t *conn);
+
+/**
+ * total number of processors
+ */
+size_t h2o_num_procs;
 
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
@@ -2001,16 +1994,14 @@ void h2o_http2_debug_state_register_configurator(h2o_globalconf_t *conf);
 extern pthread_mutex_t h2o_conn_id_mutex;
 #endif
 
-inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_socket_t *sock, h2o_context_t *ctx, h2o_hostconf_t **hosts,
-                                         struct timeval connected_at, const h2o_conn_callbacks_t *callbacks)
+inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
+                                         const h2o_conn_callbacks_t *callbacks)
 {
     h2o_conn_t *conn = (h2o_conn_t *)h2o_mem_alloc(sz);
 
     conn->ctx = ctx;
     conn->hosts = hosts;
     conn->connected_at = connected_at;
-    conn->is_traced = h2o_trace_check_map(sock, &ctx->map_fd, (int)(**hosts).global->num_procs);
-
 #ifdef H2O_NO_64BIT_ATOMICS
     pthread_mutex_lock(&h2o_conn_id_mutex);
     conn->id = ++h2o_connection_id;

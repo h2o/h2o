@@ -949,39 +949,51 @@ void h2o_cleanup_thread(void)
 #include <linux/bpf.h>
 #include <linux/unistd.h>
 #include "h2o-probes.h"
+#include "include/h2o/ebpf.h"
 
-struct keyType {
-    u_int8_t ipa[16];
-    u_int8_t ipb[16];
-    long porta;
-    long portb;
-};
+int h2o_tracing_map_fd = 0;
+u_int32_t h2o_tracing_map_last_attempt = 0;
 
-inline int open_map(int *map_fd)
+int open_map()
 {
-    char path[] = "/sys/fs/bpf/h2o_map";
     union bpf_attr attr;
+    int fd = 0;
+    u_int32_t now = (u_int32_t)time(NULL);
+
+    // only try every second
+    if ((h2o_tracing_map_last_attempt - now) == 0) {
+        return 0;
+    }
+    __sync_bool_compare_and_swap(&h2o_tracing_map_last_attempt, h2o_tracing_map_last_attempt, now);
 
     memset(&attr, 0, sizeof(attr));
-    attr.pathname = (__u64)(unsigned long)&path[0];
+    attr.pathname = (__u64)(unsigned long)&h2o_ebpf_map_path[0];
 
-    *map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
-    return *map_fd;
+    fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    if (fd <= 0)
+      return 0;
+
+    // try set map fd if not set before
+    // if fd was set beforehand, don't set the new fd, and close it
+    if (!__sync_bool_compare_and_swap(&h2o_tracing_map_fd, 0, fd))
+        close(fd);
+
+    return h2o_tracing_map_fd;
 }
 
-inline int lookup_map(int *map_fd, const void *key, const void *value)
+inline int lookup_map(const void *key, const void *value)
 {
     union bpf_attr attr;
 
     memset(&attr, 0, sizeof(attr));
-    attr.map_fd = *map_fd;
+    attr.map_fd = h2o_tracing_map_fd;
     attr.key = (__u64)(unsigned long)key;
     attr.value = (__u64)(unsigned long)value;
 
     return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
 }
 
-inline void read_ip_port(struct sockaddr *sa, void *ip, long *port)
+inline void read_ip_port(struct sockaddr *sa, void *ip, u_int16_t *port)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
@@ -994,29 +1006,31 @@ inline void read_ip_port(struct sockaddr *sa, void *ip, long *port)
     }
 }
 
-char h2o_trace_check_map(h2o_socket_t *sock, int *map_fd, int num_procs)
+int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
 {
     // check for tracing enablement
     if (H2O_UNLIKELY(!H2O_H2O_CONN_TRACING_ENABLED())) {
 
         // cleanup opened map if it was opened
-        if (H2O_UNLIKELY(*map_fd > 0))
-            *map_fd = close(*map_fd);
+        if (H2O_UNLIKELY(h2o_tracing_map_fd > 0)) {
+            close(h2o_tracing_map_fd);
+            __sync_fetch_and_and(&h2o_tracing_map_fd, 0);
+        }
 
         return 0;
     }
 
     // try open map if not opened
-    if (*map_fd <= 0 && open_map(map_fd) <= 0)
+    if (h2o_tracing_map_fd <= 0 && open_map(h2o_tracing_map_fd) <= 0)
         return 1; // map can't be opened, fallback accepting probe
 
-    struct sockaddr_storage loc;
-    struct sockaddr_storage rem;
-    struct keyType key;
+
+    struct sockaddr_storage loc, rem;
+    struct h2o_ebpf_map_key_t key;
     memset(&key, 0, sizeof(key));
 
     // as PER_CPU maps are used, the lookup will return 1 value per cpu
-    __u64 vals[num_procs];
+    __u64 vals[h2o_num_procs];
     memset(&vals, 0, sizeof(vals));
 
     // get sock/peer ip/ports
@@ -1027,12 +1041,15 @@ char h2o_trace_check_map(h2o_socket_t *sock, int *map_fd, int num_procs)
     read_ip_port((void *)&loc, &key.ipa, &key.porta);
     read_ip_port((void *)&rem, &key.ipb, &key.portb);
 
+    // read ip family
+    key.family = loc.ss_family == AF_INET6 ? 6 : 4;
+
     // lookup map for our key
-    if (lookup_map(map_fd, &key, &vals) == -1)
+    if (lookup_map(&key, &vals) == -1)
         return 0; // key not in map, or errored - return 0
 
     // return 1 if value present in map
-    for (int i = 0; i < num_procs; i++)
+    for (int i = 0; i < h2o_num_procs; i++)
         if (vals[i] > 0)
             return 1;
 
@@ -1041,8 +1058,14 @@ char h2o_trace_check_map(h2o_socket_t *sock, int *map_fd, int num_procs)
     return 0;
 }
 #else
-char h2o_trace_check_map(h2o_socket_t *sock, int *map_fd, int num_procs)
+int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
 {
     return 1;
 }
 #endif
+
+int h2o_tracing_is_conn_traced(h2o_conn_t *conn)
+{
+    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
+    return sock->is_traced;
+}

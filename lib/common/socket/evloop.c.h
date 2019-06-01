@@ -418,6 +418,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 {
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t *)_listener;
     int fd;
+    h2o_socket_t *sock;
 
 #if H2O_USE_ACCEPT4
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
@@ -432,13 +433,16 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
         }
     }
 #endif
-    return &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
+    sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
     if ((fd = cloexec_accept(listener->fd, NULL, NULL)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
-    return &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
+    sock = &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
+
+    sock->is_traced = h2o_tracing_is_sock_traced(sock);
+    return sock;
 }
 
 h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, socklen_t addrlen, h2o_socket_cb cb)
