@@ -1195,11 +1195,6 @@ void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsi
 int h2o_tracing_is_conn_traced(h2o_conn_t *conn);
 
 /**
- * total number of processors
- */
-size_t h2o_num_procs;
-
-/**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);

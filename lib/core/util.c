@@ -1024,16 +1024,13 @@ int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
     if (h2o_tracing_map_fd <= 0 && open_map(h2o_tracing_map_fd) <= 0)
         return 1; // map can't be opened, fallback accepting probe
 
-
-    struct sockaddr_storage loc, rem;
+    // define key/vals - we are only interrested in presence of the key, discard values
     struct h2o_ebpf_map_key_t key;
     memset(&key, 0, sizeof(key));
-
-    // as PER_CPU maps are used, the lookup will return 1 value per cpu
-    __u64 vals[h2o_num_procs];
-    memset(&vals, 0, sizeof(vals));
+    void *vals = NULL;
 
     // get sock/peer ip/ports
+    struct sockaddr_storage loc, rem;
     h2o_socket_getsockname(sock, (void *)&loc);
     h2o_socket_getpeername(sock, (void *)&rem);
 
@@ -1048,14 +1045,8 @@ int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
     if (lookup_map(&key, &vals) == -1)
         return 0; // key not in map, or errored - return 0
 
-    // return 1 if value present in map
-    for (int i = 0; i < h2o_num_procs; i++)
-        if (vals[i] > 0)
-            return 1;
-
-    // 0 otherwise - should never be called
-    H2O_H2O_CONN_TRACING(); // dummy call to a trace only used for checking enablement
-    return 0;
+    H2O_H2O_CONN_TRACING(); // dummy call - only used for checking enablement
+    return 1;
 }
 #else
 int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
