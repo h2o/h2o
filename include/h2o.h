@@ -1192,7 +1192,7 @@ void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsi
 /**
  * helper to return if the socket is to be traced
  */
-int h2o_tracing_is_conn_traced(h2o_conn_t *conn);
+int h2o_conn_is_traced(h2o_conn_t *conn);
 
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")

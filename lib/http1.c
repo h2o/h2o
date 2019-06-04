@@ -531,9 +531,6 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         H2O_PROBE_CONN(RECEIVE_REQUEST_HEADERS, &conn->super, conn->_req_index, &conn->req.input.method, &conn->req.input.authority,
                        &conn->req.input.path, conn->req.version, conn->req.headers.entries, conn->req.headers.size);
 
-        H2O_PROBE(RECEIVE_REQUEST_HEADERS, &conn->super, conn->_req_index, &conn->req.input.method, &conn->req.input.authority,
-                  &conn->req.input.path, conn->req.version, conn->req.headers.entries, conn->req.headers.size);
-
         if (entity_body_header_index != -1) {
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {

@@ -950,50 +950,58 @@ void h2o_cleanup_thread(void)
 #include <linux/unistd.h>
 #include "h2o-probes.h"
 #include "include/h2o/ebpf.h"
+#include <sys/stat.h>
 
 int h2o_tracing_map_fd = 0;
-u_int32_t h2o_tracing_map_last_attempt = 0;
+uint32_t h2o_tracing_map_last_attempt = 0;
 
-int open_map()
+void open_map()
 {
-    union bpf_attr attr;
-    int fd = 0;
-    u_int32_t now = (u_int32_t)time(NULL);
+    // only check every second
+    uint32_t now = (uint32_t)time(NULL);
+    if (h2o_tracing_map_last_attempt == now)
+        return;
 
-    // only try every second
-    if ((h2o_tracing_map_last_attempt - now) == 0) {
-        return 0;
-    }
     __sync_bool_compare_and_swap(&h2o_tracing_map_last_attempt, h2o_tracing_map_last_attempt, now);
 
-    memset(&attr, 0, sizeof(attr));
-    attr.pathname = (__u64)(unsigned long)&h2o_ebpf_map_path[0];
+    // check if map exists at path
+    struct stat s;
+    if (stat(&H2O_EBPF_MAP_PATH[0], &s) == -1) {
+        // map path unavailable, cleanup fd if needed and leave
+        if (h2o_tracing_map_fd > 0) {
+            close(h2o_tracing_map_fd);
+            __sync_fetch_and_and(&h2o_tracing_map_fd, 0);
+        }
+        return;
+    }
 
-    fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+    if (h2o_tracing_map_fd > 0)
+        return; // map still exists and we have a fd
+
+    union bpf_attr attr;
+    memset(&attr, 0, sizeof(attr));
+    attr.pathname = (uint64_t)(unsigned long)&H2O_EBPF_MAP_PATH[0];
+
+    int fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
     if (fd <= 0)
-      return 0;
+        return;
 
     // try set map fd if not set before
-    // if fd was set beforehand, don't set the new fd, and close it
     if (!__sync_bool_compare_and_swap(&h2o_tracing_map_fd, 0, fd))
-        close(fd);
-
-    return h2o_tracing_map_fd;
+        close(fd); // if a fd was set beforehand, don't set the new fd, and close it
 }
 
 inline int lookup_map(const void *key, const void *value)
 {
     union bpf_attr attr;
-
     memset(&attr, 0, sizeof(attr));
     attr.map_fd = h2o_tracing_map_fd;
-    attr.key = (__u64)(unsigned long)key;
-    attr.value = (__u64)(unsigned long)value;
-
-    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
+    attr.key = (uint64_t)(unsigned long)key;
+    attr.value = (uint64_t)(unsigned long)value;
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? -1 : 1;
 }
 
-inline void read_ip_port(struct sockaddr *sa, void *ip, u_int16_t *port)
+inline void read_ip_port(struct sockaddr *sa, void *ip, uint16_t *port)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
@@ -1006,22 +1014,17 @@ inline void read_ip_port(struct sockaddr *sa, void *ip, u_int16_t *port)
     }
 }
 
-int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
+int h2o_socket_is_traced(h2o_socket_t *sock)
 {
-    // check for tracing enablement
-    if (H2O_UNLIKELY(!H2O_H2O_CONN_TRACING_ENABLED())) {
-
-        // cleanup opened map if it was opened
-        if (H2O_UNLIKELY(h2o_tracing_map_fd > 0)) {
-            close(h2o_tracing_map_fd);
-            __sync_fetch_and_and(&h2o_tracing_map_fd, 0);
-        }
-
+    if (sock == NULL)
         return 0;
-    }
+
+    if (sock->_is_traced != 0)
+        return sock->_is_traced;
 
     // try open map if not opened
-    if (h2o_tracing_map_fd <= 0 && open_map(h2o_tracing_map_fd) <= 0)
+    open_map();
+    if (h2o_tracing_map_fd <= 0)
         return 1; // map can't be opened, fallback accepting probe
 
     // define key/vals - we are only interrested in presence of the key, discard values
@@ -1042,21 +1045,16 @@ int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
     key.family = loc.ss_family == AF_INET6 ? 6 : 4;
 
     // lookup map for our key
-    if (lookup_map(&key, &vals) == -1)
-        return 0; // key not in map, or errored - return 0
-
-    H2O_H2O_CONN_TRACING(); // dummy call - only used for checking enablement
-    return 1;
+    return sock->_is_traced = lookup_map(&key, &vals);
 }
 #else
-int h2o_tracing_is_sock_traced(h2o_socket_t *sock)
+int h2o_socket_is_traced(h2o_socket_t *sock)
 {
     return 1;
 }
 #endif
 
-int h2o_tracing_is_conn_traced(h2o_conn_t *conn)
+int h2o_conn_is_traced(h2o_conn_t *conn)
 {
-    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
-    return sock->is_traced;
+    return h2o_socket_is_traced(conn->callbacks->get_socket(conn));
 }

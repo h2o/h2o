@@ -33,7 +33,7 @@
 
 #define H2O_PROBE_CONN(label, _conn, ...)                                                                                          \
     do {                                                                                                                           \
-        if (PTLS_UNLIKELY(H2O_H2O_##label##_ENABLED()) && h2o_tracing_is_conn_traced((h2o_conn_t *)_conn)) {                       \
+        if (PTLS_UNLIKELY(H2O_H2O_##label##_ENABLED()) && h2o_conn_is_traced(_conn) == 1) {                                        \
             H2O_H2O_##label(_conn, __VA_ARGS__);                                                                                   \
         }                                                                                                                          \
     } while (0)

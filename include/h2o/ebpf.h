@@ -22,17 +22,14 @@
 #ifndef h2o__ebpf_h
 #define h2o__ebpf_h
 
-#if H2O_USE_DTRACE
-
 struct h2o_ebpf_map_key_t {
-    u_int8_t ipa[16];
-    u_int8_t ipb[16];
-    u_int16_t porta;
-    u_int16_t portb;
-    u_int8_t family;
+    uint8_t ipa[16];
+    uint8_t ipb[16];
+    uint16_t porta;
+    uint16_t portb;
+    uint8_t family;
 };
 
-char h2o_ebpf_map_path[] = "/sys/fs/bpf/h2o_map";
+#define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
 
-#endif
 #endif

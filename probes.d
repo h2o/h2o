@@ -24,6 +24,4 @@ provider h2o {
     probe h2o_receive_request_headers(struct st_h2o_conn_t *conn, int64_t request_id, struct st_h2o_iovec_t *method,
                                       struct st_h2o_iovec_t *authority, struct st_h2o_iovec_t *path, int http_version,
                                       struct st_h2o_header_t *headers, size_t num_headers);
-
-    probe h2o_conn_tracing();
 };

@@ -268,7 +268,6 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->close_cb = close_cb;
     sock->handle->data = sock;
 
-    sock->super.is_traced = h2o_tracing_is_sock_traced(&sock->super);
     return &sock->super;
 }
 
