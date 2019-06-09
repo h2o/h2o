@@ -26,13 +26,27 @@
 #include <string.h>
 #include <stdio.h>
 #include "picotls.h"
+#include "picotls/ffx.h"
 #include "picotls/minicrypto.h"
+#include "picotls/pembase64.h"
 #include "../deps/picotest/picotest.h"
 #include "../lib/picotls.c"
 #include "test.h"
 
+static void test_is_ipaddr(void)
+{
+    ok(!ptls_server_name_is_ipaddr("www.google.com"));
+    ok(!ptls_server_name_is_ipaddr("www.google.com."));
+    ok(!ptls_server_name_is_ipaddr("www"));
+    ok(!ptls_server_name_is_ipaddr(""));
+    ok(!ptls_server_name_is_ipaddr("123"));
+    ok(ptls_server_name_is_ipaddr("1.1.1.1"));
+    ok(ptls_server_name_is_ipaddr("2001:db8::2:1"));
+}
+
 ptls_context_t *ctx, *ctx_peer;
 ptls_verify_certificate_t *verify_certificate;
+struct st_ptls_ffx_test_variants_t ffx_variants[7];
 
 static ptls_cipher_suite_t *find_cipher(ptls_context_t *ctx, uint16_t id)
 {
@@ -66,17 +80,29 @@ static void test_sha384(void)
 static void test_hmac_sha256(void)
 {
     /* test vector from RFC 4231 */
-    const char *secret = "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b", *message = "Hi There";
+    const char *secret = "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b", *message = "Hi There",
+               *expected =
+                   "\xb0\x34\x4c\x61\xd8\xdb\x38\x53\x5c\xa8\xaf\xce\xaf\x0b\xf1\x2b\x88\x1d\xc2\x00\xc9\x83\x3d\xa7\x26\xe9\x37"
+                   "\x6c\x2e\x32\xcf\xf7";
     uint8_t digest[32];
 
     ptls_hash_context_t *hctx =
         ptls_hmac_create(find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)->hash, secret, strlen(secret));
-    hctx->update(hctx, message, strlen(message));
-    hctx->final(hctx, digest, 0);
 
-    ok(memcmp(digest, "\xb0\x34\x4c\x61\xd8\xdb\x38\x53\x5c\xa8\xaf\xce\xaf\x0b\xf1\x2b\x88\x1d\xc2\x00\xc9\x83\x3d\xa7\x26\xe9\x37"
-                      "\x6c\x2e\x32\xcf\xf7",
-              32) == 0);
+    memset(digest, 0, sizeof(digest));
+    hctx->update(hctx, message, strlen(message));
+    hctx->final(hctx, digest, PTLS_HASH_FINAL_MODE_RESET);
+    ok(memcmp(digest, expected, 32) == 0);
+
+    memset(digest, 0, sizeof(digest));
+    hctx->update(hctx, message, strlen(message));
+    hctx->final(hctx, digest, PTLS_HASH_FINAL_MODE_RESET);
+    ok(memcmp(digest, expected, 32) == 0);
+
+    memset(digest, 0, sizeof(digest));
+    hctx->update(hctx, message, strlen(message));
+    hctx->final(hctx, digest, PTLS_HASH_FINAL_MODE_FREE);
+    ok(memcmp(digest, expected, 32) == 0);
 }
 
 static void test_hkdf(void)
@@ -89,19 +115,21 @@ static void test_hkdf(void)
     uint8_t okm[42];
 
     ptls_hkdf_extract(sha256, prk, ptls_iovec_init(salt, sizeof(salt) - 1), ptls_iovec_init(ikm, sizeof(ikm) - 1));
-    ok(memcmp(prk, "\x07\x77\x09\x36\x2c\x2e\x32\xdf\x0d\xdc\x3f\x0d\xc4\x7b\xba\x63\x90\xb6\xc7\x3b\xb5\x0f\x9c\x31\x22\xec\x84"
-                   "\x4a\xd7\xc2\xb3\xe5",
+    ok(memcmp(prk,
+              "\x07\x77\x09\x36\x2c\x2e\x32\xdf\x0d\xdc\x3f\x0d\xc4\x7b\xba\x63\x90\xb6\xc7\x3b\xb5\x0f\x9c\x31\x22\xec\x84"
+              "\x4a\xd7\xc2\xb3\xe5",
               32) == 0);
 
     ptls_hkdf_expand(sha256, okm, sizeof(okm), ptls_iovec_init(prk, sha256->digest_size), ptls_iovec_init(info, sizeof(info) - 1));
-    ok(memcmp(okm, "\x3c\xb2\x5f\x25\xfa\xac\xd5\x7a\x90\x43\x4f\x64\xd0\x36\x2f\x2a\x2d\x2d\x0a\x90\xcf\x1a\x5a\x4c\x5d\xb0\x2d"
-                   "\x56\xec\xc4\xc5\xbf\x34\x00\x72\x08\xd5\xb8\x87\x18\x58\x65",
+    ok(memcmp(okm,
+              "\x3c\xb2\x5f\x25\xfa\xac\xd5\x7a\x90\x43\x4f\x64\xd0\x36\x2f\x2a\x2d\x2d\x0a\x90\xcf\x1a\x5a\x4c\x5d\xb0\x2d"
+              "\x56\xec\xc4\xc5\xbf\x34\x00\x72\x08\xd5\xb8\x87\x18\x58\x65",
               sizeof(okm)) == 0);
 }
 
 static void test_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
 {
-    const char *traffic_secret = "01234567890123456789012345678901", *src1 = "hello world", *src2 = "good bye, all";
+    const char *traffic_secret = "012345678901234567890123456789012345678901234567", *src1 = "hello world", *src2 = "good bye, all";
     ptls_aead_context_t *c;
     char enc1[256], enc2[256], dec1[256], dec2[256];
     size_t enc1len, enc2len, dec1len, dec2len;
@@ -140,7 +168,7 @@ static void test_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
 
 static void test_aad_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
 {
-    const char *traffic_secret = "01234567890123456789012345678901", *src = "hello world", *aad = "my true aad";
+    const char *traffic_secret = "012345678901234567890123456789012345678901234567", *src = "hello world", *aad = "my true aad";
     ptls_aead_context_t *c;
     char enc[256], dec[256];
     size_t enclen, declen;
@@ -164,10 +192,53 @@ static void test_aad_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *
     ptls_aead_free(c);
 }
 
+static void test_ecb(ptls_cipher_algorithm_t *algo, const void *expected, size_t expected_len)
+{
+    static const uint8_t key[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
+                                  16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31},
+                         plaintext[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                                        0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+
+    uint8_t *actual = malloc(expected_len);
+    assert(actual != NULL);
+    /* encrypt */
+    memset(actual, 0, expected_len);
+    ptls_cipher_context_t *ctx = ptls_cipher_new(algo, 1, key);
+    ptls_cipher_encrypt(ctx, actual, plaintext, expected_len);
+    ptls_cipher_free(ctx);
+    ok(memcmp(actual, expected, expected_len) == 0);
+
+    /* decrypt */
+    ctx = ptls_cipher_new(algo, 0, key);
+    ptls_cipher_encrypt(ctx, actual, actual, expected_len);
+    ptls_cipher_free(ctx);
+    ok(memcmp(actual, plaintext, expected_len) == 0);
+
+    free(actual);
+}
+
+static void test_aes128ecb(void)
+{
+    static const uint8_t expected[] = {0x69, 0xC4, 0xE0, 0xD8, 0x6A, 0x7B, 0x04, 0x30,
+                                       0xD8, 0xCD, 0xB7, 0x80, 0x70, 0xB4, 0xC5, 0x5A};
+
+    test_ecb(find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)->aead->ecb_cipher, expected, sizeof(expected));
+}
+
+static void test_aes256ecb(void)
+{
+    static const uint8_t expected[] = {0x8E, 0xA2, 0xB7, 0xCA, 0x51, 0x67, 0x45, 0xBF,
+                                       0xEA, 0xFC, 0x49, 0x90, 0x4B, 0x49, 0x60, 0x89};
+    ptls_cipher_suite_t *cipher = find_cipher(ctx, PTLS_CIPHER_SUITE_AES_256_GCM_SHA384);
+
+    if (cipher != NULL)
+        test_ecb(cipher->aead->ecb_cipher, expected, sizeof(expected));
+}
+
 static void test_ctr(ptls_cipher_suite_t *cs, const uint8_t *key, size_t key_len, const void *iv, size_t iv_len,
                      const void *expected, size_t expected_len)
 {
-    static uint8_t zeroes[64] = {0};
+    static const uint8_t zeroes[64] = {0};
 
     if (cs == NULL)
         return;
@@ -242,6 +313,116 @@ static void test_chacha20poly1305(void)
     }
 }
 
+static void test_ffx(void)
+{
+    static uint8_t ffx_test_source[32] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
+                                          'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v'};
+
+    static uint8_t ffx_test_key[32] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16,
+                                       17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31, 32};
+    static uint8_t ffx_test_bad_key[32] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
+                                           16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 31};
+
+    static uint8_t ffx_test_iv[16] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
+    static uint8_t ffx_test_bad_iv[16] = {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26};
+
+    static uint8_t ffx_test_mask[8] = {0x00, 0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3F, 0x7F};
+    ptls_cipher_context_t *ffx_enc = NULL;
+    ptls_cipher_context_t *ffx_dec = NULL;
+    ptls_cipher_context_t *ffx_dec_bad = NULL;
+    uint8_t encrypted[32];
+    uint8_t result[32];
+
+    for (int i = 0; ffx_variants[i].algo != NULL; i++) {
+        ffx_enc = ptls_cipher_new(ffx_variants[i].algo, 1, ffx_test_key);
+        ffx_dec = ptls_cipher_new(ffx_variants[i].algo, 0, ffx_test_key);
+        ffx_dec_bad = ptls_cipher_new(ffx_variants[i].algo, 0, ffx_test_bad_key);
+        ok(ffx_enc != NULL && ffx_dec != NULL && ffx_dec_bad != NULL);
+        if (ffx_enc != NULL && ffx_dec != NULL && ffx_dec_bad != NULL) {
+            int bit_length = ffx_variants[i].bit_length;
+            int len = (bit_length + 7) / 8;
+            /* test that encoding works and last byte is correct */
+            ptls_cipher_init(ffx_enc, ffx_test_iv);
+            ptls_cipher_encrypt(ffx_enc, encrypted, ffx_test_source, len);
+            ok((encrypted[len - 1] & ffx_test_mask[bit_length % 8]) == (ffx_test_source[len - 1] & ffx_test_mask[bit_length % 8]));
+            /* Test that decoding with good key and IV works*/
+            ptls_cipher_init(ffx_dec, ffx_test_iv);
+            ptls_cipher_encrypt(ffx_dec, result, encrypted, len);
+            ok(memcmp(ffx_test_source, result, len) == 0);
+            /* Test that decoding with bad IV fails */
+            ptls_cipher_init(ffx_dec, ffx_test_bad_iv);
+            ptls_cipher_encrypt(ffx_dec, result, encrypted, len);
+            ok(memcmp(ffx_test_source, result, len) != 0);
+            /* Test that decoding with bad key fails */
+            ptls_cipher_init(ffx_dec_bad, ffx_test_iv);
+            ptls_cipher_encrypt(ffx_dec_bad, result, encrypted, len);
+            ok(memcmp(ffx_test_source, result, len) != 0);
+        }
+        if (ffx_enc != NULL) {
+            ptls_cipher_free(ffx_enc);
+        }
+        if (ffx_dec != NULL) {
+            ptls_cipher_free(ffx_dec);
+        }
+        if (ffx_dec_bad != NULL) {
+            ptls_cipher_free(ffx_dec_bad);
+        }
+    }
+
+    /* Test the direct usage of the API with the "ptls_ffx_new" function.
+     * The test verifies that ptls_ffx_new is compatible with
+     * creating an ffx variant with the macro, then creating the cipher.
+     */
+    assert(ffx_variants[2].bit_length == 53); /* assumes that ffx_variants[0] is ffx_aes128ctr_b53_r4 */
+    ffx_enc = ptls_ffx_new(&ptls_minicrypto_aes128ctr, 1, 4, 53, ffx_test_key);
+    ffx_dec = ptls_cipher_new(ffx_variants[2].algo, 0, ffx_test_key);
+    ok(ffx_enc != NULL && ffx_dec != NULL);
+    if (ffx_enc != NULL && ffx_dec != NULL) {
+        ptls_cipher_init(ffx_enc, ffx_test_iv);
+        ptls_cipher_encrypt(ffx_enc, encrypted, ffx_test_source, 7);
+        ptls_cipher_init(ffx_dec, ffx_test_iv);
+        ptls_cipher_encrypt(ffx_dec, result, encrypted, 7);
+        ok(memcmp(ffx_test_source, result, 7) == 0);
+    }
+    if (ffx_enc != NULL) {
+        ptls_cipher_free(ffx_enc);
+    }
+    if (ffx_dec != NULL) {
+        ptls_cipher_free(ffx_dec);
+    }
+}
+
+static void test_base64_decode(void)
+{
+    ptls_base64_decode_state_t state;
+    ptls_buffer_t buf;
+    int ret;
+
+    ptls_buffer_init(&buf, "", 0);
+
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("aGVsbG8gd29ybGQ=", &state, &buf);
+    ok(ret == 0);
+    ok(buf.off == 11);
+    ok(memcmp(buf.base, "hello world", 11) == 0);
+
+    buf.off = 0;
+
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("a$b", &state, &buf);
+    ok(ret != 0);
+
+    buf.off = 0;
+
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("a\xFF"
+                             "b",
+                             &state, &buf);
+    ok(ret != 0);
+
+    ptls_buffer_dispose(&buf);
+}
+
 static struct {
     struct {
         uint8_t buf[32];
@@ -301,13 +482,15 @@ static void test_fragmented_message(void)
     ok(ret == PTLS_ERROR_IN_PROGRESS);
     ok(test_fragmented_message_queue.count == 2);
     ok(test_fragmented_message_queue.vec[0].len == 7);
-    ok(memcmp(test_fragmented_message_queue.vec[0].buf, "\x01\x00\x00\x03"
-                                                        "abc",
+    ok(memcmp(test_fragmented_message_queue.vec[0].buf,
+              "\x01\x00\x00\x03"
+              "abc",
               7) == 0);
     ok(!test_fragmented_message_queue.vec[0].is_end_of_record);
     ok(test_fragmented_message_queue.vec[1].len == 6);
-    ok(memcmp(test_fragmented_message_queue.vec[1].buf, "\x02\x00\x00\x02"
-                                                        "de",
+    ok(memcmp(test_fragmented_message_queue.vec[1].buf,
+              "\x02\x00\x00\x02"
+              "de",
               6) == 0);
     ok(!test_fragmented_message_queue.vec[1].is_end_of_record);
     SET_RECORD("\x00\x00\x03"
@@ -317,23 +500,42 @@ static void test_fragmented_message(void)
     ok(tls.recvbuf.mess.base == NULL);
     ok(test_fragmented_message_queue.count == 3);
     ok(test_fragmented_message_queue.vec[2].len == 7);
-    ok(memcmp(test_fragmented_message_queue.vec[2].buf, "\x03\x00\x00\x03"
-                                                        "end",
+    ok(memcmp(test_fragmented_message_queue.vec[2].buf,
+              "\x03\x00\x00\x03"
+              "end",
               7) == 0);
     ok(test_fragmented_message_queue.vec[2].is_end_of_record);
 
 #undef SET_RECORD
 }
 
-static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_iovec_t server_name, const ptls_iovec_t *protocols,
-                             size_t num_protocols, const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+static int was_esni;
+
+static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
-    ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
-    ptls_set_negotiated_protocol(tls, (const char *)protocols[0].base, protocols[0].len);
+    ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
+    if (params->negotiated_protocols.count != 0)
+        ptls_set_negotiated_protocol(tls, (const char *)params->negotiated_protocols.list[0].base,
+                                     params->negotiated_protocols.list[0].len);
+    if (params->esni)
+        ++was_esni;
     return 0;
 }
 
-enum { TEST_HANDSHAKE_1RTT, TEST_HANDSHAKE_2RTT, TEST_HANDSHAKE_HRR, TEST_HANDSHAKE_HRR_STATELESS, TEST_HANDSHAKE_EARLY_DATA };
+enum {
+    TEST_HANDSHAKE_1RTT,
+    TEST_HANDSHAKE_2RTT,
+    TEST_HANDSHAKE_HRR,
+    TEST_HANDSHAKE_HRR_STATELESS,
+    TEST_HANDSHAKE_EARLY_DATA,
+    TEST_HANDSHAKE_KEY_UPDATE
+};
+
+static int on_extension_cb(ptls_on_extension_t *self, ptls_t *tls, uint8_t hstype, uint16_t exttype, ptls_iovec_t extdata)
+{
+    assert(extdata.base);
+    return 0;
+}
 
 static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int check_ch, int require_client_authentication)
 {
@@ -364,8 +566,16 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ptls_set_server_name(client, "test.example.com", 0);
     }
 
+    static ptls_on_extension_t cb = {on_extension_cb};
+    ctx_peer->on_extension = &cb;
+
     if (require_client_authentication) {
         ctx_peer->require_client_authentication = 1;
+    }
+
+    if (ctx_peer->esni != NULL) {
+        was_esni = 0;
+        client_hs_prop.client.esni_keys = ptls_iovec_init(ESNIKEYS, sizeof(ESNIKEYS) - 1);
     }
 
     switch (mode) {
@@ -374,7 +584,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         break;
     case TEST_HANDSHAKE_HRR_STATELESS:
         client_hs_prop.client.negotiate_before_key_exchange = 1;
-        server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+        server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
         server_hs_prop.server.retry_uses_cookie = 1;
         break;
     case TEST_HANDSHAKE_EARLY_DATA:
@@ -433,6 +643,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ok(strcmp(ptls_get_server_name(server), "test.example.com") == 0);
         ok(ptls_get_negotiated_protocol(server) != NULL);
         ok(strcmp(ptls_get_negotiated_protocol(server), "h2") == 0);
+        ok(was_esni == (ctx_peer->esni != NULL));
     } else {
         ok(ptls_get_server_name(server) == NULL);
         ok(ptls_get_negotiated_protocol(server) == NULL);
@@ -504,6 +715,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ok(memcmp(decbuf.base, req, strlen(req)) == 0);
         ok(ptls_handshake_is_complete(server));
         decbuf.off = 0;
+        cbuf.off = 0;
 
         ret = ptls_send(server, &sbuf, resp, strlen(resp));
         ok(ret == 0);
@@ -517,6 +729,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     ok(memcmp(decbuf.base, resp, strlen(resp)) == 0);
     ok(ptls_handshake_is_complete(client));
     decbuf.off = 0;
+    sbuf.off = 0;
 
     if (mode == TEST_HANDSHAKE_EARLY_DATA) {
         consumed = cbuf.off;
@@ -525,6 +738,39 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ok(cbuf.off == consumed);
         ok(decbuf.off == 0);
         ok(ptls_handshake_is_complete(client));
+        cbuf.off = 0;
+    }
+
+    if (mode == TEST_HANDSHAKE_KEY_UPDATE) {
+        /* server -> client with update_request */
+        ret = ptls_update_key(server, 1);
+        ok(ret == 0);
+        ok(server->needs_key_update);
+        ok(server->key_update_send_request);
+        ret = ptls_send(server, &sbuf, "good bye", 8);
+        ok(ret == 0);
+        ok(!server->needs_key_update);
+        ok(!server->key_update_send_request);
+        consumed = sbuf.off;
+        ret = ptls_receive(client, &decbuf, sbuf.base, &consumed);
+        ok(ret == 0);
+        ok(sbuf.off == consumed);
+        ok(decbuf.off == 8);
+        ok(memcmp(decbuf.base, "good bye", 8) == 0);
+        ok(client->needs_key_update);
+        ok(!client->key_update_send_request);
+        sbuf.off = 0;
+        decbuf.off = 0;
+        ret = ptls_send(client, &cbuf, "hello", 5);
+        ok(ret == 0);
+        consumed = cbuf.off;
+        ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+        ok(ret == 0);
+        ok(cbuf.off == consumed);
+        ok(decbuf.off == 5);
+        ok(memcmp(decbuf.base, "hello", 5) == 0);
+        cbuf.off = 0;
+        decbuf.off = 0;
     }
 
     ptls_buffer_dispose(&cbuf);
@@ -594,6 +840,11 @@ static void test_full_handshake(void)
 static void test_full_handshake_with_client_authentication(void)
 {
     test_full_handshake_impl(1);
+}
+
+static void test_key_update(void)
+{
+    test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_KEY_UPDATE, 0, 0, 0);
 }
 
 static void test_hrr_handshake(void)
@@ -730,7 +981,7 @@ static void test_enforce_retry(int use_cookie)
     size_t consumed;
     int ret;
 
-    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
     server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
     server_hs_prop.server.enforce_retry = 1;
     server_hs_prop.server.retry_uses_cookie = use_cookie;
@@ -839,7 +1090,7 @@ static void test_stateless_hrr_aad_change(void)
     size_t consumed;
     int ret;
 
-    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef";
+    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
     server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
     server_hs_prop.server.enforce_retry = 1;
     server_hs_prop.server.retry_uses_cookie = 1;
@@ -912,8 +1163,10 @@ static void test_handshake_api(void)
     int ret;
 
     ctx->update_traffic_key = &update_traffic_key;
+    ctx->omit_end_of_early_data = 1;
     ctx->save_ticket = &save_ticket;
     ctx_peer->update_traffic_key = &update_traffic_key;
+    ctx_peer->omit_end_of_early_data = 1;
     ctx_peer->encrypt_ticket = &encrypt_ticket;
     ctx_peer->ticket_lifetime = 86400;
     ctx_peer->max_early_data_size = 8192;
@@ -963,14 +1216,15 @@ static void test_handshake_api(void)
     memset(coffs, 0, sizeof(coffs));
     memset(soffs, 0, sizeof(soffs));
 
+    ctx->save_ticket = NULL; /* don't allow further test to update the saved ticket */
+
+    /* 0-RTT resumption */
     size_t max_early_data_size = 0;
     ptls_handshake_properties_t client_hs_prop = {{{{NULL}, saved_ticket, &max_early_data_size}}};
     client = ptls_new(ctx, 0);
     *ptls_get_data_ptr(client) = &client_secrets;
     server = ptls_new(ctx_peer, 1);
     *ptls_get_data_ptr(server) = &server_secrets;
-
-    /* 0-RTT resumption */
     ret = ptls_handle_message(client, &cbuf, coffs, 0, NULL, 0, &client_hs_prop);
     ok(ret == PTLS_ERROR_IN_PROGRESS);
     ok(max_early_data_size != 0);
@@ -992,8 +1246,145 @@ static void test_handshake_api(void)
     ok(memcmp(client_secrets[1][3], zeroes_of_max_digest_size, PTLS_MAX_DIGEST_SIZE) != 0);
     ret = feed_messages(server, &sbuf, soffs, cbuf.base, coffs, NULL);
     ok(ret == 0);
+    ok(sbuf.off == 0);
     ok(ptls_handshake_is_complete(server));
-    ok(memcmp(client_secrets[1][3], server_secrets[0][3], PTLS_MAX_DIGEST_SIZE) == 0);
+    ok(memcmp(server_secrets[0][3], zeroes_of_max_digest_size, PTLS_MAX_DIGEST_SIZE) != 0);
+
+    ptls_free(client);
+    ptls_free(server);
+
+    cbuf.off = 0;
+    sbuf.off = 0;
+    memset(client_secrets, 0, sizeof(client_secrets));
+    memset(server_secrets, 0, sizeof(server_secrets));
+    memset(coffs, 0, sizeof(coffs));
+    memset(soffs, 0, sizeof(soffs));
+
+    /* 0-RTT rejection */
+    ctx_peer->max_early_data_size = 0;
+    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_ticket, &max_early_data_size}}};
+    client = ptls_new(ctx, 0);
+    *ptls_get_data_ptr(client) = &client_secrets;
+    server = ptls_new(ctx_peer, 1);
+    *ptls_get_data_ptr(server) = &server_secrets;
+    ret = ptls_handle_message(client, &cbuf, coffs, 0, NULL, 0, &client_hs_prop);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(max_early_data_size != 0);
+    ok(memcmp(client_secrets[1][1], zeroes_of_max_digest_size, PTLS_MAX_DIGEST_SIZE) != 0);
+    ret = feed_messages(server, &sbuf, soffs, cbuf.base, coffs, NULL);
+    ok(ret == 0);
+    ok(sbuf.off != 0);
+    ok(!ptls_handshake_is_complete(server));
+    ret = feed_messages(client, &cbuf, coffs, sbuf.base, soffs, &client_hs_prop);
+    ok(ret == 0);
+    ok(cbuf.off != 0);
+    ok(ptls_handshake_is_complete(client));
+    ok(client_hs_prop.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED);
+    ok(memcmp(server_secrets[0][1], zeroes_of_max_digest_size, PTLS_MAX_DIGEST_SIZE) == 0);
+    ret = feed_messages(server, &sbuf, soffs, cbuf.base, coffs, NULL);
+    ok(ret == 0);
+    ok(sbuf.off == 0);
+    ok(ptls_handshake_is_complete(server));
+
+    ptls_free(client);
+    ptls_free(server);
+
+    cbuf.off = 0;
+    sbuf.off = 0;
+    memset(client_secrets, 0, sizeof(client_secrets));
+    memset(server_secrets, 0, sizeof(server_secrets));
+    memset(coffs, 0, sizeof(coffs));
+    memset(soffs, 0, sizeof(soffs));
+
+    /* HRR rejects 0-RTT */
+    ctx_peer->max_early_data_size = 8192;
+    ptls_handshake_properties_t server_hs_prop = {{{{NULL}}}};
+    server_hs_prop.server.enforce_retry = 1;
+    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_ticket, &max_early_data_size}}};
+    client = ptls_new(ctx, 0);
+    *ptls_get_data_ptr(client) = &client_secrets;
+    server = ptls_new(ctx_peer, 1);
+    *ptls_get_data_ptr(server) = &server_secrets;
+    ret = ptls_handle_message(client, &cbuf, coffs, 0, NULL, 0, &client_hs_prop); /* -> CH */
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(max_early_data_size != 0);
+    ok(memcmp(client_secrets[1][1], zeroes_of_max_digest_size, PTLS_MAX_DIGEST_SIZE) != 0);
+    ret = feed_messages(server, &sbuf, soffs, cbuf.base, coffs, &server_hs_prop); /* CH -> HRR */
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(sbuf.off != 0);
+    ok(!ptls_handshake_is_complete(server));
+    ret = feed_messages(client, &cbuf, coffs, sbuf.base, soffs, &client_hs_prop); /* HRR  -> CH */
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(cbuf.off != 0);
+    ok(!ptls_handshake_is_complete(client));
+    ok(client_hs_prop.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED);
+    ret = feed_messages(server, &sbuf, soffs, cbuf.base, coffs, &server_hs_prop); /* CH -> SH..SF */
+    ok(ret == 0);
+    ok(!ptls_handshake_is_complete(server));
+    ok(memcmp(server_secrets[0][1], zeroes_of_max_digest_size, PTLS_MAX_DIGEST_SIZE) == 0);
+    ok(sbuf.off != 0);
+    ret = feed_messages(client, &cbuf, coffs, sbuf.base, soffs, &client_hs_prop); /* SH..SF -> CF */
+    ok(ret == 0);
+    ok(ptls_handshake_is_complete(client));
+    ok(cbuf.off != 0);
+    ret = feed_messages(server, &sbuf, soffs, cbuf.base, coffs, &server_hs_prop); /* CF -> */
+    ok(ret == 0);
+    ok(ptls_handshake_is_complete(server));
+
+    ptls_free(client);
+    ptls_free(server);
+
+    cbuf.off = 0;
+    sbuf.off = 0;
+
+    /* shamelessly reuse this subtest for testing ordinary TLS 0-RTT with HRR rejection */
+    ctx->update_traffic_key = NULL;
+    ctx->omit_end_of_early_data = 0;
+    ctx_peer->update_traffic_key = NULL;
+    ctx_peer->omit_end_of_early_data = 0;
+    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_ticket, &max_early_data_size}}};
+    server_hs_prop = (ptls_handshake_properties_t){{{{NULL}}}};
+    server_hs_prop.server.enforce_retry = 1;
+    client = ptls_new(ctx, 0);
+    server = ptls_new(ctx_peer, 1);
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, &client_hs_prop); /* -> CH */
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(client_hs_prop.client.max_early_data_size != 0);
+    ok(client_hs_prop.client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTANCE_UNKNOWN);
+    ok(cbuf.off != 0);
+    ret = ptls_send(client, &cbuf, "hello world", 11); /* send 0-RTT data that'll be rejected */
+    ok(ret == 0);
+    size_t inlen = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &inlen, &server_hs_prop); /* CH -> HRR */
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(cbuf.off == inlen);
+    cbuf.off = 0;
+    ok(sbuf.off != 0);
+    inlen = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &inlen, &client_hs_prop); /* HRR -> CH */
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(client_hs_prop.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED);
+    ok(sbuf.off == inlen);
+    sbuf.off = 0;
+    ok(cbuf.off != 0);
+    inlen = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &inlen, &server_hs_prop); /* CH -> SH..SF,NST */
+    ok(ret == 0);
+    ok(!ptls_handshake_is_complete(server));
+    ok(cbuf.off == inlen);
+    cbuf.off = 0;
+    ok(sbuf.off != 0);
+    inlen = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &inlen, &client_hs_prop); /* SH..SF -> CF */
+    ok(ret == 0);
+    ok(ptls_handshake_is_complete(client));
+    ok(inlen < sbuf.off); /* ignore NST */
+    sbuf.off = 0;
+    inlen = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &inlen, &server_hs_prop); /* CF -> */
+    ok(ret == 0);
+    ok(ptls_handshake_is_complete(server));
+    ok(sbuf.off == 0);
 
     ptls_free(client);
     ptls_free(server);
@@ -1002,28 +1393,18 @@ static void test_handshake_api(void)
     ptls_buffer_dispose(&sbuf);
 
     ctx->update_traffic_key = NULL;
+    ctx->omit_end_of_early_data = 0;
     ctx->save_ticket = NULL;
     ctx_peer->update_traffic_key = NULL;
+    ctx_peer->omit_end_of_early_data = 0;
     ctx_peer->encrypt_ticket = NULL;
     ctx_peer->save_ticket = NULL;
     ctx_peer->ticket_lifetime = 0;
     ctx_peer->max_early_data_size = 0;
 }
 
-void test_picotls(void)
+static void test_all_handshakes(void)
 {
-    subtest("sha256", test_sha256);
-    subtest("sha384", test_sha384);
-    subtest("hmac-sha256", test_hmac_sha256);
-    subtest("hkdf", test_hkdf);
-    subtest("aes128gcm", test_aes128gcm);
-    subtest("aes256gcm", test_aes256gcm);
-    subtest("chacha20poly1305", test_chacha20poly1305);
-    subtest("aes128ctr", test_aes128ctr);
-    subtest("chacha20", test_chacha20);
-
-    subtest("fragmented-message", test_fragmented_message);
-
     ptls_sign_certificate_t server_sc = {sign_certificate};
     sc_orig = ctx_peer->sign_certificate;
     ctx_peer->sign_certificate = &server_sc;
@@ -1047,31 +1428,63 @@ void test_picotls(void)
 
     subtest("stateless-hrr-aad-change", test_stateless_hrr_aad_change);
 
+    subtest("key-update", test_key_update);
+
     subtest("handshake-api", test_handshake_api);
 
     ctx_peer->sign_certificate = sc_orig;
 
-    if (ctx_peer != ctx) {
+    if (ctx_peer != ctx)
         ctx->sign_certificate = second_sc_orig;
-    }
+}
+
+void test_picotls(void)
+{
+    subtest("is_ipaddr", test_is_ipaddr);
+    subtest("sha256", test_sha256);
+    subtest("sha384", test_sha384);
+    subtest("hmac-sha256", test_hmac_sha256);
+    subtest("hkdf", test_hkdf);
+    subtest("aes128gcm", test_aes128gcm);
+    subtest("aes256gcm", test_aes256gcm);
+    subtest("chacha20poly1305", test_chacha20poly1305);
+    subtest("aes128ecb", test_aes128ecb);
+    subtest("aes256ecb", test_aes256ecb);
+    subtest("aes128ctr", test_aes128ctr);
+    subtest("chacha20", test_chacha20);
+    subtest("ffx", test_ffx);
+    subtest("base64-decode", test_base64_decode);
+    subtest("fragmented-message", test_fragmented_message);
+    subtest("handshake", test_all_handshakes);
+}
+
+void test_picotls_esni(ptls_key_exchange_context_t **keys)
+{
+    ptls_esni_context_t esni, *esni_list[] = {&esni, NULL};
+    ptls_esni_init_context(ctx_peer, &esni, ptls_iovec_init(ESNIKEYS, sizeof(ESNIKEYS) - 1), keys);
+    ctx_peer->esni = esni_list;
+
+    subtest("esni-handshake", test_picotls);
+
+    ctx_peer->esni = NULL;
 }
 
 void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_algorithm_t *server)
 {
     ptls_key_exchange_context_t *ctx;
-    ptls_iovec_t client_pubkey, client_secret, server_pubkey, server_secret;
+    ptls_iovec_t client_secret, server_pubkey, server_secret;
     int ret;
 
     /* fail */
-    ret = server->exchange(&server_pubkey, &server_secret, (ptls_iovec_t){NULL});
+    ret = server->exchange(server, &server_pubkey, &server_secret, (ptls_iovec_t){NULL});
     ok(ret != 0);
 
     /* perform ecdh */
-    ret = client->create(&ctx, &client_pubkey);
+    ret = client->create(client, &ctx);
     ok(ret == 0);
-    ret = server->exchange(&server_pubkey, &server_secret, client_pubkey);
+    ret = server->exchange(server, &server_pubkey, &server_secret, ctx->pubkey);
     ok(ret == 0);
-    ret = ctx->on_exchange(&ctx, &client_secret, server_pubkey);
+    ret = ctx->on_exchange(&ctx, 1, &client_secret, server_pubkey);
     ok(ret == 0);
     ok(client_secret.len == server_secret.len);
     ok(memcmp(client_secret.base, server_secret.base, client_secret.len) == 0);
@@ -1081,9 +1494,9 @@ void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_
     free(server_secret.base);
 
     /* client abort */
-    ret = client->create(&ctx, &client_pubkey);
+    ret = client->create(client, &ctx);
     ok(ret == 0);
-    ret = ctx->on_exchange(&ctx, NULL, ptls_iovec_init(NULL, 0));
+    ret = ctx->on_exchange(&ctx, 1, NULL, ptls_iovec_init(NULL, 0));
     ok(ret == 0);
     ok(ctx == NULL);
 }

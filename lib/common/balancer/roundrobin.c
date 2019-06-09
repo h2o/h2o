@@ -60,7 +60,7 @@ static size_t selector(h2o_balancer_t *balancer, h2o_balancer_backend_t **backen
             select_next(self, backends_len);
         }
     }
-    assert(!"unreachable");
+    h2o_fatal("unreachable");
 }
 
 static void destroy(h2o_balancer_t *balancer)

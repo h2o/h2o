@@ -22,6 +22,10 @@
 #ifndef picotls_minicrypto_h
 #define picotls_minicrypto_h
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "picotls.h"
 
 #define SECP256R1_PRIVATE_KEY_SIZE 32
@@ -40,7 +44,8 @@ int ptls_minicrypto_init_secp256r1sha256_sign_certificate(ptls_minicrypto_secp25
 
 extern ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1, ptls_minicrypto_x25519;
 extern ptls_key_exchange_algorithm_t *ptls_minicrypto_key_exchanges[];
-extern ptls_cipher_algorithm_t ptls_minicrypto_aes128ctr, ptls_minicrypto_aes256ctr, ptls_minicrypto_chacha20;
+extern ptls_cipher_algorithm_t ptls_minicrypto_aes128ecb, ptls_minicrypto_aes256ecb, ptls_minicrypto_aes128ctr,
+    ptls_minicrypto_aes256ctr, ptls_minicrypto_chacha20;
 extern ptls_aead_algorithm_t ptls_minicrypto_aes128gcm, ptls_minicrypto_aes256gcm, ptls_minicrypto_chacha20poly1305;
 extern ptls_hash_algorithm_t ptls_minicrypto_sha256, ptls_minicrypto_sha384;
 extern ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256, ptls_minicrypto_aes256gcmsha384, ptls_minicrypto_chacha20poly1305sha256;
@@ -57,5 +62,9 @@ typedef struct st_ptls_asn1_pkcs8_private_key_t {
 } ptls_asn1_pkcs8_private_key_t;
 
 int ptls_minicrypto_load_private_key(ptls_context_t *ctx, char const *pem_fname);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

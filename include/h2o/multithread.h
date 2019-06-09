@@ -28,10 +28,8 @@
 
 typedef struct st_h2o_multithread_receiver_t h2o_multithread_receiver_t;
 typedef struct st_h2o_multithread_queue_t h2o_multithread_queue_t;
-typedef struct st_h2o_multithread_request_t h2o_multithread_request_t;
 
 typedef void (*h2o_multithread_receiver_cb)(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages);
-typedef void (*h2o_multithread_response_cb)(h2o_multithread_request_t *req);
 
 struct st_h2o_multithread_receiver_t {
     h2o_multithread_queue_t *queue;
@@ -43,12 +41,6 @@ struct st_h2o_multithread_receiver_t {
 typedef struct st_h2o_multithread_message_t {
     h2o_linklist_t link;
 } h2o_multithread_message_t;
-
-struct st_h2o_multithread_request_t {
-    h2o_multithread_message_t super;
-    h2o_multithread_receiver_t *source;
-    h2o_multithread_response_cb cb;
-};
 
 typedef struct st_h2o_sem_t {
     pthread_mutex_t _mutex;
@@ -85,10 +77,6 @@ void h2o_multithread_unregister_receiver(h2o_multithread_queue_t *queue, h2o_mul
  * sends a message (or set message to NULL to just wake up the receiving thread)
  */
 void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_multithread_message_t *message);
-/**
- * sends a request
- */
-void h2o_multithread_send_request(h2o_multithread_receiver_t *receiver, h2o_multithread_request_t *req);
 /**
  * create a thread
  */

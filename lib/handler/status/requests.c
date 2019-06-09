@@ -96,22 +96,27 @@ static void *requests_status_init(void)
             SEPARATOR ELEMENT("method", "%m") SEPARATOR ELEMENT("path", "%U") SEPARATOR ELEMENT("query", "%q")
                 SEPARATOR ELEMENT("protocol", "%H") SEPARATOR ELEMENT("referer", "%{Referer}i")
                     SEPARATOR ELEMENT("user-agent", "%{User-agent}i") SEPARATOR
-        /* time */
-        X_ELEMENT("connect-time") SEPARATOR X_ELEMENT("request-header-time") SEPARATOR X_ELEMENT("request-body-time")
-            SEPARATOR X_ELEMENT("request-total-time") SEPARATOR X_ELEMENT("process-time") SEPARATOR X_ELEMENT("response-time")
-                SEPARATOR
-        /* connection */
-        X_ELEMENT("connection-id") SEPARATOR X_ELEMENT("ssl.protocol-version") SEPARATOR X_ELEMENT("ssl.session-reused")
-            SEPARATOR X_ELEMENT("ssl.cipher") SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR X_ELEMENT("ssl.session-ticket")
-                SEPARATOR
-        /* http1 */
-        X_ELEMENT("http1.request-index") SEPARATOR
-        /* http2 */
-        X_ELEMENT("http2.stream-id") SEPARATOR X_ELEMENT("http2.priority.received.exclusive")
-            SEPARATOR X_ELEMENT("http2.priority.received.parent") SEPARATOR X_ELEMENT("http2.priority.received.weight")
-                SEPARATOR X_ELEMENT("http2.priority.actual.parent") SEPARATOR X_ELEMENT("http2.priority.actual.weight") SEPARATOR
-        /* misc */
-        ELEMENT("authority", "%V")
+                        /* time */
+                        X_ELEMENT("connect-time") SEPARATOR X_ELEMENT("request-header-time")
+                            SEPARATOR X_ELEMENT("request-body-time") SEPARATOR X_ELEMENT("request-total-time")
+                                SEPARATOR X_ELEMENT("process-time") SEPARATOR X_ELEMENT("response-time") SEPARATOR
+                                    /* connection */
+                                    X_ELEMENT("connection-id") SEPARATOR X_ELEMENT("ssl.protocol-version")
+                                        SEPARATOR X_ELEMENT("ssl.session-reused") SEPARATOR X_ELEMENT("ssl.cipher")
+                                            SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR X_ELEMENT("ssl.session-ticket")
+                                                SEPARATOR
+                                                    /* http1 */
+                                                    X_ELEMENT("http1.request-index") SEPARATOR
+                                                        /* http2 */
+                                                        X_ELEMENT("http2.stream-id")
+                                                            SEPARATOR X_ELEMENT("http2.priority.received.exclusive")
+                                                                SEPARATOR X_ELEMENT("http2.priority.received.parent")
+                                                                    SEPARATOR X_ELEMENT("http2.priority.received.weight")
+                                                                        SEPARATOR X_ELEMENT("http2.priority.actual.parent")
+                                                                            SEPARATOR X_ELEMENT("http2.priority.actual.weight")
+                                                                                SEPARATOR
+                                                                                    /* misc */
+                                                                                    ELEMENT("authority", "%V")
         /* end */
         "}";
 #undef ELEMENT
@@ -121,7 +126,7 @@ static void *requests_status_init(void)
     /* compile logconf */
     if ((rsc->logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL)
         /* log format compilation error is an internal logic flaw, therefore we need not send the details to the client */
-        fprintf(stderr, "[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
+        h2o_error_printf("[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
 
     rsc->req_data = (h2o_iovec_t){NULL};
     pthread_mutex_init(&rsc->mutex, NULL);

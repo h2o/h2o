@@ -212,13 +212,15 @@ struct st_h2o_pathconf_t {
      */
     H2O_VECTOR(h2o_handler_t *) handlers;
     /**
-     * list of filters
+     * list of filters to be applied unless when processing a subrequest.
+     * The address of the list is set in `req->filters` and used when processing a request.
      */
-    H2O_VECTOR(h2o_filter_t *) filters;
+    H2O_VECTOR(h2o_filter_t *) _filters;
     /**
-     * list of loggers (h2o_logger_t)
+     * list of loggers to be applied unless when processing a subrequest.
+     * The address of the list is set in `req->loggers` and used when processing a request.
      */
-    H2O_VECTOR(h2o_logger_t *) loggers;
+    H2O_VECTOR(h2o_logger_t *) _loggers;
     /**
      * mimemap
      */
@@ -304,7 +306,7 @@ typedef struct st_h2o_protocol_callbacks_t {
 typedef h2o_iovec_t (*final_status_handler_cb)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req);
 typedef const struct st_h2o_status_handler_t {
     h2o_iovec_t name;
-    h2o_iovec_t (* final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
+    h2o_iovec_t (*final)(void *ctx, h2o_globalconf_t *gconf, h2o_req_t *req); /* mandatory, will be passed the optional context */
     void *(*init)(void); /* optional callback, allocates a context that will be passed to per_thread() */
     void (*per_thread)(void *priv, h2o_context_t *ctx); /* optional callback, will be called for each thread */
 } h2o_status_handler_t;
@@ -415,6 +417,10 @@ struct st_h2o_globalconf_t {
          * keepalive timeout (in milliseconds)
          */
         uint64_t keepalive_timeout;
+        /**
+         * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
+         */
+        unsigned forward_close_connection : 1;
         /**
          * a boolean flag if set to true, instructs the proxy to preserve the x-forwarded-proto header passed by the client
          */
@@ -684,10 +690,6 @@ typedef enum h2o_send_state {
 
 typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
 
-static inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
-{
-    return s == H2O_SEND_STATE_IN_PROGRESS;
-}
 /**
  * an output stream that may alter the output.
  * The object is typically constructed by filters calling the h2o_prepend_ostream function.
@@ -898,6 +900,7 @@ typedef struct st_h2o_filereq_t {
 
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
+typedef void (*h2o_on_request_streaming_selected_cb)(h2o_req_t *, int is_streaming);
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
@@ -943,6 +946,16 @@ struct st_h2o_req_t {
      * the path context
      */
     h2o_pathconf_t *pathconf;
+    /**
+     * filters and the size of it
+     */
+    h2o_filter_t **filters;
+    size_t num_filters;
+    /**
+     * loggers and the size of it
+     */
+    h2o_logger_t **loggers;
+    size_t num_loggers;
     /**
      * the handler that has been executed
      */
@@ -1073,10 +1086,6 @@ struct st_h2o_req_t {
      * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
      */
     unsigned char upstream_refused : 1;
-    /**
-     * whether the request is a subrequest
-     */
-    unsigned char is_subrequest : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
@@ -1105,7 +1114,15 @@ struct st_h2o_req_t {
     struct {
         h2o_write_req_cb cb;
         void *ctx;
+        h2o_on_request_streaming_selected_cb on_streaming_selected;
     } write_req;
+    /**
+     * structure used for request body processing; `body` is NULL unless request body IS expected
+     */
+    struct {
+        size_t bytes_received;
+        h2o_buffer_t *body;
+    } _req_body;
 
     /**
      * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
@@ -1145,10 +1162,10 @@ static void h2o_doublebuffer_consume(h2o_doublebuffer_t *db);
 
 /* util */
 
-extern const char *h2o_http2_npn_protocols;
-extern const char *h2o_npn_protocols;
-extern const h2o_iovec_t *h2o_http2_alpn_protocols;
-extern const h2o_iovec_t *h2o_alpn_protocols;
+extern const char h2o_http2_npn_protocols[];
+extern const char h2o_npn_protocols[];
+extern const h2o_iovec_t h2o_http2_alpn_protocols[];
+extern const h2o_iovec_t h2o_alpn_protocols[];
 
 /**
  * accepts a connection
@@ -1286,7 +1303,10 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
  * binds configurations to the request
  */
 void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t *pathconf);
-
+/**
+ *
+ */
+static int h2o_send_state_is_in_progress(h2o_send_state_t s);
 /**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
@@ -1480,11 +1500,22 @@ enum {
  */
 void h2o_resp_add_date_header(h2o_req_t *req);
 /**
- * sends the given string as the response
+ * Sends the given string as the response. The function copies the string so that the caller can discard it immediately.
+ *
+ * Be careful of calling the function asynchronously, because there is a chance of the request object getting destroyed before the
+ * function is being invoked.  This could happpen for example when the client abruptly closing the connection. There are two ways to
+ * detect the destruction:
+ *
+ * * allocate a memory chunk using the request's memory pool with a destructor that you define; i.e. call `h2o_mem_alloc_shared(
+ *   &req->pool, obj_size, my_destructor)`. When the request object is destroyed, `my_destructor` will be invoked as part of the
+ *   memory reclamation process.
+ * * register the `stop` callback of the generator that is bound to the request. The downside of the approach is that a generator
+ *   is not associated to a request until all the response headers become ready to be sent, i.e., when `h2o_start_response` is
+ *   called.
  */
 void h2o_send_inline(h2o_req_t *req, const char *body, size_t len);
 /**
- * sends the given information as an error response to the client
+ * sends the given information as an error response to the client. Uses h2o_send_inline internally, so the same restrictions apply.
  */
 void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 #define H2O_SEND_ERROR_XXX(status)                                                                                                 \
@@ -1505,15 +1536,16 @@ H2O_SEND_ERROR_XXX(502)
 H2O_SEND_ERROR_XXX(503)
 
 /**
- * sends error response using zero timeout; can be called by output filters while processing the headers
+ * sends error response using zero timeout; can be called by output filters while processing the headers.  Uses h2o_send_inline
+ * internally, so the same restrictions apply.
  */
 void h2o_send_error_deferred(h2o_req_t *req, int status, const char *reason, const char *body, int flags);
 /**
- * sends a redirect response
+ * sends a redirect response.  Uses (the equivalent of) h2o_send_inline internally, so the same restrictions apply.
  */
 void h2o_send_redirect(h2o_req_t *req, int status, const char *reason, const char *url, size_t url_len);
 /**
- * handles redirect internally
+ * handles redirect internally.
  */
 void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *url_str, size_t url_len, int preserve_overrides);
 /**
@@ -1529,7 +1561,10 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
  * sends 1xx response
  */
 void h2o_send_informational(h2o_req_t *req);
-
+/**
+ *
+ */
+int h2o_write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity);
 /**
  * logs an error
  */
@@ -2011,6 +2046,11 @@ Found:
     req->env.size -= 2;
 }
 
+inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
+{
+    return s == H2O_SEND_STATE_IN_PROGRESS;
+}
+
 inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
 {
     h2o_send_state_t send_state;
@@ -2025,8 +2065,8 @@ inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)
 {
     h2o_filter_t *next;
 
-    if (req->_next_filter_index < req->pathconf->filters.size) {
-        next = req->pathconf->filters.entries[req->_next_filter_index++];
+    if (req->_next_filter_index < req->num_filters) {
+        next = req->filters[req->_next_filter_index++];
         next->on_setup_ostream(next, req, slot);
     }
 }
@@ -2158,25 +2198,25 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
         return 1;                                                                                                                  \
     }
 
-COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at);
+COMPUTE_DURATION(connect_time, &req->conn->connected_at, &req->timestamps.request_begin_at)
 COMPUTE_DURATION(header_time, &req->timestamps.request_begin_at,
                  h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
-                                                                             : &req->timestamps.request_body_begin_at);
+                                                                             : &req->timestamps.request_body_begin_at)
 COMPUTE_DURATION(body_time,
                  h2o_timeval_is_null(&req->timestamps.request_body_begin_at) ? &req->processed_at.at
                                                                              : &req->timestamps.request_body_begin_at,
-                 &req->processed_at.at);
-COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
-COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
-COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
-COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+                 &req->processed_at.at)
+COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at)
+COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at)
+COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at)
+COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at)
 
-COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->timestamps.proxy.start_at);
-COMPUTE_DURATION(proxy_connect_time, &req->timestamps.proxy.start_at, &req->timestamps.proxy.request_begin_at);
-COMPUTE_DURATION(proxy_request_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.request_end_at);
-COMPUTE_DURATION(proxy_process_time, &req->timestamps.proxy.request_end_at, &req->timestamps.proxy.response_start_at);
-COMPUTE_DURATION(proxy_response_time, &req->timestamps.proxy.response_start_at, &req->timestamps.proxy.response_end_at);
-COMPUTE_DURATION(proxy_total_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.response_end_at);
+COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->timestamps.proxy.start_at)
+COMPUTE_DURATION(proxy_connect_time, &req->timestamps.proxy.start_at, &req->timestamps.proxy.request_begin_at)
+COMPUTE_DURATION(proxy_request_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.request_end_at)
+COMPUTE_DURATION(proxy_process_time, &req->timestamps.proxy.request_end_at, &req->timestamps.proxy.response_start_at)
+COMPUTE_DURATION(proxy_response_time, &req->timestamps.proxy.response_start_at, &req->timestamps.proxy.response_end_at)
+COMPUTE_DURATION(proxy_total_time, &req->timestamps.proxy.request_begin_at, &req->timestamps.proxy.response_end_at)
 
 #undef COMPUTE_DURATION
 

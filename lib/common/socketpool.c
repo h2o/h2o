@@ -34,8 +34,10 @@
 #include "h2o/socket.h"
 #include "h2o/balancer.h"
 
-/* TODO set the timer by calculating the exact moment when the oldest entry expires */
-#define CHECK_EXPIRATION_INTERVAL 1000
+/**
+ * timeout will be set to this value when calculated less than this value
+ */
+#define CHECK_EXPIRATION_MIN_INTERVAL 1000
 
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
@@ -82,36 +84,49 @@ static void destroy_attached(struct pool_entry_t *entry)
     destroy_detached(entry);
 }
 
-static void destroy_expired(h2o_socketpool_t *pool)
+/* caller should lock the mutex */
+static uint64_t destroy_expired_locked(h2o_socketpool_t *pool)
 {
-    if (pool->_interval_cb.loop == NULL)
-        return;
+    if (pool->_interval_cb.loop != NULL) {
+        uint64_t now_ms = h2o_now(pool->_interval_cb.loop);
+        uint64_t expire_before = now_ms - pool->timeout;
+        while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
+            struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
+            if (entry->added_at > expire_before) {
+                return entry->added_at + pool->timeout - now_ms;
+            }
+            destroy_attached(entry);
+            __sync_sub_and_fetch(&pool->_shared.count, 1);
+            __sync_sub_and_fetch(&pool->_shared.pooled_count, 1);
+        }
+    }
+    return UINT64_MAX;
+}
 
-    /* caller should lock the mutex */
-    uint64_t expire_before = h2o_now(pool->_interval_cb.loop) - pool->timeout;
-    while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
-        struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
-        if (entry->added_at > expire_before)
-            break;
-        destroy_attached(entry);
-        __sync_sub_and_fetch(&pool->_shared.count, 1);
-        __sync_sub_and_fetch(&pool->_shared.pooled_count, 1);
+/* caller should lock the mutex */
+static void check_pool_expired_locked(h2o_socketpool_t *pool)
+{
+    uint64_t next_expired = destroy_expired_locked(pool);
+    if (next_expired != UINT64_MAX) {
+        if (!h2o_timer_is_linked(&pool->_interval_cb.timeout)) {
+            if (next_expired < CHECK_EXPIRATION_MIN_INTERVAL)
+                next_expired = CHECK_EXPIRATION_MIN_INTERVAL;
+            h2o_timer_link(pool->_interval_cb.loop, next_expired, &pool->_interval_cb.timeout);
+        }
     }
 }
 
 static void on_timeout(h2o_timer_t *timeout)
 {
-    /* FIXME decrease the frequency of this function being called; the expiration
+    /* decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well
      */
     h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.timeout, timeout);
 
     if (pthread_mutex_trylock(&pool->_shared.mutex) == 0) {
-        destroy_expired(pool);
+        check_pool_expired_locked(pool);
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
-
-    h2o_timer_link(pool->_interval_cb.loop, CHECK_EXPIRATION_INTERVAL, &pool->_interval_cb.timeout);
 }
 
 static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **targets, size_t num_targets, size_t capacity,
@@ -152,8 +167,7 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
         }
     } else {
         assert(to_sun_err == NULL);
-        struct sockaddr_un *sun = (struct sockaddr_un *)sa;
-        *salen = sizeof(*sun);
+        *salen = sizeof(struct sockaddr_un);
         return H2O_SOCKETPOOL_TYPE_SOCKADDR;
     }
 }
@@ -274,7 +288,7 @@ void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 
     pool->_interval_cb.loop = loop;
     h2o_timer_init(&pool->_interval_cb.timeout, on_timeout);
-    h2o_timer_link(loop, CHECK_EXPIRATION_INTERVAL, &pool->_interval_cb.timeout);
+    h2o_timer_link(loop, CHECK_EXPIRATION_MIN_INTERVAL, &pool->_interval_cb.timeout);
 }
 
 void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
@@ -354,7 +368,6 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
-    const char *errstr = NULL;
 
     assert(req->sock == sock);
 
@@ -367,7 +380,6 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         req->sock = NULL;
-        errstr = "connection failed"; /* shouldn't we return err? */
     } else {
         h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
         if (target_url->scheme->is_ssl) {
@@ -377,7 +389,7 @@ static void on_connect(h2o_socket_t *sock, const char *err)
         }
     }
 
-    call_connect_cb(req, errstr);
+    call_connect_cb(req, err);
 }
 
 static void on_close(void *data)
@@ -401,7 +413,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
             return;
         }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, "failed to connect to host");
+        call_connect_cb(req, h2o_socket_error_conn_fail);
         return;
     }
     close_data = h2o_mem_alloc(sizeof(*close_data));
@@ -466,7 +478,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
     /* fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);
-    destroy_expired(pool);
+    check_pool_expired_locked(pool);
 
     /* TODO lookup outside this critical section */
     if (is_global_pool(pool)) {
@@ -516,11 +528,11 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         if (rret <= 0) {
             static long counter = 0;
             if (__sync_fetch_and_add(&counter, 1) == 0)
-                fprintf(stderr, "[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
+                h2o_error_printf("[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
         } else {
             static long counter = 0;
             if (__sync_fetch_and_add(&counter, 1) == 0)
-                fprintf(stderr, "[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
+                h2o_error_printf("[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
         }
         destroy_detached(entry);
         pthread_mutex_lock(&pool->_shared.mutex);
@@ -594,7 +606,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     __sync_add_and_fetch(&pool->_shared.pooled_count, 1);
 
     pthread_mutex_lock(&pool->_shared.mutex);
-    destroy_expired(pool);
+    check_pool_expired_locked(pool);
     h2o_linklist_insert(&pool->_shared.sockets, &entry->all_link);
     h2o_linklist_insert(&pool->targets.entries[target]->_shared.sockets, &entry->target_link);
     pthread_mutex_unlock(&pool->_shared.mutex);

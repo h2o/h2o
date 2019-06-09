@@ -22,8 +22,8 @@
 
 #include "h2o/httpclient.h"
 
-const char *const h2o_httpclient_error_is_eos = "end of stream";
-const char *const h2o_httpclient_error_refused_stream = "refused stream";
+const char h2o_httpclient_error_is_eos[] = "end of stream";
+const char h2o_httpclient_error_refused_stream[] = "refused stream";
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
 {
@@ -75,6 +75,7 @@ static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_htt
     client->data = data;
     client->cancel = do_cancel;
     client->steal_socket = NULL;
+    client->get_socket = NULL;
     client->update_window = NULL;
     client->write_req = NULL;
     client->_cb.on_connect = cb;

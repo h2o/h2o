@@ -39,6 +39,14 @@ static ssize_t add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_iove
     return headers->size - 1;
 }
 
+static inline h2o_iovec_t *alloc_and_init_iovec(h2o_mem_pool_t *pool, const char *base, size_t len)
+{
+    h2o_iovec_t *iov = h2o_mem_alloc_pool(pool, *iov, 1);
+    iov->base = (char *)base;
+    iov->len = len;
+    return iov;
+}
+
 ssize_t h2o_find_header(const h2o_headers_t *headers, const h2o_token_t *token, ssize_t cursor)
 {
     for (++cursor; cursor < headers->size; ++cursor) {
@@ -63,24 +71,20 @@ ssize_t h2o_find_header_by_str(const h2o_headers_t *headers, const char *name, s
 ssize_t h2o_add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *orig_name,
                        const char *value, size_t value_len)
 {
-    return add_header(pool, headers, (h2o_iovec_t *)&token->buf, orig_name, value, value_len, token->flags);
+    return add_header(pool, headers, (h2o_iovec_t *)&token->buf, orig_name, value, value_len, (h2o_header_flags_t){0});
 }
 
 ssize_t h2o_add_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, const char *name, size_t name_len, int maybe_token,
                               const char *orig_name, const char *value, size_t value_len)
 {
-    h2o_iovec_t *name_buf;
-
     if (maybe_token) {
         const h2o_token_t *token = h2o_lookup_token(name, name_len);
         if (token != NULL) {
-            return add_header(pool, headers, (h2o_iovec_t *)token, orig_name, value, value_len, token->flags);
+            return add_header(pool, headers, (h2o_iovec_t *)token, orig_name, value, value_len, (h2o_header_flags_t){0});
         }
     }
-    name_buf = h2o_mem_alloc_pool(pool, *name_buf, 1);
-    name_buf->base = (char *)name;
-    name_buf->len = name_len;
-    return add_header(pool, headers, name_buf, orig_name, value, value_len, (h2o_header_flags_t){0});
+    return add_header(pool, headers, alloc_and_init_iovec(pool, name, name_len), orig_name, value, value_len,
+                      (h2o_header_flags_t){0});
 }
 
 ssize_t h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value, size_t value_len,
@@ -89,9 +93,7 @@ ssize_t h2o_set_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_t
     ssize_t cursor = h2o_find_header(headers, token, -1);
     if (cursor != -1) {
         if (overwrite_if_exists) {
-            h2o_iovec_t *slot = &headers->entries[cursor].value;
-            slot->base = (char *)value;
-            slot->len = value_len;
+            headers->entries[cursor].value = h2o_iovec_init(value, value_len);
         }
         return cursor;
     } else {
@@ -114,23 +116,19 @@ ssize_t h2o_set_header_by_str(h2o_mem_pool_t *pool, h2o_headers_t *headers, cons
     cursor = h2o_find_header_by_str(headers, name, name_len, -1);
     if (cursor != -1) {
         if (overwrite_if_exists) {
-            h2o_iovec_t *slot = &headers->entries[cursor].value;
-            slot->base = (char *)value;
-            slot->len = value_len;
+            headers->entries[cursor].value = h2o_iovec_init(value, value_len);
         }
         return cursor;
     } else {
-        h2o_iovec_t *name_buf = h2o_mem_alloc_pool(pool, *name_buf, 1);
-        name_buf->base = (char *)name;
-        name_buf->len = name_len;
-        return add_header(pool, headers, name_buf, NULL, value, value_len, (h2o_header_flags_t){0});
+        return add_header(pool, headers, alloc_and_init_iovec(pool, name, name_len), NULL, value, value_len,
+                          (h2o_header_flags_t){0});
     }
 }
 
 ssize_t h2o_set_header_token(h2o_mem_pool_t *pool, h2o_headers_t *headers, const h2o_token_t *token, const char *value,
                              size_t value_len)
 {
-    size_t found = -1;
+    ssize_t found = -1;
     size_t i;
     for (i = 0; i != headers->size; ++i) {
         if (headers->entries[i].name == &token->buf) {

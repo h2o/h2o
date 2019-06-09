@@ -138,7 +138,12 @@ static struct {
     run_mode_t run_mode;
     struct {
         int *fds;
-        char *bound_fd_map; /* has `num_fds` elements, set to 1 if fd[index] was bound to one of the listeners */
+        /**
+         * List of booleans corresponding to each element of `server_starter.fds` indicating if a H2O listener has been mapped to
+         * the file descriptor. The list is used to check if all the file descriptors opened by Server::Starter have been assigned
+         * H2O listeners.
+         */
+        char *bound_fd_map;
         size_t num_fds;
     } server_starter;
     struct listener_config_t **listeners;
@@ -146,7 +151,10 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
-    size_t num_threads;
+    /**
+     * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
+     */
+    H2O_VECTOR(int) thread_map;
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -160,11 +168,15 @@ static struct {
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
-        int _num_connections; /* number of currently handled incoming connections, should use atomic functions to update the value
-                                 */
+        /**
+         * Number of currently handled incoming connections. Should use atomic functions to update the value.
+         */
+        int _num_connections;
         char _unused2_avoir_false_sharing[32];
-        unsigned long
-            _num_sessions; /* total number of opened incoming connections, should use atomic functions to update the value */
+        /**
+         * Total number of opened incoming connections. Should use atomic functions to update the value.
+         */
+        unsigned long _num_sessions;
         char _unused3_avoir_false_sharing[32];
     } state;
     char *crash_handler;
@@ -178,9 +190,9 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
-    0,                                      /* initialized in main() */
-    0,                                      /* initialized in main() */
-    0,                                      /* initialized in main() */
+    {NULL},                                 /* thread_map, initialized in main() */
+    0,                                      /* tfo_queues, initialized in main() */
+    0,                                      /* launch_time initialized in main() */
     NULL,                                   /* thread_ids */
     0,                                      /* shutdown_requested */
     H2O_BARRIER_INITIALIZER(SIZE_MAX),      /* startup_sync_barrier */
@@ -265,28 +277,28 @@ struct st_on_client_hello_ptls_t {
     struct listener_config_t *listener;
 };
 
-static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_iovec_t server_name,
-                                const ptls_iovec_t *negotiated_protocols, size_t num_negotiated_protocols,
-                                const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
     int ret = 0;
 
     /* handle SNI */
-    if (server_name.base != NULL) {
-        struct listener_ssl_config_t *resolved = resolve_sni(self->listener, (const char *)server_name.base, server_name.len);
+    if (params->server_name.base != NULL) {
+        struct listener_ssl_config_t *resolved =
+            resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(resolved->ctx);
         ptls_set_context(tls, newctx);
-        ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
+        ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
     }
 
     /* handle ALPN */
-    if (num_negotiated_protocols != 0) {
+    if (params->negotiated_protocols.count != 0) {
         const h2o_iovec_t *server_pref;
         for (server_pref = h2o_alpn_protocols; server_pref->len != 0; ++server_pref) {
             size_t i;
-            for (i = 0; i != num_negotiated_protocols; ++i)
-                if (h2o_memis(server_pref->base, server_pref->len, negotiated_protocols[i].base, negotiated_protocols[i].len))
+            for (i = 0; i != params->negotiated_protocols.count; ++i)
+                if (h2o_memis(server_pref->base, server_pref->len, params->negotiated_protocols.list[i].base,
+                              params->negotiated_protocols.list[i].len))
                     goto ALPN_Found;
         }
         return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
@@ -379,8 +391,9 @@ static void *ocsp_updater_thread(void *_ssl_conf)
                         ssl_conf->certificate_file);
                 update_ocsp_stapling(ssl_conf, NULL);
             } else {
-                fprintf(stderr, "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
-                                "response for certificate file:%s\n",
+                fprintf(stderr,
+                        "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
+                        "response for certificate file:%s\n",
                         ssl_conf->certificate_file);
                 ++fail_cnt;
             }
@@ -429,45 +442,48 @@ static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_conf)
 
 #if H2O_USE_PICOTLS
 
-struct st_staple_ocsp_ptls_t {
-    ptls_staple_ocsp_t super;
+struct st_emit_certificate_ptls_t {
+    ptls_emit_certificate_t super;
     struct listener_ssl_config_t *conf;
 };
 
-static int on_staple_ocsp_ptls(ptls_staple_ocsp_t *_self, ptls_t *tls, ptls_buffer_t *output, size_t cert_index)
+static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
+                                    ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
 {
-    struct st_staple_ocsp_ptls_t *self = (struct st_staple_ocsp_ptls_t *)_self;
-    int locked = 0, ret;
+    struct st_emit_certificate_ptls_t *self = (void *)_self;
+    ptls_context_t *tlsctx = ptls_get_context(tls);
+    int ret;
 
-    if (cert_index != 0) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-
-    pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
-    locked = 1;
-
-    if (self->conf->ocsp_stapling.response.data == NULL) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    ptls_buffer_pushv(output, self->conf->ocsp_stapling.response.data->bytes, self->conf->ocsp_stapling.response.data->size);
+    ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
+        pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
+        h2o_buffer_t *ocsp_response = push_status_request ? self->conf->ocsp_stapling.response.data : NULL;
+        ret = ptls_build_certificate_message(
+            emitter->buf, ptls_iovec_init(NULL, 0), tlsctx->certificates.list, tlsctx->certificates.count,
+            ocsp_response != NULL ? ptls_iovec_init(ocsp_response->bytes, ocsp_response->size) : ptls_iovec_init(NULL, 0));
+        pthread_mutex_unlock(&self->conf->ocsp_stapling.response.mutex);
+        if (ret != 0)
+            goto Exit;
+    });
     ret = 0;
 
 Exit:
-    if (locked)
-        pthread_mutex_unlock(&self->conf->ocsp_stapling.response.mutex);
     return ret;
 }
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
                                               SSL_CTX *ssl_ctx)
 {
-    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
+    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
+#ifdef PTLS_OPENSSL_HAS_X25519
+        &ptls_openssl_x25519,
+#else
+        &ptls_minicrypto_x25519,
+#endif
+        &ptls_openssl_secp256r1, NULL};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
-        struct st_staple_ocsp_ptls_t so;
+        struct st_emit_certificate_ptls_t ec;
         ptls_openssl_sign_certificate_t sc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
     EVP_PKEY *key;
@@ -480,8 +496,9 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
                                        {NULL, 0},
+                                       NULL,
                                        &pctx->ch.super,
-                                       &pctx->so.super,
+                                       &pctx->ec.super,
                                        &pctx->sc.super,
                                        NULL,
                                        0,
@@ -489,7 +506,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        NULL,
                                        1},
                                       {{on_client_hello_ptls}, listener},
-                                      {{on_staple_ocsp_ptls}, ssl_config}};
+                                      {{on_emit_certificate_ptls}, ssl_config}};
 
     { /* obtain key and cert (via fake connection for libressl compatibility) */
         SSL *fakeconn = SSL_new(ssl_ctx);
@@ -1215,11 +1232,62 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
 }
 
+static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, node, "CPUs in cpu sequence must be a scalar");
+        return -1;
+    }
+
+    const char *cpu_spec = node->data.scalar;
+    unsigned cpu_low, cpu_high, cpu_num;
+    int pos;
+    if (index(cpu_spec, '-') == NULL) {
+        if (sscanf(cpu_spec, "%u%n", &cpu_low, &pos) != 1 || pos != strlen(cpu_spec))
+            goto Error;
+        cpu_high = cpu_low;
+    } else {
+        if (sscanf(cpu_spec, "%u-%u%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec))
+            goto Error;
+        if (cpu_low > cpu_high)
+            goto Error;
+    }
+    for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
+        h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
+        conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
+    }
+    return 0;
+Error:
+    h2o_configurator_errprintf(
+        cmd, node, "Invalid CPU number: CPUs must be specified as a non-negative number or as a range of non-negative numbers");
+    return -1;
+}
+
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_threads) != 0)
+    conf.thread_map.size = 0;
+    if (node->type == YOML_TYPE_SCALAR) {
+        size_t i, num_threads = 0;
+        if (h2o_configurator_scanf(cmd, node, "%zu", &num_threads) != 0)
+            return -1;
+        h2o_vector_reserve(NULL, &conf.thread_map, num_threads);
+        for (i = 0; i < num_threads; i++)
+            conf.thread_map.entries[conf.thread_map.size++] = -1;
+    } else if (node->type == YOML_TYPE_SEQUENCE) {
+        /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
+#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
+        size_t i;
+        for (i = 0; i < node->data.sequence.size; i++) {
+            if (on_config_num_threads_add_cpu(cmd, ctx, node->data.sequence.elements[i]) != 0)
+                return -1;
+        }
+#else
+        h2o_configurator_errprintf(
+            cmd, node, "Can't handle a CPU list, this platform doesn't support thread pinning via `pthread_setaffinity_np`");
         return -1;
-    if (conf.num_threads == 0) {
+#endif
+    }
+    if (conf.thread_map.size == 0) {
         h2o_configurator_errprintf(cmd, node, "num-threads must be >=1");
         return -1;
     }
@@ -1439,7 +1507,7 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
 static void notify_all_threads(void)
 {
     unsigned i;
-    for (i = 0; i != conf.num_threads; ++i)
+    for (i = 0; i != conf.thread_map.size; ++i)
         h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
 }
 
@@ -1547,7 +1615,7 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
-    size_t num_accepts = conf.max_connections / 16 / conf.num_threads;
+    size_t num_accepts = conf.max_connections / 16 / conf.thread_map.size;
     if (num_accepts < 8)
         num_accepts = 8;
 
@@ -1619,6 +1687,22 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
     conf.threads[thread_index].tid = pthread_self();
+
+    if (conf.thread_map.entries[thread_index] >= 0) {
+#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
+        cpu_set_t cpu_set;
+        CPU_ZERO(&cpu_set);
+        CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0) {
+            static int once;
+            if (__sync_fetch_and_add(&once, 1) == 0) {
+                fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
+            }
+        }
+#else
+        h2o_fatal("internal error; thread pinning not available even though specified");
+#endif
+    }
 
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
@@ -1834,20 +1918,21 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
         generation = "null";
 
     ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
-    ret.len = snprintf(ret.base, BUFSIZE, ",\n"
-                                          " \"server-version\": \"" H2O_VERSION "\",\n"
-                                          " \"openssl-version\": \"%s\",\n"
-                                          " \"current-time\": \"%s\",\n"
-                                          " \"restart-time\": \"%s\",\n"
-                                          " \"uptime\": %" PRIu64 ",\n"
-                                          " \"generation\": %s,\n"
-                                          " \"connections\": %d,\n"
-                                          " \"max-connections\": %d,\n"
-                                          " \"listeners\": %zu,\n"
-                                          " \"worker-threads\": %zu,\n"
-                                          " \"num-sessions\": %lu",
+    ret.len = snprintf(ret.base, BUFSIZE,
+                       ",\n"
+                       " \"server-version\": \"" H2O_VERSION "\",\n"
+                       " \"openssl-version\": \"%s\",\n"
+                       " \"current-time\": \"%s\",\n"
+                       " \"restart-time\": \"%s\",\n"
+                       " \"uptime\": %" PRIu64 ",\n"
+                       " \"generation\": %s,\n"
+                       " \"connections\": %d,\n"
+                       " \"max-connections\": %d,\n"
+                       " \"listeners\": %zu,\n"
+                       " \"worker-threads\": %zu,\n"
+                       " \"num-sessions\": %lu",
                        SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads, num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
@@ -1860,9 +1945,10 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
 
     arg.outbuf = h2o_iovec_init(alloca(BUFSIZE - ret.len), BUFSIZE - ret.len);
     arg.err = 0;
-    arg.written = snprintf(arg.outbuf.base, arg.outbuf.len, ",\n"
-                                                            " \"jemalloc\": {\n"
-                                                            "   \"jemalloc-raw\": \"");
+    arg.written = snprintf(arg.outbuf.base, arg.outbuf.len,
+                           ",\n"
+                           " \"jemalloc\": {\n"
+                           "   \"jemalloc-raw\": \"");
     malloc_stats_print(extra_status_jemalloc_cb, &arg, "ga" /* omit general info, only aggregated stats */);
 
     if (arg.err || arg.written + 1 >= arg.outbuf.len) {
@@ -1882,12 +1968,13 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     if (!mallctl("stats.allocated", &allocated, &sz, NULL, 0) && !mallctl("stats.active", &active, &sz, NULL, 0) &&
         !mallctl("stats.metadata", &metadata, &sz, NULL, 0) && !mallctl("stats.resident", &resident, &sz, NULL, 0) &&
         !mallctl("stats.mapped", &mapped, &sz, NULL, 0)) {
-        arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written, ",\n"
-                                                                                             "   \"allocated\": %zu,\n"
-                                                                                             "   \"active\": %zu,\n"
-                                                                                             "   \"metadata\": %zu,\n"
-                                                                                             "   \"resident\": %zu,\n"
-                                                                                             "   \"mapped\": %zu }",
+        arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written,
+                                ",\n"
+                                "   \"allocated\": %zu,\n"
+                                "   \"active\": %zu,\n"
+                                "   \"metadata\": %zu,\n"
+                                "   \"resident\": %zu,\n"
+                                "   \"mapped\": %zu }",
                                 allocated, active, metadata, resident, mapped);
     }
     if (arg.written + 1 >= arg.outbuf.len) {
@@ -1979,9 +2066,12 @@ static void setup_configurators(void)
 int main(int argc, char **argv)
 {
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
-    int error_log_fd = -1;
+    int n, error_log_fd = -1;
+    size_t num_procs = h2o_numproc();
 
-    conf.num_threads = h2o_numproc();
+    h2o_vector_reserve(NULL, &conf.thread_map, num_procs);
+    for (n = 0; n < num_procs; n++)
+        conf.thread_map.entries[conf.thread_map.size++] = -1;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
 
@@ -2163,7 +2253,7 @@ int main(int argc, char **argv)
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-                ) {
+            ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
             }
         }
@@ -2246,15 +2336,15 @@ int main(int argc, char **argv)
         error_log_fd = -1;
     }
 
-    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
+    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
-    assert(conf.num_threads != 0);
+    assert(conf.thread_map.size != 0);
 
     /* start the threads */
-    conf.threads = alloca(sizeof(conf.threads[0]) * conf.num_threads);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.num_threads);
+    conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
     size_t i;
-    for (i = 1; i != conf.num_threads; ++i) {
+    for (i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
     }

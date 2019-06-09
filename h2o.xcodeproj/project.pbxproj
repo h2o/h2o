@@ -108,7 +108,6 @@
 		107923C619A3217300C52AD6 /* connection.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B319A3217300C52AD6 /* connection.c */; };
 		107923C719A3217300C52AD6 /* hpack.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B419A3217300C52AD6 /* hpack.c */; };
 		107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923B519A3217300C52AD6 /* hpack_huffman_table.h */; };
-		107923C919A3217300C52AD6 /* hpack_static_table.h in Headers */ = {isa = PBXBuildFile; fileRef = 107923B619A3217300C52AD6 /* hpack_static_table.h */; };
 		107923CB19A3217300C52AD6 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B819A3217300C52AD6 /* frame.c */; };
 		107923CC19A3217300C52AD6 /* context.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923B919A3217300C52AD6 /* context.c */; };
 		107923CD19A3217300C52AD6 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 107923BA19A3217300C52AD6 /* memory.c */; };
@@ -193,7 +192,7 @@
 		10D0905519F102C70043D458 /* http1client.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0905419F102C70043D458 /* http1client.c */; };
 		10D0905919F22FA10043D458 /* string_.h in Headers */ = {isa = PBXBuildFile; fileRef = 10D0905819F22FA10043D458 /* string_.h */; };
 		10D0906219F38B2E0043D458 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
-		10D0906B19F38B850043D458 /* http1client.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0906A19F38B850043D458 /* http1client.c */; };
+		10D0906B19F38B850043D458 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0906A19F38B850043D458 /* httpclient.c */; };
 		10D0906C19F395FC0043D458 /* socket-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0905219F0CB130043D458 /* socket-client.c */; };
 		10D0907019F494CC0043D458 /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0906E19F494CC0043D458 /* test.c */; };
 		10D0907319F633B00043D458 /* proxy.c in Sources */ = {isa = PBXBuildFile; fileRef = 10D0907219F633B00043D458 /* proxy.c */; };
@@ -354,6 +353,7 @@
 		E9708B891E52C8560029E0A5 /* scheduler.c in Sources */ = {isa = PBXBuildFile; fileRef = 10E299571A67E68500701AA6 /* scheduler.c */; };
 		E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
 		E9708B8B1E52C85A0029E0A5 /* tunnel.c in Sources */ = {isa = PBXBuildFile; fileRef = 106C22F71C040F6400405689 /* tunnel.c */; };
+		E97EC88D213CE3130086AD64 /* hpack.h in Headers */ = {isa = PBXBuildFile; fileRef = E97EC88C213CE3130086AD64 /* hpack.h */; };
 		E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5861FD7BE2200DE4346 /* utf8_util.c */; };
 		E987E5D01FD7BE8D00DE4346 /* static_dict.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58C1FD7BE2300DE4346 /* static_dict.c */; };
 		E987E5D11FD7BE9200DE4346 /* metablock.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5801FD7BE2100DE4346 /* metablock.c */; };
@@ -604,7 +604,7 @@
 		105534EE1A440FC800627ECB /* config.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
 		105534F21A460EF600627ECB /* 00unit.evloop.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.evloop.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F31A460EF600627ECB /* 00unit.libuv.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = 00unit.libuv.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		105534F41A460EF600627ECB /* 10http1client.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 10http1client.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		105534F41A460EF600627ECB /* 10httpclient.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 10httpclient.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F51A460EF600627ECB /* 40protocol.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 40protocol.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F61A460EF600627ECB /* 50file-config.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50file-config.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		105534F71A460F2E00627ECB /* 50mimemap.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 50mimemap.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -697,7 +697,6 @@
 		107923B319A3217300C52AD6 /* connection.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = connection.c; sourceTree = "<group>"; };
 		107923B419A3217300C52AD6 /* hpack.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpack.c; sourceTree = "<group>"; };
 		107923B519A3217300C52AD6 /* hpack_huffman_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hpack_huffman_table.h; sourceTree = "<group>"; };
-		107923B619A3217300C52AD6 /* hpack_static_table.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hpack_static_table.h; sourceTree = "<group>"; };
 		107923B819A3217300C52AD6 /* frame.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = frame.c; sourceTree = "<group>"; };
 		107923B919A3217300C52AD6 /* context.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = context.c; sourceTree = "<group>"; };
 		107923BA19A3217300C52AD6 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
@@ -818,8 +817,8 @@
 		10D0905419F102C70043D458 /* http1client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http1client.c; sourceTree = "<group>"; };
 		10D0905819F22FA10043D458 /* string_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = string_.h; sourceTree = "<group>"; };
 		10D0905A19F230280043D458 /* string.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = string.c; sourceTree = "<group>"; };
-		10D0906919F38B2E0043D458 /* examples-http1client */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-http1client"; sourceTree = BUILT_PRODUCTS_DIR; };
-		10D0906A19F38B850043D458 /* http1client.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http1client.c; sourceTree = "<group>"; };
+		10D0906919F38B2E0043D458 /* examples-httpclient */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "examples-httpclient"; sourceTree = BUILT_PRODUCTS_DIR; };
+		10D0906A19F38B850043D458 /* httpclient.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = httpclient.c; sourceTree = "<group>"; };
 		10D0906E19F494CC0043D458 /* test.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = test.c; sourceTree = "<group>"; };
 		10D0906F19F494CC0043D458 /* test.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = test.h; sourceTree = "<group>"; };
 		10D0907219F633B00043D458 /* proxy.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = proxy.c; sourceTree = "<group>"; };
@@ -941,6 +940,7 @@
 		E9708B061E49A3130029E0A5 /* sha256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sha256.c; sourceTree = "<group>"; };
 		E9708B071E49A3130029E0A5 /* tassert.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = tassert.h; sourceTree = "<group>"; };
 		E9708B1B1E49A3480029E0A5 /* handy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = handy.h; sourceTree = "<group>"; };
+		E97EC88C213CE3130086AD64 /* hpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hpack.h; sourceTree = "<group>"; };
 		E987E5551FD7BE1D00DE4346 /* bit_cost.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_cost.c; sourceTree = "<group>"; };
 		E987E5561FD7BE1D00DE4346 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		E987E5571FD7BE1D00DE4346 /* brotli_bit_stream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = brotli_bit_stream.h; sourceTree = "<group>"; };
@@ -1550,7 +1550,7 @@
 				1079243519A3260E00C52AD6 /* unittest */,
 				10F417D319C1907B00B6E31A /* h2o */,
 				10D0905119F0CA9C0043D458 /* examples-socket-server */,
-				10D0906919F38B2E0043D458 /* examples-http1client */,
+				10D0906919F38B2E0043D458 /* examples-httpclient */,
 				10EA45DF1D0949BF00769A2B /* examples-latency-optimization */,
 				08790E101D8BD7F100A04BC1 /* examples-redis-client */,
 				E918FC392136583F00CCB252 /* proptest */,
@@ -1617,6 +1617,7 @@
 				1044812D1BFD0FBE0007863F /* filecache.h */,
 				7D2DF4ED20297EE0004AD361 /* header.h */,
 				1058C8871AA6DE4B008D6180 /* hostinfo.h */,
+				E97EC88C213CE3130086AD64 /* hpack.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
 				7D67C723204F8C9B0049E935 /* httpclient.h */,
 				107923A119A3215F00C52AD6 /* http2.h */,
@@ -1684,7 +1685,6 @@
 			isa = PBXGroup;
 			children = (
 				107923B519A3217300C52AD6 /* hpack_huffman_table.h */,
-				107923B619A3217300C52AD6 /* hpack_static_table.h */,
 				1024A3FB1D22315000EB13F1 /* cache_digests.c */,
 				10AAAC641B6C9275004487C3 /* casper.c */,
 				107923B319A3217300C52AD6 /* connection.c */,
@@ -1811,7 +1811,6 @@
 		10BF213E1A087CDF008F7129 /* libh2o */ = {
 			isa = PBXGroup;
 			children = (
-				10D0906A19F38B850043D458 /* http1client.c */,
 				10D0905219F0CB130043D458 /* socket-client.c */,
 				08790DF41D8BD72500A04BC1 /* redis-client.c */,
 				107923FC19A3238500C52AD6 /* simple.c */,
@@ -1850,7 +1849,7 @@
 				105534F21A460EF600627ECB /* 00unit.evloop.t */,
 				105534F31A460EF600627ECB /* 00unit.libuv.t */,
 				109EEFDC1D77B350001F11D1 /* 00unit.mruby.t */,
-				105534F41A460EF600627ECB /* 10http1client.t */,
+				105534F41A460EF600627ECB /* 10httpclient.t */,
 				10FEF2481D6EC30800E11B1D /* 40bad-request.t */,
 				E9AFBF17212A9802000F5DB8 /* 40chunked.t */,
 				104CD5021CC465AF0057C62F /* 40env.t */,
@@ -1971,6 +1970,7 @@
 		10F417D419C190DD00B6E31A /* src */ = {
 			isa = PBXGroup;
 			children = (
+				10D0906A19F38B850043D458 /* httpclient.c */,
 				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
 				107D4D4D1B58970D004A9B21 /* ssl.c */,
@@ -2332,7 +2332,6 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				107923C919A3217300C52AD6 /* hpack_static_table.h in Headers */,
 				10AAAC631B6C7A7D004487C3 /* http2_casper.h in Headers */,
 				08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */,
 				1022E7C61CA8BCEB00CE2A05 /* yrmcds_portability.h in Headers */,
@@ -2377,6 +2376,7 @@
 				10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */,
 				08790DDF1D8015A400A04BC1 /* net.h in Headers */,
 				10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */,
+				E97EC88D213CE3130086AD64 /* hpack.h in Headers */,
 				10F419801B64E70D00BEAEAC /* golombset.h in Headers */,
 				104B9A261A4A5041009EEE64 /* serverutil.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
@@ -2506,9 +2506,9 @@
 			productReference = 10D0905119F0CA9C0043D458 /* examples-socket-server */;
 			productType = "com.apple.product-type.tool";
 		};
-		10D0905C19F38B2E0043D458 /* examples-http1client */ = {
+		10D0905C19F38B2E0043D458 /* examples-httpclient */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 10D0906419F38B2E0043D458 /* Build configuration list for PBXNativeTarget "examples-http1client" */;
+			buildConfigurationList = 10D0906419F38B2E0043D458 /* Build configuration list for PBXNativeTarget "examples-httpclient" */;
 			buildPhases = (
 				10D0905F19F38B2E0043D458 /* Sources */,
 				10D0906119F38B2E0043D458 /* Frameworks */,
@@ -2519,9 +2519,9 @@
 			dependencies = (
 				10D0905D19F38B2E0043D458 /* PBXTargetDependency */,
 			);
-			name = "examples-http1client";
+			name = "examples-httpclient";
 			productName = simple;
-			productReference = 10D0906919F38B2E0043D458 /* examples-http1client */;
+			productReference = 10D0906919F38B2E0043D458 /* examples-httpclient */;
 			productType = "com.apple.product-type.tool";
 		};
 		10EA45D21D0949BF00769A2B /* examples-latency-optimization */ = {
@@ -2606,7 +2606,7 @@
 				1079240219A3247A00C52AD6 /* examples-websocket */,
 				10D0904419F0CA9C0043D458 /* examples-socket-client */,
 				08790E031D8BD7F100A04BC1 /* examples-redis-client */,
-				10D0905C19F38B2E0043D458 /* examples-http1client */,
+				10D0905C19F38B2E0043D458 /* examples-httpclient */,
 				10EA45D21D0949BF00769A2B /* examples-latency-optimization */,
 			);
 		};
@@ -2822,7 +2822,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				10D0906B19F38B850043D458 /* http1client.c in Sources */,
+				10D0906B19F38B850043D458 /* httpclient.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3831,7 +3831,7 @@
 					"-lcrypto",
 					"-lz",
 				);
-				PRODUCT_NAME = "examples-http1client";
+				PRODUCT_NAME = "examples-httpclient";
 			};
 			name = "evloop-debug";
 		};
@@ -3860,7 +3860,7 @@
 					"-luv",
 					"-lz",
 				);
-				PRODUCT_NAME = "examples-http1client";
+				PRODUCT_NAME = "examples-httpclient";
 			};
 			name = "libuv-debug";
 		};
@@ -3884,7 +3884,7 @@
 					"-lcrypto",
 					"-lz",
 				);
-				PRODUCT_NAME = "examples-http1client";
+				PRODUCT_NAME = "examples-httpclient";
 			};
 			name = "evloop-release";
 		};
@@ -3909,7 +3909,7 @@
 					"-luv",
 					"-lz",
 				);
-				PRODUCT_NAME = "examples-http1client";
+				PRODUCT_NAME = "examples-httpclient";
 			};
 			name = "libuv-release";
 		};
@@ -4344,7 +4344,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "evloop-release";
 		};
-		10D0906419F38B2E0043D458 /* Build configuration list for PBXNativeTarget "examples-http1client" */ = {
+		10D0906419F38B2E0043D458 /* Build configuration list for PBXNativeTarget "examples-httpclient" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				10D0906519F38B2E0043D458 /* evloop-debug */,

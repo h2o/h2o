@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "h2o/memory.h"
@@ -65,13 +66,22 @@ struct st_h2o_mem_pool_shared_ref_t {
     struct st_h2o_mem_pool_shared_entry_t *entry;
 };
 
-void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
+void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
+size_t h2o_mmap_errors = 0;
 
-void h2o__fatal(const char *msg)
+void h2o__fatal(const char *file, int line, const char *msg, ...)
 {
-    fprintf(stderr, "fatal:%s\n", msg);
+    char buf[1024];
+    va_list args;
+
+    va_start(args, msg);
+    vsnprintf(buf, sizeof(buf), msg, args);
+    va_end(args);
+
+    h2o_error_printf("fatal:%s:%d:%s\n", file, line, buf);
+
     abort();
 }
 
@@ -263,7 +273,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     char *tmpfn = alloca(strlen(inbuf->_prototype->mmap_settings->fn_template) + 1);
                     strcpy(tmpfn, inbuf->_prototype->mmap_settings->fn_template);
                     if ((fd = mkstemp(tmpfn)) == -1) {
-                        fprintf(stderr, "failed to create temporary file:%s:%s\n", tmpfn, strerror(errno));
+                        h2o_perror("failed to create temporary file");
                         goto MapError;
                     }
                     unlink(tmpfn);
@@ -277,11 +287,11 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 fallocate_ret = ftruncate(fd, new_allocsize);
 #endif
                 if (fallocate_ret != 0) {
-                    perror("failed to resize temporary file");
+                    h2o_perror("failed to resize temporary file");
                     goto MapError;
                 }
                 if ((newp = (void *)mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
-                    perror("mmap failed");
+                    h2o_perror("mmap failed");
                     goto MapError;
                 }
                 if (inbuf->_fd == -1) {
@@ -322,6 +332,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     return ret;
 
 MapError:
+    __sync_add_and_fetch(&h2o_mmap_errors, 1);
     ret.base = NULL;
     ret.len = 0;
     return ret;
@@ -412,4 +423,26 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
     *list = h2o_mem_realloc(*list, (cnt + 2) * sizeof(void *));
     (*list)[cnt++] = element;
     (*list)[cnt] = NULL;
+}
+
+char *h2o_strerror_r(int err, char *buf, size_t len)
+{
+#ifndef _GNU_SOURCE
+    strerror_r(err, buf, len);
+    return buf;
+#else
+    /**
+     * The GNU-specific strerror_r() returns a pointer to a string containing the error message.
+     * This may be either a pointer to a string that the function stores in  buf,
+     * or a pointer to some (immutable) static string (in which case buf is unused)
+     */
+    return strerror_r(err, buf, len);
+#endif
+}
+
+void h2o_perror(const char *msg)
+{
+    char buf[128];
+
+    h2o_error_printf("%s: %s\n", msg, h2o_strerror_r(errno, buf, sizeof(buf)));
 }

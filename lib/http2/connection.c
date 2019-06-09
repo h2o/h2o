@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "h2o.h"
+#include "h2o/hpack.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
@@ -182,7 +183,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
 
         for (link = conn->_pending_reqs.next; link != &conn->_pending_reqs && can_run_requests(conn); link = lnext) {
             /* fetch and detach a pending stream */
-            h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, link);
+            h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, link);
 
             lnext = link->next;
 
@@ -202,7 +203,7 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
                 }
             }
 
-            h2o_linklist_unlink(&stream->_refs.link);
+            h2o_linklist_unlink(&stream->_link);
             ran_one_request = 1;
 
             /* handle it */
@@ -214,16 +215,20 @@ static void run_pending_requests(h2o_http2_conn_t *conn)
     } while (ran_one_request && !h2o_linklist_is_empty(&conn->_pending_reqs));
 }
 
-static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+static int reset_stream_if_disregarded(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (!h2o_http2_stream_is_push(stream->stream_id) && stream->stream_id > conn->pull_stream_ids.max_open) {
-        /* this stream is opend after sending GOAWAY, so ignore it */
+        /* this stream is opened after sending GOAWAY, so ignore it */
         h2o_http2_stream_reset(conn, stream);
-        return;
+        return 1;
     }
+    return 0;
+}
 
+static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
     /* TODO schedule the pending reqs using the scheduler */
-    h2o_linklist_insert(&conn->_pending_reqs, &stream->_refs.link);
+    h2o_linklist_insert(&conn->_pending_reqs, &stream->_link);
 
     run_pending_requests(conn);
     update_idle_timeout(conn);
@@ -232,6 +237,9 @@ static void execute_or_enqueue_request_core(h2o_http2_conn_t *conn, h2o_http2_st
 static void execute_or_enqueue_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+
+    if (reset_stream_if_disregarded(conn, stream))
+        return;
 
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
     if (!stream->blocked_by_server)
@@ -249,14 +257,33 @@ void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     kh_val(conn->streams, iter) = stream;
 }
 
+static void preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src)
+{
+    assert(h2o_http2_scheduler_is_open(&src->_scheduler));
+
+    h2o_http2_stream_t **dst = conn->_recently_closed_streams.streams + conn->_recently_closed_streams.next_slot;
+    if (++conn->_recently_closed_streams.next_slot == HTTP2_CLOSED_STREAM_PRIORITIES)
+        conn->_recently_closed_streams.next_slot = 0;
+
+    if (*dst != NULL) {
+        assert(h2o_http2_scheduler_is_open(&(*dst)->_scheduler));
+        h2o_http2_scheduler_close(&(*dst)->_scheduler);
+    } else {
+        *dst = h2o_mem_alloc(offsetof(h2o_http2_stream_t, _scheduler) + sizeof((*dst)->_scheduler));
+    }
+
+    (*dst)->stream_id = src->stream_id;
+    h2o_http2_scheduler_relocate(&(*dst)->_scheduler, &src->_scheduler);
+    h2o_http2_scheduler_deactivate(&(*dst)->_scheduler);
+}
+
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
+    preserve_stream_scheduler(conn, stream);
+
     khiter_t iter = kh_get(h2o_http2_stream_t, conn->streams, stream->stream_id);
     assert(iter != kh_end(conn->streams));
     kh_del(h2o_http2_stream_t, conn->streams, iter);
-
-    assert(h2o_http2_scheduler_is_open(&stream->_refs.scheduler));
-    h2o_http2_scheduler_close(&stream->_refs.scheduler);
 
     if (stream->_conn_stream_in_progress) {
         h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
@@ -266,23 +293,23 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
-        if (h2o_linklist_is_linked(&stream->_refs.link))
-            h2o_linklist_unlink(&stream->_refs.link);
+        if (h2o_linklist_is_linked(&stream->_link))
+            h2o_linklist_unlink(&stream->_link);
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_IDLE:
     case H2O_HTTP2_STREAM_STATE_RECV_HEADERS:
-        assert(!h2o_linklist_is_linked(&stream->_refs.link));
+        assert(!h2o_linklist_is_linked(&stream->_link));
         break;
     case H2O_HTTP2_STREAM_STATE_REQ_PENDING:
-        assert(h2o_linklist_is_linked(&stream->_refs.link));
-        h2o_linklist_unlink(&stream->_refs.link);
+        assert(h2o_linklist_is_linked(&stream->_link));
+        h2o_linklist_unlink(&stream->_link);
         break;
     case H2O_HTTP2_STREAM_STATE_SEND_HEADERS:
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
     case H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL:
     case H2O_HTTP2_STREAM_STATE_END_STREAM:
-        if (h2o_linklist_is_linked(&stream->_refs.link))
-            h2o_linklist_unlink(&stream->_refs.link);
+        if (h2o_linklist_is_linked(&stream->_link))
+            h2o_linklist_unlink(&stream->_link);
         break;
     }
     if (stream->state != H2O_HTTP2_STREAM_STATE_END_STREAM)
@@ -318,6 +345,17 @@ static void close_connection_now(h2o_http2_conn_t *conn)
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
         h2o_buffer_dispose(&conn->_write.buf_in_flight);
+    {
+        size_t i;
+        for (i = 0; i < sizeof(conn->_recently_closed_streams.streams) / sizeof(conn->_recently_closed_streams.streams[0]); ++i) {
+            h2o_http2_stream_t *closed_stream = conn->_recently_closed_streams.streams[i];
+            if (closed_stream == NULL)
+                break;
+            assert(h2o_http2_scheduler_is_open(&closed_stream->_scheduler));
+            h2o_http2_scheduler_close(&closed_stream->_scheduler);
+            free(closed_stream);
+        }
+    }
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
     assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
@@ -372,25 +410,25 @@ static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta
     if (h2o_http2_window_update(&stream->output_window, delta) != 0)
         return -1;
     if (cur <= 0 && h2o_http2_window_get_avail(&stream->output_window) > 0 &&
-        (h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL)) {
-        assert(!h2o_linklist_is_linked(&stream->_refs.link));
-        h2o_http2_scheduler_activate(&stream->_refs.scheduler);
+        (h2o_http2_stream_has_pending_data(stream) || stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL)) {
+        assert(!h2o_linklist_is_linked(&stream->_link));
+        h2o_http2_scheduler_activate(&stream->_scheduler);
     }
     return 0;
 }
 
 static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, h2o_iovec_t payload, int is_end_stream)
 {
-    stream->_req_body.bytes_received += payload.len;
+    stream->req._req_body.bytes_received += payload.len;
 
     /* check size */
-    if (stream->_req_body.bytes_received > conn->super.ctx->globalconf->max_request_entity_size) {
+    if (stream->req._req_body.bytes_received > conn->super.ctx->globalconf->max_request_entity_size) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
         h2o_http2_stream_reset(conn, stream);
         return;
     }
     if (stream->req.content_length != SIZE_MAX) {
-        size_t received = stream->_req_body.bytes_received, cl = stream->req.content_length;
+        size_t received = stream->req._req_body.bytes_received, cl = stream->req.content_length;
         if (is_end_stream ? (received != cl) : (received > cl)) {
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
             h2o_http2_stream_reset(conn, stream);
@@ -422,10 +460,10 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     header_exists_map = 0;
-    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme,
-                                       &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path,
-                                       &stream->req.headers, &header_exists_map, &stream->req.content_length,
-                                       &stream->cache_digests, err_desc)) != 0) {
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
+                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
+                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
+                                       &stream->req.content_length, &stream->cache_digests, src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -454,7 +492,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         return 0;
     }
 
-    if (stream->_req_body.body == NULL) {
+    if (stream->req._req_body.body == NULL) {
         execute_or_enqueue_request(conn, stream);
     } else {
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
@@ -473,9 +511,10 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     size_t dummy_content_length;
     int ret;
 
-    if ((ret = h2o_hpack_parse_headers(&stream->req.pool, src, len, &conn->_input_header_table, &stream->req.input.scheme,
-                                       &stream->req.input.authority, &stream->req.input.method, &stream->req.input.path,
-                                       &stream->req.headers, NULL, &dummy_content_length, NULL, err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
+                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
+                                       &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, src, len,
+                                       err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
@@ -549,22 +588,32 @@ void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stre
 static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, const h2o_http2_priority_t *priority,
                          int scheduler_is_open)
 {
-    h2o_http2_scheduler_node_t *parent_sched;
+    h2o_http2_scheduler_node_t *parent_sched = NULL;
 
     /* determine the parent */
     if (priority->dependency != 0) {
         h2o_http2_stream_t *parent_stream = h2o_http2_conn_get_stream(conn, priority->dependency);
         if (parent_stream != NULL) {
-            parent_sched = &parent_stream->_refs.scheduler.node;
+            parent_sched = &parent_stream->_scheduler.node;
         } else {
-            /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in that
-             * stream being given a default priority. (RFC 7540 5.3.1)
-             * It is possible for a stream to become closed while prioritization information that creates a dependency on that
-             * stream is in transit. If a stream identified in a dependency has no associated priority information, then the
-             * dependent stream is instead assigned a default priority. (RFC 7540 5.3.4)
-             */
-            parent_sched = &conn->scheduler;
-            priority = &h2o_http2_default_priority;
+            size_t i;
+            for (i = 0; i < HTTP2_CLOSED_STREAM_PRIORITIES; i++) {
+                if (conn->_recently_closed_streams.streams[i] &&
+                    conn->_recently_closed_streams.streams[i]->stream_id == priority->dependency) {
+                    parent_sched = &conn->_recently_closed_streams.streams[i]->_scheduler.node;
+                    break;
+                }
+            }
+            if (parent_sched == NULL) {
+                /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in
+                 * that stream being given a default priority. (RFC 7540 5.3.1) It is possible for a stream to become closed while
+                 * prioritization information that creates a dependency on that stream is in transit. If a stream identified in a
+                 * dependency has no associated priority information, then the dependent stream is instead assigned a default
+                 * priority. (RFC 7540 5.3.4)
+                 */
+                parent_sched = &conn->scheduler;
+                priority = &h2o_http2_default_priority;
+            }
         }
     } else {
         parent_sched = &conn->scheduler;
@@ -572,9 +621,9 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
 
     /* setup the scheduler */
     if (!scheduler_is_open) {
-        h2o_http2_scheduler_open(&stream->_refs.scheduler, parent_sched, priority->weight, priority->exclusive);
+        h2o_http2_scheduler_open(&stream->_scheduler, parent_sched, priority->weight, priority->exclusive);
     } else {
-        h2o_http2_scheduler_rebind(&stream->_refs.scheduler, parent_sched, priority->weight, priority->exclusive);
+        h2o_http2_scheduler_rebind(&stream->_scheduler, parent_sched, priority->weight, priority->exclusive);
     }
 }
 
@@ -599,12 +648,12 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_s
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
 
-    if (h2o_buffer_append(&stream->_req_body.body, payload.base, payload.len) == 0)
+    if (h2o_buffer_append(&stream->req._req_body.body, payload.base, payload.len) == 0)
         return -1;
     proceed_request(&stream->req, payload.len, is_end_stream);
 
     if (is_end_stream) {
-        stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
+        stream->req.entity = h2o_iovec_init(stream->req._req_body.body->bytes, stream->req._req_body.body->size);
         execute_or_enqueue_request((h2o_http2_conn_t *)stream->req.conn, stream);
     }
     return 0;
@@ -614,9 +663,9 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
 
-    if (h2o_buffer_append(&stream->_req_body.body, payload.base, payload.len) == 0)
+    if (h2o_buffer_append(&stream->req._req_body.body, payload.base, payload.len) == 0)
         return -1;
-    stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
+    stream->req.entity = h2o_iovec_init(stream->req._req_body.body->bytes, stream->req._req_body.body->size);
 
     /* mark that we have seen eos */
     if (is_end_stream)
@@ -625,30 +674,23 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
     return 0;
 }
 
-static int write_req_first(void *_req, h2o_iovec_t payload, int is_end_stream)
+static void on_request_streaming_selected(h2o_req_t *req, int is_streaming)
 {
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, _req);
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     h2o_http2_conn_t *conn = (h2o_http2_conn_t *)stream->req.conn;
-    h2o_handler_t *first_handler;
 
-    /* if possible, switch to either streaming request body mode */
-    if (!is_end_stream && (first_handler = h2o_get_first_handler(&stream->req)) != NULL &&
-        first_handler->supports_request_streaming) {
-        if (h2o_buffer_append(&stream->_req_body.body, payload.base, payload.len) == 0)
-            return -1;
-        stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
-        stream->req.write_req.cb = write_req_streaming_pre_dispatch;
-        stream->req.proceed_req = proceed_request;
-        execute_or_enqueue_request_core(conn, stream);
-        return 0;
+    if (is_streaming) {
+        req->write_req.cb = write_req_streaming_pre_dispatch;
+        req->proceed_req = proceed_request;
+        if (!reset_stream_if_disregarded(conn, stream))
+            execute_or_enqueue_request_core(conn, stream);
+        return;
     }
-
     /* TODO elect input streams one by one for non-streaming case as well? */
     update_stream_input_window(conn, stream,
-                               conn->super.ctx->globalconf->http2.active_stream_window_size -
-                                   H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
-    stream->req.write_req.cb = write_req_non_streaming;
-    return write_req_non_streaming(stream->req.write_req.ctx, payload, is_end_stream);
+            conn->super.ctx->globalconf->http2.active_stream_window_size -
+            H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+    req->write_req.cb = write_req_non_streaming;
 }
 
 static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, const char **err_desc)
@@ -717,7 +759,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
                 *err_desc = "trailing HEADERS frame MUST have END_STREAM flag set";
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
-            stream->req.entity = h2o_iovec_init(stream->_req_body.body->bytes, stream->_req_body.body->size);
+            stream->req.entity = h2o_iovec_init(stream->req._req_body.body->bytes, stream->req._req_body.body->size);
             if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0)
                 goto PREPARE_FOR_CONTINUATION;
             return handle_trailing_headers(conn, stream, payload.headers, payload.headers_len, err_desc);
@@ -742,15 +784,16 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
         set_priority(conn, stream, &payload.priority, 0);
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
-    stream->req.write_req.cb = write_req_first;
+    stream->req.write_req.cb = h2o_write_req_first;
+    stream->req.write_req.on_streaming_selected = on_request_streaming_selected;
     stream->req.write_req.ctx = &stream->req;
 
     /* setup container for request body if it is expected to arrive */
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) == 0)
-        h2o_buffer_init(&stream->_req_body.body, &h2o_socket_buffer_prototype);
+        h2o_buffer_init(&stream->req._req_body.body, &h2o_socket_buffer_prototype);
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
-        /* request is complete, handle it */
+        /* request headers are complete, handle it */
         return handle_incoming_request(conn, stream, payload.headers, payload.headers_len, err_desc);
     }
 
@@ -782,7 +825,7 @@ static int handle_priority_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         /* ignore priority changes to pushed streams with weight=257, since that is where we are trying to be smarter than the web
          * browsers
          */
-        if (h2o_http2_scheduler_get_weight(&stream->_refs.scheduler) != 257)
+        if (h2o_http2_scheduler_get_weight(&stream->_scheduler) != 257)
             set_priority(conn, stream, &payload, 1);
     } else {
         if (h2o_http2_stream_is_push(frame->stream_id)) {
@@ -985,7 +1028,7 @@ ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, c
         if (hret != 0)
             ret = hret;
     } else {
-        fprintf(stderr, "skipping frame (type:%d)\n", frame.type);
+        h2o_error_printf("skipping frame (type:%d)\n", frame.type);
     }
 
     return ret;
@@ -1054,8 +1097,8 @@ static void on_read(h2o_socket_t *sock, const char *err)
         if (!h2o_socket_ssl_is_early_data(conn->sock)) {
             while (conn->early_data.blocked_streams.next != &conn->early_data.blocked_streams) {
                 h2o_http2_stream_t *stream =
-                    H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->early_data.blocked_streams.next);
-                h2o_linklist_unlink(&stream->_refs.link);
+                    H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, conn->early_data.blocked_streams.next);
+                h2o_linklist_unlink(&stream->_link);
                 h2o_replay_request(&stream->req);
             }
         }
@@ -1114,18 +1157,18 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 
     if (h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL) {
         if (h2o_http2_window_get_avail(&stream->output_window) > 0) {
-            assert(!h2o_linklist_is_linked(&stream->_refs.link));
-            h2o_http2_scheduler_activate(&stream->_refs.scheduler);
+            assert(!h2o_linklist_is_linked(&stream->_link));
+            h2o_http2_scheduler_activate(&stream->_scheduler);
         }
     } else {
-        h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+        h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     }
 }
 
 void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (conn->sock->ssl != NULL && h2o_socket_ssl_is_early_data(conn->sock)) {
-        h2o_linklist_insert(&conn->early_data.blocked_streams, &stream->_refs.link);
+        h2o_linklist_insert(&conn->early_data.blocked_streams, &stream->_link);
     } else {
         h2o_replay_request_deferred(&stream->req);
     }
@@ -1162,10 +1205,9 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* call the proceed callback of the streams that have been flushed (while unlinking them from the list) */
     if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
         while (!h2o_linklist_is_empty(&conn->_write.streams_to_proceed)) {
-            h2o_http2_stream_t *stream =
-                H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.link, conn->_write.streams_to_proceed.next);
+            h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, conn->_write.streams_to_proceed.next);
             assert(!h2o_http2_stream_has_pending_data(stream));
-            h2o_linklist_unlink(&stream->_refs.link);
+            h2o_linklist_unlink(&stream->_link);
             h2o_http2_stream_proceed(conn, stream);
         }
     }
@@ -1192,7 +1234,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *still_is_active, void *cb_arg)
 {
     h2o_http2_conn_t *conn = cb_arg;
-    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.scheduler, ref);
+    h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _scheduler, ref);
 
     assert(h2o_http2_stream_has_pending_data(stream) || stream->state >= H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL);
 
@@ -1216,9 +1258,8 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
             }
             h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, stream->stream_id,
                                        conn->peer_settings.max_frame_size, trailers, num_trailers);
-            h2o_http2_conn_request_write(conn);
         }
-        h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_refs.link);
+        h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     }
 
     return h2o_http2_conn_get_buffer_window(conn) > 0 ? 0 : -1;
@@ -1336,11 +1377,11 @@ static h2o_iovec_t log_priority_received_weight(h2o_req_t *req)
 
 static uint32_t get_parent_stream_id(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    h2o_http2_scheduler_node_t *parent_sched = h2o_http2_scheduler_get_parent(&stream->_refs.scheduler);
+    h2o_http2_scheduler_node_t *parent_sched = h2o_http2_scheduler_get_parent(&stream->_scheduler);
     if (parent_sched == &conn->scheduler) {
         return 0;
     } else {
-        h2o_http2_stream_t *parent_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _refs.scheduler, parent_sched);
+        h2o_http2_stream_t *parent_stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _scheduler, parent_sched);
         return parent_stream->stream_id;
     }
 }
@@ -1351,7 +1392,7 @@ static h2o_iovec_t log_priority_actual(h2o_req_t *req)
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT32_LONGEST_STR ":" H2O_UINT16_LONGEST_STR));
     size_t len = (size_t)sprintf(s, "%" PRIu32 ":%" PRIu16, get_parent_stream_id(conn, stream),
-                                 h2o_http2_scheduler_get_weight(&stream->_refs.scheduler));
+                                 h2o_http2_scheduler_get_weight(&stream->_scheduler));
     return h2o_iovec_init(s, len);
 }
 
@@ -1368,7 +1409,7 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
 {
     h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, req, req);
     char *s = h2o_mem_alloc_pool(&stream->req.pool, *s, sizeof(H2O_UINT16_LONGEST_STR));
-    size_t len = (size_t)sprintf(s, "%" PRIu16, h2o_http2_scheduler_get_weight(&stream->_refs.scheduler));
+    size_t len = (size_t)sprintf(s, "%" PRIu16, h2o_http2_scheduler_get_weight(&stream->_scheduler));
     return h2o_iovec_init(s, len);
 }
 
@@ -1438,6 +1479,8 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         conn->num_streams.push.open >= conn->peer_settings.max_concurrent_streams)
         return;
 
+    if (conn->state >= H2O_HTTP2_CONN_STATE_IS_CLOSING)
+        return;
     if (conn->push_stream_ids.max_open >= 0x7ffffff0)
         return;
     if (!(h2o_linklist_is_empty(&conn->_pending_reqs) && can_run_requests(conn)))
@@ -1477,9 +1520,9 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     stream->received_priority.dependency = src_stream->stream_id;
     stream->push.parent_stream_id = src_stream->stream_id;
     if (is_critical) {
-        h2o_http2_scheduler_open(&stream->_refs.scheduler, &conn->scheduler, 257, 0);
+        h2o_http2_scheduler_open(&stream->_scheduler, &conn->scheduler, 257, 0);
     } else {
-        h2o_http2_scheduler_open(&stream->_refs.scheduler, &src_stream->_refs.scheduler.node, 16, 0);
+        h2o_http2_scheduler_open(&stream->_scheduler, &src_stream->_scheduler.node, 16, 0);
     }
     h2o_http2_stream_prepare_for_request(conn, stream);
 
@@ -1495,12 +1538,13 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
         size_t i;
         for (i = 0; i != src_stream->req.headers.size; ++i) {
             h2o_header_t *src_header = src_stream->req.headers.entries + i;
-            if (src_header->flags.copy_for_push_request) {
-                assert(h2o_header_is_token(src_header)); /* currently only predefined headers are copiable*/
+            /* currently only predefined headers are copiable */
+            if (h2o_iovec_is_token(src_header->name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, src_header->name);
-                h2o_add_header(&stream->req.pool, &stream->req.headers, token, NULL,
-                               h2o_strdup(&stream->req.pool, src_header->value.base, src_header->value.len).base,
-                               src_header->value.len);
+                if (token->flags.copy_for_push_request)
+                    h2o_add_header(&stream->req.pool, &stream->req.headers, token, NULL,
+                                   h2o_strdup(&stream->req.pool, src_header->value.base, src_header->value.len).base,
+                                   src_header->value.len);
             }
         }
     }
@@ -1574,7 +1618,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
 
     /* open the stream, now that the function is guaranteed to succeed */
     stream = h2o_http2_stream_open(http2conn, 1, req, &h2o_http2_default_priority);
-    h2o_http2_scheduler_open(&stream->_refs.scheduler, &http2conn->scheduler, h2o_http2_default_priority.weight, 0);
+    h2o_http2_scheduler_open(&stream->_scheduler, &http2conn->scheduler, h2o_http2_default_priority.weight, 0);
     h2o_http2_stream_prepare_for_request(http2conn, stream);
 
     /* send response */

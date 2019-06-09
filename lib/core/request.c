@@ -284,7 +284,7 @@ void h2o_init_request(h2o_req_t *req, h2o_conn_t *conn, h2o_req_t *src)
         req->headers.size = src->headers.size;
         for (i = 0; i != src->headers.size; ++i) {
             h2o_header_t *dst_header = req->headers.entries + i, *src_header = src->headers.entries + i;
-            if (h2o_header_is_token(src_header)) {
+            if (h2o_iovec_is_token(src_header->name)) {
                 dst_header->name = src_header->name;
             } else {
                 dst_header->name = h2o_mem_alloc_pool(&req->pool, *dst_header->name, 1);
@@ -312,8 +312,8 @@ void h2o_dispose_request(h2o_req_t *req)
 
     h2o_timer_unlink(&req->_timeout_entry);
 
-    if (req->pathconf != NULL && !req->is_subrequest) {
-        h2o_logger_t **logger = req->pathconf->loggers.entries, **end = logger + req->pathconf->loggers.size;
+    if (req->pathconf != NULL) {
+        h2o_logger_t **logger = req->loggers, **end = logger + req->num_loggers;
         for (; logger != end; ++logger) {
             (*logger)->log_access((*logger), req);
         }
@@ -321,6 +321,9 @@ void h2o_dispose_request(h2o_req_t *req)
 
     if (req->error_logs != NULL)
         h2o_buffer_dispose(&req->error_logs);
+
+    if (req->_req_body.body != NULL)
+        h2o_buffer_dispose(&req->_req_body.body);
 
     h2o_mem_clear_pool(&req->pool);
 }
@@ -531,6 +534,13 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
 {
     req->hostconf = hostconf;
     req->pathconf = pathconf;
+
+    /* copy filters and loggers */
+    req->filters = pathconf->_filters.entries;
+    req->num_filters = pathconf->_filters.size;
+    req->loggers = pathconf->_loggers.entries;
+    req->num_loggers = pathconf->_loggers.size;
+
     if (pathconf->env != NULL)
         apply_env(req, pathconf->env);
 }
@@ -705,7 +715,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
 
     /* parse the location URL */
     if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
-        /* TODO log fprintf(stderr, "[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
+        /* TODO log h2o_error_printf("[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
         h2o_send_error_deferred_502(req, "Gateway Error", "internal error", 0);
         return;
     }
@@ -776,8 +786,8 @@ void h2o_send_informational(h2o_req_t *req)
         goto Clear;
 
     int i = 0;
-    for (i = 0; i != req->pathconf->filters.size; ++i) {
-        h2o_filter_t *filter = req->pathconf->filters.entries[i];
+    for (i = 0; i != req->num_filters; ++i) {
+        h2o_filter_t *filter = req->filters[i];
         if (filter->on_informational != NULL)
             filter->on_informational(filter, req);
     }
@@ -791,4 +801,23 @@ Clear:
     /* clear status and headers */
     req->res.status = 0;
     req->res.headers = (h2o_headers_t){NULL, 0, 0};
+}
+
+int h2o_write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity)
+{
+    h2o_req_t *req = _req;
+    h2o_handler_t *first_handler;
+
+    /* if possible, switch to either streaming request body mode */
+    if (!is_end_entity && (first_handler = h2o_get_first_handler(req)) != NULL &&
+        first_handler->supports_request_streaming) {
+        if (h2o_buffer_append(&req->_req_body.body, payload.base, payload.len) == 0)
+            return -1;
+        req->entity = h2o_iovec_init(req->_req_body.body->bytes, req->_req_body.body->size);
+        req->write_req.on_streaming_selected(req, 1);
+        return 0;
+    }
+
+    req->write_req.on_streaming_selected(req, 0);
+    return req->write_req.cb(req->write_req.ctx, payload, is_end_entity);
 }

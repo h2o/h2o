@@ -26,7 +26,7 @@
 #include <sys/time.h>
 
 #if 0
-#define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
 #else
 #define DEBUG_LOG(...)
 #endif
@@ -124,7 +124,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         return -1;
 
     if (nevents != 0)
-        h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now);
+        h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now_millisec);
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {
@@ -173,7 +173,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)
     while ((ret = kevent(loop->kq, changelist, change_index, NULL, 0, NULL)) != 0 && errno == EINTR)
         ;
     if (ret == -1)
-        fprintf(stderr, "kevent returned error %d (fd=%d)", errno, sock->fd);
+        h2o_error_printf("kevent returned error %d (fd=%d)", errno, sock->fd);
 }
 
 static void evloop_do_dispose(h2o_evloop_t *_loop)

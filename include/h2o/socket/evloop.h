@@ -42,7 +42,8 @@ typedef struct st_h2o_evloop_t {
         struct st_h2o_evloop_socket_t *head;
         struct st_h2o_evloop_socket_t **tail_ref;
     } _statechanged;
-    uint64_t _now;
+    uint64_t _now_millisec;
+    uint64_t _now_nanosec;
     struct timeval _tv_at;
     h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_counter;
@@ -58,6 +59,11 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 
 h2o_evloop_t *h2o_evloop_create(void);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
+/**
+ * runs a event loop once. The function returns 0 if successful, or -1 if it aborts the operation due to a system call returning an
+ * error (typcially due to an interrupt setting errno to EINTR). When an error is returned, the application can consult errno and
+ * rerun the event loop.
+ */
 int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
 
 #define h2o_timer_init h2o_timerwheel_init_entry
@@ -74,7 +80,12 @@ static inline struct timeval h2o_gettimeofday(h2o_evloop_t *loop)
 
 static inline uint64_t h2o_now(h2o_evloop_t *loop)
 {
-    return loop->_now;
+    return loop->_now_millisec;
+}
+
+static inline uint64_t h2o_now_nanosec(h2o_evloop_t *loop)
+{
+    return loop->_now_nanosec;
 }
 
 static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
@@ -84,7 +95,7 @@ static inline uint64_t h2o_evloop_get_execution_time(h2o_evloop_t *loop)
 
 inline void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer)
 {
-    h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now + delay_ticks);
+    h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now_millisec + delay_ticks);
 }
 
 #endif
