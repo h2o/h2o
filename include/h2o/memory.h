@@ -279,7 +279,7 @@ static int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len);
  * variant of h2o_buffer_append that does not abort on failure
  * @return 0 on allocation failure, 1 otherwise
  */
-static int h2o_buffer_try_append(h2o_buffer_t **dst, void *src, size_t len);
+static int h2o_buffer_try_append(h2o_buffer_t **dst, void *src, size_t len) __attribute__((warn_unused_result));
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
