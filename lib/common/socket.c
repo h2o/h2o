@@ -395,7 +395,7 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
     if (sock->ssl->output.bufs.size != 0) {
         h2o_socket_read_stop(sock);
         flush_pending_ssl(sock, ret == 1 ? dispose_socket : shutdown_ssl);
-    } else if (ret == 2 && SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_READ) {
+    } else if (ret == 0 && SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_READ) {
         h2o_socket_read_start(sock, shutdown_ssl);
     } else {
         goto Close;
