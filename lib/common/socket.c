@@ -838,6 +838,21 @@ h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock)
     return h2o_iovec_init(NULL, 0);
 }
 
+const char *h2o_socket_get_ssl_server_name(const h2o_socket_t *sock)
+{
+  if (sock->ssl != NULL) {
+#if H2O_USE_PICOTLS
+      if (sock->ssl->ptls != NULL) {
+          return ptls_get_server_name(sock->ssl->ptls);
+      } else
+#endif
+      if (sock->ssl->ossl != NULL) {
+          return SSL_get_servername(sock->ssl->ossl, TLSEXT_NAMETYPE_host_name);
+      }
+  }
+  return NULL;
+}
+
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
     h2o_iovec_t base64id, rawid = h2o_socket_get_ssl_session_id(sock);
@@ -931,7 +946,7 @@ static void create_ossl(h2o_socket_t *sock)
 }
 
 static SSL_SESSION *on_async_resumption_get(SSL *ssl,
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+#if !defined(LIBRESSL_VERSION_NUMBER) ? OPENSSL_VERSION_NUMBER >= 0x1010000fL : LIBRESSL_VERSION_NUMBER > 0x2070000f
                                             const
 #endif
                                             unsigned char *data,

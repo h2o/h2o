@@ -89,7 +89,7 @@ size_t h2o_timerwheel_run(h2o_timerwheel_t *ctx, uint64_t now);
 
 inline void h2o_timerwheel_init_entry(h2o_timerwheel_entry_t *entry, h2o_timerwheel_cb cb)
 {
-    *entry = (h2o_timerwheel_entry_t){{NULL}, 0, cb};
+    *entry = (h2o_timerwheel_entry_t){{NULL, NULL}, 0, cb};
 }
 
 inline int h2o_timerwheel_is_linked(h2o_timerwheel_entry_t *entry)

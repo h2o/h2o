@@ -69,6 +69,7 @@ struct st_h2o_mem_pool_shared_ref_t {
 void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
+size_t h2o_mmap_errors = 0;
 
 void h2o__fatal(const char *file, int line, const char *msg, ...)
 {
@@ -331,6 +332,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     return ret;
 
 MapError:
+    __sync_add_and_fetch(&h2o_mmap_errors, 1);
     ret.base = NULL;
     ret.len = 0;
     return ret;

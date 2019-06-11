@@ -97,13 +97,14 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        " \"http2-errors.inadequate-security\": %" PRIu64 ", \n"
                        " \"http2.read-closed\": %" PRIu64 ", \n"
                        " \"http2.write-closed\": %" PRIu64 ", \n"
-                       " \"ssl.errors\": %" PRIu64 "\n",
+                       " \"ssl.errors\": %" PRIu64 ", \n"
+                       " \"memory.mmap_errors\": %zu\n",
                        H1_AGG_ERR(400), H1_AGG_ERR(403), H1_AGG_ERR(404), H1_AGG_ERR(405), H1_AGG_ERR(416), H1_AGG_ERR(417),
                        H1_AGG_ERR(500), H1_AGG_ERR(502), H1_AGG_ERR(503), H2_AGG_ERR(PROTOCOL), H2_AGG_ERR(INTERNAL),
                        H2_AGG_ERR(FLOW_CONTROL), H2_AGG_ERR(SETTINGS_TIMEOUT), H2_AGG_ERR(STREAM_CLOSED), H2_AGG_ERR(FRAME_SIZE),
                        H2_AGG_ERR(REFUSED_STREAM), H2_AGG_ERR(CANCEL), H2_AGG_ERR(COMPRESSION), H2_AGG_ERR(CONNECT),
                        H2_AGG_ERR(ENHANCE_YOUR_CALM), H2_AGG_ERR(INADEQUATE_SECURITY), esc->h2_read_closed, esc->h2_write_closed,
-                       esc->ssl_errors);
+                       esc->ssl_errors, h2o_mmap_errors);
     pthread_mutex_destroy(&esc->mutex);
     free(esc);
     return ret;
