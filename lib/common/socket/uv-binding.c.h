@@ -37,20 +37,27 @@ struct st_h2o_uv_socket_t {
     };
 };
 
-static void alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size, uv_buf_t *_buf)
+static void alloc_inbuf(h2o_buffer_t **buf, uv_buf_t *_vec)
 {
-    struct st_h2o_uv_socket_t *sock = handle->data;
+    h2o_iovec_t vec = h2o_buffer_try_reserve(buf, 4096);
 
-    h2o_iovec_t buf = h2o_buffer_try_reserve(&sock->super.input, 4096);
-    memcpy(_buf, &buf, sizeof(buf));
+    /* Returning {NULL, 0} upon reservation failure is fine. Quoting from http://docs.libuv.org/en/v1.x/handle.html#c.uv_alloc_cb,
+     * "if NULL is assigned as the buffer’s base or 0 as its length, a UV_ENOBUFS error will be triggered in the uv_udp_recv_cb or
+     * the uv_read_cb callback."
+     */
+    memcpy(_vec, &vec, sizeof(vec));
 }
 
-static void alloc_inbuf_ssl(uv_handle_t *handle, size_t suggested_size, uv_buf_t *_buf)
+static void alloc_inbuf_tcp(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
 {
     struct st_h2o_uv_socket_t *sock = handle->data;
+    alloc_inbuf(&sock->super.input, buf);
+}
 
-    h2o_iovec_t buf = h2o_buffer_try_reserve(&sock->super.ssl->input.encrypted, 4096);
-    memcpy(_buf, &buf, sizeof(buf));
+static void alloc_inbuf_ssl(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf)
+{
+    struct st_h2o_uv_socket_t *sock = handle->data;
+    alloc_inbuf(&sock->super.ssl->input.encrypted, buf);
 }
 
 static void on_read_tcp(uv_stream_t *stream, ssize_t nread, const uv_buf_t *_unused)
