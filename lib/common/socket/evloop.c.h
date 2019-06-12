@@ -121,7 +121,7 @@ static const char *on_read_core(int fd, h2o_buffer_t **input)
 
     while (1) {
         ssize_t rret;
-        h2o_iovec_t buf = h2o_buffer_reserve(input, 4096);
+        h2o_iovec_t buf = h2o_buffer_try_reserve(input, 4096);
         if (buf.base == NULL) {
             /* memory allocation failed */
             return h2o_socket_error_out_of_memory;

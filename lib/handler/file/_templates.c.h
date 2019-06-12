@@ -66,7 +66,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
             qsort(files.entries, files.size, sizeof(files.entries[0]), cmpstrptr);
     }
 
-    h2o_buffer_t *_;
+    h2o_buffer_t *_ = NULL;
     h2o_iovec_t path_normalized_escaped = h2o_htmlescape(pool, path_normalized.base, path_normalized.len);
 
     h2o_buffer_init(&_, &h2o_socket_buffer_prototype);
@@ -87,4 +87,7 @@ static h2o_buffer_t *build_dir_listing_html(h2o_mem_pool_t *pool, h2o_iovec_t pa
 ?</UL>
 
     return _;
+NoMemory:
+    h2o_buffer_dispose(&_);
+    return NULL;
 }
