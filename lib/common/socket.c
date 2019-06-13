@@ -242,7 +242,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
             h2o_iovec_t reserved;
             ptls_buffer_t rbuf;
             int ret;
-            if ((reserved = h2o_buffer_reserve(&sock->input, sock->ssl->input.encrypted->size)).base == NULL)
+            if ((reserved = h2o_buffer_try_reserve(&sock->input, sock->ssl->input.encrypted->size)).base == NULL)
                 return h2o_socket_error_out_of_memory;
             ptls_buffer_init(&rbuf, reserved.base, reserved.len);
             do {
@@ -253,7 +253,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
             } while (src != src_end);
             h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size - (src_end - src));
             if (rbuf.is_allocated) {
-                if ((reserved = h2o_buffer_reserve(&sock->input, rbuf.off)).base == NULL)
+                if ((reserved = h2o_buffer_try_reserve(&sock->input, rbuf.off)).base == NULL)
                     return h2o_socket_error_out_of_memory;
                 memcpy(reserved.base, rbuf.base, rbuf.off);
                 sock->input->size += rbuf.off;
@@ -269,7 +269,7 @@ const char *decode_ssl_input(h2o_socket_t *sock)
 
     while (sock->ssl->input.encrypted->size != 0 || SSL_pending(sock->ssl->ossl)) {
         int rlen;
-        h2o_iovec_t buf = h2o_buffer_reserve(&sock->input, 4096);
+        h2o_iovec_t buf = h2o_buffer_try_reserve(&sock->input, 4096);
         if (buf.base == NULL)
             return h2o_socket_error_out_of_memory;
         { /* call SSL_read (while detecting SSL renegotiation and reporting it as error) */
@@ -926,7 +926,7 @@ static void create_ossl(h2o_socket_t *sock)
 }
 
 static SSL_SESSION *on_async_resumption_get(SSL *ssl,
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+#if !defined(LIBRESSL_VERSION_NUMBER) ? OPENSSL_VERSION_NUMBER >= 0x1010000fL : LIBRESSL_VERSION_NUMBER > 0x2070000f
                                             const
 #endif
                                             unsigned char *data,

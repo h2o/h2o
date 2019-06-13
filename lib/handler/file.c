@@ -432,6 +432,11 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     body = build_dir_listing_html(&req->pool, req->path_normalized, dp);
     closedir(dp);
 
+    if (body == NULL) {
+        h2o_send_error_503(req, "Service Unavailable", "please try again later", 0);
+        return 0;
+    }
+
     bodyvec = h2o_iovec_init(body->bytes, body->size);
     h2o_buffer_link_to_pool(body, &req->pool);
 

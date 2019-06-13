@@ -45,7 +45,11 @@ static int collect_req_status(h2o_req_t *req, void *_cbdata)
     --len; /* omit trailing LF */
 
     /* append to buffer */
-    h2o_buffer_reserve(&cbdata->buffer, len + 3);
+    if ((h2o_buffer_try_reserve(&cbdata->buffer, len + 3)).base == NULL) {
+        if (logline != buf)
+            free(logline);
+        return -1;
+    }
     memcpy(cbdata->buffer->bytes + cbdata->buffer->size, logline, len);
     cbdata->buffer->size += len;
 
@@ -65,9 +69,12 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
         return;
 
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
-    ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
-    ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
-    ctx->globalconf->http3.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
+    if (ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0 ||
+        ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0 ||
+        ctx->globalconf->http3.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0) {
+        h2o_buffer_dispose(&cbdata.buffer);
+        return;
+    }
 
     /* concat JSON elements */
     if (cbdata.buffer->size != 0) {

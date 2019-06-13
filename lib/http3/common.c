@@ -850,6 +850,6 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_encoder;
 
     assert(stream != NULL);
-    H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_append(&stream->sendbuf, bytes, len));
+    h2o_buffer_append(&stream->sendbuf, bytes, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
 }

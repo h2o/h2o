@@ -301,7 +301,7 @@ static int handle_input_data_payload(struct st_h2o_http3client_req_t *req, const
     /* save data, update states */
     if (src_end - *src < payload_bytes)
         payload_bytes = src_end - *src;
-    H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_append(&req->recvbuf.body, *src, payload_bytes));
+    h2o_buffer_append(&req->recvbuf.body, *src, payload_bytes);
     *src += payload_bytes;
     req->bytes_left_in_data_frame -= payload_bytes;
     if (req->bytes_left_in_data_frame == 0)
@@ -525,7 +525,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
 
     /* append data to partial buffer (if it's non-empty) */
     if (req->recvbuf.partial_frame->size != 0) {
-        H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_append(&req->recvbuf.partial_frame, src, src_end - src));
+        h2o_buffer_append(&req->recvbuf.partial_frame, src, src_end - src);
         src = (const uint8_t *)req->recvbuf.partial_frame->bytes;
         src_end = src + req->recvbuf.partial_frame->size;
     }
@@ -546,7 +546,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
             assert(src_end == (const uint8_t *)req->recvbuf.partial_frame->bytes + req->recvbuf.partial_frame->size);
             h2o_buffer_consume(&req->recvbuf.partial_frame, src - (const uint8_t *)req->recvbuf.partial_frame->bytes);
         } else {
-            H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_append(&req->recvbuf.partial_frame, src, src_end - src));
+            h2o_buffer_append(&req->recvbuf.partial_frame, src, src_end - src);
         }
     }
 
@@ -658,7 +658,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, &buf, method, url.scheme,
                                   url.authority, url.path, headers, num_headers);
     });
-    H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_append(&req->sendbuf, buf.entries, buf.size));
+    h2o_buffer_append(&req->sendbuf, buf.entries, buf.size);
 
     quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
     quicly_stream_sync_sendbuf(req->quic, 1);
