@@ -52,6 +52,7 @@ struct st_h2o_http1client_t {
     h2o_buffer_t *_body_buf_in_flight;
     unsigned _is_chunked : 1;
     unsigned _body_buf_is_done : 1;
+    unsigned _seen_at_least_one_chunk : 1;
 };
 
 static void close_client(struct st_h2o_http1client_t *client)
@@ -162,7 +163,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&client->super._timeout);
 
     if (err != NULL) {
-        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder)) {
+        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder) && client->_seen_at_least_one_chunk) {
             /*
              * if the peer closed after a full chunk, treat this
              * as if the transfer had complete, browsers appear to ignore
@@ -202,6 +203,8 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
             break;
         }
         inbuf->size -= sock->bytes_read - newsz;
+        if (inbuf->size > 0)
+            client->_seen_at_least_one_chunk = 1;
         cb_ret = client->super._cb.on_body(&client->super, errstr);
         if (errstr != NULL) {
             close_client(client);
@@ -363,6 +366,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
     h2o_buffer_consume(&sock->input, client->bytes_to_consume);
     client->bytes_to_consume = 0;
     client->sock->bytes_read = client->sock->input->size;
+    if (reader == on_req_chunked)
+        client->_seen_at_least_one_chunk = 0;
 
     client->super._timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);
