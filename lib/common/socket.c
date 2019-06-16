@@ -1478,53 +1478,47 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 #include "include/h2o/ebpf.h"
 #include <sys/stat.h>
 
-int h2o_tracing_map_fd = 0;
-uint32_t h2o_tracing_map_last_attempt = 0;
+static __thread int tracing_map_fd = -1;
+static __thread uint64_t tracing_map_last_attempt = 0;
 
-void open_map()
+static void open_tracing_map(h2o_socket_t *sock)
 {
     // only check every second
-    uint32_t now = (uint32_t)time(NULL);
-    if (h2o_tracing_map_last_attempt == now)
+    uint64_t now = h2o_now(h2o_socket_get_loop(sock));
+    if (tracing_map_last_attempt - now < 1000)
         return;
 
-    __sync_bool_compare_and_swap(&h2o_tracing_map_last_attempt, h2o_tracing_map_last_attempt, now);
+    tracing_map_last_attempt = now;
 
     // check if map exists at path
     struct stat s;
     if (stat(&H2O_EBPF_MAP_PATH[0], &s) == -1) {
         // map path unavailable, cleanup fd if needed and leave
-        if (h2o_tracing_map_fd > 0) {
-            close(h2o_tracing_map_fd);
-            __sync_fetch_and_and(&h2o_tracing_map_fd, 0);
+        if (tracing_map_fd > 0) {
+            close(tracing_map_fd);
+            tracing_map_fd = -1;
         }
         return;
     }
 
-    if (h2o_tracing_map_fd > 0)
+    if (tracing_map_fd > 0)
         return; // map still exists and we have a fd
 
+    // map exists, try connect
     union bpf_attr attr;
     memset(&attr, 0, sizeof(attr));
     attr.pathname = (uint64_t)(unsigned long)&H2O_EBPF_MAP_PATH[0];
-
-    int fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
-    if (fd <= 0)
-        return;
-
-    // try set map fd if not set before
-    if (!__sync_bool_compare_and_swap(&h2o_tracing_map_fd, 0, fd))
-        close(fd); // if a fd was set beforehand, don't set the new fd, and close it
+    tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
 }
 
-inline int lookup_map(const void *key, const void *value)
+static int lookup_map(const void *key, const void *value)
 {
     union bpf_attr attr;
     memset(&attr, 0, sizeof(attr));
-    attr.map_fd = h2o_tracing_map_fd;
+    attr.map_fd = tracing_map_fd;
     attr.key = (uint64_t)(unsigned long)key;
     attr.value = (uint64_t)(unsigned long)value;
-    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? -1 : 1;
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? -1 : 1; // return 1 if found, -1 otherwise
 }
 
 inline void read_ip_port(struct sockaddr *sa, void *ip, uint16_t *port)
@@ -1549,9 +1543,9 @@ int h2o_socket_is_traced(h2o_socket_t *sock)
         return sock->_is_traced;
 
     // try open map if not opened
-    open_map();
-    if (h2o_tracing_map_fd <= 0)
-        return 1; // map can't be opened, fallback accepting probe
+    open_tracing_map(sock);
+    if (tracing_map_fd <= 0)
+        return 1; // map is not connected, fallback accepting probe
 
     // define key/vals - we are only interrested in presence of the key, discard values
     struct h2o_ebpf_map_key_t key;
