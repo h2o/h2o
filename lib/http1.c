@@ -29,9 +29,15 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 
+enum enum_h2o_http1_ostream_state {
+    OSTREAM_STATE_HEAD,
+    OSTREAM_STATE_BODY,
+    OSTREAM_STATE_DONE,
+};
+
 struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
-    int sent_headers;
+    enum enum_h2o_http1_ostream_state state;
     char *chunked_buf; /* buffer used for chunked-encoding (NULL unless chunked encoding is used) */
     char *pull_buf;
     struct {
@@ -128,6 +134,30 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     free(conn);
 }
 
+static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
+{
+    if (!conn->req.http1_is_persistent) {
+        /* TODO use lingering close */
+        close_connection(conn, 1);
+        return;
+    }
+
+    assert(conn->req.proceed_req == NULL);
+    assert(conn->_req_entity_reader == NULL);
+
+    /* handle next request */
+    if (conn->_unconsumed_request_size)
+        h2o_buffer_consume(&conn->sock->input, conn->_unconsumed_request_size);
+    init_request(conn);
+    conn->req._req_body.bytes_received = 0;
+    conn->req.write_req.cb = NULL;
+    conn->req.write_req.ctx = NULL;
+    conn->req.proceed_req = NULL;
+    conn->_prevreqlen = 0;
+    conn->_unconsumed_request_size = 0;
+    reqread_start(conn);
+}
+
 /**
  * timer is activated if cb != NULL, disactivated otherwise
  */
@@ -157,13 +187,19 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
 #define DECL_ENTITY_READ_SEND_ERROR_XXX(status_)                                                                                   \
     static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
     {                                                                                                                              \
-        if (conn->_ostr_final.sent_headers)                                                                                        \
-            return;                                                                                                                \
+        conn->req.proceed_req = NULL;                                                                                              \
         conn->_req_entity_reader = NULL;                                                                                           \
         set_timeout(conn, 0, NULL);                                                                                                \
         h2o_socket_read_stop(conn->sock);                                                                                          \
-        conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                       \
-        h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                          \
+        if (!h2o_is_sending_response(&conn->req) && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {                               \
+            conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                   \
+            h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                      \
+        } else {                                                                                                                   \
+            conn->req.http1_is_persistent = 0;                                                                                     \
+            if (conn->_ostr_final.state == OSTREAM_STATE_DONE) {                                                                   \
+                cleanup_connection(conn);                                                                                          \
+            }                                                                                                                      \
+        }                                                                                                                          \
     }
 
 DECL_ENTITY_READ_SEND_ERROR_XXX(400)
@@ -183,6 +219,9 @@ static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fr
     if (complete) {
         conn->req.proceed_req = NULL;
         conn->_req_entity_reader = NULL;
+        if (conn->_ostr_final.state == OSTREAM_STATE_DONE) {
+            cleanup_connection(conn);
+        }
     }
 }
 
@@ -438,9 +477,15 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
     h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
-static void proceed_request(h2o_req_t *req, size_t written, int is_end_entity)
+static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
+
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
+        return;
+    }
+
     set_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
     return;
@@ -458,7 +503,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, payload.len, is_end_entity);
+        proceed_request(&conn->req, payload.len, is_end_entity ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
     }
     return 0;
 }
@@ -632,37 +677,17 @@ static void on_send_next(h2o_socket_t *sock, const char *err)
         h2o_proceed_response(&conn->req);
 }
 
-static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
-{
-    if (!conn->req.http1_is_persistent) {
-        /* TODO use lingering close */
-        close_connection(conn, 1);
-        return;
-    }
-
-    assert(conn->req.proceed_req == NULL);
-    assert(conn->_req_entity_reader == NULL);
-
-    /* handle next request */
-    if (conn->_unconsumed_request_size)
-        h2o_buffer_consume(&conn->sock->input, conn->_unconsumed_request_size);
-    init_request(conn);
-    conn->req._req_body.bytes_received = 0;
-    conn->req.write_req.cb = NULL;
-    conn->req.write_req.ctx = NULL;
-    conn->req.proceed_req = NULL;
-    conn->_prevreqlen = 0;
-    conn->_unconsumed_request_size = 0;
-    reqread_start(conn);
-}
-
 static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
     if (err != NULL)
         conn->req.http1_is_persistent = 0;
-    cleanup_connection(conn);
+
+    conn->_ostr_final.state = OSTREAM_STATE_DONE;
+    if (conn->req.proceed_req == NULL) {
+        cleanup_connection(conn);
+    }
 }
 
 static void on_send_complete(h2o_socket_t *sock, const char *err)
@@ -685,7 +710,10 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
-    cleanup_connection(conn);
+    conn->_ostr_final.state = OSTREAM_STATE_DONE;
+    if (conn->req.proceed_req == NULL) {
+        cleanup_connection(conn);
+    }
 }
 
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
@@ -876,7 +904,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         }
     }
 
-    if (!conn->_ostr_final.sent_headers) {
+    if (conn->_ostr_final.state == OSTREAM_STATE_HEAD) {
         /* build headers and send */
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
         setup_chunked(&conn->_ostr_final, &conn->req);
@@ -898,10 +926,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             pullbuf_off = bufs[bufcnt].len;
         }
         ++bufcnt;
-        conn->_ostr_final.sent_headers = 1;
-    } else {
-        if (pull_mode != NOT_PULL && conn->_ostr_final.pull_buf == NULL)
-            allocate_pull_buf(conn, send_state, bytes_to_be_sent, 0);
+        conn->_ostr_final.state = OSTREAM_STATE_BODY;
     }
 
     if (conn->_ostr_final.chunked_buf != NULL) {

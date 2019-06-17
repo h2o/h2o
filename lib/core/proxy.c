@@ -42,6 +42,8 @@ struct rp_generator_t {
     int is_websocket_handshake;
     int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
     h2o_timer_t send_headers_timeout;
+    unsigned req_done : 1;
+    unsigned res_done : 1;
 };
 
 struct rp_ws_upgrade_info_t {
@@ -290,6 +292,15 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     }
 }
 
+static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
+{
+    h2o_httpclient_t *client = self->client;
+    assert(client != NULL);
+    client->data = NULL;
+    self->client = NULL;
+    return client;
+}
+
 static void do_close(struct rp_generator_t *self)
 {
     /**
@@ -303,8 +314,8 @@ static void do_close(struct rp_generator_t *self)
      * Thus, to ensure to do closing things, both of dispose and stop callbacks call this function.
      */
     if (self->client != NULL) {
-        self->client->cancel(self->client);
-        self->client = NULL;
+        h2o_httpclient_t *client = detach_client(self);
+        client->cancel(client);
     }
     h2o_timer_unlink(&self->send_headers_timeout);
 }
@@ -321,10 +332,10 @@ static void do_send(struct rp_generator_t *self)
     size_t veccnt;
     h2o_send_state_t ststate;
 
-    vecs[0] = h2o_doublebuffer_prepare(&self->sending, self->client != NULL ? self->client->buf : &self->last_content_before_send,
+    vecs[0] = h2o_doublebuffer_prepare(&self->sending, self->last_content_before_send != NULL ? &self->last_content_before_send : self->client->buf,
                                        self->src_req->preferred_chunk_size);
 
-    if (self->client == NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
+    if (self->last_content_before_send != NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
         veccnt = vecs[0].len != 0 ? 1 : 0;
         ststate = H2O_SEND_STATE_FINAL;
     } else {
@@ -346,7 +357,7 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
 
     h2o_doublebuffer_consume(&self->sending);
     do_send(self);
-    if (self->client != NULL)
+    if (self->last_content_before_send == NULL)
         self->client->update_window(self->client);
 }
 
@@ -386,10 +397,17 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
         /* detach the content */
         self->last_content_before_send = *self->client->buf;
         h2o_buffer_init(self->client->buf, &h2o_socket_buffer_prototype);
-        self->client = NULL;
-        if (errstr != h2o_httpclient_error_is_eos) {
+        if (errstr == h2o_httpclient_error_is_eos) {
+            self->res_done = 1;
+            if (self->req_done)
+                detach_client(self);
+        } else {
+            detach_client(self);
             h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
             self->had_body_error = 1;
+            if (self->src_req->proceed_req != NULL) {
+                self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+            }
         }
     }
     if (!self->sending.inflight)
@@ -434,7 +452,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        self->client = NULL;
+        detach_client(self);
         h2o_req_log_error(req, "lib/core/proxy.c", "%s", errstr);
 
         if (errstr == h2o_httpclient_error_refused_stream) {
@@ -443,7 +461,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             h2o_start_response(req, &generator);
             h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
         } else {
-            h2o_send_error_502(req, "Gateway Error", errstr, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+            h2o_send_error_502(req, "Gateway Error", errstr, 0);
+            if (self->src_req->proceed_req != NULL) {
+                self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+            }
         }
 
         return NULL;
@@ -467,15 +488,18 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
-                    self->client = NULL;
+                    detach_client(self);
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
-                    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
+                    if (self->src_req->proceed_req != NULL) {
+                        self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+                    }
                     return NULL;
                 }
                 goto Skip;
             } else if (token == H2O_TOKEN_LOCATION) {
                 if (req->res_is_delegated && (300 <= status && status <= 399) && status != 304) {
-                    self->client = NULL;
+                    detach_client(self);
                     h2o_iovec_t method = h2o_get_redirect_method(req->method, status);
                     h2o_send_redirect_internal(req, method, headers[i].value.base, headers[i].value.len, 1);
                     return NULL;
@@ -526,7 +550,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         assert(client_ctx->websocket_timeout != NULL);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("websocket"));
         on_websocket_upgrade(self, *client_ctx->websocket_timeout);
-        self->client = NULL;
+        detach_client(self);
         return NULL;
     }
 
@@ -534,9 +558,11 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     h2o_start_response(req, &self->super);
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        self->client = NULL;
+        self->res_done = 1;
+        if (self->req_done)
+            detach_client(self);
         h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
-        return NULL;
+        return NULL; /* TODO this returning NULL causes keepalive to be disabled in http1client. is this what we intended? */
     }
 
     /* if httpclient has no received body at this time, immediately send only headers using zero timeout */
@@ -564,21 +590,36 @@ static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t
     return 0;
 }
 
-static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end_stream)
+static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
     struct rp_generator_t *self = client->data;
+    if (self == NULL) {
+        return;
+    }
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        detach_client(self);
+    }
     if (self->src_req->proceed_req != NULL)
-        self->src_req->proceed_req(self->src_req, written, is_end_stream);
+        self->src_req->proceed_req(self->src_req, written, send_state);
 }
 
 static int write_req(void *ctx, h2o_iovec_t chunk, int is_end_stream)
 {
     struct rp_generator_t *self = ctx;
+    h2o_httpclient_t *client = self->client;
+
+    if (client == NULL) {
+        return -1;
+    }
 
     if (is_end_stream) {
         self->src_req->write_req.cb = NULL;
+        self->req_done = 1;
+        if (self->res_done)
+            detach_client(self);
     }
-    return self->client->write_req(self->client, chunk, is_end_stream);
+
+    return client->write_req(client, chunk, is_end_stream);
 }
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -593,9 +634,13 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     self->src_req->timestamps.proxy = self->client->timings;
 
     if (errstr != NULL) {
-        self->client = NULL;
+        detach_client(self);
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
-        h2o_send_error_502(self->src_req, "Gateway Error", errstr, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+        h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
+        if (self->src_req->proceed_req != NULL) {
+            self->src_req->proceed_req(self->src_req, 0, H2O_SEND_STATE_ERROR);
+        }
+
         return NULL;
     }
 
@@ -631,12 +676,14 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
+    self->req_done = 1;
     if (self->src_req->entity.base != NULL) {
         *body = self->src_req->entity;
         if (self->src_req->proceed_req != NULL) {
             *proceed_req_cb = proceed_request;
             self->src_req->write_req.cb = write_req;
             self->src_req->write_req.ctx = self;
+            self->req_done = 0;
         }
     }
     self->client->informational_cb = on_1xx;
@@ -648,7 +695,9 @@ static void on_generator_dispose(void *_self)
     struct rp_generator_t *self = _self;
     do_close(self);
 
-    h2o_buffer_dispose(&self->last_content_before_send);
+    if (self->last_content_before_send != NULL) {
+        h2o_buffer_dispose(&self->last_content_before_send);
+    }
     h2o_doublebuffer_dispose(&self->sending);
 }
 
@@ -667,10 +716,12 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     }
     self->had_body_error = 0;
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
-    h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
+    self->last_content_before_send = NULL;
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
     req->timestamps.proxy = (h2o_httpclient_timings_t){{0}};
     h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
+    self->req_done = 0;
+    self->res_done = 0;
 
     return self;
 }

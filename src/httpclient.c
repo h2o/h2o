@@ -252,7 +252,7 @@ static void timeout_cb(h2o_timer_t *entry)
     return;
 }
 
-static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end_stream)
+static void proceed_request(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state)
 {
     if (cur_req_body_size > 0) {
         struct st_timeout_ctx *tctx;

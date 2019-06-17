@@ -2,12 +2,10 @@ use strict;
 use warnings;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
-use File::Temp qw(tempfile);
-use IO::Socket::SSL;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
 use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states :limits :endpoints);
-use Protocol::HTTP2::Connection;
 use Scope::Guard;
+use Time::HiRes;
 use t::Util;
 $|=1;
 
@@ -16,7 +14,7 @@ plan skip_all => 'curl not found'
 
 subtest 'basic' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, [ ':status' => 200 ], 1);
@@ -31,7 +29,7 @@ subtest 'basic' => sub {
 
 subtest 'no :status header' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, ['x-foo' => 'bar'], 1);
@@ -47,7 +45,7 @@ subtest 'no :status header' => sub {
 
 subtest 'content-length' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, [
@@ -68,7 +66,7 @@ subtest 'content-length' => sub {
 
 subtest 'invalid content-length' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, [
@@ -84,9 +82,39 @@ subtest 'invalid content-length' => sub {
     like $headers, qr{^HTTP/[0-9.]+ 502}is;
     ok check_port($server->{port}), 'live check';
 
+    Time::HiRes::sleep(0.1);
     $upstream->{kill}->();
-    my $log = $upstream->{read_all}->();
+    my $log = join('', readline($upstream->{stdout}));
     like $log, qr{Receive reset stream with error code CANCEL};
+};
+
+subtest 'request body streaming' => sub {
+    plan skip_all => "h2get not found"
+        unless h2get_exists();
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+            ], 0);
+            $conn->send_data($stream_id, 'hello world', 1);
+        },
+    });
+
+    my $server = create_h2o($upstream_port);
+    my $output = run_with_h2get_simple($server, <<"EOR");
+        req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/" }
+        h2g.send_headers(req, 1, END_HEADERS)
+        h2g.send_data(1, 0, "a")
+        sleep 1
+        h2g.send_data(1, END_STREAM, "a" * 1024)
+        h2g.read_loop(100)
+EOR
+    $upstream->{kill}->();
+    my $log = join('', readline($upstream->{stdout}));
+    like $log, qr{TYPE = DATA\(0\), FLAGS = 00000000, STREAM_ID = 1, LENGTH = 1};
+    like $log, qr{TYPE = DATA\(0\), FLAGS = 00000001, STREAM_ID = 1, LENGTH = 1024};
 };
 
 sub create_h2o {
@@ -103,95 +131,6 @@ hosts:
         proxy.ssl.verify-peer: OFF
 EOT
     return $server;
-}
-
-sub create_upstream {
-    my ($upstream_port, $stream_state_cbs, $stream_frame_cbs) = @_;
-
-    my ($cout, $pin);
-    pipe($pin, $cout);
-
-    my $pid = fork;
-    if ($pid) {
-        close $cout;
-        my $upstream; $upstream = +{
-            pid => $pid,
-            kill => sub {
-                return unless defined $pid;
-                kill 'KILL', $pid;
-                undef $pid;
-            },
-            guard => Scope::Guard->new(sub {
-                $upstream->{kill}->()
-            }),
-            read => sub {
-                my $line = <$pin>;
-                return $line;
-            },
-            read_all => sub {
-                join('', <$pin>);
-            },
-        };
-        return $upstream;
-    }
-    close $pin;
-    open(STDOUT, '>&=', fileno($cout)) or die $!;
-    my $conn; $conn = Protocol::HTTP2::Connection->new(SERVER,
-        on_new_peer_stream => sub {
-            my $stream_id = shift;
-            for my $state (keys %{ $stream_state_cbs || +{} }) {
-                my $cb = $stream_state_cbs->{$state};
-                $conn->stream_cb($stream_id, $state, sub {
-                    $cb->($conn, $stream_id);
-                });
-            }
-            for my $type (keys %{ $stream_frame_cbs || +{} }) {
-                my $cb = $stream_frame_cbs->{$type};
-                $conn->stream_frame_cb($stream_id, $type, sub {
-                    $cb->($conn, $stream_id, shift);
-                });
-            }
-        },
-    );
-    my $upstream = IO::Socket::SSL->new(
-        LocalAddr => '127.0.0.1',
-        LocalPort => $upstream_port,
-        Listen => 1,
-        ReuseAddr => 1,
-        SSL_cert_file => 'examples/h2o/server.crt',
-        SSL_key_file => 'examples/h2o/server.key',
-        SSL_alpn_protocols => ['h2'],
-    ) or die "cannot create socket: $!";
-    my $sock = $upstream->accept;
-
-    my $input = '';
-
-    while (1) {
-        my $offset = 0;
-        my $buf;
-        next unless $sock->read($buf, 1);
-        $input .= $buf;
-
-        unless ($conn->preface) {
-            my $len = $conn->preface_decode(\$input, 0);
-            unless (defined($len)) {
-                die 'invalid preface';
-            }
-            next unless $len;
-            $conn->preface(1);
-            $offset += $len;
-        }
-
-        while (my $len = $conn->frame_decode(\$input, $offset)) {
-            $offset += $len;
-        }
-        substr($input, 0, $offset) = '' if $offset;
-
-        while (my $frame = $conn->dequeue) {
-            $sock->write($frame);
-        }
-    }
-    exit;
 }
 
 done_testing();
