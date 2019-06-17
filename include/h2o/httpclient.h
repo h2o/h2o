@@ -27,6 +27,7 @@ extern "C" {
 #endif
 
 #include "h2o/header.h"
+#include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
 
@@ -68,7 +69,7 @@ typedef struct st_h2o_httpclient_properties_t {
     h2o_httpclient_precedence_t precedence;
 } h2o_httpclient_properties_t;
 
-typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
+typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
                                                          h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
@@ -84,6 +85,8 @@ typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *cl
                                                             h2o_httpclient_properties_t *props, h2o_url_t *origin);
 typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg,
                                                h2o_header_t *headers, size_t num_headers);
+
+typedef void (*h2o_httpclient_finish_cb)(h2o_httpclient_t *client);
 
 typedef struct st_h2o_httpclient_connection_pool_t {
     /**
@@ -231,7 +234,7 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
  * TODO: create H1- or H2-specific connect function that works without the connection pool?
  */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb on_connect);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 extern const size_t h2o_httpclient__h1_size;

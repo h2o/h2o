@@ -54,6 +54,7 @@ extern "C" {
 #include "h2o/version.h"
 #include "h2o/balancer.h"
 #include "h2o/http2_common.h"
+#include "h2o/send_state.h"
 
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
@@ -686,12 +687,6 @@ typedef struct st_h2o_generator_t {
     void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
-typedef enum h2o_send_state {
-    H2O_SEND_STATE_IN_PROGRESS,
-    H2O_SEND_STATE_FINAL,
-    H2O_SEND_STATE_ERROR,
-} h2o_send_state_t;
-
 /**
  * the maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
  * vector is used.
@@ -939,7 +934,7 @@ typedef struct st_h2o_filereq_t {
     h2o_iovec_t local_path;
 } h2o_filereq_t;
 
-typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
+typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, h2o_send_state_t send_state);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 typedef void (*h2o_on_request_streaming_selected_cb)(h2o_req_t *, int is_streaming);
 
@@ -1327,6 +1322,11 @@ void h2o_replay_request_deferred(h2o_req_t *req);
  * @param generator the generator
  */
 void h2o_start_response(h2o_req_t *req, h2o_generator_t *generator);
+/**
+ * indicates whether the response is being sent or not
+ * @param req the request
+ */
+static int h2o_is_sending_response(h2o_req_t *req);
 /**
  * called by filters to insert output-stream filters for modifying the response
  * @param req the request
@@ -2078,6 +2078,11 @@ inline void h2o_proceed_response(h2o_req_t *req)
     } else {
         req->_ostr_top->do_send(req->_ostr_top, req, NULL, 0, H2O_SEND_STATE_FINAL);
     }
+}
+
+inline int h2o_is_sending_response(h2o_req_t *req)
+{
+    return req->_generator != NULL;
 }
 
 inline h2o_iovec_t *h2o_req_getenv(h2o_req_t *req, const char *name, size_t name_len, int allocate_if_not_found)
