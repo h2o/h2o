@@ -69,6 +69,7 @@ struct st_h2o_mem_pool_shared_ref_t {
 void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
+size_t h2o_mmap_errors = 0;
 
 void h2o__fatal(const char *file, int line, const char *msg, ...)
 {
@@ -235,6 +236,15 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer)
 
 h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
+    h2o_iovec_t reserved = h2o_buffer_try_reserve(_inbuf, min_guarantee);
+    if (reserved.base == NULL) {
+        h2o_fatal("failed to reserve buffer; capacity: %zu, min_gurantee: %zu", (*_inbuf)->capacity, min_guarantee);
+    }
+    return reserved;
+}
+
+h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
+{
     h2o_buffer_t *inbuf = *_inbuf;
     h2o_iovec_t ret;
 
@@ -331,6 +341,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     return ret;
 
 MapError:
+    __sync_add_and_fetch(&h2o_mmap_errors, 1);
     ret.base = NULL;
     ret.len = 0;
     return ret;
