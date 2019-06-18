@@ -57,7 +57,7 @@ struct st_h2o_http1client_t {
 static void close_client(struct st_h2o_http1client_t *client)
 {
     if (client->sock != NULL) {
-        if (client->super.connpool != NULL && client->_do_keepalive) {
+        if (client->super.connpool != NULL && client->_do_keepalive && client->super.connpool->socketpool->timeout > 0) {
             /* we do not send pipelined requests, and thus can trash all the received input at the end of the request */
             h2o_buffer_consume(&client->sock->input, client->sock->input->size);
             h2o_socketpool_return(client->super.connpool->socketpool, client->sock);
