@@ -138,12 +138,14 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
         DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(total_time));
 #undef DURATION_FMT
 #undef DURATION_VALS
+    char *delim = "";
     ret.len += sprintf(ret.base + ret.len, ",\n\"evloop-latency-nanosec\": [");
     for(int i = 0; i < agg_stats->stats.evloop_latency_nanosec.size; i++) {
-        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%llu,", agg_stats->stats.evloop_latency_nanosec.entries[i]);
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%s%llu",
+                            delim, agg_stats->stats.evloop_latency_nanosec.entries[i]);
+        delim = ",";
     }
-    /* overwrite the final comma */
-    ret.len += snprintf(ret.base + ret.len - 1, BUFSIZE - ret.len, "]\n") - 1;
+    ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
 #undef BUFSIZE
     duration_stats_free(&agg_stats->stats);
     free(agg_stats->stats.evloop_latency_nanosec.entries);
