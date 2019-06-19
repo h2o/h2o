@@ -1507,21 +1507,21 @@ static void open_tracing_map(h2o_socket_t *sock)
     // map exists, try connect
     union bpf_attr attr;
     memset(&attr, 0, sizeof(attr));
-    attr.pathname = (uint64_t)(unsigned long)&H2O_EBPF_MAP_PATH[0];
+    attr.pathname = (uint64_t)&H2O_EBPF_MAP_PATH[0];
     tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
 }
 
-static int lookup_map(const void *key, const void *value)
+int lookup_map(const void *key, const void *value)
 {
     union bpf_attr attr;
     memset(&attr, 0, sizeof(attr));
     attr.map_fd = tracing_map_fd;
-    attr.key = (uint64_t)(unsigned long)key;
-    attr.value = (uint64_t)(unsigned long)value;
+    attr.key = (uint64_t)key;
+    attr.value = (uint64_t)value;
     return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? -1 : 1; // return 1 if found, -1 otherwise
 }
 
-inline void read_ip_port(struct sockaddr *sa, void *ip, uint16_t *port)
+inline void set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
@@ -1532,6 +1532,20 @@ inline void read_ip_port(struct sockaddr *sa, void *ip, uint16_t *port)
         memcpy(ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
         *port = sin->sin6_port;
     }
+}
+
+inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
+{
+    struct sockaddr_storage sockname, peername;
+    memset(key, 0, sizeof(h2o_ebpf_map_key_t));
+
+    if (h2o_socket_getsockname(sock, (void *)&sockname) == 0 || h2o_socket_getpeername(sock, (void *)&peername) == 0)
+        return 0;
+
+    set_ebpf_map_key_tuples((void *)&sockname, &key->source.ip[0], &key->source.port);
+    set_ebpf_map_key_tuples((void *)&peername, &key->destination.ip[0], &key->destination.port);
+    key->family = sockname.ss_family == AF_INET6 ? 6 : 4;
+    return 1;
 }
 
 int h2o_socket_is_traced(h2o_socket_t *sock)
@@ -1548,21 +1562,12 @@ int h2o_socket_is_traced(h2o_socket_t *sock)
         return 1; // map is not connected, fallback accepting probe
 
     // define key/vals - we are only interrested in presence of the key, discard values
-    struct h2o_ebpf_map_key_t key;
-    memset(&key, 0, sizeof(key));
+    h2o_ebpf_map_key_t key;
     void *vals = NULL;
 
-    // get sock/peer ip/ports
-    struct sockaddr_storage loc, rem;
-    h2o_socket_getsockname(sock, (void *)&loc);
-    h2o_socket_getpeername(sock, (void *)&rem);
-
-    // read ip/ports, put parsed val into key structure
-    read_ip_port((void *)&loc, &key.ipa, &key.porta);
-    read_ip_port((void *)&rem, &key.ipb, &key.portb);
-
-    // read ip family
-    key.family = loc.ss_family == AF_INET6 ? 6 : 4;
+    // init key - fallback refusing probe if key can't be initialized
+    if (init_ebpf_map_key(&key, sock) == 0)
+        return 0;
 
     // lookup map for our key
     return sock->_is_traced = lookup_map(&key, &vals);

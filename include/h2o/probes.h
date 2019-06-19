@@ -31,8 +31,9 @@
 #include "picotls.h"
 #include "h2o-probes.h"
 
-#define H2O_PROBE_CONN(label, _conn, ...)                                                                                          \
+#define H2O_PROBE_CONN(label, conn, ...)                                                                                           \
     do {                                                                                                                           \
+         h2o_conn_t *_conn = (conn);                                                                                               \
         if (PTLS_UNLIKELY(H2O_H2O_##label##_ENABLED()) && h2o_conn_is_traced(_conn) == 1) {                                        \
             H2O_H2O_##label(_conn, __VA_ARGS__);                                                                                   \
         }                                                                                                                          \

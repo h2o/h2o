@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2019 DeNA Co., Ltd., Kazuho Oku, Fastly, Inc.
+ * Copyright (c) 2019 Fastly Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -22,13 +22,17 @@
 #ifndef h2o__ebpf_h
 #define h2o__ebpf_h
 
-struct h2o_ebpf_map_key_t {
-    uint8_t ipa[16];
-    uint8_t ipb[16];
-    uint16_t porta;
-    uint16_t portb;
+typedef struct h2o_ebpf_map_key_t {
+    struct {
+        uint8_t ip[16];
+        uint16_t port;
+    } source;
+    struct {
+        uint8_t ip[16];
+        uint16_t port;
+    } destination;
     uint8_t family;
-};
+} h2o_ebpf_map_key_t;
 
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
 
