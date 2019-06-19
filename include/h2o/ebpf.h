@@ -32,6 +32,7 @@ typedef struct h2o_ebpf_map_key_t {
         uint16_t port;
     } destination;
     uint8_t family;
+    uint8_t protocol;
 } h2o_ebpf_map_key_t;
 
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"

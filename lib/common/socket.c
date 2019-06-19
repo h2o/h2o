@@ -1537,14 +1537,19 @@ inline void set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *
 inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
 {
     struct sockaddr_storage sockname, peername;
+    unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
     memset(key, 0, sizeof(h2o_ebpf_map_key_t));
 
-    if (h2o_socket_getsockname(sock, (void *)&sockname) == 0 || h2o_socket_getpeername(sock, (void *)&peername) == 0)
+    // fetch sock/peer name and socket type
+    if (h2o_socket_getsockname(sock, (void *)&sockname) == 0 ||
+        h2o_socket_getpeername(sock, (void *)&peername) == 0 ||
+        getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) == -1)
         return 0;
 
     set_ebpf_map_key_tuples((void *)&sockname, &key->source.ip[0], &key->source.port);
     set_ebpf_map_key_tuples((void *)&peername, &key->destination.ip[0], &key->destination.port);
     key->family = sockname.ss_family == AF_INET6 ? 6 : 4;
+    key->protocol = sock_type;
     return 1;
 }
 
