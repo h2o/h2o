@@ -1687,7 +1687,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
     conf.threads[thread_index].tid = pthread_self();
-    conf.threads[thread_index].ctx.thread_index = thread_index;
 
     if (conf.thread_map.entries[thread_index] >= 0) {
 #ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP

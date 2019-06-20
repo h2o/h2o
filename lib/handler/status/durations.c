@@ -69,10 +69,8 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
         ADD_DURATION(response_time);
         ADD_DURATION(total_time);
 #undef ADD_DURATION
-        if (agg_stats->stats.evloop_latency_nanosec.capacity <= ctx->thread_index) {
-            h2o_vector_reserve(NULL, &agg_stats->stats.evloop_latency_nanosec, ctx->thread_index + 1);
-        }
-        agg_stats->stats.evloop_latency_nanosec.entries[ctx->thread_index] = h2o_evloop_get_execution_time_nanosec(ctx->loop);
+        h2o_vector_reserve(NULL, &agg_stats->stats.evloop_latency_nanosec, agg_stats->stats.evloop_latency_nanosec.size + 1);
+        agg_stats->stats.evloop_latency_nanosec.entries[agg_stats->stats.evloop_latency_nanosec.size] = h2o_evloop_get_execution_time_nanosec(ctx->loop);
         agg_stats->stats.evloop_latency_nanosec.size++;
         pthread_mutex_unlock(&agg_stats->mutex);
     }

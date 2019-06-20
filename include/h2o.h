@@ -583,10 +583,6 @@ struct st_h2o_context_t {
      * flag indicating if shutdown has been requested
      */
     int shutdown_requested;
-    /**
-     * index number of the thread that manages this context
-     */
-    size_t thread_index;
 
     struct {
         /**
