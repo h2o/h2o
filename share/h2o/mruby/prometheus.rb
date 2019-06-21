@@ -22,7 +22,7 @@
 module H2O
   class Prometheus
 
-    @@gauge_types = ['uptime', 'connections', 'num-sessions', 'evloop-latency-ms']
+    @@gauge_types = ['uptime', 'connections', 'num-sessions', 'evloop-latency-nanosec']
 
     def initialize(app)
       @app = app
@@ -56,7 +56,7 @@ module H2O
         s += "# HELP #{pk} #{k}\n"
         s += "# TYPE #{pk} #{type}\n" if type
 
-        if k == 'evloop-latency-ms' then
+        if k == 'evloop-latency-nanosec' then
           v.each_with_index do |vv, i|
             s += "#{pk}{version=\"#{version}\", thread=\"#{i}\"} #{vv}\n"
           end
