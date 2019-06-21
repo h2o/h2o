@@ -33,7 +33,7 @@ sub parse_output {
     my ($out) = @_;
     my @ret;
     my @lines = split(/\n/, $out);
-    while (my ($helpline, $typeline, $valueline) = splice(@lines, 0, 3)) {
+    while (my ($helpline, $typeline) = splice(@lines, 0, 2)) {
         my ($name, $type, $version, $value);
         if ($helpline =~ /^# HELP (\w+)/) {
             $name = $1;
@@ -47,19 +47,17 @@ sub parse_output {
             fail("invalid typeline: $typeline");
             return;
         }
-        if ($valueline =~ /^$name\{version="(.*)"\} (.*)$/) {
-            $version = $1;
-            $value = $2;
-        } else {
-            fail("invalid valueline: $valueline");
-            return;
+        # there can be multiple valuelines per typeline
+        foreach my $valueline (@lines) {
+            last unless ($valueline =~ /^$name\{version="(.*)"\} (.*)$/);
+            push(@ret, +{
+                name => $name,
+                type => $type,
+                version => $1,
+                value => $2,
+            });
+            shift @lines;
         }
-        push(@ret, +{
-            name => $name,
-            type => $type,
-            version => $version,
-            value => $value,
-        });
     }
     return \@ret;
 }
