@@ -217,20 +217,80 @@ static int on_openssl_print_errors(const char *str, size_t len, void *fp)
     return (int)len;
 }
 
-static void setup_ecc_key(SSL_CTX *ssl_ctx)
+static int setup_ecc_key(SSL_CTX *ssl_ctx, const char *requested_curves)
 {
-#ifdef SSL_CTX_set_ecdh_auto
-    SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
-#else
-    int nid = NID_X9_62_prime256v1;
-    EC_KEY *key = EC_KEY_new_by_curve_name(nid);
-    if (key == NULL) {
-        fprintf(stderr, "Failed to create curve \"%s\"\n", OBJ_nid2sn(nid));
-        return;
+    /* Only do ECC setup if possible. */
+    #ifndef OPENSSL_NO_ECDH
+
+    char * curves;
+    curves = (char *) requested_curves;
+
+    #ifdef SSL_OP_SINGLE_ECDH_USE
+       SSL_CTX_set_options(ssl_ctx, SSL_OP_SINGLE_ECDH_USE);
+    #endif
+    /* It may improve security for a little performance degration. */
+
+    #ifdef SSL_CTRL_SET_ECDH_AUTO
+        /* Setups most (OpenSSL) / a sane list (LibreSSL > 2.5.3)
+         * of elliptic-curves for Diffie-Hellman key exchange (ECDH).
+         *
+         * This call is not required and not possible for OpenSSL >= 1.1.0,
+         * a noop macro may be defined.
+         */
+        SSL_CTX_set_ecdh_auto(ssl_ctx, 1);
+    #elif OPENSSL_VERSION_NUMBER < 0x10002000
+        /* Check if OpenSSL version is too old for ..._set_ecdh_auto(...),
+         * which should be available since OpenSSL 1.0.1 or OpenSSL 1.0.2(?).
+         * As call is not required on OpenSSL >= 1.1.0, actions are only
+         * required for old versions.
+         */
+        if (strncmp("auto", curves, 4) == 0) {
+            curves = "prime256v1";
+        }
+    #endif
+
+    if (strncmp("auto", curves, 4) == 0) {
+        /* Follow nginx behaviour. */
+        return 0;
     }
+
+    #ifdef SSL_CTX_set1_curves_list
+        /* Set a list of curves (or a single one) on OpenSSL >= 1.1.0 */
+        if (SSL_CTX_set1_curves_list(ssl_ctx, curves) == 0) {
+            fprintf(stderr, "Error: Failed to set curve list \"%s\"\n", curves);
+            return 1;
+        }
+        return 0;
+    #endif
+
+    if (strncmp("auto", requested_curves, 4) != 0) {
+        fprintf(stderr, "Error: The linked Open-/LibreSSL version does not support SSL_CTX_set1_curves_list. Setting curves for ECDHE is not possible.\n");
+        return 1;
+    }
+
+    /* Only a single curve can be set. */
+    int nid;
+    EC_KEY *key;
+
+    nid = OBJ_sn2nid(curves);
+    if (nid == 0) {
+        fprintf(stderr, "Error: Failed to get nid for single curve \"%s\"\n", curves);
+        return 1;
+    }
+
+    key = EC_KEY_new_by_curve_name(nid);
+
+    if (key == NULL) {
+        fprintf(stderr, "Error: Failed to create single curve \"%s\"\n", OBJ_nid2sn(nid));
+        return 1;
+    }
+
     SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
     EC_KEY_free(key);
-#endif
+
+    #endif
+
+    return 0;
 }
 
 static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
@@ -575,12 +635,13 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX *ssl_ctx = NULL;
     yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node;
+        **http2_origin_frame_node, **ecdh_curves;
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
     int use_neverbleed = 1, use_picotls = 1;     /* enabled by default */
+    char *use_curves = "auto";                   /* default (could be better) */
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -601,10 +662,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                        "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
                                        "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
                                        "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                       "http2-origin-frame:*",
+                                       "http2-origin-frame:*,ecdh-curves:*",
                                        &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
                                        &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
-                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node) != 0)
+                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node,
+                                       &ecdh_curves) != 0)
         return -1;
     if (cipher_preference_node != NULL) {
         switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
@@ -694,7 +756,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
-    setup_ecc_key(ssl_ctx);
+    if (ecdh_curves != NULL) {
+        use_curves = (char *) (*ecdh_curves)-> data.scalar;
+    }
+
+    if (setup_ecc_key(ssl_ctx, use_curves) != 0) {
+        h2o_configurator_errprintf(cmd, *ecdh_curves, "failed to setup ecdh curve(s): %s\n",
+                                   (*ecdh_curves)->data.scalar);
+        goto Error;
+    }
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
         h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
                                    (*certificate_file)->data.scalar);

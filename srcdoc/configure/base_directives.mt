@@ -199,6 +199,13 @@ path of a PEM file containing the Diffie-Hellman parameters to be used.
 Use of the file is recommended for servers using Diffie-Hellman key agreement.
 (optional)
 </dd>
+<dt id="ecdh-curves">ecdh-curves:</dt>
+<dd>
+colon seperated list of curves or a single curve for servers using Diffie-Hellman key exchange
+with elliptic curves (ECDH). Default is <code>auto</code> which offers a default set of curves
+set by the SSL library used. On older OpenSSL version it will fallback to secp256r1.<br>
+OpenSSL 1.0.2 / LibreSSL 2.5.1 or newer are required for this option.
+</dd>
 <dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>
 interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
