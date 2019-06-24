@@ -117,7 +117,7 @@ struct st_h2o_http2_stream_t {
     /**
      * if the response body is streaming
      */
-    unsigned _conn_stream_in_progress : 1;
+    unsigned _req_streaming_in_progress : 1;
     /**
      *  steate of the ostream, only used in push mode
      */
@@ -155,7 +155,7 @@ struct st_h2o_http2_conn_t {
         h2o_http2_conn_num_streams_t pull;
         h2o_http2_conn_num_streams_t push;
         uint32_t blocked_by_server;
-        uint32_t _request_body_in_progress;
+        uint32_t _req_streaming_in_progress;
     } num_streams;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
