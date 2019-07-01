@@ -1518,7 +1518,7 @@ static int lookup_map(const void *key, const void *value)
     attr.map_fd = tracing_map_fd;
     attr.key = (uint64_t)key;
     attr.value = (uint64_t)value;
-    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? -1 : 1; // return 1 if found, -1 otherwise
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? 0 : 1; // return 1 if found, 0 otherwise
 }
 
 static inline void set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
@@ -1558,9 +1558,6 @@ int h2o_socket_is_traced(h2o_socket_t *sock)
     if (sock == NULL)
         return 0;
 
-    if (sock->_is_traced != 0)
-        return sock->_is_traced;
-
     // try open map if not opened
     open_tracing_map(sock);
     if (tracing_map_fd <= 0)
@@ -1575,7 +1572,7 @@ int h2o_socket_is_traced(h2o_socket_t *sock)
         return 0;
 
     // lookup map for our key
-    return sock->_is_traced = lookup_map(&key, &vals);
+    return lookup_map(&key, &vals);
 }
 #else
 int h2o_socket_is_traced(h2o_socket_t *sock)

@@ -109,7 +109,7 @@ struct st_h2o_socket_t {
      */
     size_t bytes_written;
     /**
-     * ternary flag to track if sock is being traced. 0 indicates value unknown, 1 means is traced, -1 is not traced
+     * boolean flag to indicate if sock is being traced
      */
     int _is_traced;
 
