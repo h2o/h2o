@@ -1494,14 +1494,14 @@ static void open_tracing_map(h2o_socket_t *sock)
     struct stat s;
     if (stat(&H2O_EBPF_MAP_PATH[0], &s) == -1) {
         // map path unavailable, cleanup fd if needed and leave
-        if (tracing_map_fd > 0) {
+        if (tracing_map_fd >= 0) {
             close(tracing_map_fd);
             tracing_map_fd = -1;
         }
         return;
     }
 
-    if (tracing_map_fd > 0)
+    if (tracing_map_fd >= 0)
         return; // map still exists and we have a fd
 
     // map exists, try connect
@@ -1511,7 +1511,7 @@ static void open_tracing_map(h2o_socket_t *sock)
     tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
 }
 
-int lookup_map(const void *key, const void *value)
+static int lookup_map(const void *key, const void *value)
 {
     union bpf_attr attr;
     memset(&attr, 0, sizeof(attr));
@@ -1521,7 +1521,7 @@ int lookup_map(const void *key, const void *value)
     return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? -1 : 1; // return 1 if found, -1 otherwise
 }
 
-inline void set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
+static inline void set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
@@ -1534,11 +1534,11 @@ inline void set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *
     }
 }
 
-inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
+static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
 {
     struct sockaddr_storage sockname, peername;
     unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
-    memset(key, 0, sizeof(h2o_ebpf_map_key_t));
+    memset(key, 0, sizeof(*key));
 
     // fetch sock/peer name and socket type
     if (h2o_socket_getsockname(sock, (void *)&sockname) == 0 ||
