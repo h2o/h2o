@@ -10,6 +10,8 @@ plan skip_all => 'mruby support is off'
 
 subtest "basic" => sub {
     my $server = spawn_h2o(<< 'EOT');
+duration-stats: ON
+num-threads: 2
 hosts:
   default:
     paths:
@@ -48,15 +50,25 @@ sub parse_output {
             return;
         }
         # there can be multiple valuelines per typeline
-        foreach my $valueline (@lines) {
-            last unless ($valueline =~ /^$name\{version="(.*)"\} (.*)$/);
+        while (@lines && $lines[0] !~ /^#/) {
+            my $valueline = splice(@lines, 0, 1);
+            unless ($valueline =~ /^$name\{version="(.*?)"(?:, (.+))?\} (.*)$/) {
+                fail("invalid valueline: $valueline");
+            }
+            my %attrs = ();
+            if (my $other_attrs = $2) {
+                for my $attr (split(', ', $other_attrs)) {
+                    $attr =~ /(.+)="(.+)"/ or fail("invalid valueline attribute: $attr");
+                    $attrs{$1} = $2;
+                }
+            }
             push(@ret, +{
                 name => $name,
                 type => $type,
                 version => $1,
-                value => $2,
+                value => $3,
+                %attrs,
             });
-            shift @lines;
         }
     }
     return \@ret;
