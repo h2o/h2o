@@ -366,8 +366,6 @@ static void on_head(h2o_socket_t *sock, const char *err)
     h2o_buffer_consume(&sock->input, client->bytes_to_consume);
     client->bytes_to_consume = 0;
     client->sock->bytes_read = client->sock->input->size;
-    if (reader == on_req_chunked)
-        client->_seen_at_least_one_chunk = 0;
 
     client->super._timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);
