@@ -496,7 +496,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
         h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
 
     if (chunk.len != 0) {
-        if (h2o_buffer_append(&client->_body_buf, chunk.base, chunk.len) == 0)
+        if (!h2o_buffer_try_append(&client->_body_buf, chunk.base, chunk.len))
             return -1;
     }
 
@@ -640,7 +640,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     if (client->proceed_req != NULL) {
         if (body.base != NULL) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-            if (h2o_buffer_append(&client->_body_buf, body.base, body.len) == 0) {
+            if (!h2o_buffer_try_append(&client->_body_buf, body.base, body.len)) {
                 on_whole_request_sent(client->sock, "Internal error");
                 return;
             }

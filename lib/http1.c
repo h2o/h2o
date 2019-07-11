@@ -503,7 +503,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, _req);
 
-    if (h2o_buffer_append(&conn->req._req_body.body, payload.base, payload.len) == 0)
+    if (h2o_buffer_try_append(&conn->req._req_body.body, payload.base, payload.len) == 0)
         return -1;
     conn->req.entity = h2o_iovec_init(conn->req._req_body.body->bytes, conn->req._req_body.body->size);
 
@@ -520,7 +520,7 @@ static int write_req_streaming_pre_dispatch(void *_req, h2o_iovec_t payload, int
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, _req);
 
-    if (h2o_buffer_append(&conn->req._req_body.body, payload.base, payload.len) == 0)
+    if (!h2o_buffer_try_append(&conn->req._req_body.body, payload.base, payload.len))
         return -1;
     conn->req.entity = h2o_iovec_init(conn->req._req_body.body->bytes, conn->req._req_body.body->size);
 
