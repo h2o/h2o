@@ -34,7 +34,7 @@ hosts:
         - proxy.reverse.url: http://127.0.0.1:$upstream_port
 access-log:
   path: $logfile
-  format: "@{[ join("\\t", map { "proxy-bytes-written-$_:%{proxy-bytes-written-$_}x" } qw(total header body)) ]}"
+  format: "@{[ join("\\t", map { "proxy.request-bytes$_:%{proxy.request-bytes$_}x" } ('', '-header', '-body')) ]}"
 EOT
 
 sub doit {
@@ -73,9 +73,9 @@ sub doit {
     };
     my $log = pop(@log);
     my %map = map { split(':', $_) } split("\t", $log);
-    is $map{'proxy-bytes-written-body'}, $expected_body_size, 'body';
-    is $map{'proxy-bytes-written-header'}, $expected_header_size, 'header';
-    is $map{'proxy-bytes-written-total'}, $expected_body_size + $expected_header_size, 'total';
+    is $map{'proxy.request-bytes-body'}, $expected_body_size, 'body';
+    is $map{'proxy.request-bytes-header'}, $expected_header_size, 'header';
+    is $map{'proxy.request-bytes'}, $expected_body_size + $expected_header_size, 'total';
 }
 
 subtest 'non-streaming' => sub {
