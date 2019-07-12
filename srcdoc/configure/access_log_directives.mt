@@ -115,6 +115,13 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr id="proxy-total"><td><code>proxy-total</code><td>sum of <code>proxy-request-time</code>, <code>proxy-process-time</code>, <code>proxy-response-time</code>
 </table>
 <table>
+<caption>Proxy (since v2.3)</caption>
+<tr><th>Name<th>Description
+<tr id="proxy.request-bytes"><td><code>proxy.request-bytes</code><td>number of bytes used by the proxy handler for sending the request (above TLS layer)
+<tr id="proxy.request-bytes-header"><td><code>proxy.request-bytes-header</code><td>number of bytes used by the proxy handler for sending the request header (above TLS layer)
+<tr id="proxy.request-bytes-body"><td><code>proxy.request-bytes-body</code><td>number of bytes used by the proxy handler for sending the request body (above TLS layer)
+</table>
+<table>
 <caption>Connection (since v2.0)</caption>
 <tr><th>Name<th>Description
 <tr><td><code>connection-id</code><td>64-bit internal ID assigned to every client connection

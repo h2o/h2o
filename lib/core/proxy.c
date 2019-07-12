@@ -374,6 +374,14 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t ti
     h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
 }
 
+static void copy_stats(struct rp_generator_t *self)
+{
+    self->src_req->proxy_stats.timestamps = self->client->timings;
+    self->src_req->proxy_stats.bytes_written.total = self->client->bytes_written.total;
+    self->src_req->proxy_stats.bytes_written.header = self->client->bytes_written.header;
+    self->src_req->proxy_stats.bytes_written.body = self->client->bytes_written.body;
+}
+
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
@@ -381,7 +389,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (errstr != NULL) {
-        self->src_req->timestamps.proxy = self->client->timings;
+        copy_stats(self);
 
         /* detach the content */
         self->last_content_before_send = *self->client->buf;
@@ -431,7 +439,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int seen_date_header = 0;
 
-    self->src_req->timestamps.proxy = self->client->timings;
+    copy_stats(self);
 
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         self->client = NULL;
@@ -590,7 +598,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     h2o_req_t *req = self->src_req;
     int use_proxy_protocol = 0, reprocess_if_too_early = 0;
 
-    self->src_req->timestamps.proxy = self->client->timings;
+    copy_stats(self);
 
     if (errstr != NULL) {
         self->client = NULL;
@@ -669,7 +677,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
-    req->timestamps.proxy = (h2o_httpclient_timings_t){{0}};
+    memset(&req->proxy_stats, 0, sizeof(req->proxy_stats));
     h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
 
     return self;

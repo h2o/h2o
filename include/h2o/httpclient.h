@@ -128,6 +128,15 @@ struct st_h2o_httpclient_t {
     h2o_httpclient_timings_t timings;
 
     /**
+     * bytes written (above the TLS layer)
+     */
+    struct {
+        uint64_t header;
+        uint64_t body;
+        uint64_t total;
+    } bytes_written;
+
+    /**
      * cancels a in-flight request
      */
     void (*cancel)(h2o_httpclient_t *client);

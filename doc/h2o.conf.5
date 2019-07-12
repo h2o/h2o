@@ -1908,6 +1908,13 @@ proxy-response-timetime spent receiving response
 proxy-totalsum of proxy-request-time, proxy-process-time, proxy-response-time
 
 
+Proxy (since v2.3)
+NameDescription
+proxy.request-bytesnumber of bytes used by the proxy handler for sending the request (above TLS layer)
+proxy.request-bytes-headernumber of bytes used by the proxy handler for sending the request header (above TLS layer)
+proxy.request-bytes-bodynumber of bytes used by the proxy handler for sending the request body (above TLS layer)
+
+
 Connection (since v2.0)
 NameDescription
 connection-id64-bit internal ID assigned to every client connection
