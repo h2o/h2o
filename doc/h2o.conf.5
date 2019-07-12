@@ -1898,7 +1898,7 @@ durationsum of request-total-time, process-time, response-time
 total-timesame as duration (since v2.3)
 
 
-Proxy Timings (since v2.3)
+Proxy (since v2.3)
 NameDescription
 proxy-idle-timetime spent after receiving request, before starting to connect to the upstream
 proxy-connect-timetime spent to establish the connection (including SSL handshake)
@@ -1906,6 +1906,10 @@ proxy-request-timetime spent sending request (header and body)
 proxy-process-timetime spent after sending request, before starting to receive response
 proxy-response-timetime spent receiving response
 proxy-totalsum of proxy-request-time, proxy-process-time, proxy-response-time
+proxy.request-bytesnumber of bytes used by the proxy handler for sending the request (above TLS layer)
+proxy.request-bytes-headernumber of bytes used by the proxy handler for sending the request header (above TLS layer)
+proxy.request-bytes-bodynumber of bytes used by the proxy handler for sending the request body (above TLS layer)
+
 
 
 Connection (since v2.0)
