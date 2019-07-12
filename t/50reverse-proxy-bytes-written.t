@@ -64,6 +64,7 @@ sub doit {
     $conn->sysread(my $buf, 4096);
     like $buf, qr{^HTTP/1.1 200}is;
     $conn->close or die "$1";
+    sleep 0.1;
 
     my @log = do {
         open my $fh, "<", $logfile
