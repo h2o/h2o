@@ -131,9 +131,9 @@ struct st_h2o_httpclient_t {
      * bytes written (above the TLS layer)
      */
     struct {
-        size_t header;
-        size_t body;
-        size_t total;
+        uint64_t header;
+        uint64_t body;
+        uint64_t total;
     } bytes_written;
 
     /**

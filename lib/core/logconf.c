@@ -794,17 +794,17 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
 
         case ELEMENT_TYPE_PROXY_BYTES_WRITTEN_TOTAL:
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRIu64, (uint64_t)req->proxy_stats.bytes_written.total);
+            pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_written.total);
             break;
 
         case ELEMENT_TYPE_PROXY_BYTES_WRITTEN_HEADER:
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRIu64, (uint64_t)req->proxy_stats.bytes_written.header);
+            pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_written.header);
             break;
 
         case ELEMENT_TYPE_PROXY_BYTES_WRITTEN_BODY:
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRIu64, (uint64_t)req->proxy_stats.bytes_written.body);
+            pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_written.body);
             break;
 
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
