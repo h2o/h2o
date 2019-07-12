@@ -26,10 +26,10 @@ sub do_upstream {
     while (my $buf = <$client>) {
         last if $buf eq "\r\n";
     }
-    sleep 0.1; # proxy-process-time
+    sleep 0.1; # proxy.process-time
     $client->send("HTTP/1.1 200 OK\r\nContent-Length:1\r\nConnection: close\r\n\r\n");
     $client->flush;
-    sleep 0.1; # proxy-response-time
+    sleep 0.1; # proxy.response-time
     $client->send('x');
     $client->flush;
     close($client);
@@ -44,7 +44,7 @@ hosts:
       "/":
         - mruby.handler: |
             proc {|env|
-              sleep 0.1 # proxy-idle-time
+              sleep 0.1 # proxy.idle-time
               [399, {}, []]
             }
         - proxy.reverse.url: http://127.0.0.1:$upstream_port
@@ -52,7 +52,7 @@ hosts:
 access-log:
   path: $logfile
   format: "@{[
-    join("\\t", map { "proxy-$_:%{proxy-$_-time}x" }
+    join("\\t", map { "proxy.$_:%{proxy.$_-time}x" }
       qw(idle connect request process response total)
     )
   ]}"
@@ -74,12 +74,12 @@ run_with_curl($server, sub {
         };
         my $log = pop(@log);
         my $timings = +{ map { split(':', $_, 2) } split("\t", $log) };
-        within_eps($timings, 'proxy-idle', 0.1);
-        within_eps($timings, 'proxy-connect', 0, 0.01);
-        within_eps($timings, 'proxy-request', 0);
-        within_eps($timings, 'proxy-process', 0.1);
-        within_eps($timings, 'proxy-response', 0.1);
-        within_eps($timings, 'proxy-total', 0.2);
+        within_eps($timings, 'proxy.idle', 0.1);
+        within_eps($timings, 'proxy.connect', 0, 0.01);
+        within_eps($timings, 'proxy.request', 0);
+        within_eps($timings, 'proxy.process', 0.1);
+        within_eps($timings, 'proxy.response', 0.1);
+        within_eps($timings, 'proxy.total', 0.2);
     };
 
     subtest 'server-timing' => sub {
@@ -88,12 +88,12 @@ run_with_curl($server, sub {
         while ($resp =~ /^server-timing: ([^\r\n]+)/mig) {
             $st = +{ %$st, map { split ('; dur=', $_) } split(', ', $1) };
         }
-        within_eps($st, 'proxy-idle', 100);
-        within_eps($st, 'proxy-connect', 0, 10);
-        within_eps($st, 'proxy-request', 0);
-        within_eps($st, 'proxy-process', 100);
-        within_eps($st, 'proxy-response', 100);
-        within_eps($st, 'proxy-total', 200);
+        within_eps($st, 'proxy.idle', 100);
+        within_eps($st, 'proxy.connect', 0, 10);
+        within_eps($st, 'proxy.request', 0);
+        within_eps($st, 'proxy.process', 100);
+        within_eps($st, 'proxy.response', 100);
+        within_eps($st, 'proxy.total', 200);
     };
 });
 
