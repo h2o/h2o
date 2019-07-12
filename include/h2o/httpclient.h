@@ -152,7 +152,9 @@ struct st_h2o_httpclient_t {
         h2o_httpclient_body_cb on_body;
     } _cb;
 
+	// fastly: h2o-fetch in varnish
 	void (*close_socket)(h2o_httpclient_t *client, h2o_socket_t *sock, int can_keepalive);
+	void (*on_send_request)(h2o_httpclient_t *client);
 };
 
 /**

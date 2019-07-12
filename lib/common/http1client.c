@@ -398,6 +398,10 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    if (client->super.on_send_request != NULL) {
+        client->super.on_send_request(&client->super);
+    }
+
     client->super.timings.request_end_at = h2o_gettimeofday(client->super.ctx->loop);
 
     h2o_socket_read_start(client->sock, on_head);
