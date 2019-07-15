@@ -621,12 +621,9 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
 
-    if (h2o_sliding_counter_is_running(&loop->exec_time_counter)) {
+    if (h2o_sliding_counter_is_running(&loop->exec_time_nanosec_counter)) {
         update_now(loop);
-        h2o_sliding_counter_stop(&loop->exec_time_counter, loop->_now_millisec);
-
-        if (h2o_sliding_counter_is_running(&loop->exec_time_nanosec_counter))
-            h2o_sliding_counter_stop(&loop->exec_time_nanosec_counter, loop->_now_nanosec);
+        h2o_sliding_counter_stop(&loop->exec_time_nanosec_counter, loop->_now_nanosec);
     }
 
     return 0;
