@@ -474,6 +474,7 @@
 		E9E5049121501BBA004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
 		E9E5049221501BC3004DC170 /* server.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E5048F21501BBA004DC170 /* server.c */; };
 		E9E5049421501CA5004DC170 /* http3_server.h in Headers */ = {isa = PBXBuildFile; fileRef = E9E5049321501CA5004DC170 /* http3_server.h */; };
+		E9F20BDD22E03FD00018D260 /* send_state.h in Headers */ = {isa = PBXBuildFile; fileRef = 7D027BEE2242283B007ACE09 /* send_state.h */; };
 		E9F677D42007476D006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
 		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
@@ -1758,6 +1759,7 @@
 				107D4D521B5B2412004A9B21 /* file.h */,
 				1044812D1BFD0FBE0007863F /* filecache.h */,
 				7D2DF4ED20297EE0004AD361 /* header.h */,
+				7DF88EF820761972005DB8D8 /* hiredis_.h */,
 				1058C8871AA6DE4B008D6180 /* hostinfo.h */,
 				E97EC88C213CE3130086AD64 /* hpack.h */,
 				107923A019A3215F00C52AD6 /* http1.h */,
@@ -1778,6 +1780,8 @@
 				1058F6EC1D7CC81E00FFFFA3 /* openssl_backport.h */,
 				E901C43C213FAE0300D17C93 /* qpack.h */,
 				1047A9FE1D0E6D5900CC4BCE /* rand.h */,
+				08790DE11D8275C100A04BC1 /* redis.h */,
+				7D027BEE2242283B007ACE09 /* send_state.h */,
 				104B9A231A4A4FAF009EEE64 /* serverutil.h */,
 				10D0903F19F0B90A0043D458 /* socket */,
 				10D0903D19F0A8190043D458 /* socket.h */,
@@ -1791,9 +1795,6 @@
 				10AA2E9E1A8807CF004322AC /* url.h */,
 				107923A319A3215F00C52AD6 /* websocket.h */,
 				104B9A2C1A4BE029009EEE64 /* version.h */,
-				08790DE11D8275C100A04BC1 /* redis.h */,
-				7DF88EF820761972005DB8D8 /* hiredis_.h */,
-				7D027BEE2242283B007ACE09 /* send_state.h */,
 			);
 			path = h2o;
 			sourceTree = "<group>";
@@ -2569,6 +2570,7 @@
 				10AA2EAA1A8DDC57004322AC /* multithread.h in Headers */,
 				E901C3E5213E1C3600D17C93 /* maxsender.h in Headers */,
 				10AA2E9F1A8807CF004322AC /* url.h in Headers */,
+				E9F20BDD22E03FD00018D260 /* send_state.h in Headers */,
 				10B38A721B8D34BB007DC191 /* mruby_.h in Headers */,
 				10FCC13F1B2E4A4500F13674 /* cloexec.h in Headers */,
 				E9708B1C1E49A3480029E0A5 /* handy.h in Headers */,
