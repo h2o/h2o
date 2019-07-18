@@ -929,6 +929,32 @@ static void quicly_byte_to_hex(char *dst, uint8_t v);
  *
  */
 char *quicly_hexdump(const uint8_t *bytes, size_t len, size_t indent);
+/**
+ *
+ */
+void quicly_stream_noop_on_destroy(quicly_stream_t *stream, int err);
+/**
+ *
+ */
+void quicly_stream_noop_on_send_shift(quicly_stream_t *stream, size_t delta);
+/**
+ *
+ */
+int quicly_stream_noop_on_send_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+/**
+ *
+ */
+int quicly_stream_noop_on_send_stop(quicly_stream_t *stream, int err);
+/**
+ *
+ */
+int quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+/**
+ *
+ */
+int quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
+
+extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 
 /* inline definitions */
 

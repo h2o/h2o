@@ -65,36 +65,36 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
 
 int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_frame_t *frame, int is_ack_ecn)
 {
-    uint64_t i, tmp;
+    uint64_t i, num_gaps, gap, ack_range;
 
     if ((frame->largest_acknowledged = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
     if ((frame->ack_delay = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
-    if ((frame->num_gaps = quicly_decodev(src, end)) == UINT64_MAX)
+    if ((num_gaps = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
 
-    if ((tmp = quicly_decodev(src, end)) == UINT64_MAX)
+    if ((ack_range = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
-    if (frame->largest_acknowledged < tmp)
+    if (frame->largest_acknowledged < ack_range)
         goto Error;
-    frame->smallest_acknowledged = frame->largest_acknowledged - tmp;
-    frame->ack_block_lengths[0] = tmp + 1;
+    frame->smallest_acknowledged = frame->largest_acknowledged - ack_range;
+    frame->ack_block_lengths[0] = ack_range + 1;
+    frame->num_gaps = 0;
 
-    for (i = 0; i != frame->num_gaps; ++i) {
-        if ((tmp = quicly_decodev(src, end)) == UINT64_MAX)
+    for (i = 0; i != num_gaps; ++i) {
+        if ((gap = quicly_decodev(src, end)) == UINT64_MAX)
             goto Error;
-        frame->gaps[i] = tmp + 1;
-        if (frame->smallest_acknowledged < frame->gaps[i])
+        if ((ack_range = quicly_decodev(src, end)) == UINT64_MAX)
             goto Error;
-        frame->smallest_acknowledged -= frame->gaps[i];
-        if ((tmp = quicly_decodev(src, end)) == UINT64_MAX)
-            goto Error;
-        tmp += 1;
-        if (frame->smallest_acknowledged < tmp)
-            goto Error;
-        frame->ack_block_lengths[i + 1] = tmp;
-        frame->smallest_acknowledged -= tmp;
+        if (i < QUICLY_ACK_MAX_GAPS) {
+            if (frame->smallest_acknowledged < gap + ack_range + 2)
+                goto Error;
+            frame->gaps[i] = gap + 1;
+            frame->ack_block_lengths[i + 1] = ack_range + 1;
+            frame->smallest_acknowledged -= gap + ack_range + 2;
+            ++frame->num_gaps;
+        }
     }
 
     if (is_ack_ecn) {

@@ -51,7 +51,8 @@ typedef struct st_quicly_maxsender_t {
 } quicly_maxsender_t;
 
 typedef struct st_quicly_maxsender_sent_t {
-    int64_t value;
+    uint64_t inflight : 1;
+    uint64_t value : 63;
 } quicly_maxsender_sent_t;
 
 static void quicly_maxsender_init(quicly_maxsender_t *m, int64_t initial_value);
@@ -105,6 +106,7 @@ inline void quicly_maxsender_record(quicly_maxsender_t *m, int64_t value, quicly
     m->max_committed = value;
     ++m->num_inflight;
     m->force_send = 0;
+    sent->inflight = 1;
     sent->value = value;
 }
 
@@ -112,12 +114,20 @@ inline void quicly_maxsender_acked(quicly_maxsender_t *m, quicly_maxsender_sent_
 {
     if (m->max_acked < sent->value)
         m->max_acked = sent->value;
-    --m->num_inflight;
+    /* num_inflight should not be adjusted in case of a late ACK */
+    if (sent->inflight) {
+        assert(m->num_inflight != 0);
+        --m->num_inflight;
+        sent->inflight = 0;
+    }
 }
 
 inline void quicly_maxsender_lost(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent)
 {
+    /* the function must be called at most once (when LOST event occurs, but not EXPIRED), hence assert and always decrement */
+    assert(m->num_inflight != 0);
     --m->num_inflight;
+    sent->inflight = 0;
 }
 
 #ifdef __cplusplus

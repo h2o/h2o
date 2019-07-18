@@ -321,18 +321,14 @@ static const quicly_stream_callbacks_t crypto_stream_callbacks = {quicly_streamb
 static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, int is_enc, size_t epoch, const void *secret);
 static int discard_sentmap_by_epoch(quicly_conn_t *conn, unsigned ack_epochs);
 
-static const quicly_transport_parameters_t transport_params_before_handshake = {
+static const quicly_transport_parameters_t default_transport_params = {
     {0, 0, 0}, 0, 0, 0, 0, QUICLY_DEFAULT_ACK_DELAY_EXPONENT, QUICLY_DEFAULT_MAX_ACK_DELAY};
 
 static __thread int64_t now;
 
 static void update_now(quicly_context_t *ctx)
 {
-    static __thread int64_t base;
-
     now = ctx->now->cb(ctx->now);
-    if (base == 0)
-        base = now;
 }
 
 static inline uint8_t get_epoch(uint8_t first_byte)
@@ -1349,7 +1345,7 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
     int ret;
 
     /* set parameters to their default values */
-    *params = (quicly_transport_parameters_t){{0}, 0, 0, 0, 0, 3, 25};
+    *params = default_transport_params;
     if (odcid != NULL)
         odcid->len = 0;
     if (stateless_reset_token != NULL)
@@ -1502,7 +1498,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
         conn->_.super.peer.bidi.next_stream_id = 0;
         conn->_.super.peer.uni.next_stream_id = 2;
     }
-    conn->_.super.peer.transport_params = transport_params_before_handshake;
+    conn->_.super.peer.transport_params = default_transport_params;
     if (server_name != NULL && ctx->enforce_version_negotiation) {
         ctx->tls->random_bytes(&conn->_.super.version, sizeof(conn->_.super.version));
         conn->_.super.version = (conn->_.super.version & 0xf0f0f0f0) | 0x0a0a0a0a;
@@ -1857,12 +1853,17 @@ static int on_ack_max_stream_data(quicly_conn_t *conn, const quicly_sent_packet_
 
     /* TODO cache pointer to stream (using a generation counter?) */
     if ((stream = quicly_get_stream(conn, sent->data.stream.stream_id)) != NULL) {
-        if (event == QUICLY_SENTMAP_EVENT_ACKED) {
+        switch (event) {
+        case QUICLY_SENTMAP_EVENT_ACKED:
             quicly_maxsender_acked(&stream->_send_aux.max_stream_data_sender, &sent->data.max_stream_data.args);
-        } else {
+            break;
+        case QUICLY_SENTMAP_EVENT_LOST:
             quicly_maxsender_lost(&stream->_send_aux.max_stream_data_sender, &sent->data.max_stream_data.args);
             if (should_send_max_stream_data(stream))
                 sched_stream_control(stream);
+            break;
+        default:
+            break;
         }
     }
 
@@ -3239,6 +3240,7 @@ static int initiate_close(quicly_conn_t *conn, int err, uint64_t frame_type, con
 int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase)
 {
     assert(err == 0 || QUICLY_ERROR_IS_QUIC_APPLICATION(err));
+    update_now(conn->super.ctx);
 
     return initiate_close(conn, err, QUICLY_FRAME_TYPE_PADDING /* used when err == 0 */, reason_phrase);
 }
@@ -4331,6 +4333,38 @@ void quicly_amend_ptls_context(ptls_context_t *ptls)
     ptls->max_early_data_size = UINT32_MAX;
     ptls->update_traffic_key = &update_traffic_key;
 }
+
+void quicly_stream_noop_on_destroy(quicly_stream_t *stream, int err)
+{
+}
+
+void quicly_stream_noop_on_send_shift(quicly_stream_t *stream, size_t delta)
+{
+}
+
+int quicly_stream_noop_on_send_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all)
+{
+    return 0;
+}
+
+int quicly_stream_noop_on_send_stop(quicly_stream_t *stream, int err)
+{
+    return 0;
+}
+
+int quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    return 0;
+}
+
+int quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err)
+{
+    return 0;
+}
+
+const quicly_stream_callbacks_t quicly_stream_noop_callbacks = {
+    quicly_stream_noop_on_destroy,   quicly_stream_noop_on_send_shift, quicly_stream_noop_on_send_emit,
+    quicly_stream_noop_on_send_stop, quicly_stream_noop_on_receive,    quicly_stream_noop_on_receive_reset};
 
 /**
  * an array of event names corresponding to quicly_event_type_t
