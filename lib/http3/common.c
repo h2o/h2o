@@ -641,14 +641,14 @@ void h2o_http3_set_context_identifier(h2o_http3_ctx_t *ctx, uint32_t accept_thre
     ctx->default_ttl = ttl;
 }
 
-static void close_connection(h2o_http3_conn_t *conn)
+void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *reason_phrase)
 {
     switch (quicly_get_state(conn->quic)) {
     case QUICLY_STATE_FIRSTFLIGHT:
         conn->callbacks->destroy_connection(conn);
         break;
     case QUICLY_STATE_CONNECTED:
-        quicly_close(conn->quic, H2O_HTTP3_ERROR_NONE, "");
+        quicly_close(conn->quic, err, reason_phrase);
         h2o_http3_schedule_timer(conn);
         break;
     default:
@@ -661,8 +661,8 @@ void h2o_http3_close_all_connections(h2o_http3_ctx_t *ctx)
 {
     h2o_http3_conn_t *conn;
 
-    kh_foreach_value(ctx->conns_by_id, conn, { close_connection(conn); });
-    kh_foreach_value(ctx->conns_accepting, conn, { close_connection(conn); });
+    kh_foreach_value(ctx->conns_by_id, conn, { h2o_http3_close_connection(conn, 0, NULL); });
+    kh_foreach_value(ctx->conns_accepting, conn, { h2o_http3_close_connection(conn, 0, NULL); });
 }
 
 size_t h2o_http3_num_connections(h2o_http3_ctx_t *ctx)

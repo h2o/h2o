@@ -310,6 +310,10 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
 /**
  *
  */
+void h2o_http3_close_connection(h2o_http3_conn_t *conn, int err, const char *reason_phrase);
+/**
+ *
+ */
 void h2o_http3_close_all_connections(h2o_http3_ctx_t *ctx);
 /**
  *

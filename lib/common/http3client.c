@@ -106,6 +106,15 @@ struct st_h2o_http3client_req_t {
      */
     int (*handle_input)(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end, int err,
                         const char **err_desc);
+    /**
+     * proceed_req callback.  The callback is invoked when all bytes in the send buffer is emitted for the first time (at this point
+     * bytes_written is changed to zero, so that the proceed_req function is called once per every block being supplied from the
+     * application).
+     */
+    struct {
+        h2o_httpclient_proceed_req_cb cb;
+        size_t bytes_written;
+    } proceed_req;
 };
 
 static int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
@@ -276,6 +285,13 @@ static void destroy_request(struct st_h2o_http3client_req_t *req)
     free(req);
 }
 
+static void detach_stream(struct st_h2o_http3client_req_t *req)
+{
+    req->quic->callbacks = &quicly_stream_noop_callbacks;
+    req->quic->data = NULL;
+    req->quic = NULL;
+}
+
 static void close_stream(struct st_h2o_http3client_req_t *req, int err)
 {
     /* TODO are we expected to send two error codes? */
@@ -283,8 +299,7 @@ static void close_stream(struct st_h2o_http3client_req_t *req, int err)
         quicly_reset_stream(req->quic, err);
     if (!quicly_recvstate_transfer_complete(&req->quic->recvstate))
         quicly_request_stop(req->quic, err);
-    req->quic->data = NULL;
-    req->quic = NULL;
+    detach_stream(req);
 }
 
 static void on_error_before_head(struct st_h2o_http3client_req_t *req, const char *errstr)
@@ -444,8 +459,7 @@ static void on_stream_destroy(quicly_stream_t *qs, int err)
     if ((req = qs->data) == NULL)
         return;
     handle_input_error(req, H2O_HTTP3_ERROR_TRANSPORT);
-    req->quic->data = NULL;
-    req->quic = NULL;
+    detach_stream(req);
     destroy_request(req);
 }
 
@@ -459,15 +473,23 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
 static int on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len, int *wrote_all)
 {
-    struct st_h2o_http3client_req_t *stream = qs->data;
+    struct st_h2o_http3client_req_t *req = qs->data;
 
-    if (*len >= stream->sendbuf->size - off) {
-        *len = stream->sendbuf->size - off;
+    if (*len >= req->sendbuf->size - off) {
+        *len = req->sendbuf->size - off;
         *wrote_all = 1;
     } else {
         *wrote_all = 0;
     }
-    memcpy(dst, stream->sendbuf->bytes, *len);
+    memcpy(dst, req->sendbuf->bytes + off, *len);
+
+    if (*wrote_all && req->proceed_req.bytes_written != 0) {
+        size_t bytes_written = req->proceed_req.bytes_written;
+        req->proceed_req.bytes_written = 0;
+        req->proceed_req.cb(&req->super, bytes_written,
+                            quicly_sendstate_is_open(&req->quic->sendstate) ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
+    }
+
     return 0;
 }
 
@@ -554,8 +576,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     if (is_eos) {
         if (!quicly_sendstate_transfer_complete(&req->quic->sendstate))
             quicly_reset_stream(req->quic, H2O_HTTP3_ERROR_NONE);
-        req->quic->data = NULL;
-        req->quic = NULL;
+        detach_stream(req);
         destroy_request(req);
     } else if (ret != 0) {
         /* FIXME consider how to send err_desc */
@@ -623,6 +644,25 @@ static void emit_priority_frame(struct st_h2o_http3client_req_t *req, h2o_byte_v
     buf->size += h2o_http3_encode_priority_frame(buf->entries + buf->size, &frame) - buf->entries;
 }
 
+static size_t emit_data(struct st_h2o_http3client_req_t *req, h2o_iovec_t payload)
+{
+    size_t nbytes;
+
+    { /* emit header */
+        uint8_t buf[9], *p = buf;
+        *p++ = H2O_HTTP3_FRAME_TYPE_DATA;
+        p = quicly_encodev(p, payload.len);
+        nbytes = p - buf;
+        h2o_buffer_append(&req->sendbuf, buf, nbytes);
+    }
+
+    /* emit payload */
+    h2o_buffer_append(&req->sendbuf, payload.base, payload.len);
+    nbytes += payload.len;
+
+    return nbytes;
+}
+
 void start_request(struct st_h2o_http3client_req_t *req)
 {
     h2o_iovec_t method;
@@ -630,7 +670,6 @@ void start_request(struct st_h2o_http3client_req_t *req)
     const h2o_header_t *headers;
     size_t num_headers;
     h2o_iovec_t body;
-    h2o_httpclient_proceed_req_cb proceed_req;
     h2o_httpclient_properties_t props = {NULL};
     int ret;
 
@@ -638,11 +677,10 @@ void start_request(struct st_h2o_http3client_req_t *req)
     assert(!h2o_linklist_is_linked(&req->link));
 
     if ((req->super._cb.on_head = req->super._cb.on_connect(&req->super, NULL, &method, &url, &headers, &num_headers, &body,
-                                                            &proceed_req, &props, &req->conn->server.origin_url)) == NULL) {
+                                                            &req->proceed_req.cb, &props, &req->conn->server.origin_url)) == NULL) {
         destroy_request(req);
         return;
     }
-    assert(body.base == NULL && proceed_req == NULL); /* FIXME add request entity support */
 
     if ((ret = quicly_open_stream(req->conn->super.quic, &req->quic, 0)) != 0) {
         on_error_before_head(req, "failed to open stream");
@@ -659,8 +697,14 @@ void start_request(struct st_h2o_http3client_req_t *req)
                                   url.authority, url.path, headers, num_headers);
     });
     h2o_buffer_append(&req->sendbuf, buf.entries, buf.size);
+    if (body.len != 0) {
+        emit_data(req, body);
+        if (req->proceed_req.cb != NULL)
+            req->proceed_req.bytes_written = body.len;
+    }
 
-    quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
+    if (req->proceed_req.cb == NULL)
+        quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
     quicly_stream_sync_sendbuf(req->quic, 1);
 
     req->handle_input = handle_input_expect_headers;
@@ -674,6 +718,32 @@ static void cancel_request(h2o_httpclient_t *_client)
     destroy_request(req);
 }
 
+static void do_update_window(h2o_httpclient_t *_client)
+{
+    /* TODO Stop receiving data for the stream when `buf` grows to certain extent. Then, resume when this function is being called.
+     */
+}
+
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
+{
+    struct st_h2o_http3client_req_t *req = (void *)_client;
+
+    assert(req->quic != NULL && quicly_sendstate_is_open(&req->quic->sendstate));
+    assert(req->proceed_req.bytes_written == 0);
+
+    size_t bytes_sent = emit_data(req, chunk);
+
+    /* shutdown if we've written all request body.  Calculation of final_size relies on all the previous data being emitted on wire
+     * prior to this function being called (see on_send_emit) */
+    if (is_end_stream)
+        quicly_sendstate_shutdown(&req->quic->sendstate, req->quic->sendstate.size_inflight + bytes_sent);
+
+    req->proceed_req.bytes_written = chunk.len;
+    quicly_stream_sync_sendbuf(req->quic, 1);
+    h2o_http3_schedule_timer(&req->conn->super);
+    return 0;
+}
+
 void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                h2o_url_t *target, h2o_httpclient_connect_cb cb)
 {
@@ -684,8 +754,19 @@ void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
         conn = create_connection(ctx, target);
 
     req = h2o_mem_alloc(sizeof(*req));
-    *req = (struct st_h2o_http3client_req_t){
-        {pool, ctx, NULL, &req->recvbuf.body, data, NULL, {h2o_gettimeofday(ctx->loop)}, cancel_request}, conn};
+    *req = (struct st_h2o_http3client_req_t){{pool,
+                                              ctx,
+                                              NULL,
+                                              &req->recvbuf.body,
+                                              data,
+                                              NULL,
+                                              {h2o_gettimeofday(ctx->loop)},
+                                              cancel_request,
+                                              NULL /* steal_socket */,
+                                              NULL /* get_socket */,
+                                              do_update_window,
+                                              do_write_req},
+                                             conn};
     req->super._cb.on_connect = cb;
     h2o_buffer_init(&req->sendbuf, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.body, &h2o_socket_buffer_prototype);
@@ -694,6 +775,7 @@ void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
 
     if (h2o_http3_has_received_settings(&conn->super)) {
         start_request(req);
+        h2o_http3_schedule_timer(&conn->super);
     } else {
         h2o_linklist_insert(&conn->pending_requests, &req->link);
     }

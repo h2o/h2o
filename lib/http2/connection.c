@@ -649,11 +649,9 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         finish_body_streaming(stream);
-        if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
-            stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
-            if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
-                h2o_http2_stream_close(conn, stream);
-            }
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
+            h2o_http2_stream_close(conn, stream);
         }
         return;
     }
