@@ -954,6 +954,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
         h2o_http2_scheduler_relocate(&stream->scheduler.ref, v);
         kh_del(h2o_http3_freestanding_priority, conn->scheduler.reqs.freestanding, iter);
         free(v);
+        stream->scheduler.conn_blocked = (h2o_linklist_t){NULL};
     } else {
         memset(&stream->scheduler, 0, sizeof(stream->scheduler));
     }
