@@ -769,14 +769,11 @@ int h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, si
     size_t new_size = off + len;
 
     if ((*buf)->size < new_size) {
-        h2o_buffer_reserve(buf, new_size);
-        if ((*buf)->capacity < new_size)
-            return PTLS_ERROR_NO_MEMORY;
+        h2o_buffer_reserve(buf, new_size - (*buf)->size);
+        (*buf)->size = new_size;
     }
 
     memcpy((*buf)->bytes + off, src, len);
-    (*buf)->size = new_size;
-
     return 0;
 }
 
