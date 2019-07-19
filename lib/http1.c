@@ -871,7 +871,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)_req->conn;
     h2o_iovec_t *bufs = alloca(sizeof(h2o_iovec_t) * (inbufcnt + 1 + 2)) /* 1 for header, 2 for chunked encoding */, chunked_suffix;
     size_t i, bytes_to_be_sent, bufcnt = 0, pullbuf_off = 0;
-    enum { NOT_PULL, IS_PULL, LASTBUF_IS_PULL } pull_mode = conn->_ostr_final.pull_buf != NULL ? IS_PULL : NOT_PULL;
+    enum { NOT_PULL, IS_PULL, LASTBUF_IS_PULL } pull_mode;
 
     assert(&conn->req == _req);
     assert(_self == &conn->_ostr_final.super);
@@ -886,9 +886,10 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
 
     /* count bytes_sent if other ostreams haven't counted, as well as checking if we should use pull mode */
     bytes_to_be_sent = 0;
+    pull_mode = NOT_PULL;
     for (i = 0; i != inbufcnt; ++i) {
         bytes_to_be_sent += inbufs[i].len;
-        if (!pull_mode && inbufs[i].callbacks->flatten != h2o_sendvec_flatten_raw)
+        if (pull_mode == NOT_PULL && inbufs[i].callbacks->flatten != h2o_sendvec_flatten_raw)
             pull_mode = IS_PULL;
     }
     assert(pull_mode == NOT_PULL || inbufcnt == 0 || (inbufcnt == 1 && inbufs[0].len <= H2O_PULL_SENDVEC_MAX_SIZE));
@@ -914,7 +915,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         const char *connection = conn->req.http1_is_persistent ? "keep-alive" : "close";
         size_t headers_est_size =
             flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
-        if (pull_mode) {
+        if (pull_mode != NOT_PULL) {
             allocate_pull_buf(conn, send_state, bytes_to_be_sent, headers_est_size);
             bufs[bufcnt].base = conn->_ostr_final.pull_buf;
         } else {
@@ -927,6 +928,9 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         }
         ++bufcnt;
         conn->_ostr_final.state = OSTREAM_STATE_BODY;
+    } else {
+        if (conn->_ostr_final.pull_buf == NULL)
+            allocate_pull_buf(conn, send_state, bytes_to_be_sent, 0);
     }
 
     if (conn->_ostr_final.chunked_buf != NULL) {
@@ -943,6 +947,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             bufs[bufcnt++] = h2o_iovec_init(inbufs[i].raw, inbufs[i].len);
     } else if (inbufcnt != 0) {
         assert(inbufcnt == 1);
+        assert(conn->_ostr_final.pull_buf != NULL);
         if (!(inbufs->callbacks->flatten(inbufs, &conn->req, h2o_iovec_init(conn->_ostr_final.pull_buf + pullbuf_off, inbufs->len),
                                          0))) {
             /* error, close abruptly */
