@@ -580,7 +580,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
          *   +----------------+------+------+------+------+ */
         FRAME( DATA           ,    1 ,    1 ,    0 ,    0 );
         FRAME( HEADERS        ,    1 ,    1 ,    0 ,    0 );
-        FRAME( PRIORITY       ,    1 ,    0 ,    1 ,    0 );
+        FRAME( PRIORITY       ,    0 ,    0 ,    1 ,    0 );
         FRAME( CANCEL_PUSH    ,    0 ,    0 ,    1 ,    1 );
         FRAME( SETTINGS       ,    0 ,    0 ,    1 ,    1 );
         FRAME( PUSH_PROMISE   ,    0 ,    1 ,    0 ,    0 );

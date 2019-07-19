@@ -219,13 +219,13 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
         if (conn->super.peer_settings.num_placeholders != 0) {
             static const h2o_http3_priority_frame_t noncritical_placeholder = {
                 {H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER, H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_ID} /* prioritized_element */,
-                {H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT} /* attached to root */,
+                {H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT} /* attached to root */,
                 H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_WEIGHT - 1 /* weight=1, converted to weight_m1 */
             };
             uint8_t base[H2O_HTTP3_PRIORITY_FRAME_CAPACITY], *dst = base;
             dst = h2o_http3_encode_priority_frame(dst, &noncritical_placeholder);
             struct st_h2o_http3_egress_unistream_t *control_stream = conn->super._control_streams.egress.control;
-            h2o_buffer_append(&conn->super._control_streams.egress.control->sendbuf, base, dst - base);
+            h2o_buffer_append(&control_stream->sendbuf, base, dst - base);
             if ((ret = quicly_stream_sync_sendbuf(control_stream->quic, 1)) != 0)
                 goto Exit;
         }
@@ -609,20 +609,19 @@ static int on_receive_reset(quicly_stream_t *qs, int err)
     return 0;
 }
 
-static void emit_priority_frame(struct st_h2o_http3client_req_t *req, h2o_byte_vector_t *buf,
-                                h2o_httpclient_precedence_t precedence)
+static size_t build_priority_frame(struct st_h2o_http3client_req_t *req, uint8_t *buf, h2o_httpclient_precedence_t precedence)
 {
-    h2o_http3_priority_frame_t frame = {{H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT}}; /* prioritized = this stream */
+    h2o_http3_priority_frame_t frame = {{H2O_HTTP3_PRIORITY_ELEMENT_TYPE_REQUEST_STREAM, req->quic->stream_id}};
 
     if (precedence == H2O_HTTPCLIENT_PRECEDENCE_BLOCKING) {
-        frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT; /* root */
+        frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT;
         frame.weight_m1 = H2O_HTTP3CLIENT_BLOCKING_STREAM_WEIGHT - 1;
     } else {
         if (req->conn->super.peer_settings.num_placeholders != 0) {
             frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER;
             frame.dependency.id_ = H2O_HTTP3CLIENT_NONCRITICAL_PLACEHOLDER_ID;
         } else {
-            frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT; /* root */
+            frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT;
         }
         switch (precedence) {
         case H2O_HTTPCLIENT_PRECEDENCE_NORMAL:
@@ -640,8 +639,7 @@ static void emit_priority_frame(struct st_h2o_http3client_req_t *req, h2o_byte_v
         }
     }
 
-    h2o_vector_reserve(req->super.pool, buf, buf->size + H2O_HTTP3_PRIORITY_FRAME_CAPACITY);
-    buf->size += h2o_http3_encode_priority_frame(buf->entries + buf->size, &frame) - buf->entries;
+    return h2o_http3_encode_priority_frame(buf, &frame) - buf;
 }
 
 static size_t emit_data(struct st_h2o_http3client_req_t *req, h2o_iovec_t payload)
@@ -689,9 +687,8 @@ void start_request(struct st_h2o_http3client_req_t *req)
     }
     req->quic->data = req;
 
-    /* TODO optimize */
+    /* send request (TODO optimize) */
     h2o_byte_vector_t buf = {NULL};
-    emit_priority_frame(req, &buf, props.precedence);
     h2o_http3_encode_frame(req->super.pool, &buf, H2O_HTTP3_FRAME_TYPE_HEADERS, {
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, &buf, method, url.scheme,
                                   url.authority, url.path, headers, num_headers);
@@ -702,10 +699,17 @@ void start_request(struct st_h2o_http3client_req_t *req)
         if (req->proceed_req.cb != NULL)
             req->proceed_req.bytes_written = body.len;
     }
-
     if (req->proceed_req.cb == NULL)
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
     quicly_stream_sync_sendbuf(req->quic, 1);
+
+    { /* send priority */
+        struct st_h2o_http3_egress_unistream_t *control_stream = req->conn->super._control_streams.egress.control;
+        h2o_buffer_reserve(&control_stream->sendbuf, H2O_HTTP3_PRIORITY_FRAME_CAPACITY);
+        control_stream->sendbuf->size +=
+            build_priority_frame(req, (uint8_t *)control_stream->sendbuf->bytes + control_stream->sendbuf->size, props.precedence);
+        quicly_stream_sync_sendbuf(control_stream->quic, 1);
+    }
 
     req->handle_input = handle_input_expect_headers;
 }

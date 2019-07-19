@@ -98,9 +98,9 @@ typedef enum en_h2o_http3_priority_element_type_t {
     H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PUSH_STREAM,
     H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER,
     /**
-     * either current stream (when used as prioritized element type) or root (when used as element dependency type
+     * root (when used as element dependency type)
      */
-    H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT
+    H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT
 } h2o_http3_priority_element_type_t;
 
 typedef struct st_h2o_http3_priority_frame_t {
@@ -108,6 +108,7 @@ typedef struct st_h2o_http3_priority_frame_t {
         h2o_http3_priority_element_type_t type;
         int64_t id_;
     } prioritized, dependency;
+    uint8_t exclusive : 1;
     uint8_t weight_m1;
 } h2o_http3_priority_frame_t;
 

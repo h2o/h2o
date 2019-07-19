@@ -23,14 +23,14 @@
 
 uint8_t *h2o_http3_encode_priority_frame(uint8_t *dst, const h2o_http3_priority_frame_t *frame)
 {
+    assert(frame->prioritized.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT);
     uint8_t *base = dst;
 
     *dst++ = H2O_HTTP3_FRAME_TYPE_PRIORITY;
     ++dst; /* skip length; determined laterwards */
-    *dst++ = ((uint8_t)frame->prioritized.type << 6) | ((uint8_t)frame->dependency.type << 4);
-    if (frame->prioritized.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT)
-        dst = quicly_encodev(dst, frame->prioritized.id_);
-    if (frame->dependency.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT)
+    *dst++ = ((uint8_t)frame->prioritized.type << 6) | ((uint8_t)frame->dependency.type << 4) | (frame->exclusive << 3);
+    dst = quicly_encodev(dst, frame->prioritized.id_);
+    if (frame->dependency.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT)
         dst = quicly_encodev(dst, frame->dependency.id_);
     *dst++ = frame->weight_m1;
     base[1] = dst - (base + 2);
@@ -46,23 +46,20 @@ int h2o_http3_decode_priority_frame(h2o_http3_priority_frame_t *frame, const uin
     if (end - src < 2)
         goto Fail;
 
-    if ((*src & 0xf) != 0)
+    if ((*src & 0x7) != 0)
         goto Fail;
     frame->prioritized.type = (*src >> 6) & 0x3;
     frame->dependency.type = (*src >> 4) & 0x3;
+    frame->exclusive = (*src & 0x8) != 0;
     ++src;
-    if (frame->prioritized.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT) {
-        if ((frame->prioritized.id_ = quicly_decodev(&src, end)) == UINT64_MAX)
-            goto Fail;
-    } else {
-        frame->prioritized.id_ = 0;
-    }
-    if (frame->dependency.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ABSENT) {
+    if (frame->prioritized.type == H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT)
+        goto Fail;
+    if ((frame->prioritized.id_ = quicly_decodev(&src, end)) == UINT64_MAX)
+        goto Fail;
+    frame->dependency.id_ = 0;
+    if (frame->dependency.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT)
         if ((frame->dependency.id_ = quicly_decodev(&src, end)) == UINT64_MAX)
             goto Fail;
-    } else {
-        frame->dependency.id_ = 0;
-    }
     if (end - src != 1)
         goto Fail;
     frame->weight_m1 = *src++;
