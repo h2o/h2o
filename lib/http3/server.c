@@ -161,6 +161,7 @@ struct st_h2o_http3_server_stream_t {
     h2o_req_t req;
 };
 
+static void on_stream_destroy(quicly_stream_t *qs, int err);
 static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                       const char **err_desc);
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
@@ -200,8 +201,16 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     stream->state = state;
     ++*get_state_counter(conn, stream->state);
 
-    if (state == H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
+    if (state == H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT) {
         dispose_request(stream);
+        static const quicly_stream_callbacks_t close_wait_callbacks = {on_stream_destroy,
+                                                                       quicly_stream_noop_on_send_shift,
+                                                                       quicly_stream_noop_on_send_emit,
+                                                                       quicly_stream_noop_on_send_stop,
+                                                                       quicly_stream_noop_on_receive,
+                                                                       quicly_stream_noop_on_receive_reset};
+        stream->quic->callbacks = &close_wait_callbacks;
+    }
 
     if (old_state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED) {
         assert(conn->num_streams.recv_body_unblocked == 0);
@@ -272,7 +281,7 @@ static h2o_iovec_t log_session_id(h2o_req_t *_req)
     return h2o_iovec_init(NULL, 0);
 }
 
-static void on_stream_destroy(quicly_stream_t *qs, int err)
+void on_stream_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -508,6 +517,7 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
         default:
             quicly_request_stop(stream->quic, ret);
             quicly_reset_stream(stream->quic, ret);
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
             break;
         }
     }
