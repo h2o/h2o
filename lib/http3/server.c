@@ -454,8 +454,9 @@ static int on_send_stop(quicly_stream_t *qs, int err)
 
 static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, const char **err_desc)
 {
-    const uint8_t *src = (const uint8_t *)stream->recvbuf.buf->bytes,
-                  *src_end = src + quicly_recvstate_bytes_available(&stream->quic->recvstate);
+    size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
+    assert(bytes_available <= stream->recvbuf.buf->size);
+    const uint8_t *src = (const uint8_t *)stream->recvbuf.buf->bytes, *src_end = src + bytes_available;
     int ret = 0;
 
     /* do nothing, if the stream is in body-blocked state */
