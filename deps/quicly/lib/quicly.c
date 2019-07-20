@@ -265,7 +265,7 @@ struct st_quicly_conn_t {
             ptls_buffer_t buf;
         } transport_params;
         /**
-         * bit vector indicating if there's any pending handshake data at epoch 0,1,2
+         * bit vector indicating if there's any pending crypto data
          */
         uint8_t pending_flows;
         /**
@@ -585,7 +585,8 @@ static void sched_stream_control(quicly_stream_t *stream)
 
 static void resched_stream_data(quicly_stream_t *stream)
 {
-    if (stream->stream_id < 0 && -3 <= stream->stream_id) {
+    if (stream->stream_id < 0) {
+        assert(-4 <= stream->stream_id);
         uint8_t mask = 1 << -(1 + stream->stream_id);
         if (stream->sendstate.pending.num_ranges != 0) {
             stream->conn->crypto.pending_flows |= mask;
@@ -817,8 +818,7 @@ static void destroy_stream(quicly_stream_t *stream, int err)
 
     if (stream->stream_id < 0) {
         size_t epoch = -(1 + stream->stream_id);
-        if (epoch <= QUICLY_EPOCH_HANDSHAKE)
-            stream->conn->crypto.pending_flows &= ~(uint8_t)(1 << epoch);
+        stream->conn->crypto.pending_flows &= ~(uint8_t)(1 << epoch);
     } else {
         struct st_quicly_conn_streamgroup_state_t *group = get_streamgroup_state(conn, stream->stream_id);
         --group->num_streams;
@@ -3022,6 +3022,14 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                 if ((ret = send_ack(conn, &conn->application->super, s)) != 0)
                     goto Exit;
             }
+            /* post-handshake messages */
+            if ((conn->crypto.pending_flows & (uint8_t)(1 << QUICLY_EPOCH_1RTT)) != 0) {
+                quicly_stream_t *stream = quicly_get_stream(conn, -(1 + QUICLY_EPOCH_1RTT));
+                assert(stream != NULL);
+                if ((ret = quicly_send_stream(stream, s)) != 0)
+                    goto Exit;
+                resched_stream_data(stream);
+            }
             /* respond to all pending received PATH_CHALLENGE frames */
             if (conn->egress.path_challenge.head != NULL) {
                 do {
@@ -4151,7 +4159,7 @@ int quicly_receive(quicly_conn_t *conn, quicly_decoded_packet_t *packet)
         /* schedule the timer to discard contexts related to the handshake if we have received all handshake messages and all the
          * messages we sent have been acked */
         if (!conn->crypto.handshake_scheduled_for_discard && ptls_handshake_is_complete(conn->crypto.tls)) {
-            quicly_stream_t *stream = quicly_get_stream(conn, -(quicly_stream_id_t)(1 + 2));
+            quicly_stream_t *stream = quicly_get_stream(conn, -(quicly_stream_id_t)(1 + QUICLY_EPOCH_HANDSHAKE));
             assert(stream != NULL);
             quicly_streambuf_t *buf = stream->data;
             if (buf->egress.vecs.size == 0) {
