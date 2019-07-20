@@ -4335,6 +4335,38 @@ void quicly_amend_ptls_context(ptls_context_t *ptls)
     ptls->update_traffic_key = &update_traffic_key;
 }
 
+void quicly_stream_noop_on_destroy(quicly_stream_t *stream, int err)
+{
+}
+
+void quicly_stream_noop_on_send_shift(quicly_stream_t *stream, size_t delta)
+{
+}
+
+int quicly_stream_noop_on_send_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all)
+{
+    return 0;
+}
+
+int quicly_stream_noop_on_send_stop(quicly_stream_t *stream, int err)
+{
+    return 0;
+}
+
+int quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    return 0;
+}
+
+int quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err)
+{
+    return 0;
+}
+
+const quicly_stream_callbacks_t quicly_stream_noop_callbacks = {
+    quicly_stream_noop_on_destroy,   quicly_stream_noop_on_send_shift, quicly_stream_noop_on_send_emit,
+    quicly_stream_noop_on_send_stop, quicly_stream_noop_on_receive,    quicly_stream_noop_on_receive_reset};
+
 /**
  * an array of event names corresponding to quicly_event_type_t
  */
