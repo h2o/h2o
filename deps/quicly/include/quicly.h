@@ -508,7 +508,10 @@ struct _st_quicly_conn_public_t {
         /**
          * stateless reset token corresponding to the CID
          */
-        uint8_t stateless_reset_token[QUICLY_STATELESS_RESET_TOKEN_LEN];
+        struct {
+            uint8_t *token;
+            uint8_t _buf[QUICLY_STATELESS_RESET_TOKEN_LEN];
+        } stateless_reset;
         struct st_quicly_conn_streamgroup_state_t bidi, uni;
         struct sockaddr *sa;
         socklen_t salen;
