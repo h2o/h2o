@@ -343,14 +343,9 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
     int ret;
 
     if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
-        if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
-            /* incomplete */
-            if (err == 0)
-                return 0;
-            /* process the input using handle_input_data_payload if the frame is not partial */
-            if (*src == src_end)
-                goto Process;
-        }
+        /* incomplete */
+        if (ret == H2O_HTTP3_ERROR_INCOMPLETE && err == 0)
+            return ret;
         req->super._cb.on_body(&req->super, "malformed frame");
         return ret;
     }
