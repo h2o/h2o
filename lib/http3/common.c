@@ -200,7 +200,7 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
         stream->handle_input = qpack_decoder_stream_handle_input;
         break;
     default:
-        quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_UNKNOWN_STREAM_TYPE);
+        quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_STREAM_CREATION);
         stream->handle_input =
             unknown_stream_type_handle_input; /* TODO reconsider quicly API; do we need to read data after sending STOP_SENDING? */
         break;

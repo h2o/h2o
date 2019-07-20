@@ -412,7 +412,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
             return 0;
         }
         on_error_before_head(req, *err_desc != NULL ? *err_desc : "qpack error");
-        return H2O_HTTP3_ERROR_GENERAL; /* FIXME */
+        return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME */
     }
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&req->conn->super, header_ack, header_ack_len);
@@ -421,7 +421,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     if (100 <= status && status <= 199) {
         if (status == 101) {
             on_error_before_head(req, "unexpected 101");
-            return H2O_HTTP3_ERROR_GENERAL;
+            return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
         }
         if (frame_is_eos) {
             on_error_before_head(req, err == H2O_HTTP3_ERROR_EOS ? "unexpected close" : "reset by peer");

@@ -486,7 +486,7 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
     if (quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
         if (ret != 0) {
             /* FIXME send MALFORMED_FRAME(last_frame); we might need to observe the value of handle_input */
-            quicly_reset_stream(stream->quic, ret == H2O_HTTP3_ERROR_INCOMPLETE ? H2O_HTTP3_ERROR_GENERAL : ret);
+            quicly_reset_stream(stream->quic, ret == H2O_HTTP3_ERROR_INCOMPLETE ? H2O_HTTP3_ERROR_GENERAL_PROTOCOL : ret);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         } else if (stream->recvbuf.buf->size == 0 && (stream->recvbuf.handle_input == handle_input_expect_data ||
                                                       stream->recvbuf.handle_input == handle_input_post_trailers)) {
@@ -621,7 +621,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
 
     case H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PUSH_STREAM:
         *err_desc = "unexpectedly found a push stream id in PRIORITY frame";
-        return H2O_HTTP3_ERROR_GENERAL;
+        return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
 
     case H2O_HTTP3_PRIORITY_ELEMENT_TYPE_PLACEHOLDER:
         /* return a placeholder, initializing it to the default values if it is not open yet */
