@@ -622,6 +622,9 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                             perror("sendmsg failed");
                         break;
                     }
+                    /* there is no way to send response to these v1 packets */
+                    if (packet.cid.dest.encrypted.len > QUICLY_MAX_CID_LEN_V1 || packet.cid.src.len > QUICLY_MAX_CID_LEN_V1)
+                        break;
                 }
                 quicly_conn_t *conn = NULL;
                 size_t i;
