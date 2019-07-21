@@ -700,6 +700,11 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 
     conn->quic = quic;
     *quicly_get_data(conn->quic) = conn;
+
+    /* setup h3 objects, only when the connection state has been created */
+    if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
+        goto Exit;
+
     conn->qpack.dec = h2o_qpack_create_decoder(H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE, 100 /* FIXME */);
 
     { /* register to the idmap */
@@ -729,6 +734,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
             return ret;
     }
 
+Exit:
     h2o_http3_schedule_timer(conn);
     return 0;
 }
