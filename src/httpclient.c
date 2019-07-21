@@ -56,13 +56,18 @@ static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
 static int delay_interval_ms = 0;
 static int ssl_verify_none = 0;
+static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
+#if PTLS_OPENSSL_HAVE_X25519
+    &ptls_openssl_x25519,
+#endif
+    &ptls_openssl_secp256r1, NULL};
 static struct {
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_http3_ctx_t h3;
 } h3ctx = {{ptls_openssl_random_bytes,
             &ptls_get_time,
-            ptls_openssl_key_exchanges,
+            h3_key_exchanges,
             ptls_openssl_cipher_suites,
             {NULL},
             NULL,
