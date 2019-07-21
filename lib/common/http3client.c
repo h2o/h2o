@@ -360,7 +360,6 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
 
     req->bytes_left_in_data_frame = frame.length;
 
-Process:
     /* unexpected close of DATA frame is handled by handle_input_data_payload. We rely on the function to detect if the DATA frame
      * is closed right after the frame header */
     req->handle_input = handle_input_data_payload;
