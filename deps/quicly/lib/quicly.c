@@ -912,6 +912,9 @@ static void update_idle_timeout(quicly_conn_t *conn, int is_in_receive)
 
 static int scheduler_can_send(quicly_conn_t *conn)
 {
+    /* scheduler would never have data to send, until application keys become available */
+    if (conn->application == NULL)
+        return 0;
     int conn_is_saturated = !(conn->egress.max_data.sent < conn->egress.max_data.permitted);
     return conn->super.ctx->stream_scheduler->can_send(conn->super.ctx->stream_scheduler, conn, conn_is_saturated);
 }
