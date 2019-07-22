@@ -37,6 +37,7 @@
 #include "picotls.h"
 #endif
 #include "h2o/socket.h"
+#include "h2o/multithread.h"
 
 #if defined(__APPLE__) && defined(__clang__)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -211,21 +212,14 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
 
 static void setup_bio(h2o_socket_t *sock)
 {
-    static BIO_METHOD *bio_methods = NULL;
-    if (bio_methods == NULL) {
-        static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
-        pthread_mutex_lock(&init_lock);
-        if (bio_methods == NULL) {
-            BIO_METHOD *biom = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
-            BIO_meth_set_write(biom, write_bio);
-            BIO_meth_set_read(biom, read_bio);
-            BIO_meth_set_puts(biom, puts_bio);
-            BIO_meth_set_ctrl(biom, ctrl_bio);
-            __sync_synchronize();
-            bio_methods = biom;
-        }
-        pthread_mutex_unlock(&init_lock);
-    }
+    static volatile BIO_METHOD *bio_methods = NULL;
+    H2O_MULTITHREAD_ONCE({
+        bio_methods = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
+        BIO_meth_set_write(bio_methods, write_bio);
+        BIO_meth_set_read(bio_methods, read_bio);
+        BIO_meth_set_puts(bio_methods, puts_bio);
+        BIO_meth_set_ctrl(bio_methods, ctrl_bio);
+    });
 
     BIO *bio = BIO_new(bio_methods);
     if (bio == NULL)
@@ -1308,18 +1302,8 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
 
 static int get_ptls_index(void)
 {
-    static int index = -1;
-
-    if (index == -1) {
-        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-        pthread_mutex_lock(&mutex);
-        if (index == -1) {
-            index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
-            assert(index != -1);
-        }
-        pthread_mutex_unlock(&mutex);
-    }
-
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL); });
     return index;
 }
 
@@ -1344,14 +1328,8 @@ static void on_dispose_ssl_ctx_session_cache(void *parent, void *ptr, CRYPTO_EX_
 
 static int get_ssl_session_cache_index(void)
 {
-    static int index = -1;
-    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_lock(&mutex);
-    if (index == -1) {
-        index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_session_cache);
-        assert(index != -1);
-    }
-    pthread_mutex_unlock(&mutex);
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_session_cache); });
     return index;
 }
 
