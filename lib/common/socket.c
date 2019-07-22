@@ -212,7 +212,7 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
 
 static void setup_bio(h2o_socket_t *sock)
 {
-    static volatile BIO_METHOD *bio_methods = NULL;
+    static BIO_METHOD *volatile bio_methods = NULL;
     H2O_MULTITHREAD_ONCE({
         bio_methods = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
         BIO_meth_set_write(bio_methods, write_bio);
