@@ -213,7 +213,7 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
 static void setup_bio(h2o_socket_t *sock)
 {
     static volatile BIO_METHOD *bio_methods = NULL;
-    H2O_MULTITRHEAD_ONCE({
+    H2O_MULTITHREAD_ONCE({
         bio_methods = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
         BIO_meth_set_write(bio_methods, write_bio);
         BIO_meth_set_read(bio_methods, read_bio);
@@ -1303,7 +1303,7 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
 static int get_ptls_index(void)
 {
     static volatile int index;
-    H2O_MULTITRHEAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL); });
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL); });
     return index;
 }
 
@@ -1329,7 +1329,7 @@ static void on_dispose_ssl_ctx_session_cache(void *parent, void *ptr, CRYPTO_EX_
 static int get_ssl_session_cache_index(void)
 {
     static volatile int index;
-    H2O_MULTITRHEAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_session_cache); });
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_session_cache); });
     return index;
 }
 

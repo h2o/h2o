@@ -85,7 +85,7 @@ void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, v
 /**
  * a variant of pthread_once, that does not require you to declare a callback, nor have a global variable
  */
-#define H2O_MULTITRHEAD_ONCE(block)                                                                                                \
+#define H2O_MULTITHREAD_ONCE(block)                                                                                                \
     do {                                                                                                                           \
         static volatile int lock = 0;                                                                                              \
         int lock_loaded = lock;                                                                                                    \
