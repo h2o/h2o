@@ -72,20 +72,20 @@ The <code>server-timing</code> header and trailer includes the following metrics
         <td><? $access_log_ext_link->('process-time') ?></td>
     </tr>
     <tr>
-        <td><code>proxy-idle</code></td>
-        <td><? $access_log_ext_link->('proxy-idle-time') ?></td>
+        <td><code>proxy.idle</code></td>
+        <td><? $access_log_ext_link->('proxy.idle-time') ?></td>
     </tr>
     <tr>
-        <td><code>proxy-connect</code></td>
-        <td><? $access_log_ext_link->('proxy-connect-time') ?></td>
+        <td><code>proxy.connect</code></td>
+        <td><? $access_log_ext_link->('proxy.connect-time') ?></td>
     </tr>
     <tr>
-        <td><code>proxy-request</code></td>
-        <td><? $access_log_ext_link->('proxy-request-time') ?></td>
+        <td><code>proxy.request</code></td>
+        <td><? $access_log_ext_link->('proxy.request-time') ?></td>
     </tr>
     <tr>
-        <td><code>proxy-process</code></td>
-        <td><? $access_log_ext_link->('proxy-process-time') ?></td>
+        <td><code>proxy.process</code></td>
+        <td><? $access_log_ext_link->('proxy.process-time') ?></td>
     </tr>
 </table>
 
@@ -104,12 +104,12 @@ The <code>server-timing</code> header and trailer includes the following metrics
         <td><? $access_log_ext_link->('total-time') ?> / <? $access_log_ext_link->('duration') ?></td>
     </tr>
     <tr>
-        <td><code>proxy-response</code></td>
-        <td><? $access_log_ext_link->('proxy-response-time') ?></td>
+        <td><code>proxy.response</code></td>
+        <td><? $access_log_ext_link->('proxy.response-time') ?></td>
     </tr>
     <tr>
-        <td><code>proxy-total</code></td>
-        <td><? $access_log_ext_link->('proxy-total') ?></td>
+        <td><code>proxy.total</code></td>
+        <td><? $access_log_ext_link->('proxy.total-time') ?></td>
     </tr>
 </table>
 </p>

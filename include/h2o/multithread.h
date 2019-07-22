@@ -82,6 +82,28 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
  */
 void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg);
 
+/**
+ * a variant of pthread_once, that does not require you to declare a callback, nor have a global variable
+ */
+#define H2O_MULTITHREAD_ONCE(block)                                                                                                \
+    do {                                                                                                                           \
+        static volatile int lock = 0;                                                                                              \
+        int lock_loaded = lock;                                                                                                    \
+        __sync_synchronize();                                                                                                      \
+        if (!lock_loaded) {                                                                                                        \
+            static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;                                                              \
+            pthread_mutex_lock(&mutex);                                                                                            \
+            if (!lock) {                                                                                                           \
+                do {                                                                                                               \
+                    block                                                                                                          \
+                } while (0);                                                                                                       \
+                __sync_synchronize();                                                                                              \
+                lock = 1;                                                                                                          \
+            }                                                                                                                      \
+            pthread_mutex_unlock(&mutex);                                                                                          \
+        }                                                                                                                          \
+    } while (0)
+
 void h2o_sem_init(h2o_sem_t *sem, ssize_t capacity);
 void h2o_sem_destroy(h2o_sem_t *sem);
 void h2o_sem_wait(h2o_sem_t *sem);
