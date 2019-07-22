@@ -29,6 +29,7 @@
 #include "h2o/string_.h"
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
+#include "h2o/multithread.h"
 
 struct st_h2o_http3_ingress_unistream_t {
     /**
@@ -284,14 +285,8 @@ static uint64_t calc_accept_hashkey(struct sockaddr *sa, ptls_iovec_t src_cid)
     /* prepare key */
     static __thread EVP_CIPHER_CTX *cipher = NULL;
     if (cipher == NULL) {
-        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-        static uint8_t key[PTLS_AES128_KEY_SIZE], key_ready = 0;
-        pthread_mutex_lock(&mutex);
-        if (!key_ready) {
-            ptls_openssl_random_bytes(key, sizeof(key));
-            key_ready = 1;
-        }
-        pthread_mutex_unlock(&mutex);
+        static uint8_t key[PTLS_AES128_KEY_SIZE];
+        H2O_MULTITHREAD_ONCE({ ptls_openssl_random_bytes(key, sizeof(key)); });
         cipher = EVP_CIPHER_CTX_new();
         EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
     }
