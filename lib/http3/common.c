@@ -279,14 +279,27 @@ static int open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egr
     return quicly_stream_sync_sendbuf((*stream)->quic, 1);
 }
 
-static uint64_t calc_accept_hashkey(struct sockaddr *sa)
+static uint64_t calc_accept_hashkey(struct sockaddr *sa, ptls_iovec_t src_cid)
 {
-    struct {
-        uint8_t bytes[32];
-        uint64_t u64[4];
-    } buf = {{0}};
-    uint8_t *p = buf.bytes;
+    /* prepare key */
+    static __thread EVP_CIPHER_CTX *cipher = NULL;
+    if (cipher == NULL) {
+        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+        static uint8_t key[PTLS_AES128_KEY_SIZE], key_ready = 0;
+        pthread_mutex_lock(&mutex);
+        if (!key_ready) {
+            ptls_openssl_random_bytes(key, sizeof(key));
+            key_ready = 1;
+        }
+        pthread_mutex_unlock(&mutex);
+        cipher = EVP_CIPHER_CTX_new();
+        EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
+    }
 
+    uint8_t buf[1 + 16 + 2 + QUICLY_MAX_CID_LEN_V1 + PTLS_AES_BLOCK_SIZE] = {0};
+    uint8_t *p = buf;
+
+    /* build plaintext to encrypt */
     *p++ = (uint8_t)sa->sa_family;
     switch (sa->sa_family) {
     case AF_INET: {
@@ -307,31 +320,25 @@ static uint64_t calc_accept_hashkey(struct sockaddr *sa)
         h2o_fatal("unexpected sa_family");
         break;
     }
-    assert(p <= buf.bytes + sizeof(buf));
+    memcpy(p, src_cid.base, src_cid.len);
+    p += src_cid.len;
+    size_t bytes_to_encrypt = ((p - buf) + PTLS_AES_BLOCK_SIZE - 1) / PTLS_AES_BLOCK_SIZE * PTLS_AES_BLOCK_SIZE;
+    assert(bytes_to_encrypt <= sizeof(buf));
 
-    static __thread EVP_CIPHER_CTX *cipher = NULL;
-    if (cipher == NULL) {
-        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-        static uint8_t key[PTLS_AES128_KEY_SIZE], key_ready = 0;
-        pthread_mutex_lock(&mutex);
-        if (!key_ready) {
-            ptls_openssl_random_bytes(key, sizeof(key));
-            key_ready = 1;
-        }
-        pthread_mutex_unlock(&mutex);
-        cipher = EVP_CIPHER_CTX_new();
-        EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
+    { /* encrypt */
+        EVP_EncryptInit_ex(cipher, NULL, NULL, NULL, NULL);
+        int bytes_encrypted = 0, ret = EVP_EncryptUpdate(cipher, buf, &bytes_encrypted, buf, (int)bytes_to_encrypt);
+        assert(ret);
+        assert(bytes_encrypted == bytes_to_encrypt);
     }
 
-    EVP_EncryptInit_ex(cipher, NULL, NULL, NULL, NULL);
-    int bytes_encrypted = sizeof(buf) + 16;
-    EVP_EncryptUpdate(cipher, buf.bytes, &bytes_encrypted, buf.bytes, sizeof(buf));
-    assert(bytes_encrypted == sizeof(buf));
-
-    /* 0 is used as nonexist */
-    if (buf.u64[3] == 0)
-        buf.u64[3] = 1;
-    return buf.u64[3];
+    /* use the last `size_t` bytes of the CBC output as the result */
+    uint64_t result;
+    memcpy(&result, buf + bytes_to_encrypt - sizeof(result), sizeof(result));
+    /* avoid 0 (used as nonexist) */
+    if (result == 0)
+        result = 1;
+    return result;
 }
 
 static void drop_from_acceptmap(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn)
@@ -384,7 +391,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
     if (conn == NULL) {
         /* Initial or 0-RTT packet, use 4-tuple to match the thread and the connection */
         assert(packets[0].cid.dest.might_be_client_generated);
-        uint64_t accept_hashkey = calc_accept_hashkey(sa);
+        uint64_t accept_hashkey = calc_accept_hashkey(sa, packets[0].cid.src);
         if (ctx->accept_thread_divisor != 0) {
             uint32_t offending_thread = accept_hashkey % ctx->accept_thread_divisor;
             if (offending_thread != ctx->next_cid.thread_id) {
