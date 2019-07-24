@@ -695,7 +695,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #endif
 
     /* setup */
-    ssl_ctx = SSL_CTX_new(TLS_server_method());
+    ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
     SSL_CTX_set_session_id_context(ssl_ctx, (const uint8_t*)"h2o", sizeof("h2o") - 1);
