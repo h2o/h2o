@@ -130,6 +130,7 @@ static void setup_cache_enable(SSL_CTX **contexts, size_t num_contexts, int asyn
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
         SSL_CTX_set_session_cache_mode(contexts[i], SSL_SESS_CACHE_SERVER | SSL_SESS_CACHE_NO_AUTO_CLEAR);
+        SSL_CTX_set_session_id_context(contexts[i], (const uint8_t*)"h2o", sizeof("h2o") - 1);
         SSL_CTX_set_timeout(contexts[i], conf.lifetime);
         if (async_resumption)
             h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);

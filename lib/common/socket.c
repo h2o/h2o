@@ -962,6 +962,33 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
     }
 }
 
+int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess)
+{
+    h2o_socket_t *sock = (h2o_socket_t *)SSL_get_app_data(s);
+    assert(sock && sock->ssl);
+
+    SSL_SESSION *session = NULL;
+    if (!SSL_is_server(s) && sock->ssl->handshake.client.session_cache != NULL) {
+        session = SSL_get_session(sock->ssl->ossl);
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL
+        if (SSL_SESSION_is_resumable(session))
+#endif
+        h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
+                     sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
+                     h2o_iovec_init(session, 1));
+#if OPENSSL_VERSION_NUMBER >= 0x1010100fL
+        else
+            session = NULL;
+#endif
+    }
+
+    /*
+     * 0 - drop ref count
+     * 1 - keep ref count
+     */
+    return session ? 1 : 0;
+}
+
 static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 {
     h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
@@ -1014,16 +1041,6 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
                 sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
                 break;
             }
-        }
-    }
-
-    /* set ssl session into the cache */
-    if (sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl) && sock->ssl->handshake.client.session_cache != NULL) {
-        if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
-            SSL_SESSION *session = SSL_get1_session(sock->ssl->ossl);
-            h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
-                          sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
-                          h2o_iovec_init(session, 1));
         }
     }
 

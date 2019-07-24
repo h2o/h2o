@@ -28,6 +28,7 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/balancer.h"
+#include "h2o/socket.h"
 
 struct proxy_config_vars_t {
     h2o_proxy_config_vars_t conf;
@@ -115,13 +116,16 @@ static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator
 static SSL_CTX *create_ssl_ctx(void)
 {
     long options;
-    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL_CTX *ctx = SSL_CTX_new(TLS_client_method());
     options = SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
 #ifdef SSL_OP_NO_RENEGOTIATION
     /* introduced in openssl 1.1.0h */
     options |= SSL_OP_NO_RENEGOTIATION;
 #endif
     SSL_CTX_set_options(ctx, options);
+    SSL_CTX_set_session_id_context(ctx, (const uint8_t*)"h2o", sizeof("h2o") - 1);
+    SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL_STORE);
+    SSL_CTX_sess_set_new_cb(ctx, h2o_socket_ssl_new_session_cb);
     return ctx;
 }
 
@@ -155,6 +159,7 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* create new ctx */
     *ctx = create_ssl_ctx();
+    SSL_CTX_set_session_id_context(*ctx, (const uint8_t*)"h2o", sizeof("h2o") - 1);
     SSL_CTX_set_cert_store(*ctx, cert_store);
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
     if (new_session_cache != NULL)
