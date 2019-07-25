@@ -582,18 +582,18 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     if (reprocess_if_too_early)
         req->reprocess_if_too_early = 1;
 
-    if (self->src_req->entity.base == NULL) {
-        body->type = H2O_HTTPCLIENT_REQ_BODY_NONE;
-    } else if (self->src_req->proceed_req == NULL) {
-        body->type = H2O_HTTPCLIENT_REQ_BODY_VEC;
-        body->vec = self->src_req->entity;
-    } else {
-        body->type = H2O_HTTPCLIENT_REQ_BODY_STREAMING;
-        body->streaming.proceed = proceed_request;
-        body->streaming.first = self->src_req->entity;
-        body->streaming.content_length = self->src_req->content_length;
-        self->src_req->write_req.cb = write_req;
-        self->src_req->write_req.ctx = self;
+    if (self->src_req->entity.base != NULL) {
+        if (self->src_req->proceed_req == NULL) {
+            body->type = H2O_HTTPCLIENT_REQ_BODY_VEC;
+            body->vec = self->src_req->entity;
+        } else {
+            body->type = H2O_HTTPCLIENT_REQ_BODY_STREAMING;
+            body->streaming.proceed = proceed_request;
+            body->streaming.first = self->src_req->entity;
+            body->streaming.content_length = self->src_req->content_length;
+            self->src_req->write_req.cb = write_req;
+            self->src_req->write_req.ctx = self;
+        }
     }
     self->client->informational_cb = on_1xx;
     return on_head;

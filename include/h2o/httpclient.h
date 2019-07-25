@@ -56,6 +56,9 @@ typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int ver
                                                h2o_header_t *headers, size_t num_headers);
 
 struct st_h2o_httpclient_req_body_t {
+    /**
+     * type is initialized to H2O_HTTPCLIENT_REQ_BODY_NONE before calling on_connect callback
+     */
     enum {
         H2O_HTTPCLIENT_REQ_BODY_NONE,
         H2O_HTTPCLIENT_REQ_BODY_VEC,

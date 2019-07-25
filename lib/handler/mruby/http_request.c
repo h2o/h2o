@@ -475,8 +475,6 @@ static h2o_httpclient_head_cb do_on_connect(h2o_httpclient_t *client, const char
     if (ctx->req.body.base != NULL) {
         body->type = H2O_HTTPCLIENT_REQ_BODY_VEC;
         body->vec = ctx->req.body;
-    } else {
-        body->type = H2O_HTTPCLIENT_REQ_BODY_NONE;
     }
 
     return on_head;
