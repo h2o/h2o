@@ -42,9 +42,8 @@ static int http2_ratio = -1;
 static int cur_body_size;
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
-                                         h2o_url_t *origin);
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_httpclient_req_body_t *body,
+                                         h2o_httpclient_properties_t *props, h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
                                       h2o_header_t *headers, size_t num_headers, int header_requires_dup);
 
@@ -224,9 +223,8 @@ static void proceed_request(h2o_httpclient_t *client, size_t written, int is_end
 }
 
 h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
-                                  const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                  h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
-                                  h2o_url_t *origin)
+                                  const h2o_header_t **headers, size_t *num_headers, h2o_httpclient_req_body_t *body,
+                                  h2o_httpclient_properties_t *props, h2o_url_t *origin)
 {
     if (errstr != NULL) {
         on_error(client->ctx, errstr);
@@ -237,12 +235,11 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *url = *((h2o_url_t *)client->data);
     *headers = NULL;
     *num_headers = 0;
-    *body = h2o_iovec_init(NULL, 0);
-    *proceed_req_cb = NULL;
 
     if (cur_body_size > 0) {
-        props->content_length = cur_body_size;
-        *proceed_req_cb = proceed_request;
+        body->type = H2O_HTTPCLIENT_REQ_BODY_STREAMING;
+        body->streaming.content_length = cur_body_size;
+        body->streaming.proceed = proceed_request;
 
         struct st_timeout_ctx *tctx;
         tctx = h2o_mem_alloc(sizeof(*tctx));
