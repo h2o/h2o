@@ -581,7 +581,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     h2o_url_t url;
     h2o_header_t *headers;
     size_t num_headers;
-    h2o_httpclient_req_body_t body = {.streaming.content_length = SIZE_MAX};
+    h2o_httpclient_req_body_t body = {H2O_HTTPCLIENT_REQ_BODY_NONE};
 
     client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
                                                              &num_headers, &body, &props, client->_origin);

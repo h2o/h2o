@@ -946,7 +946,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_url_t url;
     h2o_header_t *headers;
     size_t num_headers;
-    h2o_httpclient_req_body_t body = {.streaming.content_length = SIZE_MAX};
+    h2o_httpclient_req_body_t body = {H2O_HTTPCLIENT_REQ_BODY_NONE};
     h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
 
     register_stream(stream, conn);
