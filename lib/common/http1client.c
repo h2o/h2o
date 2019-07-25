@@ -610,17 +610,10 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
-    if (body.type == H2O_HTTPCLIENT_REQ_BODY_STREAMING) {
-        client->proceed_req = body.streaming.proceed;
-        if (body.streaming.first.base != NULL) {
-            h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
-            if (!h2o_buffer_try_append(&client->_body_buf, body.streaming.first.base, body.streaming.first.len)) {
-                on_send_request(client->sock, "Internal error");
-                return;
-            }
-        }
-        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_req_body_done);
-    } else if (body.type == H2O_HTTPCLIENT_REQ_BODY_VEC) {
+    switch (body.type) {
+    case H2O_HTTPCLIENT_REQ_BODY_NONE:
+        break;
+    case H2O_HTTPCLIENT_REQ_BODY_VEC:
         assert(body.vec.base != NULL);
         if (client->_is_chunked) {
             size_t bytes;
@@ -631,6 +624,18 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
             client->super.bytes_written.body = body.vec.len;
         }
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_send_request);
+        break;
+    case H2O_HTTPCLIENT_REQ_BODY_STREAMING:
+        client->proceed_req = body.streaming.proceed;
+        if (body.streaming.first.base != NULL) {
+            h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
+            if (!h2o_buffer_try_append(&client->_body_buf, body.streaming.first.base, body.streaming.first.len)) {
+                on_send_request(client->sock, "Internal error");
+                return;
+            }
+        }
+        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_req_body_done);
+        break;
     }
     client->super.bytes_written.total = client->sock->bytes_written;
 
