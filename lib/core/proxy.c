@@ -320,6 +320,14 @@ static inline void on_websocket_upgrade(struct rp_generator_t *self, uint64_t ti
     h2o_http1_upgrade(req, NULL, 0, on_websocket_upgrade_complete, info);
 }
 
+static void copy_stats(struct rp_generator_t *self)
+{
+    self->src_req->proxy_stats.timestamps = self->client->timings;
+    self->src_req->proxy_stats.bytes_written.total = self->client->bytes_written.total;
+    self->src_req->proxy_stats.bytes_written.header = self->client->bytes_written.header;
+    self->src_req->proxy_stats.bytes_written.body = self->client->bytes_written.body;
+}
+
 static int on_body(h2o_httpclient_t *client, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
@@ -327,7 +335,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (errstr != NULL) {
-        self->src_req->timestamps.proxy = self->client->timings;
+        copy_stats(self);
 
         /* detach the content */
         self->last_content_before_send = *self->client->buf;
@@ -377,7 +385,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     int emit_missing_date_header = req->conn->ctx->globalconf->proxy.emit_missing_date_header;
     int seen_date_header = 0;
 
-    self->src_req->timestamps.proxy = self->client->timings;
+    copy_stats(self);
 
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         self->client = NULL;
@@ -389,7 +397,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             h2o_start_response(req, &generator);
             h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
         } else {
-            h2o_send_error_502(req, "Gateway Error", errstr, 0);
+            h2o_send_error_502(req, "Gateway Error", errstr, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
         }
 
         return NULL;
@@ -402,14 +410,20 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         h2o_iovec_t value = headers[i].value;
         if (h2o_iovec_is_token(headers[i].name)) {
             const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
-            if (token->flags.proxy_should_drop_for_res)
+            if (token->flags.proxy_should_drop_for_res) {
+                if (token == H2O_TOKEN_CONNECTION && self->src_req->version < 0x200 &&
+                    req->conn->ctx->globalconf->proxy.forward_close_connection) {
+                    if (h2o_lcstris(headers[i].value.base, headers[i].value.len, H2O_STRLIT("close")))
+                        self->src_req->http1_is_persistent = 0;
+                }
                 continue;
+            }
             if (token == H2O_TOKEN_CONTENT_LENGTH) {
                 if (req->res.content_length != SIZE_MAX ||
                     (req->res.content_length = h2o_strtosize(headers[i].value.base, headers[i].value.len)) == SIZE_MAX) {
                     self->client = NULL;
                     h2o_req_log_error(req, "lib/core/proxy.c", "%s", "invalid response from upstream (malformed content-length)");
-                    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", 0);
+                    h2o_send_error_502(req, "Gateway Error", "invalid response from upstream", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
                     return NULL;
                 }
                 goto Skip;
@@ -469,6 +483,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
         self->client = NULL;
         return NULL;
     }
+
     /* declare the start of the response */
     h2o_start_response(req, &self->super);
 
@@ -528,12 +543,12 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     h2o_req_t *req = self->src_req;
     int use_proxy_protocol = 0, reprocess_if_too_early = 0;
 
-    self->src_req->timestamps.proxy = self->client->timings;
+    copy_stats(self);
 
     if (errstr != NULL) {
         self->client = NULL;
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
-        h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
+        h2o_send_error_502(self->src_req, "Gateway Error", errstr, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
         return NULL;
     }
 
@@ -610,7 +625,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->up_req.is_head = h2o_memis(req->method.base, req->method.len, H2O_STRLIT("HEAD"));
     h2o_buffer_init(&self->last_content_before_send, &h2o_socket_buffer_prototype);
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
-    req->timestamps.proxy = (h2o_httpclient_timings_t){{0}};
+    memset(&req->proxy_stats, 0, sizeof(req->proxy_stats));
     h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
 
     return self;

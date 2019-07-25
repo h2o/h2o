@@ -23,6 +23,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "microecc", "microecc\microe
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cifra", "cifra\cifra.vcxproj", "{5D4DA3A3-7851-4CAE-AE4F-C421A2C8C440}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ptlsbench", "ptlsbench\ptlsbench.vcxproj", "{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5D4DA3A3-7851-4CAE-AE4F-C421A2C8C440} = {5D4DA3A3-7851-4CAE-AE4F-C421A2C8C440}
+		{46E6D6E9-7A30-4058-9661-DF70CC07E821} = {46E6D6E9-7A30-4058-9661-DF70CC07E821}
+		{3440FDEA-84D2-4424-BB19-B4B26A6ADC8A} = {3440FDEA-84D2-4424-BB19-B4B26A6ADC8A}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -71,8 +78,19 @@ Global
 		{5D4DA3A3-7851-4CAE-AE4F-C421A2C8C440}.Release|x64.Build.0 = Release|x64
 		{5D4DA3A3-7851-4CAE-AE4F-C421A2C8C440}.Release|x86.ActiveCfg = Release|Win32
 		{5D4DA3A3-7851-4CAE-AE4F-C421A2C8C440}.Release|x86.Build.0 = Release|Win32
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Debug|x64.ActiveCfg = Debug|x64
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Debug|x64.Build.0 = Debug|x64
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Debug|x86.ActiveCfg = Debug|Win32
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Debug|x86.Build.0 = Debug|Win32
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Release|x64.ActiveCfg = Release|x64
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Release|x64.Build.0 = Release|x64
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Release|x86.ActiveCfg = Release|Win32
+		{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {97EE09B3-5753-4DE3-8683-3B2B378BCA03}
 	EndGlobalSection
 EndGlobal

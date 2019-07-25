@@ -653,8 +653,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
         } break;
         default:
-            fprintf(stderr, "logic flaw at %s:%d\n", __FILE__, __LINE__);
-            abort();
+            h2o_fatal("logic flaw");
         }
     }
 
@@ -1096,15 +1095,16 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run)
 
 void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...)
 {
+    char buf[1024];
     va_list args;
 
-    fprintf(stderr, "[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
+    h2o_error_printf("[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
     if (cmd != NULL)
-        fprintf(stderr, "in command %s, ", cmd->name);
+        h2o_error_printf("in command %s, ", cmd->name);
     va_start(args, reason);
-    vfprintf(stderr, reason, args);
+    vsnprintf(buf, sizeof(buf), reason, args);
     va_end(args);
-    fputc('\n', stderr);
+    h2o_error_printf("%s\n", buf);
 }
 
 int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...)
@@ -1191,8 +1191,7 @@ static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned
     return NULL;
 
 Error:
-    fprintf(stderr, "%s: detected invalid or missing type specifier; input is: %s\n", __FUNCTION__, start);
-    abort();
+    h2o_fatal("detected invalid or missing type specifier; input is: %s\n", start);
 }
 
 int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,

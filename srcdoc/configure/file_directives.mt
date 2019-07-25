@@ -20,6 +20,7 @@ $ctx->{directive}->(
 ?>
 <p>
 The directive accepts a mapping containing configuration directives that can be used at the <code>extension</code> level, together with a property named <code>extension</code> specifying a extension (starting with <code>.</code>) or a sequence of extensions to which the directives should be applied.
+If all the files (including those without extensions) shall be mapped, this property must be set to <code>default</code>. 
 Only one handler must exist within the directives.
 </p>
 <?= $ctx->{example}->('Mapping PHP files to FastCGI', <<'EOT')

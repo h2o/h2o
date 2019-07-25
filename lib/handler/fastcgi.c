@@ -545,27 +545,30 @@ static int fill_headers(h2o_req_t *req, struct phr_header *headers, size_t num_h
     }
 
     /* add date: if it's missing from the response */
-    if (h2o_find_header(&req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)
+    if (h2o_find_header(&req->res.headers, H2O_TOKEN_DATE, -1) == -1)
         h2o_resp_add_date_header(req);
 
     return 0;
 }
 
-static void append_content(struct st_fcgi_generator_t *generator, const void *src, size_t len)
+static int append_content(struct st_fcgi_generator_t *generator, const void *src, size_t len)
 {
     /* do not accumulate more than content-length bytes */
     if (generator->leftsize != SIZE_MAX) {
         if (generator->leftsize < len) {
             len = generator->leftsize;
             if (len == 0)
-                return;
+                return 0;
         }
         generator->leftsize -= len;
     }
-
-    h2o_iovec_t reserved = h2o_buffer_reserve(&generator->resp.receiving, len);
+    h2o_iovec_t reserved = h2o_buffer_try_reserve(&generator->resp.receiving, len);
+    if (reserved.base == NULL) {
+        return -1;
+    }
     memcpy(reserved.base, src, len);
     generator->resp.receiving->size += len;
+    return 0;
 }
 
 static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_fcgi_record_header_t *header)
@@ -580,7 +583,10 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
 
     if (generator->sent_headers) {
         /* simply accumulate the data to response buffer */
-        append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
+        if (append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength) != 0) {
+            h2o_req_log_error(generator->req, MODULE_NAME, "failed to allocate memory");
+            return -1;
+        }
         return 0;
     }
 
@@ -622,7 +628,10 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
     if (generator->resp.receiving->size == 0) {
         size_t leftlen = header->contentLength - parse_result;
         if (leftlen != 0) {
-            append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE + parse_result, leftlen);
+            if (append_content(generator, input->bytes + FCGI_RECORD_HEADER_SIZE + parse_result, leftlen) != 0) {
+                h2o_req_log_error(generator->req, MODULE_NAME, "failed to allocate memory");
+                return -1;
+            }
         }
     } else {
         h2o_buffer_consume(&generator->resp.receiving, parse_result);

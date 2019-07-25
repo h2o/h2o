@@ -226,7 +226,10 @@ static mrb_value send_chunk_method(mrb_state *mrb, mrb_value self)
         if (sender->super.bytes_left != SIZE_MAX && sender->super.bytes_left < len)
             len = sender->super.bytes_left; /* trim data too long */
         if (len != 0) {
-            h2o_buffer_reserve(&sender->receiving, len);
+            if ((h2o_buffer_try_reserve(&sender->receiving, len)).base == NULL) {
+                mrb_value exc = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "failed to allocate memory");
+                mrb_exc_raise(mrb, exc);
+            }
             memcpy(sender->receiving->bytes + sender->receiving->size, s, len);
             sender->receiving->size += len;
             if (!sender->super.final_sent && !sender->sending.inflight)
