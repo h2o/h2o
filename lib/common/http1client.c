@@ -612,6 +612,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
 
     switch (body.type) {
     case H2O_HTTPCLIENT_REQ_BODY_NONE:
+        h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_send_request);
         break;
     case H2O_HTTPCLIENT_REQ_BODY_VEC:
         assert(body.vec.base != NULL);
