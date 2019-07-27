@@ -1476,7 +1476,7 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 #include <linux/bpf.h>
 #include <linux/unistd.h>
 #include "h2o-probes.h"
-#include "include/h2o/ebpf.h"
+#include "h2o/ebpf.h"
 #include <sys/stat.h>
 
 static __thread int tracing_map_fd = -1;
