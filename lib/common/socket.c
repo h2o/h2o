@@ -1541,22 +1541,22 @@ static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint
 
 static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
 {
-    struct sockaddr_storage sockname, peername;
+    struct sockaddr_storage ss;
     unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
     memset(key, 0, sizeof(*key));
 
     // fetch sock/peer name and socket type
-    if (h2o_socket_getsockname(sock, (void *)&sockname) == 0)
+    if (h2o_socket_getsockname(sock, (void *)&ss) == 0)
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&sockname, &key->source.ip[0], &key->source.port))
+    if (!set_ebpf_map_key_tuples((void *)&ss, &key->source.ip[0], &key->source.port))
         return 0;
-    if (h2o_socket_getpeername(sock, (void *)&peername) == 0)
+    if (h2o_socket_getpeername(sock, (void *)&ss) == 0)
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&peername, &key->destination.ip[0], &key->destination.port))
+    if (!set_ebpf_map_key_tuples((void *)&ss, &key->destination.ip[0], &key->destination.port))
         return 0;
     if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0)
         return 0;
-    key->family = sockname.ss_family == AF_INET6 ? 6 : 4;
+    key->family = ss.ss_family == AF_INET6 ? 6 : 4;
     key->protocol = sock_type;
     return 1;
 }
