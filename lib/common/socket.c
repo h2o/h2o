@@ -1482,10 +1482,10 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 static __thread int tracing_map_fd = -1;
 static __thread uint64_t tracing_map_last_attempt = 0;
 
-static void open_tracing_map(h2o_socket_t *sock)
+static void open_tracing_map(h2o_loop_t *loop)
 {
     // only check every second
-    uint64_t now = h2o_now(h2o_socket_get_loop(sock));
+    uint64_t now = h2o_now(loop);
     if (tracing_map_last_attempt - now < 1000)
         return;
 
@@ -1557,7 +1557,7 @@ static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
 int socket_is_traced(h2o_socket_t *sock)
 {
     // try open map if not opened
-    open_tracing_map(sock);
+    open_tracing_map(h2o_socket_get_loop(sock));
     if (tracing_map_fd <= 0)
         return 1; // map is not connected, fallback accepting probe
 
