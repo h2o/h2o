@@ -948,5 +948,5 @@ void h2o_cleanup_thread(void)
 int h2o_conn_is_traced(h2o_conn_t *conn)
 {
     h2o_socket_t *sock = conn->callbacks->get_socket(conn);
-    return sock != NULL ? sock->_is_traced : 0;
+    return sock != NULL ? h2o_socket_is_traced(sock) : 0;
 }

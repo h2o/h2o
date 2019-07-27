@@ -347,7 +347,7 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
 /**
  * helper to check if socket is to be traced according to eBPF map
  */
-int h2o_socket_is_traced(h2o_socket_t *sock);
+static int h2o_socket_is_traced(h2o_socket_t *sock);
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
@@ -408,6 +408,11 @@ inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
 inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now)
 {
     counter->cur.start_at = now;
+}
+
+inline int h2o_socket_is_traced(h2o_socket_t *sock)
+{
+    return sock->_is_traced;
 }
 
 #ifdef __cplusplus

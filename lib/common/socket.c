@@ -115,6 +115,7 @@ static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
+static int socket_is_traced(h2o_socket_t *sock);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.c.h"
@@ -1553,7 +1554,7 @@ static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
     return 1;
 }
 
-int h2o_socket_is_traced(h2o_socket_t *sock)
+int socket_is_traced(h2o_socket_t *sock)
 {
     if (sock == NULL)
         return 0;
@@ -1575,7 +1576,7 @@ int h2o_socket_is_traced(h2o_socket_t *sock)
     return lookup_map(&key, &vals);
 }
 #else
-int h2o_socket_is_traced(h2o_socket_t *sock)
+int socket_is_traced(h2o_socket_t *sock)
 {
     return 1;
 }
