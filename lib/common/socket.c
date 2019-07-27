@@ -936,6 +936,8 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
 static void create_ossl(h2o_socket_t *sock)
 {
     sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
+    /* set app data to be used in h2o_socket_ssl_new_session_cb */
+    assert(SSL_set_app_data(sock->ssl->ossl, sock));
     setup_bio(sock);
 }
 
@@ -965,8 +967,8 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
 int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess)
 {
     h2o_socket_t *sock = (h2o_socket_t *)SSL_get_app_data(s);
-    if (sock == NULL || sock->ssl == NULL)
-        return 0;
+    assert(sock != NULL);
+    assert(sock->ssl != NULL);
 
     SSL_SESSION *session = NULL;
     if (!SSL_is_server(s) && sock->ssl->handshake.client.session_cache != NULL) {
