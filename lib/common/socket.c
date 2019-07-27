@@ -1573,7 +1573,7 @@ int socket_is_traced(h2o_socket_t *sock)
     void *vals = NULL;
 
     // init key - fallback refusing probe if key can't be initialized
-    if (init_ebpf_map_key(&key, sock) == 0)
+    if (!init_ebpf_map_key(&key, sock))
         return 0;
 
     // lookup map for our key
