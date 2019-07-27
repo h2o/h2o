@@ -22,9 +22,9 @@
 #ifndef h2o__probes_h
 #define h2o__probes_h
 
-/* This file must only be included from the source files of the h2o / libh2o, because H2O_USE_DTRACE is a symbol available only
- * during the build phase of h2o.  That's fine, because only h2o / libh2o should have the right to define probes belonging to the
- * h2o namespace.
+/* This file is placed under lib, and must only be included from the source files of the h2o / libh2o, because H2O_USE_DTRACE is a
+ * symbol available only during the build phase of h2o.  That's fine, because only h2o / libh2o has the sole right to define probes
+ * belonging to the h2o namespace.
  */
 #if H2O_USE_DTRACE
 
