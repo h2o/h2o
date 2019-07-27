@@ -1519,7 +1519,7 @@ static int lookup_map(const void *key, const void *value)
     attr.map_fd = tracing_map_fd;
     attr.key = (uint64_t)key;
     attr.value = (uint64_t)value;
-    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? 0 : 1; // return 1 if found, 0 otherwise
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == 0; // return 1 if found, 0 otherwise
 }
 
 static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
