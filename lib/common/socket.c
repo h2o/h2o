@@ -1565,7 +1565,7 @@ int socket_is_traced(h2o_socket_t *sock)
 {
     // try open map if not opened
     open_tracing_map(h2o_socket_get_loop(sock));
-    if (tracing_map_fd <= 0)
+    if (tracing_map_fd < 0)
         return 1; // map is not connected, fallback accepting probe
 
     // define key/vals - we are only interrested in presence of the key, discard values
