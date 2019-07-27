@@ -1522,16 +1522,20 @@ static int lookup_map(const void *key, const void *value)
     return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == -1 ? 0 : 1; // return 1 if found, 0 otherwise
 }
 
-static inline void set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
+static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
         memcpy(ip, &sin->sin_addr, sizeof(sin->sin_addr));
         *port = sin->sin_port;
+        return 1;
     } else if (sa->sa_family == AF_INET6) {
         struct sockaddr_in6 *sin = (void *)sa;
         memcpy(ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
         *port = sin->sin6_port;
+        return 1;
+    } else {
+        return 0;
     }
 }
 
@@ -1542,13 +1546,16 @@ static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
     memset(key, 0, sizeof(*key));
 
     // fetch sock/peer name and socket type
-    if (h2o_socket_getsockname(sock, (void *)&sockname) == 0 ||
-        h2o_socket_getpeername(sock, (void *)&peername) == 0 ||
-        getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) == -1)
+    if (h2o_socket_getsockname(sock, (void *)&sockname) == 0)
         return 0;
-
-    set_ebpf_map_key_tuples((void *)&sockname, &key->source.ip[0], &key->source.port);
-    set_ebpf_map_key_tuples((void *)&peername, &key->destination.ip[0], &key->destination.port);
+    if (!set_ebpf_map_key_tuples((void *)&sockname, &key->source.ip[0], &key->source.port))
+        return 0;
+    if (h2o_socket_getpeername(sock, (void *)&peername) == 0)
+        return 0;
+    if (!set_ebpf_map_key_tuples((void *)&peername, &key->destination.ip[0], &key->destination.port))
+        return 0;
+    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0)
+        return 0;
     key->family = sockname.ss_family == AF_INET6 ? 6 : 4;
     key->protocol = sock_type;
     return 1;
