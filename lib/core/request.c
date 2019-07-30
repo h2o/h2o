@@ -811,7 +811,7 @@ int h2o_write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity)
     /* if possible, switch to either streaming request body mode */
     if (!is_end_entity && (first_handler = h2o_get_first_handler(req)) != NULL &&
         first_handler->supports_request_streaming) {
-        if (h2o_buffer_append(&req->_req_body.body, payload.base, payload.len) == 0)
+        if (!h2o_buffer_try_append(&req->_req_body.body, payload.base, payload.len))
             return -1;
         req->entity = h2o_iovec_init(req->_req_body.body->bytes, req->_req_body.body->size);
         req->write_req.on_streaming_selected(req, 1);

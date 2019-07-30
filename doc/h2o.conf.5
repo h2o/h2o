@@ -1900,12 +1900,19 @@ total-timesame as duration (since v2.3)
 
 Proxy Timings (since v2.3)
 NameDescription
-proxy-idle-timetime spent after receiving request, before starting to connect to the upstream
-proxy-connect-timetime spent to establish the connection (including SSL handshake)
-proxy-request-timetime spent sending request (header and body)
-proxy-process-timetime spent after sending request, before starting to receive response
-proxy-response-timetime spent receiving response
-proxy-totalsum of proxy-request-time, proxy-process-time, proxy-response-time
+proxy.idle-timetime spent after receiving request, before starting to connect to the upstream
+proxy.connect-timetime spent to establish the connection (including SSL handshake)
+proxy.request-timetime spent sending request (header and body)
+proxy.process-timetime spent after sending request, before starting to receive response
+proxy.response-timetime spent receiving response
+proxy.total-timesum of proxy-request-time, proxy-process-time, proxy-response-time
+
+
+Proxy (since v2.3)
+NameDescription
+proxy.request-bytesnumber of bytes used by the proxy handler for sending the request (above TLS layer)
+proxy.request-bytes-headernumber of bytes used by the proxy handler for sending the request header (above TLS layer)
+proxy.request-bytes-bodynumber of bytes used by the proxy handler for sending the request body (above TLS layer)
 
 
 Connection (since v2.0)
@@ -2155,6 +2162,23 @@ file.custom-handler:
 .fi
 .PP
 
+.PP
+.BR Example:\ 
+Map any executable file in path /var/www/data/cgi-bin to fastcgi-cgi wrapper
+.PP
+.nf
+.RS
+"/cgi-bin":
+    file.dir: /var/www/data/cgi-bin
+    file.custom-handler:
+        extension: default # means "no extension" in this case
+        fastcgi.spawn:
+            command: "exec /usr/local/share/h2o/fastcgi-cgi"
+
+.RE
+.fi
+.PP
+
 
 As of version 1.4.0, the spawned process is run under the privileges of user specified by the user directive (in version 1.3.x, the FastCGI process was spawned under the privileges that spawned the H2O standalone server).
 It is possible to specify a different user for running the FastCGI process, by providing a mapping that contains an attribute named user together with an attribute named command.
@@ -2236,6 +2260,7 @@ The directive maps extensions to a custom handler (e.g. FastCGI).
 
 
 The directive accepts a mapping containing configuration directives that can be used at the extension level, together with a property named extension specifying a extension (starting with .) or a sequence of extensions to which the directives should be applied.
+If all the files (including those without extensions) shall be mapped, this property must be set to default. 
 Only one handler must exist within the directives.
 
 .PP

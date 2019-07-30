@@ -495,16 +495,30 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        &ptls_get_time,
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
-                                       {NULL, 0},
-                                       NULL,
-                                       &pctx->ch.super,
-                                       &pctx->ec.super,
-                                       &pctx->sc.super,
-                                       NULL,
-                                       0,
-                                       8192,
-                                       NULL,
-                                       1},
+                                       {NULL, 0},       /* certificates (filled later) */
+                                       NULL,            /* ESNI context (filled later) */
+                                       &pctx->ch.super, /* on_client_hello */
+                                       &pctx->ec.super, /* emit_certificate */
+                                       &pctx->sc.super, /* sign_certificate */
+                                       NULL,            /* verify_certificate */
+                                       0,               /* ticket_lifetime (initialized alongside encrypt_ticket) */
+                                       8192,            /* max_early_data_size */
+                                       NULL,            /* obsolete */
+                                       1,               /* require_dhe_on_psk */
+                                       0,               /* use_exporter */
+                                       0,               /* send_change_cipher_spec (FIXME set this?) */
+                                       0,               /* require_client_authentication */
+                                       0,               /* omit_end_of_early_data */
+                                       NULL,            /* encrypt_ticket (initialized later) */
+                                       NULL,            /* save_ticket (initialized later) */
+                                       NULL,            /* log_event */
+                                       NULL,            /* update_open_count */
+                                       NULL,            /* update_traffic_key */
+                                       NULL,            /* decompress_certificate */
+                                       NULL,            /* update_esni_key */
+                                       NULL,            /* is_traced */
+                                       {NULL, 0},       /* pkey_buf */
+                                       NULL},           /* on_extension */
                                       {{on_client_hello_ptls}, listener},
                                       {{on_emit_certificate_ptls}, ssl_config}};
 
