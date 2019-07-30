@@ -1557,8 +1557,6 @@ static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
 
 void init_is_traced(h2o_socket_t *sock)
 {
-    sock->_is_traced = 0;
-
     // try open map if not opened
     open_tracing_map(h2o_socket_get_loop(sock));
     if (tracing_map_fd < 0) {
