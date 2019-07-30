@@ -21,7 +21,7 @@
  */
 
 provider h2o {
-    probe h2o_receive_request_headers(struct st_h2o_conn_t *conn, int64_t request_id, struct st_h2o_iovec_t *method,
-                                      struct st_h2o_iovec_t *authority, struct st_h2o_iovec_t *path, int http_version,
-                                      struct st_h2o_header_t *headers, size_t num_headers);
+    probe h2o_receive_request(struct st_h2o_conn_t *conn, uint64_t conn_id, int64_t req_id, int http_version);
+    probe h2o_receive_request_header(struct st_h2o_conn_t *conn, uint64_t conn_id, uint64_t req_id, const char *name,
+                                     size_t name_len, const char *value, size_t value_len);
 };

@@ -528,8 +528,21 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             return;
         }
 
-        H2O_PROBE_CONN(RECEIVE_REQUEST_HEADERS, &conn->super, conn->_req_index, &conn->req.input.method, &conn->req.input.authority,
-                       &conn->req.input.path, conn->req.version, conn->req.headers.entries, conn->req.headers.size);
+        H2O_PROBE_CONN(RECEIVE_REQUEST, &conn->super, conn->super.id, conn->_req_index, conn->req.version);
+        if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, &conn->super)) {
+#define PROBE_HEADER(name, value)                                                                                                  \
+    H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, &conn->super, conn->super.id, conn->_req_index, (name).base, (name).len, (value).base,  \
+                   (value).len)
+            PROBE_HEADER(H2O_TOKEN_METHOD->buf, conn->req.input.method);
+            PROBE_HEADER(H2O_TOKEN_AUTHORITY->buf, conn->req.input.authority);
+            PROBE_HEADER(H2O_TOKEN_PATH->buf, conn->req.input.path);
+            size_t i;
+            for (i = 0; i != conn->req.headers.size; ++i) {
+                h2o_header_t *h = conn->req.headers.entries + i;
+                PROBE_HEADER(*h->name, h->value);
+            }
+#undef PROBE_HEADER
+        }
 
         if (entity_body_header_index != -1) {
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
