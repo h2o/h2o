@@ -487,7 +487,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         &ptls_minicrypto_x25519,
 #endif
         &ptls_openssl_secp256r1, NULL};
-    static const ptls_is_traced_t is_traced = {tls_is_traced};
+    static ptls_is_traced_t is_traced = {tls_is_traced};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
