@@ -271,23 +271,15 @@ SET(PICOTLS_INCLUDE_DIRECTORIES
     deps/picotls/include)
 
 SET(PICOTLS_SOURCE_FILES
-    deps/picotls/deps/micro-ecc/uECC.c
-    deps/picotls/deps/cifra/src/aes.c
     deps/picotls/deps/cifra/src/blockwise.c
-    deps/picotls/deps/cifra/src/chacha20.c
     deps/picotls/deps/cifra/src/chash.c
     deps/picotls/deps/cifra/src/curve25519.c
     deps/picotls/deps/cifra/src/drbg.c
     deps/picotls/deps/cifra/src/hmac.c
-    deps/picotls/deps/cifra/src/gcm.c
-    deps/picotls/deps/cifra/src/gf128.c
-    deps/picotls/deps/cifra/src/modes.c
-    deps/picotls/deps/cifra/src/poly1305.c
     deps/picotls/deps/cifra/src/sha256.c
-    deps/picotls/deps/cifra/src/sha512.c
     deps/picotls/lib/picotls.c
-    deps/picotls/lib/cifra.c
-    deps/picotls/lib/uecc.c
+    deps/picotls/lib/cifra/random.c
+    deps/picotls/lib/cifra/x25519.c
     deps/picotls/lib/openssl.c)
 
 SET(LIB_SOURCE_FILES
