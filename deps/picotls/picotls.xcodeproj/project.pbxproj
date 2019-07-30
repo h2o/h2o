@@ -117,6 +117,17 @@
 		E9E865EB203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
 		E9E865EC203BD46600E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
 		E9E865ED203BD46700E2FFCD /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E9E865E9203BD45600E2FFCD /* sha512.c */; };
+		E9F20BEA22E34B3E0018D260 /* aes-common.h in Headers */ = {isa = PBXBuildFile; fileRef = E9F20BE322E34B340018D260 /* aes-common.h */; };
+		E9F20BEB22E34B3E0018D260 /* aes128.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE222E34B340018D260 /* aes128.c */; };
+		E9F20BEC22E34B3E0018D260 /* aes256.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE022E34B340018D260 /* aes256.c */; };
+		E9F20BED22E34B3E0018D260 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE422E34B340018D260 /* chacha20.c */; };
+		E9F20BEE22E34B3E0018D260 /* x25519.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE122E34B340018D260 /* x25519.c */; };
+		E9F20BEF22E34B480018D260 /* aes128.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE222E34B340018D260 /* aes128.c */; };
+		E9F20BF022E34B480018D260 /* aes256.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE022E34B340018D260 /* aes256.c */; };
+		E9F20BF122E34B480018D260 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE422E34B340018D260 /* chacha20.c */; };
+		E9F20BF222E34B480018D260 /* x25519.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE122E34B340018D260 /* x25519.c */; };
+		E9F20BFB22E34C1B0018D260 /* random.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BF922E34C110018D260 /* random.c */; };
+		E9F20BFC22E34C1C0018D260 /* random.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BF922E34C110018D260 /* random.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -260,6 +271,12 @@
 		E9E4B12A2180530400514B47 /* certificate_compression.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = certificate_compression.c; sourceTree = "<group>"; };
 		E9E4B12C2181927900514B47 /* CMakeLists.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CMakeLists.txt; sourceTree = "<group>"; };
 		E9E865E9203BD45600E2FFCD /* sha512.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = sha512.c; path = src/sha512.c; sourceTree = "<group>"; };
+		E9F20BE022E34B340018D260 /* aes256.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = aes256.c; sourceTree = "<group>"; };
+		E9F20BE122E34B340018D260 /* x25519.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = x25519.c; sourceTree = "<group>"; };
+		E9F20BE222E34B340018D260 /* aes128.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = aes128.c; sourceTree = "<group>"; };
+		E9F20BE322E34B340018D260 /* aes-common.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "aes-common.h"; sourceTree = "<group>"; };
+		E9F20BE422E34B340018D260 /* chacha20.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = chacha20.c; sourceTree = "<group>"; };
+		E9F20BF922E34C110018D260 /* random.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = random.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -411,6 +428,7 @@
 				E99B75DE1F5CDDB500CF503E /* asn1.c */,
 				E97577022212405D00D1EF74 /* ffx.c */,
 				E99B75DF1F5CDDB500CF503E /* pembase64.c */,
+				E9F20BDF22E34B210018D260 /* cifra */,
 				1059003F1DC8D53200FB4085 /* cifra.c */,
 				106530C21D9B004B005B2C60 /* openssl.c */,
 				106530BF1D998641005B2C60 /* picotls.c */,
@@ -499,6 +517,19 @@
 			path = src;
 			sourceTree = "<group>";
 		};
+		E9F20BDF22E34B210018D260 /* cifra */ = {
+			isa = PBXGroup;
+			children = (
+				E9F20BE322E34B340018D260 /* aes-common.h */,
+				E9F20BE222E34B340018D260 /* aes128.c */,
+				E9F20BE022E34B340018D260 /* aes256.c */,
+				E9F20BE422E34B340018D260 /* chacha20.c */,
+				E9F20BF922E34C110018D260 /* random.c */,
+				E9F20BE122E34B340018D260 /* x25519.c */,
+			);
+			path = cifra;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -548,6 +579,7 @@
 				10EACB081DCEAF0F00CA0341 /* cf_config.h in Headers */,
 				10EACB091DCEAF0F00CA0341 /* handy.h in Headers */,
 				10EACB0A1DCEAF0F00CA0341 /* uECC.h in Headers */,
+				E9F20BEA22E34B3E0018D260 /* aes-common.h in Headers */,
 				10EACB0B1DCEAF0F00CA0341 /* drbg.h in Headers */,
 				10EACB0C1DCEAF0F00CA0341 /* tassert.h in Headers */,
 				10EACB0D1DCEAF0F00CA0341 /* hmac.h in Headers */,
@@ -739,11 +771,16 @@
 				105900C41DC96B2200FB4085 /* uECC.c in Sources */,
 				105900441DC8D57000FB4085 /* picotest.c in Sources */,
 				105900611DC8DF8C00FB4085 /* sha256.c in Sources */,
+				E9F20BF122E34B480018D260 /* chacha20.c in Sources */,
 				E9BC76D21EF3A36A00EB7A09 /* chacha20.c in Sources */,
 				1059004E1DC8D61800FB4085 /* minicrypto.c in Sources */,
 				E99B75E31F5CE54D00CF503E /* asn1.c in Sources */,
 				E9E865ED203BD46700E2FFCD /* sha512.c in Sources */,
+				E9F20BF022E34B480018D260 /* aes256.c in Sources */,
+				E9F20BFC22E34C1C0018D260 /* random.c in Sources */,
+				E9F20BEF22E34B480018D260 /* aes128.c in Sources */,
 				10EACAF01DCC843A00CA0341 /* drbg.c in Sources */,
+				E9F20BF222E34B480018D260 /* x25519.c in Sources */,
 				E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */,
 				1059006A1DC8DFE300FB4085 /* hmac.c in Sources */,
 				1059006F1DC8E00B00FB4085 /* chash.c in Sources */,
@@ -822,16 +859,21 @@
 				E949EF282073629300511ECA /* minicrypto-pem.c in Sources */,
 				10EACAF51DCEAF0F00CA0341 /* gf128.c in Sources */,
 				10EACAF61DCEAF0F00CA0341 /* gcm.c in Sources */,
+				E9F20BED22E34B3E0018D260 /* chacha20.c in Sources */,
+				E9F20BFB22E34C1B0018D260 /* random.c in Sources */,
+				E9F20BEC22E34B3E0018D260 /* aes256.c in Sources */,
 				10EACAF71DCEAF0F00CA0341 /* sha256.c in Sources */,
 				10EACAF81DCEAF0F00CA0341 /* aes.c in Sources */,
 				E9BC76DD1EF3CCD100EB7A09 /* poly1305.c in Sources */,
 				10EACAF91DCEAF0F00CA0341 /* modes.c in Sources */,
 				E9BC76CF1EF3A35E00EB7A09 /* chacha20.c in Sources */,
 				10EACAFB1DCEAF0F00CA0341 /* chash.c in Sources */,
+				E9F20BEB22E34B3E0018D260 /* aes128.c in Sources */,
 				10EACAFC1DCEAF0F00CA0341 /* curve25519.c in Sources */,
 				10EACAFD1DCEAF0F00CA0341 /* hmac.c in Sources */,
 				10EACAFE1DCEAF0F00CA0341 /* drbg.c in Sources */,
 				E9E865EB203BD46600E2FFCD /* sha512.c in Sources */,
+				E9F20BEE22E34B3E0018D260 /* x25519.c in Sources */,
 				10EACAFF1DCEAF0F00CA0341 /* cifra.c in Sources */,
 				10EACB001DCEAF0F00CA0341 /* blockwise.c in Sources */,
 			);

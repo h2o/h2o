@@ -14,7 +14,6 @@ ENDIF ()
 
 SET(CMAKE_C_FLAGS "-std=c99 -Wall -O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
 INCLUDE_DIRECTORIES(
-    ${OPENSSL_INCLUDE_DIR}
     deps/cifra/src/ext
     deps/cifra/src
     deps/micro-ecc
@@ -65,9 +64,32 @@ ENDIF ()
 
 ADD_LIBRARY(picotls-core ${CORE_FILES})
 TARGET_LINK_LIBRARIES(picotls-core ${CORE_EXTRA_LIBS})
-ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c lib/ffx.c)
+ADD_LIBRARY(picotls-minicrypto
+    ${MINICRYPTO_LIBRARY_FILES}
+    lib/cifra.c
+    lib/cifra/x25519.c
+    lib/cifra/chacha20.c
+    lib/cifra/aes128.c
+    lib/cifra/aes256.c
+    lib/cifra/random.c
+    lib/minicrypto-pem.c
+    lib/uecc.c
+    lib/asn1.c
+    lib/ffx.c)
 TARGET_LINK_LIBRARIES(picotls-minicrypto picotls-core)
-ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c ${CORE_TEST_FILES} t/minicrypto.c lib/asn1.c lib/pembase64.c lib/ffx.c)
+ADD_EXECUTABLE(test-minicrypto.t
+    ${MINICRYPTO_LIBRARY_FILES}
+    deps/picotest/picotest.c
+    ${CORE_TEST_FILES}
+    t/minicrypto.c
+    lib/asn1.c
+    lib/pembase64.c
+    lib/ffx.c
+    lib/cifra/x25519.c
+    lib/cifra/chacha20.c
+    lib/cifra/aes128.c
+    lib/cifra/aes256.c
+    lib/cifra/random.c)
 
 SET(TEST_EXES test-minicrypto.t)
 
@@ -82,7 +104,21 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     ADD_EXECUTABLE(picotls-esni src/esni.c)
     TARGET_LINK_LIBRARIES(picotls-esni picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
-    ADD_EXECUTABLE(test-openssl.t ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/uecc.c lib/asn1.c lib/pembase64.c lib/ffx.c deps/picotest/picotest.c ${CORE_TEST_FILES} t/openssl.c)
+    ADD_EXECUTABLE(test-openssl.t
+        ${MINICRYPTO_LIBRARY_FILES}
+        lib/cifra.c
+        lib/cifra/x25519.c
+        lib/cifra/chacha20.c
+        lib/cifra/aes128.c
+        lib/cifra/aes256.c
+        lib/cifra/random.c
+        lib/uecc.c
+        lib/asn1.c
+        lib/pembase64.c
+        lib/ffx.c
+        deps/picotest/picotest.c
+        ${CORE_TEST_FILES}
+        t/openssl.c)
     SET_TARGET_PROPERTIES(test-openssl.t PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
     TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 
@@ -104,7 +140,7 @@ ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
 ENDIF ()
 
 FIND_LIBRARY(LIBC_RESOLV_LIB "resolv")
-IF (LIBC_RESOLV_LIB)
+IF (OPENSSL_FOUND AND LIBC_RESOLV_LIB)
     TARGET_LINK_LIBRARIES(cli ${LIBC_RESOLV_LIB})
 ENDIF ()
 

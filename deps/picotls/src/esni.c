@@ -24,7 +24,15 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef _WINDOWS
+#include "..\picotls\wincompat.h"
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#pragma warning(disable : 4996)
+#else
 #include <strings.h>
+#endif
 #include <time.h>
 #include <openssl/err.h>
 #include <openssl/engine.h>
@@ -34,7 +42,7 @@
 #include "picotls/openssl.h"
 
 static int emit_esni(ptls_key_exchange_context_t **key_exchanges, ptls_cipher_suite_t **cipher_suites, uint16_t padded_length,
-                     uint64_t not_before, uint64_t lifetime)
+                     uint64_t not_before, uint64_t lifetime, char const *published_sni, char const *file_output)
 {
     ptls_buffer_t buf;
     ptls_key_exchange_context_t *ctx[256] = {NULL};
@@ -42,8 +50,13 @@ static int emit_esni(ptls_key_exchange_context_t **key_exchanges, ptls_cipher_su
 
     ptls_buffer_init(&buf, "", 0);
 
-    ptls_buffer_push16(&buf, PTLS_ESNI_VERSION_DRAFT02);
+    ptls_buffer_push16(&buf, PTLS_ESNI_VERSION_DRAFT03);
     ptls_buffer_push(&buf, 0, 0, 0, 0); /* checksum, filled later */
+    if (published_sni != NULL) {
+        ptls_buffer_push_block(&buf, 2, { ptls_buffer_pushv(&buf, published_sni, strlen(published_sni)); });
+    } else {
+        ptls_buffer_push16(&buf, 0);
+    }
     ptls_buffer_push_block(&buf, 2, {
         size_t i;
         for (i = 0; key_exchanges[i] != NULL; ++i) {
@@ -67,9 +80,20 @@ static int emit_esni(ptls_key_exchange_context_t **key_exchanges, ptls_cipher_su
         memcpy(buf.base + 2, d, 4);
     }
 
-    /* emit the structure to stdout */
-    fwrite(buf.base, 1, buf.off, stdout);
-    fflush(stdout);
+    if (file_output != NULL) {
+        FILE *fo = fopen(file_output, "wb");
+        if (fo == NULL) {
+            fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
+            goto Exit;
+        } else {
+            fwrite(buf.base, 1, buf.off, fo);
+            fclose(fo);
+        }
+    } else {
+        /* emit the structure to stdout */
+        fwrite(buf.base, 1, buf.off, stdout);
+        fflush(stdout);
+    }
 
     ret = 0;
 Exit : {
@@ -87,11 +111,14 @@ static void usage(const char *cmd, int status)
            "\n"
            "Usage: %s [options]\n"
            "Options:\n"
+           "  -n <published-sni>  published sni value\n"
            "  -K <key-file>       private key files (repeat the option to include multiple\n"
            "                      keys)\n"
            "  -c <cipher-suite>   aes128-gcm, chacha20-poly1305, ...\n"
            "  -d <days>           number of days until expiration (default: 90)\n"
            "  -p <padded-length>  padded length (default: 260)\n"
+           "  -o <output-file>    write output to specified file instead of stdout\n"
+           "                      (use on Windows as stdout is not binary there)\n"
            "  -h                  prints this help\n"
            "\n"
            "-c and -x can be used multiple times.\n"
@@ -102,6 +129,8 @@ static void usage(const char *cmd, int status)
 
 int main(int argc, char **argv)
 {
+    char const *published_sni = NULL;
+    char const *file_output = NULL;
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
 #if !defined(OPENSSL_NO_ENGINE)
@@ -123,15 +152,21 @@ int main(int argc, char **argv)
     uint64_t lifetime = 90 * 86400;
 
     int ch;
-    while ((ch = getopt(argc, argv, "K:c:d:p:h")) != -1) {
+
+    while ((ch = getopt(argc, argv, "n:K:c:d:p:o:h")) != -1) {
         switch (ch) {
+        case 'n':
+            published_sni = optarg;
+            break;
         case 'K': {
             FILE *fp;
             EVP_PKEY *pkey;
+
             if ((fp = fopen(optarg, "rt")) == NULL) {
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 exit(1);
             }
+
             if ((pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL)) == NULL) {
                 fprintf(stderr, "failed to read private key from file:%s:%s\n", optarg, strerror(errno));
                 exit(1);
@@ -162,10 +197,20 @@ int main(int argc, char **argv)
             lifetime *= 86400; /* convert to seconds */
             break;
         case 'p':
+#ifdef _WINDOWS
+            if (sscanf_s(optarg, "%" SCNu16, &padded_length) != 1 || padded_length == 0) {
+                fprintf(stderr, "padded length must be a positive integer\n");
+                exit(1);
+            }
+#else
             if (sscanf(optarg, "%" SCNu16, &padded_length) != 1 || padded_length == 0) {
                 fprintf(stderr, "padded length must be a positive integer\n");
                 exit(1);
             }
+#endif
+            break;
+        case 'o':
+            file_output = optarg;
             break;
         case 'h':
             usage(argv[0], 0);
@@ -185,7 +230,8 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    if (emit_esni(key_exchanges.elements, cipher_suites.elements, padded_length, time(NULL), lifetime) != 0) {
+    if (emit_esni(key_exchanges.elements, cipher_suites.elements, padded_length, time(NULL), lifetime, published_sni,
+                  file_output) != 0) {
         fprintf(stderr, "failed to generate ESNI private structure.\n");
         exit(1);
     }
