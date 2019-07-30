@@ -108,6 +108,11 @@ struct st_h2o_socket_t {
      * total bytes written (above the TLS layer)
      */
     size_t bytes_written;
+    /**
+     * boolean flag to indicate if sock is being traced
+     */
+    int _is_traced;
+
     struct {
         void (*cb)(void *data);
         void *data;
@@ -339,6 +344,10 @@ void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
  * registers the protocol list to be used for NPN
  */
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
+/**
+ * helper to check if socket is to be traced according to eBPF map
+ */
+static int h2o_socket_is_traced(h2o_socket_t *sock);
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
@@ -399,6 +408,11 @@ inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
 inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now)
 {
     counter->cur.start_at = now;
+}
+
+inline int h2o_socket_is_traced(h2o_socket_t *sock)
+{
+    return sock->_is_traced;
 }
 
 #ifdef __cplusplus

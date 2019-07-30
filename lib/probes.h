@@ -22,14 +22,22 @@
 #ifndef h2o__probes_h
 #define h2o__probes_h
 
-/* This file must only be included from the source files of the h2o / libh2o, because H2O_USE_DTRACE is a symbol available only
- * during the build phase of h2o.  That's fine, because only h2o / libh2o should have the right to define probes belonging to the
- * h2o namespace.
+/* This file is placed under lib, and must only be included from the source files of the h2o / libh2o, because H2O_USE_DTRACE is a
+ * symbol available only during the build phase of h2o.  That's fine, because only h2o / libh2o has the sole right to define probes
+ * belonging to the h2o namespace.
  */
 #if H2O_USE_DTRACE
 
 #include "picotls.h"
 #include "h2o-probes.h"
+
+#define H2O_PROBE_CONN(label, conn, ...)                                                                                           \
+    do {                                                                                                                           \
+         h2o_conn_t *_conn = (conn);                                                                                               \
+        if (PTLS_UNLIKELY(H2O_H2O_##label##_ENABLED()) && h2o_conn_is_traced(_conn) == 1) {                                        \
+            H2O_H2O_##label(_conn, __VA_ARGS__);                                                                                   \
+        }                                                                                                                          \
+    } while (0)
 
 #define H2O_PROBE(label, ...)                                                                                                      \
     do {                                                                                                                           \
@@ -37,17 +45,17 @@
             H2O_H2O_##label(__VA_ARGS__);                                                                                          \
         }                                                                                                                          \
     } while (0)
+
 #define H2O_PROBE_HEXDUMP(s, l)                                                                                                    \
     ({                                                                                                                             \
         size_t _l = (l);                                                                                                           \
         ptls_hexdump(alloca(_l * 2 + 1), (s), _l);                                                                                 \
     })
-
 #else
 
+#define H2O_PROBE_CONN(label, conn, ...)
 #define H2O_PROBE(label, ...)
 #define H2O_PROBE_HEXDUMP(s, l)
 
 #endif
-
 #endif

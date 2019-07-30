@@ -28,7 +28,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
-#include "h2o/probes.h"
+#include "probes.h"
 
 #define MAX_PULL_BUF_SZ 65536
 
@@ -527,8 +527,10 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             send_bad_request(conn, "line folding of header fields is not supported");
             return;
         }
-        H2O_PROBE(RECEIVE_REQUEST_HEADERS, &conn->super, conn->_req_index, &conn->req.input.method, &conn->req.input.authority,
-                  &conn->req.input.path, conn->req.version, conn->req.headers.entries, conn->req.headers.size);
+
+        H2O_PROBE_CONN(RECEIVE_REQUEST_HEADERS, &conn->super, conn->_req_index, &conn->req.input.method, &conn->req.input.authority,
+                       &conn->req.input.path, conn->req.version, conn->req.headers.entries, conn->req.headers.size);
+
         if (entity_body_header_index != -1) {
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {

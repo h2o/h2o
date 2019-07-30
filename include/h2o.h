@@ -1190,6 +1190,11 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, uns
 void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsigned expiration, const char *prefix);
 
 /**
+ * helper to return if the socket is to be traced
+ */
+int h2o_conn_is_traced(h2o_conn_t *conn);
+
+/**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
 size_t h2o_stringify_protocol_version(char *dst, int version);
