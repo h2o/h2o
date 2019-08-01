@@ -703,9 +703,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_options |= SSL_OP_NO_COMPRESSION;
 #endif
 
+#ifdef SSL_OP_NO_RENEGOTIATION
+    ssl_options |= SSL_OP_NO_RENEGOTIATION;
+#endif
+
     /* setup */
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
+
+    SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
 
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
