@@ -266,7 +266,7 @@
 		E95E954122914F1500215ACD /* h2o-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCD72281148C0022C32D /* h2o-probes.d */; };
 		E95E954222914F1600215ACD /* h2o-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCD72281148C0022C32D /* h2o-probes.d */; };
 		E95E954322914F1C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953F22914F0600215ACD /* picotls-probes.d */; };
-		E95EBCDA228117620022C32D /* probes.h in Headers */ = {isa = PBXBuildFile; fileRef = E95EBCD9228117620022C32D /* probes.h */; };
+		E95EBCDA228117620022C32D /* probes_.h in Headers */ = {isa = PBXBuildFile; fileRef = E95EBCD9228117620022C32D /* probes_.h */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
 		E9708AE71E49A2420029E0A5 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
 		E9708AE81E49A2420029E0A5 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
@@ -912,7 +912,7 @@
 		E9581B9C22F0022900299E8A /* random.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = random.c; sourceTree = "<group>"; };
 		E95E953F22914F0600215ACD /* picotls-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "picotls-probes.d"; sourceTree = "<group>"; };
 		E95EBCD72281148C0022C32D /* h2o-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "h2o-probes.d"; sourceTree = "<group>"; };
-		E95EBCD9228117620022C32D /* probes.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = probes.h; sourceTree = "<group>"; };
+		E95EBCD9228117620022C32D /* probes_.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = probes_.h; sourceTree = "<group>"; };
 		E9708AD91E499E040029E0A5 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
 		E9708ADA1E499E040029E0A5 /* picotls.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotls.c; sourceTree = "<group>"; };
 		E9708ADF1E49A2120029E0A5 /* picotls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotls.h; sourceTree = "<group>"; };
@@ -1666,7 +1666,7 @@
 				104B9A4B1A5FA804009EEE64 /* handler */,
 				107923B119A3217300C52AD6 /* http1.c */,
 				107923B219A3217300C52AD6 /* http2 */,
-				E95EBCD9228117620022C32D /* probes.h */,
+				E95EBCD9228117620022C32D /* probes_.h */,
 				106C22F71C040F6400405689 /* tunnel.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
@@ -2363,7 +2363,7 @@
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				1058F6ED1D7CC99B00FFFFA3 /* openssl_backport.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
-				E95EBCDA228117620022C32D /* probes.h in Headers */,
+				E95EBCDA228117620022C32D /* probes_.h in Headers */,
 				10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */,
 				08790DDF1D8015A400A04BC1 /* net.h in Headers */,
 				10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */,
