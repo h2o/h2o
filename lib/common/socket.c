@@ -970,25 +970,18 @@ int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess)
     assert(sock != NULL);
     assert(sock->ssl != NULL);
 
-    SSL_SESSION *session = NULL;
-    if (!SSL_is_server(s) && sock->ssl->handshake.client.session_cache != NULL) {
+    if (!SSL_is_server(s) && sock->ssl->handshake.client.session_cache != NULL
 #if OPENSSL_VERSION_NUMBER >= 0x1010100fL
-        if (SSL_SESSION_is_resumable(sess)) {
+        && SSL_SESSION_is_resumable(sess)
 #endif
-        session = sess;
+    ) {
         h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
-                     sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
-                     h2o_iovec_init(session, 1));
-#if OPENSSL_VERSION_NUMBER >= 0x1010100fL
-        }
-#endif
+                      sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
+                      h2o_iovec_init(sess, 1));
+        return 1; /* retain ref count */
     }
 
-    /*
-     * 0 - drop ref count
-     * 1 - keep ref count
-     */
-    return (session != NULL) ? 1 : 0;
+    return 0; /* drop ref count */
 }
 
 static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
