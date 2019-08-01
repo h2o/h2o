@@ -971,7 +971,7 @@ int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess)
     assert(sock->ssl != NULL);
 
     if (!SSL_is_server(s) && sock->ssl->handshake.client.session_cache != NULL
-#if OPENSSL_VERSION_NUMBER >= 0x1010100fL
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010100fL
         && SSL_SESSION_is_resumable(sess)
 #endif
     ) {
