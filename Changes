@@ -1,5 +1,8 @@
 Revision history for H2O.
 
+2.2.6 2019-08-13 17:00:00+0000
+	- [security fix][http2] fix HTTP/2 DoS attack vectors CVE-2019-9512 CVE-2019-9514 CVE-2019-9515 #2090 (Kazuho Oku)
+
 2.2.5 2018-06-01 08:00:00+0000
 	- [security fix][access-log] fix buffer overflow CVE-2018-0608 #1775 (Frederik Deweerdt)
 	- [fastcgi] index file name must be part of SCRIPT_NAME #1650 (Ichito Nagata)
