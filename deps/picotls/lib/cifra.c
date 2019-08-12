@@ -44,7 +44,11 @@
 #include "picotls/minicrypto.h"
 
 #ifdef _WINDOWS
+#ifdef _WINDOWS_XP
+ /* The modern BCrypt API is only available on Windows Vista and later versions.
+  * If compiling on Windows XP, we need to use the olded "wincrypt" API */
 #include <wincrypt.h>
+
 static void read_entropy(uint8_t *entropy, size_t size)
 {
     HCRYPTPROV hCryptProv = 0;
@@ -56,9 +60,35 @@ static void read_entropy(uint8_t *entropy, size_t size)
     }
 
     if (ret == FALSE) {
+        perror("ptls_minicrypto_random_bytes: could not use CryptGenRandom");
         abort();
     }
 }
+#else
+ /* The old "Wincrypt" API requires access to default security containers.
+  * This can cause access control errors on some systems. We prefer
+  * to use the modern BCrypt API when available */
+#include <bcrypt.h>
+
+ static void read_entropy(uint8_t *entropy, size_t size)
+ {
+    NTSTATUS nts = 0;
+    BCRYPT_ALG_HANDLE hAlgorithm = 0;
+
+    nts = BCryptOpenAlgorithmProvider(&hAlgorithm, BCRYPT_RNG_ALGORITHM, NULL, 0);
+
+    if (BCRYPT_SUCCESS(nts)) {
+        nts = BCryptGenRandom(hAlgorithm, (PUCHAR)entropy, (ULONG)size, 0);
+
+        (void)BCryptCloseAlgorithmProvider(hAlgorithm, 0); 
+    } 
+
+    if (!BCRYPT_SUCCESS(nts)) {
+        perror("ptls_minicrypto_random_bytes: could not open BCrypt RNG Algorithm");
+        abort();
+    }
+}
+#endif
 #else
 static void read_entropy(uint8_t *entropy, size_t size)
 {
@@ -128,12 +158,10 @@ static int x25519_derive_secret(ptls_iovec_t *secret, const uint8_t *clientpriv,
     return 0;
 }
 
-static int x25519_on_exchange(ptls_key_exchange_context_t **_ctx, ptls_iovec_t *secret, ptls_iovec_t peerkey)
+static int x25519_on_exchange(ptls_key_exchange_context_t **_ctx, int release, ptls_iovec_t *secret, ptls_iovec_t peerkey)
 {
     struct st_x25519_key_exchange_t *ctx = (struct st_x25519_key_exchange_t *)*_ctx;
     int ret;
-
-    *_ctx = NULL;
 
     if (secret == NULL) {
         ret = 0;
@@ -147,26 +175,29 @@ static int x25519_on_exchange(ptls_key_exchange_context_t **_ctx, ptls_iovec_t *
     ret = x25519_derive_secret(secret, ctx->priv, ctx->pub, NULL, peerkey.base);
 
 Exit:
-    ptls_clear_memory(ctx->priv, sizeof(ctx->priv));
-    free(ctx);
+    if (release) {
+        ptls_clear_memory(ctx->priv, sizeof(ctx->priv));
+        free(ctx);
+        *_ctx = NULL;
+    }
     return ret;
 }
 
-static int x25519_create_key_exchange(ptls_key_exchange_context_t **_ctx, ptls_iovec_t *pubkey)
+static int x25519_create_key_exchange(ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **_ctx)
 {
     struct st_x25519_key_exchange_t *ctx;
 
     if ((ctx = (struct st_x25519_key_exchange_t *)malloc(sizeof(*ctx))) == NULL)
         return PTLS_ERROR_NO_MEMORY;
-    ctx->super = (ptls_key_exchange_context_t){x25519_on_exchange};
+    ctx->super = (ptls_key_exchange_context_t){algo, ptls_iovec_init(ctx->pub, sizeof(ctx->pub)), x25519_on_exchange};
     x25519_create_keypair(ctx->priv, ctx->pub);
 
     *_ctx = &ctx->super;
-    *pubkey = ptls_iovec_init(ctx->pub, sizeof(ctx->pub));
     return 0;
 }
 
-static int x25519_key_exchange(ptls_iovec_t *pubkey, ptls_iovec_t *secret, ptls_iovec_t peerkey)
+static int x25519_key_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *pubkey, ptls_iovec_t *secret,
+                               ptls_iovec_t peerkey)
 {
     uint8_t priv[X25519_KEY_SIZE], *pub = NULL;
     int ret;
@@ -192,6 +223,51 @@ Exit:
     if (pub != NULL && ret != 0)
         ptls_clear_memory(pub, X25519_KEY_SIZE);
     return ret;
+}
+
+struct aesecb_context_t {
+    ptls_cipher_context_t super;
+    cf_aes_context aes;
+};
+
+static void aesecb_dispose(ptls_cipher_context_t *_ctx)
+{
+    struct aesecb_context_t *ctx = (struct aesecb_context_t *)_ctx;
+    ptls_clear_memory(ctx, sizeof(*ctx));
+}
+
+static void aesecb_encrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t len)
+{
+    struct aesecb_context_t *ctx = (struct aesecb_context_t *)_ctx;
+    assert(len % AES_BLOCKSZ == 0);
+    cf_aes_encrypt(&ctx->aes, input, output);
+}
+
+static void aesecb_decrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t len)
+{
+    struct aesecb_context_t *ctx = (struct aesecb_context_t *)_ctx;
+    assert(len % AES_BLOCKSZ == 0);
+    cf_aes_decrypt(&ctx->aes, input, output);
+}
+
+static int aesecb_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key, size_t key_size)
+{
+    struct aesecb_context_t *ctx = (struct aesecb_context_t *)_ctx;
+    ctx->super.do_dispose = aesecb_dispose;
+    ctx->super.do_init = NULL;
+    ctx->super.do_transform = is_enc ? aesecb_encrypt : aesecb_decrypt;
+    cf_aes_init(&ctx->aes, key, key_size);
+    return 0;
+}
+
+static int aes128ecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void *key)
+{
+    return aesecb_setup_crypto(ctx, is_enc, key, PTLS_AES128_KEY_SIZE);
+}
+
+static int aes256ecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void *key)
+{
+    return aesecb_setup_crypto(ctx, is_enc, key, PTLS_AES256_KEY_SIZE);
 }
 
 struct aesctr_context_t {
@@ -497,24 +573,34 @@ ptls_define_hash(sha256, cf_sha256_context, cf_sha256_init, cf_sha256_update, cf
 ptls_define_hash(sha384, cf_sha512_context, cf_sha384_init, cf_sha384_update, cf_sha384_digest_final);
 
 ptls_key_exchange_algorithm_t ptls_minicrypto_x25519 = {PTLS_GROUP_X25519, x25519_create_key_exchange, x25519_key_exchange};
-ptls_cipher_algorithm_t ptls_minicrypto_aes128ctr = {"AES128-CTR", PTLS_AES128_KEY_SIZE, PTLS_AES_IV_SIZE,
-                                                     sizeof(struct aesctr_context_t), aes128ctr_setup_crypto};
+ptls_cipher_algorithm_t ptls_minicrypto_aes128ecb = {
+    "AES128-ECB",          PTLS_AES128_KEY_SIZE, PTLS_AES_BLOCK_SIZE, 0 /* iv size */, sizeof(struct aesecb_context_t),
+    aes128ecb_setup_crypto};
+ptls_cipher_algorithm_t ptls_minicrypto_aes128ctr = {
+    "AES128-CTR",          PTLS_AES128_KEY_SIZE, 1 /* block size */, PTLS_AES_IV_SIZE, sizeof(struct aesctr_context_t),
+    aes128ctr_setup_crypto};
 ptls_aead_algorithm_t ptls_minicrypto_aes128gcm = {
-    "AES128-GCM",         &ptls_minicrypto_aes128ctr,      PTLS_AES128_KEY_SIZE,       PTLS_AESGCM_IV_SIZE,
-    PTLS_AESGCM_TAG_SIZE, sizeof(struct aesgcm_context_t), aead_aes128gcm_setup_crypto};
-ptls_cipher_algorithm_t ptls_minicrypto_aes256ctr = {"AES256-CTR", PTLS_AES256_KEY_SIZE, PTLS_AES_IV_SIZE,
-                                                     sizeof(struct aesctr_context_t), aes256ctr_setup_crypto};
+    "AES128-GCM",        &ptls_minicrypto_aes128ctr, &ptls_minicrypto_aes128ecb,      PTLS_AES128_KEY_SIZE,
+    PTLS_AESGCM_IV_SIZE, PTLS_AESGCM_TAG_SIZE,       sizeof(struct aesgcm_context_t), aead_aes128gcm_setup_crypto};
+ptls_cipher_algorithm_t ptls_minicrypto_aes256ecb = {
+    "AES128-ECB",          PTLS_AES256_KEY_SIZE, PTLS_AES_BLOCK_SIZE, 0 /* iv size */, sizeof(struct aesecb_context_t),
+    aes256ecb_setup_crypto};
+ptls_cipher_algorithm_t ptls_minicrypto_aes256ctr = {
+    "AES256-CTR",          PTLS_AES256_KEY_SIZE, 1 /* block size */, PTLS_AES_IV_SIZE, sizeof(struct aesctr_context_t),
+    aes256ctr_setup_crypto};
 ptls_aead_algorithm_t ptls_minicrypto_aes256gcm = {
-    "AES256-GCM",         &ptls_minicrypto_aes256ctr,      PTLS_AES256_KEY_SIZE,       PTLS_AESGCM_IV_SIZE,
-    PTLS_AESGCM_TAG_SIZE, sizeof(struct aesgcm_context_t), aead_aes256gcm_setup_crypto};
+    "AES256-GCM",        &ptls_minicrypto_aes256ctr, &ptls_minicrypto_aes256ecb,      PTLS_AES256_KEY_SIZE,
+    PTLS_AESGCM_IV_SIZE, PTLS_AESGCM_TAG_SIZE,       sizeof(struct aesgcm_context_t), aead_aes256gcm_setup_crypto};
 ptls_hash_algorithm_t ptls_minicrypto_sha256 = {PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
                                                 PTLS_ZERO_DIGEST_SHA256};
 ptls_hash_algorithm_t ptls_minicrypto_sha384 = {PTLS_SHA384_BLOCK_SIZE, PTLS_SHA384_DIGEST_SIZE, sha384_create,
                                                 PTLS_ZERO_DIGEST_SHA384};
-ptls_cipher_algorithm_t ptls_minicrypto_chacha20 = {"CHACHA20", PTLS_CHACHA20_KEY_SIZE, PTLS_CHACHA20_IV_SIZE,
-                                                    sizeof(struct chacha20_context_t), chacha20_setup_crypto};
+ptls_cipher_algorithm_t ptls_minicrypto_chacha20 = {
+    "CHACHA20",           PTLS_CHACHA20_KEY_SIZE, 1 /* block size */, PTLS_CHACHA20_IV_SIZE, sizeof(struct chacha20_context_t),
+    chacha20_setup_crypto};
 ptls_aead_algorithm_t ptls_minicrypto_chacha20poly1305 = {"CHACHA20-POLY1305",
                                                           &ptls_minicrypto_chacha20,
+                                                          NULL,
                                                           PTLS_CHACHA20_KEY_SIZE,
                                                           PTLS_CHACHA20POLY1305_IV_SIZE,
                                                           PTLS_CHACHA20POLY1305_TAG_SIZE,

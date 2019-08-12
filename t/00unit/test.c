@@ -161,11 +161,13 @@ int main(int argc, char **argv)
         subtest("lib/cache.c", test_lib__common__cache_c);
         subtest("lib/common/multithread.c", test_lib__common__multithread_c);
         subtest("lib/common/hostinfo.c", test_lib__common__hostinfo_c);
+        subtest("lib/common/httpclient.c", test_lib__common__httpclient_c);
         subtest("lib/common/serverutil.c", test_lib__common__serverutil_c);
         subtest("lib/common/serverutil.c", test_lib__common__socket_c);
         subtest("lib/common/string.c", test_lib__common__string_c);
         subtest("lib/common/url.c", test_lib__common__url_c);
         subtest("lib/common/time.c", test_lib__common__time_c);
+        subtest("lib/common/timerwheel.c", test_lib__common__timerwheel_c);
         subtest("lib/core/headers.c", test_lib__core__headers_c);
         subtest("lib/core/proxy.c", test_lib__core__proxy_c);
         subtest("lib/core/util.c", test_lib__core__util_c);

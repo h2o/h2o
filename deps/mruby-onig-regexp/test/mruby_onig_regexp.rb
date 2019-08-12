@@ -19,6 +19,9 @@ end
 assert('OnigRegexp.last_match', '15.2.15.6.3') do
   OnigRegexp.new('.*') =~ 'ginka'
   assert_equal 'ginka', OnigRegexp.last_match[0]
+
+  OnigRegexp.new('zzz') =~ 'ginka'
+  assert_nil OnigRegexp.last_match
 end
 
 assert('OnigRegexp.quote', '15.2.15.6.4') do
@@ -51,6 +54,8 @@ assert("OnigRegexp#===", '15.2.15.7.4') do
   reg = OnigRegexp.new("(https?://[^/]+)[-a-zA-Z0-9./]+")
   assert_true reg === "http://example.com"
   assert_false reg === "htt://example.com"
+
+  assert_false /a/ === Object.new
 end
 
 assert('OnigRegexp#=~', '15.2.15.7.5') do
@@ -70,6 +75,12 @@ assert("OnigRegexp#match", '15.2.15.7.7') do
   reg = OnigRegexp.new("(https?://[^/]+)[-a-zA-Z0-9./]+")
   assert_false reg.match("http://masamitsu-murase.12345/hoge.html").nil?
   assert_nil reg.match("http:///masamitsu-murase.12345/hoge.html")
+
+  reg = OnigRegexp.new('def')
+  assert_equal "def", reg.match('abcdef', 3)[0]
+  assert_nil reg.match('abcdef', -1)
+  assert_nil reg.match('abcdef', 4)
+  assert_nil reg.match(nil, 3)
 end
 
 assert("OnigRegexp#source", '15.2.15.7.8') do
@@ -95,6 +106,7 @@ assert("OnigRegexp#inspect") do
   assert_equal '/(https?:\/\/[^\/]+)[-a-zA-Z0-9.\/]+/', reg.inspect
   assert_equal '/abc\nd\te/mi', OnigRegexp.new("abc\nd\te", OnigRegexp::MULTILINE | OnigRegexp::IGNORECASE).inspect
   assert_equal '/abc/min', OnigRegexp.new("abc", OnigRegexp::MULTILINE | OnigRegexp::IGNORECASE, "none").inspect
+  assert_equal "/\\\\\\+\\//", /\\\+\//.inspect
 end
 
 assert("OnigRegexp#to_s") do
@@ -103,6 +115,7 @@ assert("OnigRegexp#to_s") do
   assert_equal '(?mx-i:ab+c)', OnigRegexp.new("ab+c", OnigRegexp::MULTILINE | OnigRegexp::EXTENDED).to_s
   assert_equal '(?mi-x:ab+c)', /ab+c/im.to_s
   assert_equal '(?mi-x:ab+c)', /ab+c/imn.to_s
+  assert_equal "(?-mix:\\\\\\+)", /\\\+/.to_s
 end
 
 assert("OnigRegexp#to_s (composition)") do
@@ -113,19 +126,31 @@ assert("OnigRegexp#to_s (composition)") do
   re3 = OnigRegexp.new("ab.+c", OnigRegexp::MULTILINE)
   re4 = OnigRegexp.new("xy#{re3}z", OnigRegexp::IGNORECASE)
   assert_equal '(?i-mx:xy(?m-ix:ab.+c)z)', re4.to_s
+
+  re5 = /\\\+/
+  re6 = /xy#{re5}z/
+  assert_equal "(?-mix:xy(?-mix:\\\\\\+)z)", re6.to_s
 end
 
 # Extended patterns.
 assert("OnigRegexp#match (no flags)") do
+  o = Object.new
+  def o.to_str
+    "obj"
+  end
   [
     [ ".*", "abcd\nefg", "abcd" ],
     [ "^a.", "abcd\naefg", "ab" ],
     [ "^a.", "bacd\naefg", "ae" ],
-    [ ".$", "bacd\naefg", "d" ]
+    [ ".$", "bacd\naefg", "d" ],
+    [ "bc", :abc, "bc"],
+    [ "bj", o, "bj"],
   ].each do |reg, str, result|
     m = OnigRegexp.new(reg).match(str)
     assert_equal result, m[0] if assert_false m.nil?
   end
+
+  assert_raise(TypeError) { /a/.match(Object.new) }
 end
 
 assert("OnigRegexp#match (multiline)") do
@@ -151,12 +176,24 @@ assert("OnigRegexp#match (none encoding)") do
   assert_equal 2, /\x82/n =~ "あ"
 end
 
+assert("OnigRegexp#match (with block)") do
+  reg = OnigRegexp.new("(https?://[^/]+)[-a-zA-Z0-9./]+")
+  reg.match("http://masamitsu-murase.12345/hoge.html") do |m|
+    assert_true m.is_a?(OnigMatchData)
+    assert_equal "http://masamitsu-murase.12345/hoge.html", m[0]
+  end
+end
+
 assert('OnigRegexp.version') do
   OnigRegexp.version.kind_of? String
 end
 
 def onig_match_data_example
   OnigRegexp.new('(\w+)(\w)').match('+aaabb-')
+end
+
+def onig_mismatch_data_example
+  OnigRegexp.new('abc').match('z')
 end
 
 assert('OnigMatchData.new') do
@@ -247,7 +284,13 @@ assert('OnigMatchData#regexp') do
 end
 
 assert('Invalid regexp') do
-  assert_raise(ArgumentError) { OnigRegexp.new '[aio' }
+  assert_raise(RegexpError) { OnigRegexp.new '[aio' }
+end
+
+assert('Invalid argument') do
+  assert_raise(ArgumentError) { "".sub(//) }
+  assert_raise(ArgumentError) { "".onig_regexp_sub(OnigRegexp.new('')) }
+  assert_raise(ArgumentError) { "\xf0".gsub(/[^a]/,"X") }
 end
 
 assert('String#onig_regexp_gsub') do
@@ -259,6 +302,16 @@ assert('String#onig_regexp_gsub') do
   assert_equal '.h.e.l.l.o. .m.r.u.b.y.', test_str.onig_regexp_gsub(OnigRegexp.new(''), '.')
   assert_equal " hello\n mruby", "hello\nmruby".onig_regexp_gsub(OnigRegexp.new('^'), ' ')
   assert_equal "he<l><><l><>o mruby", test_str.onig_regexp_gsub(OnigRegexp.new('(l)'), '<\1><\2>')
+end
+
+assert('String#onig_regexp_gsub with hash') do
+  assert_equal('azc', 'abc'.gsub(/b/, "b" => "z"))
+  assert_equal('ac', 'abc'.gsub(/b/, {}))
+  assert_equal('a1c', 'abc'.gsub(/b/, "b" => 1))
+  assert_equal('aBc', 'abc'.gsub(/b/, Hash.new {|h, k| k.upcase }))
+  assert_equal('a[\&]c', 'abc'.gsub(/b/, "b" => '[\&]'))
+  assert_equal('aBcaBc', 'abcabc'.gsub(/b/, Hash.new {|h, k| h[k] = k.upcase }))
+  assert_equal('aBcDEf', 'abcdef'.gsub(/de|b/, "b" => "B", "de" => "DE"))
 end
 
 assert('String#onig_regexp_scan') do
@@ -275,6 +328,9 @@ assert('String#onig_regexp_scan') do
   result = ''
   assert_equal test_str, test_str.onig_regexp_scan(OnigRegexp.new('(.)(.)')) { |x, y| result += y; result += x }
   assert_equal 'rmbu yowlr', result
+
+  assert_equal [""] * (test_str.length + 1), test_str.onig_regexp_scan(OnigRegexp.new(''))
+  assert_equal [""], "".onig_regexp_scan(OnigRegexp.new(''))
 end
 
 assert('String#onig_regexp_sub') do
@@ -283,6 +339,17 @@ assert('String#onig_regexp_sub') do
   assert_equal 'h<e>llo mruby', test_str.onig_regexp_sub(OnigRegexp.new('([aeiou])'), '<\1>')
   assert_equal 'h ello mruby', test_str.onig_regexp_sub(OnigRegexp.new('\w')) { |v| v + ' ' }
   assert_equal 'h{e}llo mruby', test_str.onig_regexp_sub(OnigRegexp.new('(?<hoge>[aeiou])'), '{\k<hoge>}')
+  assert_equal "heOlo mruby", test_str.onig_regexp_sub(OnigRegexp.new("l"), "O") { "X" }
+end
+
+assert('String#onig_regexp_sub with hash') do
+  assert_equal('azc', 'abc'.sub(/b/, "b" => "z"))
+  assert_equal('ac', 'abc'.sub(/b/, {}))
+  assert_equal('a1c', 'abc'.sub(/b/, "b" => 1))
+  assert_equal('aBc', 'abc'.sub(/b/, Hash.new {|h, k| k.upcase }))
+  assert_equal('a[\&]c', 'abc'.sub(/b/, "b" => '[\&]'))
+  assert_equal('aBcabc', 'abcabc'.sub(/b/, Hash.new {|h, k| h[k] = k.upcase }))
+  assert_equal('aBcdef', 'abcdef'.sub(/de|b/, "b" => "B", "de" => "DE"))
 end
 
 assert('String#onig_regexp_split') do
@@ -293,11 +360,37 @@ assert('String#onig_regexp_split') do
   prev_splitter = $;
   $; = OnigRegexp.new ' \w'
   assert_equal ['cute', 'ruby', 'ute'], test_str.onig_regexp_split
+  assert_equal ['cute', 'ruby', 'ute'], test_str.onig_regexp_split(nil)
+  assert_equal ['cute', 'ruby cute'], test_str.onig_regexp_split(nil, 2)
   $; = 't'
   assert_equal ['cu', 'e mruby cu', 'e'], test_str.onig_regexp_split
+  assert_equal ['cu', 'e mruby cu', 'e'], test_str.onig_regexp_split(nil)
+  assert_equal ['cu', 'e mruby cute'], test_str.onig_regexp_split(nil, 2)
+  $; = nil
+  assert_equal ['cute', 'mruby', 'cute'], test_str.onig_regexp_split
+  assert_equal ['cute', 'mruby', 'cute'], test_str.onig_regexp_split(nil)
+  assert_equal ['cute', 'mruby cute'], test_str.onig_regexp_split(nil, 2)
+  $; = 1
+  assert_raise(TypeError) { "".onig_regexp_split }
   $; = prev_splitter
 
   assert_equal ['h', 'e', 'l', 'l', 'o'], 'hello'.onig_regexp_split(OnigRegexp.new(''))
+  assert_equal ["h", "e", "l", "l", "o", ""], 'hello'.onig_regexp_split(OnigRegexp.new(''), -1)
+  assert_equal ["h", "", "i", "", "!", "", ""], "hi!".onig_regexp_split(OnigRegexp.new('()'), -1)
+  assert_equal ["h", "el", "lo"], "hello".onig_regexp_split(OnigRegexp.new('(el)|(xx)'))
+
+  assert_equal ['あ', 'い', 'う', 'え', 'お'], 'あいうえお'.onig_regexp_split('')
+  assert_equal ['あ', 'い', 'う', 'え', 'お', ''], 'あいうえお'.onig_regexp_split('', -1)
+  assert_equal ['あいうえお'], 'あいうえお'.onig_regexp_split('', 1)
+  assert_equal ['あ', 'いうえお'], 'あいうえお'.onig_regexp_split('', 2)
+  assert_equal ['あ', 'い', 'うえお'], 'あいうえお'.onig_regexp_split('', 3)
+
+  assert_equal ['あ', 'い', 'う', 'え', 'お'], 'あいうえお'.onig_regexp_split(OnigRegexp.new(''))
+  assert_equal ['あ', 'い', 'う', 'え', 'お', ''], 'あいうえお'.onig_regexp_split(OnigRegexp.new(''), -1)
+  assert_equal ['あいうえお'], 'あいうえお'.onig_regexp_split(OnigRegexp.new(''), 1)
+  assert_equal ['あ', 'いうえお'], 'あいうえお'.onig_regexp_split(OnigRegexp.new(''), 2)
+  assert_equal ['あ', 'い', 'うえお'], 'あいうえお'.onig_regexp_split(OnigRegexp.new(''), 3)
+
   assert_equal ['h', 'e', 'llo'], 'hello'.onig_regexp_split(OnigRegexp.new(''), 3)
   assert_equal ['h', 'i', 'd', 'a', 'd'], 'hi dad'.onig_regexp_split(OnigRegexp.new('\s*'))
 
@@ -310,6 +403,13 @@ assert('String#onig_regexp_split') do
   assert_equal ['1', '', '2', '3', '', '4', '', ''], test_str.onig_regexp_split(OnigRegexp.new(','), -4)
 
   assert_equal [], ''.onig_regexp_split(OnigRegexp.new(','), -1)
+
+  o = Object.new
+  def o.to_str
+    ","
+  end
+  assert_equal ["こ", "に", "ち", "わ"], "こ,に,ち,わ".onig_regexp_split(o)
+  assert_raise(TypeError) { "".onig_regexp_split(1) }
 end
 
 assert('String#index') do
@@ -333,32 +433,58 @@ Regexp = OnigRegexp
 assert('$~') do
   m = onig_match_data_example
   assert_equal m[0], $~[0]
+
+  onig_mismatch_data_example
+  assert_nil $~
 end
 
 assert('$&') do
   m = onig_match_data_example
   assert_equal m[0], $&
+
+  onig_mismatch_data_example
+  assert_nil $&
 end
 
 assert('$`') do
   m = onig_match_data_example
   assert_equal m.pre_match, $`
+
+  onig_mismatch_data_example
+  assert_nil $`
 end
 
 assert('$\'') do
   m = onig_match_data_example
   assert_equal m.post_match, $'
+
+  onig_mismatch_data_example
+  assert_nil $'
 end
 
 assert('$+') do
   m = onig_match_data_example
   assert_equal m[-1], $+
+
+  onig_mismatch_data_example
+  assert_nil $+
 end
 
 assert('$1 to $9') do
   onig_match_data_example
   assert_equal 'aaab', $1
   assert_equal 'b', $2
+  assert_nil $3
+  assert_nil $4
+  assert_nil $5
+  assert_nil $6
+  assert_nil $7
+  assert_nil $8
+  assert_nil $9
+
+  onig_mismatch_data_example
+  assert_nil $1
+  assert_nil $2
   assert_nil $3
   assert_nil $4
   assert_nil $5
@@ -386,6 +512,26 @@ assert('change set_global_variables') do
   assert_nil $~
 
   OnigRegexp.set_global_variables = true
+end
+
+assert('OnigRegexp#match?') do
+  assert_false OnigRegexp.new('^[123]+$').match?('abc')
+  assert_false OnigRegexp.new('^[123]+$').match?(:abc)
+  assert_true OnigRegexp.new('^[123]+$').match?('321')
+  assert_true OnigRegexp.new('webp').match?('text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8')
+  assert_true(/webp/.match?('text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8'))
+
+  reg = OnigRegexp.new('def')
+  assert_true reg.match?('abcdef', 3)
+  assert_false reg.match?('abcdef', -1)
+  assert_false reg.match?('abcdef', 4)
+  assert_false reg.match?(nil, 3)
+end
+
+assert('String#match?') do
+  assert_equal false, 'abc'.onig_regexp_match?(OnigRegexp.new('^[123]+$'))
+  assert_equal true, '321'.onig_regexp_match?(OnigRegexp.new('^[123]+$'))
+  assert_true 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8'.onig_regexp_match?(OnigRegexp.new('webp'))
 end
 
 Regexp = Object

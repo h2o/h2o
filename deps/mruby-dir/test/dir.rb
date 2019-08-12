@@ -108,19 +108,27 @@ end
 
 assert('Dir#tell') do
   n = nil
-  Dir.open(DirTest.sandbox) { |d|
-    n = d.tell
-  }
-  assert_true n.is_a? Integer
+  begin
+    Dir.open(DirTest.sandbox) { |d|
+      n = d.tell
+    }
+    assert_true n.is_a? Integer
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert('Dir#seek') do
   d1 = Dir.open(DirTest.sandbox)
   d1.read
-  n = d1.tell
-  d1.read
-  d2 = d1.seek(n)
-  assert_equal d1, d2
+  begin
+    n = d1.tell
+    d1.read
+    d2 = d1.seek(n)
+    assert_equal d1, d2
+  rescue NotImplementedError => e
+    skip e.message
+  end
 end
 
 assert('DirTest.teardown') do

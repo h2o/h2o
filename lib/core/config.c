@@ -133,7 +133,6 @@ void h2o_config_init_pathconf(h2o_pathconf_t *pathconf, h2o_globalconf_t *global
 {
     memset(pathconf, 0, sizeof(*pathconf));
     pathconf->global = globalconf;
-    h2o_chunked_register(pathconf);
     if (path != NULL)
         pathconf->path = h2o_strdup(NULL, path, SIZE_MAX);
     h2o_mem_addref_shared(mimemap);
@@ -155,8 +154,8 @@ void h2o_config_dispose_pathconf(h2o_pathconf_t *pathconf)
         free(list.entries);                                                                                                        \
     } while (0)
     DESTROY_LIST(h2o_handler_t, pathconf->handlers);
-    DESTROY_LIST(h2o_filter_t, pathconf->filters);
-    DESTROY_LIST(h2o_logger_t, pathconf->loggers);
+    DESTROY_LIST(h2o_filter_t, pathconf->_filters);
+    DESTROY_LIST(h2o_logger_t, pathconf->_loggers);
 #undef DESTROY_LIST
 
     free(pathconf->path.base);
@@ -213,21 +212,16 @@ h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *p
     return pathconf;
 }
 
-void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t status_handler)
+void h2o_config_register_status_handler(h2o_globalconf_t *config, h2o_status_handler_t *status_handler)
 {
+    /* check if the status handler is already registered */
+    size_t i;
+    for (i = 0; i != config->statuses.size; ++i)
+        if (config->statuses.entries[i] == status_handler)
+            return;
+    /* register the new handler */
     h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
     config->statuses.entries[config->statuses.size++] = status_handler;
-}
-
-void h2o_config_register_simple_status_handler(h2o_globalconf_t *config, h2o_iovec_t name, final_status_handler_cb status_handler)
-{
-    h2o_status_handler_t *sh;
-
-    h2o_vector_reserve(NULL, &config->statuses, config->statuses.size + 1);
-    sh = &config->statuses.entries[config->statuses.size++];
-    memset(sh, 0, sizeof(*sh));
-    sh->name = h2o_strdup(NULL, name.base, name.len);
-    sh->final = status_handler;
 }
 
 h2o_hostconf_t *h2o_config_register_host(h2o_globalconf_t *config, h2o_iovec_t host, uint16_t port)
@@ -310,10 +304,10 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
     memset(filter, 0, sz);
     filter->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, &conf->filters, conf->filters.size + 1);
-    memmove(conf->filters.entries + 1, conf->filters.entries, conf->filters.size * sizeof(conf->filters.entries[0]));
-    conf->filters.entries[0] = filter;
-    ++conf->filters.size;
+    h2o_vector_reserve(NULL, &conf->_filters, conf->_filters.size + 1);
+    memmove(conf->_filters.entries + 1, conf->_filters.entries, conf->_filters.size * sizeof(conf->_filters.entries[0]));
+    conf->_filters.entries[0] = filter;
+    ++conf->_filters.size;
 
     return filter;
 }
@@ -325,8 +319,8 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
     memset(logger, 0, sz);
     logger->_config_slot = conf->global->_num_config_slots++;
 
-    h2o_vector_reserve(NULL, &conf->loggers, conf->loggers.size + 1);
-    conf->loggers.entries[conf->loggers.size++] = logger;
+    h2o_vector_reserve(NULL, &conf->_loggers, conf->_loggers.size + 1);
+    conf->_loggers.entries[conf->_loggers.size++] = logger;
 
     return logger;
 }

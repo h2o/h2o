@@ -13,6 +13,11 @@ assert('Proc#inspect') do
   assert_kind_of String, ins
 end
 
+assert('Proc#parameters') do
+  parameters = Proc.new{|x,y=42,*other|}.parameters
+  assert_equal [[:opt, :x], [:opt, :y], [:rest, :other]], parameters
+end
+
 assert('Proc#lambda?') do
   assert_true lambda{}.lambda?
   assert_true !Proc.new{}.lambda?
@@ -70,6 +75,19 @@ assert('Kernel#proc') do
   assert_raise LocalJumpError do
     proc{ break }.call
   end
+end
+
+assert "Proc#<< and Proc#>>" do
+  add3 = ->(n) { n + 3 }
+  mul2 = ->(n) { n * 2 }
+
+  f1 = mul2 << add3
+  assert_kind_of Proc, f1
+  assert_equal 16, f1.call(5)
+
+  f2 = mul2 >> add3
+  assert_kind_of Proc, f2
+  assert_equal 13, f2.call(5)
 end
 
 assert('mrb_proc_new_cfunc_with_env') do

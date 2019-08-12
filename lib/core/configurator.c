@@ -30,6 +30,7 @@ struct st_core_config_vars_t {
     struct {
         unsigned reprioritize_blocking_assets : 1;
         unsigned push_preload : 1;
+        unsigned allow_cross_origin_push : 1;
         h2o_casper_conf_t casper;
     } http2;
     struct {
@@ -84,6 +85,7 @@ static int on_core_exit(h2o_configurator_t *_self, h2o_configurator_context_t *c
         /* exitting from host-level configuration */
         ctx->hostconf->http2.reprioritize_blocking_assets = self->vars->http2.reprioritize_blocking_assets;
         ctx->hostconf->http2.push_preload = self->vars->http2.push_preload;
+        ctx->hostconf->http2.allow_cross_origin_push = self->vars->http2.allow_cross_origin_push;
         ctx->hostconf->http2.casper = self->vars->http2.casper;
     } else if (ctx->pathconf != NULL) {
         /* exitting from path or extension-level configuration */
@@ -276,8 +278,8 @@ static yoml_t *convert_path_config_node(h2o_configurator_command_t *cmd, yoml_t 
             for (j = 0; j != elem->data.mapping.size; ++j) {
                 yoml_t *elemkey = elem->data.mapping.elements[j].key;
                 yoml_t *elemvalue = elem->data.mapping.elements[j].value;
-                map = h2o_mem_realloc(
-                    map, offsetof(yoml_t, data.mapping.elements) + sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
+                map = h2o_mem_realloc(map, offsetof(yoml_t, data.mapping.elements) +
+                                               sizeof(yoml_mapping_element_t) * (map->data.mapping.size + 1));
                 map->data.mapping.elements[map->data.mapping.size].key = elemkey;
                 map->data.mapping.elements[map->data.mapping.size].value = elemvalue;
                 ++map->data.mapping.size;
@@ -501,6 +503,18 @@ static int on_config_http2_push_preload(h2o_configurator_command_t *cmd, h2o_con
     return 0;
 }
 
+static int on_config_http2_allow_cross_origin_push(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_core_configurator_t *self = (void *)cmd->configurator;
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    self->vars->http2.allow_cross_origin_push = (int)on;
+
+    return 0;
+}
+
 static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     static const h2o_casper_conf_t defaults = {
@@ -533,9 +547,8 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
                 return -1;
             }
         }
-        if (tracking_types != NULL &&
-            (self->vars->http2.casper.track_all_types =
-                 (int)h2o_configurator_get_one_of(cmd, *tracking_types, "blocking-assets,all")) == -1)
+        if (tracking_types != NULL && (self->vars->http2.casper.track_all_types =
+                                           (int)h2o_configurator_get_one_of(cmd, *tracking_types, "blocking-assets,all")) == -1)
             return -1;
     } break;
     default:
@@ -640,8 +653,7 @@ static int set_mimetypes(h2o_configurator_command_t *cmd, h2o_mimemap_t *mimemap
             }
         } break;
         default:
-            fprintf(stderr, "logic flaw at %s:%d\n", __FILE__, __LINE__);
-            abort();
+            h2o_fatal("logic flaw");
         }
     }
 
@@ -964,6 +976,10 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_push_preload);
+        h2o_configurator_define_command(&c->super, "http2-allow-cross-origin-push",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_PATH |
+                                            H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http2_allow_cross_origin_push);
         h2o_configurator_define_command(&c->super, "http2-casper", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST,
                                         on_config_http2_casper);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
@@ -1001,8 +1017,7 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "send-informational",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_send_informational);
-        h2o_configurator_define_command(&c->super, "stash", H2O_CONFIGURATOR_FLAG_ALL_LEVELS,
-                                        on_config_stash);
+        h2o_configurator_define_command(&c->super, "stash", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_stash);
     }
 }
 
@@ -1080,15 +1095,16 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run)
 
 void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...)
 {
+    char buf[1024];
     va_list args;
 
-    fprintf(stderr, "[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
+    h2o_error_printf("[%s:%zu] ", node->filename ? node->filename : "-", node->line + 1);
     if (cmd != NULL)
-        fprintf(stderr, "in command %s, ", cmd->name);
+        h2o_error_printf("in command %s, ", cmd->name);
     va_start(args, reason);
-    vfprintf(stderr, reason, args);
+    vsnprintf(buf, sizeof(buf), reason, args);
     va_end(args);
-    fputc('\n', stderr);
+    h2o_error_printf("%s\n", buf);
 }
 
 int h2o_configurator_scanf(h2o_configurator_command_t *cmd, yoml_t *node, const char *fmt, ...)
@@ -1133,7 +1149,7 @@ ssize_t h2o_configurator_get_one_of(h2o_configurator_command_t *cmd, yoml_t *nod
             goto Error;
         cand_str += 1; /* skip ',' */
     }
-/* not reached */
+    /* not reached */
 
 Error:
     h2o_configurator_errprintf(cmd, node, "argument must be one of: %s", candidates);
@@ -1175,8 +1191,7 @@ static const char *get_next_key(const char *start, h2o_iovec_t *output, unsigned
     return NULL;
 
 Error:
-    fprintf(stderr, "%s: detected invalid or missing type specifier; input is: %s\n", __FUNCTION__, start);
-    abort();
+    h2o_fatal("detected invalid or missing type specifier; input is: %s\n", start);
 }
 
 int h2o_configurator__do_parse_mapping(h2o_configurator_command_t *cmd, yoml_t *node, const char *keys_required,

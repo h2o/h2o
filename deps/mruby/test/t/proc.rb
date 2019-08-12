@@ -157,7 +157,7 @@ assert('&obj call to_proc if defined') do
   def mock(&b)
     b
   end
-  assert_equal pr.object_id, mock(&pr).object_id
+  assert_same pr, mock(&pr)
   assert_equal pr, mock(&pr)
 
   obj = Object.new

@@ -11,9 +11,9 @@ MRuby.each_target do
   if cxx_exception_enabled?
     objs += %w(vm error).map { |v| compile_as_cxx "#{current_dir}/#{v}.c", "#{current_build_dir}/#{v}.cxx" }
   end
-  self.libmruby << objs
+  self.libmruby_objs << objs
 
-  file libfile("#{build_dir}/lib/libmruby_core") => objs do |t|
+  file libmruby_core_static => objs do |t|
     archiver.run t.name, t.prerequisites
   end
 end

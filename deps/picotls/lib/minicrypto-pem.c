@@ -33,7 +33,6 @@
 #include "picotls/asn1.h"
 #include "picotls/pembase64.h"
 
-
 /*
  * This function could be declared as static, but we want to access it
  * in the unit tests.
@@ -116,7 +115,7 @@ size_t ptls_minicrypto_asn1_decode_private_key(ptls_asn1_pkcs8_private_key_t *pk
         pkey->parameters_index = byte_index;
 
         pkey->parameters_length =
-            ptls_asn1_validation_recursive(bytes + byte_index, last_byte1 - byte_index, decode_error, 2, log_ctx);
+            (uint32_t)ptls_asn1_validation_recursive(bytes + byte_index, last_byte1 - byte_index, decode_error, 2, log_ctx);
 
         byte_index += pkey->parameters_length;
 
@@ -207,6 +206,7 @@ static int ptls_set_ecdsa_private_key(ptls_context_t *ctx, ptls_asn1_pkcs8_priva
     uint8_t *ecdsa_key_data = NULL;
     uint32_t ecdsa_key_data_length = 0;
     size_t ecdsa_key_data_last = 0;
+    ctx->pkey_buf = pkey->vec;
 
     /* We expect the parameters to include just the curve ID */
 
@@ -322,18 +322,23 @@ int ptls_minicrypto_load_private_key(ptls_context_t *ctx, char const *pem_fname)
     ptls_asn1_pkcs8_private_key_t pkey = {{0}};
     int ret = ptls_pem_parse_private_key(pem_fname, &pkey, NULL);
 
-    /* Check that this is the expected key type.
-    * At this point, the minicrypto library only supports ECDSA keys.
-    * In theory, we could add support for RSA keys at some point.
-    */
-    if (ret == 0) {
-        if (pkey.algorithm_length == sizeof(ptls_asn1_algorithm_ecdsa) &&
-            memcmp(pkey.vec.base + pkey.algorithm_index, ptls_asn1_algorithm_ecdsa, sizeof(ptls_asn1_algorithm_ecdsa)) == 0) {
-            ret = ptls_set_ecdsa_private_key(ctx, &pkey, NULL);
-        } else {
-            ret = -1;
-        }
-    }
+    if (ret != 0)
+        goto err;
 
-    return ret;
+    /* Check that this is the expected key type.
+     * At this point, the minicrypto library only supports ECDSA keys.
+     * In theory, we could add support for RSA keys at some point.
+     */
+    if (pkey.algorithm_length != sizeof(ptls_asn1_algorithm_ecdsa) ||
+        memcmp(pkey.vec.base + pkey.algorithm_index, ptls_asn1_algorithm_ecdsa, sizeof(ptls_asn1_algorithm_ecdsa)) != 0)
+        goto err;
+
+    return ptls_set_ecdsa_private_key(ctx, &pkey, NULL);
+
+err:
+    if (pkey.vec.base) {
+        ptls_clear_memory(pkey.vec.base, pkey.vec.len);
+        free(pkey.vec.base);
+    }
+    return -1;
 }

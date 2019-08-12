@@ -184,7 +184,7 @@ cleanup(mrb_state *mrb, struct _args *args)
 static mrb_debug_context*
 mrb_debug_context_new(mrb_state *mrb)
 {
-  mrb_debug_context *dbg = mrb_malloc(mrb, sizeof(mrb_debug_context));
+  mrb_debug_context *dbg = (mrb_debug_context*)mrb_malloc(mrb, sizeof(mrb_debug_context));
 
   memset(dbg, 0, sizeof(mrb_debug_context));
 
@@ -223,12 +223,12 @@ mrb_debug_context_free(mrb_state *mrb)
 static mrdb_state*
 mrdb_state_new(mrb_state *mrb)
 {
-  mrdb_state *mrdb = mrb_malloc(mrb, sizeof(mrdb_state));
+  mrdb_state *mrdb = (mrdb_state*)mrb_malloc(mrb, sizeof(mrdb_state));
 
   memset(mrdb, 0, sizeof(mrdb_state));
 
   mrdb->dbg = mrb_debug_context_get(mrb);
-  mrdb->command = mrb_malloc(mrb, MAX_COMMAND_LINE+1);
+  mrdb->command = (char*)mrb_malloc(mrb, MAX_COMMAND_LINE+1);
   mrdb->print_no = 1;
 
   return mrdb;
@@ -510,6 +510,7 @@ check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value 
   mrb_sym sym;
   int32_t bpno;
   mrb_bool isCfunc;
+  struct mrb_insn_data insn;
 
   mrb_debug_context *dbg = mrb_debug_context_get(mrb);
 
@@ -517,11 +518,12 @@ check_method_breakpoint(mrb_state *mrb, mrb_irep *irep, mrb_code *pc, mrb_value 
   bpno = dbg->method_bpno;
   dbg->method_bpno = 0;
 
-  switch(GET_OPCODE(*pc)) {
+  insn = mrb_decode_insn(pc);
+  switch(insn.insn) {
     case OP_SEND:
     case OP_SENDB:
-      c = mrb_class(mrb, regs[GETARG_A(*pc)]);
-      sym = irep->syms[GETARG_B(*pc)];
+      c = mrb_class(mrb, regs[insn.a]);
+      sym = irep->syms[insn.b];
       break;
     case OP_SUPER:
       c = mrb->c->ci->target_class->super;

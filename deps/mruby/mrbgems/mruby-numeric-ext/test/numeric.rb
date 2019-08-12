@@ -14,6 +14,7 @@ assert('Integer#div') do
 end
 
 assert('Float#div') do
+  skip unless Object.const_defined?(:Float)
   assert_float 52, 365.2425.div(7)
 end
 

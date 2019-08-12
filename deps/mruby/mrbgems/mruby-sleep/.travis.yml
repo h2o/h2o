@@ -1,0 +1,29 @@
+dist: trusty
+
+language: c
+compiler:
+  - gcc
+  - clang
+env:
+  - MRUBY_VERSION=1.2.0
+  - MRUBY_VERSION=master
+matrix:
+  allow_failures:
+    - env: MRUBY_VERSION=master
+branches:
+  only:
+    - master
+addons:
+  apt:
+    packages:
+      - rake
+      - bison
+      - git
+      - gperf
+      # - aclocal
+      # - automake
+      # - autoconf
+      # - autotools-dev
+
+script:
+  - rake test

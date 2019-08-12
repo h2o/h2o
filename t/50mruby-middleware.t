@@ -5,6 +5,7 @@ use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port check_port);
 use Test::More;
 use Test::Exception;
+use Hash::MultiValue;
 use t::Util;
 
 plan skip_all => 'mruby support is off'
@@ -33,14 +34,15 @@ sub create_upstream {
 };
 
 sub get {
-    my ($proto, $port, $curl, $path, $req_headers, $data_file) = @_;
+    my ($proto, $port, $curl, $path, $opts) = @_;
+    $opts ||= +{};
 
     # build curl command
     my @curl_cmd = ($curl);
     push(@curl_cmd, qw(--silent --dump-header /dev/stderr));
-    push(@curl_cmd, map { ('-H', "'$_'") } @{ $req_headers || [] });
+    push(@curl_cmd, map { ('-H', "'$_'") } @{ $opts->{headers} || [] });
     push(@curl_cmd, "$proto://127.0.0.1:$port$path");
-    push(@curl_cmd, '--data-binary', "\@$data_file") if $data_file;
+    push(@curl_cmd, '--data-binary', "\@$opts->{data_file}") if $opts->{data_file};
     my $curl_cmd = join(' ', @curl_cmd);
 
     local $SIG{ALRM} = sub { die };
@@ -57,8 +59,12 @@ sub get {
         die "failed to get $path: @{[$sline || '']}";
     }
     my $status = $1 + 0;
-    my $headers = +{ map { split(': ', $_, 2) } @hlines };
-    $headers = +{ map { lc($_) => $headers->{$_} } keys %$headers };
+    my $headers = Hash::MultiValue->new(map { (lc($_->[0]), $_->[1]) } map { [ split(': ', $_, 2) ] } @hlines);
+    # unless ($opts->{list_headers}) {
+    #     $headers = +{ @$headers };
+    # }
+    # my $headers = +{ map { split(': ', $_, 2) } @hlines };
+    # $headers = +{ map { lc($_) => $headers->{$_} } keys %$headers };
     return ($status, $headers, $body);
 }
 
@@ -385,7 +391,7 @@ EOT
 EOT
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
@@ -432,7 +438,7 @@ EOT
 EOT
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size} + length('suffix');
                 is md5_hex($body), md5_hex($files{$file}->{content} . 'suffix');
@@ -452,7 +458,7 @@ EOT
 EOT
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), 3;
                 is $body, substr($files{$file}->{content}, 0, 3);
@@ -472,7 +478,7 @@ EOT
 EOT
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size};
                 is md5_hex($body), $files{$file}->{md5};
@@ -492,7 +498,7 @@ EOT
 EOT
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", undef, "@{[ DOC_ROOT ]}/$file");
+                my ($status, $headers, $body) = get($proto, $port, $curl, "$path/echo", +{ data_file => "@{[ DOC_ROOT ]}/$file" });
                 is $status, 200;
                 is length($body), $files{$file}->{size} - 3;
                 is md5_hex($body), md5_hex(substr($files{$file}->{content}, 3));
@@ -637,10 +643,10 @@ EOT
         truncate $access_log, 0;
 
         my ($status, $headers, $body);
-        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt', ['X-Foo: FOO']);
+        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt', +{ headers => ['X-Foo: FOO'] });
         is $status, 200;
         is $body, 'FOO';
-        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt?BAR', ['X-Foo: FOO']);
+        ($status, $headers, $body) = get($proto, $port, $curl, '/index.txt?BAR', +{ headers => ['X-Foo: FOO'] });
         is $status, 200;
         is $body, 'BAR';
 
@@ -809,6 +815,29 @@ EOT
         /modify?PATH_INFO=foo
         /modify?SCRIPT_NAME=/bar
     );
+};
+
+subtest 'do not apply filters multiple times' => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  "127.0.0.1:$port":
+    paths: &paths
+      /:
+        - mruby.handler: |
+            proc {|env|
+              H2O.next.call(env)
+            }
+        - file.dir: @{[ ASSETS_DIR ]}/doc_root
+        - header.add: "x-foo: FOO"
+  "127.0.0.1:$tls_port":
+    paths: *paths
+EOT
+    });
+    my ($status, $headers, $body);
+    ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/');
+    is scalar(my @v = $headers->get_all('x-foo')), 1;
 };
 
 done_testing();

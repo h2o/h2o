@@ -28,7 +28,6 @@ extern "C" {
 
 #include <netdb.h>
 #include "h2o/socketpool.h"
-#include "yoml.h"
 
 typedef size_t (*h2o_balancer_selector)(h2o_balancer_t *balancer, h2o_socketpool_target_vector_t *targets, char *tried);
 

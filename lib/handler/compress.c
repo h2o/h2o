@@ -57,6 +57,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     struct st_compress_filter_t *self = (void *)_self;
     struct st_compress_encoder_t *encoder;
     int compressible_types;
+    int compressible_types_mask = H2O_COMPRESSIBLE_BROTLI | H2O_COMPRESSIBLE_GZIP;
     h2o_compress_context_t *compressor;
     ssize_t i;
 
@@ -74,6 +75,12 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     case H2O_COMPRESS_HINT_ENABLE:
         /* compression was explicitely enabled */
         break;
+    case H2O_COMPRESS_HINT_ENABLE_BR:
+        compressible_types_mask = H2O_COMPRESSIBLE_BROTLI;
+        break;
+    case H2O_COMPRESS_HINT_ENABLE_GZIP:
+        compressible_types_mask = H2O_COMPRESSIBLE_GZIP;
+        break;
     case H2O_COMPRESS_HINT_AUTO:
     default:
         /* no hint from the producer, decide whether to compress based
@@ -87,7 +94,8 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     }
 
     /* skip if failed to gather the list of compressible types */
-    if ((compressible_types = h2o_get_compressible_types(&req->headers)) == 0)
+    compressible_types = h2o_get_compressible_types(&req->headers) & compressible_types_mask;
+    if (compressible_types == 0)
         goto Next;
 
     /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges) */

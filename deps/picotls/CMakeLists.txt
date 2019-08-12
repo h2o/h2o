@@ -22,10 +22,26 @@ SET(MINICRYPTO_LIBRARY_FILES
     deps/cifra/src/poly1305.c
     deps/cifra/src/sha256.c
     deps/cifra/src/sha512.c)
+SET(CORE_FILES
+    lib/picotls.c
+    lib/pembase64.c)
 
-ADD_LIBRARY(picotls-core lib/picotls.c lib/pembase64.c)
-ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c)
-ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c t/picotls.c t/minicrypto.c lib/asn1.c lib/pembase64.c)
+PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)
+PKG_CHECK_MODULES(BROTLI_ENC libbrotlienc)
+IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
+    INCLUDE_DIRECTORIES(${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
+    LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_BROTLI=1")
+    LIST(APPEND CORE_FILES
+        lib/certificate_compression.c)
+    LIST(APPEND CORE_EXTRA_LIBS ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+ENDIF ()
+
+ADD_LIBRARY(picotls-core ${CORE_FILES})
+TARGET_LINK_LIBRARIES(picotls-core ${CORE_EXTRA_LIBS})
+ADD_LIBRARY(picotls-minicrypto ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/minicrypto-pem.c lib/uecc.c lib/asn1.c lib/ffx.c)
+TARGET_LINK_LIBRARIES(picotls-minicrypto picotls-core)
+ADD_EXECUTABLE(test-minicrypto.t ${MINICRYPTO_LIBRARY_FILES} deps/picotest/picotest.c t/picotls.c t/minicrypto.c lib/asn1.c lib/pembase64.c lib/ffx.c)
 
 SET(TEST_EXES test-minicrypto.t)
 
@@ -34,18 +50,71 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     MESSAGE(WARNING "Enabling OpenSSL support")
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
     ADD_LIBRARY(picotls-openssl lib/openssl.c)
+    TARGET_LINK_LIBRARIES(picotls-openssl ${OPENSSL_LIBRARIES} picotls-core ${CMAKE_DL_LIBS})
     ADD_EXECUTABLE(cli t/cli.c lib/pembase64.c)
-    TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
-    ADD_EXECUTABLE(test-openssl.t ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/uecc.c lib/asn1.c lib/pembase64.c deps/picotest/picotest.c t/picotls.c t/openssl.c)
+    TARGET_LINK_LIBRARIES(cli picotls-openssl picotls-core)
+    ADD_EXECUTABLE(picotls-esni src/esni.c)
+    TARGET_LINK_LIBRARIES(picotls-esni picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+
+    ADD_EXECUTABLE(test-openssl.t ${MINICRYPTO_LIBRARY_FILES} lib/cifra.c lib/uecc.c lib/asn1.c lib/pembase64.c lib/ffx.c deps/picotest/picotest.c t/picotls.c t/openssl.c)
     SET_TARGET_PROPERTIES(test-openssl.t PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
     TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+
+    ADD_EXECUTABLE(ptlsbench t/ptlsbench.c)
+    SET_TARGET_PROPERTIES(ptlsbench PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
+    TARGET_LINK_LIBRARIES(ptlsbench picotls-minicrypto picotls-openssl picotls-core ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+
     SET(TEST_EXES ${TEST_EXES} test-openssl.t)
 ELSE ()
     MESSAGE(WARNING "Disabling OpenSSL support (requires 1.0.1 or newer)")
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check prove --exec '' -v ./*.t DEPENDS ${TEST_EXES})
+ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${TEST_EXES} cli)
 
-IF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+     SET(CMAKE_C_FLAGS "-D_GNU_SOURCE -pthread ${CMAKE_C_FLAGS}")
+ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     TARGET_LINK_LIBRARIES(cli "socket" "nsl")
 ENDIF ()
+
+FIND_LIBRARY(LIBC_RESOLV_LIB "resolv")
+IF (LIBC_RESOLV_LIB)
+    TARGET_LINK_LIBRARIES(cli ${LIBC_RESOLV_LIB})
+ENDIF ()
+
+IF (BUILD_FUZZER)
+    IF (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        MESSAGE(FATAL ERROR "The fuzzer needs clang as a compiler")
+    ENDIF()
+
+    ADD_EXECUTABLE(fuzz-asn1 fuzz/fuzz-asn1.c)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_GNU_SOURCE")
+    INCLUDE_DIRECTORIES(t include ${OPENSSL_INCLUDE_DIR})
+    ADD_DEFINITIONS(-DPTLS_FUZZ_HANDSHAKE=1)
+    ADD_EXECUTABLE(fuzz-server-hello fuzz/fuzz-server-hello.c)
+    ADD_EXECUTABLE(fuzz-client-hello fuzz/fuzz-client-hello.c)
+
+    IF (OSS_FUZZ)
+        # Use https://github.com/google/oss-fuzz compatible options
+        SET(LIB_FUZZER FuzzingEngine)
+        SET_TARGET_PROPERTIES(fuzz-asn1
+            fuzz-server-hello
+            fuzz-client-hello
+            PROPERTIES
+            LINKER_LANGUAGE CXX)
+    ELSE()
+        SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=fuzzer-no-link")
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=fuzzer-no-link")
+        SET_TARGET_PROPERTIES(fuzz-asn1
+            fuzz-server-hello
+            fuzz-client-hello
+            PROPERTIES
+            COMPILE_FLAGS "-fsanitize=fuzzer"
+            LINK_FLAGS "-fsanitize=fuzzer")
+    ENDIF (OSS_FUZZ)
+
+    TARGET_LINK_LIBRARIES(fuzz-asn1 picotls-minicrypto picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(fuzz-server-hello picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
+    TARGET_LINK_LIBRARIES(fuzz-client-hello picotls-core picotls-openssl ${OPENSSL_LIBRARIES} ${LIB_FUZZER})
+
+ENDIF()

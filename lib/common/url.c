@@ -165,7 +165,7 @@ Rewrite:
         goto RewriteError;
     return ret;
 RewriteError:
-    fprintf(stderr, "failed to normalize path: `%.*s` => `%.*s`\n", (int)len, path, (int)ret.len, ret.base);
+    h2o_error_printf("failed to normalize path: `%.*s` => `%.*s`\n", (int)len, path, (int)ret.len, ret.base);
     ret = h2o_iovec_init("/", 1);
     return ret;
 }
@@ -408,7 +408,7 @@ const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
 #undef PREFIX
 }
 
-const char *h2o_url_host_to_sun_err_is_not_unix_socket = "supplied name does not look like an unix-domain socket";
+const char h2o_url_host_to_sun_err_is_not_unix_socket[] = "supplied name does not look like an unix-domain socket";
 
 int h2o_url_init_with_hostport(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_url_scheme_t *scheme, h2o_iovec_t host,
                                uint16_t port, h2o_iovec_t path)

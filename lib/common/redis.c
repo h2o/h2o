@@ -24,10 +24,10 @@
 #include "h2o/hiredis_.h"
 #include "h2o/socket.h"
 
-const char *const h2o_redis_error_connection = "Connection Error";
-const char *const h2o_redis_error_protocol = "Protocol Error";
-const char *const h2o_redis_error_connect_timeout = "Connection Timeout";
-const char *const h2o_redis_error_command_timeout = "Command Timeout";
+const char h2o_redis_error_connection[] = "Connection Error";
+const char h2o_redis_error_protocol[] = "Protocol Error";
+const char h2o_redis_error_connect_timeout[] = "Connection Timeout";
+const char h2o_redis_error_command_timeout[] = "Command Timeout";
 
 struct st_redis_socket_data_t {
     redisAsyncContext *context;
@@ -37,18 +37,10 @@ struct st_redis_socket_data_t {
 
 static void attach_loop(redisAsyncContext *ac, h2o_loop_t *loop);
 
-static void invoke_deferred(h2o_redis_client_t *client, h2o_timeout_entry_t *entry, h2o_timeout_cb cb)
+static void invoke_deferred(h2o_redis_client_t *client, uint64_t tick, h2o_timer_t *entry, h2o_timer_cb cb)
 {
     entry->cb = cb;
-    h2o_timeout_link(client->loop, &client->_defer_timeout, entry);
-}
-
-static void dispose_connect_timeout(h2o_redis_client_t *client)
-{
-    if (h2o_timeout_is_linked(&client->_connect_timeout_entry))
-        h2o_timeout_unlink(&client->_connect_timeout_entry);
-    if (h2o_linklist_is_linked(&client->_connect_timeout._link))
-        h2o_timeout_dispose(client->loop, &client->_connect_timeout);
+    h2o_timer_link(client->loop, tick, entry);
 }
 
 static void close_and_detach_connection(h2o_redis_client_t *client, const char *errstr)
@@ -60,7 +52,7 @@ static void close_and_detach_connection(h2o_redis_client_t *client, const char *
 
     client->_redis->data = NULL;
     client->_redis = NULL;
-    dispose_connect_timeout(client);
+    h2o_timer_unlink(&client->_timeout_entry);
 }
 
 static void disconnect(h2o_redis_client_t *client, const char *errstr)
@@ -95,7 +87,7 @@ static const char *get_error(const redisAsyncContext *redis)
     case REDIS_ERR_OTHER:
         return redis->errstr;
     default:
-        assert(!"FIXME");
+        h2o_fatal("FIXME");
     }
 }
 
@@ -109,7 +101,7 @@ static void on_connect(const redisAsyncContext *redis, int status)
         close_and_detach_connection(client, h2o_redis_error_connection);
         return;
     }
-    dispose_connect_timeout(client);
+    h2o_timer_unlink(&client->_timeout_entry);
 
     client->state = H2O_REDIS_CONNECTION_STATE_CONNECTED;
     if (client->on_connect != NULL)
@@ -125,19 +117,13 @@ static void on_disconnect(const redisAsyncContext *redis, int status)
     close_and_detach_connection(client, get_error(redis));
 }
 
-static void on_connect_timeout_deferred(h2o_timeout_entry_t *entry)
+static void on_connect_timeout(h2o_timer_t *entry)
 {
-    h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _defer_timeout_entry, entry);
-    disconnect(client, h2o_redis_error_connect_timeout);
-}
-
-static void on_connect_timeout(h2o_timeout_entry_t *entry)
-{
-    h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _connect_timeout_entry, entry);
+    h2o_redis_client_t *client = H2O_STRUCT_FROM_MEMBER(h2o_redis_client_t, _timeout_entry, entry);
     assert((client->_redis->c.flags & REDIS_CONNECTED) == 0);
     assert(client->state != H2O_REDIS_CONNECTION_STATE_CLOSED);
 
-    invoke_deferred(client, &client->_defer_timeout_entry, on_connect_timeout_deferred);
+    disconnect(client, h2o_redis_error_connect_timeout);
 }
 
 h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz)
@@ -147,8 +133,7 @@ h2o_redis_client_t *h2o_redis_create_client(h2o_loop_t *loop, size_t sz)
 
     client->loop = loop;
     client->state = H2O_REDIS_CONNECTION_STATE_CLOSED;
-    h2o_timeout_init(client->loop, &client->_defer_timeout, 0);
-    client->_connect_timeout_entry.cb = on_connect_timeout;
+    h2o_timer_init(&client->_timeout_entry, on_connect_timeout);
 
     return client;
 }
@@ -178,10 +163,8 @@ void h2o_redis_connect(h2o_redis_client_t *client, const char *host, uint16_t po
         return;
     }
 
-    if (client->connect_timeout != 0) {
-        h2o_timeout_init(client->loop, &client->_connect_timeout, client->connect_timeout);
-        h2o_timeout_link(client->loop, &client->_connect_timeout, &client->_connect_timeout_entry);
-    }
+    if (client->connect_timeout != 0)
+        h2o_timer_link(client->loop, client->connect_timeout, &client->_timeout_entry);
 }
 
 void h2o_redis_disconnect(h2o_redis_client_t *client)
@@ -192,17 +175,7 @@ void h2o_redis_disconnect(h2o_redis_client_t *client)
 
 static void dispose_command(h2o_redis_command_t *command)
 {
-    if (h2o_timeout_is_linked(&command->_defer_timeout_entry)) {
-        h2o_timeout_unlink(&command->_defer_timeout_entry);
-    }
-
-    if (h2o_timeout_is_linked(&command->_command_timeout_entry)) {
-        h2o_timeout_unlink(&command->_command_timeout_entry);
-    }
-    if (h2o_linklist_is_linked(&command->_command_timeout._link)) {
-        h2o_timeout_dispose(command->client->loop, &command->_command_timeout);
-    }
-
+    h2o_timer_unlink(&command->_command_timeout);
     free(command);
 }
 
@@ -240,18 +213,12 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
     handle_reply(command, reply, errstr);
 }
 
-static void on_command_timeout_deferred(h2o_timeout_entry_t *entry)
+static void on_command_timeout(h2o_timer_t *entry)
 {
-    h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _defer_timeout_entry, entry);
-    disconnect(command->client, h2o_redis_error_command_timeout);
-}
-
-static void on_command_timeout(h2o_timeout_entry_t *entry)
-{
-    h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _command_timeout_entry, entry);
+    h2o_redis_command_t *command = H2O_STRUCT_FROM_MEMBER(h2o_redis_command_t, _command_timeout, entry);
 
     /* invoke disconnect to finalize inflight commands */
-    invoke_deferred(command->client, &command->_defer_timeout_entry, on_command_timeout_deferred);
+    disconnect(command->client, h2o_redis_error_command_timeout);
 }
 
 static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis_command_cb cb, void *cb_data,
@@ -263,14 +230,11 @@ static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis
     command->cb = cb;
     command->data = cb_data;
     command->type = type;
-    command->_defer_timeout_entry.cb = NULL;
-    command->_command_timeout_entry.cb = on_command_timeout;
+    h2o_timer_init(&command->_command_timeout, on_command_timeout);
 
     if (client->command_timeout != 0 && (type == H2O_REDIS_COMMAND_TYPE_NORMAL || type == H2O_REDIS_COMMAND_TYPE_UNSUBSCRIBE ||
-                                         type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE)) {
-        h2o_timeout_init(client->loop, &command->_command_timeout, client->command_timeout);
-        h2o_timeout_link(client->loop, &command->_command_timeout, &command->_command_timeout_entry);
-    }
+                                         type == H2O_REDIS_COMMAND_TYPE_PUNSUBSCRIBE))
+        h2o_timer_link(client->loop, client->command_timeout, &command->_command_timeout);
 
     return command;
 }
@@ -377,12 +341,7 @@ void h2o_redis_free(h2o_redis_client_t *client)
 {
     if (client->state != H2O_REDIS_CONNECTION_STATE_CLOSED)
         disconnect(client, NULL);
-
-    if (h2o_timeout_is_linked(&client->_defer_timeout_entry)) {
-        h2o_timeout_unlink(&client->_defer_timeout_entry);
-    }
-    h2o_timeout_dispose(client->loop, &client->_defer_timeout);
-
+    h2o_timer_unlink(&client->_timeout_entry);
     free(client);
 }
 

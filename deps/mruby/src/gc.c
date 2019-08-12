@@ -114,7 +114,9 @@ typedef struct {
     struct RException exc;
     struct RBreak brk;
 #ifdef MRB_WORD_BOXING
+#ifndef MRB_WITHOUT_FLOAT
     struct RFloat floatv;
+#endif
     struct RCptr cptr;
 #endif
   } as;
@@ -175,7 +177,7 @@ gettimeofday_time(void)
 
 #define GC_STEP_SIZE 1024
 
-/* white: 011, black: 100, gray: 000 */
+/* white: 001 or 010, black: 100, gray: 000 */
 #define GC_GRAY 0
 #define GC_WHITE_A 1
 #define GC_WHITE_B (1 << 1)
@@ -272,9 +274,29 @@ mrb_free(mrb_state *mrb, void *p)
   (mrb->allocf)(mrb, p, 0, mrb->allocf_ud);
 }
 
+static mrb_bool
+heap_p(mrb_gc *gc, struct RBasic *object)
+{
+  mrb_heap_page* page;
+
+  page = gc->heaps;
+  while (page) {
+    RVALUE *p;
+
+    p = objects(page);
+    if (&p[0].as.basic <= object && object <= &p[MRB_HEAP_PAGE_SIZE].as.basic) {
+      return TRUE;
+    }
+    page = page->next;
+  }
+  return FALSE;
+}
+
 MRB_API mrb_bool
 mrb_object_dead_p(mrb_state *mrb, struct RBasic *object) {
-  return is_dead(&mrb->gc, object);
+  mrb_gc *gc = &mrb->gc;
+  if (!heap_p(gc, object)) return TRUE;
+  return is_dead(gc, object);
 }
 
 static void
@@ -342,7 +364,8 @@ add_heap(mrb_state *mrb, mrb_gc *gc)
 
 #define DEFAULT_GC_INTERVAL_RATIO 200
 #define DEFAULT_GC_STEP_RATIO 200
-#define DEFAULT_MAJOR_GC_INC_RATIO 200
+#define MAJOR_GC_INC_RATIO 120
+#define MAJOR_GC_TOOMANY 10000
 #define is_generational(gc) ((gc)->generational)
 #define is_major_gc(gc) (is_generational(gc) && (gc)->full)
 #define is_minor_gc(gc) (is_generational(gc) && !(gc)->full)
@@ -412,7 +435,7 @@ gc_protect(mrb_state *mrb, mrb_gc *gc, struct RBasic *p)
 #else
   if (gc->arena_idx >= gc->arena_capa) {
     /* extend arena */
-    gc->arena_capa = (int)(gc->arena_capa * 1.5);
+    gc->arena_capa = (int)(gc->arena_capa * 3 / 2);
     gc->arena = (struct RBasic**)mrb_realloc(mrb, gc->arena, sizeof(struct RBasic*)*gc->arena_capa);
   }
 #endif
@@ -545,21 +568,39 @@ add_gray_list(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
   gc->gray_list = obj;
 }
 
+static int
+ci_nregs(mrb_callinfo *ci)
+{
+  struct RProc *p = ci->proc;
+  int n = 0;
+
+  if (!p) {
+    if (ci->argc < 0) return 3;
+    return ci->argc+2;
+  }
+  if (!MRB_PROC_CFUNC_P(p) && p->body.irep) {
+    n = p->body.irep->nregs;
+  }
+  if (ci->argc < 0) {
+    if (n < 3) n = 3; /* self + args + blk */
+  }
+  if (ci->argc > n) {
+    n = ci->argc + 2; /* self + blk */
+  }
+  return n;
+}
+
 static void
 mark_context_stack(mrb_state *mrb, struct mrb_context *c)
 {
   size_t i;
   size_t e;
   mrb_value nil;
-  int nregs;
 
   if (c->stack == NULL) return;
   e = c->stack - c->stbase;
   if (c->ci) {
-    nregs = c->ci->argc + 2;
-    if (c->ci->nregs > nregs)
-      nregs = c->ci->nregs;
-    e += nregs;
+    e += ci_nregs(c->ci);
   }
   if (c->stbase + e > c->stend) e = c->stend - c->stbase;
   for (i=0; i<e; i++) {
@@ -582,6 +623,7 @@ mark_context(mrb_state *mrb, struct mrb_context *c)
   int i;
   mrb_callinfo *ci;
 
+ start:
   if (c->status == MRB_FIBER_TERMINATED) return;
 
   /* mark VM stack */
@@ -596,14 +638,14 @@ mark_context(mrb_state *mrb, struct mrb_context *c)
     }
   }
   /* mark ensure stack */
-  for (i=0; i<c->esize; i++) {
-    if (c->ensure[i] == NULL) break;
+  for (i=0; i<c->eidx; i++) {
     mrb_gc_mark(mrb, (struct RBasic*)c->ensure[i]);
   }
   /* mark fibers */
   mrb_gc_mark(mrb, (struct RBasic*)c->fib);
   if (c->prev) {
-    mark_context(mrb, c->prev);
+    c = c->prev;
+    goto start;
   }
 }
 
@@ -618,7 +660,7 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
   case MRB_TT_ICLASS:
     {
       struct RClass *c = (struct RClass*)obj;
-      if (MRB_FLAG_TEST(c, MRB_FLAG_IS_ORIGIN))
+      if (MRB_FLAG_TEST(c, MRB_FL_CLASS_IS_ORIGIN))
         mrb_gc_mark_mt(mrb, c);
       mrb_gc_mark(mrb, (struct RBasic*)((struct RClass*)obj)->super);
     }
@@ -645,11 +687,8 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
     {
       struct RProc *p = (struct RProc*)obj;
 
-      mrb_gc_mark(mrb, (struct RBasic*)p->env);
-      mrb_gc_mark(mrb, (struct RBasic*)p->target_class);
-      if (!MRB_PROC_CFUNC_P(p) && p->body.irep) {
-        mrb_gc_mark(mrb, (struct RBasic*)p->body.irep->target_class);
-      }
+      mrb_gc_mark(mrb, (struct RBasic*)p->upper);
+      mrb_gc_mark(mrb, (struct RBasic*)p->e.env);
     }
     break;
 
@@ -658,11 +697,8 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
       struct REnv *e = (struct REnv*)obj;
       mrb_int i, len;
 
-      if (MRB_ENV_STACK_SHARED_P(e)) {
-        if (e->cxt.c->fib) {
-          mrb_gc_mark(mrb, (struct RBasic*)e->cxt.c->fib);
-        }
-        break;
+      if (MRB_ENV_STACK_SHARED_P(e) && e->cxt && e->cxt->fib) {
+        mrb_gc_mark(mrb, (struct RBasic*)e->cxt->fib);
       }
       len = MRB_ENV_STACK_LEN(e);
       for (i=0; i<len; i++) {
@@ -696,17 +732,14 @@ gc_mark_children(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
     break;
 
   case MRB_TT_STRING:
+    if (RSTR_FSHARED_P(obj) && !RSTR_NOFREE_P(obj)) {
+      struct RString *s = (struct RString*)obj;
+      mrb_gc_mark(mrb, (struct RBasic*)s->as.heap.aux.fshared);
+    }
     break;
 
   case MRB_TT_RANGE:
-    {
-      struct RRange *r = (struct RRange*)obj;
-
-      if (r->edges) {
-        mrb_gc_mark_value(mrb, r->edges->beg);
-        mrb_gc_mark_value(mrb, r->edges->end);
-      }
-    }
+    mrb_gc_mark_range(mrb, (struct RRange*)obj);
     break;
 
   default:
@@ -735,11 +768,13 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
     /* cannot happen */
     return;
 
+#ifndef MRB_WITHOUT_FLOAT
   case MRB_TT_FLOAT:
 #ifdef MRB_WORD_BOXING
     break;
 #else
     return;
+#endif
 #endif
 
   case MRB_TT_OBJECT:
@@ -757,7 +792,7 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
     mrb_gc_free_iv(mrb, (struct RObject*)obj);
     break;
   case MRB_TT_ICLASS:
-    if (MRB_FLAG_TEST(obj, MRB_FLAG_IS_ORIGIN))
+    if (MRB_FLAG_TEST(obj, MRB_FL_CLASS_IS_ORIGIN))
       mrb_gc_free_mt(mrb, (struct RClass*)obj);
     break;
   case MRB_TT_ENV:
@@ -766,7 +801,8 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
 
       if (MRB_ENV_STACK_SHARED_P(e)) {
         /* cannot be freed */
-        return;
+        e->stack = NULL;
+        break;
       }
       mrb_free(mrb, e->stack);
       e->stack = NULL;
@@ -777,17 +813,19 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
     {
       struct mrb_context *c = ((struct RFiber*)obj)->cxt;
 
-      if (!end && c && c != mrb->root_c) {
-        mrb_callinfo *ci = c->ci;
-        mrb_callinfo *ce = c->cibase;
+      if (c && c != mrb->root_c) {
+        if (!end && c->status != MRB_FIBER_TERMINATED) {
+          mrb_callinfo *ci = c->ci;
+          mrb_callinfo *ce = c->cibase;
 
-        while (ce <= ci) {
-          struct REnv *e = ci->env;
-          if (e && !is_dead(&mrb->gc, e) &&
-              e->tt == MRB_TT_ENV && MRB_ENV_STACK_SHARED_P(e)) {
-            mrb_env_unshare(mrb, e);
+          while (ce <= ci) {
+            struct REnv *e = ci->env;
+            if (e && !mrb_object_dead_p(mrb, (struct RBasic*)e) &&
+                e->tt == MRB_TT_ENV && MRB_ENV_STACK_SHARED_P(e)) {
+              mrb_env_unshare(mrb, e);
+            }
+            ci--;
           }
-          ci--;
         }
         mrb_free_context(mrb, c);
       }
@@ -815,13 +853,17 @@ obj_free(mrb_state *mrb, struct RBasic *obj, int end)
       struct RProc *p = (struct RProc*)obj;
 
       if (!MRB_PROC_CFUNC_P(p) && p->body.irep) {
-        mrb_irep_decref(mrb, p->body.irep);
+        mrb_irep *irep = p->body.irep;
+        if (end) {
+          mrb_irep_cutref(mrb, irep);
+        }
+        mrb_irep_decref(mrb, irep);
       }
     }
     break;
 
   case MRB_TT_RANGE:
-    mrb_free(mrb, ((struct RRange*)obj)->edges);
+    mrb_gc_free_range(mrb, ((struct RRange*)obj));
     break;
 
   case MRB_TT_DATA:
@@ -867,7 +909,9 @@ root_scan_phase(mrb_state *mrb, mrb_gc *gc)
   mrb_gc_mark(mrb, (struct RBasic*)mrb->hash_class);
   mrb_gc_mark(mrb, (struct RBasic*)mrb->range_class);
 
+#ifndef MRB_WITHOUT_FLOAT
   mrb_gc_mark(mrb, (struct RBasic*)mrb->float_class);
+#endif
   mrb_gc_mark(mrb, (struct RBasic*)mrb->fixnum_class);
   mrb_gc_mark(mrb, (struct RBasic*)mrb->true_class);
   mrb_gc_mark(mrb, (struct RBasic*)mrb->false_class);
@@ -926,7 +970,7 @@ gc_gray_mark(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
     break;
 
   case MRB_TT_ENV:
-    children += (int)obj->flags;
+    children += MRB_ENV_STACK_LEN(obj);
     break;
 
   case MRB_TT_FIBER:
@@ -935,10 +979,14 @@ gc_gray_mark(mrb_state *mrb, mrb_gc *gc, struct RBasic *obj)
       size_t i;
       mrb_callinfo *ci;
 
-      if (!c) break;
+      if (!c || c->status == MRB_FIBER_TERMINATED) break;
+
       /* mark stack */
       i = c->stack - c->stbase;
-      if (c->ci) i += c->ci->nregs;
+
+      if (c->ci) {
+        i += ci_nregs(c->ci);
+      }
       if (c->stbase + i > c->stend) i = c->stend - c->stbase;
       children += i;
 
@@ -1198,8 +1246,17 @@ mrb_incremental_gc(mrb_state *mrb)
     }
 
     if (is_major_gc(gc)) {
-      gc->majorgc_old_threshold = gc->live_after_mark/100 * DEFAULT_MAJOR_GC_INC_RATIO;
+      size_t threshold = gc->live_after_mark/100 * MAJOR_GC_INC_RATIO;
+
       gc->full = FALSE;
+      if (threshold < MAJOR_GC_TOOMANY) {
+        gc->majorgc_old_threshold = threshold;
+      }
+      else {
+        /* too many objects allocated during incremental GC, */
+        /* instead of increasing threshold, invoke full GC. */
+        mrb_full_gc(mrb);
+      }
     }
     else if (is_minor_gc(gc)) {
       if (gc->live > gc->majorgc_old_threshold) {
@@ -1237,7 +1294,7 @@ mrb_full_gc(mrb_state *mrb)
   gc->threshold = (gc->live_after_mark/100) * gc->interval_ratio;
 
   if (is_generational(gc)) {
-    gc->majorgc_old_threshold = gc->live_after_mark/100 * DEFAULT_MAJOR_GC_INC_RATIO;
+    gc->majorgc_old_threshold = gc->live_after_mark/100 * MAJOR_GC_INC_RATIO;
     gc->full = FALSE;
   }
 
@@ -1387,7 +1444,7 @@ gc_interval_ratio_set(mrb_state *mrb, mrb_value obj)
   mrb_int ratio;
 
   mrb_get_args(mrb, "i", &ratio);
-  mrb->gc.interval_ratio = ratio;
+  mrb->gc.interval_ratio = (int)ratio;
   return mrb_nil_value();
 }
 
@@ -1420,7 +1477,7 @@ gc_step_ratio_set(mrb_state *mrb, mrb_value obj)
   mrb_int ratio;
 
   mrb_get_args(mrb, "i", &ratio);
-  mrb->gc.step_ratio = ratio;
+  mrb->gc.step_ratio = (int)ratio;
   return mrb_nil_value();
 }
 
@@ -1438,7 +1495,7 @@ change_gen_gc_mode(mrb_state *mrb, mrb_gc *gc, mrb_bool enable)
   }
   else if (!is_generational(gc) && enable) {
     incremental_gc_until(mrb, gc, MRB_GC_STATE_ROOT);
-    gc->majorgc_old_threshold = gc->live_after_mark/100 * DEFAULT_MAJOR_GC_INC_RATIO;
+    gc->majorgc_old_threshold = gc->live_after_mark/100 * MAJOR_GC_INC_RATIO;
     gc->full = FALSE;
   }
   gc->generational = enable;
@@ -1484,7 +1541,6 @@ gc_each_objects(mrb_state *mrb, mrb_gc *gc, mrb_each_object_callback *callback, 
 {
   mrb_heap_page* page;
 
-  mrb_full_gc(mrb);
   page = gc->heaps;
   while (page != NULL) {
     RVALUE *p;
@@ -1504,6 +1560,7 @@ mrb_objspace_each_objects(mrb_state *mrb, mrb_each_object_callback *callback, vo
 {
   mrb_bool iterating = mrb->gc.iterating;
 
+  mrb_full_gc(mrb);
   mrb->gc.iterating = TRUE;
   if (iterating) {
     gc_each_objects(mrb, &mrb->gc, callback, data);
@@ -1516,7 +1573,7 @@ mrb_objspace_each_objects(mrb_state *mrb, mrb_each_object_callback *callback, vo
       mrb->jmp = &c_jmp;
       gc_each_objects(mrb, &mrb->gc, callback, data);
       mrb->jmp = prev_jmp;
-      mrb->gc.iterating = iterating; 
+      mrb->gc.iterating = iterating;
    } MRB_CATCH(&c_jmp) {
       mrb->gc.iterating = iterating;
       mrb->jmp = prev_jmp;

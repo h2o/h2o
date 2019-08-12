@@ -3,6 +3,8 @@ use warnings;
 use Test::More;
 use t::Util;
 use JSON;
+use File::Temp qw(tempdir);
+use Net::EmptyPort qw/check_port/;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
@@ -83,7 +85,96 @@ EOT
     is $jresp->{'connect-time-0'}, 0, "Duration stats";
 };
 
+subtest "ssl stats" => sub {
+    my $setup = sub {
+        my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+        my $server = spawn_h2o_raw(<< "EOT", [$port]); # omit tls_port check which causes a handshake
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[ DOC_ROOT ]}
+      /s:
+        status: ON
+listen:
+  host: 0.0.0.0
+  port: $port
+listen:
+  host: 0.0.0.0
+  port: $tls_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+    minimum-version: tlsv1.2
+EOT
+        return ($server, $port, $tls_port);
+    };
 
+    subtest 'basic' => sub {
+        my ($server, $port, $tls_port) = $setup->();
+
+        # error by TLS minimum version
+        `curl --silent --insecure --tlsv1.1           -o /dev/stderr https://127.0.0.1:$tls_port/`;
+        # alpn
+        `curl --silent --insecure --tlsv1.2 --http1.1 -o /dev/stderr https://127.0.0.1:$tls_port/`;
+        `curl --silent --insecure --tlsv1.2 --http2   -o /dev/stderr https://127.0.0.1:$tls_port/`;
+
+        my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=events,ssl 2>&1 > /dev/null`;
+        my $jresp = decode_json($resp);
+        is $jresp->{'ssl.errors'}, 1, 'ssl.errors';
+        is $jresp->{'ssl.alpn.h1'}, 1, 'ssl.alpn.h1';
+        is $jresp->{'ssl.alpn.h2'}, 1, 'ssl.alpn.h2';
+    };
+
+    subtest 'handshake' => sub {
+        plan skip_all => "could not find openssl"
+            unless prog_exists("openssl");
+        my $tempdir = tempdir(CLEANUP => 1);
+
+        my ($server, $port, $tls_port) = $setup->();
+
+        # full handshake
+        `openssl s_client -no_ticket -sess_out $tempdir/session -connect 127.0.0.1:$tls_port < /dev/null`;
+        # resume handshake
+        `openssl s_client -no_ticket -sess_in $tempdir/session  -connect 127.0.0.1:$tls_port < /dev/null`;
+
+        my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=ssl 2>&1 > /dev/null`;
+        my $jresp = decode_json($resp);
+        is $jresp->{'ssl.handshake.full'}, 1, 'ssl.handshake.full';
+        is $jresp->{'ssl.handshake.resume'}, 1, 'ssl.handshake.resume';
+        ok $jresp->{'ssl.handshake.accumulated-time.full'}, 'ssl.handshake.accumulated-time.full';
+        ok $jresp->{'ssl.handshake.accumulated-time.resume'}, 'ssl.handshake.accumulated-time.resume';
+    };
+};
+
+
+subtest "json internal request bug (duplication of durations and events)" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+duration-stats: ON
+hosts:
+  default:
+    paths:
+      /server-status:
+        status: ON
+      /server-status2:
+        status: ON
+EOT
+    });
+
+    {
+        my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status/json?show=durations,events,main' 2>&1 > /dev/null`;
+        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
+    }
+
+    {
+        my $resp = `curl --silent -o /dev/stderr 'http://127.0.0.1:$server->{port}/server-status2/json?show=durations,events,main' 2>&1 > /dev/null`;
+        is scalar @{[ $resp =~ m!"status-errors.400":!g ]}, 1, "only once";
+        is scalar @{[ $resp =~ m!"connect-time-0":!g ]}, 1, "only once";
+    }
+};
 
 
 done_testing();

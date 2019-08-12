@@ -19,6 +19,12 @@
 #include <readline/history.h>
 #define MIRB_ADD_HISTORY(line) add_history(line)
 #define MIRB_READLINE(ch) readline(ch)
+#if !defined(RL_READLINE_VERSION) || RL_READLINE_VERSION < 0x600
+/* libedit & older readline do not have rl_free() */
+#define MIRB_LINE_FREE(line) free(line)
+#else
+#define MIRB_LINE_FREE(line) rl_free(line)
+#endif
 #define MIRB_WRITE_HISTORY(path) write_history(path)
 #define MIRB_READ_HISTORY(path) read_history(path)
 #define MIRB_USING_HISTORY() using_history()
@@ -27,6 +33,7 @@
 #include <linenoise.h>
 #define MIRB_ADD_HISTORY(line) linenoiseHistoryAdd(line)
 #define MIRB_READLINE(ch) linenoise(ch)
+#define MIRB_LINE_FREE(line) linenoiseFree(line)
 #define MIRB_WRITE_HISTORY(path) linenoiseHistorySave(path)
 #define MIRB_READ_HISTORY(path) linenoiseHistoryLoad(history_path)
 #define MIRB_USING_HISTORY()
@@ -46,7 +53,10 @@
 #include <mruby/array.h>
 #include <mruby/proc.h>
 #include <mruby/compile.h>
+#include <mruby/dump.h>
 #include <mruby/string.h>
+#include <mruby/variable.h>
+#include <mruby/throw.h>
 
 #ifdef ENABLE_READLINE
 
@@ -88,6 +98,7 @@ static void
 p(mrb_state *mrb, mrb_value obj, int prompt)
 {
   mrb_value val;
+  char* msg;
 
   val = mrb_funcall(mrb, obj, "inspect", 0);
   if (prompt) {
@@ -101,7 +112,9 @@ p(mrb_state *mrb, mrb_value obj, int prompt)
   if (!mrb_string_p(val)) {
     val = mrb_obj_as_string(mrb, obj);
   }
-  fwrite(RSTRING_PTR(val), RSTRING_LEN(val), 1, stdout);
+  msg = mrb_locale_from_utf8(RSTRING_PTR(val), (int)RSTRING_LEN(val));
+  fwrite(msg, strlen(msg), 1, stdout);
+  mrb_locale_free(msg);
   putc('\n', stdout);
 }
 
@@ -114,10 +127,6 @@ is_code_block_open(struct mrb_parser_state *parser)
 
   /* check for heredoc */
   if (parser->parsing_heredoc != NULL) return TRUE;
-  if (parser->heredoc_end_now) {
-    parser->heredoc_end_now = FALSE;
-    return FALSE;
-  }
 
   /* check for unterminated string */
   if (parser->lex_strterm) return TRUE;
@@ -209,8 +218,11 @@ is_code_block_open(struct mrb_parser_state *parser)
 struct _args {
   FILE *rfp;
   mrb_bool verbose      : 1;
+  mrb_bool debug        : 1;
   int argc;
   char** argv;
+  int libc;
+  char **libv;
 };
 
 static void
@@ -218,6 +230,8 @@ usage(const char *name)
 {
   static const char *const usage_msg[] = {
   "switches:",
+  "-d           set $DEBUG to true (same as `mruby -d`)",
+  "-r library   same as `mruby -r`",
   "-v           print version number, then run in verbose mode",
   "--verbose    run in verbose mode",
   "--version    print the version",
@@ -231,9 +245,19 @@ usage(const char *name)
     printf("  %s\n", *p++);
 }
 
+static char *
+dup_arg_item(mrb_state *mrb, const char *item)
+{
+  size_t buflen = strlen(item) + 1;
+  char *buf = (char*)mrb_malloc(mrb, buflen);
+  memcpy(buf, item, buflen);
+  return buf;
+}
+
 static int
 parse_args(mrb_state *mrb, int argc, char **argv, struct _args *args)
 {
+  char **origargv = argv;
   static const struct _args args_zero = { 0 };
 
   *args = args_zero;
@@ -244,6 +268,26 @@ parse_args(mrb_state *mrb, int argc, char **argv, struct _args *args)
 
     item = argv[0] + 1;
     switch (*item++) {
+    case 'd':
+      args->debug = TRUE;
+      break;
+    case 'r':
+      if (!item[0]) {
+        if (argc <= 1) {
+          printf("%s: No library specified for -r\n", *origargv);
+          return EXIT_FAILURE;
+        }
+        argc--; argv++;
+        item = argv[0];
+      }
+      if (args->libc == 0) {
+        args->libv = (char**)mrb_malloc(mrb, sizeof(char*));
+      }
+      else {
+        args->libv = (char**)mrb_realloc(mrb, args->libv, sizeof(char*) * (args->libc + 1));
+      }
+      args->libv[args->libc++] = dup_arg_item(mrb, item);
+      break;
     case 'v':
       if (!args->verbose) mrb_show_version(mrb);
       args->verbose = TRUE;
@@ -289,6 +333,12 @@ cleanup(mrb_state *mrb, struct _args *args)
   if (args->rfp)
     fclose(args->rfp);
   mrb_free(mrb, args->argv);
+  if (args->libc) {
+    while (args->libc--) {
+      mrb_free(mrb, args->libv[args->libc]);
+    }
+    mrb_free(mrb, args->libv);
+  }
   mrb_close(mrb);
 }
 
@@ -403,6 +453,7 @@ main(int argc, char **argv)
     }
   }
   mrb_define_global_const(mrb, "ARGV", ARGV);
+  mrb_gv_set(mrb, mrb_intern_lit(mrb, "$DEBUG"), mrb_bool_value(args.debug));
 
 #ifdef ENABLE_READLINE
   history_path = get_history_path(mrb);
@@ -419,6 +470,19 @@ main(int argc, char **argv)
   print_hint();
 
   cxt = mrbc_context_new(mrb);
+
+  /* Load libraries */
+  for (i = 0; i < args.libc; i++) {
+    FILE *lfp = fopen(args.libv[i], "r");
+    if (lfp == NULL) {
+      printf("Cannot open library file. (%s)\n", args.libv[i]);
+      cleanup(mrb, &args);
+      return EXIT_FAILURE;
+    }
+    mrb_load_file_cxt(mrb, lfp, cxt);
+    fclose(lfp);
+  }
+
   cxt->capture_errors = TRUE;
   cxt->lineno = 1;
   mrbc_filename(mrb, cxt, "(mirb)");
@@ -428,7 +492,10 @@ main(int argc, char **argv)
 
   while (TRUE) {
     char *utf8;
+    struct mrb_jmpbuf c_jmp;
 
+    MRB_TRY(&c_jmp);
+    mrb->jmp = &c_jmp;
     if (args.rfp) {
       if (fgets(last_code_line, sizeof(last_code_line)-1, args.rfp) != NULL)
         goto done;
@@ -489,11 +556,10 @@ main(int argc, char **argv)
     strcpy(last_code_line, line);
     strcat(last_code_line, "\n");
     MIRB_ADD_HISTORY(line);
-    free(line);
+    MIRB_LINE_FREE(line);
 #endif
 
-done:
-
+  done:
     if (code_block_open) {
       if (strlen(ruby_code)+strlen(last_code_line) > sizeof(ruby_code)-1) {
         fputs("concatenated input string too long\n", stderr);
@@ -528,9 +594,17 @@ done:
       /* no evaluation of code */
     }
     else {
+      if (0 < parser->nwarn) {
+        /* warning */
+        char* msg = mrb_locale_from_utf8(parser->warn_buffer[0].message, -1);
+        printf("line %d: %s\n", parser->warn_buffer[0].lineno, msg);
+        mrb_locale_free(msg);
+      }
       if (0 < parser->nerr) {
         /* syntax error */
-        printf("line %d: %s\n", parser->error_buffer[0].lineno, parser->error_buffer[0].message);
+        char* msg = mrb_locale_from_utf8(parser->error_buffer[0].message, -1);
+        printf("line %d: %s\n", parser->error_buffer[0].lineno, msg);
+        mrb_locale_free(msg);
       }
       else {
         /* generate bytecode */
@@ -543,6 +617,13 @@ done:
 
         if (args.verbose) {
           mrb_codedump_all(mrb, proc);
+        }
+        /* adjust stack length of toplevel environment */
+        if (mrb->c->cibase->env) {
+          struct REnv *e = mrb->c->cibase->env;
+          if (e && MRB_ENV_STACK_LEN(e) < proc->body.irep->nlocals) {
+            MRB_ENV_SET_STACK_LEN(e, proc->body.irep->nlocals);
+          }
         }
         /* pass a proc for evaluation */
         /* evaluate the bytecode */
@@ -570,6 +651,11 @@ done:
     }
     mrb_parser_free(parser);
     cxt->lineno++;
+    MRB_CATCH(&c_jmp) {
+      p(mrb, mrb_obj_value(mrb->exc), 0);
+      mrb->exc = 0;
+    }
+    MRB_END_EXC(&c_jmp);
   }
 
 #ifdef ENABLE_READLINE
@@ -577,6 +663,14 @@ done:
   mrb_free(mrb, history_path);
 #endif
 
+  if (args.rfp) fclose(args.rfp);
+  mrb_free(mrb, args.argv);
+  if (args.libv) {
+    for (i = 0; i < args.libc; ++i) {
+      mrb_free(mrb, args.libv[i]);
+    }
+    mrb_free(mrb, args.libv);
+  }
   mrbc_context_free(mrb, cxt);
   mrb_close(mrb);
 

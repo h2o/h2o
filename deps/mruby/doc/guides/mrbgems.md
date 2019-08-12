@@ -26,6 +26,11 @@ conf.gem :github => 'masuidrive/mrbgems-example', :branch => 'master'
 conf.gem :bitbucket => 'mruby/mrbgems-example', :branch => 'master'
 ```
 
+You can specify the sub directory of the repository with `:path` option:
+```ruby
+conf.gem github: 'mruby/mruby', path: 'mrbgems/mruby-socket'
+```
+
 To use mrbgem from [mgem-list](https://github.com/mruby/mgem-list) use `:mgem` option:
 ```ruby
 conf.gem :mgem => 'mruby-yaml'
@@ -174,11 +179,11 @@ Version requirement supports following operators:
 
 When more than one version requirements is passed, the dependency must satisfy all of it.
 
-You can have default gem to use as depedency when it's not defined in *build_config.rb*.
+You can have default gem to use as dependency when it's not defined in *build_config.rb*.
 When the last argument of `add_dependency` call is `Hash`, it will be treated as default gem information.
 Its format is same as argument of method `MRuby::Build#gem`, expect that it can't be treated as path gem location.
 
-When a special version of depedency is required,
+When a special version of dependency is required,
 use `MRuby::Build#gem` in *build_config.rb* to override default gem.
 
 If you have conflicting GEMs use the following method:

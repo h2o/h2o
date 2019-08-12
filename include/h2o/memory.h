@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -72,6 +73,13 @@ extern "C" {
 #define H2O_TO_STR(n) H2O_TO__STR(n)
 
 #define H2O_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
+
+/**
+ * library users can use their own log method by define this macro
+ */
+#ifndef h2o_error_printf
+#define h2o_error_printf(...) fprintf(stderr, __VA_ARGS__)
+#endif
 
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
@@ -154,13 +162,18 @@ struct st_h2o_buffer_prototype_t {
 typedef H2O_VECTOR(void) h2o_vector_t;
 typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
-extern void *(*h2o_mem__set_secure)(void *, int, size_t);
+extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 
 /**
  * prints an error message and aborts
  */
-#define h2o_fatal(msg) h2o__fatal(__FILE__ ":" H2O_TO_STR(__LINE__) ":" msg)
-H2O_NORETURN void h2o__fatal(const char *msg);
+H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
+#ifndef h2o_fatal
+#define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
+#endif
+
+void h2o_perror(const char *msg);
+char *h2o_strerror_r(int err, char *buf, size_t len);
 
 /**
  * A version of memcpy that can take a NULL @src to avoid UB
@@ -244,6 +257,11 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer);
  */
 static void h2o_buffer_dispose(h2o_buffer_t **buffer);
 /**
+ * allocates a buffer with h2o_buffer_try_reserve. aborts on allocation failure.
+ * @return buffer to which the next data should be stored
+ */
+h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+/**
  * allocates a buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
  * @param min_guarantee minimum number of bytes to reserve
@@ -251,12 +269,16 @@ static void h2o_buffer_dispose(h2o_buffer_t **buffer);
  * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
  * exponential backoff for already-allocated buffers.
  */
-h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **inbuf, size_t min_guarantee) __attribute__((warn_unused_result));
 /**
- * copies @len bytes from @src to @dst, calling h2o_buffer_reserve
- * @return 0 if the allocation failed, 1 otherwise
+ * copies @len bytes from @src to @dst, calling h2o_buffer_reserve. aborts on allocation failure.
  */
-static int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len);
+static void h2o_buffer_append(h2o_buffer_t **dst, const void *src, size_t len);
+/**
+ * variant of h2o_buffer_append that does not abort on failure
+ * @return a boolean indicating if allocation has succeeded
+ */
+static int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len) __attribute__((warn_unused_result));
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
@@ -322,6 +344,7 @@ void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
 void h2o_append_to_null_terminated_list(void ***list, void *element);
 
 extern __thread h2o_mem_recycle_t h2o_mem_pool_allocator;
+extern size_t h2o_mmap_errors;
 
 /* inline defs */
 
@@ -415,12 +438,19 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
-inline int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
+inline void h2o_buffer_append(h2o_buffer_t **dst, const void *src, size_t len)
 {
     h2o_iovec_t buf = h2o_buffer_reserve(dst, len);
+    h2o_memcpy(buf.base, src, len);
+    (*dst)->size += len;
+}
+
+inline int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len)
+{
+    h2o_iovec_t buf = h2o_buffer_try_reserve(dst, len);
     if (buf.base == NULL)
         return 0;
-    memcpy(buf.base, src, len);
+    h2o_memcpy(buf.base, src, len);
     (*dst)->size += len;
     return 1;
 }

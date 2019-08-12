@@ -52,6 +52,7 @@ enum {
     H2O_MRUBY_LIT_RACK_HIJACK_,
     H2O_MRUBY_LIT_RACK_INPUT,
     H2O_MRUBY_LIT_RACK_ERRORS,
+    H2O_MRUBY_LIT_RACK_EARLY_HINTS,
     H2O_MRUBY_LIT_SERVER_SOFTWARE,
     H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE,
     H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS,
@@ -179,7 +180,8 @@ typedef struct st_h2o_mruby_generator_t {
             h2o_mruby__abort_exc(mrb, "unexpected ruby error", __FILE__, __LINE__);                                                \
     } while (0)
 
-#define h2o_mruby_new_str(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), __FILE__, __LINE__)
+#define h2o_mruby_new_str(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), 0, __FILE__, __LINE__)
+#define h2o_mruby_new_str_static(mrb, s, l) h2o_mruby__new_str((mrb), (s), (l), 1, __FILE__, __LINE__)
 
 /* source files using this macro should include mruby/throw.h */
 #define H2O_MRUBY_EXEC_GUARD(block)                                                                                                \
@@ -203,7 +205,7 @@ typedef struct st_h2o_mruby_generator_t {
 
 /* handler/mruby.c */
 void h2o_mruby__abort_exc(mrb_state *mrb, const char *mess, const char *file, int line);
-mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, const char *file, int line);
+mrb_value h2o_mruby__new_str(mrb_state *mrb, const char *s, size_t len, int is_static, const char *file, int line);
 mrb_value h2o_mruby_to_str(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_to_int(mrb_state *mrb, mrb_value v);
 mrb_value h2o_mruby_eval_expr(mrb_state *mrb, const char *expr);
@@ -221,7 +223,7 @@ int h2o_mruby_iterate_rack_headers(h2o_mruby_shared_context_t *shared_ctx, mrb_v
 int h2o_mruby_iterate_header_values(h2o_mruby_shared_context_t *shared_ctx, mrb_value name, mrb_value value,
                                     int (*cb)(h2o_mruby_shared_context_t *, h2o_iovec_t *, h2o_iovec_t, void *), void *cb_data);
 int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
-                                     int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_iovec_t *, h2o_iovec_t, void *),
+                                     int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_header_t *, void *),
                                      void *cb_data);
 int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *req);
 

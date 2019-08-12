@@ -45,8 +45,10 @@ module MRuby
     include Rake::DSL
     include LoadGems
     attr_accessor :name, :bins, :exts, :file_separator, :build_dir, :gem_clone_dir
-    attr_reader :libmruby, :gems, :toolchains
+    attr_reader :libmruby_objs, :gems, :toolchains
     attr_writer :enable_bintest, :enable_test
+
+    alias libmruby libmruby_objs
 
     COMPILERS = %w(cc cxx objc asm)
     COMMANDS = COMPILERS + %w(linker archiver yacc gperf git exts mrbc)
@@ -81,7 +83,7 @@ module MRuby
         @mrbc = Command::Mrbc.new(self)
 
         @bins = []
-        @gems, @libmruby = MRuby::Gem::List.new, []
+        @gems, @libmruby_objs = MRuby::Gem::List.new, []
         @build_mrbtest_lib_only = false
         @cxx_exception_enabled = false
         @cxx_exception_disabled = false
@@ -100,6 +102,10 @@ module MRuby
       build_mrbtest if test_enabled?
     end
 
+    def debug_enabled?
+      @enable_debug
+    end
+
     def enable_debug
       compilers.each do |c|
         c.defines += %w(MRB_DEBUG)
@@ -108,6 +114,8 @@ module MRuby
         end
       end
       @mrbc.compile_options += ' -g'
+
+      @enable_debug = true
     end
 
     def disable_cxx_exception
@@ -154,8 +162,6 @@ module MRuby
     end
 
     def compile_as_cxx src, cxx_src, obj = nil, includes = []
-      src = File.absolute_path src
-      cxx_src = File.absolute_path cxx_src
       obj = objfile(cxx_src) if obj.nil?
 
       file cxx_src => [src, __FILE__] do |t|
@@ -167,7 +173,7 @@ module MRuby
 #ifndef MRB_ENABLE_CXX_ABI
 extern "C" {
 #endif
-#include "#{src}"
+#include "#{File.absolute_path src}"
 #ifndef MRB_ENABLE_CXX_ABI
 }
 #endif
@@ -264,8 +270,11 @@ EOS
     def exefile(name)
       if name.is_a?(Array)
         name.flatten.map { |n| exefile(n) }
-      else
+      elsif File.extname(name).empty?
         "#{name}#{exts.executable}"
+      else
+        # `name` sometimes have (non-standard) extension (e.g. `.bat`).
+        name
       end
     end
 
@@ -293,18 +302,21 @@ EOS
       @build_mrbtest_lib_only
     end
 
+    def verbose_flag
+      $verbose ? ' -v' : ''
+    end
+
     def run_test
       puts ">>> Test #{name} <<<"
       mrbtest = exefile("#{build_dir}/bin/mrbtest")
-      sh "#{filename mrbtest.relative_path}#{$verbose ? ' -v' : ''}"
+      sh "#{filename mrbtest.relative_path}#{verbose_flag}"
       puts
-      run_bintest if bintest_enabled?
     end
 
     def run_bintest
       targets = @gems.select { |v| File.directory? "#{v.dir}/bintest" }.map { |v| filename v.dir }
       targets << filename(".") if File.directory? "./bintest"
-      sh "ruby test/bintest.rb #{targets.join ' '}"
+      sh "ruby test/bintest.rb#{verbose_flag} #{targets.join ' '}"
     end
 
     def print_build_summary
@@ -324,6 +336,18 @@ EOS
       puts "================================================"
       puts
     end
+
+    def libmruby_static
+      libfile("#{build_dir}/lib/libmruby")
+    end
+
+    def libmruby_core_static
+      libfile("#{build_dir}/lib/libmruby_core")
+    end
+
+    def libraries
+      [libmruby_static]
+    end
   end # Build
 
   class CrossBuild < Build
@@ -334,6 +358,7 @@ EOS
     attr_accessor :host_target, :build_target
 
     def initialize(name, build_dir=nil, &block)
+      @endian = nil
       @test_runner = Command::CrossTestRunner.new(self)
       super
     end
@@ -343,6 +368,7 @@ EOS
     end
 
     def run_test
+      @test_runner.runner_options << ' -v' if $verbose
       mrbtest = exefile("#{build_dir}/bin/mrbtest")
       if (@test_runner.command == nil)
         puts "You should run #{mrbtest} on target device."
@@ -350,6 +376,27 @@ EOS
       else
         @test_runner.run(mrbtest)
       end
+    end
+
+    def big_endian
+      if @endian
+        puts "Endian has already specified as #{@endian}."
+        return
+      end
+      @endian = :big
+      @mrbc.compile_options += ' -E'
+      compilers.each do |c|
+        c.defines += %w(MRB_ENDIAN_BIG)
+      end
+    end
+
+    def little_endian
+      if @endian
+        puts "Endian has already specified as #{@endian}."
+        return
+      end
+      @endian = :little
+      @mrbc.compile_options += ' -e'
     end
   end # CrossBuild
 end # MRuby

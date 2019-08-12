@@ -200,7 +200,7 @@ static int setup_ssl(const char *cert_file, const char *key_file, const char *ci
 #endif
 
     /* load certificate and private key */
-    if (SSL_CTX_use_certificate_file(accept_ctx.ssl_ctx, cert_file, SSL_FILETYPE_PEM) != 1) {
+    if (SSL_CTX_use_certificate_chain_file(accept_ctx.ssl_ctx, cert_file) != 1) {
         fprintf(stderr, "an error occurred while trying to load server certificate file:%s\n", cert_file);
         return -1;
     }
@@ -264,9 +264,8 @@ int main(int argc, char **argv)
     if (USE_MEMCACHED)
         h2o_multithread_register_receiver(ctx.queue, &libmemcached_receiver, h2o_memcached_receiver);
 
-    if (USE_HTTPS &&
-        setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key",
-                  "DEFAULT:!MD5:!DSS:!DES:!RC4:!RC2:!SEED:!IDEA:!NULL:!ADH:!EXP:!SRP:!PSK") != 0)
+    if (USE_HTTPS && setup_ssl("examples/h2o/server.crt", "examples/h2o/server.key",
+                               "DEFAULT:!MD5:!DSS:!DES:!RC4:!RC2:!SEED:!IDEA:!NULL:!ADH:!EXP:!SRP:!PSK") != 0)
         goto Error;
 
     accept_ctx.ctx = &ctx;

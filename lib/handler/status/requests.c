@@ -45,7 +45,11 @@ static int collect_req_status(h2o_req_t *req, void *_cbdata)
     --len; /* omit trailing LF */
 
     /* append to buffer */
-    h2o_buffer_reserve(&cbdata->buffer, len + 3);
+    if ((h2o_buffer_try_reserve(&cbdata->buffer, len + 3)).base == NULL) {
+        if (logline != buf)
+            free(logline);
+        return -1;
+    }
     memcpy(cbdata->buffer->bytes + cbdata->buffer->size, logline, len);
     cbdata->buffer->size += len;
 
@@ -65,8 +69,14 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
         return;
 
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
-    ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
-    ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata);
+    if (ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0) {
+        h2o_buffer_dispose(&cbdata.buffer);
+        return;
+    }
+    if (ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0) {
+        h2o_buffer_dispose(&cbdata.buffer);
+        return;
+    }
 
     /* concat JSON elements */
     if (cbdata.buffer->size != 0) {
@@ -96,22 +106,27 @@ static void *requests_status_init(void)
             SEPARATOR ELEMENT("method", "%m") SEPARATOR ELEMENT("path", "%U") SEPARATOR ELEMENT("query", "%q")
                 SEPARATOR ELEMENT("protocol", "%H") SEPARATOR ELEMENT("referer", "%{Referer}i")
                     SEPARATOR ELEMENT("user-agent", "%{User-agent}i") SEPARATOR
-        /* time */
-        X_ELEMENT("connect-time") SEPARATOR X_ELEMENT("request-header-time") SEPARATOR X_ELEMENT("request-body-time")
-            SEPARATOR X_ELEMENT("request-total-time") SEPARATOR X_ELEMENT("process-time") SEPARATOR X_ELEMENT("response-time")
-                SEPARATOR
-        /* connection */
-        X_ELEMENT("connection-id") SEPARATOR X_ELEMENT("ssl.protocol-version") SEPARATOR X_ELEMENT("ssl.session-reused")
-            SEPARATOR X_ELEMENT("ssl.cipher") SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR X_ELEMENT("ssl.session-ticket")
-                SEPARATOR
-        /* http1 */
-        X_ELEMENT("http1.request-index") SEPARATOR
-        /* http2 */
-        X_ELEMENT("http2.stream-id") SEPARATOR X_ELEMENT("http2.priority.received.exclusive")
-            SEPARATOR X_ELEMENT("http2.priority.received.parent") SEPARATOR X_ELEMENT("http2.priority.received.weight")
-                SEPARATOR X_ELEMENT("http2.priority.actual.parent") SEPARATOR X_ELEMENT("http2.priority.actual.weight") SEPARATOR
-        /* misc */
-        ELEMENT("authority", "%V")
+                        /* time */
+                        X_ELEMENT("connect-time") SEPARATOR X_ELEMENT("request-header-time")
+                            SEPARATOR X_ELEMENT("request-body-time") SEPARATOR X_ELEMENT("request-total-time")
+                                SEPARATOR X_ELEMENT("process-time") SEPARATOR X_ELEMENT("response-time") SEPARATOR
+                                    /* connection */
+                                    X_ELEMENT("connection-id") SEPARATOR X_ELEMENT("ssl.protocol-version")
+                                        SEPARATOR X_ELEMENT("ssl.session-reused") SEPARATOR X_ELEMENT("ssl.cipher")
+                                            SEPARATOR X_ELEMENT("ssl.cipher-bits") SEPARATOR X_ELEMENT("ssl.session-ticket")
+                                                SEPARATOR
+                                                    /* http1 */
+                                                    X_ELEMENT("http1.request-index") SEPARATOR
+                                                        /* http2 */
+                                                        X_ELEMENT("http2.stream-id")
+                                                            SEPARATOR X_ELEMENT("http2.priority.received.exclusive")
+                                                                SEPARATOR X_ELEMENT("http2.priority.received.parent")
+                                                                    SEPARATOR X_ELEMENT("http2.priority.received.weight")
+                                                                        SEPARATOR X_ELEMENT("http2.priority.actual.parent")
+                                                                            SEPARATOR X_ELEMENT("http2.priority.actual.weight")
+                                                                                SEPARATOR
+                                                                                    /* misc */
+                                                                                    ELEMENT("authority", "%V")
         /* end */
         "}";
 #undef ELEMENT
@@ -121,7 +136,7 @@ static void *requests_status_init(void)
     /* compile logconf */
     if ((rsc->logconf = h2o_logconf_compile(fmt, H2O_LOGCONF_ESCAPE_JSON, errbuf)) == NULL)
         /* log format compilation error is an internal logic flaw, therefore we need not send the details to the client */
-        fprintf(stderr, "[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
+        h2o_error_printf("[lib/handler/status/requests.c] failed to compile log format: %s", errbuf);
 
     rsc->req_data = (h2o_iovec_t){NULL};
     pthread_mutex_init(&rsc->mutex, NULL);
@@ -146,6 +161,5 @@ static h2o_iovec_t requests_status_final(void *priv, h2o_globalconf_t *gconf, h2
     return ret;
 }
 
-h2o_status_handler_t requests_status_handler = {
-    {H2O_STRLIT("requests")}, requests_status_init, requests_status_per_thread, requests_status_final,
-};
+h2o_status_handler_t h2o_requests_status_handler = {
+    {H2O_STRLIT("requests")}, requests_status_final, requests_status_init, requests_status_per_thread};

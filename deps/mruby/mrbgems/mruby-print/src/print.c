@@ -19,11 +19,10 @@ printstr(mrb_state *mrb, mrb_value obj)
 #if defined(_WIN32)
     if (isatty(fileno(stdout))) {
       DWORD written;
-      int mlen = RSTRING_LEN(obj);
+      int mlen = (int)RSTRING_LEN(obj);
       char* utf8 = RSTRING_PTR(obj);
       int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8, mlen, NULL, 0);
       wchar_t* utf16 = (wchar_t*)mrb_malloc(mrb, (wlen+1) * sizeof(wchar_t));
-      if (utf16 == NULL) return;
       if (MultiByteToWideChar(CP_UTF8, 0, utf8, mlen, utf16, wlen) > 0) {
         utf16[wlen] = 0;
         WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE),

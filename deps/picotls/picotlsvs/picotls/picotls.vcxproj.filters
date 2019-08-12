@@ -116,6 +116,12 @@
     <ClCompile Include="..\..\lib\asn1.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\lib\minicrypto-pem.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\lib\ffx.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\deps\cifra\src\poly1305.py" />

@@ -425,6 +425,11 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     body = build_dir_listing_html(&req->pool, req->path_normalized, dp);
     closedir(dp);
 
+    if (body == NULL) {
+        h2o_send_error_503(req, "Service Unavailable", "please try again later", 0);
+        return 0;
+    }
+
     bodyvec = h2o_iovec_init(body->bytes, body->size);
     h2o_buffer_link_to_pool(body, &req->pool);
 
@@ -604,8 +609,7 @@ static int try_dynamic_request(h2o_file_handler_t *self, h2o_req_t *req, char *r
         return delegate_dynamic_request(req, script_name, path_info, rpath, slash_at, mime_type);
     }
     }
-    fprintf(stderr, "unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
-    abort();
+    h2o_fatal("unknown h2o_miemmap_type_t::type (%d)\n", (int)mime_type->type);
 }
 
 static void send_method_not_allowed(h2o_req_t *req)
@@ -619,7 +623,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
 {
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
     size_t if_modified_since_header_index, if_none_match_header_index;
-    size_t range_header_index;
+    size_t range_header_index, if_range_header_index;
 
     /* determine the method */
     if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))) {
@@ -638,13 +642,13 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
     assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
 
     /* if-non-match and if-modified-since */
-    if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, SIZE_MAX)) != -1) {
+    if ((if_none_match_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_NONE_MATCH, -1)) != -1) {
         h2o_iovec_t *if_none_match = &req->headers.entries[if_none_match_header_index].value;
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
         size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
-        if (h2o_memis(if_none_match->base, if_none_match->len, etag, etag_len))
+        if (h2o_filecache_compare_etag_strong(if_none_match->base, if_none_match->len, etag, etag_len))
             goto NotModified;
-    } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, SIZE_MAX)) != -1) {
+    } else if ((if_modified_since_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_MODIFIED_SINCE, -1)) != -1) {
         h2o_iovec_t *ims_vec = &req->headers.entries[if_modified_since_header_index].value;
         struct tm ims_tm, *last_modified_tm;
         if (h2o_time_parse_rfc1123(ims_vec->base, ims_vec->len, &ims_tm) == 0) {
@@ -654,15 +658,31 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         }
     }
 
-    /* only allow GET or POST for static files */
+    /* only allow GET or HEAD for static files */
     if (method_type == METHOD_IS_OTHER) {
         do_close(&generator->super, req);
         send_method_not_allowed(req);
         return 0;
     }
 
-    /* if-range */
-    if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, SIZE_MAX)) != -1) {
+    /* range request */
+    if ((range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_RANGE, -1)) != -1) {
+        /* if range */
+        if ((if_range_header_index = h2o_find_header(&req->headers, H2O_TOKEN_IF_RANGE, -1)) != -1) {
+            h2o_iovec_t *if_range = &req->headers.entries[if_range_header_index].value;
+            /* first try parse if-range as http-date */
+            struct tm ir_tm, *last_modified_tm;
+            if (h2o_time_parse_rfc1123(if_range->base, if_range->len, &ir_tm) == 0) {
+                last_modified_tm = h2o_filecache_get_last_modified(generator->file.ref, NULL);
+                if (tm_is_lessthan(&ir_tm, last_modified_tm))
+                    goto EntireFile;
+            } else { /* treat it as an e-tag */
+                char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
+                size_t etag_len = h2o_filecache_get_etag(generator->file.ref, etag);
+                if (!h2o_filecache_compare_etag_strong(if_range->base, if_range->len, etag, etag_len))
+                    goto EntireFile;
+            }
+        }
         h2o_iovec_t *range = &req->headers.entries[range_header_index].value;
         size_t *range_infos, range_count;
         range_infos = process_range(&req->pool, range, generator->bytesleft, &range_count);
@@ -724,6 +744,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
         return 0;
     }
 
+EntireFile:
     /* return file */
     do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, &mime_type->data.attr, method_type == METHOD_IS_GET);
     return 0;

@@ -13,10 +13,9 @@ module Enumerable
   #    a.drop(3)             #=> [4, 5, 0]
 
   def drop(n)
-    raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
+    n = n.__to_int
     raise ArgumentError, "attempt to drop negative size" if n < 0
 
-    n = n.to_int
     ary = []
     self.each {|*val| n == 0 ? ary << val.__svalue : n -= 1 }
     ary
@@ -57,8 +56,8 @@ module Enumerable
   #    a.take(3)             #=> [1, 2, 3]
 
   def take(n)
-    raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
-    i = n.to_int
+    n = n.__to_int
+    i = n.to_i
     raise ArgumentError, "attempt to take negative size" if i < 0
     ary = []
     return ary if i == 0
@@ -113,12 +112,12 @@ module Enumerable
   #     [8, 9, 10]
 
   def each_cons(n, &block)
-    raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
+    n = n.__to_int
     raise ArgumentError, "invalid size" if n <= 0
 
     return to_enum(:each_cons,n) unless block
     ary = []
-    n = n.to_int
+    n = n.to_i
     self.each do |*val|
       ary.shift if ary.size == n
       ary << val.__svalue
@@ -141,12 +140,12 @@ module Enumerable
   #     [10]
 
   def each_slice(n, &block)
-    raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
+    n = n.__to_int
     raise ArgumentError, "invalid slice size" if n <= 0
 
     return to_enum(:each_slice,n) unless block
     ary = []
-    n = n.to_int
+    n = n.to_i
     self.each do |*val|
       ary << val.__svalue
       if ary.size == n
@@ -201,14 +200,11 @@ module Enumerable
       ary.push([block.call(e), i])
     }
     if ary.size > 1
-      __sort_sub__(ary, 0, ary.size - 1) do |a,b|
-        a <=> b
-      end
+      ary.sort!
     end
     ary.collect{|e,i| orig[i]}
   end
 
-  NONE = Object.new
   ##
   # call-seq:
   #    enum.first       ->  obj or nil
@@ -225,9 +221,7 @@ module Enumerable
       end
       return nil
     when 1
-      n = args[0]
-      raise TypeError, "no implicit conversion of #{n.class} into Integer" unless n.respond_to?(:to_int)
-      i = n.to_int
+      i = args[0].__to_int
       raise ArgumentError, "attempt to take negative size" if i < 0
       ary = []
       return ary if i == 0
@@ -451,20 +445,30 @@ module Enumerable
   ##
   #  call-seq:
   #     enum.none? [{ |obj| block }]   -> true or false
+  #     enum.none?(pattern)            -> true or false
   #
   #  Passes each element of the collection to the given block. The method
   #  returns <code>true</code> if the block never returns <code>true</code>
   #  for all elements. If the block is not given, <code>none?</code> will return
   #  <code>true</code> only if none of the collection members is true.
   #
+  #  If a pattern is supplied instead, the method returns whether
+  #  <code>pattern === element</code> for none of the collection members.
+  #
   #     %w(ant bear cat).none? { |word| word.length == 5 } #=> true
   #     %w(ant bear cat).none? { |word| word.length >= 4 } #=> false
+  #     %w{ant bear cat}.none?(/d/)                        #=> true
+  #     [1, 3.14, 42].none?(Float)                         #=> false
   #     [].none?                                           #=> true
   #     [nil, false].none?                                 #=> true
   #     [nil, true].none?                                  #=> false
 
-  def none?(&block)
-    if block
+  def none?(pat=NONE, &block)
+    if pat != NONE
+      self.each do |*val|
+        return false if pat === val.__svalue
+      end
+    elsif block
       self.each do |*val|
         return false if block.call(*val)
       end
@@ -479,6 +483,7 @@ module Enumerable
   ##
   #  call-seq:
   #    enum.one? [{ |obj| block }]   -> true or false
+  #    enum.one?(pattern)            -> true or false
   #
   # Passes each element of the collection to the given block. The method
   # returns <code>true</code> if the block returns <code>true</code>
@@ -486,16 +491,26 @@ module Enumerable
   # <code>true</code> only if exactly one of the collection members is
   # true.
   #
+  # If a pattern is supplied instead, the method returns whether
+  # <code>pattern === element</code> for exactly one collection member.
+  #
   #    %w(ant bear cat).one? { |word| word.length == 4 }  #=> true
   #    %w(ant bear cat).one? { |word| word.length > 4 }   #=> false
   #    %w(ant bear cat).one? { |word| word.length < 4 }   #=> false
+  #    %w{ant bear cat}.one?(/t/)                         #=> false
   #    [nil, true, 99].one?                               #=> false
   #    [nil, true, false].one?                            #=> true
-  #
+  #    [ nil, true, 99 ].one?(Integer)                    #=> true
+  #    [].one?                                            #=> false
 
-  def one?(&block)
+  def one?(pat=NONE, &block)
     count = 0
-    if block
+    if pat!=NONE
+      self.each do |*val|
+        count += 1 if pat === val.__svalue
+        return false if count > 1
+      end
+    elsif block
       self.each do |*val|
         count += 1 if block.call(*val)
         return false if count > 1
@@ -508,6 +523,71 @@ module Enumerable
     end
 
     count == 1 ? true : false
+  end
+
+  # ISO 15.3.2.2.1
+  #  call-seq:
+  #     enum.all? [{ |obj| block } ]   -> true or false
+  #     enum.all?(pattern)             -> true or false
+  #
+  #  Passes each element of the collection to the given block. The method
+  #  returns <code>true</code> if the block never returns
+  #  <code>false</code> or <code>nil</code>. If the block is not given,
+  #  Ruby adds an implicit block of <code>{ |obj| obj }</code> which will
+  #  cause #all? to return +true+ when none of the collection members are
+  #  +false+ or +nil+.
+  #
+  #  If a pattern is supplied instead, the method returns whether
+  #  <code>pattern === element</code> for every collection member.
+  #
+  #     %w[ant bear cat].all? { |word| word.length >= 3 } #=> true
+  #     %w[ant bear cat].all? { |word| word.length >= 4 } #=> false
+  #     %w[ant bear cat].all?(/t/)                        #=> false
+  #     [1, 2i, 3.14].all?(Numeric)                       #=> true
+  #     [nil, true, 99].all?                              #=> false
+  #
+  def all?(pat=NONE, &block)
+    if pat != NONE
+      self.each{|*val| return false unless pat === val.__svalue}
+    elsif block
+      self.each{|*val| return false unless block.call(*val)}
+    else
+      self.each{|*val| return false unless val.__svalue}
+    end
+    true
+  end
+
+  # ISO 15.3.2.2.2
+  #  call-seq:
+  #     enum.any? [{ |obj| block }]   -> true or false
+  #     enum.any?(pattern)            -> true or false
+  #
+  #  Passes each element of the collection to the given block. The method
+  #  returns <code>true</code> if the block ever returns a value other
+  #  than <code>false</code> or <code>nil</code>. If the block is not
+  #  given, Ruby adds an implicit block of <code>{ |obj| obj }</code> that
+  #  will cause #any? to return +true+ if at least one of the collection
+  #  members is not +false+ or +nil+.
+  #
+  #  If a pattern is supplied instead, the method returns whether
+  #  <code>pattern === element</code> for any collection member.
+  #
+  #     %w[ant bear cat].any? { |word| word.length >= 3 } #=> true
+  #     %w[ant bear cat].any? { |word| word.length >= 4 } #=> true
+  #     %w[ant bear cat].any?(/d/)                        #=> false
+  #     [nil, true, 99].any?(Integer)                     #=> true
+  #     [nil, true, 99].any?                              #=> true
+  #     [].any?                                           #=> false
+  #
+  def any?(pat=NONE, &block)
+    if pat != NONE
+      self.each{|*val| return true if pat === val.__svalue}
+    elsif block
+      self.each{|*val| return true if block.call(*val)}
+    else
+      self.each{|*val| return true if val.__svalue}
+    end
+    false
   end
 
   ##
@@ -524,9 +604,7 @@ module Enumerable
   #     #=> [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
   #
 
-  def each_with_object(obj=nil, &block)
-    raise ArgumentError, "wrong number of arguments (0 for 1)" if obj.nil?
-
+  def each_with_object(obj, &block)
     return to_enum(:each_with_object, obj) unless block
 
     self.each {|*val| block.call(val.__svalue, obj) }
@@ -591,13 +669,7 @@ module Enumerable
     if nv.nil?
       n = -1
     else
-      unless nv.respond_to?(:to_int)
-        raise TypeError, "no implicit conversion of #{nv.class} into Integer"
-      end
-      n = nv.to_int
-      unless n.kind_of?(Integer)
-        raise TypeError, "no implicit conversion of #{nv.class} into Integer"
-      end
+      n = nv.__to_int
       return nil if n <= 0
     end
 
@@ -656,18 +728,39 @@ module Enumerable
   ##
   #  call-seq:
   #     enum.zip(arg, ...)                  -> an_array_of_array
+  #     enum.zip(arg, ...) { |arr| block }  -> nil
   #
   #  Takes one element from <i>enum</i> and merges corresponding
   #  elements from each <i>args</i>.  This generates a sequence of
   #  <em>n</em>-element arrays, where <em>n</em> is one more than the
   #  count of arguments.  The length of the resulting sequence will be
   #  <code>enum#size</code>.  If the size of any argument is less than
-  #  <code>enum#size</code>, <code>nil</code> values are supplied.
+  #  <code>enum#size</code>, <code>nil</code> values are supplied. If
+  #  a block is given, it is invoked for each output array, otherwise
+  #  an array of arrays is returned.
+  #
+  #     a = [ 4, 5, 6 ]
+  #     b = [ 7, 8, 9 ]
+  #
+  #     a.zip(b)                 #=> [[4, 7], [5, 8], [6, 9]]
+  #     [1, 2, 3].zip(a, b)      #=> [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
+  #     [1, 2].zip(a, b)         #=> [[1, 4, 7], [2, 5, 8]]
+  #     a.zip([1, 2], [8])       #=> [[4, 1, 8], [5, 2, nil], [6, nil, nil]]
+  #
+  #     c = []
+  #     a.zip(b) { |x, y| c << x + y }  #=> nil
+  #     c                               #=> [11, 13, 15]
   #
 
-  def zip(*arg)
-    ary = []
-    arg = arg.map{|a|a.to_a}
+  def zip(*arg, &block)
+    result = block ? nil : []
+    arg = arg.map do |a|
+      unless a.respond_to?(:to_a)
+        raise TypeError, "wrong argument type #{a.class} (must respond to :to_a)"
+      end
+      a.to_a
+    end
+
     i = 0
     self.each do |*val|
       a = []
@@ -677,10 +770,14 @@ module Enumerable
         a.push(arg[idx][i])
         idx += 1
       end
-      ary.push(a)
       i += 1
+      if result.nil?
+        block.call(a)
+      else
+        result.push(a)
+      end
     end
-    ary
+    result
   end
 
   ##
@@ -694,18 +791,43 @@ module Enumerable
   #       # => {:hello => 0, :world => 1}
   #
 
-  def to_h
+  def to_h(&blk)
     h = {}
-    self.each do |*v|
-      v = v.__svalue
-      raise TypeError, "wrong element type #{v.class} (expected Array)" unless v.is_a? Array
-      raise ArgumentError, "element has wrong array length (expected 2, was #{v.size})" if v.size != 2
-      h[v[0]] = v[1]
+    if blk
+      self.each do |v|
+        v = blk.call(v)
+        raise TypeError, "wrong element type #{v.class} (expected Array)" unless v.is_a? Array
+        raise ArgumentError, "element has wrong array length (expected 2, was #{v.size})" if v.size != 2
+        h[v[0]] = v[1]
+      end
+    else
+      self.each do |*v|
+        v = v.__svalue
+        raise TypeError, "wrong element type #{v.class} (expected Array)" unless v.is_a? Array
+        raise ArgumentError, "element has wrong array length (expected 2, was #{v.size})" if v.size != 2
+        h[v[0]] = v[1]
+      end
     end
     h
   end
 
   def nil.to_h
     {}
+  end
+
+  def uniq(&block)
+    hash = {}
+    if block
+      self.each do|*v|
+        v = v.__svalue
+        hash[block.call(v)] ||= v
+      end
+    else
+      self.each do|*v|
+        v = v.__svalue
+        hash[v] ||= v
+      end
+    end
+    hash.values
   end
 end

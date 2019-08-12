@@ -1,17 +1,39 @@
-# use trusty beta (ubuntu 14.04)
-sudo: required
-dist: trusty
-
 language: c
+dist: xenial
+sudo: required
 
-compiler:
-  - gcc
-  - clang
-
-before_install:
-  - sudo apt-get install --yes cmake
+matrix:
+  include:
+    - name: Linux (gcc-8)
+      os: linux
+      compiler: gcc-8
+      addons:
+        apt:
+          sources: ['ubuntu-toolchain-r-test']
+          packages: ['gcc-8']
+      before_install: &bs_linux
+        - sudo apt-get install faketime libscope-guard-perl libtest-tcp-perl
+    - name: Linux (clang)
+      os: linux
+      compiler: clang
+      before_install: *bs_linux
+    - name: macOS (Xcode)
+      os: osx
+      env:
+        - CMAKE_OPTS=" -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/"
+      before_install: &bs_macos
+        - curl -L https://cpanmin.us | sudo perl - App::cpanminus
+        - sudo cpanm --notest Scope::Guard
+        - sudo cpanm --notest Test::TCP
+        - brew install libfaketime
+    - name: macOS (Xcode 10.1/clang-10)
+      os: osx
+      osx_image: xcode10.1
+      env:
+        - CMAKE_OPTS=" -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/"
+      before_install: *bs_macos
 
 script:
-  - cmake .
+  - cmake ${CMAKE_OPTS} .
   - make all
   - make check

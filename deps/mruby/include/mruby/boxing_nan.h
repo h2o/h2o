@@ -11,6 +11,10 @@
 # error ---->> MRB_NAN_BOXING and MRB_USE_FLOAT conflict <<----
 #endif
 
+#ifdef MRB_WITHOUT_FLOAT
+# error ---->> MRB_NAN_BOXING and MRB_WITHOUT_FLOAT conflict <<----
+#endif
+
 #ifdef MRB_INT64
 # error ---->> MRB_NAN_BOXING and MRB_INT64 conflict <<----
 #endif
@@ -77,7 +81,7 @@ typedef struct mrb_value {
 } while (0)
 
 #define SET_FLOAT_VALUE(mrb,r,v) do { \
-  if (v != v) { \
+  if ((v) != (v)) { \
     (r).value.ttt = 0x7ff80000; \
     (r).value.i = 0; \
   } \

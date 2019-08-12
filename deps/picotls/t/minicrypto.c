@@ -32,12 +32,12 @@
 
 static void test_secp256r1_key_exchange(void)
 {
-    test_key_exchange(&ptls_minicrypto_secp256r1);
+    test_key_exchange(&ptls_minicrypto_secp256r1, &ptls_minicrypto_secp256r1);
 }
 
 static void test_x25519_key_exchange(void)
 {
-    test_key_exchange(&ptls_minicrypto_x25519);
+    test_key_exchange(&ptls_minicrypto_x25519, &ptls_minicrypto_x25519);
 }
 
 static void test_secp256r1_sign(void)
@@ -135,6 +135,9 @@ static void test_hrr(void)
     ptls_free(server);
 }
 
+DEFINE_FFX_AES128_ALGORITHMS(minicrypto);
+DEFINE_FFX_CHACHA20_ALGORITHMS(minicrypto);
+
 int main(int argc, char **argv)
 {
     subtest("secp256r1", test_secp256r1_key_exchange);
@@ -154,8 +157,11 @@ int main(int argc, char **argv)
                              {&cert, 1},
                              NULL,
                              NULL,
+                             NULL,
                              &sign_certificate.super};
     ctx = ctx_peer = &ctxbuf;
+    ADD_FFX_AES128_ALGORITHMS(minicrypto);
+    ADD_FFX_CHACHA20_ALGORITHMS(minicrypto);
 
     subtest("picotls", test_picotls);
     subtest("hrr", test_hrr);

@@ -44,7 +44,7 @@ class Enumerator
 
     def to_enum(meth=:each, *args, &block)
       unless self.respond_to?(meth)
-        raise NoMethodError, "undefined method #{meth}"
+        raise ArgumentError, "undefined method #{meth}"
       end
       lz = Lazy.new(self, &block)
       lz.obj = self
@@ -154,6 +154,21 @@ class Enumerator
           yielder << block.call(ary)
         else
           yielder << ary
+        end
+      }
+    end
+
+    def uniq(&block)
+      hash = {}
+      Lazy.new(self){|yielder, val|
+        if block
+          v = block.call(val)
+        else
+          v = val
+        end
+        unless hash.include?(v)
+          yielder << val
+          hash[v] = val
         end
       }
     end

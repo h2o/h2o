@@ -28,6 +28,19 @@
 /* add -DMRB_USE_FLOAT to use float instead of double for floating point numbers */
 //#define MRB_USE_FLOAT
 
+/* exclude floating point numbers */
+//#define MRB_WITHOUT_FLOAT
+
+/* add -DMRB_METHOD_CACHE to use method cache to improve performance */
+//#define MRB_METHOD_CACHE
+/* size of the method cache (need to be the power of 2) */
+//#define MRB_METHOD_CACHE_SIZE (1<<7)
+
+/* add -DMRB_METHOD_TABLE_INLINE to reduce the size of method table */
+/* MRB_METHOD_TABLE_INLINE requires LSB of function pointers to be zero */
+/* you might need to specify --falign-functions=n (where n>1) */
+//#define MRB_METHOD_TABLE_INLINE
+
 /* add -DMRB_INT16 to use 16bit integer for mrb_int; conflict with MRB_INT64 */
 //#define MRB_INT16
 
@@ -45,11 +58,16 @@
 # endif
 #endif
 
-/* represent mrb_value in boxed double; conflict with MRB_USE_FLOAT */
-//#define MRB_NAN_BOXING
+/* define on big endian machines; used by MRB_NAN_BOXING, etc. */
+#ifndef MRB_ENDIAN_BIG
+# if (defined(BYTE_ORDER) && defined(BIG_ENDIAN) && BYTE_ORDER == BIG_ENDIAN) || \
+     (defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#  define MRB_ENDIAN_BIG
+# endif
+#endif
 
-/* define on big endian machines; used by MRB_NAN_BOXING */
-//#define MRB_ENDIAN_BIG
+/* represent mrb_value in boxed double; conflict with MRB_USE_FLOAT and MRB_WITHOUT_FLOAT */
+//#define MRB_NAN_BOXING
 
 /* represent mrb_value as a word (natural unit of data for the processor) */
 //#define MRB_WORD_BOXING
@@ -102,6 +120,7 @@
 
 /* -DMRB_ENABLE_XXXX to enable following features */
 //#define MRB_ENABLE_DEBUG_HOOK /* hooks for debugger */
+//#define MRB_ENABLE_ALL_SYMBOLS /* Symbols.all_symbols */
 
 /* end of configuration */
 

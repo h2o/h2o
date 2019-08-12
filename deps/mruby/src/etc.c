@@ -75,6 +75,7 @@ mrb_obj_to_sym(mrb_state *mrb, mrb_value name)
       if (mrb_nil_p(name)) {
         name = mrb_inspect(mrb, name);
         mrb_raisef(mrb, E_TYPE_ERROR, "%S is not a symbol", name);
+        /* not reached */
       }
       /* fall through */
     case MRB_TT_STRING:
@@ -87,21 +88,27 @@ mrb_obj_to_sym(mrb_state *mrb, mrb_value name)
 }
 
 MRB_API mrb_int
+#ifdef MRB_WITHOUT_FLOAT
+mrb_fixnum_id(mrb_int f)
+#else
 mrb_float_id(mrb_float f)
+#endif
 {
   const char *p = (const char*)&f;
   int len = sizeof(f);
-  mrb_int id = 0;
+  uint32_t id = 0;
 
+#ifndef MRB_WITHOUT_FLOAT
   /* normalize -0.0 to 0.0 */
   if (f == 0) f = 0.0;
+#endif
   while (len--) {
     id = id*65599 + *p;
     p++;
   }
   id = id + (id>>5);
 
-  return id;
+  return (mrb_int)id;
 }
 
 MRB_API mrb_int
@@ -125,9 +132,13 @@ mrb_obj_id(mrb_value obj)
   case MRB_TT_SYMBOL:
     return MakeID(mrb_symbol(obj));
   case MRB_TT_FIXNUM:
+#ifdef MRB_WITHOUT_FLOAT
+    return MakeID(mrb_fixnum_id(mrb_fixnum(obj)));
+#else
     return MakeID2(mrb_float_id((mrb_float)mrb_fixnum(obj)), MRB_TT_FLOAT);
   case MRB_TT_FLOAT:
     return MakeID(mrb_float_id(mrb_float(obj)));
+#endif
   case MRB_TT_STRING:
   case MRB_TT_OBJECT:
   case MRB_TT_CLASS:
@@ -148,6 +159,7 @@ mrb_obj_id(mrb_value obj)
 }
 
 #ifdef MRB_WORD_BOXING
+#ifndef MRB_WITHOUT_FLOAT
 MRB_API mrb_value
 mrb_word_boxing_float_value(mrb_state *mrb, mrb_float f)
 {
@@ -167,6 +179,7 @@ mrb_word_boxing_float_pool(mrb_state *mrb, mrb_float f)
   nf->f = f;
   return mrb_obj_value(nf);
 }
+#endif  /* MRB_WITHOUT_FLOAT */
 
 MRB_API mrb_value
 mrb_word_boxing_cptr_value(mrb_state *mrb, void *p)

@@ -23,10 +23,10 @@ MRuby::Gem::Specification.new 'mruby-compiler' do |spec|
       cc.run t.name, t.prerequisites.first, [], ["#{current_dir}/core"]
     end
   end
-  file objfile("#{current_build_dir}/core/y.tab") => lex_def
 
   # Parser
-  file "#{current_build_dir}/core/y.tab.c" => ["#{current_dir}/core/parse.y"] do |t|
+  file "#{current_build_dir}/core/y.tab.c" => ["#{current_dir}/core/parse.y", lex_def] do |t|
+    FileUtils.mkdir_p File.dirname t.name
     yacc.run t.name, t.prerequisites.first
   end
 
@@ -35,6 +35,6 @@ MRuby::Gem::Specification.new 'mruby-compiler' do |spec|
     gperf.run t.name, t.prerequisites.first
   end
 
-  file libfile("#{build.build_dir}/lib/libmruby_core") => core_objs
+  file build.libmruby_core_static => core_objs
   build.libmruby << core_objs
 end
