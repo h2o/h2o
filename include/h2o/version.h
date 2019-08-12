@@ -27,9 +27,9 @@
 #endif
 
 #ifdef H2O_GITREV
-#define H2O_VERSION "2.3.0-DEV@" H2O_TO_STR(H2O_GITREV)
+#define H2O_VERSION "2.3.0-beta2@" H2O_TO_STR(H2O_GITREV)
 #else
-#define H2O_VERSION "2.3.0-DEV"
+#define H2O_VERSION "2.3.0-beta2"
 #endif
 
 #define H2O_VERSION_MAJOR 2
