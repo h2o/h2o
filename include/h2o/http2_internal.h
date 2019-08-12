@@ -33,8 +33,8 @@
 typedef struct st_h2o_http2_conn_t h2o_http2_conn_t;
 typedef struct st_h2o_http2_stream_t h2o_http2_stream_t;
 
-/* connection flow control window + alpha */
-#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
+#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920 /* the target size of each write call; connection flow control window + alpha */
+#define H2O_HTTP2_DEFAULT_OUTBUF_SOFT_MAX_SIZE 524288 /* 512KB; stops reading if size exceeds this value */
 
 /* hpack */
 

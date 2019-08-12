@@ -56,6 +56,7 @@ static const h2o_iovec_t SETTINGS_HOST_BIN = {H2O_STRLIT("\x00\x00\x0c"     /* f
 static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
+static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static void do_emit_writereq(h2o_http2_conn_t *conn);
@@ -147,7 +148,12 @@ static void on_idle_timeout(h2o_timeout_entry_t *entry)
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
 
     enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));
-    close_connection(conn);
+    if (conn->_write.buf_in_flight != NULL) {
+        close_connection_now(conn);
+    } else {
+        enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));
+        close_connection(conn);
+    }
 }
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
@@ -247,7 +253,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 }
 
-static void close_connection_now(h2o_http2_conn_t *conn)
+void close_connection_now(h2o_http2_conn_t *conn)
 {
     h2o_http2_stream_t *stream;
 
@@ -937,10 +943,20 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     }
 }
 
+static size_t bytes_in_buf(h2o_http2_conn_t *conn)
+{
+    size_t size = conn->_write.buf->size;
+    if (conn->_write.buf_in_flight != 0)
+        size += conn->_write.buf_in_flight->size;
+    return size;
+}
+
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn)
 {
     if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
         return;
+    if (h2o_socket_is_reading(conn->sock) && bytes_in_buf(conn) >= H2O_HTTP2_DEFAULT_OUTBUF_SOFT_MAX_SIZE)
+        h2o_socket_read_stop(conn->sock);
     request_gathered_write(conn);
 }
 
@@ -1000,6 +1016,11 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* cancel the write callback if scheduled (as the generator may have scheduled a write just before this function gets called) */
     if (h2o_timeout_is_linked(&conn->_write.timeout_entry))
         h2o_timeout_unlink(&conn->_write.timeout_entry);
+
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+        if (!h2o_socket_is_reading(conn->sock) && bytes_in_buf(conn) < H2O_HTTP2_DEFAULT_OUTBUF_SOFT_MAX_SIZE)
+            h2o_socket_read_start(conn->sock, on_read);
+    }
 
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
