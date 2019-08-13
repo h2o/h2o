@@ -28,3 +28,7 @@ end
 assert('Symbol#to_sym', '15.2.11.3.4') do
   assert_equal :abc, :abc.to_sym
 end
+
+assert('Symbol#to_proc') do
+  assert_equal 5, :abs.to_proc[-5]
+end

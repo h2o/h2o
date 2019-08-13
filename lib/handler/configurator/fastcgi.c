@@ -90,30 +90,14 @@ static int on_config_connect(h2o_configurator_command_t *cmd, h2o_configurator_c
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "host")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`host` is not a string");
-                return -1;
-            }
-            hostname = t->data.scalar;
-        }
-        if ((t = yoml_get(node, "port")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
+        yoml_t **port_node, **host_node, **type_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s", &port_node, &host_node, &type_node) != 0)
             return -1;
-        }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "`port` is not a string");
-            return -1;
-        }
-        servname = t->data.scalar;
-        if ((t = yoml_get(node, "type")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`type` is not a string");
-                return -1;
-            }
-            type = t->data.scalar;
-        }
+        servname = (*port_node)->data.scalar;
+        if (host_node != NULL)
+            hostname = (*host_node)->data.scalar;
+        if (type_node != NULL)
+            type = (*type_node)->data.scalar;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node,
@@ -200,7 +184,7 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
                         -1};
     pid_t pid = h2o_spawnp(argv[0], argv, mapped_fds, 0);
     if (pid == -1) {
-        fprintf(stderr, "[lib/handler/fastcgi.c] failed to launch helper program %s:%s\n", argv[0], strerror(errno));
+        h2o_error_printf("[lib/handler/fastcgi.c] failed to launch helper program %s:%s\n", argv[0], strerror(errno));
         goto Error;
     }
 
@@ -231,7 +215,7 @@ static void spawnproc_on_dispose(h2o_fastcgi_handler_t *handler, void *data)
 static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct fastcgi_configurator_t *self = (void *)cmd->configurator;
-    char *spawn_user = NULL, *spawn_cmd;
+    char *spawn_user = ctx->globalconf->user, *spawn_cmd;
     char *kill_on_close_cmd_path = NULL, *setuidgid_cmd_path = NULL;
     char dirname[] = "/tmp/h2o.fcgisock.XXXXXX";
     char *argv[10];
@@ -246,28 +230,15 @@ static int on_config_spawn(h2o_configurator_command_t *cmd, h2o_configurator_con
 
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        spawn_user = ctx->globalconf->user;
         spawn_cmd = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "command")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "mandatory attribute `command` does not exist");
+        yoml_t **command_node, **user_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "command:s", "user:s", &command_node, &user_node) != 0)
             return -1;
-        }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "attribute `command` must be scalar");
-            return -1;
-        }
-        spawn_cmd = t->data.scalar;
-        spawn_user = ctx->globalconf->user;
-        if ((t = yoml_get(node, "user")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "attribute `user` must be scalar");
-                return -1;
-            }
-            spawn_user = t->data.scalar;
-        }
+        spawn_cmd = (*command_node)->data.scalar;
+        if (user_node != NULL)
+            spawn_user = (*user_node)->data.scalar;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "argument must be scalar or mapping");

@@ -9,8 +9,9 @@
 #include <mruby.h>
 #include <mruby/class.h>
 #include <mruby/data.h>
+#include <mruby/time.h>
 
-#ifndef DISABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 #include <stdio.h>
 #else
 #include <string.h>
@@ -46,7 +47,7 @@ double round(double x) {
 /* #define NO_GMTIME_R */
 
 #ifdef _WIN32
-#if _MSC_VER
+#ifdef _MSC_VER
 /* Win32 platform do not provide gmtime_r/localtime_r; emulate them using gmtime_s/localtime_s */
 #define gmtime_r(tp, tm)    ((gmtime_s((tm), (tp)) == 0) ? (tm) : NULL)
 #define localtime_r(tp, tm)    ((localtime_s((tm), (tp)) == 0) ? (tm) : NULL)
@@ -66,6 +67,11 @@ double round(double x) {
 /* mktime() creates tm structure for localtime; timegm() is for UTC time */
 /* define following macro to use probably faster timegm() on the platform */
 /* #define USE_SYSTEM_TIMEGM */
+
+/* time_t */
+/* If your platform supports time_t as uint (e.g. uint32_t, uint64_t), */
+/* uncomment following macro. */
+/* #define MRB_TIME_T_UINT */
 
 /** end of Time class configuration */
 
@@ -138,8 +144,14 @@ timegm(struct tm *tm)
   int i;
   unsigned int *nday = (unsigned int*) ndays[is_leapyear(tm->tm_year+1900)];
 
-  for (i = 70; i < tm->tm_year; ++i)
-    r += is_leapyear(i+1900) ? 366*24*60*60 : 365*24*60*60;
+  static const int epoch_year = 70;
+  if(tm->tm_year >= epoch_year) {
+    for (i = epoch_year; i < tm->tm_year; ++i)
+      r += is_leapyear(i+1900) ? 366*24*60*60 : 365*24*60*60;
+  } else {
+    for (i = tm->tm_year; i < epoch_year; ++i)
+      r -= is_leapyear(i+1900) ? 366*24*60*60 : 365*24*60*60;
+  }
   for (i = 0; i < tm->tm_mon; ++i)
     r += nday[i] * 24 * 60 * 60;
   r += (tm->tm_mday - 1) * 24 * 60 * 60;
@@ -155,13 +167,6 @@ timegm(struct tm *tm)
 * second level. Also, there are only 2 timezones, namely UTC and LOCAL.
 */
 
-enum mrb_timezone {
-  MRB_TIMEZONE_NONE   = 0,
-  MRB_TIMEZONE_UTC    = 1,
-  MRB_TIMEZONE_LOCAL  = 2,
-  MRB_TIMEZONE_LAST   = 3
-};
-
 typedef struct mrb_timezone_name {
   const char name[8];
   size_t len;
@@ -173,7 +178,7 @@ static const mrb_timezone_name timezone_names[] = {
   { "LOCAL", sizeof("LOCAL") - 1 },
 };
 
-#ifndef DISABLE_STDIO
+#ifndef MRB_DISABLE_STDIO
 static const char mon_names[12][4] = {
   "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 };
@@ -234,13 +239,21 @@ time_alloc(mrb_state *mrb, double sec, double usec, enum mrb_timezone timezone)
 
   mrb_check_num_exact(mrb, (mrb_float)sec);
   mrb_check_num_exact(mrb, (mrb_float)usec);
-
+#ifndef MRB_TIME_T_UINT
   if (sizeof(time_t) == 4 && (sec > (double)INT32_MAX || (double)INT32_MIN > sec)) {
     goto out_of_range;
   }
   if (sizeof(time_t) == 8 && (sec > (double)INT64_MAX || (double)INT64_MIN > sec)) {
     goto out_of_range;
   }
+#else
+  if (sizeof(time_t) == 4 && (sec > (double)UINT32_MAX || (double)0 > sec)) {
+    goto out_of_range;
+  }
+  if (sizeof(time_t) == 8 && (sec > (double)UINT64_MAX || (double)0 > sec)) {
+    goto out_of_range;
+  }
+#endif
   tsec  = (time_t)sec;
   if ((sec > 0 && tsec < 0) || (sec < 0 && (double)tsec > sec)) {
   out_of_range:
@@ -250,12 +263,12 @@ time_alloc(mrb_state *mrb, double sec, double usec, enum mrb_timezone timezone)
   tm->sec  = tsec;
   tm->usec = (time_t)llround((sec - tm->sec) * 1.0e6 + usec);
   if (tm->usec < 0) {
-    long sec2 = (long)NDIV(usec,1000000); /* negative div */
+    long sec2 = (long)NDIV(tm->usec,1000000); /* negative div */
     tm->usec -= sec2 * 1000000;
     tm->sec += sec2;
   }
   else if (tm->usec >= 1000000) {
-    long sec2 = (long)(usec / 1000000);
+    long sec2 = (long)(tm->usec / 1000000);
     tm->usec -= sec2 * 1000000;
     tm->sec += sec2;
   }
@@ -277,7 +290,7 @@ current_mrb_time(mrb_state *mrb)
   struct mrb_time *tm;
 
   tm = (struct mrb_time *)mrb_malloc(mrb, sizeof(*tm));
-#if defined(TIME_UTC)
+#if defined(TIME_UTC) && !defined(__ANDROID__)
   {
     struct timespec ts;
     if (timespec_get(&ts, TIME_UTC) == 0) {
@@ -324,10 +337,16 @@ mrb_time_now(mrb_state *mrb, mrb_value self)
   return mrb_time_wrap(mrb, mrb_class_ptr(self), current_mrb_time(mrb));
 }
 
+MRB_API mrb_value
+mrb_time_at(mrb_state *mrb, double sec, double usec, enum mrb_timezone zone)
+{
+  return mrb_time_make(mrb, mrb_class_get(mrb, "Time"), sec, usec, zone);
+}
+
 /* 15.2.19.6.1 */
 /* Creates an instance of time at the given time in seconds, etc. */
 static mrb_value
-mrb_time_at(mrb_state *mrb, mrb_value self)
+mrb_time_at_m(mrb_state *mrb, mrb_value self)
 {
   mrb_float f, f2 = 0;
 
@@ -369,7 +388,7 @@ time_mktime(mrb_state *mrb, mrb_int ayear, mrb_int amonth, mrb_int aday,
     mrb_raise(mrb, E_ARGUMENT_ERROR, "Not a valid time.");
   }
 
-  return time_alloc(mrb, (double)nowsecs, ausec, timezone);
+  return time_alloc(mrb, (double)nowsecs, (double)ausec, timezone);
 }
 
 /* 15.2.19.6.2 */
@@ -541,7 +560,7 @@ mrb_time_asctime(mrb_state *mrb, mrb_value self)
   struct tm *d = &tm->datetime;
   int len;
 
-#if defined(DISABLE_STDIO)
+#if defined(MRB_DISABLE_STDIO)
   char *s;
 # ifdef NO_ASCTIME_R
   s = asctime(d);
@@ -634,7 +653,7 @@ mrb_time_initialize(mrb_state *mrb, mrb_value self)
 {
   mrb_int ayear = 0, amonth = 1, aday = 1, ahour = 0,
   amin = 0, asec = 0, ausec = 0;
-  int n;
+  mrb_int n;
   struct mrb_time *tm;
 
   n = mrb_get_args(mrb, "|iiiiiii",
@@ -811,7 +830,7 @@ mrb_mruby_time_gem_init(mrb_state* mrb)
   tc = mrb_define_class(mrb, "Time", mrb->object_class);
   MRB_SET_INSTANCE_TT(tc, MRB_TT_DATA);
   mrb_include_module(mrb, tc, mrb_module_get(mrb, "Comparable"));
-  mrb_define_class_method(mrb, tc, "at", mrb_time_at, MRB_ARGS_ARG(1, 1));      /* 15.2.19.6.1 */
+  mrb_define_class_method(mrb, tc, "at", mrb_time_at_m, MRB_ARGS_ARG(1, 1));      /* 15.2.19.6.1 */
   mrb_define_class_method(mrb, tc, "gm", mrb_time_gm, MRB_ARGS_ARG(1,6));       /* 15.2.19.6.2 */
   mrb_define_class_method(mrb, tc, "local", mrb_time_local, MRB_ARGS_ARG(1,6)); /* 15.2.19.6.3 */
   mrb_define_class_method(mrb, tc, "mktime", mrb_time_local, MRB_ARGS_ARG(1,6));/* 15.2.19.6.4 */

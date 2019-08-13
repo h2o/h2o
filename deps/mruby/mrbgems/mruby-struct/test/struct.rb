@@ -11,13 +11,6 @@ assert('Struct.new', '15.2.18.3.1') do
   assert_equal [:m1, :m2], c.members
 end
 
-# Check crash bug with Struc.new and no params.
-assert('Struct.new', '15.2.18.3.1') do
-  c = Struct.new()
-  assert_equal Struct, c.superclass
-  assert_equal [], c.members
-end
-
 assert('Struct#==', '15.2.18.4.1') do
   c = Struct.new(:m1, :m2)
   cc1 = c.new(1,2)
@@ -192,7 +185,7 @@ assert("Struct.new generates subclass of Struct") do
   begin
     original_struct = Struct
     Struct = String
-    assert_equal original_struct, original_struct.new.superclass
+    assert_equal original_struct, original_struct.new(:foo).superclass
   ensure
     Struct = original_struct
   end

@@ -22,14 +22,22 @@
 #ifndef h2o__version_h
 #define h2o__version_h
 
+#ifdef H2O_HAS_GITREV_H
+#include "h2o/gitrev.h"
+#endif
+
+#ifdef H2O_GITREV
+#define H2O_VERSION "2.3.0-DEV@" H2O_TO_STR(H2O_GITREV)
+#else
 #define H2O_VERSION "2.3.0-DEV"
+#endif
 
 #define H2O_VERSION_MAJOR 2
 #define H2O_VERSION_MINOR 3
 #define H2O_VERSION_PATCH 0
 
 #define H2O_LIBRARY_VERSION_MAJOR 0
-#define H2O_LIBRARY_VERSION_MINOR 14
+#define H2O_LIBRARY_VERSION_MINOR 16
 #define H2O_LIBRARY_VERSION_PATCH 0
 
 #endif

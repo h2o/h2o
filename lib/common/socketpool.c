@@ -31,7 +31,13 @@
 #include "h2o/linklist.h"
 #include "h2o/socketpool.h"
 #include "h2o/string_.h"
-#include "h2o/timeout.h"
+#include "h2o/socket.h"
+#include "h2o/balancer.h"
+
+/**
+ * timeout will be set to this value when calculated less than this value
+ */
+#define CHECK_EXPIRATION_MIN_INTERVAL 1000
 
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
@@ -52,18 +58,14 @@ struct st_h2o_socketpool_connect_request_t {
     size_t selected_target;
     size_t remaining_try_count;
     struct {
-        int *tried;
+        char *tried;
     } lb;
+    h2o_iovec_t alpn_protos;
 };
 
 struct on_close_data_t {
     h2o_socketpool_t *pool;
     size_t target;
-};
-
-struct round_robin_t {
-    size_t next_pos;
-    pthread_mutex_t mutex;
 };
 
 static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr *addr, socklen_t addrlen);
@@ -82,40 +84,53 @@ static void destroy_attached(struct pool_entry_t *entry)
     destroy_detached(entry);
 }
 
-static void destroy_expired(h2o_socketpool_t *pool)
+/* caller should lock the mutex */
+static uint64_t destroy_expired_locked(h2o_socketpool_t *pool)
 {
-    if (pool->_interval_cb.loop == NULL)
-        return;
+    if (pool->_interval_cb.loop != NULL) {
+        uint64_t now_ms = h2o_now(pool->_interval_cb.loop);
+        uint64_t expire_before = now_ms - pool->timeout;
+        while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
+            struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
+            if (entry->added_at > expire_before) {
+                return entry->added_at + pool->timeout - now_ms;
+            }
+            destroy_attached(entry);
+            __sync_sub_and_fetch(&pool->_shared.count, 1);
+            __sync_sub_and_fetch(&pool->_shared.pooled_count, 1);
+        }
+    }
+    return UINT64_MAX;
+}
 
-    /* caller should lock the mutex */
-    uint64_t expire_before = h2o_now(pool->_interval_cb.loop) - pool->timeout;
-    while (!h2o_linklist_is_empty(&pool->_shared.sockets)) {
-        struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
-        if (entry->added_at > expire_before)
-            break;
-        destroy_attached(entry);
-        __sync_sub_and_fetch(&pool->_shared.count, 1);
+/* caller should lock the mutex */
+static void check_pool_expired_locked(h2o_socketpool_t *pool)
+{
+    uint64_t next_expired = destroy_expired_locked(pool);
+    if (next_expired != UINT64_MAX) {
+        if (!h2o_timer_is_linked(&pool->_interval_cb.timeout)) {
+            if (next_expired < CHECK_EXPIRATION_MIN_INTERVAL)
+                next_expired = CHECK_EXPIRATION_MIN_INTERVAL;
+            h2o_timer_link(pool->_interval_cb.loop, next_expired, &pool->_interval_cb.timeout);
+        }
     }
 }
 
-static void on_timeout(h2o_timeout_entry_t *timeout_entry)
+static void on_timeout(h2o_timer_t *timeout)
 {
-    /* FIXME decrease the frequency of this function being called; the expiration
+    /* decrease the frequency of this function being called; the expiration
      * check can be (should be) performed in the `connect` fuction as well
      */
-    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.entry, timeout_entry);
+    h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.timeout, timeout);
 
     if (pthread_mutex_trylock(&pool->_shared.mutex) == 0) {
-        destroy_expired(pool);
+        check_pool_expired_locked(pool);
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
-
-    h2o_timeout_link(pool->_interval_cb.loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
 }
 
-static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t targets, size_t capacity,
-                        h2o_socketpool_lb_initializer lb_init, h2o_socketpool_lb_selector lb_selector,
-                        h2o_socketpool_lb_dispose_cb lb_dispose)
+static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **targets, size_t num_targets, size_t capacity,
+                        h2o_balancer_t *balancer)
 {
     memset(pool, 0, sizeof(*pool));
 
@@ -124,51 +139,12 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_vector_t t
 
     pthread_mutex_init(&pool->_shared.mutex, NULL);
     h2o_linklist_init_anchor(&pool->_shared.sockets);
-    memcpy(&pool->targets, &targets, sizeof(targets));
 
-    if (lb_init != NULL)
-        lb_init(&pool->targets, &pool->_lb.data);
-    pool->_lb.selector = lb_selector;
-    pool->_lb.dispose = lb_dispose;
-}
+    h2o_vector_reserve(NULL, &pool->targets, num_targets);
+    for (; pool->targets.size < num_targets; ++pool->targets.size)
+        pool->targets.entries[pool->targets.size] = targets[pool->targets.size];
 
-static void lb_rr_init(h2o_socketpool_target_vector_t *targets, void **data)
-{
-    struct round_robin_t *self = h2o_mem_alloc(sizeof(*self));
-    self->next_pos = 0;
-    pthread_mutex_init(&self->mutex, NULL);
-    *data = self;
-}
-
-static size_t lb_rr_selector(h2o_socketpool_target_vector_t *targets, void *_data, int *tried)
-{
-    size_t i;
-    size_t result = 0;
-    struct round_robin_t *self = _data;
-
-    pthread_mutex_lock(&self->mutex);
-
-    for (i = 0; i < targets->size; i++) {
-        if (!tried[self->next_pos]) {
-            result = self->next_pos;
-            break;
-        }
-        self->next_pos++;
-        self->next_pos %= targets->size;
-    }
-
-    assert(i < targets->size);
-    self->next_pos++;
-    self->next_pos %= targets->size;
-    pthread_mutex_unlock(&self->mutex);
-    return result;
-}
-
-static void lb_rr_dispose(void *data)
-{
-    struct round_robin_t *self = data;
-    pthread_mutex_destroy(&self->mutex);
-    free(data);
+    pool->balancer = balancer;
 }
 
 h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_storage *sa, socklen_t *salen)
@@ -188,17 +164,17 @@ h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_
         }
     } else {
         assert(to_sun_err == NULL);
-        struct sockaddr_un *sun = (struct sockaddr_un *)sa;
-        *salen = sizeof(*sun);
+        *salen = sizeof(struct sockaddr_un);
         return H2O_SOCKETPOOL_TYPE_SOCKADDR;
     }
 }
 
-void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin)
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf)
 {
     struct sockaddr_storage sa;
     socklen_t salen;
 
+    h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
     h2o_url_copy(NULL, &target->url, origin);
     assert(target->url.host.base[target->url.host.len] == '\0'); /* needs to be null-terminated in order to be used in SNI */
     target->type = detect_target_type(origin, &sa, &salen);
@@ -218,47 +194,36 @@ void init_target(h2o_socketpool_target_t *target, h2o_url_t *origin)
         target->peer.sockaddr.len = salen;
         break;
     }
+    target->_shared.leased_count = 0;
+    if (lb_target_conf != NULL)
+        target->conf.weight_m1 = lb_target_conf->weight_m1;
+    else {
+        target->conf.weight_m1 = 0;
+    }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
+    return target;
 }
 
-void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_url_t *origins, size_t origin_len)
+void h2o_socketpool_init_specific(h2o_socketpool_t *pool, size_t capacity, h2o_socketpool_target_t **targets, size_t num_targets,
+                                  h2o_balancer_t *balancer)
 {
-    int i;
-    h2o_socketpool_target_vector_t targets = {};
-
-    h2o_vector_reserve(NULL, &targets, origin_len);
-    for (i = 0; i != origin_len; ++i) {
-        h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-        init_target(target, &origins[i]);
-        targets.entries[i] = target;
-    }
-    targets.size = origin_len;
-
-    common_init(pool, targets, capacity, lb_rr_init, lb_rr_selector, lb_rr_dispose);
+    if (balancer == NULL)
+        balancer = h2o_balancer_create_rr();
+    common_init(pool, targets, num_targets, capacity, balancer);
 }
 
 static inline int is_global_pool(h2o_socketpool_t *pool)
 {
-    return pool->_lb.selector == NULL;
-}
-
-static size_t add_target(h2o_socketpool_t *pool, h2o_url_t *origin)
-{
-    assert(is_global_pool(pool));
-    h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
-    h2o_socketpool_target_t *target = h2o_mem_alloc(sizeof(*target));
-    init_target(target, origin);
-    pool->targets.entries[pool->targets.size++] = target;
-    return pool->targets.size - 1;
+    return pool->balancer == NULL;
 }
 
 void h2o_socketpool_init_global(h2o_socketpool_t *pool, size_t capacity)
 {
-    common_init(pool, (h2o_socketpool_target_vector_t){}, capacity, NULL, NULL, NULL);
+    common_init(pool, NULL, 0, capacity, NULL);
 }
 
-void dispose_target(h2o_socketpool_target_t *target)
+void h2o_socketpool_destroy_target(h2o_socketpool_target_t *target)
 {
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
@@ -282,12 +247,14 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         struct pool_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct pool_entry_t, all_link, pool->_shared.sockets.next);
         destroy_attached(entry);
         __sync_sub_and_fetch(&pool->_shared.count, 1);
+        __sync_sub_and_fetch(&pool->_shared.pooled_count, 1);
     }
     pthread_mutex_unlock(&pool->_shared.mutex);
     pthread_mutex_destroy(&pool->_shared.mutex);
 
-    if (pool->_lb.dispose != NULL)
-        pool->_lb.dispose(pool->_lb.data);
+    if (pool->balancer != NULL) {
+        pool->balancer->callbacks->destroy(pool->balancer);
+    }
 
     if (pool->_ssl_ctx != NULL)
         SSL_CTX_free(pool->_ssl_ctx);
@@ -296,7 +263,7 @@ void h2o_socketpool_dispose(h2o_socketpool_t *pool)
         h2o_socketpool_unregister_loop(pool, pool->_interval_cb.loop);
 
     for (i = 0; i < pool->targets.size; i++) {
-        dispose_target(pool->targets.entries[i]);
+        h2o_socketpool_destroy_target(pool->targets.entries[i]);
     }
     free(pool->targets.entries);
 }
@@ -316,17 +283,15 @@ void h2o_socketpool_register_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
         return;
 
     pool->_interval_cb.loop = loop;
-    h2o_timeout_init(loop, &pool->_interval_cb.timeout, 1000);
-    pool->_interval_cb.entry.cb = on_timeout;
-    h2o_timeout_link(loop, &pool->_interval_cb.timeout, &pool->_interval_cb.entry);
+    h2o_timer_init(&pool->_interval_cb.timeout, on_timeout);
+    h2o_timer_link(loop, CHECK_EXPIRATION_MIN_INTERVAL, &pool->_interval_cb.timeout);
 }
 
 void h2o_socketpool_unregister_loop(h2o_socketpool_t *pool, h2o_loop_t *loop)
 {
     if (pool->_interval_cb.loop != loop)
         return;
-    h2o_timeout_unlink(&pool->_interval_cb.entry);
-    h2o_timeout_dispose(loop, &pool->_interval_cb.timeout);
+    h2o_timer_unlink(&pool->_interval_cb.timeout);
     pool->_interval_cb.loop = NULL;
 }
 
@@ -342,6 +307,9 @@ static void call_connect_cb(h2o_socketpool_connect_request_t *req, const char *e
     }
 
     free(req);
+
+    if (sock != NULL)
+        sock->data = NULL;
     cb(sock, errstr, data, &selected_target->url);
 }
 
@@ -350,13 +318,18 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     h2o_socketpool_target_t *target;
 
     req->remaining_try_count--;
+
     if (req->lb.tried != NULL) {
-        /* do load balancing */
-        req->selected_target = req->pool->_lb.selector(&req->pool->targets, req->pool->_lb.data, req->lb.tried);
-        assert(!req->lb.tried[req->selected_target]);
-        req->lb.tried[req->selected_target] = 1;
+        if (req->pool->targets.size > 1) {
+            req->selected_target = req->pool->balancer->callbacks->select_(req->pool->balancer, &req->pool->targets, req->lb.tried);
+            assert(!req->lb.tried[req->selected_target]);
+            req->lb.tried[req->selected_target] = 1;
+        } else {
+            req->selected_target = 0;
+        }
     }
     target = req->pool->targets.entries[req->selected_target];
+    __sync_add_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
 
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
@@ -390,35 +363,35 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 static void on_connect(h2o_socket_t *sock, const char *err)
 {
     h2o_socketpool_connect_request_t *req = sock->data;
-    const char *errstr = NULL;
 
     assert(req->sock == sock);
 
     if (err != NULL) {
+        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
         h2o_socket_close(sock);
-        if (req->remaining_try_count == 0) {
-            req->sock = NULL;
-            errstr = "connection failed"; /* shouldn't we return err? */
-        } else {
+        if (req->remaining_try_count > 0) {
             try_connect(req);
             return;
         }
+        __sync_sub_and_fetch(&req->pool->_shared.count, 1);
+        req->sock = NULL;
     } else {
         h2o_url_t *target_url = &req->pool->targets.entries[req->selected_target]->url;
         if (target_url->scheme->is_ssl) {
             assert(req->pool->_ssl_ctx != NULL && "h2o_socketpool_set_ssl_ctx must be called for a pool that contains SSL target");
-            h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, on_handshake_complete);
+            h2o_socket_ssl_handshake(sock, req->pool->_ssl_ctx, target_url->host.base, req->alpn_protos, on_handshake_complete);
             return;
         }
     }
 
-    call_connect_cb(req, errstr);
+    call_connect_cb(req, err);
 }
 
 static void on_close(void *data)
 {
     struct on_close_data_t *close_data = data;
     h2o_socketpool_t *pool = close_data->pool;
+    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);
     free(close_data);
     __sync_sub_and_fetch(&pool->_shared.count, 1);
 }
@@ -429,8 +402,13 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
 
     req->sock = h2o_socket_connect(req->loop, addr, addrlen, on_connect);
     if (req->sock == NULL) {
+        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
+        if (req->remaining_try_count > 0) {
+            try_connect(req);
+            return;
+        }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
-        call_connect_cb(req, "failed to connect to host");
+        call_connect_cb(req, h2o_socket_error_conn_fail);
         return;
     }
     close_data = h2o_mem_alloc(sizeof(*close_data));
@@ -449,6 +427,11 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     req->getaddr_req = NULL;
 
     if (errstr != NULL) {
+        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
+        if (req->remaining_try_count > 0) {
+            try_connect(req);
+            return;
+        }
         __sync_sub_and_fetch(&req->pool->_shared.count, 1);
         call_connect_cb(req, errstr);
         return;
@@ -476,7 +459,8 @@ static size_t lookup_target(h2o_socketpool_t *pool, h2o_url_t *url)
 }
 
 void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketpool_t *pool, h2o_url_t *url, h2o_loop_t *loop,
-                            h2o_multithread_receiver_t *getaddr_receiver, h2o_socketpool_connect_cb cb, void *data)
+                            h2o_multithread_receiver_t *getaddr_receiver, h2o_iovec_t alpn_protos, h2o_socketpool_connect_cb cb,
+                            void *data)
 {
     struct pool_entry_t *entry = NULL;
     struct on_close_data_t *close_data;
@@ -489,13 +473,15 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
     /* fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);
-    destroy_expired(pool);
+    check_pool_expired_locked(pool);
 
     /* TODO lookup outside this critical section */
     if (is_global_pool(pool)) {
         target = lookup_target(pool, url);
         if (target == SIZE_MAX) {
-            target = add_target(pool, url);
+            h2o_vector_reserve(NULL, &pool->targets, pool->targets.size + 1);
+            pool->targets.entries[pool->targets.size++] = h2o_socketpool_create_target(url, NULL);
+            target = pool->targets.size - 1;
         }
         sockets = &pool->targets.entries[target]->_shared.sockets;
     } else {
@@ -513,6 +499,8 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         h2o_linklist_unlink(&entry->target_link);
         pthread_mutex_unlock(&pool->_shared.mutex);
 
+        __sync_sub_and_fetch(&pool->_shared.pooled_count, 1);
+
         /* test if the connection is still alive */
         char buf[1];
         ssize_t rret = recv(entry->sockinfo.fd, buf, 1, MSG_PEEK);
@@ -526,6 +514,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
             close_data->target = entry_target;
             sock->on_close.cb = on_close;
             sock->on_close.data = close_data;
+            __sync_add_and_fetch(&pool->targets.entries[entry_target]->_shared.leased_count, 1);
             cb(sock, NULL, data, &pool->targets.entries[entry_target]->url);
             return;
         }
@@ -534,11 +523,11 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
         if (rret <= 0) {
             static long counter = 0;
             if (__sync_fetch_and_add(&counter, 1) == 0)
-                fprintf(stderr, "[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
+                h2o_error_printf("[WARN] detected close by upstream before the expected timeout (see issue #679)\n");
         } else {
             static long counter = 0;
             if (__sync_fetch_and_add(&counter, 1) == 0)
-                fprintf(stderr, "[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
+                h2o_error_printf("[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
         }
         destroy_detached(entry);
         pthread_mutex_lock(&pool->_shared.mutex);
@@ -555,11 +544,12 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     if (_req != NULL)
         *_req = req;
     req->getaddr_receiver = getaddr_receiver;
+    req->alpn_protos = alpn_protos;
 
     req->selected_target = target;
     if (target == SIZE_MAX) {
-        req->lb.tried = h2o_mem_alloc(sizeof(int) * pool->targets.size);
-        memset(req->lb.tried, 0, sizeof(int) * pool->targets.size);
+        req->lb.tried = h2o_mem_alloc(sizeof(req->lb.tried[0]) * pool->targets.size);
+        memset(req->lb.tried, 0, sizeof(req->lb.tried[0]) * pool->targets.size);
         req->remaining_try_count = pool->targets.size;
     } else {
         req->remaining_try_count = 1;
@@ -575,8 +565,10 @@ void h2o_socketpool_cancel_connect(h2o_socketpool_connect_request_t *req)
     }
     if (req->sock != NULL)
         h2o_socket_close(req->sock);
-    if (req->lb.tried != NULL)
+    if (req->lb.tried != NULL) {
         free(req->lb.tried);
+        __sync_sub_and_fetch(&req->pool->targets.entries[req->selected_target]->_shared.leased_count, 1);
+    }
     free(req);
 }
 
@@ -590,6 +582,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     target = close_data->target;
     /* reset the on_close callback */
     assert(close_data->pool == pool);
+    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);
     free(close_data);
     sock->on_close.cb = NULL;
     sock->on_close.data = NULL;
@@ -605,12 +598,27 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     entry->added_at = h2o_now(h2o_socket_get_loop(sock));
     entry->target = target;
 
+    __sync_add_and_fetch(&pool->_shared.pooled_count, 1);
+
     pthread_mutex_lock(&pool->_shared.mutex);
-    destroy_expired(pool);
+    check_pool_expired_locked(pool);
     h2o_linklist_insert(&pool->_shared.sockets, &entry->all_link);
     h2o_linklist_insert(&pool->targets.entries[target]->_shared.sockets, &entry->target_link);
     pthread_mutex_unlock(&pool->_shared.mutex);
     return 0;
+}
+
+void h2o_socketpool_detach(h2o_socketpool_t *pool, h2o_socket_t *sock)
+{
+    struct on_close_data_t *close_data = sock->on_close.data;
+    assert(close_data->pool == pool);
+
+    __sync_sub_and_fetch(&pool->targets.entries[close_data->target]->_shared.leased_count, 1);
+    __sync_sub_and_fetch(&pool->_shared.count, 1);
+
+    sock->on_close.cb = NULL;
+    sock->on_close.data = NULL;
+    free(close_data);
 }
 
 int h2o_socketpool_can_keepalive(h2o_socketpool_t *pool)

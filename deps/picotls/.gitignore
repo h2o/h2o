@@ -2,6 +2,8 @@
 Debug
 */Release
 Release
+*/x64
+x64
 */.vs
 .vs
 */Generated Files
@@ -19,3 +21,10 @@ Release
 */*.dll
 */*.xbf
 */*.ilk
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles/
+Makefile
+deps/picotest
+/picotlsvs/cifra/cifra.vcxproj.user
+/picotlsvs/testopenssl/testopenssl.vcxproj.user

@@ -15,6 +15,6 @@ hosts:
 EOT
 
 my $output = `h2spec -t -k -p $server->{tls_port} 2>&1`;
-like $output, qr/All tests passed/;
+unlike $output, qr/Failures:/;
 
 done_testing();

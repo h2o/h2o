@@ -45,7 +45,7 @@ struct RArray {
 #define ARY_EMBED_P(a) ((a)->flags & MRB_ARY_EMBED_MASK)
 #define ARY_UNSET_EMBED_FLAG(a) ((a)->flags &= ~(MRB_ARY_EMBED_MASK))
 #define ARY_EMBED_LEN(a) ((mrb_int)(((a)->flags & MRB_ARY_EMBED_MASK) - 1))
-#define ARY_SET_EMBED_LEN(a,len) ((a)->flags = ((a)->flags&~MRB_ARY_EMBED_MASK) | (len + 1))
+#define ARY_SET_EMBED_LEN(a,len) ((a)->flags = ((a)->flags&~MRB_ARY_EMBED_MASK) | ((uint32_t)(len) + 1))
 #define ARY_EMBED_PTR(a) (&((a)->as.embed[0]))
 
 #define ARY_LEN(a) (ARY_EMBED_P(a)?ARY_EMBED_LEN(a):(a)->as.heap.len)
@@ -199,6 +199,7 @@ MRB_API void mrb_ary_set(mrb_state *mrb, mrb_value ary, mrb_int n, mrb_value val
  * @param other The array to replace it with.
  */
 MRB_API void mrb_ary_replace(mrb_state *mrb, mrb_value self, mrb_value other);
+MRB_API mrb_value mrb_ensure_array_type(mrb_state *mrb, mrb_value self);
 MRB_API mrb_value mrb_check_array_type(mrb_state *mrb, mrb_value self);
 
 /*

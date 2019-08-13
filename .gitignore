@@ -7,6 +7,7 @@ CMakeCache.txt
 CMakeFiles/
 Makefile
 build/
+./mruby/
 cmake_install.cmake
 xcuserdata
 *.xccheckout
@@ -14,3 +15,4 @@ xcuserdata
 misc/test-ca/demoCA/newcerts/*.pem
 tmp/
 /doc/workdir/
+include/h2o/gitrev.h

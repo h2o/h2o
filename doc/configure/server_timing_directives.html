@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>Server Timing Directives - Configure - H2O - the optimized HTTP/2 server</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1>
+<a href="index.html">H2O</a>
+<iframe align="right" valign="baseline" src="https://ghbtns.com/github-btn.html?user=h2o&repo=h2o&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="30px" style="padding-top: 30px"></iframe>
+</h1>
+<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected"><a href="configure.html">Configure</a></td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+Server Timing Directives
+</h2>
+
+
+<p>
+The server timing handler turns on the <a href="https://www.w3.org/TR/server-timing/">Server Timing</a> feature.
+This document describes the configuration directives of the handler.
+</p>
+
+<ul>
+<li><a href="configure/server_timing_directives.html#server-timing">
+<code>server-timing</code>
+</a></li>
+</ul>
+
+
+<div id="server-timing" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/server_timing_directives.html#server-timing"><code>"server-timing"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A flag indicating how <code>server-timing</code> header and trailer should be served.
+
+</p>
+
+
+<p>
+If the value is <code>ON</code>, H2O adds the <code>server-timing</code> header and trailer (if possible) to the response. The header is always added, but the trailer isn't if all of the following conditions are met.
+<ul>
+<li>The protocol used for the request is HTTP/1.1</li>
+<li><code>transfer encoding</code> of the response is not <code>chunked</code></li>
+</ul>
+</p>
+
+<p>
+If the value is <code>ENFORCE</code>, H2O forces the response to use chunked encoding by removing <code>content-length</code> header.
+</p>
+
+<p>
+If the value is <code>OFF</code>, the feature is disabled.
+</p>
+
+<p>
+The <code>server-timing</code> header and trailer includes the following metrics. For now, all metrics have the <code>dur</code> attribute whose values are exactly equal to one of the Access Log Extensions with similar names. To get the meaning of each <code>dur</code> attribute, see <a href="https://h2o.examp1e.net/configure/access_log_directives.html#access-log"><code>access-log</code></a>.
+
+<table>
+    <caption>Header Metrics</caption>
+    <tr>
+        <th>Name</th>
+        <th>Log Extension</th>
+    </tr>
+    <tr>
+        <td><code>connect</code></td>
+        <td><a href="configure/access_log_directives.html#connect-time"><code>connect-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>request-header</code></td>
+        <td><a href="configure/access_log_directives.html#request-header-time"><code>request-header-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>request-body</code></td>
+        <td><a href="configure/access_log_directives.html#request-body-time"><code>request-body-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>request-total</code></td>
+        <td><a href="configure/access_log_directives.html#request-total-time"><code>request-total-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>process</code></td>
+        <td><a href="configure/access_log_directives.html#process-time"><code>process-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>proxy.idle</code></td>
+        <td><a href="configure/access_log_directives.html#proxy.idle-time"><code>proxy.idle-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>proxy.connect</code></td>
+        <td><a href="configure/access_log_directives.html#proxy.connect-time"><code>proxy.connect-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>proxy.request</code></td>
+        <td><a href="configure/access_log_directives.html#proxy.request-time"><code>proxy.request-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>proxy.process</code></td>
+        <td><a href="configure/access_log_directives.html#proxy.process-time"><code>proxy.process-time</code></a></td>
+    </tr>
+</table>
+
+<table>
+    <caption>Trailer Metrics</caption>
+    <tr>
+        <th>Name</th>
+        <th>Log Extension</th>
+    </tr>
+    <tr>
+        <td><code>response</code></td>
+        <td><a href="configure/access_log_directives.html#response-time"><code>response-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>total</code></td>
+        <td><a href="configure/access_log_directives.html#total-time"><code>total-time</code></a> / <a href="configure/access_log_directives.html#duration"><code>duration</code></a></td>
+    </tr>
+    <tr>
+        <td><code>proxy.response</code></td>
+        <td><a href="configure/access_log_directives.html#proxy.response-time"><code>proxy.response-time</code></a></td>
+    </tr>
+    <tr>
+        <td><code>proxy.total</code></td>
+        <td><a href="configure/access_log_directives.html#proxy.total-time"><code>proxy.total-time</code></a></td>
+    </tr>
+</table>
+</p>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>OFF</pre></code>
+</dl>
+
+
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+<script type="text/javascript">
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+ga('create', 'UA-19422636-3', 'auto');
+ga('send', 'pageview');
+</script>
+</body>
+</html>

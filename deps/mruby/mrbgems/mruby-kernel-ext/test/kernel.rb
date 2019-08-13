@@ -49,16 +49,18 @@ assert('Kernel#__method__') do
 end
 
 assert('Kernel#Integer') do
-  assert_equal(123, Integer(123.999))
   assert_equal(26, Integer("0x1a"))
   assert_equal(930, Integer("0930", 10))
   assert_equal(7, Integer("111", 2))
   assert_equal(0, Integer("0"))
   assert_equal(0, Integer("00000"))
   assert_raise(TypeError) { Integer(nil) }
+  skip unless Object.const_defined?(:Float)
+  assert_equal(123, Integer(123.999))
 end
 
 assert('Kernel#Float') do
+  skip unless Object.const_defined?(:Float)
   assert_equal(1.0, Float(1))
   assert_equal(123.456, Float(123.456))
   assert_equal(123.456, Float("123.456"))

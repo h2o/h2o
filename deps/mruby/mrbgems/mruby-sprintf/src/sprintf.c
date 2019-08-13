@@ -12,15 +12,19 @@
 #include <mruby/string.h>
 #include <mruby/hash.h>
 #include <mruby/numeric.h>
+#ifndef MRB_WITHOUT_FLOAT
 #include <math.h>
+#endif
 #include <ctype.h>
 
 #define BIT_DIGITS(N)   (((N)*146)/485 + 1)  /* log2(10) =~ 146/485 */
 #define BITSPERDIG MRB_INT_BIT
 #define EXTENDSIGN(n, l) (((~0U << (n)) >> (((n)*(l)) % BITSPERDIG)) & ~(~0U << (n)))
 
-mrb_value mrb_str_format(mrb_state *, int, const mrb_value *, mrb_value);
+mrb_value mrb_str_format(mrb_state *, mrb_int, const mrb_value *, mrb_value);
+#ifndef MRB_WITHOUT_FLOAT
 static void fmt_setup(char*,size_t,int,int,mrb_int,mrb_int);
+#endif
 
 static char*
 remove_sign_bits(char *str, int base)
@@ -115,13 +119,11 @@ mrb_fix2binstr(mrb_state *mrb, mrb_value x, int base)
 #define FPREC0 128
 
 #define CHECK(l) do {\
-/*  int cr = ENC_CODERANGE(result);*/\
   while ((l) >= bsiz - blen) {\
+    if (bsiz > MRB_INT_MAX/2) mrb_raise(mrb, E_ARGUMENT_ERROR, "too big specifier"); \
     bsiz*=2;\
-    if (bsiz < 0) mrb_raise(mrb, E_ARGUMENT_ERROR, "too big specifier"); \
   }\
   mrb_str_resize(mrb, result, bsiz);\
-/*  ENC_CODERANGE_SET(result, cr);*/\
   buf = RSTRING_PTR(result);\
 } while (0)
 
@@ -153,7 +155,7 @@ check_next_arg(mrb_state *mrb, int posarg, int nextarg)
 }
 
 static void
-check_pos_arg(mrb_state *mrb, int posarg, int n)
+check_pos_arg(mrb_state *mrb, mrb_int posarg, mrb_int n)
 {
   if (posarg > 0) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "numbered(%S) after unnumbered(%S)",
@@ -168,7 +170,7 @@ check_pos_arg(mrb_state *mrb, int posarg, int n)
 }
 
 static void
-check_name_arg(mrb_state *mrb, int posarg, const char *name, int len)
+check_name_arg(mrb_state *mrb, int posarg, const char *name, mrb_int len)
 {
   if (posarg > 0) {
     mrb_raisef(mrb, E_ARGUMENT_ERROR, "named%S after unnumbered(%S)",
@@ -198,11 +200,10 @@ check_name_arg(mrb_state *mrb, int posarg, const char *name, int len)
 
 #define GETNUM(n, val) \
   for (; p < end && ISDIGIT(*p); p++) {\
-    int next_n = 10 * n + (*p - '0'); \
-    if (next_n / 10 != n) {\
+    if (n > (MRB_INT_MAX - (*p - '0'))/10) {\
       mrb_raise(mrb, E_ARGUMENT_ERROR, #val " too big"); \
     } \
-    n = next_n; \
+    n = 10 * n + (*p - '0'); \
   } \
   if (p >= end) { \
     mrb_raise(mrb, E_ARGUMENT_ERROR, "malformed format string - %*[0-9]"); \
@@ -224,7 +225,7 @@ check_name_arg(mrb_state *mrb, int posarg, const char *name, int len)
 } while (0)
 
 static mrb_value
-get_hash(mrb_state *mrb, mrb_value *hash, int argc, const mrb_value *argv)
+get_hash(mrb_state *mrb, mrb_value *hash, mrb_int argc, const mrb_value *argv)
 {
   mrb_value tmp;
 
@@ -232,7 +233,7 @@ get_hash(mrb_state *mrb, mrb_value *hash, int argc, const mrb_value *argv)
   if (argc != 2) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "one hash required");
   }
-  tmp = mrb_check_convert_type(mrb, argv[1], MRB_TT_HASH, "Hash", "to_hash");
+  tmp = mrb_check_hash_type(mrb, argv[1]);
   if (mrb_nil_p(tmp)) {
     mrb_raise(mrb, E_ARGUMENT_ERROR, "one hash required");
   }
@@ -518,7 +519,7 @@ mrb_f_sprintf(mrb_state *mrb, mrb_value obj)
 }
 
 mrb_value
-mrb_str_format(mrb_state *mrb, int argc, const mrb_value *argv, mrb_value fmt)
+mrb_str_format(mrb_state *mrb, mrb_int argc, const mrb_value *argv, mrb_value fmt)
 {
   const char *p, *end;
   char *buf;
@@ -551,7 +552,7 @@ mrb_str_format(mrb_state *mrb, int argc, const mrb_value *argv, mrb_value fmt)
 
   ++argc;
   --argv;
-  fmt = mrb_str_to_str(mrb, fmt);
+  mrb_to_str(mrb, fmt);
   p = RSTRING_PTR(fmt);
   end = p + RSTRING_LEN(fmt);
   blen = 0;
@@ -643,7 +644,7 @@ retry:
         }
         symname = mrb_str_new(mrb, start + 1, p - start - 1);
         id = mrb_intern_str(mrb, symname);
-        nextvalue = GETNAMEARG(mrb_symbol_value(id), start, (int)(p - start + 1));
+        nextvalue = GETNAMEARG(mrb_symbol_value(id), start, (mrb_int)(p - start + 1));
         if (mrb_undef_p(nextvalue)) {
           mrb_raisef(mrb, E_KEY_ERROR, "key%S not found", mrb_str_new(mrb, start, p - start + 1));
         }
@@ -814,10 +815,12 @@ retry:
 
   bin_retry:
         switch (mrb_type(val)) {
+#ifndef MRB_WITHOUT_FLOAT
           case MRB_TT_FLOAT:
             val = mrb_flo_to_fixnum(mrb, val);
             if (mrb_fixnum_p(val)) goto bin_retry;
             break;
+#endif
           case MRB_TT_STRING:
             val = mrb_str_to_inum(mrb, val, 0, TRUE);
             goto bin_retry;
@@ -990,6 +993,7 @@ retry:
       }
       break;
 
+#ifndef MRB_WITHOUT_FLOAT
       case 'f':
       case 'g':
       case 'G':
@@ -999,13 +1003,15 @@ retry:
       case 'A': {
         mrb_value val = GETARG();
         double fval;
-        int i, need = 6;
+        mrb_int i;
+        mrb_int need = 6;
         char fbuf[32];
+        int frexp_result;
 
         fval = mrb_float(mrb_Float(mrb, val));
         if (!isfinite(fval)) {
           const char *expr;
-          const int elen = 3;
+          const mrb_int elen = 3;
           char sign = '\0';
 
           if (isnan(fval)) {
@@ -1045,27 +1051,33 @@ retry:
         need = 0;
         if (*p != 'e' && *p != 'E') {
           i = INT_MIN;
-          frexp(fval, &i);
+          frexp(fval, &frexp_result);
+          i = (mrb_int)frexp_result;
           if (i > 0)
             need = BIT_DIGITS(i);
+        }
+        if (need > MRB_INT_MAX - ((flags&FPREC) ? prec : 6)) {
+        too_big_width:
+          mrb_raise(mrb, E_ARGUMENT_ERROR,
+                    (width > prec ? "width too big" : "prec too big"));
         }
         need += (flags&FPREC) ? prec : 6;
         if ((flags&FWIDTH) && need < width)
           need = width;
-        need += 20;
-        if (need <= 0) {
-          mrb_raise(mrb, E_ARGUMENT_ERROR,
-                    (width > prec ? "width too big" : "prec too big"));
+        if (need > MRB_INT_MAX - 20) {
+          goto too_big_width;
         }
+        need += 20;
 
         CHECK(need);
         n = snprintf(&buf[blen], need, fbuf, fval);
-        if (n < 0) {
+        if (n < 0 || n >= need) {
           mrb_raise(mrb, E_RUNTIME_ERROR, "formatting error");
         }
         blen += n;
       }
       break;
+#endif
     }
     flags = FNONE;
   }
@@ -1085,6 +1097,7 @@ retry:
   return result;
 }
 
+#ifndef MRB_WITHOUT_FLOAT
 static void
 fmt_setup(char *buf, size_t size, int c, int flags, mrb_int width, mrb_int prec)
 {
@@ -1111,3 +1124,4 @@ fmt_setup(char *buf, size_t size, int c, int flags, mrb_int width, mrb_int prec)
   *buf++ = c;
   *buf = '\0';
 }
+#endif

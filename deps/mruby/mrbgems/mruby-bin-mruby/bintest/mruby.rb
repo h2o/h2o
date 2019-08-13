@@ -12,7 +12,7 @@ assert('regression for #1572') do
   File.write script.path, 'p "ok"'
   system "#{cmd('mrbc')} -g -o #{bin.path} #{script.path}"
   o = `#{cmd('mruby')} -b #{bin.path}`.strip
-  assert_equal o, '"ok"'
+  assert_equal '"ok"', o
 end
 
 assert '$0 value' do
@@ -29,6 +29,13 @@ assert '$0 value' do
 
   # one liner
   assert_equal '"-e"', `#{cmd('mruby')} -e #{shellquote('p $0')}`.chomp
+end
+
+assert('float literal') do
+  script, bin = Tempfile.new('test.rb'), Tempfile.new('test.mrb')
+  File.write script.path, 'p [3.21, 2e308.infinite?, -2e308.infinite?]'
+  system "#{cmd('mrbc')} -g -o #{bin.path} #{script.path}"
+  assert_equal "[3.21, 1, -1]", `#{cmd('mruby')} -b #{bin.path}`.chomp!
 end
 
 assert '__END__', '8.6' do
@@ -56,5 +63,35 @@ print nil.class.to_s
 RUBY
   script.flush
   assert_equal "NilClass", `#{cmd('mruby')} #{script.path}`
+  assert_equal 0, $?.exitstatus
+end
+
+assert('mruby -d option') do
+  o = `#{cmd('mruby')} -e #{shellquote('p $DEBUG')}`
+  assert_equal "false\n", o
+  o = `#{cmd('mruby')} -d -e #{shellquote('p $DEBUG')}`
+  assert_equal "true\n", o
+end
+
+assert('mruby -r option') do
+  lib = Tempfile.new('lib.rb')
+  lib.write <<EOS
+class Hoge
+  def hoge
+    :hoge
+  end
+end
+EOS
+  lib.flush
+
+  script = Tempfile.new('test.rb')
+  script.write <<EOS
+print Hoge.new.hoge
+EOS
+  script.flush
+  assert_equal 'hoge', `#{cmd('mruby')} -r #{lib.path} #{script.path}`
+  assert_equal 0, $?.exitstatus
+
+  assert_equal 'hogeClass', `#{cmd('mruby')} -r #{lib.path} -r #{script.path} -e #{shellquote('print Hoge.class')}`
   assert_equal 0, $?.exitstatus
 end

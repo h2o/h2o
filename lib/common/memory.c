@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include "h2o/memory.h"
@@ -49,10 +50,9 @@ struct st_h2o_mem_recycle_chunk_t {
     struct st_h2o_mem_recycle_chunk_t *next;
 };
 
-struct st_h2o_mem_pool_chunk_t {
-    struct st_h2o_mem_pool_chunk_t *next;
-    size_t _dummy; /* align to 2*sizeof(void*) */
-    char bytes[4096 - sizeof(void *) * 2];
+union un_h2o_mem_pool_chunk_t {
+    union un_h2o_mem_pool_chunk_t *next;
+    char bytes[4096];
 };
 
 struct st_h2o_mem_pool_direct_t {
@@ -66,13 +66,22 @@ struct st_h2o_mem_pool_shared_ref_t {
     struct st_h2o_mem_pool_shared_entry_t *entry;
 };
 
-void *(*h2o_mem__set_secure)(void *, int, size_t) = memset;
+void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
 
-static __thread h2o_mem_recycle_t mempool_allocator = {16};
+__thread h2o_mem_recycle_t h2o_mem_pool_allocator = {16};
+size_t h2o_mmap_errors = 0;
 
-void h2o__fatal(const char *msg)
+void h2o__fatal(const char *file, int line, const char *msg, ...)
 {
-    fprintf(stderr, "fatal:%s\n", msg);
+    char buf[1024];
+    va_list args;
+
+    va_start(args, msg);
+    vsnprintf(buf, sizeof(buf), msg, args);
+    va_end(args);
+
+    h2o_error_printf("fatal:%s:%d:%s\n", file, line, buf);
+
     abort();
 }
 
@@ -101,6 +110,17 @@ void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p)
     chunk->next = allocator->_link;
     allocator->_link = chunk;
     ++allocator->cnt;
+}
+
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator)
+{
+    struct st_h2o_mem_recycle_chunk_t *chunk;
+
+    while (allocator->cnt-- > 0) {
+        chunk = allocator->_link;
+        allocator->_link = allocator->_link->next;
+        free(chunk);
+    }
 }
 
 void h2o_mem_init_pool(h2o_mem_pool_t *pool)
@@ -132,18 +152,19 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
     }
     /* free chunks, and reset the first chunk */
     while (pool->chunks != NULL) {
-        struct st_h2o_mem_pool_chunk_t *next = pool->chunks->next;
-        h2o_mem_free_recycle(&mempool_allocator, pool->chunks);
+        union un_h2o_mem_pool_chunk_t *next = pool->chunks->next;
+        h2o_mem_free_recycle(&h2o_mem_pool_allocator, pool->chunks);
         pool->chunks = next;
     }
     pool->chunk_offset = sizeof(pool->chunks->bytes);
 }
 
-void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz)
+void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
 {
+#define ALIGN_TO(x, a) (((x) + (a)-1) & ~((a)-1))
     void *ret;
 
-    if (sz >= sizeof(pool->chunks->bytes) / 4) {
+    if (sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
         /* allocate large requests directly */
         struct st_h2o_mem_pool_direct_t *newp = h2o_mem_alloc(offsetof(struct st_h2o_mem_pool_direct_t, bytes) + sz);
         newp->next = pool->directs;
@@ -152,27 +173,27 @@ void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz)
     }
 
     /* return a valid pointer even for 0 sized allocs */
-    if (sz == 0)
+    if (H2O_UNLIKELY(sz == 0))
         sz = 1;
 
-    /* 16-bytes rounding */
-    sz = (sz + 15) & ~15;
+    pool->chunk_offset = ALIGN_TO(pool->chunk_offset, alignment);
     if (sizeof(pool->chunks->bytes) - pool->chunk_offset < sz) {
         /* allocate new chunk */
-        struct st_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&mempool_allocator, sizeof(*newp));
+        union un_h2o_mem_pool_chunk_t *newp = h2o_mem_alloc_recycle(&h2o_mem_pool_allocator, sizeof(*newp));
         newp->next = pool->chunks;
         pool->chunks = newp;
-        pool->chunk_offset = 0;
+        pool->chunk_offset = ALIGN_TO(sizeof(newp->next), alignment);
     }
 
     ret = pool->chunks->bytes + pool->chunk_offset;
     pool->chunk_offset += sz;
     return ret;
+#undef ALIGN_TO
 }
 
 static void link_shared(h2o_mem_pool_t *pool, struct st_h2o_mem_pool_shared_entry_t *entry)
 {
-    struct st_h2o_mem_pool_shared_ref_t *ref = h2o_mem_alloc_pool(pool, sizeof(struct st_h2o_mem_pool_shared_ref_t));
+    struct st_h2o_mem_pool_shared_ref_t *ref = h2o_mem_alloc_pool(pool, *ref, 1);
     ref->entry = entry;
     ref->next = pool->shared_refs;
     pool->shared_refs = ref;
@@ -215,6 +236,15 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer)
 
 h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
 {
+    h2o_iovec_t reserved = h2o_buffer_try_reserve(_inbuf, min_guarantee);
+    if (reserved.base == NULL) {
+        h2o_fatal("failed to reserve buffer; capacity: %zu, min_gurantee: %zu", (*_inbuf)->capacity, min_guarantee);
+    }
+    return reserved;
+}
+
+h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
+{
     h2o_buffer_t *inbuf = *_inbuf;
     h2o_iovec_t ret;
 
@@ -252,7 +282,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     char *tmpfn = alloca(strlen(inbuf->_prototype->mmap_settings->fn_template) + 1);
                     strcpy(tmpfn, inbuf->_prototype->mmap_settings->fn_template);
                     if ((fd = mkstemp(tmpfn)) == -1) {
-                        fprintf(stderr, "failed to create temporary file:%s:%s\n", tmpfn, strerror(errno));
+                        h2o_perror("failed to create temporary file");
                         goto MapError;
                     }
                     unlink(tmpfn);
@@ -266,11 +296,11 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 fallocate_ret = ftruncate(fd, new_allocsize);
 #endif
                 if (fallocate_ret != 0) {
-                    perror("failed to resize temporary file");
+                    h2o_perror("failed to resize temporary file");
                     goto MapError;
                 }
                 if ((newp = (void *)mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
-                    perror("mmap failed");
+                    h2o_perror("mmap failed");
                     goto MapError;
                 }
                 if (inbuf->_fd == -1) {
@@ -311,6 +341,7 @@ h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
     return ret;
 
 MapError:
+    __sync_add_and_fetch(&h2o_mmap_errors, 1);
     ret.base = NULL;
     ret.len = 0;
     return ret;
@@ -338,7 +369,7 @@ void h2o_buffer__dispose_linked(void *p)
     h2o_buffer_dispose(buf);
 }
 
-void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size, size_t new_capacity)
 {
     void *new_entries;
     assert(vector->capacity < new_capacity);
@@ -347,7 +378,7 @@ void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t eleme
     while (vector->capacity < new_capacity)
         vector->capacity *= 2;
     if (pool != NULL) {
-        new_entries = h2o_mem_alloc_pool(pool, element_size * vector->capacity);
+        new_entries = h2o_mem_alloc_pool_aligned(pool, alignment, element_size * vector->capacity);
         h2o_memcpy(new_entries, vector->entries, element_size * vector->size);
     } else {
         new_entries = h2o_mem_realloc(vector->entries, element_size * vector->capacity);
@@ -401,4 +432,26 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
     *list = h2o_mem_realloc(*list, (cnt + 2) * sizeof(void *));
     (*list)[cnt++] = element;
     (*list)[cnt] = NULL;
+}
+
+char *h2o_strerror_r(int err, char *buf, size_t len)
+{
+#ifndef _GNU_SOURCE
+    strerror_r(err, buf, len);
+    return buf;
+#else
+    /**
+     * The GNU-specific strerror_r() returns a pointer to a string containing the error message.
+     * This may be either a pointer to a string that the function stores in  buf,
+     * or a pointer to some (immutable) static string (in which case buf is unused)
+     */
+    return strerror_r(err, buf, len);
+#endif
+}
+
+void h2o_perror(const char *msg)
+{
+    char buf[128];
+
+    h2o_error_printf("%s: %s\n", msg, h2o_strerror_r(errno, buf, sizeof(buf)));
 }

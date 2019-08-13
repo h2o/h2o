@@ -159,11 +159,13 @@ builder {
     };
     mount "/streaming-body" => sub {
         my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        my $sleep = $query->{sleep} // 0.1;
         return sub {
             my $responder = shift;
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
             for my $i (1..30) {
-                sleep 0.1;
+                sleep $sleep;
                 $writer->write($i);
             }
             $writer->close;
@@ -256,6 +258,9 @@ builder {
             "HTTP/1.1 100 Continue",
             "link: </index.js>; rel=preload",
             "",
+            "HTTP/1.1 100 Continue",
+            "link: </index.js>; rel=preload",
+            "",
             "",
         );
         sleep 1.1;
@@ -286,5 +291,53 @@ builder {
             ],
             [ 'a' x ($query->{size} || 0) ],
         ];
+    };
+    mount "/1xx" => sub {
+        my $env = shift;
+        my $query = Plack::Request->new($env)->query_parameters;
+        my $status = $query->get('status') || 100;
+        my $fh = $env->{"psgix.io"};
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 $status OK",
+            ($query->get('link') ? (
+                "link: </index.js>; rel=preload",
+            ) : ()),
+            "",
+            "HTTP/1.1 $status OK",
+            ($query->get('link') ? (
+                "link: </style.css>; rel=preload",
+            ) : ()),
+            "",
+            "HTTP/1.1 200 OK",
+            "connection: close",
+            "content-type: text/plain",
+            "content-length: 11",
+            "",
+            "hello world",
+        );
+        return sub {}; # do nothing
+    };
+    mount "/early-hints" => sub {
+        my $env = shift;
+        my $fh = $env->{"psgix.io"};
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 103 Early Hints",
+            "link: </index.js>; rel=preload",
+            "",
+            "",
+        );
+        sleep 0.1 if $env->{'QUERY_STRING'} eq 'sleep';
+        print $fh join(
+            "\r\n",
+            "HTTP/1.1 200 OK",
+            "connection: close",
+            "content-type: text/plain",
+            "content-length: 11",
+            "",
+            "hello world",
+        );
+        return sub {};
     };
 };

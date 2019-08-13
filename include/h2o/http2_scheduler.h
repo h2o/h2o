@@ -83,6 +83,10 @@ void h2o_http2_scheduler_open(h2o_http2_scheduler_openref_t *ref, h2o_http2_sche
  */
 void h2o_http2_scheduler_close(h2o_http2_scheduler_openref_t *ref);
 /**
+ * relocates an openref to a different memory location
+ */
+void h2o_http2_scheduler_relocate(h2o_http2_scheduler_openref_t *dst, h2o_http2_scheduler_openref_t *src);
+/**
  * reprioritizes the reference.
  */
 void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_scheduler_node_t *new_parent, uint16_t weight,
@@ -104,6 +108,10 @@ static h2o_http2_scheduler_node_t *h2o_http2_scheduler_get_parent(h2o_http2_sche
  * if any resource should be allocated
  */
 void h2o_http2_scheduler_activate(h2o_http2_scheduler_openref_t *ref);
+/**
+ * deactivates a reference while retaining it in the scheduler
+ */
+void h2o_http2_scheduler_deactivate(h2o_http2_scheduler_openref_t *ref);
 /**
  * calls the callback of the references linked to the dependency tree one by one, in the order defined by the dependency and the
  * weight.

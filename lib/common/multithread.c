@@ -83,8 +83,7 @@ pthread_mutex_t h2o_conn_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 static void on_read(h2o_socket_t *sock, const char *err)
 {
     if (err != NULL) {
-        fprintf(stderr, "pipe error\n");
-        abort();
+        h2o_fatal("on_read: %s", err);
     }
 
     h2o_buffer_consume(&sock->input, sock->input->size);
@@ -99,20 +98,20 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
      * much lower than that of a pipe, and only one file descriptor is required
      */
     int fd;
+    char buf[128];
 
     fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (fd == -1) {
-        perror("eventfd");
-        abort();
+        h2o_fatal("eventfd: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     queue->async.write = fd;
     queue->async.read = h2o_evloop_socket_create(loop, fd, 0);
 #else
     int fds[2];
+    char buf[128];
 
     if (cloexec_pipe(fds) != 0) {
-        perror("pipe");
-        abort();
+        h2o_fatal("pipe: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     fcntl(fds[1], F_SETFL, O_NONBLOCK);
     queue->async.write = fds[1];
@@ -141,12 +140,22 @@ h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
     return queue;
 }
 
+#if H2O_USE_LIBUV
+static void libuv_destroy_delayed(uv_handle_t *handle)
+{
+    h2o_multithread_queue_t *queue = H2O_STRUCT_FROM_MEMBER(h2o_multithread_queue_t, async, (uv_async_t *)handle);
+    free(queue);
+}
+#endif
+
 void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 {
     assert(h2o_linklist_is_empty(&queue->receivers.active));
     assert(h2o_linklist_is_empty(&queue->receivers.inactive));
+    pthread_mutex_destroy(&queue->mutex);
+
 #if H2O_USE_LIBUV
-    uv_close((uv_handle_t *)&queue->async, (uv_close_cb)free);
+    uv_close((uv_handle_t *)&queue->async, libuv_destroy_delayed);
 #else
     h2o_socket_read_stop(queue->async.read);
     h2o_socket_close(queue->async.read);
@@ -154,8 +163,8 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
     /* only one file descriptor is required for eventfd and already closed by h2o_socket_close() */
     close(queue->async.write);
 #endif
+    free(queue);
 #endif
-    pthread_mutex_destroy(&queue->mutex);
 }
 
 void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver,
@@ -216,9 +225,10 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
 
 void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, void *(*func)(void *), void *arg)
 {
-    if (pthread_create(tid, attr, func, arg) != 0) {
-        perror("pthread_create");
-        abort();
+    int ret;
+    if ((ret = pthread_create(tid, attr, func, arg)) != 0) {
+        char buf[128];
+        h2o_fatal("pthread_create: %s", h2o_strerror_r(ret, buf, sizeof(buf)));
     }
 }
 

@@ -4,6 +4,8 @@
 #include <stdint.h>
 #define ssize_t int
 #include <Winsock2.h>
+#include <ws2tcpip.h>
+#include <malloc.h>
 
 #ifndef gettimeofday
 #define gettimeofday wintimeofday
@@ -15,6 +17,10 @@
 #ifdef  __cplusplus
 extern "C" {
 #endif
+	struct timezone {
+		int tz_minuteswest;     /* minutes west of Greenwich */
+		int tz_dsttime;         /* type of DST correction */
+	};
 
     int wintimeofday(struct timeval* tv, struct timezone* tz);
 

@@ -24,12 +24,6 @@
     <ClCompile Include="..\..\deps\cifra\src\blockwise.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\deps\cifra\src\cbcmac.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\deps\cifra\src\ccm.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\deps\cifra\src\chacha20.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -40,9 +34,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\deps\cifra\src\cmac.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\deps\cifra\src\curve25519.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\deps\cifra\src\drbg.c">
@@ -81,13 +72,13 @@
     <ClCompile Include="..\..\deps\cifra\src\sha1.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\deps\cifra\src\sha3.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\deps\cifra\src\sha256.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\deps\cifra\src\sha512.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\deps\cifra\src\curve25519.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

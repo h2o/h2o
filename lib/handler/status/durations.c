@@ -34,7 +34,7 @@ struct st_duration_stats_t {
     struct gkc_summary *request_total_time;
     struct gkc_summary *process_time;
     struct gkc_summary *response_time;
-    struct gkc_summary *duration;
+    struct gkc_summary *total_time;
 };
 
 struct st_duration_agg_stats_t {
@@ -62,7 +62,7 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
         ADD_DURATION(request_total_time);
         ADD_DURATION(process_time);
         ADD_DURATION(response_time);
-        ADD_DURATION(duration);
+        ADD_DURATION(total_time);
 #undef ADD_DURATION
         pthread_mutex_unlock(&agg_stats->mutex);
     }
@@ -76,7 +76,7 @@ static void duration_stats_init(struct st_duration_stats_t *stats)
     stats->request_total_time = gkc_summary_alloc(GK_EPSILON);
     stats->process_time = gkc_summary_alloc(GK_EPSILON);
     stats->response_time = gkc_summary_alloc(GK_EPSILON);
-    stats->duration = gkc_summary_alloc(GK_EPSILON);
+    stats->total_time = gkc_summary_alloc(GK_EPSILON);
 }
 
 static void *durations_status_init(void)
@@ -99,7 +99,7 @@ static void duration_stats_free(struct st_duration_stats_t *stats)
     gkc_summary_free(stats->request_total_time);
     gkc_summary_free(stats->process_time);
     gkc_summary_free(stats->response_time);
-    gkc_summary_free(stats->duration);
+    gkc_summary_free(stats->total_time);
 }
 
 static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
@@ -118,13 +118,13 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     gkc_query(agg_stats->stats.x, 0), gkc_query(agg_stats->stats.x, 0.25), gkc_query(agg_stats->stats.x, 0.5),                     \
         gkc_query(agg_stats->stats.x, 0.75), gkc_query(agg_stats->stats.x, 0.99)
 
-    ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
+    ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
     ret.len = snprintf(
         ret.base, BUFSIZE,
         ",\n" DURATION_FMT("connect-time") "," DURATION_FMT("header-time") "," DURATION_FMT("body-time") "," DURATION_FMT(
             "request-total-time") "," DURATION_FMT("process-time") "," DURATION_FMT("response-time") "," DURATION_FMT("duration"),
         DURATION_VALS(connect_time), DURATION_VALS(header_time), DURATION_VALS(body_time), DURATION_VALS(request_total_time),
-        DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(duration));
+        DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(total_time));
 
 #undef BUFSIZE
 #undef DURATION_FMT
@@ -159,7 +159,7 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
     ADD_OBSERVATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at);
     ADD_OBSERVATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at);
     ADD_OBSERVATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at);
-    ADD_OBSERVATION(duration, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
+    ADD_OBSERVATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at);
 #undef ADD_OBSERVATION
 }
 
@@ -196,13 +196,12 @@ void h2o_duration_stats_register(h2o_globalconf_t *conf)
             int j;
             for (j = 0; j < hconf->paths.entries[i].handlers.size; j++) {
                 h2o_pathconf_t *pathconf = &hconf->paths.entries[i];
-                h2o_vector_reserve(NULL, &pathconf->loggers, pathconf->loggers.size + 1);
-                pathconf->loggers.entries[pathconf->loggers.size++] = (void *)logger;
+                h2o_vector_reserve(NULL, &pathconf->_loggers, pathconf->_loggers.size + 1);
+                pathconf->_loggers.entries[pathconf->_loggers.size++] = (void *)logger;
             }
         }
     }
 }
 
-h2o_status_handler_t durations_status_handler = {
-    {H2O_STRLIT("durations")}, durations_status_init, durations_status_per_thread, durations_status_final,
-};
+h2o_status_handler_t h2o_durations_status_handler = {
+    {H2O_STRLIT("durations")}, durations_status_final, durations_status_init, durations_status_per_thread};

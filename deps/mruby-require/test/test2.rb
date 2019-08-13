@@ -1,4 +1,4 @@
-$dir = File.join(Dir.tmpdir, "mruby-require-test-#{Time.now.to_i}.#{Time.now.usec}")
+$dir = File.join(File.realpath(Dir.tmpdir), "mruby-require-test-#{Time.now.to_i}.#{Time.now.usec}")
 
 def test_setup
   Dir.mkdir($dir)  unless File.exist?($dir)

@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef WIN32
+#ifdef _WINDOWS
 #include "wincompat.h"
 #else
 #include <unistd.h>
@@ -42,13 +42,11 @@ struct st_secp256r1_key_exhchange_t {
     uint8_t pub[SECP256R1_PUBLIC_KEY_SIZE];
 };
 
-static int secp256r1_on_exchange(ptls_key_exchange_context_t **_ctx, ptls_iovec_t *secret, ptls_iovec_t peerkey)
+static int secp256r1_on_exchange(ptls_key_exchange_context_t **_ctx, int release, ptls_iovec_t *secret, ptls_iovec_t peerkey)
 {
     struct st_secp256r1_key_exhchange_t *ctx = (struct st_secp256r1_key_exhchange_t *)*_ctx;
     uint8_t *secbytes = NULL;
     int ret;
-
-    *_ctx = NULL;
 
     if (secret == NULL) {
         ret = 0;
@@ -73,27 +71,30 @@ static int secp256r1_on_exchange(ptls_key_exchange_context_t **_ctx, ptls_iovec_
 Exit:
     if (ret != 0)
         free(secbytes);
-    ptls_clear_memory(ctx->priv, sizeof(ctx->priv));
-    free(ctx);
+    if (release) {
+        ptls_clear_memory(ctx->priv, sizeof(ctx->priv));
+        free(ctx);
+        *_ctx = NULL;
+    }
     return ret;
 }
 
-static int secp256r1_create_key_exchange(ptls_key_exchange_context_t **_ctx, ptls_iovec_t *pubkey)
+static int secp256r1_create_key_exchange(ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **_ctx)
 {
     struct st_secp256r1_key_exhchange_t *ctx;
 
     if ((ctx = (struct st_secp256r1_key_exhchange_t *)malloc(sizeof(*ctx))) == NULL)
         return PTLS_ERROR_NO_MEMORY;
-    ctx->super = (ptls_key_exchange_context_t){secp256r1_on_exchange};
+    ctx->super = (ptls_key_exchange_context_t){algo, ptls_iovec_init(ctx->pub, sizeof(ctx->pub)), secp256r1_on_exchange};
     ctx->pub[0] = TYPE_UNCOMPRESSED_PUBLIC_KEY;
     uECC_make_key(ctx->pub + 1, ctx->priv, uECC_secp256r1());
 
     *_ctx = &ctx->super;
-    *pubkey = ptls_iovec_init(ctx->pub, sizeof(ctx->pub));
     return 0;
 }
 
-static int secp256r1_key_exchange(ptls_iovec_t *pubkey, ptls_iovec_t *secret, ptls_iovec_t peerkey)
+static int secp256r1_key_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *pubkey, ptls_iovec_t *secret,
+                                  ptls_iovec_t peerkey)
 {
     uint8_t priv[SECP256R1_PRIVATE_KEY_SIZE], *pub = NULL, *secbytes = NULL;
     int ret;

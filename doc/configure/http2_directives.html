@@ -225,6 +225,9 @@ The following describes the configuration directives for controlling the HTTP/2 
 <li><a href="configure/http2_directives.html#http2-graceful-shutdown-timeout">
 <code>http2-graceful-shutdown-timeout</code>
 </a></li>
+<li><a href="configure/http2_directives.html#http2-allow-cross-origin-push">
+<code>http2-allow-cross-origin-push</code>
+</a></li>
 </ul>
 
 
@@ -556,6 +559,27 @@ A timeout in seconds. How long to wait before closing the connection on graceful
 <dd><code><pre>http2-graceful-shutdown-timeout: 0</pre></code>
 </dl>
 
+
+<div id="http2-allow-cross-origin-push" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/http2_directives.html#http2-allow-cross-origin-push"><code>"http2-allow-cross-origin-push"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the server should push resources belonging to a different authority.
+
+</p>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-allow-cross-origin-push: OFF</pre></code>
+</dl>
 
 
 

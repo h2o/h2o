@@ -1,4 +1,13 @@
 MRuby::GemBox.new do |conf|
+  # Meta-programming features
+  conf.gem :core => "mruby-metaprog"
+
+  # Use standard IO/File class
+  conf.gem :core => "mruby-io"
+
+  # Use standard Array#pack, String#unpack methods
+  conf.gem :core => "mruby-pack"
+
   # Use standard Kernel#sprintf method
   conf.gem :core => "mruby-sprintf"
 
@@ -13,6 +22,9 @@ MRuby::GemBox.new do |conf|
 
   # Use standard Struct class
   conf.gem :core => "mruby-struct"
+
+  # Use Comparable module extension
+  conf.gem :core => "mruby-compar-ext"
 
   # Use Enumerable module extension
   conf.gem :core => "mruby-enum-ext"

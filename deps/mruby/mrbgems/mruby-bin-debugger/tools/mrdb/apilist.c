@@ -48,7 +48,7 @@ build_path(mrb_state *mrb, const char *dir, const char *base)
     len += strlen(dir) + sizeof("/") - 1;
   }
 
-  path = mrb_malloc(mrb, len);
+  path = (char*)mrb_malloc(mrb, len);
   memset(path, 0, len);
 
   if (strcmp(dir, ".")) {
@@ -64,7 +64,8 @@ static char*
 dirname(mrb_state *mrb, const char *path)
 {
   size_t len;
-  char *p, *dir;
+  const char *p;
+  char *dir;
 
   if (path == NULL) {
     return NULL;
@@ -73,7 +74,7 @@ dirname(mrb_state *mrb, const char *path)
   p = strrchr(path, '/');
   len = p != NULL ? (size_t)(p - path) : strlen(path);
 
-  dir = mrb_malloc(mrb, len + 1);
+  dir = (char*)mrb_malloc(mrb, len + 1);
   strncpy(dir, path, len);
   dir[len] = '\0';
 
@@ -83,9 +84,9 @@ dirname(mrb_state *mrb, const char *path)
 static source_file*
 source_file_new(mrb_state *mrb, mrb_debug_context *dbg, char *filename)
 {
-  source_file *file = NULL;
+  source_file *file;
 
-  file = mrb_malloc(mrb, sizeof(source_file));
+  file = (source_file*)mrb_malloc(mrb, sizeof(source_file));
 
   memset(file, '\0', sizeof(source_file));
   file->fp = fopen(filename, "rb");
@@ -96,7 +97,7 @@ source_file_new(mrb_state *mrb, mrb_debug_context *dbg, char *filename)
   }
 
   file->lineno = 1;
-  file->path = mrb_malloc(mrb, strlen(filename) + 1);
+  file->path = (char*)mrb_malloc(mrb, strlen(filename) + 1);
   strcpy(file->path, filename);
   return file;
 }

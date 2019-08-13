@@ -71,6 +71,9 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
+#define H2O_SESSID_CTX ((const uint8_t*)"h2o")
+#define H2O_SESSID_CTX_LEN (sizeof("h2o") - 1)
+
 typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
@@ -156,14 +159,15 @@ typedef void (*h2o_socket_ssl_resumption_remove_cb)(h2o_iovec_t session_id);
 extern h2o_buffer_mmap_settings_t h2o_socket_buffer_mmap_settings;
 extern __thread h2o_buffer_prototype_t h2o_socket_buffer_prototype;
 
-extern const char *h2o_socket_error_out_of_memory;
-extern const char *h2o_socket_error_io;
-extern const char *h2o_socket_error_closed;
-extern const char *h2o_socket_error_conn_fail;
-extern const char *h2o_socket_error_ssl_no_cert;
-extern const char *h2o_socket_error_ssl_cert_invalid;
-extern const char *h2o_socket_error_ssl_cert_name_mismatch;
-extern const char *h2o_socket_error_ssl_decode;
+extern const char h2o_socket_error_out_of_memory[];
+extern const char h2o_socket_error_io[];
+extern const char h2o_socket_error_closed[];
+extern const char h2o_socket_error_conn_fail[];
+extern const char h2o_socket_error_ssl_no_cert[];
+extern const char h2o_socket_error_ssl_cert_invalid[];
+extern const char h2o_socket_error_ssl_cert_name_mismatch[];
+extern const char h2o_socket_error_ssl_decode[];
+extern const char h2o_socket_error_ssl_handshake[];
 
 /**
  * returns the loop
@@ -261,11 +265,13 @@ int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock);
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock);
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock);
 h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock);
+const char *h2o_socket_get_ssl_server_name(const h2o_socket_t *sock);
 static h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 
 /**
  * compares socket addresses
@@ -285,7 +291,8 @@ int32_t h2o_socket_getport(struct sockaddr *sa);
  * @param ssl_ctx SSL context
  * @param handshake_cb callback to be called when handshake is complete
  */
-void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_socket_cb handshake_cb);
+void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *server_name, h2o_iovec_t alpn_protos,
+                              h2o_socket_cb handshake_cb);
 /**
  * resumes SSL handshake with given session data
  * @param sock the socket
@@ -305,6 +312,10 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
  * @param sock the socket
  */
 h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock);
+/**
+ * returns if the socket is in early-data state (i.e. have not yet seen ClientFinished)
+ */
+int h2o_socket_ssl_is_early_data(h2o_socket_t *sock);
 /**
  *
  */
@@ -363,12 +374,14 @@ inline size_t h2o_socket_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 
 inline h2o_iovec_t h2o_socket_log_ssl_protocol_version(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
+    (void)pool;
     const char *s = h2o_socket_get_ssl_protocol_version(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }
 
 inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
+    (void)pool;
     switch (h2o_socket_get_ssl_session_reused(sock)) {
     case 0:
         return h2o_iovec_init(H2O_STRLIT("0"));
@@ -381,6 +394,7 @@ inline h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem
 
 inline h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
+    (void)pool;
     const char *s = h2o_socket_get_ssl_cipher(sock);
     return s != NULL ? h2o_iovec_init(s, strlen(s)) : h2o_iovec_init(NULL, 0);
 }

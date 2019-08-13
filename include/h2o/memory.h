@@ -30,12 +30,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
+#define H2O_ALIGNOF(type) (__alignof__(type))
 
 #if __GNUC__ >= 3
 #define H2O_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -72,6 +74,13 @@ extern "C" {
 
 #define H2O_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 
+/**
+ * library users can use their own log method by define this macro
+ */
+#ifndef h2o_error_printf
+#define h2o_error_printf(...) fprintf(stderr, __VA_ARGS__)
+#endif
+
 typedef struct st_h2o_buffer_prototype_t h2o_buffer_prototype_t;
 
 /**
@@ -98,7 +107,7 @@ struct st_h2o_mem_pool_shared_entry_t {
  * the memory pool
  */
 typedef struct st_h2o_mem_pool_t {
-    struct st_h2o_mem_pool_chunk_t *chunks;
+    union un_h2o_mem_pool_chunk_t *chunks;
     size_t chunk_offset;
     struct st_h2o_mem_pool_shared_ref_t *shared_refs;
     struct st_h2o_mem_pool_direct_t *directs;
@@ -131,9 +140,10 @@ typedef struct st_h2o_buffer_t {
     char _buf[1];
 } h2o_buffer_t;
 
+#define H2O_TMP_FILE_TEMPLATE_MAX 256
 typedef struct st_h2o_buffer_mmap_settings_t {
     size_t threshold;
-    char fn_template[FILENAME_MAX];
+    char fn_template[H2O_TMP_FILE_TEMPLATE_MAX];
 } h2o_buffer_mmap_settings_t;
 
 struct st_h2o_buffer_prototype_t {
@@ -152,13 +162,18 @@ struct st_h2o_buffer_prototype_t {
 typedef H2O_VECTOR(void) h2o_vector_t;
 typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
-extern void *(*h2o_mem__set_secure)(void *, int, size_t);
+extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 
 /**
  * prints an error message and aborts
  */
-#define h2o_fatal(msg) h2o__fatal(__FILE__ ":" H2O_TO_STR(__LINE__) ":" msg)
-H2O_NORETURN void h2o__fatal(const char *msg);
+H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
+#ifndef h2o_fatal
+#define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
+#endif
+
+void h2o_perror(const char *msg);
+char *h2o_strerror_r(int err, char *buf, size_t len);
 
 /**
  * A version of memcpy that can take a NULL @src to avoid UB
@@ -185,6 +200,10 @@ void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator, size_t sz);
  * returns the memory to the reusing allocator
  */
 void h2o_mem_free_recycle(h2o_mem_recycle_t *allocator, void *p);
+/**
+ * release all the memory chunks cached in input allocator to system
+ */
+void h2o_mem_clear_recycle(h2o_mem_recycle_t *allocator);
 
 /**
  * initializes the memory pool.
@@ -198,7 +217,12 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool);
 /**
  * allocates given size of memory from the memory pool, or dies if impossible
  */
-void *h2o_mem_alloc_pool(h2o_mem_pool_t *pool, size_t sz);
+#define h2o_mem_alloc_pool(pool, type, cnt) h2o_mem_alloc_pool_aligned(pool, H2O_ALIGNOF(type), sizeof(type) * (cnt))
+/**
+ * allocates given size of memory from pool using given alignment
+ */
+static void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
+void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size);
 /**
  * allocates a ref-counted chunk of given size from the memory pool, or dies if impossible.
  * The ref-count of the returned chunk is 1 regardless of whether or not the chunk is linked to a pool.
@@ -233,6 +257,11 @@ void h2o_buffer__do_free(h2o_buffer_t *buffer);
  */
 static void h2o_buffer_dispose(h2o_buffer_t **buffer);
 /**
+ * allocates a buffer with h2o_buffer_try_reserve. aborts on allocation failure.
+ * @return buffer to which the next data should be stored
+ */
+h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+/**
  * allocates a buffer.
  * @param inbuf - pointer to a pointer pointing to the structure (set *inbuf to NULL to allocate a new buffer)
  * @param min_guarantee minimum number of bytes to reserve
@@ -240,12 +269,16 @@ static void h2o_buffer_dispose(h2o_buffer_t **buffer);
  * @note When called against a new buffer, the function returns a buffer twice the size of requested guarantee.  The function uses
  * exponential backoff for already-allocated buffers.
  */
-h2o_iovec_t h2o_buffer_reserve(h2o_buffer_t **inbuf, size_t min_guarantee);
+h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **inbuf, size_t min_guarantee) __attribute__((warn_unused_result));
 /**
- * copies @len bytes from @src to @dst, calling h2o_buffer_reserve
- * @return 0 if the allocation failed, 1 otherwise
+ * copies @len bytes from @src to @dst, calling h2o_buffer_reserve. aborts on allocation failure.
  */
-static int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len);
+static void h2o_buffer_append(h2o_buffer_t **dst, const void *src, size_t len);
+/**
+ * variant of h2o_buffer_append that does not abort on failure
+ * @return a boolean indicating if allocation has succeeded
+ */
+static int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len) __attribute__((warn_unused_result));
 /**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
@@ -269,9 +302,11 @@ void h2o_buffer__dispose_linked(void *p);
  * @param new_capacity the capacity of the buffer after the function returns
  */
 #define h2o_vector_reserve(pool, vector, new_capacity)                                                                             \
-    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), sizeof((vector)->entries[0]), (new_capacity))
-static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
-void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity);
+    h2o_vector__reserve((pool), (h2o_vector_t *)(void *)(vector), H2O_ALIGNOF((vector)->entries[0]), sizeof((vector)->entries[0]), \
+                        (new_capacity))
+static void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size,
+                                size_t new_capacity);
+void h2o_vector__expand(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size, size_t new_capacity);
 /**
  * erase the entry at given index from the vector
  */
@@ -307,6 +342,9 @@ void h2o_dump_memory(FILE *fp, const char *buf, size_t len);
  * appends an element to a NULL-terminated list allocated using malloc
  */
 void h2o_append_to_null_terminated_list(void ***list, void *element);
+
+extern __thread h2o_mem_recycle_t h2o_mem_pool_allocator;
+extern size_t h2o_mmap_errors;
 
 /* inline defs */
 
@@ -344,6 +382,14 @@ inline void *h2o_mem_realloc(void *oldp, size_t sz)
         return oldp;
     }
     return newp;
+}
+
+inline void *h2o_mem_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t size)
+{
+    /* C11 6.2.8: "Every valid alignment value shall be a nonnegative integral power of two"; assert will be resolved at compile-
+     * time for performance-sensitive cases */
+    assert(alignment != 0 && (alignment & (alignment - 1)) == 0);
+    return h2o_mem__do_alloc_pool_aligned(pool, alignment, size);
 }
 
 inline void h2o_mem_addref_shared(void *p)
@@ -392,20 +438,28 @@ inline void h2o_buffer_link_to_pool(h2o_buffer_t *buffer, h2o_mem_pool_t *pool)
     *slot = buffer;
 }
 
-inline int h2o_buffer_append(h2o_buffer_t **dst, void *src, size_t len)
+inline void h2o_buffer_append(h2o_buffer_t **dst, const void *src, size_t len)
 {
     h2o_iovec_t buf = h2o_buffer_reserve(dst, len);
+    h2o_memcpy(buf.base, src, len);
+    (*dst)->size += len;
+}
+
+inline int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len)
+{
+    h2o_iovec_t buf = h2o_buffer_try_reserve(dst, len);
     if (buf.base == NULL)
         return 0;
-    memcpy(buf.base, src, len);
+    h2o_memcpy(buf.base, src, len);
     (*dst)->size += len;
     return 1;
 }
 
-inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t element_size, size_t new_capacity)
+inline void h2o_vector__reserve(h2o_mem_pool_t *pool, h2o_vector_t *vector, size_t alignment, size_t element_size,
+                                size_t new_capacity)
 {
     if (vector->capacity < new_capacity) {
-        h2o_vector__expand(pool, vector, element_size, new_capacity);
+        h2o_vector__expand(pool, vector, alignment, element_size, new_capacity);
     }
 }
 

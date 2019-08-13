@@ -22,6 +22,8 @@
 #ifndef h2o__uv_binding_h
 #define h2o__uv_binding_h
 
+#include <string.h>
+#include <sys/time.h>
 #include <uv.h>
 
 #if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
@@ -30,16 +32,50 @@
 
 typedef uv_loop_t h2o_loop_t;
 
-struct st_h2o_timeout_backend_properties_t {
-    uv_timer_t timer;
-};
-
 h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb);
 h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb);
 
-static inline uint64_t h2o_now(uv_loop_t *loop)
+typedef struct st_h2o_timer_t h2o_timer_t;
+typedef void (*h2o_timer_cb)(h2o_timer_t *timer);
+struct st_h2o_timer_t {
+    uv_timer_t uv_timer;
+    int is_linked;
+    h2o_timer_cb cb;
+};
+
+static void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb);
+void h2o_timer_link(h2o_loop_t *l, uint64_t delay_ticks, h2o_timer_t *timer);
+static int h2o_timer_is_linked(h2o_timer_t *timer);
+void h2o_timer_unlink(h2o_timer_t *timer);
+
+/* inline definitions */
+
+static inline struct timeval h2o_gettimeofday(uv_loop_t *loop)
+{
+    struct timeval tv_at;
+    gettimeofday(&tv_at, NULL);
+    return tv_at;
+}
+
+static inline uint64_t h2o_now(h2o_loop_t *loop)
 {
     return uv_now(loop);
+}
+
+static inline uint64_t h2o_now_nanosec(h2o_loop_t *loop)
+{
+    return uv_now(loop) * 1000000;
+}
+
+inline void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb)
+{
+    memset(timer, 0, sizeof(*timer));
+    timer->cb = cb;
+}
+
+inline int h2o_timer_is_linked(h2o_timer_t *entry)
+{
+    return entry->is_linked;
 }
 
 #endif

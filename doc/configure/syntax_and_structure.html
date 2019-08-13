@@ -266,6 +266,22 @@ key-file:         /path/to/example.com.crt
 </div>
 
 
+<p>
+Starting from version 2.3, it is possible to refer to an environment variable (intepreted as a scalar) from the configuration file by using <code>!env</code> custom YAML tag.
+</p>
+
+<div class="example">
+<div class="caption">Example. h2o.conf</div>
+<pre><code>hosts:
+  &quot;example.com&quot;:
+    listen:
+      port: !env H2O_PORT
+    paths:
+      ...
+</code></pre>
+</div>
+
+
 
 
 <div class="notes">
@@ -291,3 +307,4 @@ ga('send', 'pageview');
 </script>
 </body>
 </html>
+

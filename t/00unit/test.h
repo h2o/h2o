@@ -48,13 +48,17 @@ extern h2o_loop_t *test_loop;
 
 char *sha1sum(const void *src, size_t len);
 
+void test_lib__common__balancer__least_conn_c(void);
+void test_lib__common__balancer__roundrobin_c(void);
 void test_lib__common__cache_c(void);
 void test_lib__common__hostinfo_c(void);
+void test_lib__common__httpclient_c(void);
 void test_lib__common__multithread_c(void);
 void test_lib__common__serverutil_c(void);
 void test_lib__common__socket_c(void);
 void test_lib__common__string_c(void);
 void test_lib__common__time_c(void);
+void test_lib__common__timerwheel_c(void);
 void test_lib__common__url_c(void);
 void test_lib__core__headers_c(void);
 void test_lib__core__proxy_c(void);

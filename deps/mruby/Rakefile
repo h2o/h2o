@@ -32,20 +32,25 @@ load "#{MRUBY_ROOT}/tasks/benchmark.rake"
 
 load "#{MRUBY_ROOT}/tasks/gitlab.rake"
 
+def install_D(src, dst)
+  opts = { :verbose => $verbose }
+  FileUtils.rm_f dst, opts
+  FileUtils.mkdir_p File.dirname(dst), opts
+  FileUtils.cp src, dst, opts
+end
+
 ##############################
 # generic build targets, rules
 task :default => :all
 
 bin_path = ENV['INSTALL_DIR'] || "#{MRUBY_ROOT}/bin"
-FileUtils.mkdir_p bin_path, { :verbose => $verbose }
 
 depfiles = MRuby.targets['host'].bins.map do |bin|
   install_path = MRuby.targets['host'].exefile("#{bin_path}/#{bin}")
   source_path = MRuby.targets['host'].exefile("#{MRuby.targets['host'].build_dir}/bin/#{bin}")
 
   file install_path => source_path do |t|
-    FileUtils.rm_f t.name, { :verbose => $verbose }
-    FileUtils.cp t.prerequisites.first, t.name, { :verbose => $verbose }
+    install_D t.prerequisites.first, t.name
   end
 
   install_path
@@ -65,7 +70,7 @@ MRuby.each_target do |target|
       exec = exefile("#{build_dir}/bin/#{bin}")
       objs = Dir.glob("#{current_dir}/tools/#{bin}/*.{c,cpp,cxx,cc}").map { |f| objfile(f.pathmap("#{current_build_dir}/tools/#{bin}/%n")) }
 
-      file exec => objs + [libfile("#{build_dir}/lib/libmruby")] do |t|
+      file exec => objs + target.libraries do |t|
         gem_flags = gems.map { |g| g.linker.flags }
         gem_flags_before_libraries = gems.map { |g| g.linker.flags_before_libraries }
         gem_flags_after_libraries = gems.map { |g| g.linker.flags_after_libraries }
@@ -78,8 +83,7 @@ MRuby.each_target do |target|
         install_path = MRuby.targets['host'].exefile("#{bin_path}/#{bin}")
 
         file install_path => exec do |t|
-          FileUtils.rm_f t.name, { :verbose => $verbose }
-          FileUtils.cp t.prerequisites.first, t.name, { :verbose => $verbose }
+          install_D t.prerequisites.first, t.name
         end
         depfiles += [ install_path ]
       elsif target == MRuby.targets['host-debug']
@@ -87,8 +91,7 @@ MRuby.each_target do |target|
           install_path = MRuby.targets['host-debug'].exefile("#{bin_path}/#{bin}")
 
           file install_path => exec do |t|
-            FileUtils.rm_f t.name, { :verbose => $verbose }
-            FileUtils.cp t.prerequisites.first, t.name, { :verbose => $verbose }
+            install_D t.prerequisites.first, t.name
           end
           depfiles += [ install_path ]
         end
@@ -100,7 +103,7 @@ MRuby.each_target do |target|
 end
 
 depfiles += MRuby.targets.map { |n, t|
-  [t.libfile("#{t.build_dir}/lib/libmruby")]
+  t.libraries
 }.flatten
 
 depfiles += MRuby.targets.reject { |n, t| n == 'host' }.map { |n, t|
@@ -118,10 +121,22 @@ task :all => depfiles do
 end
 
 desc "run all mruby tests"
-task :test => ["all"] do
-  MRuby.each_target do
-    run_test if test_enabled?
+task :test
+MRuby.each_target do
+  next unless test_enabled?
+
+  t = :"test_#{self.name}"
+  task t => ["all"] do
+    run_test
   end
+  task :test => t
+
+  next unless bintest_enabled?
+  t = :"bintest_#{self.name}"
+  task t => ["all"] do
+    run_bintest
+  end
+  task :test => t
 end
 
 desc "clean all built and in-repo installed artifacts"

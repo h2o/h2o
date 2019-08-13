@@ -68,7 +68,7 @@ Therefore you may try to at first install the software using your favorite packa
 <p>
 At the time being, following packages are known to be actively maintained<sup><a href="#note_1" id="#cite_1" title="Please open a new issue on Github if you want a new package to get added.">1</sup></a></sup>:
 <ul>
-<li><a href="http://portsmon.freebsd.org/portoverview.py?category=www&portname=h2o">FreeBSD</a></li>
+<li><a href="https://www.freshports.org/www/h2o">FreeBSD h2o release</a> and <a href="https://www.freshports.org/www/h2o-devel">h2o betas</a></li>
 <li><a href="http://brewformulas.org/H2o">Homebrew (OS X)</a></li>
 <li><a href="https://github.com/tatsushid/h2o-rpm">RPM (Fedora, RHEL/CentOS, OpenSUSE)</a></li>
 <li><a href="https://hub.docker.com/r/lkwg82/h2o-http2-server/">Docker Image</a></li>
@@ -81,7 +81,7 @@ At the time being, following packages are known to be actively maintained<sup><a
 Download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a> or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>, and build it using <a href="http://www.cmake.org/">CMake</a><sup><a href="#note_2" id="#cite_2" title="CMake is a popular build tool that can be found as a binary package on most operating systems.">2</sup></a></sup>.
 </p>
 
-<pre><code>% cmake -DWITH_BUNDLED_SSL=on .
+<pre><code>% cmake .
 % make
 % sudo make install
 </code></pre>
@@ -115,10 +115,6 @@ Following list shows the interesting arguments recognized by CMake.
 <dd>
 This option specifies the directory to which H2O will be installed (default: <code>/usr/local</code>).
 </dd>
-<dt><code>-DWITH_BUNDLED_SSL=<i>on</i>|<i>off</i></code></dt>
-<dd>
-This option instructs whether or not to use <a href="http://www.libressl.org/">LibreSSL</a> being bundled (default: <code>off</code> if <a href="https://www.openssl.org/">OpenSSL</a> version >= 1.0.2 is found, <code>on</code> if otherwise).  Read the section below for comparison between OpenSSL and LibreSSL.
-</dd>
 <dt><code>-DWITH_MRUBY=<i>on</i>|<i>off</i></code></dt>
 <dd>
 This option instructs whether or not to build the standalone server with support for <a href="configure/mruby.html">scripting using mruby</a>.
@@ -137,11 +133,11 @@ The difficulty in using OpenSSL is that the HTTP/2 specification requires the us
 </p>
 
 <p>
-Once you have installed OpenSSL 1.0.2, it is possible to build H2O that links against the library.  As an safeguard it is advised to use <code>-DWITH_BUNDLED_SSL</code> set to <code>off</code>, so that the server would not accidentally link against the bundled LibreSSL.
+Once you have installed OpenSSL 1.0.2, it is possible to build H2O that links against the library.
 CMake will search for OpenSSL by looking at the default search paths.
 </p>
 
-<pre><code>% cmake -DWITH_BUNDLED_SSL=off
+<pre><code>% cmake .
 % make
 % sudo make install
 </code></pre>
@@ -151,7 +147,7 @@ Two ways exist to specify the directory in which CMake should search for OpenSSL
 The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment variable.
 </p>
 
-<pre><code>% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake -DWITH_BUNDLED_SSL=off
+<pre><code>% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake .
 % make
 % sudo make install
 </code></pre>
@@ -160,7 +156,7 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<sup><a href="#note_6" id="#cite_6" title="ref: h2o issue #277, CMake issue 0015386">6</sup></a></sup>.
 </p>
 
-<pre><code>% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake -DWITH_BUNDLED_SSL=off
+<pre><code>% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake .
 % make
 % sudo make install
 </code></pre>

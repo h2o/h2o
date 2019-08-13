@@ -37,39 +37,36 @@ hash_values_at(mrb_state *mrb, mrb_value hash)
 }
 
 /*
- * call-seq:
- *   hsh.compact!    -> hsh
+ *  call-seq:
+ *     hsh.slice(*keys) -> a_hash
  *
- * Removes all nil values from the hash. Returns the hash.
+ *  Returns a hash containing only the given keys and their values.
  *
- *   h = { a: 1, b: false, c: nil }
- *   h.compact!     #=> { a: 1, b: false }
+ *     h = { a: 100, b: 200, c: 300 }
+ *     h.slice(:a)           #=> {:a=>100}
+ *     h.slice(:b, :c, :d)   #=> {:b=>200, :c=>300}
  */
 static mrb_value
-hash_compact_bang(mrb_state *mrb, mrb_value hash)
+hash_slice(mrb_state *mrb, mrb_value hash)
 {
-  khiter_t k;
-  khash_t(ht) *h = RHASH_TBL(hash);
-  mrb_int n = -1;
+  mrb_value *argv, result;
+  mrb_int argc, i;
 
-  if (!h) return mrb_nil_value();
-  for (k = kh_begin(h); k != kh_end(h); k++) {
-    if (kh_exist(h, k)) {
-      mrb_value val = kh_value(h, k).v;
-      khiter_t k2;
+  mrb_get_args(mrb, "*", &argv, &argc);
+  if (argc == 0) {
+    return mrb_hash_new_capa(mrb, argc);
+  }
+  result = mrb_hash_new_capa(mrb, argc);
+  for (i = 0; i < argc; i++) {
+    mrb_value key = argv[i];
+    mrb_value val;
 
-      if (mrb_nil_p(val)) {
-        kh_del(ht, mrb, h, k);
-        n = kh_value(h, k).n;
-        for (k2 = kh_begin(h); k2 != kh_end(h); k2++) {
-          if (!kh_exist(h, k2)) continue;
-          if (kh_value(h, k2).n > n) kh_value(h, k2).n--;
-        }
-      }
+    val = mrb_hash_fetch(mrb, hash, key, mrb_undef_value());
+    if (!mrb_undef_p(val)) {
+      mrb_hash_set(mrb, result, key, val);
     }
   }
-  if (n < 0) return mrb_nil_value();
-  return hash;
+  return result;
 }
 
 void
@@ -79,7 +76,7 @@ mrb_mruby_hash_ext_gem_init(mrb_state *mrb)
 
   h = mrb->hash_class;
   mrb_define_method(mrb, h, "values_at", hash_values_at, MRB_ARGS_ANY());
-  mrb_define_method(mrb, h, "compact!",  hash_compact_bang, MRB_ARGS_NONE());
+  mrb_define_method(mrb, h, "slice",     hash_slice, MRB_ARGS_ANY());
 }
 
 void

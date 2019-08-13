@@ -54,6 +54,13 @@ static void on_recv(h2o_socket_t *sock, const char *err)
     h2o_websocket_proceed(conn);
 }
 
+static void free_write_buf(h2o_websocket_conn_t *conn)
+{
+    size_t i;
+    for (i = 0; i < conn->_write_buf.cnt; ++i)
+        free(conn->_write_buf.bufs[i].base);
+}
+
 static void on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_websocket_conn_t *conn = sock->data;
@@ -62,6 +69,10 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         on_close(conn);
         return;
     }
+    assert(conn->_write_buf.cnt > 0);
+    free_write_buf(conn);
+    conn->_write_buf.cnt = 0;
+
     h2o_websocket_proceed(conn);
 }
 
@@ -85,23 +96,22 @@ static ssize_t recv_callback(wslay_event_context_ptr ctx, uint8_t *buf, size_t l
 static ssize_t send_callback(wslay_event_context_ptr ctx, const uint8_t *data, size_t len, int flags, void *_conn)
 {
     h2o_websocket_conn_t *conn = _conn;
-    h2o_iovec_t buf;
+    h2o_iovec_t *buf;
 
-    /* return WOULDBLOCK if pending (TODO: queue fixed number of chunks, instead of only one) */
-    if (h2o_socket_is_writing(conn->sock)) {
+    /* return WOULDBLOCK if pending or no buffer available */
+    if (h2o_socket_is_writing(conn->sock) ||
+        conn->_write_buf.cnt == sizeof(conn->_write_buf.bufs) / sizeof(conn->_write_buf.bufs[0])) {
         wslay_event_set_error(conn->ws_ctx, WSLAY_ERR_WOULDBLOCK);
         return -1;
     }
 
+    buf = &conn->_write_buf.bufs[conn->_write_buf.cnt];
+
     /* copy data */
-    conn->_write_buf = h2o_mem_realloc(conn->_write_buf, len);
-    memcpy(conn->_write_buf, data, len);
-
-    /* write */
-    buf.base = conn->_write_buf;
-    buf.len = len;
-    h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
-
+    buf->base = h2o_mem_alloc(len);
+    buf->len = len;
+    memcpy(buf->base, data, len);
+    ++conn->_write_buf.cnt;
     return len;
 }
 
@@ -196,7 +206,7 @@ void h2o_websocket_close(h2o_websocket_conn_t *conn)
 {
     if (conn->sock != NULL)
         h2o_socket_close(conn->sock);
-    free(conn->_write_buf);
+    free_write_buf(conn);
     wslay_event_context_free(conn->ws_ctx);
     free(conn);
 }
@@ -212,7 +222,10 @@ void h2o_websocket_proceed(h2o_websocket_conn_t *conn)
             if (wslay_event_send(conn->ws_ctx) != 0) {
                 goto Close;
             }
-            handled = 1;
+            /* avoid infinite loop when user want send more bufers count than ours in on_msg_callback() */
+            if (conn->_write_buf.cnt < sizeof(conn->_write_buf.bufs) / sizeof(conn->_write_buf.bufs[0])) {
+                handled = 1;
+            }
         }
         if (conn->sock->input->size != 0 && wslay_event_want_read(conn->ws_ctx)) {
             if (wslay_event_recv(conn->ws_ctx) != 0) {
@@ -221,6 +234,11 @@ void h2o_websocket_proceed(h2o_websocket_conn_t *conn)
             handled = 1;
         }
     } while (handled);
+
+    if (!h2o_socket_is_writing(conn->sock) && conn->_write_buf.cnt > 0) {
+        /* write */
+        h2o_socket_write(conn->sock, conn->_write_buf.bufs, conn->_write_buf.cnt, on_write_complete);
+    }
 
     if (wslay_event_want_read(conn->ws_ctx)) {
         h2o_socket_read_start(conn->sock, on_recv);

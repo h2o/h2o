@@ -88,6 +88,7 @@ struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
     SSL_CTX *ctx;
+    h2o_iovec_t *http2_origin_frame;
 #if H2O_USE_OCSP
     struct {
         uint64_t interval;
@@ -137,7 +138,12 @@ static struct {
     run_mode_t run_mode;
     struct {
         int *fds;
-        char *bound_fd_map; /* has `num_fds` elements, set to 1 if fd[index] was bound to one of the listeners */
+        /**
+         * List of booleans corresponding to each element of `server_starter.fds` indicating if a H2O listener has been mapped to
+         * the file descriptor. The list is used to check if all the file descriptors opened by Server::Starter have been assigned
+         * H2O listeners.
+         */
+        char *bound_fd_map;
         size_t num_fds;
     } server_starter;
     struct listener_config_t **listeners;
@@ -145,7 +151,10 @@ static struct {
     char *pid_file;
     char *error_log;
     int max_connections;
-    size_t num_threads;
+    /**
+     * array size == number of worker threads to instantiate, the values indicate which CPU to pin, -1 if not
+     */
+    H2O_VECTOR(int) thread_map;
     int tfo_queues;
     time_t launch_time;
     struct {
@@ -159,11 +168,15 @@ static struct {
     struct {
         /* unused buffers exist to avoid false sharing of the cache line */
         char _unused1_avoir_false_sharing[32];
-        int _num_connections; /* number of currently handled incoming connections, should use atomic functions to update the value
-                                 */
+        /**
+         * Number of currently handled incoming connections. Should use atomic functions to update the value.
+         */
+        int _num_connections;
         char _unused2_avoir_false_sharing[32];
-        unsigned long
-            _num_sessions; /* total number of opened incoming connections, should use atomic functions to update the value */
+        /**
+         * Total number of opened incoming connections. Should use atomic functions to update the value.
+         */
+        unsigned long _num_sessions;
         char _unused3_avoir_false_sharing[32];
     } state;
     char *crash_handler;
@@ -177,9 +190,9 @@ static struct {
     NULL,                                   /* pid_file */
     NULL,                                   /* error_log */
     1024,                                   /* max_connections */
-    0,                                      /* initialized in main() */
-    0,                                      /* initialized in main() */
-    0,                                      /* initialized in main() */
+    {NULL},                                 /* thread_map, initialized in main() */
+    0,                                      /* tfo_queues, initialized in main() */
+    0,                                      /* launch_time initialized in main() */
     NULL,                                   /* thread_ids */
     0,                                      /* shutdown_requested */
     H2O_BARRIER_INITIALIZER(SIZE_MAX),      /* startup_sync_barrier */
@@ -264,28 +277,28 @@ struct st_on_client_hello_ptls_t {
     struct listener_config_t *listener;
 };
 
-static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_iovec_t server_name,
-                                const ptls_iovec_t *negotiated_protocols, size_t num_negotiated_protocols,
-                                const uint16_t *signature_algorithms, size_t num_signature_algorithms)
+static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
     int ret = 0;
 
     /* handle SNI */
-    if (server_name.base != NULL) {
-        struct listener_ssl_config_t *resolved = resolve_sni(self->listener, (const char *)server_name.base, server_name.len);
+    if (params->server_name.base != NULL) {
+        struct listener_ssl_config_t *resolved =
+            resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_context_t *newctx = h2o_socket_ssl_get_picotls_context(resolved->ctx);
         ptls_set_context(tls, newctx);
-        ptls_set_server_name(tls, (const char *)server_name.base, server_name.len);
+        ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
     }
 
     /* handle ALPN */
-    if (num_negotiated_protocols != 0) {
+    if (params->negotiated_protocols.count != 0) {
         const h2o_iovec_t *server_pref;
         for (server_pref = h2o_alpn_protocols; server_pref->len != 0; ++server_pref) {
             size_t i;
-            for (i = 0; i != num_negotiated_protocols; ++i)
-                if (h2o_memis(server_pref->base, server_pref->len, negotiated_protocols[i].base, negotiated_protocols[i].len))
+            for (i = 0; i != params->negotiated_protocols.count; ++i)
+                if (h2o_memis(server_pref->base, server_pref->len, params->negotiated_protocols.list[i].base,
+                              params->negotiated_protocols.list[i].len))
                     goto ALPN_Found;
         }
         return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
@@ -378,8 +391,9 @@ static void *ocsp_updater_thread(void *_ssl_conf)
                         ssl_conf->certificate_file);
                 update_ocsp_stapling(ssl_conf, NULL);
             } else {
-                fprintf(stderr, "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
-                                "response for certificate file:%s\n",
+                fprintf(stderr,
+                        "[OCSP Stapling] reusing old response due to a temporary error occurred while fetching OCSP "
+                        "response for certificate file:%s\n",
                         ssl_conf->certificate_file);
                 ++fail_cnt;
             }
@@ -428,45 +442,48 @@ static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_conf)
 
 #if H2O_USE_PICOTLS
 
-struct st_staple_ocsp_ptls_t {
-    ptls_staple_ocsp_t super;
+struct st_emit_certificate_ptls_t {
+    ptls_emit_certificate_t super;
     struct listener_ssl_config_t *conf;
 };
 
-static int on_staple_ocsp_ptls(ptls_staple_ocsp_t *_self, ptls_t *tls, ptls_buffer_t *output, size_t cert_index)
+static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls, ptls_message_emitter_t *emitter,
+                                    ptls_key_schedule_t *key_sched, ptls_iovec_t context, int push_status_request)
 {
-    struct st_staple_ocsp_ptls_t *self = (struct st_staple_ocsp_ptls_t *)_self;
-    int locked = 0, ret;
+    struct st_emit_certificate_ptls_t *self = (void *)_self;
+    ptls_context_t *tlsctx = ptls_get_context(tls);
+    int ret;
 
-    if (cert_index != 0) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-
-    pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
-    locked = 1;
-
-    if (self->conf->ocsp_stapling.response.data == NULL) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    ptls_buffer_pushv(output, self->conf->ocsp_stapling.response.data->bytes, self->conf->ocsp_stapling.response.data->size);
+    ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
+        pthread_mutex_lock(&self->conf->ocsp_stapling.response.mutex);
+        h2o_buffer_t *ocsp_response = push_status_request ? self->conf->ocsp_stapling.response.data : NULL;
+        ret = ptls_build_certificate_message(
+            emitter->buf, ptls_iovec_init(NULL, 0), tlsctx->certificates.list, tlsctx->certificates.count,
+            ocsp_response != NULL ? ptls_iovec_init(ocsp_response->bytes, ocsp_response->size) : ptls_iovec_init(NULL, 0));
+        pthread_mutex_unlock(&self->conf->ocsp_stapling.response.mutex);
+        if (ret != 0)
+            goto Exit;
+    });
     ret = 0;
 
 Exit:
-    if (locked)
-        pthread_mutex_unlock(&self->conf->ocsp_stapling.response.mutex);
     return ret;
 }
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
                                               SSL_CTX *ssl_ctx)
 {
-    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {&ptls_minicrypto_x25519, &ptls_openssl_secp256r1, NULL};
+    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
+#ifdef PTLS_OPENSSL_HAS_X25519
+        &ptls_openssl_x25519,
+#else
+        &ptls_minicrypto_x25519,
+#endif
+        &ptls_openssl_secp256r1, NULL};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
-        struct st_staple_ocsp_ptls_t so;
+        struct st_emit_certificate_ptls_t ec;
         ptls_openssl_sign_certificate_t sc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
     EVP_PKEY *key;
@@ -475,18 +492,34 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     int ret;
 
     *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
+                                       &ptls_get_time,
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
-                                       {NULL, 0},
-                                       &pctx->ch.super,
-                                       &pctx->so.super,
-                                       &pctx->sc.super,
-                                       NULL,
-                                       0,
-                                       8192,
-                                       1},
+                                       {NULL, 0},       /* certificates (filled later) */
+                                       NULL,            /* ESNI context (filled later) */
+                                       &pctx->ch.super, /* on_client_hello */
+                                       &pctx->ec.super, /* emit_certificate */
+                                       &pctx->sc.super, /* sign_certificate */
+                                       NULL,            /* verify_certificate */
+                                       0,               /* ticket_lifetime (initialized alongside encrypt_ticket) */
+                                       8192,            /* max_early_data_size */
+                                       NULL,            /* obsolete */
+                                       1,               /* require_dhe_on_psk */
+                                       0,               /* use_exporter */
+                                       0,               /* send_change_cipher_spec (FIXME set this?) */
+                                       0,               /* require_client_authentication */
+                                       0,               /* omit_end_of_early_data */
+                                       NULL,            /* encrypt_ticket (initialized later) */
+                                       NULL,            /* save_ticket (initialized later) */
+                                       NULL,            /* log_event */
+                                       NULL,            /* update_open_count */
+                                       NULL,            /* update_traffic_key */
+                                       NULL,            /* decompress_certificate */
+                                       NULL,            /* update_esni_key */
+                                       {NULL, 0},       /* pkey_buf */
+                                       NULL},           /* on_extension */
                                       {{on_client_hello_ptls}, listener},
-                                      {{on_staple_ocsp_ptls}, ssl_config}};
+                                      {{on_emit_certificate_ptls}, ssl_config}};
 
     { /* obtain key and cert (via fake connection for libressl compatibility) */
         SSL *fakeconn = SSL_new(ssl_ctx);
@@ -524,12 +557,39 @@ static void listener_setup_ssl_add_host(struct listener_ssl_config_t *ssl_config
     ssl_config->hostnames.entries[ssl_config->hostnames.size++] = h2o_iovec_init(host.base, host_end - host.base);
 }
 
+static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yoml_t **origins, size_t nr_origins)
+{
+    size_t i;
+    h2o_iovec_t *http2_origin_frame = h2o_mem_alloc(sizeof(*http2_origin_frame));
+    uint16_t lengths[nr_origins];
+    h2o_iovec_t elems[nr_origins * 2];
+    for (i = 0; i < nr_origins; i++) {
+        yoml_t *origin = origins[i];
+        if (origin->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, origin, "element of a sequence passed to http2-origin-frame must be a scalar");
+            free(http2_origin_frame);
+            return NULL;
+        }
+        size_t origin_len = strlen(origins[i]->data.scalar);
+        lengths[i] = htons(origin_len);
+        elems[i * 2].base = (char *)&lengths[i];
+        elems[i * 2].len = 2;
+        elems[i * 2 + 1].base = origins[i]->data.scalar;
+        elems[i * 2 + 1].len = origin_len;
+        h2o_strtolower(elems[i * 2 + 1].base, origin_len);
+    }
+    *http2_origin_frame = h2o_concat_list(NULL, elems, nr_origins * 2);
+    return http2_origin_frame;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
-                              yoml_t *ssl_node, struct listener_config_t *listener, int listener_is_new)
+                              yoml_t **ssl_node, struct listener_config_t *listener, int listener_is_new)
 {
     SSL_CTX *ssl_ctx = NULL;
-    yoml_t *certificate_file = NULL, *key_file = NULL, *dh_file = NULL, *min_version = NULL, *max_version = NULL,
-           *cipher_suite = NULL, *ocsp_update_cmd = NULL, *ocsp_update_interval_node = NULL, *ocsp_max_failures_node = NULL;
+    yoml_t **certificate_file, **key_file, **dh_file, **min_version, **max_version, **cipher_suite, **ocsp_update_cmd,
+        **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
+        **http2_origin_frame_node;
+    h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     uint64_t ocsp_update_interval = 4 * 60 * 60; /* defaults to 4 hours */
     unsigned ocsp_max_failures = 3;              /* defaults to 3; permit 3 failures before temporary disabling OCSP stapling */
@@ -541,117 +601,89 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             return -1;
         }
         if (listener->ssl.size == 0 && ssl_node != NULL) {
-            h2o_configurator_errprintf(cmd, ssl_node, "cannot accept HTTPS; already defined to accept HTTP");
+            h2o_configurator_errprintf(cmd, *ssl_node, "cannot accept HTTPS; already defined to accept HTTP");
             return -1;
         }
     }
 
     if (ssl_node == NULL)
         return 0;
-    if (ssl_node->type != YOML_TYPE_MAPPING) {
-        h2o_configurator_errprintf(cmd, ssl_node, "`ssl` is not a mapping");
-        return -1;
-    }
 
-    { /* parse */
-        size_t i;
-        for (i = 0; i != ssl_node->data.sequence.size; ++i) {
-            yoml_t *key = ssl_node->data.mapping.elements[i].key, *value = ssl_node->data.mapping.elements[i].value;
-            /* obtain the target command */
-            if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(NULL, key, "command must be a string");
-                return -1;
-            }
-#define FETCH_PROPERTY(n, p)                                                                                                       \
-    if (strcmp(key->data.scalar, n) == 0) {                                                                                        \
-        if (value->type != YOML_TYPE_SCALAR) {                                                                                     \
-            h2o_configurator_errprintf(cmd, value, "property of `" n "` must be a string");                                        \
-            return -1;                                                                                                             \
-        }                                                                                                                          \
-        p = value;                                                                                                                 \
-        continue;                                                                                                                  \
+    /* parse */
+    if (h2o_configurator_parse_mapping(cmd, *ssl_node, "certificate-file:s,key-file:s",
+                                       "min-version:s,minimum-version:s,max-version:s,maximum-version:s,"
+                                       "cipher-suite:s,ocsp-update-cmd:s,ocsp-update-interval:*,"
+                                       "ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
+                                       "http2-origin-frame:*",
+                                       &certificate_file, &key_file, &min_version, &min_version, &max_version, &max_version,
+                                       &cipher_suite, &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node,
+                                       &dh_file, &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node) != 0)
+        return -1;
+    if (cipher_preference_node != NULL) {
+        switch (h2o_configurator_get_one_of(cmd, *cipher_preference_node, "client,server")) {
+        case 0:
+            ssl_options &= ~SSL_OP_CIPHER_SERVER_PREFERENCE;
+            break;
+        case 1:
+            ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
+            break;
+        default:
+            return -1;
+        }
     }
-            FETCH_PROPERTY("certificate-file", certificate_file);
-            FETCH_PROPERTY("key-file", key_file);
-            FETCH_PROPERTY("min-version", min_version);
-            FETCH_PROPERTY("minimum-version", min_version);
-            FETCH_PROPERTY("max-version", max_version);
-            FETCH_PROPERTY("maximum-version", max_version);
-            FETCH_PROPERTY("cipher-suite", cipher_suite);
-            FETCH_PROPERTY("ocsp-update-cmd", ocsp_update_cmd);
-            FETCH_PROPERTY("ocsp-update-interval", ocsp_update_interval_node);
-            FETCH_PROPERTY("ocsp-max-failures", ocsp_max_failures_node);
-            FETCH_PROPERTY("dh-file", dh_file);
-            if (strcmp(key->data.scalar, "cipher-preference") == 0) {
-                if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "client") == 0) {
-                    ssl_options &= ~SSL_OP_CIPHER_SERVER_PREFERENCE;
-                } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "server") == 0) {
-                    ssl_options |= SSL_OP_CIPHER_SERVER_PREFERENCE;
-                } else {
-                    h2o_configurator_errprintf(cmd, value, "property of `cipher-preference` must be either of: `client`, `server`");
-                    return -1;
-                }
-                continue;
-            }
-            if (strcmp(key->data.scalar, "neverbleed") == 0) {
-                if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "ON") == 0) {
-                    /* no need to enable neverbleed for daemon / master */
-                    use_neverbleed = 1;
-                } else if (value->type == YOML_TYPE_SCALAR && strcasecmp(value->data.scalar, "OFF") == 0) {
-                    use_neverbleed = 0;
-                } else {
-                    h2o_configurator_errprintf(cmd, value, "property of `neverbleed` must be either of: `ON`, `OFF");
-                    return -1;
-                }
-                continue;
-            }
-            h2o_configurator_errprintf(cmd, key, "unknown property: %s", key->data.scalar);
-            return -1;
-#undef FETCH_PROPERTY
-        }
-        if (certificate_file == NULL) {
-            h2o_configurator_errprintf(cmd, ssl_node, "could not find mandatory property `certificate-file`");
+    if (neverbleed_node != NULL && (use_neverbleed = (int)h2o_configurator_get_one_of(cmd, *neverbleed_node, "off,on")) == -1)
+        return -1;
+    if (http2_origin_frame_node != NULL) {
+        switch ((*http2_origin_frame_node)->type) {
+        case YOML_TYPE_SCALAR:
+            if ((http2_origin_frame = build_http2_origin_frame(cmd, http2_origin_frame_node, 1)) == NULL)
+                return -1;
+            break;
+        case YOML_TYPE_SEQUENCE:
+            if ((http2_origin_frame = build_http2_origin_frame(cmd, (*http2_origin_frame_node)->data.sequence.elements,
+                                                               (*http2_origin_frame_node)->data.sequence.size)) == NULL)
+                return -1;
+            break;
+        default:
+            h2o_configurator_errprintf(cmd, *http2_origin_frame_node,
+                                       "argument to `http2-origin-frame` must be either a scalar or a sequence");
             return -1;
         }
-        if (key_file == NULL) {
-            h2o_configurator_errprintf(cmd, ssl_node, "could not find mandatory property `key-file`");
-            return -1;
-        }
-        if (min_version != NULL) {
+    }
+    if (min_version != NULL) {
 #define MAP(tok, op)                                                                                                               \
-    if (strcasecmp(min_version->data.scalar, tok) == 0) {                                                                          \
+    if (strcasecmp((*min_version)->data.scalar, tok) == 0) {                                                                       \
         ssl_options |= (op);                                                                                                       \
         goto VersionFound;                                                                                                         \
     }
-            MAP("sslv2", 0);
-            MAP("sslv3", SSL_OP_NO_SSLv2);
-            MAP("tlsv1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
-            MAP("tlsv1.1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
+        MAP("sslv2", 0);
+        MAP("sslv3", SSL_OP_NO_SSLv2);
+        MAP("tlsv1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+        MAP("tlsv1.1", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1);
 #ifdef SSL_OP_NO_TLSv1_1
-            MAP("tlsv1.2", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
+        MAP("tlsv1.2", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
 #endif
 #ifdef SSL_OP_NO_TLSv1_2
-            MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
+        MAP("tlsv1.3", SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1 | SSL_OP_NO_TLSv1_2);
 #endif
 #undef MAP
-            h2o_configurator_errprintf(cmd, min_version, "unknown protocol version: %s", min_version->data.scalar);
-        VersionFound:;
-        } else {
-            /* default is >= TLSv1 */
-            ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
-        }
-        if (max_version != NULL) {
-            if (strcasecmp(max_version->data.scalar, "tlsv1.3") < 0)
-                use_picotls = 0;
-        }
-        if (ocsp_update_interval_node != NULL) {
-            if (h2o_configurator_scanf(cmd, ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
-                goto Error;
-        }
-        if (ocsp_max_failures_node != NULL) {
-            if (h2o_configurator_scanf(cmd, ocsp_max_failures_node, "%u", &ocsp_max_failures) != 0)
-                goto Error;
-        }
+        h2o_configurator_errprintf(cmd, *min_version, "unknown protocol version: %s", (*min_version)->data.scalar);
+    VersionFound:;
+    } else {
+        /* default is >= TLSv1 */
+        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+    }
+    if (max_version != NULL) {
+        if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0)
+            use_picotls = 0;
+    }
+    if (ocsp_update_interval_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
+            goto Error;
+    }
+    if (ocsp_max_failures_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *ocsp_max_failures_node, "%u", &ocsp_max_failures) != 0)
+            goto Error;
     }
 
     /* add the host to the existing SSL config, if the certificate file is already registered */
@@ -659,7 +691,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         size_t i;
         for (i = 0; i != listener->ssl.size; ++i) {
             struct listener_ssl_config_t *ssl_config = listener->ssl.entries[i];
-            if (strcmp(ssl_config->certificate_file, certificate_file->data.scalar) == 0) {
+            if (strcmp(ssl_config->certificate_file, (*certificate_file)->data.scalar) == 0) {
                 listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
                 return 0;
             }
@@ -671,13 +703,20 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_options |= SSL_OP_NO_COMPRESSION;
 #endif
 
+#ifdef SSL_OP_NO_RENEGOTIATION
+    ssl_options |= SSL_OP_NO_RENEGOTIATION;
+#endif
+
     /* setup */
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
 
+    SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
+
     setup_ecc_key(ssl_ctx);
-    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_file->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, certificate_file, "failed to load certificate file:%s\n", certificate_file->data.scalar);
+    if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, *certificate_file, "failed to load certificate file:%s\n",
+                                   (*certificate_file)->data.scalar);
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
@@ -701,33 +740,33 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 abort();
             }
         }
-        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, key_file->data.scalar, errbuf) != 1) {
-            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s:%s\n", key_file->data.scalar, errbuf);
+        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*key_file)->data.scalar, errbuf) != 1) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s:%s\n", (*key_file)->data.scalar, errbuf);
             goto Error;
         }
     } else {
-        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, key_file->data.scalar, SSL_FILETYPE_PEM) != 1) {
-            h2o_configurator_errprintf(cmd, key_file, "failed to load private key file:%s\n", key_file->data.scalar);
+        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, (*key_file)->data.scalar, SSL_FILETYPE_PEM) != 1) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to load private key file:%s\n", (*key_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
     }
-    if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, cipher_suite->data.scalar) != 1) {
-        h2o_configurator_errprintf(cmd, cipher_suite, "failed to setup SSL cipher suite\n");
+    if (cipher_suite != NULL && SSL_CTX_set_cipher_list(ssl_ctx, (*cipher_suite)->data.scalar) != 1) {
+        h2o_configurator_errprintf(cmd, *cipher_suite, "failed to setup SSL cipher suite\n");
         ERR_print_errors_cb(on_openssl_print_errors, stderr);
         goto Error;
     }
     if (dh_file != NULL) {
-        BIO *bio = BIO_new_file(dh_file->data.scalar, "r");
+        BIO *bio = BIO_new_file((*dh_file)->data.scalar, "r");
         if (bio == NULL) {
-            h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
+            h2o_configurator_errprintf(cmd, *dh_file, "failed to load dhparam file:%s\n", (*dh_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
         DH *dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
         BIO_free(bio);
         if (dh == NULL) {
-            h2o_configurator_errprintf(cmd, dh_file, "failed to load dhparam file:%s\n", dh_file->data.scalar);
+            h2o_configurator_errprintf(cmd, *dh_file, "failed to load dhparam file:%s\n", (*dh_file)->data.scalar);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             goto Error;
         }
@@ -759,7 +798,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         listener_setup_ssl_add_host(ssl_config, ctx->hostconf->authority.hostport);
     }
     ssl_config->ctx = ssl_ctx;
-    ssl_config->certificate_file = h2o_strdup(NULL, certificate_file->data.scalar, SIZE_MAX).base;
+    ssl_config->certificate_file = h2o_strdup(NULL, (*certificate_file)->data.scalar, SIZE_MAX).base;
+    ssl_config->http2_origin_frame = http2_origin_frame;
 
 #if !H2O_USE_OCSP
     if (ocsp_update_interval != 0)
@@ -770,8 +810,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
 #endif
     pthread_mutex_init(&ssl_config->ocsp_stapling.response.mutex, NULL);
-    ssl_config->ocsp_stapling.cmd =
-        ocsp_update_cmd != NULL ? h2o_strdup(NULL, ocsp_update_cmd->data.scalar, SIZE_MAX).base : "share/h2o/fetch-ocsp-response";
+    ssl_config->ocsp_stapling.cmd = ocsp_update_cmd != NULL ? h2o_strdup(NULL, (*ocsp_update_cmd)->data.scalar, SIZE_MAX).base
+                                                            : "share/h2o/fetch-ocsp-response";
     if (ocsp_update_interval != 0) {
         switch (conf.run_mode) {
         case RUN_MODE_WORKER:
@@ -786,19 +826,19 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             break;
         case RUN_MODE_TEST: {
             h2o_buffer_t *respbuf;
-            fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", certificate_file->data.scalar);
-            switch (get_ocsp_response(certificate_file->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
+            fprintf(stderr, "[OCSP Stapling] testing for certificate file:%s\n", (*certificate_file)->data.scalar);
+            switch (get_ocsp_response((*certificate_file)->data.scalar, ssl_config->ocsp_stapling.cmd, &respbuf)) {
             case 0:
                 h2o_buffer_dispose(&respbuf);
-                fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", certificate_file->data.scalar);
+                fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", (*certificate_file)->data.scalar);
                 break;
             case EX_TEMPFAIL:
-                h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] temporary failed for file:%s\n",
-                                           certificate_file->data.scalar);
+                h2o_configurator_errprintf(cmd, *certificate_file, "[OCSP Stapling] temporary failed for file:%s\n",
+                                           (*certificate_file)->data.scalar);
                 break;
             default:
-                h2o_configurator_errprintf(cmd, certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n",
-                                           certificate_file->data.scalar);
+                h2o_configurator_errprintf(cmd, *certificate_file, "[OCSP Stapling] does not work, will be disabled for file:%s\n",
+                                           (*certificate_file)->data.scalar);
                 break;
             }
         } break;
@@ -810,7 +850,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     if (use_picotls) {
         const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
         if (errstr != NULL)
-            h2o_configurator_errprintf(cmd, ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
+            h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled\n", errstr);
     }
 #endif
 
@@ -883,31 +923,26 @@ Found:
     return conf.server_starter.fds[i];
 }
 
-static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa)
+static int open_unix_listener(h2o_configurator_command_t *cmd, yoml_t *node, struct sockaddr_un *sa, yoml_t **owner_node,
+                              yoml_t **permission_node)
 {
     struct stat st;
     int fd = -1;
     struct passwd *owner = NULL, pwbuf;
     char pwbuf_buf[65536];
     unsigned mode = UINT_MAX;
-    yoml_t *t;
 
     /* obtain owner and permission */
-    if ((t = yoml_get(node, "owner")) != NULL) {
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, t, "`owner` is not a scalar");
-            goto ErrorExit;
-        }
-        if (getpwnam_r(t->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
-            h2o_configurator_errprintf(cmd, t, "failed to obtain uid of user:%s: %s", t->data.scalar, strerror(errno));
+    if (owner_node != NULL) {
+        if (getpwnam_r((*owner_node)->data.scalar, &pwbuf, pwbuf_buf, sizeof(pwbuf_buf), &owner) != 0 || owner == NULL) {
+            h2o_configurator_errprintf(cmd, *owner_node, "failed to obtain uid of user:%s: %s", (*owner_node)->data.scalar,
+                                       strerror(errno));
             goto ErrorExit;
         }
     }
-    if ((t = yoml_get(node, "permission")) != NULL) {
-        if (t->type != YOML_TYPE_SCALAR || sscanf(t->data.scalar, "%o", &mode) != 1) {
-            h2o_configurator_errprintf(cmd, t, "`permission` must be an octal number");
-            goto ErrorExit;
-        }
+    if (permission_node != NULL && h2o_configurator_scanf(cmd, *permission_node, "%o", &mode) != 0) {
+        h2o_configurator_errprintf(cmd, *permission_node, "`permission` must be an octal number");
+        goto ErrorExit;
     }
 
     /* remove existing socket file as suggested in #45 */
@@ -1008,56 +1043,30 @@ Error:
 
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    const char *hostname = NULL, *servname = NULL, *type = "tcp";
-    yoml_t *ssl_node = NULL;
+    const char *hostname = NULL, *servname, *type = "tcp";
+    yoml_t **ssl_node, **owner_node = NULL, **permission_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
     case YOML_TYPE_SCALAR:
         servname = node->data.scalar;
+        ssl_node = NULL;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t *t;
-        if ((t = yoml_get(node, "host")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`host` is not a string");
-                return -1;
-            }
-            hostname = t->data.scalar;
-        }
-        if ((t = yoml_get(node, "port")) == NULL) {
-            h2o_configurator_errprintf(cmd, node, "cannot find mandatory property `port`");
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
+                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
+                                           &proxy_protocol_node) != 0)
             return -1;
-        }
-        if (t->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, node, "`port` is not a string");
+        servname = (*port_node)->data.scalar;
+        if (host_node != NULL)
+            hostname = (*host_node)->data.scalar;
+        if (type_node != NULL)
+            type = (*type_node)->data.scalar;
+        if (proxy_protocol_node != NULL &&
+            (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
-        }
-        servname = t->data.scalar;
-        if ((t = yoml_get(node, "type")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, t, "`type` is not a string");
-                return -1;
-            }
-            type = t->data.scalar;
-        }
-        if ((t = yoml_get(node, "ssl")) != NULL)
-            ssl_node = t;
-        if ((t = yoml_get(node, "proxy-protocol")) != NULL) {
-            if (t->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, node, "`proxy-protocol` must be a string");
-                return -1;
-            }
-            if (strcasecmp(t->data.scalar, "ON") == 0) {
-                proxy_protocol = 1;
-            } else if (strcasecmp(t->data.scalar, "OFF") == 0) {
-                proxy_protocol = 0;
-            } else {
-                h2o_configurator_errprintf(cmd, node, "value of `proxy-protocol` must be either of: ON,OFF");
-                return -1;
-            }
-        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
@@ -1090,7 +1099,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         return -1;
                     }
                 } else {
-                    if ((fd = open_unix_listener(cmd, node, &sa)) == -1)
+                    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, permission_node)) == -1)
                         return -1;
                 }
                 break;
@@ -1242,11 +1251,62 @@ static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
 }
 
+static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        h2o_configurator_errprintf(cmd, node, "CPUs in cpu sequence must be a scalar");
+        return -1;
+    }
+
+    const char *cpu_spec = node->data.scalar;
+    unsigned cpu_low, cpu_high, cpu_num;
+    int pos;
+    if (index(cpu_spec, '-') == NULL) {
+        if (sscanf(cpu_spec, "%u%n", &cpu_low, &pos) != 1 || pos != strlen(cpu_spec))
+            goto Error;
+        cpu_high = cpu_low;
+    } else {
+        if (sscanf(cpu_spec, "%u-%u%n", &cpu_low, &cpu_high, &pos) != 2 || pos != strlen(cpu_spec))
+            goto Error;
+        if (cpu_low > cpu_high)
+            goto Error;
+    }
+    for (cpu_num = cpu_low; cpu_num <= cpu_high; cpu_num++) {
+        h2o_vector_reserve(NULL, &conf.thread_map, conf.thread_map.size + 1);
+        conf.thread_map.entries[conf.thread_map.size++] = cpu_num;
+    }
+    return 0;
+Error:
+    h2o_configurator_errprintf(
+        cmd, node, "Invalid CPU number: CPUs must be specified as a non-negative number or as a range of non-negative numbers");
+    return -1;
+}
+
 static int on_config_num_threads(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    if (h2o_configurator_scanf(cmd, node, "%zu", &conf.num_threads) != 0)
+    conf.thread_map.size = 0;
+    if (node->type == YOML_TYPE_SCALAR) {
+        size_t i, num_threads = 0;
+        if (h2o_configurator_scanf(cmd, node, "%zu", &num_threads) != 0)
+            return -1;
+        h2o_vector_reserve(NULL, &conf.thread_map, num_threads);
+        for (i = 0; i < num_threads; i++)
+            conf.thread_map.entries[conf.thread_map.size++] = -1;
+    } else if (node->type == YOML_TYPE_SEQUENCE) {
+        /* a sequence is treated as a list of CPUs to bind to, one per thread to instantiate */
+#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
+        size_t i;
+        for (i = 0; i < node->data.sequence.size; i++) {
+            if (on_config_num_threads_add_cpu(cmd, ctx, node->data.sequence.elements[i]) != 0)
+                return -1;
+        }
+#else
+        h2o_configurator_errprintf(
+            cmd, node, "Can't handle a CPU list, this platform doesn't support thread pinning via `pthread_setaffinity_np`");
         return -1;
-    if (conf.num_threads == 0) {
+#endif
+    }
+    if (conf.thread_map.size == 0) {
         h2o_configurator_errprintf(cmd, node, "num-threads must be >=1");
         return -1;
     }
@@ -1300,6 +1360,26 @@ static int on_config_temp_buffer_path(h2o_configurator_command_t *cmd, h2o_confi
         return -1;
     }
     strcpy(h2o_socket_buffer_mmap_settings.fn_template, buf);
+
+    return 0;
+}
+
+static int on_config_temp_buffer_threshold(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* if "OFF", disable temp buffers by setting the threshold to SIZE_MAX */
+    if (strcasecmp(node->data.scalar, "OFF") == 0) {
+        h2o_socket_buffer_mmap_settings.threshold = SIZE_MAX;
+        return 0;
+    }
+
+    /* if not "OFF", it could be a number */
+    if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_socket_buffer_mmap_settings.threshold) != 0)
+        return -1;
+
+    if (h2o_socket_buffer_mmap_settings.threshold < 1048576) {
+        h2o_configurator_errprintf(cmd, node, "threshold is too low (must be >= 1048576; OFF to disable)");
+        return -1;
+    }
 
     return 0;
 }
@@ -1392,12 +1472,39 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
     return loaded;
 }
 
+static yoml_t *resolve_env_tag(yoml_t *node, resolve_tag_arg_t *arg)
+{
+    if (node->type != YOML_TYPE_SCALAR) {
+        fprintf(stderr, "value of !env must be a scalar");
+        return NULL;
+    }
+
+    const char *value;
+    if ((value = getenv(node->data.scalar)) == NULL)
+        value = "";
+
+    /* free old data (we need to reset tag; otherwise we might try to resolve the value once again if the same object is referred
+     * more than once due to the use of aliases) */
+    free(node->data.scalar);
+    free(node->tag);
+    node->tag = NULL;
+
+    node->data.scalar = h2o_strdup(NULL, value, SIZE_MAX).base;
+    ++node->_refcnt;
+
+    return node;
+}
+
 static yoml_t *resolve_tag(const char *tag, yoml_t *node, void *cb_arg)
 {
     resolve_tag_arg_t *arg = (resolve_tag_arg_t *)cb_arg;
 
     if (strcmp(tag, "!file") == 0) {
         return resolve_file_tag(node, arg);
+    }
+
+    if (strcmp(tag, "!env") == 0) {
+        return resolve_env_tag(node, arg);
     }
 
     /* otherwise, return the node itself */
@@ -1419,7 +1526,7 @@ static void dispose_resolve_tag_arg(resolve_tag_arg_t *arg)
 static void notify_all_threads(void)
 {
     unsigned i;
-    for (i = 0; i != conf.num_threads; ++i)
+    for (i = 0; i != conf.thread_map.size; ++i)
         h2o_multithread_send_message(&conf.threads[i].server_notifications, NULL);
 }
 
@@ -1527,7 +1634,7 @@ static void on_socketclose(void *data)
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
-    size_t num_accepts = conf.max_connections / 16 / conf.num_threads;
+    size_t num_accepts = conf.max_connections / 16 / conf.thread_map.size;
     if (num_accepts < 8)
         num_accepts = 8;
 
@@ -1600,6 +1707,22 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       h2o_memcached_receiver);
     conf.threads[thread_index].tid = pthread_self();
 
+    if (conf.thread_map.entries[thread_index] >= 0) {
+#ifdef H2O_HAS_PTHREAD_SETAFFINITY_NP
+        cpu_set_t cpu_set;
+        CPU_ZERO(&cpu_set);
+        CPU_SET(conf.thread_map.entries[thread_index], &cpu_set);
+        if (pthread_setaffinity_np(pthread_self(), sizeof(cpu_set), &cpu_set) != 0) {
+            static int once;
+            if (__sync_fetch_and_add(&once, 1) == 0) {
+                fprintf(stderr, "[warning] failed to set bind to CPU:%d\n", conf.thread_map.entries[thread_index]);
+            }
+        }
+#else
+        h2o_fatal("internal error; thread pinning not available even though specified");
+#endif
+    }
+
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
@@ -1617,8 +1740,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         memset(listeners + i, 0, sizeof(listeners[i]));
         listeners[i].accept_ctx.ctx = &conf.threads[thread_index].ctx;
         listeners[i].accept_ctx.hosts = listener_config->hosts;
-        if (listener_config->ssl.size != 0)
+        if (listener_config->ssl.size != 0) {
             listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->ctx;
+            listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
+        }
         listeners[i].accept_ctx.expect_proxy_line = listener_config->proxy_protocol;
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
@@ -1811,21 +1936,22 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     if ((generation = getenv("SERVER_STARTER_GENERATION")) == NULL)
         generation = "null";
 
-    ret.base = h2o_mem_alloc_pool(&req->pool, BUFSIZE);
-    ret.len = snprintf(ret.base, BUFSIZE, ",\n"
-                                          " \"server-version\": \"" H2O_VERSION "\",\n"
-                                          " \"openssl-version\": \"%s\",\n"
-                                          " \"current-time\": \"%s\",\n"
-                                          " \"restart-time\": \"%s\",\n"
-                                          " \"uptime\": %" PRIu64 ",\n"
-                                          " \"generation\": %s,\n"
-                                          " \"connections\": %d,\n"
-                                          " \"max-connections\": %d,\n"
-                                          " \"listeners\": %zu,\n"
-                                          " \"worker-threads\": %zu,\n"
-                                          " \"num-sessions\": %lu",
+    ret.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
+    ret.len = snprintf(ret.base, BUFSIZE,
+                       ",\n"
+                       " \"server-version\": \"" H2O_VERSION "\",\n"
+                       " \"openssl-version\": \"%s\",\n"
+                       " \"current-time\": \"%s\",\n"
+                       " \"restart-time\": \"%s\",\n"
+                       " \"uptime\": %" PRIu64 ",\n"
+                       " \"generation\": %s,\n"
+                       " \"connections\": %d,\n"
+                       " \"max-connections\": %d,\n"
+                       " \"listeners\": %zu,\n"
+                       " \"worker-threads\": %zu,\n"
+                       " \"num-sessions\": %lu",
                        SSLeay_version(SSLEAY_VERSION), current_time, restart_time, (uint64_t)(now - conf.launch_time), generation,
-                       num_connections(0), conf.max_connections, conf.num_listeners, conf.num_threads, num_sessions(0));
+                       num_connections(0), conf.max_connections, conf.num_listeners, conf.thread_map.size, num_sessions(0));
     assert(ret.len < BUFSIZE);
 
 #if JEMALLOC_STATS == 1
@@ -1838,9 +1964,10 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
 
     arg.outbuf = h2o_iovec_init(alloca(BUFSIZE - ret.len), BUFSIZE - ret.len);
     arg.err = 0;
-    arg.written = snprintf(arg.outbuf.base, arg.outbuf.len, ",\n"
-                                                            " \"jemalloc\": {\n"
-                                                            "   \"jemalloc-raw\": \"");
+    arg.written = snprintf(arg.outbuf.base, arg.outbuf.len,
+                           ",\n"
+                           " \"jemalloc\": {\n"
+                           "   \"jemalloc-raw\": \"");
     malloc_stats_print(extra_status_jemalloc_cb, &arg, "ga" /* omit general info, only aggregated stats */);
 
     if (arg.err || arg.written + 1 >= arg.outbuf.len) {
@@ -1860,12 +1987,13 @@ static h2o_iovec_t on_extra_status(void *unused, h2o_globalconf_t *_conf, h2o_re
     if (!mallctl("stats.allocated", &allocated, &sz, NULL, 0) && !mallctl("stats.active", &active, &sz, NULL, 0) &&
         !mallctl("stats.metadata", &metadata, &sz, NULL, 0) && !mallctl("stats.resident", &resident, &sz, NULL, 0) &&
         !mallctl("stats.mapped", &mapped, &sz, NULL, 0)) {
-        arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written, ",\n"
-                                                                                             "   \"allocated\": %zu,\n"
-                                                                                             "   \"active\": %zu,\n"
-                                                                                             "   \"metadata\": %zu,\n"
-                                                                                             "   \"resident\": %zu,\n"
-                                                                                             "   \"mapped\": %zu }",
+        arg.written += snprintf(&arg.outbuf.base[arg.written], arg.outbuf.len - arg.written,
+                                ",\n"
+                                "   \"allocated\": %zu,\n"
+                                "   \"active\": %zu,\n"
+                                "   \"metadata\": %zu,\n"
+                                "   \"resident\": %zu,\n"
+                                "   \"mapped\": %zu }",
                                 allocated, active, metadata, resident, mapped);
     }
     if (arg.written + 1 >= arg.outbuf.len) {
@@ -1922,6 +2050,9 @@ static void setup_configurators(void)
                                         on_config_num_ocsp_updaters);
         h2o_configurator_define_command(c, "temp-buffer-path", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_temp_buffer_path);
+        h2o_configurator_define_command(c, "temp-buffer-threshold",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_temp_buffer_threshold);
         h2o_configurator_define_command(c, "crash-handler", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler);
         h2o_configurator_define_command(c, "crash-handler.wait-pipe-close",
@@ -1942,19 +2073,24 @@ static void setup_configurators(void)
     h2o_redirect_register_configurator(&conf.globalconf);
     h2o_status_register_configurator(&conf.globalconf);
     h2o_http2_debug_state_register_configurator(&conf.globalconf);
+    h2o_server_timing_register_configurator(&conf.globalconf);
 #if H2O_USE_MRUBY
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
 
-    h2o_config_register_simple_status_handler(&conf.globalconf, (h2o_iovec_t){H2O_STRLIT("main")}, on_extra_status);
+    static h2o_status_handler_t extra_status_handler = {{H2O_STRLIT("main")}, on_extra_status};
+    h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
 int main(int argc, char **argv)
 {
     const char *cmd = argv[0], *opt_config_file = H2O_TO_STR(H2O_CONFIG_PATH);
-    int error_log_fd = -1;
+    int n, error_log_fd = -1;
+    size_t num_procs = h2o_numproc();
 
-    conf.num_threads = h2o_numproc();
+    h2o_vector_reserve(NULL, &conf.thread_map, num_procs);
+    for (n = 0; n < num_procs; n++)
+        conf.thread_map.entries[conf.thread_map.size++] = -1;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
 
@@ -1991,7 +2127,8 @@ int main(int argc, char **argv)
                 case RUN_MODE_MASTER:
                 case RUN_MODE_DAEMON:
                     if (getenv(SERVER_STARTER_PORT) != NULL) {
-                        fprintf(stderr, "refusing to start in `%s` mode, environment variable " SERVER_STARTER_PORT " is already set\n",
+                        fprintf(stderr,
+                                "refusing to start in `%s` mode, environment variable " SERVER_STARTER_PORT " is already set\n",
                                 optarg);
                         exit(EX_SOFTWARE);
                     }
@@ -2037,7 +2174,7 @@ int main(int argc, char **argv)
                        "  -h, --help         print this help\n"
                        "\n"
                        "Please refer to the documentation under `share/doc/h2o` (or available online at\n"
-                       "http://h2o.examp1e.net/) for how to configure the server.\n"
+                       "https://h2o.examp1e.net/) for how to configure the server.\n"
                        "\n",
                        H2O_TO_STR(H2O_CONFIG_PATH));
                 exit(0);
@@ -2090,7 +2227,8 @@ int main(int argc, char **argv)
         int all_were_bound = 1;
         for (i = 0; i != conf.server_starter.num_fds; ++i) {
             if (!conf.server_starter.bound_fd_map[i]) {
-                fprintf(stderr, "no configuration found for fd:%d passed in by $" SERVER_STARTER_PORT "\n", conf.server_starter.fds[i]);
+                fprintf(stderr, "no configuration found for fd:%d passed in by $" SERVER_STARTER_PORT "\n",
+                        conf.server_starter.fds[i]);
                 all_were_bound = 0;
                 break;
             }
@@ -2134,7 +2272,7 @@ int main(int argc, char **argv)
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-                ) {
+            ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %d\n", (int)limit.rlim_cur);
             }
         }
@@ -2217,15 +2355,15 @@ int main(int argc, char **argv)
         error_log_fd = -1;
     }
 
-    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests\n", (int)getpid());
+    fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
 
-    assert(conf.num_threads != 0);
+    assert(conf.thread_map.size != 0);
 
     /* start the threads */
-    conf.threads = alloca(sizeof(conf.threads[0]) * conf.num_threads);
-    h2o_barrier_init(&conf.startup_sync_barrier, conf.num_threads);
+    conf.threads = alloca(sizeof(conf.threads[0]) * conf.thread_map.size);
+    h2o_barrier_init(&conf.startup_sync_barrier, conf.thread_map.size);
     size_t i;
-    for (i = 1; i != conf.num_threads; ++i) {
+    for (i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
     }

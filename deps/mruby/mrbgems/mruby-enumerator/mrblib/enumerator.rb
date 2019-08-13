@@ -109,27 +109,30 @@ class Enumerator
   #
   #     p fib.take(10) # => [1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
   #
-  def initialize(obj=nil, meth=:each, *args, &block)
+  # In the second, deprecated, form, a generated Enumerator iterates over the
+  # given object using the given method with the given arguments passed. This
+  # form is left only for internal use.
+  #
+  # Use of this form is discouraged.  Use Kernel#enum_for or Kernel#to_enum
+  # instead.
+  def initialize(obj=NONE, meth=:each, *args, &block)
     if block
       obj = Generator.new(&block)
-    else
-      raise ArgumentError unless obj
-    end
-    if @obj and !self.respond_to?(meth)
-      raise NoMethodError, "undefined method #{meth}"
+    elsif obj == NONE
+      raise ArgumentError, "wrong number of arguments (given 0, expected 1+)"
     end
 
     @obj = obj
     @meth = meth
-    @args = args.dup
+    @args = args
     @fib = nil
     @dst = nil
     @lookahead = nil
     @feedvalue = nil
     @stop_exc = false
   end
-  attr_accessor :obj, :meth, :args, :fib
-  private :obj, :meth, :args, :fib
+  attr_accessor :obj, :meth, :args
+  attr_reader :fib
 
   def initialize_copy(obj)
     raise TypeError, "can't copy type #{obj.class}" unless obj.kind_of? Enumerator
@@ -157,12 +160,10 @@ class Enumerator
   def with_index(offset=0, &block)
     return to_enum :with_index, offset unless block
 
-    offset = if offset.nil?
-      0
-    elsif offset.respond_to?(:to_int)
-      offset.to_int
+    if offset.nil?
+      offset = 0
     else
-      raise TypeError, "no implicit conversion of #{offset.class} into Integer"
+      offset = offset.__to_int
     end
 
     n = offset - 1
@@ -223,13 +224,11 @@ class Enumerator
   end
 
   def inspect
-    return "#<#{self.class}: uninitialized>" unless @obj
-
     if @args && @args.size > 0
       args = @args.join(", ")
-      "#<#{self.class}: #{@obj}:#{@meth}(#{args})>"
+      "#<#{self.class}: #{@obj.inspect}:#{@meth}(#{args})>"
     else
-      "#<#{self.class}: #{@obj}:#{@meth}>"
+      "#<#{self.class}: #{@obj.inspect}:#{@meth}>"
     end
   end
 
@@ -621,25 +620,38 @@ end
 
 module Enumerable
   # use Enumerator to use infinite sequence
-  def zip(*arg)
-    ary = []
-    arg = arg.map{|a|a.each}
-    i = 0
-    self.each do |*val|
-      a = []
-      a.push(val.__svalue)
-      idx = 0
-      while idx < arg.size
-        begin
-          a.push(arg[idx].next)
-        rescue StopIteration
-          a.push(nil)
-        end
-        idx += 1
+  def zip(*args, &block)
+    args = args.map do |a|
+      if a.respond_to?(:each)
+        a.to_enum(:each)
+      else
+        raise TypeError, "wrong argument type #{a.class} (must respond to :each)"
       end
-      ary.push(a)
-      i += 1
     end
-    ary
+
+    result = block ? nil : []
+
+    each do |*val|
+      tmp = [val.__svalue]
+      args.each do |arg|
+        v = if arg.nil?
+          nil
+        else
+          begin
+            arg.next
+          rescue StopIteration
+            nil
+          end
+        end
+        tmp.push(v)
+      end
+      if result.nil?
+        block.call(tmp)
+      else
+        result.push(tmp)
+      end
+    end
+
+    result
   end
 end

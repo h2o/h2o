@@ -2,14 +2,14 @@
 
 static h2o_header_t *find_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
 {
-    size_t index;
+    ssize_t index;
 
     if (h2o_iovec_is_token(cmd->name)) {
-        index = h2o_find_header(headers, (void *)cmd->name, SIZE_MAX);
+        index = h2o_find_header(headers, (void *)cmd->name, -1);
     } else {
-        index = h2o_find_header_by_str(headers, cmd->name->base, cmd->name->len, SIZE_MAX);
+        index = h2o_find_header_by_str(headers, cmd->name->base, cmd->name->len, -1);
     }
-    if (index == SIZE_MAX)
+    if (index == -1)
         return NULL;
     return headers->entries + index;
 }
@@ -34,7 +34,8 @@ static void remove_header(h2o_headers_t *headers, h2o_headers_command_t *cmd)
     headers->size = dst;
 }
 
-void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value)
+void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec_t *name, h2o_iovec_t value,
+                                h2o_headers_command_when_t when)
 {
     h2o_headers_command_t *new_cmds;
     size_t cnt;
@@ -49,7 +50,7 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_iovec
     new_cmds = h2o_mem_alloc_shared(NULL, (cnt + 2) * sizeof(*new_cmds), NULL);
     if (*cmds != NULL)
         memcpy(new_cmds, *cmds, cnt * sizeof(*new_cmds));
-    new_cmds[cnt] = (h2o_headers_command_t){cmd, name, value};
+    new_cmds[cnt] = (h2o_headers_command_t){cmd, name, value, when};
     new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
 
     if (*cmds != NULL)
@@ -101,7 +102,7 @@ AppendToken:
     if (target->value.len != 0) {
         h2o_iovec_t v;
         v.len = target->value.len + 2 + cmd->value.len;
-        v.base = h2o_mem_alloc_pool(pool, v.len);
+        v.base = h2o_mem_alloc_pool(pool, char, v.len);
         memcpy(v.base, target->value.base, target->value.len);
         v.base[target->value.len] = ',';
         v.base[target->value.len + 1] = ' ';

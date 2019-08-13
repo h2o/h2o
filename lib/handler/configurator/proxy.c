@@ -27,10 +27,11 @@
 #include <openssl/ssl.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
+#include "h2o/balancer.h"
+#include "h2o/socket.h"
 
 struct proxy_config_vars_t {
     h2o_proxy_config_vars_t conf;
-    uint64_t keepalive_timeout; /* in milliseconds; set to zero to disable keepalive */
     SSL_CTX *ssl_ctx;
 };
 
@@ -73,7 +74,7 @@ static int on_config_timeout_first_byte(h2o_configurator_command_t *cmd, h2o_con
 static int on_config_timeout_keepalive(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->keepalive_timeout);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &self->vars->conf.keepalive_timeout);
 }
 
 static int on_config_preserve_host(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -114,8 +115,17 @@ static int on_config_websocket(h2o_configurator_command_t *cmd, h2o_configurator
 
 static SSL_CTX *create_ssl_ctx(void)
 {
+    long options;
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
-    SSL_CTX_set_options(ctx, SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3);
+    options = SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+#ifdef SSL_OP_NO_RENEGOTIATION
+    /* introduced in openssl 1.1.0h */
+    options |= SSL_OP_NO_RENEGOTIATION;
+#endif
+    SSL_CTX_set_options(ctx, options);
+    SSL_CTX_set_session_id_context(ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
+    SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL_STORE);
+    SSL_CTX_sess_set_new_cb(ctx, h2o_socket_ssl_new_session_cb);
     return ctx;
 }
 
@@ -149,6 +159,7 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* create new ctx */
     *ctx = create_ssl_ctx();
+    SSL_CTX_set_session_id_context(*ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
     SSL_CTX_set_cert_store(*ctx, cert_store);
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
     if (new_session_cache != NULL)
@@ -212,39 +223,23 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
         }
         break;
     case YOML_TYPE_MAPPING: {
-        size_t i;
-        for (i = 0; i != node->data.mapping.size; ++i) {
-            yoml_t *key = node->data.mapping.elements[i].key;
-            yoml_t *value = node->data.mapping.elements[i].value;
-            if (key->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, key, "key must be a scalar");
-                return -1;
-            }
-            if (strcasecmp(key->data.scalar, "capacity") == 0) {
-                if (h2o_configurator_scanf(cmd, value, "%zu", &capacity) != 0)
-                    return -1;
-                if (capacity == 0) {
-                    h2o_configurator_errprintf(cmd, key, "capacity must be greater than zero");
-                    return -1;
-                }
-            } else if (strcasecmp(key->data.scalar, "lifetime") == 0) {
-                unsigned lifetime = 0;
-                if (h2o_configurator_scanf(cmd, value, "%u", &lifetime) != 0)
-                    return -1;
-                if (lifetime == 0) {
-                    h2o_configurator_errprintf(cmd, key, "lifetime must be greater than zero");
-                    return -1;
-                }
-                duration = (uint64_t)lifetime * 1000;
-            } else {
-                h2o_configurator_errprintf(cmd, key, "key must be either of: `capacity`, `lifetime`");
-                return -1;
-            }
-        }
-        if (capacity == 0 || duration == 0) {
-            h2o_configurator_errprintf(cmd, node, "`capacity` and `lifetime` are required");
+        yoml_t **capacity_node, **lifetime_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "capacity:*,lifetime:*", NULL, &capacity_node, &lifetime_node) != 0)
+            return -1;
+        if (h2o_configurator_scanf(cmd, *capacity_node, "%zu", &capacity) != 0)
+            return -1;
+        if (capacity == 0) {
+            h2o_configurator_errprintf(cmd, *capacity_node, "capacity must be greater than zero");
             return -1;
         }
+        unsigned lifetime = 0;
+        if (h2o_configurator_scanf(cmd, *lifetime_node, "%u", &lifetime) != 0)
+            return -1;
+        if (lifetime == 0) {
+            h2o_configurator_errprintf(cmd, *lifetime_node, "lifetime must be greater than zero");
+            return -1;
+        }
+        duration = (uint64_t)lifetime * 1000;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "node must be a scalar or a mapping");
@@ -265,48 +260,123 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
     return 0;
 }
 
+static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, yoml_t *backend)
+{
+    yoml_t **url_node;
+    h2o_socketpool_target_conf_t lb_per_target_conf = {0}; /* default weight of each target */
+
+    switch (backend->type) {
+    case YOML_TYPE_SCALAR:
+        url_node = &backend;
+        break;
+    case YOML_TYPE_MAPPING: {
+        yoml_t **weight_node;
+        if (h2o_configurator_parse_mapping(cmd, backend, "url:s", "weight:*", &url_node, &weight_node) != 0)
+            return NULL;
+        if (weight_node != NULL) {
+            unsigned weight;
+            if (h2o_configurator_scanf(cmd, *weight_node, "%u", &weight) != 0)
+                return NULL;
+            if (!(1 <= weight && weight <= H2O_SOCKETPOOL_TARGET_MAX_WEIGHT)) {
+                h2o_configurator_errprintf(cmd, *weight_node, "weight must be an integer in range 1 - 256");
+                return NULL;
+            }
+            lb_per_target_conf.weight_m1 = weight - 1;
+        }
+    } break;
+    default:
+        h2o_configurator_errprintf(cmd, backend,
+                                   "items of arguments passed to proxy.reverse.url must be either a scalar or a mapping");
+        return NULL;
+    }
+
+    h2o_url_t url;
+    if (h2o_url_parse((*url_node)->data.scalar, SIZE_MAX, &url) != 0) {
+        h2o_configurator_errprintf(cmd, *url_node, "failed to parse URL: %s\n", (*url_node)->data.scalar);
+        return NULL;
+    }
+    return h2o_socketpool_create_target(&url, &lb_per_target_conf);
+}
+
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    yoml_t **inputs;
-    size_t num_upstreams, i;
 
-    /* parse the URL(s) */
+    yoml_t **backends, **balancer_conf = NULL;
+    size_t i, num_backends = 0;
+    h2o_balancer_t *balancer = NULL;
+
+    /* collect the nodes */
     switch (node->type) {
     case YOML_TYPE_SCALAR:
-        inputs = &node;
-        num_upstreams = 1;
+        backends = &node;
+        num_backends = 1;
         break;
     case YOML_TYPE_SEQUENCE:
-        inputs = node->data.sequence.elements;
-        num_upstreams = node->data.sequence.size;
+        backends = node->data.sequence.elements;
+        num_backends = node->data.sequence.size;
+        break;
+    case YOML_TYPE_MAPPING:
+        if (h2o_configurator_parse_mapping(cmd, node, "backends:*", "balancer:s", &backends, &balancer_conf) != 0)
+            return -1;
+        switch ((*backends)->type) {
+        case YOML_TYPE_SCALAR:
+            num_backends = 1;
+            break;
+        case YOML_TYPE_SEQUENCE:
+            num_backends = (*backends)->data.sequence.size;
+            backends = (*backends)->data.sequence.elements;
+            break;
+        default:
+            h2o_configurator_errprintf(cmd, *backends, "value for the `backends` property must be either a scalar or a sequence");
+            return -1;
+        }
         break;
     default:
         h2o_fatal("unexpected node type");
         return -1;
     }
-    h2o_url_t *upstreams = alloca(sizeof(*upstreams) * num_upstreams);
-    for (i = 0; i != num_upstreams; ++i) {
-        if (inputs[i]->type != YOML_TYPE_SCALAR) {
-            h2o_configurator_errprintf(cmd, inputs[i], "argument to proxy.reverse.url must be a scalar or a sequence");
-            return -1;
-        }
-        if (h2o_url_parse(inputs[i]->data.scalar, SIZE_MAX, upstreams + i) != 0) {
-            h2o_configurator_errprintf(cmd, inputs[i], "failed to parse URL: %s\n", inputs[i]->data.scalar);
+    if (num_backends == 0) {
+        h2o_configurator_errprintf(cmd, node, "at least one backend url must be set");
+        return -1;
+    }
+
+    /* determine the balancer */
+    if (balancer_conf != NULL) {
+        if (strcmp((*balancer_conf)->data.scalar, "round-robin") == 0) {
+            balancer = h2o_balancer_create_rr();
+        } else if (strcmp((*balancer_conf)->data.scalar, "least-conn") == 0) {
+            balancer = h2o_balancer_create_lc();
+        } else {
+            h2o_configurator_errprintf(
+                cmd, node, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn");
             return -1;
         }
     }
 
-    if (self->vars->keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+    /* parse the backends */
+    h2o_socketpool_target_t **targets = alloca(sizeof(*targets) * num_backends);
+    for (i = 0; i != num_backends; ++i)
+        if ((targets[i] = parse_backend(cmd, backends[i])) == NULL)
+            return -1;
+
+    if (self->vars->conf.keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
+        h2o_configurator_errprintf(cmd, node,
+                                   "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
+                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
     }
+
     if (self->vars->conf.headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars->conf.headers_cmds);
 
-    h2o_proxy_register_reverse_proxy(ctx->pathconf, upstreams, num_upstreams, self->vars->keepalive_timeout, self->vars->ssl_ctx,
-                                     &self->vars->conf);
+    h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
+    memset(sockpool, 0, sizeof(*sockpool));
+    /* init socket pool */
+    h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, targets, num_backends, balancer);
+    h2o_socketpool_set_timeout(sockpool, self->vars->conf.keepalive_timeout);
+    h2o_socketpool_set_ssl_ctx(sockpool, self->vars->ssl_ctx);
+    h2o_proxy_register_reverse_proxy(ctx->pathconf, &self->vars->conf, sockpool);
     return 0;
 }
 
@@ -352,6 +422,34 @@ static int on_config_max_buffer_size(h2o_configurator_command_t *cmd, h2o_config
     return h2o_configurator_scanf(cmd, node, "%zu", &self->vars->conf.max_buffer_size);
 }
 
+static int on_config_http2_max_concurrent_streams(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.http2.max_concurrent_strams);
+}
+
+static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    int ret = h2o_configurator_scanf(cmd, node, "%" SCNd32, &self->vars->conf.http2.ratio);
+    if (ret < 0)
+        return ret;
+    if (self->vars->conf.http2.ratio < 0 || 100 < self->vars->conf.http2.ratio) {
+        h2o_configurator_errprintf(cmd, node, "proxy.http2.ratio must be between 0 and 100");
+        return -1;
+    }
+    return 0;
+}
+
+static int on_config_forward_close_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    ctx->globalconf->proxy.forward_close_connection = (int)ret;
+    return 0;
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)_self;
@@ -368,8 +466,8 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
         self->vars->ssl_ctx = create_ssl_ctx();
         char *ca_bundle = h2o_configurator_get_cmd_path("share/h2o/ca-bundle.crt");
         if (SSL_CTX_load_verify_locations(self->vars->ssl_ctx, ca_bundle, NULL) != 1)
-            fprintf(stderr, "Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
-                    ca_bundle);
+            h2o_error_printf("Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
+                             ca_bundle);
         free(ca_bundle);
         SSL_CTX_set_verify(self->vars->ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         h2o_cache_t *ssl_session_cache =
@@ -391,8 +489,12 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
         ctx->globalconf->proxy.io_timeout = self->vars->conf.io_timeout;
         ctx->globalconf->proxy.connect_timeout = self->vars->conf.connect_timeout;
         ctx->globalconf->proxy.first_byte_timeout = self->vars->conf.first_byte_timeout;
+        ctx->globalconf->proxy.keepalive_timeout = self->vars->conf.keepalive_timeout;
+        ctx->globalconf->proxy.max_buffer_size = self->vars->conf.max_buffer_size;
+        ctx->globalconf->proxy.http2.max_concurrent_streams = self->vars->conf.http2.max_concurrent_strams;
+        ctx->globalconf->proxy.http2.ratio = self->vars->conf.http2.ratio;
         h2o_socketpool_set_ssl_ctx(&ctx->globalconf->proxy.global_socketpool, self->vars->ssl_ctx);
-        h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->keepalive_timeout);
+        h2o_socketpool_set_timeout(&ctx->globalconf->proxy.global_socketpool, self->vars->conf.keepalive_timeout);
     }
     SSL_CTX_free(self->vars->ssl_ctx);
 
@@ -421,14 +523,17 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     c->vars->conf.websocket.enabled = 0; /* have websocket proxying disabled by default; until it becomes non-experimental */
     c->vars->conf.websocket.timeout = H2O_DEFAULT_PROXY_WEBSOCKET_TIMEOUT;
     c->vars->conf.max_buffer_size = SIZE_MAX;
-    c->vars->keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
+    c->vars->conf.http2.max_concurrent_strams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS;
+    c->vars->conf.http2.ratio = -1;
+    c->vars->conf.keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool);
 
     /* setup handlers */
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
     h2o_configurator_define_command(&c->super, "proxy.reverse.url",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_DEFERRED,
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING |
+                                        H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_reverse_url);
     h2o_configurator_define_command(&c->super, "proxy.preserve-host",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
@@ -474,4 +579,12 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.max-buffer-size",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_max_buffer_size);
+    h2o_configurator_define_command(&c->super, "proxy.http2.max-concurrent_streams",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_http2_max_concurrent_streams);
+    h2o_configurator_define_command(&c->super, "proxy.http2.ratio",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http2_ratio);
+    h2o_configurator_define_command(&c->super, "proxy.forward.close-connection",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_forward_close_connection);
 }

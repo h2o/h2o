@@ -184,14 +184,14 @@ assert('register window of calls (#3783)') do
   # NODE_UNDEF
   assert_nothing_raised do
     class << Object.new
-      undef send
+      undef inspect
     end
   end
 
   # NODE_ALIAS
   assert_nothing_raised do
     class << Object.new
-      alias send2 send
+      alias inspect2 inspect
     end
   end
 end
