@@ -14,7 +14,7 @@ my $upstream_port = empty_port();
 subtest "http/1" => sub {
     my $fetch = sub {
         my ($server, $path, $send_count) = @_;
-        my $cmd = "exec @{[bindir]}/picotls/cli -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
+        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
         open my $fh, "|-", $cmd
             or die "failed to invoke command:$cmd:$!";
         autoflush $fh 1;
@@ -47,7 +47,7 @@ EOT
 subtest "http/2" => sub {
     my $fetch = sub {
         my ($server, $path) = @_;
-        my $cmd = "exec @{[bindir]}/picotls/cli -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
+        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
         my $pid = open my $fh, "|-", $cmd
             or die "failed to invoke command:$cmd:$!";
         autoflush $fh 1;
