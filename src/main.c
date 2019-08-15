@@ -516,7 +516,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        NULL,            /* update_traffic_key */
                                        NULL,            /* decompress_certificate */
                                        NULL,            /* update_esni_key */
-                                       {NULL, 0},       /* pkey_buf */
                                        NULL},           /* on_extension */
                                       {{on_client_hello_ptls}, listener},
                                       {{on_emit_certificate_ptls}, ssl_config}};
