@@ -18,38 +18,35 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="..\..\t\ptlsbench.c" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>
-    <ProjectGuid>{15D7D32F-3B62-4B10-A06A-BA1ADD591D7F}</ProjectGuid>
+    <ProjectGuid>{559AC085-1BEF-450A-A62D-0D370561D596}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>ptlsbench</RootNamespace>
+    <RootNamespace>picotlsminicrypto</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v141</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -91,16 +88,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\cifra\src\ext;$(ProjectDir)\..\..\deps\micro-ecc;$(OPENSSL64DIR)\include;$(OPENSSL64DIR)\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\picotls;$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\include\picotls;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\micro-ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(OPENSSL64DIR);$(OPENSSL64DIR)\lib;$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>picotls-core.lib;picotls-openssl.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;bcrypt.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -109,16 +103,13 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\cifra\src\ext;$(ProjectDir)\..\..\deps\micro-ecc;$(OPENSSLDIR)\include;$(OPENSSLDIR)\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\picotls;$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\include\picotls;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\micro-ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(OPENSSLDIR);$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>picotls-core.lib;picotls-openssl.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;bcrypt.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -129,18 +120,15 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\cifra\src\ext;$(ProjectDir)\..\..\deps\micro-ecc;$(OPENSSLDIR)\include;$(OPENSSLDIR)\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\picotls;$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\include\picotls;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\micro-ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(OPENSSLDIR);$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>picotls-core.lib;picotls-openssl.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;bcrypt.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -151,20 +139,32 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_LIB;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\cifra\src\ext;$(ProjectDir)\..\..\deps\micro-ecc;$(OPENSSL64DIR)\include;$(OPENSSL64DIR)\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);$(ProjectDir)..\picotls;$(ProjectDir)..\..\picotls;$(ProjectDir)..\..\include;$(ProjectDir)..\..\include\picotls;$(ProjectDir)\..\..\deps\cifra\src;$(ProjectDir)\..\..\deps\micro-ecc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(OPENSSL64DIR);$(OPENSSL64DIR)\lib;$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>picotls-core.lib;picotls-openssl.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;bcrypt.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="targetver.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\lib\asn1.c" />
+    <ClCompile Include="..\..\lib\cifra.c" />
+    <ClCompile Include="..\..\lib\cifra\aes128.c" />
+    <ClCompile Include="..\..\lib\cifra\aes256.c" />
+    <ClCompile Include="..\..\lib\cifra\chacha20.c" />
+    <ClCompile Include="..\..\lib\cifra\random.c" />
+    <ClCompile Include="..\..\lib\cifra\x25519.c" />
+    <ClCompile Include="..\..\lib\ffx.c" />
+    <ClCompile Include="..\..\lib\minicrypto-pem.c" />
+    <ClCompile Include="..\..\lib\uecc.c" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
