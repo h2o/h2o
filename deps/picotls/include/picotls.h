@@ -26,9 +26,15 @@
 extern "C" {
 #endif
 
+#ifdef _WINDOWS
+#include "wincompat.h"
+#endif
+
 #include <assert.h>
 #include <inttypes.h>
 #include <sys/types.h>
+
+
 
 #ifndef PTLS_FUZZ_HANDSHAKE
 #define PTLS_FUZZ_HANDSHAKE 0
@@ -84,7 +90,10 @@ extern "C" {
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512 0x0806
 
 /* ESNI */
-#define PTLS_ESNI_VERSION_DRAFT02 0xff01
+#define PTLS_ESNI_VERSION_DRAFT03 0xff02
+
+#define PTLS_ESNI_RESPONSE_TYPE_ACCEPT 0
+#define PTLS_ESNI_RESPONSE_TYPE_RETRY_REQUEST 1
 
 /* error classes and macros */
 #define PTLS_ERROR_CLASS_SELF_ALERT 0
@@ -132,6 +141,7 @@ extern "C" {
 #define PTLS_ERROR_STATELESS_RETRY (PTLS_ERROR_CLASS_INTERNAL + 6)
 #define PTLS_ERROR_NOT_AVAILABLE (PTLS_ERROR_CLASS_INTERNAL + 7)
 #define PTLS_ERROR_COMPRESSION_FAILURE (PTLS_ERROR_CLASS_INTERNAL + 8)
+#define PTLS_ERROR_ESNI_RETRY (PTLS_ERROR_CLASS_INTERNAL + 8)
 
 #define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
 #define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
@@ -346,7 +356,7 @@ typedef struct st_ptls_hash_context_t {
     /**
      * returns the digest and performs necessary operation specified by mode
      */
-    void (* final)(struct st_ptls_hash_context_t *ctx, void *md, ptls_hash_final_mode_t mode);
+    void (*final)(struct st_ptls_hash_context_t *ctx, void *md, ptls_hash_final_mode_t mode);
     /**
      * creates a copy of the hash context
      */
@@ -403,7 +413,30 @@ typedef struct st_ptls_esni_context_t {
     uint16_t padded_length;
     uint64_t not_before;
     uint64_t not_after;
+    uint16_t version;
 } ptls_esni_context_t;
+
+/**
+ * holds the ESNI secret, as exchanged during the handshake
+ */
+
+#define PTLS_ESNI_NONCE_SIZE 16
+
+typedef struct st_ptls_esni_secret_t {
+    ptls_iovec_t secret;
+    uint8_t nonce[PTLS_ESNI_NONCE_SIZE];
+    uint8_t esni_contents_hash[PTLS_MAX_DIGEST_SIZE];
+    union {
+        struct {
+            ptls_key_exchange_algorithm_t *key_share;
+            ptls_cipher_suite_t *cipher;
+            ptls_iovec_t pubkey;
+            uint8_t record_digest[PTLS_MAX_DIGEST_SIZE];
+            uint16_t padded_length;
+        } client;
+    };
+    uint16_t version;
+} ptls_esni_secret_t;
 
 #define PTLS_CALLBACK_TYPE0(ret, name)                                                                                             \
     typedef struct st_ptls_##name##_t {                                                                                            \
@@ -489,7 +522,8 @@ PTLS_CALLBACK_TYPE(int, save_ticket, ptls_t *tls, ptls_iovec_t input);
  * event logging (incl. secret logging)
  */
 typedef struct st_ptls_log_event_t {
-    void (*cb)(struct st_ptls_log_event_t *self, ptls_t *tls, const char *type, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
+    void (*cb)(struct st_ptls_log_event_t *self, ptls_t *tls, const char *type, const char *fmt, ...)
+        __attribute__((format(printf, 4, 5)));
 } ptls_log_event_t;
 /**
  * reference counting
@@ -633,10 +667,6 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_esni_key_t *update_esni_key;
-    /**
-     *
-     */
-    ptls_iovec_t pkey_buf;
     /**
      *
      */
@@ -1154,6 +1184,12 @@ int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_
  *
  */
 void ptls_esni_dispose_context(ptls_esni_context_t *esni);
+
+/**
+ * Obtain the ESNI secrets negotiated during the handshake.
+ */
+ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx);
+
 /**
  *
  */

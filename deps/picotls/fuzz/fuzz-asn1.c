@@ -97,7 +97,6 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
             }
         } else {
             ptls_minicrypto_load_private_key(&ctx, fname);
-            free(ctx.pkey_buf.base);
         }
 out2:
         close(fd);
