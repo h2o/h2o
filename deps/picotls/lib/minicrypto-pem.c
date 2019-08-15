@@ -211,7 +211,6 @@ static int ptls_set_ecdsa_private_key(ptls_context_t *ctx, ptls_asn1_pkcs8_priva
     uint8_t *ecdsa_key_data = NULL;
     uint32_t ecdsa_key_data_length = 0;
     size_t ecdsa_key_data_last = 0;
-    ctx->pkey_buf = pkey->vec;
 
     /* We expect the parameters to include just the curve ID */
 
@@ -335,15 +334,17 @@ int ptls_minicrypto_load_private_key(ptls_context_t *ctx, char const *pem_fname)
      * In theory, we could add support for RSA keys at some point.
      */
     if (pkey.algorithm_length != sizeof(ptls_asn1_algorithm_ecdsa) ||
-        memcmp(pkey.vec.base + pkey.algorithm_index, ptls_asn1_algorithm_ecdsa, sizeof(ptls_asn1_algorithm_ecdsa)) != 0)
+        memcmp(pkey.vec.base + pkey.algorithm_index, ptls_asn1_algorithm_ecdsa, sizeof(ptls_asn1_algorithm_ecdsa)) != 0) {
+        ret = -1;
         goto err;
+    }
 
-    return ptls_set_ecdsa_private_key(ctx, &pkey, NULL);
+    ret = ptls_set_ecdsa_private_key(ctx, &pkey, NULL);
 
 err:
     if (pkey.vec.base) {
         ptls_clear_memory(pkey.vec.base, pkey.vec.len);
         free(pkey.vec.base);
     }
-    return -1;
+    return ret;
 }

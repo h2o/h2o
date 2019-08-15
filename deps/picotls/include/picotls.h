@@ -684,10 +684,6 @@ struct st_ptls_context_t {
     /**
      *
      */
-    ptls_iovec_t pkey_buf;
-    /**
-     *
-     */
     ptls_on_extension_t *on_extension;
 };
 

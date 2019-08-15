@@ -64,7 +64,7 @@ static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 }
 
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                             ptls_handshake_properties_t *hsprop, int request_key_update)
+                             ptls_handshake_properties_t *hsprop, int request_key_update, int keep_sender_open)
 {
     ptls_t *tls = ptls_new(ctx, server_name == NULL);
     ptls_buffer_t rbuf, encbuf, ptbuf;
@@ -224,18 +224,19 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
 
         /* close the sender side when necessary */
         if (state == IN_1RTT && inputfd == -1) {
-            ptls_buffer_t wbuf;
-            uint8_t wbuf_small[32];
-            ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
-            if ((ret = ptls_send_alert(tls, &wbuf,
-                       PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY)) != 0) {
-                fprintf(stderr, "ptls_send_alert:%d\n", ret);
+            if (!keep_sender_open) {
+                ptls_buffer_t wbuf;
+                uint8_t wbuf_small[32];
+                ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
+                if ((ret = ptls_send_alert(tls, &wbuf,
+                           PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY)) != 0) {
+                    fprintf(stderr, "ptls_send_alert:%d\n", ret);
+                }
+                if (wbuf.off != 0)
+                    (void)write(sockfd, wbuf.base, wbuf.off);
+                ptls_buffer_dispose(&wbuf);
+                shutdown(sockfd, SHUT_WR);
             }
-            if (wbuf.off != 0) {
-                (void)write(sockfd, wbuf.base, wbuf.off);
-            }
-            ptls_buffer_dispose(&wbuf);
-            shutdown(sockfd, SHUT_WR);
             state = IN_SHUTDOWN;
         }
     }
@@ -278,14 +279,14 @@ static int run_server(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
     while (1) {
         fprintf(stderr, "waiting for connections\n");
         if ((conn_fd = accept(listen_fd, NULL, 0)) != -1)
-            handle_connection(conn_fd, ctx, NULL, input_file, hsprop, request_key_update);
+            handle_connection(conn_fd, ctx, NULL, input_file, hsprop, request_key_update, 0);
     }
 
     return 0;
 }
 
 static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                      ptls_handshake_properties_t *hsprop, int request_key_update)
+                      ptls_handshake_properties_t *hsprop, int request_key_update, int keep_sender_open)
 {
     int fd;
 
@@ -300,7 +301,7 @@ static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
         return 1;
     }
 
-    int ret = handle_connection(fd, ctx, server_name, input_file, hsprop, request_key_update);
+    int ret = handle_connection(fd, ctx, server_name, input_file, hsprop, request_key_update, keep_sender_open);
     free(hsprop->client.esni_keys.base);
     return ret;
 }
@@ -317,6 +318,7 @@ static void usage(const char *cmd)
            "  -C certificate-file  certificate chain used for client authentication\n"
            "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
+           "  -I                   keep send side open after sending all data (client-only)\n"
            "  -k key-file          specifies the credentials for signing the certificate\n"
            "  -l log-file          file to log events (incl. traffic secrets)\n"
            "  -n                   negotiates the key exchange method (i.e. wait for HRR)\n"
@@ -365,12 +367,12 @@ int main(int argc, char **argv)
         ptls_key_exchange_context_t *elements[16];
         size_t count;
     } esni_key_exchanges;
-    int is_server = 0, use_early_data = 0, request_key_update = 0, ch;
+    int is_server = 0, use_early_data = 0, request_key_update = 0, keep_sender_open = 0, ch;
     struct sockaddr_storage sa;
     socklen_t salen;
     int family = 0;
 
-    while ((ch = getopt(argc, argv, "46abC:c:i:k:nN:es:SE:K:l:vh")) != -1) {
+    while ((ch = getopt(argc, argv, "46abC:c:i:Ik:nN:es:SE:K:l:vh")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -400,6 +402,9 @@ int main(int argc, char **argv)
             break;
         case 'i':
             file = optarg;
+            break;
+        case 'I':
+            keep_sender_open = 1;
             break;
         case 'k':
             load_private_key(&ctx, optarg);
@@ -531,6 +536,6 @@ int main(int argc, char **argv)
     if (is_server) {
         return run_server((struct sockaddr *)&sa, salen, &ctx, file, &hsprop, request_key_update);
     } else {
-        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop, request_key_update);
+        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop, request_key_update, keep_sender_open);
     }
 }

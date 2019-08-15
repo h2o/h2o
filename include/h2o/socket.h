@@ -71,6 +71,9 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
+#define H2O_SESSID_CTX ((const uint8_t*)"h2o")
+#define H2O_SESSID_CTX_LEN (sizeof("h2o") - 1)
+
 typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
@@ -273,6 +276,7 @@ static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 
 /**
  * compares socket addresses
