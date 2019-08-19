@@ -84,6 +84,30 @@
     "k0O8Q62ZxzjGJ7Zw6K3azXlH/BYE+CajxTUF+FKRRkkWL1GrFVUsYd9KLDAVry0=\n"                                                           \
     "-----END CERTIFICATE-----\n"
 
+static void test_bf(void)
+{
+#if PTLS_OPENSSL_HAVE_BF
+    /* vectors from http://www.herongyang.com/Blowfish/Perl-Crypt-Blowfish-Test-Vector-128-Bit-Key.html */
+    static const uint8_t key[PTLS_BLOWFISH_KEY_SIZE] = {0},
+                         plaintext[PTLS_BLOWFISH_BLOCK_SIZE] = {0x4e, 0xf9, 0x97, 0x45, 0x61, 0x98, 0xdd, 0x78},
+                         expected[PTLS_BLOWFISH_BLOCK_SIZE] = {0xe1, 0xc0, 0x30, 0xe7, 0x4c, 0x14, 0xd2, 0x61};
+    uint8_t encrypted[PTLS_BLOWFISH_BLOCK_SIZE], decrypted[PTLS_BLOWFISH_BLOCK_SIZE];
+
+    /* encrypt */
+    ptls_cipher_context_t *ctx = ptls_cipher_new(&ptls_openssl_bfecb, 1, key);
+    ptls_cipher_encrypt(ctx, encrypted, plaintext, PTLS_BLOWFISH_BLOCK_SIZE);
+    ptls_cipher_free(ctx);
+    ok(memcmp(encrypted, expected, PTLS_BLOWFISH_BLOCK_SIZE) == 0);
+
+    /* decrypt */
+    ctx = ptls_cipher_new(&ptls_openssl_bfecb, 0, key);
+    ptls_cipher_encrypt(ctx, decrypted, "deadbeef", PTLS_BLOWFISH_BLOCK_SIZE);
+    ptls_cipher_encrypt(ctx, decrypted, encrypted, PTLS_BLOWFISH_BLOCK_SIZE);
+    ptls_cipher_free(ctx);
+    ok(memcmp(decrypted, plaintext, PTLS_BLOWFISH_BLOCK_SIZE) == 0);
+#endif
+}
+
 static void test_key_exchanges(void)
 {
     test_key_exchange(&ptls_openssl_secp256r1, &ptls_openssl_secp256r1);
@@ -229,6 +253,11 @@ static int verify_cert_cb(int ok, X509_STORE_CTX *ctx)
     return 1;
 }
 
+DEFINE_FFX_AES128_ALGORITHMS(openssl);
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+DEFINE_FFX_CHACHA20_ALGORITHMS(openssl);
+#endif
+
 int main(int argc, char **argv)
 {
     ptls_openssl_sign_certificate_t openssl_sign_certificate;
@@ -242,6 +271,8 @@ int main(int argc, char **argv)
     ENGINE_register_all_ciphers();
     ENGINE_register_all_digests();
 #endif
+
+    subtest("bf", test_bf);
 
     subtest("key-exchange", test_key_exchanges);
 
@@ -270,6 +301,10 @@ int main(int argc, char **argv)
 
     ctx = ctx_peer = &openssl_ctx;
     verify_certificate = &openssl_verify_certificate.super;
+    ADD_FFX_AES128_ALGORITHMS(openssl);
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+    ADD_FFX_CHACHA20_ALGORITHMS(openssl);
+#endif
 
     subtest("rsa-sign", test_rsa_sign);
     subtest("ecdsa-sign", test_ecdsa_sign);

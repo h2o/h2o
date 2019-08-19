@@ -159,6 +159,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\lib\asn1.c" />
+    <ClCompile Include="..\..\lib\ffx.c" />
     <ClCompile Include="..\..\lib\minicrypto-pem.c" />
     <ClCompile Include="..\..\lib\pembase64.c" />
     <ClCompile Include="..\..\lib\cifra.c" />

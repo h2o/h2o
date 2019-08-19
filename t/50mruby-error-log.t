@@ -97,8 +97,8 @@ EOT
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
-            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failed', 'access log';
-            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failed', 'error log';
+            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failure', 'access log';
+            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failure', 'error log';
         });
     };
 
@@ -161,9 +161,9 @@ EOT
             note $_ for @$error_logs;
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
-            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failed', 'access log';
-            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failed', 'error log';
-            is $body, '[lib/core/proxy.c] in request:/:connection failed', 'wrapped buffer';
+            is $access_logs->[0], '[lib/core/proxy.c] in request:/:connection failure', 'access log';
+            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:connection failure', 'error log';
+            is $body, '[lib/core/proxy.c] in request:/:connection failure', 'wrapped buffer';
         });
     };
 

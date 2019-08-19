@@ -28,6 +28,7 @@
 #include "h2o.h"
 #include "h2o/configurator.h"
 #include "h2o/balancer.h"
+#include "h2o/socket.h"
 
 struct proxy_config_vars_t {
     h2o_proxy_config_vars_t conf;
@@ -122,6 +123,9 @@ static SSL_CTX *create_ssl_ctx(void)
     options |= SSL_OP_NO_RENEGOTIATION;
 #endif
     SSL_CTX_set_options(ctx, options);
+    SSL_CTX_set_session_id_context(ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
+    SSL_CTX_set_session_cache_mode(ctx, SSL_SESS_CACHE_CLIENT | SSL_SESS_CACHE_NO_INTERNAL_STORE);
+    SSL_CTX_sess_set_new_cb(ctx, h2o_socket_ssl_new_session_cb);
     return ctx;
 }
 
@@ -155,6 +159,7 @@ static void update_ssl_ctx(SSL_CTX **ctx, X509_STORE *cert_store, int verify_mod
 
     /* create new ctx */
     *ctx = create_ssl_ctx();
+    SSL_CTX_set_session_id_context(*ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
     SSL_CTX_set_cert_store(*ctx, cert_store);
     SSL_CTX_set_verify(*ctx, verify_mode, NULL);
     if (new_session_cache != NULL)
@@ -356,8 +361,9 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             return -1;
 
     if (self->vars->conf.keepalive_timeout != 0 && self->vars->conf.use_proxy_protocol) {
-        h2o_configurator_errprintf(cmd, node, "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
-                                              "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
+        h2o_configurator_errprintf(cmd, node,
+                                   "please either set `proxy.use-proxy-protocol` to `OFF` or disable keep-alive by "
+                                   "setting `proxy.timeout.keepalive` to zero; the features are mutually exclusive");
         return -1;
     }
 
@@ -435,6 +441,15 @@ static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_forward_close_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    ctx->globalconf->proxy.forward_close_connection = (int)ret;
+    return 0;
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)_self;
@@ -451,8 +466,8 @@ static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t
         self->vars->ssl_ctx = create_ssl_ctx();
         char *ca_bundle = h2o_configurator_get_cmd_path("share/h2o/ca-bundle.crt");
         if (SSL_CTX_load_verify_locations(self->vars->ssl_ctx, ca_bundle, NULL) != 1)
-            fprintf(stderr, "Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
-                    ca_bundle);
+            h2o_error_printf("Warning: failed to load the default certificates file at %s. Proxying to HTTPS servers may fail.\n",
+                             ca_bundle);
         free(ca_bundle);
         SSL_CTX_set_verify(self->vars->ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
         h2o_cache_t *ssl_session_cache =
@@ -569,4 +584,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_http2_max_concurrent_streams);
     h2o_configurator_define_command(&c->super, "proxy.http2.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http2_ratio);
+    h2o_configurator_define_command(&c->super, "proxy.forward.close-connection",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_forward_close_connection);
 }

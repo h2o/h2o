@@ -153,40 +153,38 @@ static inline void setup_esni(ptls_context_t *ctx, const char *esni_fn, ptls_key
     }
 }
 
-struct st_util_log_secret_t {
-    ptls_log_secret_t super;
+struct st_util_log_event_t {
+    ptls_log_event_t super;
     FILE *fp;
 };
 
-static void fprinthex(FILE *fp, ptls_iovec_t vec)
+static void log_event_cb(ptls_log_event_t *_self, ptls_t *tls, const char *type, const char *fmt, ...)
 {
-    size_t i;
-    for (i = 0; i != vec.len; ++i)
-        fprintf(fp, "%02x", vec.base[i]);
-}
+    struct st_util_log_event_t *self = (void *)_self;
+    char randomhex[PTLS_HELLO_RANDOM_SIZE * 2 + 1];
+    va_list args;
 
-static void log_secret_cb(ptls_log_secret_t *_self, ptls_t *tls, const char *label, ptls_iovec_t secret)
-{
-    struct st_util_log_secret_t *self = (void *)_self;
+    ptls_hexdump(randomhex, ptls_get_client_random(tls).base, PTLS_HELLO_RANDOM_SIZE);
+    fprintf(self->fp, "%s %s ", type, randomhex);
 
-    fprintf(self->fp, "%s ", label);
-    fprinthex(self->fp, ptls_get_client_random(tls));
-    fprintf(self->fp, " ");
-    fprinthex(self->fp, secret);
+    va_start(args, fmt);
+    vfprintf(self->fp, fmt, args);
+    va_end(args);
+
     fprintf(self->fp, "\n");
     fflush(self->fp);
 }
 
-static inline void setup_log_secret(ptls_context_t *ctx, const char *fn)
+static inline void setup_log_event(ptls_context_t *ctx, const char *fn)
 {
-    static struct st_util_log_secret_t ls;
+    static struct st_util_log_event_t ls;
 
     if ((ls.fp = fopen(fn, "at")) == NULL) {
         fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
         exit(1);
     }
-    ls.super.cb = log_secret_cb;
-    ctx->log_secret = &ls.super;
+    ls.super.cb = log_event_cb;
+    ctx->log_event = &ls.super;
 }
 
 /* single-entry session cache */

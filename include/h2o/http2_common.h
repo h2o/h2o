@@ -50,7 +50,7 @@
 #define H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM -11
 #define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
 #define H2O_HTTP2_ERROR_MAX 13
-/* end of the HTT2-spec defined errors */
+/* end of the HTTP2-spec defined errors */
 #define H2O_HTTP2_ERROR_INVALID_HEADER_CHAR                                                                                        \
     -254 /* an internal value indicating that invalid characters were found in the header name or value */
 #define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
@@ -76,8 +76,9 @@ typedef struct st_h2o_http2_priority_t {
 
 extern const h2o_http2_priority_t h2o_http2_default_priority;
 
-/* connection flow control window + alpha */
-#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
+#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920 /* the target size of each write call; connection flow control window + alpha */
+#define H2O_HTTP2_DEFAULT_OUTBUF_SOFT_MAX_SIZE 524288 /* 512KB; stops reading if size exceeds this value */
+#define H2O_HTTP2_DEFAULT_OUTBUF_WRITE_TIMEOUT 60000  /* 60 seconds; close if write does not complete within the period */
 
 /* hpack */
 

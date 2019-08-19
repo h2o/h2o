@@ -313,19 +313,16 @@ static socklen_t parse_hostport(h2o_mem_pool_t *pool, h2o_iovec_t host, h2o_iove
 {
     /* fast path for IPv4 addresses */
     {
-        unsigned int d1, d2, d3, d4, _port;
+        unsigned d1, d2, d3, d4, _port;
         int parsed_len;
-        if (sscanf(host.base, "%" SCNd32 "%*[.]%" SCNd32 "%*[.]%" SCNd32 "%*[.]%" SCNd32 "%n", &d1, &d2, &d3, &d4, &parsed_len) ==
-                4 &&
-            parsed_len == host.len && d1 <= UCHAR_MAX && d2 <= UCHAR_MAX && d3 <= UCHAR_MAX && d4 <= UCHAR_MAX) {
-            if (sscanf(port.base, "%" SCNd32 "%n", &_port, &parsed_len) == 1 && parsed_len == port.len && _port <= USHRT_MAX) {
-                struct sockaddr_in sin;
-                memset(&sin, 0, sizeof(sin));
-                sin.sin_family = AF_INET;
-                sin.sin_port = htons(_port);
-                sin.sin_addr.s_addr = ntohl((d1 << 24) + (d2 << 16) + (d3 << 8) + d4);
-                *ss = *((struct sockaddr_storage *)&sin);
-                return sizeof(sin);
+        if (sscanf(host.base, "%u%*[.]%u%*[.]%u%*[.]%u%n", &d1, &d2, &d3, &d4, &parsed_len) == 4 && parsed_len == host.len &&
+            d1 <= 255 && d2 <= 255 && d3 <= 255 && d4 <= 255) {
+            if (sscanf(port.base, "%u%n", &_port, &parsed_len) == 1 && parsed_len == port.len && _port <= 65535) {
+                struct sockaddr_in *sin = (void *)ss;
+                sin->sin_family = AF_INET;
+                sin->sin_port = htons(_port);
+                sin->sin_addr.s_addr = ntohl((d1 << 24) + (d2 << 16) + (d3 << 8) + d4);
+                return sizeof(*sin);
             }
         }
     }
@@ -433,7 +430,7 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
     mrb_value msgstr = h2o_mruby_new_str(mrb, concat.base, concat.len);
     mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
     if (mrb->exc != NULL) {
-        fprintf(stderr, "%s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
+        h2o_error_printf("%s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
         mrb->exc = NULL;
     }
 }
@@ -499,7 +496,7 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
             if (numify)                                                                                                            \
                 val = h2o_mruby_to_int(mrb, val);                                                                                  \
             if (mrb->exc != NULL)                                                                                                  \
-            return -1;                                                                                                                \
+                return -1;                                                                                                         \
         }                                                                                                                          \
     } while (0)
 #define RETRIEVE_ENV_OBJ(val) RETRIEVE_ENV(val, 0, 0);
@@ -568,9 +565,10 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
         RETRIEVE_ENV_STR(reqenv);
         if (!mrb_nil_p(reqenv)) {
             h2o_vector_reserve(&data->subreq->super.pool, &data->subreq->super.env, data->subreq->super.env.size + 2);
-            data->subreq->super.env.entries[data->subreq->super.env.size] = h2o_strdup(&data->subreq->super.pool, keystr, keystr_len);
+            data->subreq->super.env.entries[data->subreq->super.env.size] =
+                h2o_strdup(&data->subreq->super.pool, keystr, keystr_len);
             data->subreq->super.env.entries[data->subreq->super.env.size + 1] =
-            h2o_strdup(&data->subreq->super.pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
+                h2o_strdup(&data->subreq->super.pool, RSTRING_PTR(reqenv), RSTRING_LEN(reqenv));
             data->subreq->super.env.size += 2;
         }
     }
@@ -624,15 +622,26 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->conn.super.id = 0; /* currently conn->id is used only for logging, so set zero as a meaningless value */
     subreq->conn.super.callbacks = &callbacks;
 
-    struct st_mruby_env_foreach_data_t data = {
-        ctx, subreq,
-        {
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        mrb_nil_value(), mrb_nil_value(), mrb_nil_value(), mrb_nil_value(),
-        }
-    };
+    struct st_mruby_env_foreach_data_t data = {ctx,
+                                               subreq,
+                                               {
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                                   mrb_nil_value(),
+                                               }};
 
     /* retrieve env variables */
     mrb_hash_foreach(mrb, mrb_hash_ptr(env), retrieve_env, &data);
@@ -722,13 +731,17 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->super.version = parse_protocol_version(RSTRING_PTR(data.env.server_protocol), RSTRING_LEN(data.env.server_protocol));
 
     if (!mrb_nil_p(data.env.server_addr) && !mrb_nil_p(data.env.server_port)) {
-        subreq->conn.server.host = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_addr), RSTRING_LEN(data.env.server_addr));
-        subreq->conn.server.port = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_port), RSTRING_LEN(data.env.server_port));
+        subreq->conn.server.host =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_addr), RSTRING_LEN(data.env.server_addr));
+        subreq->conn.server.port =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.server_port), RSTRING_LEN(data.env.server_port));
     }
 
     if (!mrb_nil_p(data.env.remote_addr) && !mrb_nil_p(data.env.remote_port)) {
-        subreq->conn.remote.host = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_addr), RSTRING_LEN(data.env.remote_addr));
-        subreq->conn.remote.port = h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_port), RSTRING_LEN(data.env.remote_port));
+        subreq->conn.remote.host =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_addr), RSTRING_LEN(data.env.remote_addr));
+        subreq->conn.remote.port =
+            h2o_strdup(&subreq->super.pool, RSTRING_PTR(data.env.remote_port), RSTRING_LEN(data.env.remote_port));
     }
 
     if (!mrb_nil_p(data.env.remaining_delegations)) {
@@ -992,7 +1005,7 @@ static void send_response_shortcutted(struct st_mruby_subreq_t *subreq)
         h2o_mruby_set_response_header(generator->ctx->shared, header->name, header->value, generator->req);
     }
     /* add date: if it's missing from the response */
-    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, SIZE_MAX) == -1)
+    if (h2o_find_header(&generator->req->res.headers, H2O_TOKEN_DATE, -1) == -1)
         h2o_resp_add_date_header(generator->req);
 
     /* setup body sender */

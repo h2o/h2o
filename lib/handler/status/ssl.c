@@ -64,13 +64,14 @@ static h2o_iovec_t ssl_status_final(void *_ssc, h2o_globalconf_t *globalconf, h2
 
 #define BUFSIZE (1024)
     buf.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
-    buf.len = snprintf(buf.base, BUFSIZE, ",\n"
-                                          " \"ssl.alpn.h1\": %" PRIu64 ",\n"
-                                          " \"ssl.alpn.h2\": %" PRIu64 ",\n"
-                                          " \"ssl.handshake.full\": %" PRIu64 ",\n"
-                                          " \"ssl.handshake.resume\": %" PRIu64 ",\n"
-                                          " \"ssl.handshake.accumulated-time.full\": %" PRIu64 ",\n"
-                                          " \"ssl.handshake.accumulated-time.resume\": %" PRIu64 "\n",
+    buf.len = snprintf(buf.base, BUFSIZE,
+                       ",\n"
+                       " \"ssl.alpn.h1\": %" PRIu64 ",\n"
+                       " \"ssl.alpn.h2\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.full\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.resume\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.accumulated-time.full\": %" PRIu64 ",\n"
+                       " \"ssl.handshake.accumulated-time.resume\": %" PRIu64 "\n",
                        ssc->alpn_h1, ssc->alpn_h2, ssc->handshake_full, ssc->handshake_resume, ssc->handshake_accum_time_full,
                        ssc->handshake_accum_time_resume);
     pthread_mutex_destroy(&ssc->mutex);

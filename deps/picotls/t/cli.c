@@ -64,7 +64,7 @@ static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 }
 
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                             ptls_handshake_properties_t *hsprop, int request_key_update)
+                             ptls_handshake_properties_t *hsprop, int request_key_update, int keep_sender_open)
 {
     ptls_t *tls = ptls_new(ctx, server_name == NULL);
     ptls_buffer_t rbuf, encbuf, ptbuf;
@@ -135,8 +135,9 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                 if (state == IN_HANDSHAKE) {
                     if ((ret = ptls_handshake(tls, &encbuf, bytebuf + off, &leftlen, hsprop)) == 0) {
                         state = IN_1RTT;
+                        assert(ptls_is_server(tls) || hsprop->client.early_data_acceptance != PTLS_EARLY_DATA_ACCEPTANCE_UNKNOWN);
                         /* release data sent as early-data, if server accepted it */
-                        if (hsprop->client.early_data_accepted_by_peer)
+                        if (hsprop->client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTED)
                             shift_buffer(&ptbuf, early_bytes_sent);
                         if (request_key_update)
                             ptls_update_key(tls, 1);
@@ -180,7 +181,7 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
                 ptls_buffer_pushv(&ptbuf, bytebuf, ioret);
                 if (state == IN_HANDSHAKE) {
                     size_t send_amount = 0;
-                    if (hsprop->client.max_early_data_size != NULL) {
+                    if (server_name != NULL && hsprop->client.max_early_data_size != NULL) {
                         size_t max_can_be_sent = *hsprop->client.max_early_data_size;
                         if (max_can_be_sent > ptbuf.off)
                             max_can_be_sent = ptbuf.off;
@@ -223,8 +224,19 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
 
         /* close the sender side when necessary */
         if (state == IN_1RTT && inputfd == -1) {
-            /* FIXME send close_alert */
-            shutdown(sockfd, SHUT_WR);
+            if (!keep_sender_open) {
+                ptls_buffer_t wbuf;
+                uint8_t wbuf_small[32];
+                ptls_buffer_init(&wbuf, wbuf_small, sizeof(wbuf_small));
+                if ((ret = ptls_send_alert(tls, &wbuf,
+                           PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY)) != 0) {
+                    fprintf(stderr, "ptls_send_alert:%d\n", ret);
+                }
+                if (wbuf.off != 0)
+                    (void)write(sockfd, wbuf.base, wbuf.off);
+                ptls_buffer_dispose(&wbuf);
+                shutdown(sockfd, SHUT_WR);
+            }
             state = IN_SHUTDOWN;
         }
     }
@@ -263,16 +275,18 @@ static int run_server(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
         return 1;
     }
 
+    fprintf(stderr, "server started on port %d\n", ntohs(((struct sockaddr_in *) sa)->sin_port));
     while (1) {
+        fprintf(stderr, "waiting for connections\n");
         if ((conn_fd = accept(listen_fd, NULL, 0)) != -1)
-            handle_connection(conn_fd, ctx, NULL, input_file, hsprop, request_key_update);
+            handle_connection(conn_fd, ctx, NULL, input_file, hsprop, request_key_update, 0);
     }
 
     return 0;
 }
 
 static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx, const char *server_name, const char *input_file,
-                      ptls_handshake_properties_t *hsprop, int request_key_update)
+                      ptls_handshake_properties_t *hsprop, int request_key_update, int keep_sender_open)
 {
     int fd;
 
@@ -287,7 +301,7 @@ static int run_client(struct sockaddr *sa, socklen_t salen, ptls_context_t *ctx,
         return 1;
     }
 
-    int ret = handle_connection(fd, ctx, server_name, input_file, hsprop, request_key_update);
+    int ret = handle_connection(fd, ctx, server_name, input_file, hsprop, request_key_update, keep_sender_open);
     free(hsprop->client.esni_keys.base);
     return ret;
 }
@@ -304,8 +318,9 @@ static void usage(const char *cmd)
            "  -C certificate-file  certificate chain used for client authentication\n"
            "  -c certificate-file  certificate chain used for server authentication\n"
            "  -i file              a file to read from and send to the peer (default: stdin)\n"
+           "  -I                   keep send side open after sending all data (client-only)\n"
            "  -k key-file          specifies the credentials for signing the certificate\n"
-           "  -l log-file          file to log traffic secrets\n"
+           "  -l log-file          file to log events (incl. traffic secrets)\n"
            "  -n                   negotiates the key exchange method (i.e. wait for HRR)\n"
            "  -N named-group       named group to be used (default: secp256r1)\n"
            "  -s session-file      file to read/write the session ticket\n"
@@ -352,12 +367,12 @@ int main(int argc, char **argv)
         ptls_key_exchange_context_t *elements[16];
         size_t count;
     } esni_key_exchanges;
-    int is_server = 0, use_early_data = 0, request_key_update = 0, ch;
+    int is_server = 0, use_early_data = 0, request_key_update = 0, keep_sender_open = 0, ch;
     struct sockaddr_storage sa;
     socklen_t salen;
     int family = 0;
 
-    while ((ch = getopt(argc, argv, "46abC:c:i:k:nN:es:SE:K:l:vh")) != -1) {
+    while ((ch = getopt(argc, argv, "46abC:c:i:Ik:nN:es:SE:K:l:vh")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -387,6 +402,9 @@ int main(int argc, char **argv)
             break;
         case 'i':
             file = optarg;
+            break;
+        case 'I':
+            keep_sender_open = 1;
             break;
         case 'k':
             load_private_key(&ctx, optarg);
@@ -426,7 +444,7 @@ int main(int argc, char **argv)
             fclose(fp);
         } break;
         case 'l':
-            setup_log_secret(&ctx, optarg);
+            setup_log_event(&ctx, optarg);
             break;
         case 'v':
             setup_verify_certificate(&ctx);
@@ -459,8 +477,10 @@ int main(int argc, char **argv)
         case 'u':
             request_key_update = 1;
             break;
-        default:
+        case 'h':
             usage(argv[0]);
+            exit(0);
+        default:
             exit(1);
         }
     }
@@ -478,8 +498,8 @@ int main(int argc, char **argv)
 #if PICOTLS_USE_BROTLI
         if (ctx.decompress_certificate != NULL) {
             static ptls_emit_compressed_certificate_t ecc;
-            if (ptls_init_compressed_certificate(&ecc, PTLS_CERTIFICATE_COMPRESSION_ALGORITHM_BROTLI, ctx.certificates.list,
-                                                 ctx.certificates.count, ptls_iovec_init(NULL, 0)) != 0) {
+            if (ptls_init_compressed_certificate(&ecc, ctx.certificates.list, ctx.certificates.count, ptls_iovec_init(NULL, 0)) !=
+                0) {
                 fprintf(stderr, "failed to create a brotli-compressed version of the certificate chain.\n");
                 exit(1);
             }
@@ -516,6 +536,6 @@ int main(int argc, char **argv)
     if (is_server) {
         return run_server((struct sockaddr *)&sa, salen, &ctx, file, &hsprop, request_key_update);
     } else {
-        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop, request_key_update);
+        return run_client((struct sockaddr *)&sa, salen, &ctx, host, file, &hsprop, request_key_update, keep_sender_open);
     }
 }

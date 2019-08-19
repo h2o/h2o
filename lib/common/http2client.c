@@ -111,7 +111,7 @@ static void request_write(struct st_h2o_http2client_conn_t *conn)
 {
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING)
         return;
-    if (conn->super.sock->_cb.write == NULL && !h2o_timer_is_linked(&conn->output.defer_timeout))
+    if (!h2o_socket_is_writing(conn->super.sock) && !h2o_timer_is_linked(&conn->output.defer_timeout))
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->output.defer_timeout);
 }
 
@@ -286,9 +286,8 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
     assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
-    if ((ret =
-             h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table, &stream->input.status,
-                                      &stream->input.headers, src, len, err_desc)) != 0) {
+    if ((ret = h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table,
+                                        &stream->input.status, &stream->input.headers, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
@@ -746,7 +745,7 @@ ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *sr
         if (hret != 0)
             ret = hret;
     } else {
-        fprintf(stderr, "skipping frame (type:%d)\n", frame.type);
+        h2o_error_printf("skipping frame (type:%d)\n", frame.type);
     }
 
     return ret;
@@ -949,6 +948,9 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     size_t num_headers;
     h2o_iovec_t body;
     h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
+
+    register_stream(stream, conn);
+
     stream->super._cb.on_head =
         stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
                                      &stream->streaming.proceed_req, &props, &conn->super.origin_url);
@@ -956,8 +958,6 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
         close_stream(stream);
         return;
     }
-
-    register_stream(stream, conn);
 
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
