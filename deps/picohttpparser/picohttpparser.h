@@ -33,8 +33,6 @@
 #define ssize_t intptr_t
 #endif
 
-/* $Id$ */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
