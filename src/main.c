@@ -473,7 +473,8 @@ Exit:
 static int tls_is_traced(ptls_is_traced_t *self, ptls_t *tls)
 {
     h2o_socket_t *sock = *ptls_get_data_ptr(tls);
-    assert(sock != NULL);
+    if (sock == NULL)
+        return 0;
     return h2o_socket_is_traced(sock);
 }
 
