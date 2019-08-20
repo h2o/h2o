@@ -237,6 +237,9 @@ void h2o_httpclient__add_cl_or_te_header(h2o_mem_pool_t *pool, h2o_iovec_t metho
 {
     switch (body->type) {
         case H2O_HTTPCLIENT_REQ_BODY_NONE:
+            if (req_requires_content_length(method, headers)) {
+                h2o_add_header(pool, headers, H2O_TOKEN_CONTENT_LENGTH, NULL, "0", 1);
+            }
             break;
         case H2O_HTTPCLIENT_REQ_BODY_VEC:
             if (req_requires_content_length(method, headers)) {
