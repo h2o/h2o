@@ -2155,6 +2155,9 @@ int main(int argc, char **argv)
                 printf(
                     "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
 #endif
+#if H2O_USE_DTRACE
+                printf("dtrace: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
