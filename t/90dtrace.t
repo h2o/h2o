@@ -38,40 +38,61 @@ if ($tracer_pid == 0) {
     close STDOUT;
     open STDOUT, ">", "$tempdir/trace.out"
         or die "failed to create temporary file:$tempdir/trace.out:$!";
-    exec "bpftrace", "-p", $server->{pid}, "-e", <<'EOT';
+    exec "unbuffer", "bpftrace", "-p", $server->{pid}, "-e", <<'EOT';
 usdt::h2o_receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o_receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 EOT
     die "failed to spawn bpftrace:$!";
 }
 
-# wait until bpftrace becomes ready (which can be detecting by it emitting preamble to the log file)
+# wait until bpftrace and the trace log becomes ready
+my $read_trace;
 while (1) {
     sleep 0.1;
-    last if -e "$tempdir/trace.out" && +(stat "$tempdir/trace.out")[7] > 0;
+    if (open my $fh, "<", "$tempdir/trace.out") {
+        my $off = 0;
+        $read_trace = sub {
+            seek $fh, $off, 0
+                or die "seek failed:$!";
+            read $fh, my $bytes, 10000;
+            $bytes = ''
+                unless defined $bytes;
+            $off += length $bytes;
+            return $bytes;
+        };
+        last;
+    }
     die "bpftrace failed to start\n"
         if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
 }
+while ($read_trace->() eq '') {
+    sleep 0.1;
+}
 sleep 1;
 
-my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-is $body, "hello\n";
-like $headers, qr{^HTTP/1\.1 200 }s;
+run_with_curl($server, sub {
+    my ($proto, $port, $cmd) = @_;
+    plan skip_all => "skipping h2 for now"
+        if $cmd =~ / --http2/;
+    # access
+    my ($headers, $body) = run_prog("$cmd --silent --dump-header silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+    is $body, "hello\n";
+    like $headers, qr{^HTTP/[0-9\.]+ 200 }s;
+    # read the trace
+    my $trace;
+    while (($trace = $read_trace->()) eq '') {
+        sleep 0.1;
+    }
+    # check
+    like $trace, qr{^\*{3} \d+:1 version 1\.1 \*{3}$}m;
+    like $trace, qr{^:method: GET$}m;
+    like $trace, qr{^:authority: 127\.0\.0\.1:$port$}m;
+    like $trace, qr{^:path: /$}m;
+});
 
 # wait until the server and the tracer exits
-sleep 1;
 undef $server;
 while (waitpid($tracer_pid, 0) != $tracer_pid) {}
 
-my $lines = do {
-    open my $fh, "<", "$tempdir/trace.out"
-        or die "failed to open $tempdir/trace.out:$!";
-    local $/;
-    <$fh>;
-};
-like $lines, qr{^\*{3} \d+:1 version 1\.1 \*{3}$}m;
-like $lines, qr{^:method: GET$}m;
-like $lines, qr{^:authority: 127\.0\.0\.1:\d+$}m;
-like $lines, qr{^:path: /$}m;
 
 done_testing();
