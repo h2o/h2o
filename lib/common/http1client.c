@@ -395,7 +395,7 @@ static void on_send_request(h2o_socket_t *sock, const char *err)
 
     if (client->_is_chunked) {
         client->_is_chunked = 0;
-        h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n"));
+        h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n\r\n"));
         client->super.bytes_written.body += last.len;
         client->super.bytes_written.total += last.len;
         h2o_socket_write(client->sock, &last, 1, on_send_request);
