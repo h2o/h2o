@@ -503,14 +503,6 @@ static void on_request_streaming_selected(h2o_req_t *req, int is_streaming)
     return;
 }
 
-/* dtrace support on Ubuntu 19.04 fails to detect more than one probe points defined in a single function. As a workground, we
- * define a function that defines a probe point and call it multiple times. */
-__attribute__((noinline))
-static void probe_request_header(struct st_h2o_http1_conn_t *conn, h2o_iovec_t name, h2o_iovec_t value)
-{
-    H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, &conn->super, conn->_req_index, name.base, name.len, value.base, value.len);
-}
-
 static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
 {
     size_t inreqlen = conn->sock->input->size < H2O_MAX_REQLEN ? conn->sock->input->size : H2O_MAX_REQLEN;
@@ -537,17 +529,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             send_bad_request(conn, "line folding of header fields is not supported");
             return;
         }
-        H2O_PROBE_CONN(RECEIVE_REQUEST, &conn->super, conn->_req_index, conn->req.version);
-         if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, &conn->super)) {
-            probe_request_header(conn, H2O_TOKEN_METHOD->buf, conn->req.input.method);
-            probe_request_header(conn, H2O_TOKEN_AUTHORITY->buf, conn->req.input.authority);
-            probe_request_header(conn, H2O_TOKEN_PATH->buf, conn->req.input.path);
-            size_t i;
-            for (i = 0; i != conn->req.headers.size; ++i) {
-                h2o_header_t *h = conn->req.headers.entries + i;
-                probe_request_header(conn, *h->name, h->value);
-            }
-        }
+        h2o_probe_log_request(&conn->req, conn->_req_index);
         if (entity_body_header_index != -1) {
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {

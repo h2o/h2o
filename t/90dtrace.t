@@ -86,6 +86,7 @@ run_with_curl($server, sub {
     # check
     like $trace, qr{^\*{3} \d+:1 version 1\.1 \*{3}$}m;
     like $trace, qr{^:method: GET$}m;
+    like $trace, qr{^:scheme: $proto$}m;
     like $trace, qr{^:authority: 127\.0\.0\.1:$port$}m;
     like $trace, qr{^:path: /$}m;
 });
