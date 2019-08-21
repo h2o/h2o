@@ -102,7 +102,7 @@ my $create_tab = sub {
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2019 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

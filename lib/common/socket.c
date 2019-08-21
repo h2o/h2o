@@ -936,6 +936,8 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
 static void create_ossl(h2o_socket_t *sock)
 {
     sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
+    /* set app data to be used in h2o_socket_ssl_new_session_cb */
+    SSL_set_app_data(sock->ssl->ossl, sock);
     setup_bio(sock);
 }
 
@@ -960,6 +962,26 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
         assert(!"FIXME");
         return NULL;
     }
+}
+
+int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess)
+{
+    h2o_socket_t *sock = (h2o_socket_t *)SSL_get_app_data(s);
+    assert(sock != NULL);
+    assert(sock->ssl != NULL);
+
+    if (!SSL_is_server(s) && sock->ssl->handshake.client.session_cache != NULL
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010100fL
+        && SSL_SESSION_is_resumable(sess)
+#endif
+    ) {
+        h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
+                      sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
+                      h2o_iovec_init(sess, 1));
+        return 1; /* retain ref count */
+    }
+
+    return 0; /* drop ref count */
 }
 
 static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
@@ -1014,16 +1036,6 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
                 sock->ssl->record_overhead = 32; /* sufficiently large number that can hold most payloads */
                 break;
             }
-        }
-    }
-
-    /* set ssl session into the cache */
-    if (sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl) && sock->ssl->handshake.client.session_cache != NULL) {
-        if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
-            SSL_SESSION *session = SSL_get1_session(sock->ssl->ossl);
-            h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
-                          sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
-                          h2o_iovec_init(session, 1));
         }
     }
 

@@ -105,25 +105,30 @@ size_t ptls_minicrypto_asn1_decode_private_key(ptls_asn1_pkcs8_private_key_t *pk
             byte_index += oid_length;
         }
     }
-
+  
     if (*decode_error == 0) {
         /* get parameters, ANY */
         if (log_ctx != NULL) {
             log_ctx->fn(log_ctx->ctx, "      Parameters:\n");
         }
+      
+        if (last_byte1 <= byte_index) {
+            pkey->parameters_index = 0;
+            pkey->parameters_length = 0;
+        } else {
+            pkey->parameters_index = byte_index;
 
-        pkey->parameters_index = byte_index;
-
-        pkey->parameters_length =
-            (uint32_t)ptls_asn1_validation_recursive(bytes + byte_index, last_byte1 - byte_index, decode_error, 2, log_ctx);
-
-        byte_index += pkey->parameters_length;
-
+            pkey->parameters_length =
+                (uint32_t)ptls_asn1_validation_recursive(bytes + byte_index, last_byte1 - byte_index, decode_error, 2, log_ctx);
+            if (*decode_error == 0) {
+                byte_index += pkey->parameters_length;
+            }
+        }
         if (log_ctx != NULL) {
             log_ctx->fn(log_ctx->ctx, "\n");
         }
         /* close sequence */
-        if (byte_index != last_byte1) {
+        if (*decode_error == 0 && byte_index != last_byte1) {
             byte_index = ptls_asn1_error_message("Length larger than element", bytes_max, byte_index, 2, log_ctx);
             *decode_error = PTLS_ERROR_BER_ELEMENT_TOO_SHORT;
         }
@@ -206,7 +211,6 @@ static int ptls_set_ecdsa_private_key(ptls_context_t *ctx, ptls_asn1_pkcs8_priva
     uint8_t *ecdsa_key_data = NULL;
     uint32_t ecdsa_key_data_length = 0;
     size_t ecdsa_key_data_last = 0;
-    ctx->pkey_buf = pkey->vec;
 
     /* We expect the parameters to include just the curve ID */
 
@@ -330,15 +334,17 @@ int ptls_minicrypto_load_private_key(ptls_context_t *ctx, char const *pem_fname)
      * In theory, we could add support for RSA keys at some point.
      */
     if (pkey.algorithm_length != sizeof(ptls_asn1_algorithm_ecdsa) ||
-        memcmp(pkey.vec.base + pkey.algorithm_index, ptls_asn1_algorithm_ecdsa, sizeof(ptls_asn1_algorithm_ecdsa)) != 0)
+        memcmp(pkey.vec.base + pkey.algorithm_index, ptls_asn1_algorithm_ecdsa, sizeof(ptls_asn1_algorithm_ecdsa)) != 0) {
+        ret = -1;
         goto err;
+    }
 
-    return ptls_set_ecdsa_private_key(ctx, &pkey, NULL);
+    ret = ptls_set_ecdsa_private_key(ctx, &pkey, NULL);
 
 err:
     if (pkey.vec.base) {
         ptls_clear_memory(pkey.vec.base, pkey.vec.len);
         free(pkey.vec.base);
     }
-    return -1;
+    return ret;
 }

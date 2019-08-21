@@ -193,18 +193,19 @@ static int bench_run_aead(char  * OS, char * HW, int basic_ref, uint64_t s0, con
     if (strcmp(provider, "openssl") == 0) {
         /*
          * OPENSSL_VERSION_NUMBER is a combination of the major, minor and patch version 
-         * into a single integer 0xMNN00PP0L, where M is major, NN is minor, PP is patch
+         * into a single integer 0xMNNFFPP0L, where M is major, NN is minor, PP is patch
          */
         uint32_t combined = OPENSSL_VERSION_NUMBER;
         int M = combined >> 28;
         int NN = (combined >> 20) & 0xFF;
+        int FF = (combined >> 12) & 0xFF;
         int PP = (combined >> 4) & 0xFF;
         char letter = 'a' - 1 + PP;
 
 #ifdef _WINDOWS
-        (void)sprintf_s(p_version, sizeof(p_version), "%d.%d.0%c", M, NN, letter);
+        (void)sprintf_s(p_version, sizeof(p_version), "%d.%d.%d%c", M, NN, FF, letter);
 #else
-        (void)sprintf(p_version, "%d.%d.0%c", M, NN, letter);
+        (void)sprintf(p_version, "%d.%d.%d%c", M, NN, FF, letter);
 #endif
     }
 
