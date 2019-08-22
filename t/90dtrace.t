@@ -1,3 +1,5 @@
+# NOTE: the test is likely to depend on https://github.com/iovisor/bpftrace/pull/864
+
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
