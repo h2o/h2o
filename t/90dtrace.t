@@ -71,9 +71,7 @@ while ($read_trace->() eq '') {
 sleep 1;
 
 run_with_curl($server, sub {
-    my ($proto, $port, $cmd) = @_;
-    plan skip_all => "skipping h2 for now"
-        if $cmd =~ / --http2/;
+    my ($proto, $port, $cmd, $http_ver) = @_;
     # access
     my ($headers, $body) = run_prog("$cmd --silent --dump-header silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
     is $body, "hello\n";
@@ -84,7 +82,8 @@ run_with_curl($server, sub {
         sleep 0.1;
     }
     # check
-    like $trace, qr{^\*{3} \d+:1 version 1\.1 \*{3}$}m;
+    my ($ver_major, $ver_minor) = (int($http_ver / 256), $http_ver % 256);
+    like $trace, qr{^\*{3} \d+:1 version $ver_major\.$ver_minor \*{3}$}m;
     like $trace, qr{^:method: GET$}m;
     like $trace, qr{^:scheme: $proto$}m;
     like $trace, qr{^:authority: 127\.0\.0\.1:$port$}m;

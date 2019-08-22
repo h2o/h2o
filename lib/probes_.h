@@ -73,8 +73,8 @@
 
 /* utility functions follow */
 
-/* dtrace support on Ubuntu 19.04 fails to detect more than one probe points defined in a single function. As a workground, we
- * define a function that defines a probe point and call it multiple times. */
+/* define the functions as non-inlineable, as bcc cannot handle relative offset against a static const (e.g.,
+ * H2O_TOKEN_PATH->buf.base) */
 __attribute__((noinline))
 static void h2o_probe_request_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name, h2o_iovec_t value)
 {
