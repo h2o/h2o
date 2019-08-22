@@ -38,7 +38,7 @@ if ($tracer_pid == 0) {
     close STDOUT;
     open STDOUT, ">", "$tempdir/trace.out"
         or die "failed to create temporary file:$tempdir/trace.out:$!";
-    exec "unbuffer", "bpftrace", "-p", $server->{pid}, "-e", <<'EOT';
+    exec qw(bpftrace -B none -p), $server->{pid}, "-e", <<'EOT';
 usdt::h2o_receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o_receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 EOT
