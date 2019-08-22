@@ -65,6 +65,7 @@
 #else
 
 #define H2O_CONN_IS_PROBED(label, conn) (0)
+#define H2O_PROBE_CONN0(label, conn)
 #define H2O_PROBE_CONN(label, conn, ...)
 #define H2O_PROBE(label, ...)
 #define H2O_PROBE_HEXDUMP(s, l)

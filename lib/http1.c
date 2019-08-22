@@ -28,7 +28,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
-#include "probes_.h"
+#include "./probes_.h"
 
 #define MAX_PULL_BUF_SZ 65536
 
