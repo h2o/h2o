@@ -14,6 +14,8 @@ plan skip_all => 'bpftrace not found'
     unless prog_exists('bpftrace');
 plan skip_all => 'test requires root privileges'
     unless $< == 0;
+plan skip_all => "skipping bpftrace tests (setenv DTRACE_TESTS=1 to run them)"
+    unless $ENV{DTRACE_TESTS};
 
 my $tempdir = tempdir(CLEANUP => 1);
 
