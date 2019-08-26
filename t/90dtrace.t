@@ -50,17 +50,17 @@ if ($tracer_pid == 0) {
         or die "failed to create temporary file:$tempdir/trace.out:$!";
     if ($^O eq 'linux') {
         exec qw(bpftrace -B none -p), $server->{pid}, "-e", <<'EOT';
-usdt::h2o_receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
-usdt::h2o_receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
+usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
+usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 EOT
         die "failed to spawn bpftrace:$!";
     } else {
         exec(
             qw(unbuffer dtrace -p), $server->{pid}, "-n", <<'EOT',
-h2o_receive_request {printf("\nXXXX*** %u:%u version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
+:h2o::receive_request {printf("\nXXXX*** %u:%u version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 EOT
             "-n", <<'EOT',
-h2o_receive_request_header {printf("\nXXXX%s: %s\n", stringof(copyin(arg2, arg3)), stringof(copyin(arg4, arg5)))}
+:h2o::receive_request_header {printf("\nXXXX%s: %s\n", stringof(copyin(arg2, arg3)), stringof(copyin(arg4, arg5)))}
 EOT
         );
         die "failed to spawn dtrace:$!";

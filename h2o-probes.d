@@ -21,9 +21,9 @@
  */
 
 provider h2o {
-    probe h2o_h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn);
-    probe h2o_h1_close(uint64_t conn_id);
-    probe h2o_receive_request(uint64_t conn_id, int64_t req_id, int http_version);
-    probe h2o_receive_request_header(uint64_t conn_id, uint64_t req_id, const char *name, size_t name_len, const char *value,
-                                     size_t value_len);
+    probe h1_accept(uint64_t conn_id, struct st_h2o_socket_t *sock, struct st_h2o_conn_t *conn);
+    probe h1_close(uint64_t conn_id);
+    probe receive_request(uint64_t conn_id, int64_t req_id, int http_version);
+    probe receive_request_header(uint64_t conn_id, uint64_t req_id, const char *name, size_t name_len, const char *value,
+                                 size_t value_len);
 };

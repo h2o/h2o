@@ -31,13 +31,13 @@
 #include "picotls.h"
 #include "h2o-probes.h"
 
-#define H2O_CONN_IS_PROBED(label, conn) (PTLS_UNLIKELY(H2O_H2O_##label##_ENABLED()) && h2o_conn_is_traced(conn))
+#define H2O_CONN_IS_PROBED(label, conn) (PTLS_UNLIKELY(H2O_##label##_ENABLED()) && h2o_conn_is_traced(conn))
 
 #define H2O_PROBE_CONN0(label, conn)                                                                                               \
     do {                                                                                                                           \
         h2o_conn_t *_conn = (conn);                                                                                                \
         if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
-            H2O_H2O_##label(_conn->id);                                                                                            \
+            H2O_##label(_conn->id);                                                                                                \
         }                                                                                                                          \
     } while (0)
 
@@ -45,14 +45,14 @@
     do {                                                                                                                           \
         h2o_conn_t *_conn = (conn);                                                                                                \
         if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
-            H2O_H2O_##label(_conn->id, __VA_ARGS__);                                                                               \
+            H2O_##label(_conn->id, __VA_ARGS__);                                                                                   \
         }                                                                                                                          \
     } while (0)
 
 #define H2O_PROBE(label, ...)                                                                                                      \
     do {                                                                                                                           \
-        if (PTLS_UNLIKELY(H2O_H2O_##label##_ENABLED())) {                                                                          \
-            H2O_H2O_##label(__VA_ARGS__);                                                                                          \
+        if (PTLS_UNLIKELY(H2O_##label##_ENABLED())) {                                                                              \
+            H2O_##label(__VA_ARGS__);                                                                                              \
         }                                                                                                                          \
     } while (0)
 
