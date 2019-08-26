@@ -21,9 +21,9 @@
  */
 
 provider picotls {
-    probe picotls_new(struct st_ptls_t *tls, int is_server);
-    probe picotls_free(struct st_ptls_t *tls);
-    probe picotls_client_random(struct st_ptls_t *tls, const void *bytes);
-    probe picotls_receive_message(struct st_ptls_t *tls, uint8_t message, const void *bytes, size_t len, int result);
-    probe picotls_new_secret(struct st_ptls_t *tls, const char *label, const char *secret_hex);
+    probe new(struct st_ptls_t *tls, int is_server);
+    probe free(struct st_ptls_t *tls);
+    probe client_random(struct st_ptls_t *tls, const void *bytes);
+    probe receive_message(struct st_ptls_t *tls, uint8_t message, const void *bytes, size_t len, int result);
+    probe new_secret(struct st_ptls_t *tls, const char *label, const char *secret_hex);
 };
