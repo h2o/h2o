@@ -27,6 +27,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
+#include "../probes_.h"
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
@@ -489,7 +490,9 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 
-    /* handle request to send response */
+    h2o_probe_log_request(&stream->req, stream->stream_id);
+
+    /* send 400 if the request contains invalid header characters */
     if (ret != 0) {
         assert(ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
         /* fast forward the stream's state so that we can start sending the response */
@@ -499,6 +502,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         return 0;
     }
 
+    /* handle the request */
     if (stream->req._req_body.body == NULL) {
         execute_or_enqueue_request(conn, stream);
     } else {

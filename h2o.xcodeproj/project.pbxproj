@@ -262,6 +262,11 @@
 		E918FC9321365ABC00CCB252 /* prop.c in Sources */ = {isa = PBXBuildFile; fileRef = E918FC3B213658BE00CCB252 /* prop.c */; };
 		E9581B9B22F001F300299E8A /* x25519.c in Sources */ = {isa = PBXBuildFile; fileRef = E9581B9922F001EB00299E8A /* x25519.c */; };
 		E9581B9E22F0022D00299E8A /* random.c in Sources */ = {isa = PBXBuildFile; fileRef = E9581B9C22F0022900299E8A /* random.c */; };
+		E95E954022914F0600215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953F22914F0600215ACD /* picotls-probes.d */; };
+		E95E954122914F1500215ACD /* h2o-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCD72281148C0022C32D /* h2o-probes.d */; };
+		E95E954222914F1600215ACD /* h2o-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCD72281148C0022C32D /* h2o-probes.d */; };
+		E95E954322914F1C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953F22914F0600215ACD /* picotls-probes.d */; };
+		E95EBCDA228117620022C32D /* probes_.h in Headers */ = {isa = PBXBuildFile; fileRef = E95EBCD9228117620022C32D /* probes_.h */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
 		E9708AE71E49A2420029E0A5 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
 		E9708AE81E49A2420029E0A5 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
@@ -873,6 +878,7 @@
 		D08137411FD408C1004679DF /* balancer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balancer.h; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
+		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
 		E918FC412136597200CCB252 /* theft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft.h; sourceTree = "<group>"; };
@@ -905,6 +911,9 @@
 		E918FC5E2136598600CCB252 /* theft_shrink_internal.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft_shrink_internal.h; sourceTree = "<group>"; };
 		E9581B9922F001EB00299E8A /* x25519.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = x25519.c; sourceTree = "<group>"; };
 		E9581B9C22F0022900299E8A /* random.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = random.c; sourceTree = "<group>"; };
+		E95E953F22914F0600215ACD /* picotls-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "picotls-probes.d"; sourceTree = "<group>"; };
+		E95EBCD72281148C0022C32D /* h2o-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "h2o-probes.d"; sourceTree = "<group>"; };
+		E95EBCD9228117620022C32D /* probes_.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = probes_.h; sourceTree = "<group>"; };
 		E9708AD91E499E040029E0A5 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
 		E9708ADA1E499E040029E0A5 /* picotls.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotls.c; sourceTree = "<group>"; };
 		E9708ADF1E49A2120029E0A5 /* picotls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotls.h; sourceTree = "<group>"; };
@@ -1509,6 +1518,7 @@
 				E9CD04281F8F1D7500524877 /* CONTRIBUTING.md */,
 				E9CD042A1F8F1D8A00524877 /* LICENSE */,
 				E9CD04291F8F1D7F00524877 /* README.md */,
+				E95EBCD72281148C0022C32D /* h2o-probes.d */,
 				1079231E19A3210D00C52AD6 /* deps */,
 				10583BEC1AE5A353004A3AD6 /* doc */,
 				1079239E19A3215F00C52AD6 /* include */,
@@ -1657,6 +1667,7 @@
 				104B9A4B1A5FA804009EEE64 /* handler */,
 				107923B119A3217300C52AD6 /* http1.c */,
 				107923B219A3217300C52AD6 /* http2 */,
+				E95EBCD9228117620022C32D /* probes_.h */,
 				106C22F71C040F6400405689 /* tunnel.c */,
 				107923C119A3217300C52AD6 /* websocket.c */,
 			);
@@ -1940,6 +1951,7 @@
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
 				106530A81D8A21A7005B2C60 /* 80reverse-proxy-missing-content-length-for-post.t */,
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
+				E90C514D230BB28800D6AD8E /* 90dtrace.t */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 				109EEFE31D77B350001F11D1 /* 90live-sni.t */,
 				10C2117C1B8164B1005A9D02 /* 90root-fastcgi-php.t */,
@@ -2122,6 +2134,7 @@
 				E9708AE91E49A2610029E0A5 /* deps */,
 				E9708ADE1E499E100029E0A5 /* include */,
 				E9708AD71E499DEA0029E0A5 /* lib */,
+				E95E953F22914F0600215ACD /* picotls-probes.d */,
 			);
 			path = picotls;
 			sourceTree = "<group>";
@@ -2352,6 +2365,7 @@
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				1058F6ED1D7CC99B00FFFFA3 /* openssl_backport.h in Headers */,
 				10D0905919F22FA10043D458 /* string_.h in Headers */,
+				E95EBCDA228117620022C32D /* probes_.h in Headers */,
 				10FEF24F1D6FC8E200E11B1D /* gkc.h in Headers */,
 				08790DDF1D8015A400A04BC1 /* net.h in Headers */,
 				10AA2EB71A970EFC004322AC /* http2_internal.h in Headers */,
@@ -2606,6 +2620,7 @@
 				D081373A1FD400F4004679DF /* least_conn.c in Sources */,
 				08790DDC1D80154C00A04BC1 /* sds.c in Sources */,
 				107E34101C7EB13F00AEF5F8 /* gzip.c in Sources */,
+				E95E954222914F1600215ACD /* h2o-probes.d in Sources */,
 				107923C719A3217300C52AD6 /* hpack.c in Sources */,
 				10A3D40A1B50DAB700327CF9 /* recv.c in Sources */,
 				101788B219B561AA0084C6D8 /* socket.c in Sources */,
@@ -2656,6 +2671,7 @@
 				08790DDA1D80153600A04BC1 /* net.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */,
+				E95E954022914F0600215ACD /* picotls-probes.d in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
 				10C45D511CFD160A0096DB06 /* throttle_resp.c in Sources */,
@@ -2831,6 +2847,7 @@
 				E9708B731E52C82A0029E0A5 /* expires.c in Sources */,
 				E987E5D91FD7BEB500DE4346 /* brotli_bit_stream.c in Sources */,
 				E9708B591E52C7EE0029E0A5 /* request.c in Sources */,
+				E95E954322914F1C00215ACD /* picotls-probes.d in Sources */,
 				E9708B861E52C8560029E0A5 /* frame.c in Sources */,
 				E9708B201E49BACA0029E0A5 /* curve25519.c in Sources */,
 				E987E5EA1FD7EBD100DE4346 /* dictionary.c in Sources */,
@@ -2928,6 +2945,7 @@
 				10756E331AC1264D0009BF57 /* parser.c in Sources */,
 				E9708B761E52C8330029E0A5 /* headers.c in Sources */,
 				E9708B871E52C8560029E0A5 /* hpack.c in Sources */,
+				E95E954122914F1500215ACD /* h2o-probes.d in Sources */,
 				E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */,
 				E9708B841E52C8560029E0A5 /* casper.c in Sources */,
 				E9581B9B22F001F300299E8A /* x25519.c in Sources */,
@@ -3167,6 +3185,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -3310,6 +3333,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -3485,6 +3513,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -3501,6 +3534,11 @@
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
 				EXECUTABLE_PREFIX = lib;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"/usr/local/openssl-1.0.2/include",
@@ -3995,9 +4033,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"H2O_USE_PICOTLS=1",
 					"$(inherited)",
+					"H2O_USE_PICOTLS=1",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -4067,6 +4106,12 @@
 		10F417D119C1907B00B6E31A /* evloop-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"H2O_USE_PICOTLS=1",
+					"PICOTLS_USE_DTRACE=1",
+					"H2O_USE_DTRACE=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,

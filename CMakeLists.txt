@@ -39,6 +39,7 @@ INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(ExternalProject)
+INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -131,7 +132,6 @@ IF (WITH_CCACHE)
     SET_PROPERTY(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
 ENDIF ()
 
-
 IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
     MESSAGE(STATUS "*************************************************************************\n"
                 "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with web        *\n"
@@ -144,6 +144,12 @@ IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
                 "   * using external cache.                                                 *\n"
                 "   *************************************************************************\n")
 ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
+
+CHECK_DTRACE(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d)
+OPTION(WITH_DTRACE "use USDT (userspace Dtrace probes)" ${HAVE_DTRACE})
+IF (WITH_DTRACE)
+    MESSAGE(STATUS "Enabling USDT support")
+ENDIF ()
 
 INCLUDE_DIRECTORIES(
     include
@@ -158,7 +164,8 @@ INCLUDE_DIRECTORIES(
     deps/picohttpparser
     deps/picotest
     deps/yaml/include
-    deps/yoml)
+    deps/yoml
+    ${CMAKE_CURRENT_BINARY_DIR})
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -373,6 +380,18 @@ SET(LIB_SOURCE_FILES
     lib/http2/scheduler.c
     lib/http2/stream.c
     lib/http2/http2_debug_state.c)
+
+IF (WITH_DTRACE)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1 -DH2O_USE_DTRACE=1")
+    DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
+    DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/h2o-probes.d h2o)
+    LIST(APPEND PICOTLS_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.h)
+    LIST(APPEND LIB_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.h)
+    IF (DTRACE_USES_OBJFILE)
+        LIST(APPEND PICOTLS_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o)
+        LIST(APPEND LIB_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.o)
+    ENDIF ()
+ENDIF ()
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}

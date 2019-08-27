@@ -4,9 +4,22 @@ CMAKE_POLICY(SET CMP0003 NEW)
 PROJECT(picotls)
 
 FIND_PACKAGE(PkgConfig REQUIRED)
+INCLUDE(cmake/dtrace-utils.cmake)
+
+CHECK_DTRACE(${CMAKE_SOURCE_DIR}/picotls-probes.d)
+OPTION(WITH_DTRACE "use USDT (userspace Dtrace probes)" ${HAVE_DTRACE})
+IF (WITH_DTRACE)
+    MESSAGE(STATUS "Enabling USDT support")
+ENDIF ()
 
 SET(CMAKE_C_FLAGS "-std=c99 -Wall -O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
-INCLUDE_DIRECTORIES(deps/cifra/src/ext deps/cifra/src deps/micro-ecc deps/picotest include)
+INCLUDE_DIRECTORIES(
+    deps/cifra/src/ext
+    deps/cifra/src
+    deps/micro-ecc
+    deps/picotest
+    include
+    ${CMAKE_CURRENT_BINARY_DIR})
 SET(MINICRYPTO_LIBRARY_FILES
     deps/micro-ecc/uECC.c
     deps/cifra/src/aes.c
@@ -25,6 +38,18 @@ SET(MINICRYPTO_LIBRARY_FILES
 SET(CORE_FILES
     lib/picotls.c
     lib/pembase64.c)
+SET(CORE_TEST_FILES
+    t/picotls.c)
+IF (WITH_DTRACE)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1")
+    DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/picotls-probes.d picotls)
+    LIST(APPEND CORE_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.h)
+    LIST(APPEND CORE_TEST_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.h)
+    IF (DTRACE_USES_OBJFILE)
+        LIST(APPEND CORE_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o)
+        LIST(APPEND CORE_TEST_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o)
+    ENDIF ()
+ENDIF ()
 
 PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)
 PKG_CHECK_MODULES(BROTLI_ENC libbrotlienc)
@@ -55,7 +80,7 @@ TARGET_LINK_LIBRARIES(picotls-minicrypto picotls-core)
 ADD_EXECUTABLE(test-minicrypto.t
     ${MINICRYPTO_LIBRARY_FILES}
     deps/picotest/picotest.c
-    t/picotls.c
+    ${CORE_TEST_FILES}
     t/minicrypto.c
     lib/asn1.c
     lib/pembase64.c
@@ -70,7 +95,7 @@ SET(TEST_EXES test-minicrypto.t)
 
 FIND_PACKAGE(OpenSSL)
 IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
-    MESSAGE(WARNING "Enabling OpenSSL support")
+    MESSAGE(STATUS "  Enabling OpenSSL support")
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
     ADD_LIBRARY(picotls-openssl lib/openssl.c)
     TARGET_LINK_LIBRARIES(picotls-openssl ${OPENSSL_LIBRARIES} picotls-core ${CMAKE_DL_LIBS})
@@ -92,7 +117,7 @@ IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
         lib/pembase64.c
         lib/ffx.c
         deps/picotest/picotest.c
-        t/picotls.c
+        ${CORE_TEST_FILES}
         t/openssl.c)
     SET_TARGET_PROPERTIES(test-openssl.t PROPERTIES COMPILE_FLAGS "-DPTLS_MEMORY_DEBUG=1")
     TARGET_LINK_LIBRARIES(test-openssl.t ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})

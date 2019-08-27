@@ -34,7 +34,13 @@ extern "C" {
 #include <inttypes.h>
 #include <sys/types.h>
 
-
+#if __GNUC__ >= 3
+#define PTLS_LIKELY(x) __builtin_expect(!!(x), 1)
+#define PTLS_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#else
+#define PTLS_LIKELY(x) (x)
+#define PTLS_UNLIKELY(x) (x)
+#endif
 
 #ifndef PTLS_FUZZ_HANDSHAKE
 #define PTLS_FUZZ_HANDSHAKE 0
@@ -557,6 +563,10 @@ typedef struct st_ptls_decompress_certificate_t {
  */
 PTLS_CALLBACK_TYPE(int, update_esni_key, ptls_t *tls, ptls_iovec_t secret, ptls_hash_algorithm_t *hash,
                    const void *hashed_esni_contents);
+/**
+ * return if USDT probes should be activated for the connection
+ */
+PTLS_CALLBACK_TYPE(int, is_traced, ptls_t *tls);
 
 /**
  * the configuration
@@ -667,6 +677,10 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_esni_key_t *update_esni_key;
+    /**
+     *
+     */
+    ptls_is_traced_t *is_traced;
     /**
      *
      */
@@ -1193,7 +1207,7 @@ ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx);
 /**
  *
  */
-void ptls_hexdump(char *dst, const void *src, size_t len);
+char *ptls_hexdump(char *dst, const void *src, size_t len);
 /**
  * the default get_time callback
  */
