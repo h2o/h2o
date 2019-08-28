@@ -116,7 +116,6 @@ static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
-static void init_is_traced(h2o_socket_t *sock);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.c.h"
@@ -1545,8 +1544,9 @@ static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, h2o_ebpf_address_
     }
 }
 
-static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
+int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
 {
+    h2o_socket_t *sock = _sock;
     struct sockaddr_storage ss;
     unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
     memset(key, 0, sizeof(*key));
@@ -1567,32 +1567,32 @@ static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
     return 1;
 }
 
-void init_is_traced(h2o_socket_t *sock)
+int h2o_socket_ebpf_lookup(int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
 {
     // try open map if not opened
     open_tracing_map(h2o_socket_get_loop(sock));
-    if (tracing_map_fd < 0) {
-        // map is not connected, fallback accepting probe
-        sock->_is_traced = 1;
-        return;
-    }
 
-    // define key/vals - we are only interrested in presence of the key, discard values
-    h2o_ebpf_map_key_t key;
-    void *vals = NULL;
-
-    // init key - fallback refusing probe if key can't be initialized
-    if (!init_ebpf_map_key(&key, sock)) {
-        sock->_is_traced = 0;
-        return;
-    }
+    // map is not connected, fallback accepting probe
+    if (tracing_map_fd < 0)
+        return 1;
 
     // lookup map for our key
-    sock->_is_traced = lookup_map(&key, &vals);
+    h2o_ebpf_map_key_t key;
+    if (!init_key(&key, cbdata))
+        return 0;
+    return lookup_map(&key, &vals);
 }
+
 #else
-void init_is_traced(h2o_socket_t *sock)
+
+int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
 {
-    sock->_is_traced = 1;
+    h2o_fatal("unimplemented");
 }
+
+int h2o_socket_ebpf_lookup(int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
+{
+    return 1;
+}
+
 #endif

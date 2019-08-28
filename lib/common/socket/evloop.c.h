@@ -441,7 +441,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     sock = &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
 
-    init_is_traced(sock);
+    sock->_is_traced = h2o_socket_ebpf_lookup(h2o_socket_ebpf_init_key, sock);
     return sock;
 }
 

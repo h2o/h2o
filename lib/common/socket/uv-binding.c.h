@@ -274,7 +274,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->handle = handle;
     sock->close_cb = close_cb;
     sock->handle->data = sock;
-    init_is_traced(&sock->super);
+    sock->super._is_traced = h2o_socket_ebpf_lookup(h2o_socket_ebpf_init_key, &sock->super);
     return &sock->super;
 }
 
