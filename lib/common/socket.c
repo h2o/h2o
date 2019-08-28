@@ -1528,17 +1528,17 @@ static int lookup_map(const void *key, const void *value)
     return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == 0; // return 1 if found, 0 otherwise
 }
 
-static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
+static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, h2o_ebpf_address_t *ea)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
-        memcpy(ip, &sin->sin_addr, sizeof(sin->sin_addr));
-        *port = sin->sin_port;
+        memcpy(ea->ip, &sin->sin_addr, sizeof(sin->sin_addr));
+        ea->port = sin->sin_port;
         return 1;
     } else if (sa->sa_family == AF_INET6) {
         struct sockaddr_in6 *sin = (void *)sa;
-        memcpy(ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
-        *port = sin->sin6_port;
+        memcpy(ea->ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
+        ea->port = sin->sin6_port;
         return 1;
     } else {
         return 0;
@@ -1554,11 +1554,11 @@ static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
     // fetch sock/peer name and socket type
     if (h2o_socket_getsockname(sock, (void *)&ss) == 0)
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->source.ip[0], &key->source.port))
+    if (!set_ebpf_map_key_tuples((void *)&ss, &key->local))
         return 0;
     if (h2o_socket_getpeername(sock, (void *)&ss) == 0)
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->destination.ip[0], &key->destination.port))
+    if (!set_ebpf_map_key_tuples((void *)&ss, &key->remote))
         return 0;
     if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0)
         return 0;

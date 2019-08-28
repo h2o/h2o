@@ -22,17 +22,15 @@
 #ifndef h2o__ebpf_h
 #define h2o__ebpf_h
 
-typedef struct h2o_ebpf_map_key_t {
+typedef struct st_h2o_ebpf_address_t {
+    uint8_t ip[16];
+    uint16_t port;
+} h2o_ebpf_address_t;
+
+typedef struct st_h2o_ebpf_map_key_t {
     uint8_t family;
     uint8_t protocol;
-    struct {
-        uint8_t ip[16];
-        uint16_t port;
-    } source;
-    struct {
-        uint8_t ip[16];
-        uint16_t port;
-    } destination;
+    h2o_ebpf_address_t local, remote;
 } h2o_ebpf_map_key_t;
 
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
