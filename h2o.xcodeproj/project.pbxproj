@@ -876,6 +876,7 @@
 		D081373D1FD40431004679DF /* least_conn.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = least_conn.c; sourceTree = "<group>"; };
 		D081373E1FD40431004679DF /* roundrobin.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = roundrobin.c; sourceTree = "<group>"; };
 		D08137411FD408C1004679DF /* balancer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balancer.h; sourceTree = "<group>"; };
+		E908A2A923163CB70039BCEE /* ebpf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ebpf.h; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1605,6 +1606,7 @@
 				10DA969B1CD2BF9000679165 /* cache.h */,
 				1024A3FD1D22546800EB13F1 /* cache_digests.h */,
 				105534D71A3C785000627ECB /* configurator.h */,
+				E908A2A923163CB70039BCEE /* ebpf.h */,
 				107D4D521B5B2412004A9B21 /* file.h */,
 				1044812D1BFD0FBE0007863F /* filecache.h */,
 				7D2DF4ED20297EE0004AD361 /* header.h */,
