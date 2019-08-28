@@ -76,8 +76,9 @@ typedef struct st_h2o_http2_priority_t {
 
 extern const h2o_http2_priority_t h2o_http2_default_priority;
 
-/* connection flow control window + alpha */
-#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920
+#define H2O_HTTP2_DEFAULT_OUTBUF_SIZE 81920 /* the target size of each write call; connection flow control window + alpha */
+#define H2O_HTTP2_DEFAULT_OUTBUF_SOFT_MAX_SIZE 524288 /* 512KB; stops reading if size exceeds this value */
+#define H2O_HTTP2_DEFAULT_OUTBUF_WRITE_TIMEOUT 60000  /* 60 seconds; close if write does not complete within the period */
 
 /* hpack */
 

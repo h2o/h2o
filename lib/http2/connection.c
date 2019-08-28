@@ -27,6 +27,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
+#include "../probes_.h"
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
@@ -51,6 +52,7 @@ __thread h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{16}, {H2O_HT
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
 static void initiate_graceful_shutdown(h2o_context_t *ctx);
+static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static void do_emit_writereq(h2o_http2_conn_t *conn);
@@ -142,12 +144,22 @@ static void on_idle_timeout(h2o_timer_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _timeout_entry, entry);
 
-    enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));
-    close_connection(conn);
+    if (conn->_write.buf_in_flight != NULL) {
+        close_connection_now(conn);
+    } else {
+        enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(H2O_STRLIT("idle timeout")));
+        close_connection(conn);
+    }
 }
 
 static void update_idle_timeout(h2o_http2_conn_t *conn)
 {
+    /* do nothing touch anything if write is in progress */
+    if (conn->_write.buf_in_flight != NULL) {
+        assert(h2o_timer_is_linked(&conn->_timeout_entry));
+        return;
+    }
+
     h2o_timer_unlink(&conn->_timeout_entry);
 
     /* always set idle timeout if TLS handshake is in progress */
@@ -156,10 +168,6 @@ static void update_idle_timeout(h2o_http2_conn_t *conn)
 
     /* no need to set timeout if pending requests exist */
     if (conn->num_streams.blocked_by_server != 0)
-        return;
-
-    /* no need to set timeout if write is in flight */
-    if (conn->_write.buf_in_flight != NULL)
         return;
 
 SetTimeout:
@@ -326,7 +334,7 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     }
 }
 
-static void close_connection_now(h2o_http2_conn_t *conn)
+void close_connection_now(h2o_http2_conn_t *conn)
 {
     h2o_http2_stream_t *stream;
 
@@ -497,7 +505,9 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 
-    /* handle request to send response */
+    h2o_probe_log_request(&stream->req, stream->stream_id);
+
+    /* send 400 if the request contains invalid header characters */
     if (ret != 0) {
         assert(ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
         /* fast forward the stream's state so that we can start sending the response */
@@ -507,6 +517,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         return 0;
     }
 
+    /* handle the request */
     if (stream->req._req_body.body == NULL) {
         execute_or_enqueue_request(conn, stream);
     } else {
@@ -1169,10 +1180,20 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     }
 }
 
+static size_t bytes_in_buf(h2o_http2_conn_t *conn)
+{
+    size_t size = conn->_write.buf->size;
+    if (conn->_write.buf_in_flight != 0)
+        size += conn->_write.buf_in_flight->size;
+    return size;
+}
+
 void h2o_http2_conn_request_write(h2o_http2_conn_t *conn)
 {
     if (conn->state == H2O_HTTP2_CONN_STATE_IS_CLOSING)
         return;
+    if (h2o_socket_is_reading(conn->sock) && bytes_in_buf(conn) >= H2O_HTTP2_DEFAULT_OUTBUF_SOFT_MAX_SIZE)
+        h2o_socket_read_stop(conn->sock);
     request_gathered_write(conn);
 }
 
@@ -1244,6 +1265,11 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     if (h2o_timer_is_linked(&conn->_write.timeout_entry))
         h2o_timer_unlink(&conn->_write.timeout_entry);
 
+    if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
+        if (!h2o_socket_is_reading(conn->sock) && bytes_in_buf(conn) < H2O_HTTP2_DEFAULT_OUTBUF_SOFT_MAX_SIZE)
+            h2o_socket_read_start(conn->sock, on_read);
+    }
+
 #if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2_CONN_STATE_OPEN) {
         if (conn->_write.buf->size != 0 || h2o_http2_scheduler_is_active(&conn->scheduler))
@@ -1304,7 +1330,8 @@ void do_emit_writereq(h2o_http2_conn_t *conn)
         h2o_socket_write(conn->sock, &buf, 1, on_write_complete);
         conn->_write.buf_in_flight = conn->_write.buf;
         h2o_buffer_init(&conn->_write.buf, &h2o_http2_wbuf_buffer_prototype);
-        update_idle_timeout(conn);
+        h2o_timer_unlink(&conn->_timeout_entry);
+        h2o_timer_link(conn->super.ctx->loop, H2O_HTTP2_DEFAULT_OUTBUF_WRITE_TIMEOUT, &conn->_timeout_entry);
     }
 
     /* close the connection if necessary */
@@ -1346,6 +1373,13 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
     assert(conn->sock != NULL && "it never becomes NULL, right?");
     return h2o_socket_get_ptls(conn->sock);
+}
+
+static int is_traced(h2o_conn_t *_conn)
+{
+    struct st_h2o_http2_conn_t *conn = (void *)_conn;
+    assert(conn->sock != NULL && "it never becomes NULL, right?");
+    return h2o_socket_is_traced(conn->sock);
 }
 
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
@@ -1444,8 +1478,9 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     static const h2o_conn_callbacks_t callbacks = {
         get_sockname, /* stringify address */
         get_peername, /* ditto */
-        push_path,    /* HTTP2 push */
         get_ptls,
+        is_traced,
+        push_path,    /* HTTP2 push */
         h2o_http2_get_debug_state, /* get debug state */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */

@@ -243,6 +243,12 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return quicly_get_tls(conn->h3.quic);
 }
 
+static int is_traced(h2o_conn_t *conn)
+{
+    /* TODO consult blah */
+    return 1;
+}
+
 static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
 {
     return h2o_iovec_init(H2O_STRLIT("TLSv1.3"));
@@ -1213,8 +1219,9 @@ SynFound : {
     static const h2o_conn_callbacks_t conn_callbacks = {
         get_sockname,
         get_peername,
-        NULL, /* push */
         get_ptls,
+        is_traced,
+        NULL, /* push */
         NULL, /* get debug state */
         {{
             {log_tls_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */

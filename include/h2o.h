@@ -810,13 +810,17 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
     /**
+     * returns picotls connection object used by the connection (or NULL if TLS is not used)
+     */
+    ptls_t *(*get_ptls)(h2o_conn_t *conn);
+    /**
+     * returns if the connection is traced
+     */
+    int (*is_traced)(h2o_conn_t *conn);
+    /**
      * optional (i.e. may be NULL) callback for server push
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len, int is_critical);
-    /**
-     * optional calldack that retruns picotls connection object used by the connection
-     */
-    ptls_t *(*get_ptls)(h2o_conn_t *_conn);
     /**
      * debug state callback (optional)
      */
@@ -1234,7 +1238,6 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, uns
  * setups accept context for redis SSL resumption
  */
 void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsigned expiration, const char *prefix);
-
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */

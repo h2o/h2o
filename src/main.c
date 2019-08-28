@@ -501,6 +501,14 @@ Exit:
     return ret;
 }
 
+static int tls_is_traced(ptls_is_traced_t *self, ptls_t *tls)
+{
+    h2o_socket_t *sock = *ptls_get_data_ptr(tls);
+    if (sock == NULL)
+        return 0;
+    return h2o_socket_is_traced(sock);
+}
+
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
                                               SSL_CTX *ssl_ctx)
 {
@@ -511,6 +519,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         &ptls_minicrypto_x25519,
 #endif
         &ptls_openssl_secp256r1, NULL};
+    static ptls_is_traced_t is_traced = {tls_is_traced};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
@@ -526,16 +535,29 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        &ptls_get_time,
                                        key_exchanges,
                                        ptls_openssl_cipher_suites,
-                                       {NULL, 0},
-                                       NULL,
-                                       &pctx->ch.super,
-                                       &pctx->ec.super,
-                                       &pctx->sc.super,
-                                       NULL,
-                                       0,
-                                       8192,
-                                       NULL,
-                                       1},
+                                       {NULL, 0},       /* certificates (filled later) */
+                                       NULL,            /* ESNI context (filled later) */
+                                       &pctx->ch.super, /* on_client_hello */
+                                       &pctx->ec.super, /* emit_certificate */
+                                       &pctx->sc.super, /* sign_certificate */
+                                       NULL,            /* verify_certificate */
+                                       0,               /* ticket_lifetime (initialized alongside encrypt_ticket) */
+                                       8192,            /* max_early_data_size */
+                                       NULL,            /* obsolete */
+                                       1,               /* require_dhe_on_psk */
+                                       0,               /* use_exporter */
+                                       0,               /* send_change_cipher_spec (FIXME set this?) */
+                                       0,               /* require_client_authentication */
+                                       0,               /* omit_end_of_early_data */
+                                       NULL,            /* encrypt_ticket (initialized later) */
+                                       NULL,            /* save_ticket (initialized later) */
+                                       NULL,            /* log_event */
+                                       NULL,            /* update_open_count */
+                                       NULL,            /* update_traffic_key */
+                                       NULL,            /* decompress_certificate */
+                                       NULL,            /* update_esni_key */
+                                       &is_traced,      /* is_traced */
+                                       NULL},           /* on_extension */
                                       {{on_client_hello_ptls}, listener},
                                       {{on_emit_certificate_ptls}, ssl_config}};
 
@@ -719,9 +741,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_options |= SSL_OP_NO_COMPRESSION;
 #endif
 
+#ifdef SSL_OP_NO_RENEGOTIATION
+    ssl_options |= SSL_OP_NO_RENEGOTIATION;
+#endif
+
     /* setup */
     ssl_ctx = SSL_CTX_new(SSLv23_server_method());
     SSL_CTX_set_options(ssl_ctx, ssl_options);
+
+    SSL_CTX_set_session_id_context(ssl_ctx, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
 
     setup_ecc_key(ssl_ctx);
     if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*certificate_file)->data.scalar) != 1) {
@@ -2501,6 +2529,9 @@ int main(int argc, char **argv)
 #if H2O_USE_MRUBY
                 printf(
                     "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
+#endif
+#if H2O_USE_DTRACE
+                printf("dtrace: YES\n");
 #endif
                 exit(0);
             case 'h':

@@ -39,6 +39,7 @@ INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(ExternalProject)
+INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -129,7 +130,6 @@ IF (WITH_CCACHE)
     SET_PROPERTY(GLOBAL PROPERTY RULE_LAUNCH_LINK ccache)
 ENDIF ()
 
-
 IF (OPENSSL_VERSION VERSION_LESS "1.0.2")
     MESSAGE(STATUS "*************************************************************************\n"
                 "   * OpenSSL 1.0.2 is required for HTTP/2 interoperability with web        *\n"
@@ -142,6 +142,12 @@ IF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
                 "   * using external cache.                                                 *\n"
                 "   *************************************************************************\n")
 ENDIF(OPENSSL_VERSION VERSION_EQUAL "1.1.0" AND OPENSSL_VERSION STRLESS "1.1.0g")
+
+CHECK_DTRACE(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d)
+OPTION(WITH_DTRACE "use USDT (userspace Dtrace probes)" ${HAVE_DTRACE})
+IF (WITH_DTRACE)
+    MESSAGE(STATUS "Enabling USDT support")
+ENDIF ()
 
 INCLUDE_DIRECTORIES(
     include
@@ -161,7 +167,8 @@ INCLUDE_DIRECTORIES(
     deps/picotls/include
     deps/quicly/include
     deps/yaml/include
-    deps/yoml)
+    deps/yoml
+    ${CMAKE_CURRENT_BINARY_DIR})
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -277,24 +284,16 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/strerror.c
     deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
-    deps/picotls/deps/micro-ecc/uECC.c
-    deps/picotls/deps/cifra/src/aes.c
     deps/picotls/deps/cifra/src/blockwise.c
-    deps/picotls/deps/cifra/src/chacha20.c
     deps/picotls/deps/cifra/src/chash.c
     deps/picotls/deps/cifra/src/curve25519.c
     deps/picotls/deps/cifra/src/drbg.c
     deps/picotls/deps/cifra/src/hmac.c
-    deps/picotls/deps/cifra/src/gcm.c
-    deps/picotls/deps/cifra/src/gf128.c
-    deps/picotls/deps/cifra/src/modes.c
-    deps/picotls/deps/cifra/src/poly1305.c
     deps/picotls/deps/cifra/src/sha256.c
-    deps/picotls/deps/cifra/src/sha512.c
     deps/picotls/lib/picotls.c
-    deps/picotls/lib/cifra.c
-    deps/picotls/lib/uecc.c
     deps/picotls/lib/openssl.c
+    deps/picotls/lib/cifra/random.c
+    deps/picotls/lib/cifra/x25519.c
     deps/quicly/lib/cc-reno.c
     deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
@@ -391,6 +390,20 @@ SET(LIB_SOURCE_FILES
     lib/http3/qpack.c
     lib/http3/common.c
     lib/http3/server.c)
+
+IF (WITH_DTRACE)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1 -DH2O_USE_DTRACE=1")
+    DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
+    DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/h2o-probes.d h2o)
+    LIST(APPEND LIB_SOURCE_FILES
+         ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.h
+         ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.h)
+    IF (DTRACE_USES_OBJFILE)
+        LIST(APPEND LIB_SOURCE_FILES
+             ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o
+             ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.o)
+    ENDIF ()
+ENDIF ()
 
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}

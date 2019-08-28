@@ -62,6 +62,7 @@ struct st_h2o_http1client_t {
     h2o_buffer_t *_body_buf_in_flight;
     unsigned _is_chunked : 1;
     unsigned _body_buf_is_done : 1;
+    unsigned _seen_at_least_one_chunk : 1;
 };
 
 static void close_client(struct st_h2o_http1client_t *client)
@@ -193,7 +194,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&client->super._timeout);
 
     if (err != NULL) {
-        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder)) {
+        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder) && client->_seen_at_least_one_chunk) {
             /*
              * if the peer closed after a full chunk, treat this
              * as if the transfer had complete, browsers appear to ignore
@@ -235,6 +236,8 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
             break;
         }
         inbuf->size -= sock->bytes_read - newsz;
+        if (inbuf->size > 0)
+            client->_seen_at_least_one_chunk = 1;
         cb_ret = client->super._cb.on_body(&client->super, errstr);
         if (client->state.res == STREAM_STATE_CLOSED) {
             close_response(client);
@@ -419,7 +422,7 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
 
     if (client->_is_chunked) {
         client->_is_chunked = 0;
-        h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n"));
+        h2o_iovec_t last = h2o_iovec_init(H2O_STRLIT("0\r\n\r\n"));
         client->super.bytes_written.body += last.len;
         client->super.bytes_written.total += last.len;
         h2o_socket_write(client->sock, &last, 1, on_whole_request_sent);
