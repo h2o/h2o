@@ -518,7 +518,7 @@ static void on_send_timeout(h2o_timer_t *entry)
     on_error_before_head(client, "I/O timeout (send)");
 }
 
-static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection,
+static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t proto, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection,
                                  h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
@@ -559,7 +559,9 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
     APPEND(method.base, method.len);
     buf.base[offset++] = ' ';
     APPEND(url.path.base, url.path.len);
-    APPEND_STRLIT(" HTTP/1.1\r\nhost: ");
+    buf.base[offset++] = ' ';
+    APPEND(proto.base, proto.len);
+    APPEND_STRLIT("\r\nhost: ");
     APPEND(url.authority.base, url.authority.len);
     buf.base[offset++] = '\r';
     buf.base[offset++] = '\n';
@@ -592,10 +594,12 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     h2o_iovec_t proxy_protocol = h2o_iovec_init(NULL, 0);
     int chunked = 0;
     h2o_iovec_t connection_header = h2o_iovec_init(NULL, 0);
+    h2o_iovec_t proto = h2o_iovec_init(H2O_STRLIT("HTTP/1.1"));
     h2o_httpclient_properties_t props = {
         &proxy_protocol,
         &chunked,
         &connection_header,
+        &proto,
     };
     h2o_iovec_t method;
     h2o_url_t url;
@@ -615,7 +619,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     size_t reqbufcnt = 0;
     if (props.proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props.proxy_protocol;
-    h2o_iovec_t header = build_request(client, method, url, *props.connection_header, headers, num_headers);
+    h2o_iovec_t header = build_request(client, *props.proto, method, url, *props.connection_header, headers, num_headers);
     reqbufs[reqbufcnt++] = header;
     client->super.bytes_written.header = header.len;
 
