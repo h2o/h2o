@@ -358,7 +358,7 @@ struct st_h2o_ebpf_map_key_t;
 /**
  * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.
  */
-int h2o_socket_ebpf_lookup(int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
 /**
  * callback for initializing the ebpf lookup key from `h2o_socket_t`
  */

@@ -1567,10 +1567,10 @@ int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
     return 1;
 }
 
-int h2o_socket_ebpf_lookup(int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     // try open map if not opened
-    open_tracing_map(h2o_socket_get_loop(sock));
+    open_tracing_map(loop);
 
     // map is not connected, fallback accepting probe
     if (tracing_map_fd < 0)
@@ -1578,6 +1578,7 @@ int h2o_socket_ebpf_lookup(int (*init_key)(struct st_h2o_ebpf_map_key_t *key, vo
 
     // lookup map for our key
     h2o_ebpf_map_key_t key;
+    void *vals = NULL;
     if (!init_key(&key, cbdata))
         return 0;
     return lookup_map(&key, &vals);
@@ -1590,7 +1591,7 @@ int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
     h2o_fatal("unimplemented");
 }
 
-int h2o_socket_ebpf_lookup(int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
+int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     return 1;
 }
