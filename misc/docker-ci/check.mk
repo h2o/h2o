@@ -3,7 +3,7 @@ SRC_DIR=/h2o
 CHECK_MK=$(SRC_DIR)/misc/docker-ci/check.mk
 CMAKE_ARGS=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
-DOCKER_RUN_OPTS=-v `pwd`:$(SRC_DIR) -e TRAVIS --add-host=127.0.0.1.xip.io:127.0.0.1 -it
+DOCKER_RUN_OPTS=--privileged -v `pwd`:$(SRC_DIR) -e TRAVIS --add-host=127.0.0.1.xip.io:127.0.0.1 -it
 
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f /h2o/misc/docker-ci/check.mk _check
@@ -19,6 +19,9 @@ ossl1.1.1:
 
 _check:
 	mkdir -p build
+	sudo mount -t tmpfs tmpfs build
+	sudo chown -R ci:ci build
+	sudo chmod 0755 build
 	$(MAKE) -f $(CHECK_MK) -C build _do-check CMAKE_ARGS=$(CMAKE_ARGS)
 
 _do-check:
