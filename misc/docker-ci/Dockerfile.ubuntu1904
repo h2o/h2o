@@ -25,6 +25,7 @@ RUN apt-get install --yes \
 	netcat-openbsd \
 	nghttp2-client \
 	php-cgi \
+	pkgconf \
 	redis-server \
 	ruby-dev \
 	sudo \
@@ -58,7 +59,8 @@ RUN git clone https://github.com/iovisor/bcc.git && \
 	cd build && \
 	cmake -DCMAKE_INSTALL_PREFIX=/usr .. && \
 	make && \
-	make install
+	make install && \
+	make clean
 RUN git clone https://github.com/kazuho/bpftrace.git && \
 	cd bpftrace && \
 	git checkout kazuho/usdt-attach-all-locations && \
@@ -66,7 +68,8 @@ RUN git clone https://github.com/kazuho/bpftrace.git && \
 	cd build && \
 	cmake .. && \
 	make && \
-	make install
+	make install && \
+	make clean
 
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
