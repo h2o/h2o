@@ -17,6 +17,9 @@ ossl1.1.0:
 ossl1.1.1:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f /h2o/misc/docker-ci/check.mk _ossl1.1.1
 
+dtrace:
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f /h2o/misc/docker-ci/check.mk _dtrace
+
 _check:
 	mkdir -p build
 	sudo mount -t tmpfs tmpfs build
@@ -35,6 +38,9 @@ _ossl1.1.0:
 
 _ossl1.1.1:
 	$(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1
+
+_dtrace:
+	UNSAFE_TESTS=1 $(MAKE) -f $(CHECK_MK) _check
 
 _fuzz:
 	$(FUZZ_ASAN) CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON

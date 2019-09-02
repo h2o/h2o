@@ -39,3 +39,12 @@ matrix:
       before_install: *bi
       script:
         - make -f misc/docker-ci/check.mk ossl1.1.1
+    - os: linux
+      sudo: required
+      services:
+        - docker
+      env:
+        - label=dtrace
+      before_install: *bi
+      script:
+        - make -f misc/docker-ci/check.mk dtrace CONTAINER_NAME=kazuho/h2o-ci:ubuntu1904
