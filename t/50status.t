@@ -114,10 +114,10 @@ EOT
         my ($server, $port, $tls_port) = $setup->();
 
         # error by TLS minimum version
-        `curl --silent --insecure --tlsv1.1           -o /dev/stderr https://127.0.0.1:$tls_port/`;
+        `curl --silent --insecure --tlsv1.1 --tls-max 1.1           -o /dev/stderr https://127.0.0.1:$tls_port/`;
         # alpn
-        `curl --silent --insecure --tlsv1.2 --http1.1 -o /dev/stderr https://127.0.0.1:$tls_port/`;
-        `curl --silent --insecure --tlsv1.2 --http2   -o /dev/stderr https://127.0.0.1:$tls_port/`;
+        `curl --silent --insecure --tlsv1.2 --tls-max 1.2 --http1.1 -o /dev/stderr https://127.0.0.1:$tls_port/`;
+        `curl --silent --insecure --tlsv1.2 --tls-max 1.2 --http2   -o /dev/stderr https://127.0.0.1:$tls_port/`;
 
         my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=events,ssl 2>&1 > /dev/null`;
         my $jresp = decode_json($resp);

@@ -168,6 +168,7 @@ sub spawn_server {
 sub spawn_h2o {
     my ($conf) = @_;
     my @opts;
+    my $max_ssl_version;
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
@@ -178,6 +179,7 @@ sub spawn_h2o {
     if (ref $conf eq 'HASH') {
         @opts = @{$conf->{opts}}
             if $conf->{opts};
+        $max_ssl_version = $conf->{max_ssl_version} || undef;
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
@@ -191,6 +193,7 @@ listen:
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
+    @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
 EOT
 
     my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
