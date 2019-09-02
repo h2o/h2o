@@ -12,13 +12,15 @@ fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _fuzz
 
 ossl1.1.0:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _ossl1.1.0
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0'
 
 ossl1.1.1:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _ossl1.1.1
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1'
 
 dtrace:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) make -f $(SRC_DIR)/misc/docker-ci/check.mk _dtrace
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env UNSAFE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
 _check:
 	mkdir -p build
@@ -32,15 +34,6 @@ _do-check:
 	make all
 	make check
 	sudo -E make check-as-root
-
-_ossl1.1.0:
-	$(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0
-
-_ossl1.1.1:
-	$(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1
-
-_dtrace:
-	UNSAFE_TESTS=1 $(MAKE) -f $(CHECK_MK) _check
 
 _fuzz:
 	$(FUZZ_ASAN) CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON
