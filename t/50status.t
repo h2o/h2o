@@ -108,7 +108,8 @@ listen:
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
-    minimum-version: tlsv1.2
+    min-version: tlsv1.2
+    max-version: tlsv1.2
 EOT
         return ($server, $port, $tls_port);
     };
@@ -142,9 +143,7 @@ EOT
         my ($server, $port, $tls_port) = $setup->();
 
         # full handshake
-        sleep 0.5;
         `openssl s_client -no_ticket -sess_out $tempdir/session -connect 127.0.0.1:$tls_port < /dev/null`;
-        sleep 0.5;
         # resume handshake
         `openssl s_client -no_ticket -sess_in $tempdir/session  -connect 127.0.0.1:$tls_port < /dev/null`;
 
