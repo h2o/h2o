@@ -19,7 +19,7 @@ hosts:
       /s:
         status: ON
 EOT
-
+    sleep 1; # wait for the spawn checker to disconnect
     my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$server->{port}/s/json 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     my @requests = @{$jresp->{'requests'}};
