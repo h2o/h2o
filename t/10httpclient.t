@@ -3,11 +3,11 @@ use warnings;
 use Test::More;
 use t::Util;
 
-my $fn = bindir() . "/examples-httpclient";
+my $progname = "h2o-httpclient";
+my $progpath = bindir() . "/$progname";
+plan skip_all => "$progname not found"
+    unless -x $progpath;
 
-plan skip_all => 'http1client not found'
-    unless -x $fn;
-
-is(system("$fn http://kazuhooku.com > /dev/null"), 0);
+is(system("$progpath http://kazuhooku.com > /dev/null"), 0);
 
 done_testing;
