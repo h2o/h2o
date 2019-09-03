@@ -41,6 +41,7 @@ matrix:
         - make -f misc/docker-ci/check.mk ossl1.1.1
     - os: linux
       sudo: required
+      dist: bionic
       services:
         - docker
       env:
