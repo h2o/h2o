@@ -3,6 +3,7 @@ use warnings;
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
+use Time::HiRes qw(sleep);
 use t::Util;
 
 plan skip_all => "could not find openssl"
@@ -39,6 +40,7 @@ subtest "file" => sub {
 num-threads: 1
 EOT
     sub {
+        sleep 1; # wait for tickets file to be loaded
         is test(), "New";
         is test(), "Reused";
         is test(), "Reused";
@@ -49,7 +51,7 @@ EOT
   ticket-file: $tickets_file
 EOT
     sub {
-        sleep 1;
+        sleep 1; # wait for tickets file to be loaded
         is test(), "Reused";
     });
 };
@@ -91,8 +93,11 @@ subtest "memcached" => sub {
 num-threads: 1
 EOT
         spawn_with($conf, sub {
+            sleep 1;
             is test(), "New";
+            sleep 0.5;
             is test(), "Reused";
+            sleep 0.5;
             is test(), "Reused";
         });
         spawn_with($conf, sub {
