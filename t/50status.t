@@ -86,6 +86,9 @@ EOT
 };
 
 subtest "ssl stats" => sub {
+    plan skip_all => "openssl too old"
+        unless (() = `openssl s_client -help 2>&1` =~ /^ -(tls1_1|tls1_2|alpn)\s/mg) == 3;
+
     my $setup = sub {
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $server = spawn_h2o_raw(<< "EOT", [$port]); # omit tls_port check which causes a handshake
@@ -111,22 +114,11 @@ EOT
     };
 
     subtest 'basic' => sub {
-        plan skip_all => "openssl too old"
-            unless (() = `openssl s_client -h 2>&1` =~ /^ -(tls1_1|tls1_2|alpn)\s/mg) == 3;
         my ($server, $port, $tls_port) = $setup->();
 
-        my $build_vers = sub {
-            my @sslvers = `openssl s_client -h 2>&1` =~ /^ -(tls[0-9_]+)/mg;
-            sub {
-                my $usever = shift;
-                die "$usever not supported by s_client, supported versions are: @{[join ', ', @sslvers]}"
-                    unless grep { $_ eq $usever } @sslvers;
-                return join "", "-$usever", map { " -no_$_" } grep { $_ ne $usever } @sslvers;
-            };
-        }->();
         my $build_req = sub {
             my ($tlsver, $alpn) = @_;
-            "(echo GET / HTTP/1.0; echo) | openssl s_client " . $build_vers->($tlsver) . " -alpn $alpn -connect 127.0.0.1:$tls_port > /dev/null";
+            "(echo GET / HTTP/1.0; echo) | openssl s_client -$tlsver -alpn $alpn -connect 127.0.0.1:$tls_port > /dev/null";
         };
 
         # error by TLS minimum version
@@ -150,7 +142,9 @@ EOT
         my ($server, $port, $tls_port) = $setup->();
 
         # full handshake
+        sleep 0.5;
         `openssl s_client -no_ticket -sess_out $tempdir/session -connect 127.0.0.1:$tls_port < /dev/null`;
+        sleep 0.5;
         # resume handshake
         `openssl s_client -no_ticket -sess_in $tempdir/session  -connect 127.0.0.1:$tls_port < /dev/null`;
 
