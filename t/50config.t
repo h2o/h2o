@@ -125,10 +125,17 @@ EOT
         subtest 'nonexist' => sub {
             local $@;
             delete local $ENV{FOO};
+            my $server;
             eval {
-                $spawn->();
+                $server = $spawn->();
             };
-            ok $@;
+            if ($@) {
+                pass("failed to start");
+            } else {
+                sleep 1;
+                my ($stderr, $stdout) = run_prog("curl --silent --dump-header /dev/stdout http://127.0.0.1:$server->{port}/");
+                is $stdout, "", "server should be down due to misconfiguration";
+            }
         };
     };
 };
