@@ -36,6 +36,7 @@ subtest "file" => sub {
   mode: ticket
   ticket-store: file
   ticket-file: $tickets_file
+num-threads: 1
 EOT
     sub {
         is test(), "New";
@@ -59,6 +60,7 @@ subtest "no-tickets-in-file" => sub {
   mode: ticket
   ticket-store: file
   ticket-file: $tickets_file
+num-threads: 1
 EOT
     sub {
         is test(), "New";
@@ -86,6 +88,7 @@ subtest "memcached" => sub {
     host: 127.0.0.1
     port: $memc_port
     protocol: $memc_proto
+num-threads: 1
 EOT
         spawn_with($conf, sub {
             is test(), "New";
