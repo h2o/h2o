@@ -100,16 +100,23 @@ sleep 1;
 
 run_with_curl($server, sub {
     my ($proto, $port, $cmd, $http_ver) = @_;
-    # access
-    my ($headers, $body) = run_prog("$cmd --silent --dump-header silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
-    is $body, "hello\n";
-    like $headers, qr{^HTTP/[0-9\.]+ 200 }s;
-    # read the trace
-    my $trace;
-    do {
-        sleep 1;
-    } while (($trace = $read_trace->()) eq '');
-    # check
+    my $get_trace = sub {
+        # access
+        my ($headers, $body) = run_prog("$cmd --silent --dump-header silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+        is $body, "hello\n";
+        like $headers, qr{^HTTP/[0-9\.]+ 200 }s;
+        # read the trace
+        my $trace;
+        do {
+            sleep 1;
+        } while (($trace = $read_trace->()) eq '');
+        $trace;
+    };
+    # Warm up so that constant elements of HPACK static table gets paged in.  Bpftrace can only log information that is available in
+    # the main memory; see https://lists.linuxfoundation.org/pipermail/iovisor-dev/2017-September/001035.html
+    $get_trace->() if $^O eq 'linux' && $http_ver == 0x200;
+    # get trace
+    my $trace = $get_trace->();
     my ($ver_major, $ver_minor) = (int($http_ver / 256), $http_ver % 256);
     like $trace, qr{^\*{3} \d+:1 version $ver_major\.$ver_minor \*{3}$}m;
     like $trace, qr{^:method: GET$}m;
