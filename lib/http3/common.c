@@ -379,7 +379,8 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
         if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
                                                                  sa, salen, ttl, packets, num_packets))
             return;
-        /* non-authenticating 1-RTT packets are potentially stateless resets (FIXME handle them) */
+        /* non-authenticating 1-RTT packets are potentially stateless resets (FIXME handle them, note that we need to use a hashdos-
+         * resistant hash map that also meets constant-time comparison requirements) */
         return;
     }
 
