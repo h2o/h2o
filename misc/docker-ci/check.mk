@@ -33,7 +33,6 @@ _do-check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.
 	make all
 	make check
-	sudo -E make check-as-root
 
 _fuzz:
 	$(FUZZ_ASAN) CC=clang CXX=clang++ $(MAKE) -f $(CHECK_MK) _check CMAKE_ARGS=-DBUILD_FUZZER=ON

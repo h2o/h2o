@@ -6,12 +6,13 @@ use POSIX ":sys_wait_h";
 use Test::More;
 use t::Util;
 
+run_as_root();
+
 plan skip_all => 'dtrace support is off'
     unless server_features()->{dtrace};
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
-plan skip_all => 'test requires root privileges'
-    unless $< == 0;
+
 if ($^O eq 'linux') {
     plan skip_all => 'bpftrace not found'
         unless prog_exists('bpftrace');
