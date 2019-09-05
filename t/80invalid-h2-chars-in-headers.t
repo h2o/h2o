@@ -14,12 +14,12 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 EOT
 
-my $resp = `nghttp -v http://127.0.0.1:$server->{'port'}/ -H 'h\rost: host.example.com' 2>&1`;
+my $resp = `nghttp -v http://127.0.0.1:$server->{'port'}/ -H 'h ost: host.example.com' 2>&1`;
 like $resp, qr{.*error_code=NO_ERROR.*}, "No protocol error for a bogus header name";
 like $resp, qr{.*:status: 400}, "400 bad headers sent";
 like $resp, qr{found an invalid character in header name}, "Found expected error message";
 
-$resp = `nghttp -v http://127.0.0.1:$server->{'port'}/ -H 'host: host.\rexample.com' 2>&1`;
+$resp = `nghttp -v http://127.0.0.1:$server->{'port'}/ -H 'foo: host.\x11example.com' 2>&1`;
 like $resp, qr{.*error_code=NO_ERROR.*}, "No protocol error for a bogus header value";
 like $resp, qr{.*:status: 400}, "400 bad headers sent";
 like $resp, qr{found an invalid character in header value}, "Found expected error message";
@@ -37,7 +37,7 @@ like $resp, qr{.*error_code=PROTOCOL_ERROR.*}, "Error for an invalid pseudo-head
 $resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.example.com' -H'bl\ah:1' -H':badpseudo:2' 2>&1`;
 like $resp, qr{.*error_code=PROTOCOL_ERROR.*}, "Protocol error for an invalid pseudo-header, even when a bad header was present";
 
-$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'host: host.उदाहरण.com' 2>&1`;
+$resp = `nghttp -nv http://127.0.0.1:$server->{'port'}/test/ -H 'foo: host.उदाहरण.com' 2>&1`;
 like $resp, qr{.*error_code=NO_ERROR.*}, "No error for utf-8 in value";
 
 done_testing();

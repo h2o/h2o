@@ -19,7 +19,7 @@ hosts:
       /s:
         status: ON
 EOT
-
+    sleep 1; # wait for the spawn checker to disconnect
     my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$server->{port}/s/json 2>&1 > /dev/null`;
     my $jresp = decode_json("$resp");
     my @requests = @{$jresp->{'requests'}};
@@ -86,6 +86,9 @@ EOT
 };
 
 subtest "ssl stats" => sub {
+    plan skip_all => "openssl too old"
+        unless (() = `openssl s_client -help 2>&1` =~ /^ -(tls1_1|tls1_2|alpn)\s/mg) == 3;
+
     my $setup = sub {
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
         my $server = spawn_h2o_raw(<< "EOT", [$port]); # omit tls_port check which causes a handshake
@@ -105,7 +108,8 @@ listen:
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
-    minimum-version: tlsv1.2
+    min-version: tlsv1.2
+    max-version: tlsv1.2
 EOT
         return ($server, $port, $tls_port);
     };
@@ -113,11 +117,16 @@ EOT
     subtest 'basic' => sub {
         my ($server, $port, $tls_port) = $setup->();
 
+        my $build_req = sub {
+            my ($tlsver, $alpn) = @_;
+            "(echo GET / HTTP/1.0; echo) | openssl s_client -$tlsver -alpn $alpn -connect 127.0.0.1:$tls_port > /dev/null";
+        };
+
         # error by TLS minimum version
-        `curl --silent --insecure --tlsv1.1           -o /dev/stderr https://127.0.0.1:$tls_port/`;
+        system $build_req->('tls1_1', 'http/1.1');
         # alpn
-        `curl --silent --insecure --tlsv1.2 --http1.1 -o /dev/stderr https://127.0.0.1:$tls_port/`;
-        `curl --silent --insecure --tlsv1.2 --http2   -o /dev/stderr https://127.0.0.1:$tls_port/`;
+        system $build_req->('tls1_2', 'http/1.1');
+        system $build_req->('tls1_2', 'h2');
 
         my $resp = `curl --silent -o /dev/stderr http://127.0.0.1:$port/s/json?show=events,ssl 2>&1 > /dev/null`;
         my $jresp = decode_json($resp);
