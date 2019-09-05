@@ -20,7 +20,7 @@ ossl1.1.1:
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1'
 
 dtrace:
-	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env UNSAFE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
+	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) env DTRACE_TESTS=1 make -f $(SRC_DIR)/misc/docker-ci/check.mk _check
 
 _check:
 	mkdir -p build

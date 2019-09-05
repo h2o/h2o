@@ -17,8 +17,8 @@ if ($^O eq 'linux') {
     plan skip_all => 'bpftrace not found'
         unless prog_exists('bpftrace');
     # NOTE: the test is likely to depend on https://github.com/iovisor/bpftrace/pull/864
-    plan skip_all => "skipping bpftrace tests (setenv UNSAFE_TESTS=1 to run them)"
-        unless $ENV{UNSAFE_TESTS};
+    plan skip_all => "skipping bpftrace tests (setenv DTRACE_TESTS=1 to run them)"
+        unless $ENV{DTRACE_TESTS};
 } else {
     plan skip_all => 'dtrace not found'
         unless prog_exists('dtrace');
