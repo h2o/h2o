@@ -71,6 +71,9 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
+#define H2O_SESSID_CTX ((const uint8_t*)"h2o")
+#define H2O_SESSID_CTX_LEN (sizeof("h2o") - 1)
+
 typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
@@ -108,6 +111,11 @@ struct st_h2o_socket_t {
      * total bytes written (above the TLS layer)
      */
     size_t bytes_written;
+    /**
+     * boolean flag to indicate if sock is being traced
+     */
+    int _is_traced;
+
     struct {
         void (*cb)(void *data);
         void *data;
@@ -268,6 +276,7 @@ static h2o_iovec_t h2o_socket_log_ssl_session_reused(h2o_socket_t *sock, h2o_mem
 static h2o_iovec_t h2o_socket_log_ssl_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 
 /**
  * compares socket addresses
@@ -340,6 +349,10 @@ void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
  * registers the protocol list to be used for NPN
  */
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
+/**
+ * helper to check if socket is to be traced according to eBPF map
+ */
+static int h2o_socket_is_traced(h2o_socket_t *sock);
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
@@ -403,6 +416,11 @@ inline int h2o_sliding_counter_is_running(h2o_sliding_counter_t *counter)
 inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t now)
 {
     counter->cur.start_at = now;
+}
+
+inline int h2o_socket_is_traced(h2o_socket_t *sock)
+{
+    return sock->_is_traced;
 }
 
 #ifdef __cplusplus

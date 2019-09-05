@@ -33,6 +33,8 @@ unlink "$tempdir/session";
 
 subtest "early-data" => sub {
     subtest "success" => sub {
+        plan skip_all => "faketime not found"
+            unless system("which faketime > /dev/null 2>&1") == 0;
         my $guard = spawn_server(qw(-i t/assets/hello.txt -l), "$tempdir/events");
         my $resp = `$cli -s $tempdir/session 127.0.0.1 $port`;
         is $resp, "hello";

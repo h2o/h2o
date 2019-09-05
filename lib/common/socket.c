@@ -37,6 +37,7 @@
 #include "picotls.h"
 #endif
 #include "h2o/socket.h"
+#include "h2o/multithread.h"
 
 #if defined(__APPLE__) && defined(__clang__)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -115,6 +116,7 @@ static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
+static void init_is_traced(h2o_socket_t *sock);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.c.h"
@@ -211,21 +213,14 @@ static long ctrl_bio(BIO *b, int cmd, long num, void *ptr)
 
 static void setup_bio(h2o_socket_t *sock)
 {
-    static BIO_METHOD *bio_methods = NULL;
-    if (bio_methods == NULL) {
-        static pthread_mutex_t init_lock = PTHREAD_MUTEX_INITIALIZER;
-        pthread_mutex_lock(&init_lock);
-        if (bio_methods == NULL) {
-            BIO_METHOD *biom = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
-            BIO_meth_set_write(biom, write_bio);
-            BIO_meth_set_read(biom, read_bio);
-            BIO_meth_set_puts(biom, puts_bio);
-            BIO_meth_set_ctrl(biom, ctrl_bio);
-            __sync_synchronize();
-            bio_methods = biom;
-        }
-        pthread_mutex_unlock(&init_lock);
-    }
+    static BIO_METHOD *volatile bio_methods = NULL;
+    H2O_MULTITHREAD_ONCE({
+        bio_methods = BIO_meth_new(BIO_TYPE_FD, "h2o_socket");
+        BIO_meth_set_write(bio_methods, write_bio);
+        BIO_meth_set_read(bio_methods, read_bio);
+        BIO_meth_set_puts(bio_methods, puts_bio);
+        BIO_meth_set_ctrl(bio_methods, ctrl_bio);
+    });
 
     BIO *bio = BIO_new(bio_methods);
     if (bio == NULL)
@@ -942,6 +937,8 @@ int32_t h2o_socket_getport(struct sockaddr *sa)
 static void create_ossl(h2o_socket_t *sock)
 {
     sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
+    /* set app data to be used in h2o_socket_ssl_new_session_cb */
+    SSL_set_app_data(sock->ssl->ossl, sock);
     setup_bio(sock);
 }
 
@@ -966,6 +963,26 @@ static SSL_SESSION *on_async_resumption_get(SSL *ssl,
         assert(!"FIXME");
         return NULL;
     }
+}
+
+int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess)
+{
+    h2o_socket_t *sock = (h2o_socket_t *)SSL_get_app_data(s);
+    assert(sock != NULL);
+    assert(sock->ssl != NULL);
+
+    if (!SSL_is_server(s) && sock->ssl->handshake.client.session_cache != NULL
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x1010100fL
+        && SSL_SESSION_is_resumable(sess)
+#endif
+    ) {
+        h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
+                      sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
+                      h2o_iovec_init(sess, 1));
+        return 1; /* retain ref count */
+    }
+
+    return 0; /* drop ref count */
 }
 
 static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
@@ -1023,16 +1040,6 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
-    /* set ssl session into the cache */
-    if (sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl) && sock->ssl->handshake.client.session_cache != NULL) {
-        if (err == NULL || err == h2o_socket_error_ssl_cert_name_mismatch) {
-            SSL_SESSION *session = SSL_get1_session(sock->ssl->ossl);
-            h2o_cache_set(sock->ssl->handshake.client.session_cache, h2o_now(h2o_socket_get_loop(sock)),
-                          sock->ssl->handshake.client.session_cache_key, sock->ssl->handshake.client.session_cache_key_hash,
-                          h2o_iovec_init(session, 1));
-        }
-    }
-
     h2o_socket_cb handshake_cb = sock->ssl->handshake.cb;
     sock->_cb.write = NULL;
     sock->ssl->handshake.cb = NULL;
@@ -1074,6 +1081,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
                 ptls_t *ptls = ptls_new(ptls_ctx, 1);
                 if (ptls == NULL)
                     h2o_fatal("no memory");
+                *ptls_get_data_ptr(ptls) = sock;
                 ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
                 if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && wbuf.off != 0) {
                     sock->ssl->ptls = ptls;
@@ -1308,18 +1316,8 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
 
 static int get_ptls_index(void)
 {
-    static int index = -1;
-
-    if (index == -1) {
-        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-        pthread_mutex_lock(&mutex);
-        if (index == -1) {
-            index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
-            assert(index != -1);
-        }
-        pthread_mutex_unlock(&mutex);
-    }
-
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL); });
     return index;
 }
 
@@ -1344,14 +1342,8 @@ static void on_dispose_ssl_ctx_session_cache(void *parent, void *ptr, CRYPTO_EX_
 
 static int get_ssl_session_cache_index(void)
 {
-    static int index = -1;
-    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-    pthread_mutex_lock(&mutex);
-    if (index == -1) {
-        index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_session_cache);
-        assert(index != -1);
-    }
-    pthread_mutex_unlock(&mutex);
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, on_dispose_ssl_ctx_session_cache); });
     return index;
 }
 
@@ -1485,3 +1477,122 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
     /* recalc average */
     counter->average = counter->prev.sum / (sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]));
 }
+
+#if H2O_USE_DTRACE && defined(__linux__)
+#include <linux/bpf.h>
+#include <linux/unistd.h>
+#include "h2o-probes.h"
+#include "h2o/ebpf.h"
+#include <sys/stat.h>
+
+static __thread int tracing_map_fd = -1;
+static __thread uint64_t tracing_map_last_attempt = 0;
+
+static void open_tracing_map(h2o_loop_t *loop)
+{
+    // only check every second
+    uint64_t now = h2o_now(loop);
+    if (tracing_map_last_attempt - now < 1000)
+        return;
+
+    tracing_map_last_attempt = now;
+
+    // check if map exists at path
+    struct stat s;
+    if (stat(&H2O_EBPF_MAP_PATH[0], &s) == -1) {
+        // map path unavailable, cleanup fd if needed and leave
+        if (tracing_map_fd >= 0) {
+            close(tracing_map_fd);
+            tracing_map_fd = -1;
+        }
+        return;
+    }
+
+    if (tracing_map_fd >= 0)
+        return; // map still exists and we have a fd
+
+    // map exists, try connect
+    union bpf_attr attr;
+    memset(&attr, 0, sizeof(attr));
+    attr.pathname = (uint64_t)&H2O_EBPF_MAP_PATH[0];
+    tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
+}
+
+static int lookup_map(const void *key, const void *value)
+{
+    union bpf_attr attr;
+    memset(&attr, 0, sizeof(attr));
+    attr.map_fd = tracing_map_fd;
+    attr.key = (uint64_t)key;
+    attr.value = (uint64_t)value;
+    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == 0; // return 1 if found, 0 otherwise
+}
+
+static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
+{
+    if (sa->sa_family == AF_INET) {
+        struct sockaddr_in *sin = (void *)sa;
+        memcpy(ip, &sin->sin_addr, sizeof(sin->sin_addr));
+        *port = sin->sin_port;
+        return 1;
+    } else if (sa->sa_family == AF_INET6) {
+        struct sockaddr_in6 *sin = (void *)sa;
+        memcpy(ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
+        *port = sin->sin6_port;
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
+{
+    struct sockaddr_storage ss;
+    unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
+    memset(key, 0, sizeof(*key));
+
+    // fetch sock/peer name and socket type
+    if (h2o_socket_getsockname(sock, (void *)&ss) == 0)
+        return 0;
+    if (!set_ebpf_map_key_tuples((void *)&ss, &key->source.ip[0], &key->source.port))
+        return 0;
+    if (h2o_socket_getpeername(sock, (void *)&ss) == 0)
+        return 0;
+    if (!set_ebpf_map_key_tuples((void *)&ss, &key->destination.ip[0], &key->destination.port))
+        return 0;
+    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0)
+        return 0;
+    key->family = ss.ss_family == AF_INET6 ? 6 : 4;
+    key->protocol = sock_type;
+    return 1;
+}
+
+void init_is_traced(h2o_socket_t *sock)
+{
+    // try open map if not opened
+    open_tracing_map(h2o_socket_get_loop(sock));
+    if (tracing_map_fd < 0) {
+        // map is not connected, fallback accepting probe
+        sock->_is_traced = 1;
+        return;
+    }
+
+    // define key/vals - we are only interrested in presence of the key, discard values
+    h2o_ebpf_map_key_t key;
+    void *vals = NULL;
+
+    // init key - fallback refusing probe if key can't be initialized
+    if (!init_ebpf_map_key(&key, sock)) {
+        sock->_is_traced = 0;
+        return;
+    }
+
+    // lookup map for our key
+    sock->_is_traced = lookup_map(&key, &vals);
+}
+#else
+void init_is_traced(h2o_socket_t *sock)
+{
+    sock->_is_traced = 1;
+}
+#endif

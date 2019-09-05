@@ -18,6 +18,7 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
     cipher-suite: AES128-SHA
+    max-version: TLSv1.2
 hosts:
   default:
     paths:
