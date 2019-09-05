@@ -712,8 +712,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
     }
     if (max_version != NULL) {
-        if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0)
+        if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0) {
+#ifdef SSL_OP_NO_TLSv1_3
+            ssl_options |= SSL_OP_NO_TLSv1_3;
+#endif
             use_picotls = 0;
+        }
     }
     if (ocsp_update_interval_node != NULL) {
         if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)

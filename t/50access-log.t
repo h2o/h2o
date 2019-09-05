@@ -18,7 +18,7 @@ sub doit {
     $args = { format => $args }
         unless ref $args;
 
-    my $server = spawn_h2o(<< "EOT");
+    my $server = spawn_h2o({conf => <<"EOT", max_ssl_version => 'TLSv1.2'});
 ssl-session-resumption:
   mode: cache
   cache-store: internal

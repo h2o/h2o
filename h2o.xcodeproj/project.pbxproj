@@ -712,7 +712,6 @@
 		10583BE41AE5A22D004A3AD6 /* install.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = install.mt; sourceTree = "<group>"; };
 		10583BE61AE5A322004A3AD6 /* clang-format-all.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = "clang-format-all.sh"; sourceTree = "<group>"; };
 		10583BE71AE5A322004A3AD6 /* install-perl-module.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "install-perl-module.pl"; sourceTree = "<group>"; };
-		10583BE81AE5A330004A3AD6 /* libressl.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = libressl.mk; sourceTree = "<group>"; };
 		10583BE91AE5A330004A3AD6 /* makedoc.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = makedoc.pl; sourceTree = "<group>"; };
 		10583BEA1AE5A341004A3AD6 /* picotemplate-conf.pl */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.perl; path = "picotemplate-conf.pl"; sourceTree = "<group>"; };
 		10583BEB1AE5A341004A3AD6 /* regen.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = regen.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = "<none>"; };
@@ -986,6 +985,10 @@
 		E901C439213E59A000D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
 		E901C43C213FAE0300D17C93 /* qpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = qpack.h; sourceTree = "<group>"; };
 		E901C43F2140CCB500D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
+		E908A2AB231CF3D10039BCEE /* 50reverse-proxy-chunked-post-termination.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunked-post-termination.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		E908A2AD2320AE4C0039BCEE /* Dockerfile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile; sourceTree = "<group>"; };
+		E908A2AE2320AE4C0039BCEE /* check.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = check.mk; sourceTree = "<group>"; };
+		E908A2AF2320AE4D0039BCEE /* Dockerfile.ubuntu1904 */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile.ubuntu1904; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1794,11 +1797,11 @@
 		107923AA19A3216B00C52AD6 /* misc */ = {
 			isa = PBXGroup;
 			children = (
-				10F4EB831C165B92003DA150 /* fastcgi-cgi.pl */,
 				10583BE61AE5A322004A3AD6 /* clang-format-all.sh */,
+				E908A2AC2320AE210039BCEE /* docker-ci */,
 				104960151B9D3F9100FF136D /* dump-github-repository.pl */,
+				10F4EB831C165B92003DA150 /* fastcgi-cgi.pl */,
 				10583BE71AE5A322004A3AD6 /* install-perl-module.pl */,
-				10583BE81AE5A330004A3AD6 /* libressl.mk */,
 				10583BE91AE5A330004A3AD6 /* makedoc.pl */,
 				10583BEA1AE5A341004A3AD6 /* picotemplate-conf.pl */,
 				10583BEB1AE5A341004A3AD6 /* regen.mk */,
@@ -2053,6 +2056,7 @@
 				108214FE1AAD34DD00D27E66 /* 50reverse-proxy-0.t */,
 				E9BC76C21EE3DAA900EB7A09 /* 50reverse-proxy-added-headers.t */,
 				E9F677CE1FF62217006476D3 /* 50reverse-proxy-chunk-sizes.t */,
+				E908A2AB231CF3D10039BCEE /* 50reverse-proxy-chunked-post-termination.t */,
 				E9F677CF1FF62217006476D3 /* 50reverse-proxy-chunk-timeout-1.t */,
 				E9F677CC1FF62216006476D3 /* 50reverse-proxy-chunk-timeout-2.t */,
 				E9F677CB1FF62216006476D3 /* 50reverse-proxy-chunk-trailing-headers.t */,
@@ -2282,6 +2286,15 @@
 				E93C7F9922701806007BF39A /* frame.c */,
 			);
 			path = http3;
+		};
+		E908A2AC2320AE210039BCEE /* docker-ci */ = {
+			isa = PBXGroup;
+			children = (
+				E908A2AE2320AE4C0039BCEE /* check.mk */,
+				E908A2AD2320AE4C0039BCEE /* Dockerfile */,
+				E908A2AF2320AE4D0039BCEE /* Dockerfile.ubuntu1904 */,
+			);
+			path = "docker-ci";
 			sourceTree = "<group>";
 		};
 		E918FC3A2136589900CCB252 /* 00prop */ = {

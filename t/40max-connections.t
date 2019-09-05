@@ -6,7 +6,7 @@ use Time::HiRes qw(sleep);
 use t::Util;
 
 my $MAX_CONN = 2;
-my $WAIT = 0.1;
+my $WAIT = 0.5;
 
 subtest "single-threaded" => sub {
     doit(1);

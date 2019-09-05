@@ -1,15 +1,13 @@
 use strict;
 use warnings;
-use IPC::Open2;
+use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
-use Time::HiRes;
+use Time::HiRes qw(sleep);
 use t::Util;
 
 plan skip_all => 'mruby support is off'
     unless server_features()->{mruby};
-plan skip_all => "nc not found"
-    unless prog_exists("nc");
 
 # This test detects an existing bug that http1client unintentionally sends '0\r\n'
 # as a chunked encoding terminator instead of the correct one ('0\r\n\r\n').
@@ -36,14 +34,18 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream->{port}
 EOT
 
-my ($in, $out);
-my $pid = open2($out, $in, 'nc', '127.0.0.1', $server->{port});
-print $in "POST / HTTP/1.1\r\nconnection: close\r\ntransfer-encoding: chunked\r\n\r\n1\r\nX\r\n";
-Time::HiRes::sleep(0.1); # force streaming, otherwise http1cliennt sends content-length header
-print $in "0\r\n\r\n";
+my $sock = IO::Socket::INET->new(
+    PeerHost => q(127.0.0.1),
+    PeerPort => $server->{port},
+    Proto    => 'tcp'
+) or die "failed to connect to 127.0.0.1$server->{port}:$!";
+
+syswrite $sock, "POST / HTTP/1.1\r\nconnection: close\r\ntransfer-encoding: chunked\r\n\r\n1\r\nX\r\n";
+sleep 0.1; # force streaming, otherwise http1cliennt sends content-length header
+syswrite $sock, "0\r\n\r\n";
 
 my $resp = '';
-while (sysread($out, my $buf, 1)) { $resp .= $buf; }
+while (sysread($sock, my $buf, 1000)) { $resp .= $buf; }
 
 # If the bug exists, upstream fires http1 request timeout after 1 second
 # that causes immediate closing of the connection. Then the server gets

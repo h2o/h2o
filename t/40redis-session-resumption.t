@@ -64,8 +64,8 @@ hosts:
       /:
         file.dir: @{[ DOC_ROOT ]}
 EOT
-    test(spawn_h2o($conf), "-sess_out $tempdir/session", "New");
-    test(spawn_h2o($conf), "-sess_in $tempdir/session", ["New", "Reused"]); # At the first request, redis connection hasn't been established
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_out $tempdir/session", "New");
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_in $tempdir/session", ["New", "Reused"]); # At the first request, redis connection hasn't been established
 };
 
 subtest "non-reachable redis server" => sub {
@@ -87,15 +87,15 @@ hosts:
       /:
         file.dir: @{[ DOC_ROOT ]}
 EOT
-    test(spawn_h2o($conf), "-sess_out $tempdir/session", "New");
-    test(spawn_h2o($conf), "-sess_in $tempdir/session", ["New", "New"]);
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_out $tempdir/session", "New");
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_in $tempdir/session", ["New", "New"]);
 };
 
 subtest 'load test' => sub {
     my $CONCURRENCY = 10;
 
     my $redis = spawn_redis();
-    my $server = spawn_h2o(<< "EOT");
+    my $server = spawn_h2o({conf => << "EOT", max_ssl_version => 'TLSv1.2'});
 ssl-session-resumption:
   lifetime: 3
   mode: cache

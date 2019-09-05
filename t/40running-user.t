@@ -1,14 +1,12 @@
 use strict;
 use warnings;
-use English;
 use Test::More;
 use t::Util;
 
-plan skip_all => "not running as root"
-    if $UID != 0;
+run_as_root();
+
 plan skip_all => "user 'nobody' does not exist"
     unless defined getpwnam("nobody");
-
 
 subtest "set-user" => sub {
     doit(<< 'EOT');
