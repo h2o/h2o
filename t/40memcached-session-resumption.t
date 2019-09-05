@@ -32,7 +32,7 @@ sub doit {
         # the test
         my $spawn_and_connect = sub {
             my ($opts, $expected) = @_;
-            my $server = spawn_h2o(<< "EOT");
+            my $server = spawn_h2o({conf => << "EOT", max_ssl_version => "TLSv1.2"});
 ssl-session-resumption:
   mode: cache
   cache-store: memcached
