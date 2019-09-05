@@ -52,6 +52,10 @@
 #define TCP_NOTSENT_LOWAT 25
 #endif
 
+#if H2O_USE_DTRACE && defined(__linux__)
+#define H2O_USE_EBPF_MAP 1
+#endif
+
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -1477,7 +1481,7 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
     counter->average = counter->prev.sum / (sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]));
 }
 
-#if H2O_USE_DTRACE && defined(__linux__)
+#if H2O_USE_EBPF_MAP
 #include <linux/bpf.h>
 #include <linux/unistd.h>
 #include "h2o-probes.h"
