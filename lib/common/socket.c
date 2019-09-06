@@ -1517,27 +1517,33 @@ static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, h2o_ebpf_address_
     }
 }
 
+int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
+{
+    memset(key, 0, sizeof(*key));
+    if (!set_ebpf_map_key_tuples(local, &key->local))
+        return 0;
+    if (!set_ebpf_map_key_tuples(remote, &key->remote))
+        return 0;
+    key->family = local->sa_family == AF_INET6 ? 6 : 4;
+    key->protocol = sock_type;
+    return 1;
+}
+
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
 {
     h2o_socket_t *sock = _sock;
-    struct sockaddr_storage ss;
+    struct sockaddr_storage local, remote;
     unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
-    memset(key, 0, sizeof(*key));
 
-    // fetch sock/peer name and socket type
-    if (h2o_socket_getsockname(sock, (void *)&ss) == 0)
+    /* fetch info */
+    if (h2o_socket_getsockname(sock, (void *)&local) == 0)
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->local))
+    if (h2o_socket_getpeername(sock, (void *)&remote) == 0)
         return 0;
-    if (h2o_socket_getpeername(sock, (void *)&ss) == 0)
+    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0) /* can't the info be cached? */
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->remote))
-        return 0;
-    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0)
-        return 0;
-    key->family = ss.ss_family == AF_INET6 ? 6 : 4;
-    key->protocol = sock_type;
-    return 1;
+
+    return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
 }
 
 int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
@@ -1558,6 +1564,11 @@ int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_
 }
 
 #else
+
+int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
+{
+    h2o_fatal("unimplemented");
+}
 
 int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
 {

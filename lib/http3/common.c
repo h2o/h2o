@@ -19,6 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#ifdef __APPLE__
+#define __APPLE_USE_RFC_3542 /* to use IPV6_PKTINFO */
+#endif
 #include <errno.h>
 #include <netinet/in.h>
 #include <pthread.h>
@@ -346,8 +349,8 @@ static void drop_from_acceptmap(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn)
     }
 }
 
-static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t salen, uint8_t ttl,
-                            quicly_decoded_packet_t *packets, size_t num_packets)
+static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *srcaddr, socklen_t srcaddrlen, struct sockaddr *destaddr,
+                            socklen_t destaddrlen, uint8_t ttl, quicly_decoded_packet_t *packets, size_t num_packets)
 {
     h2o_http3_conn_t *conn = NULL;
 
@@ -363,9 +366,10 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
         } else if (!packets[0].cid.dest.might_be_client_generated) {
             /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
             if (packets[0].octets.len >= QUICLY_STATELESS_RESET_PACKET_MIN_LEN) {
-                quicly_datagram_t *dgram = quicly_send_stateless_reset(ctx->quic, sa, salen, packets[0].cid.dest.encrypted.base);
+                quicly_datagram_t *dgram =
+                    quicly_send_stateless_reset(ctx->quic, srcaddr, srcaddrlen, packets[0].cid.dest.encrypted.base);
                 if (dgram != NULL) {
-                    send_one(h2o_socket_get_fd(ctx->sock), dgram);
+                    send_one(h2o_socket_get_fd(ctx->sock.sock), dgram);
                     ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
                 }
             }
@@ -377,7 +381,8 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
             return;
         uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
         if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
-                                                                 sa, salen, ttl, packets, num_packets))
+                                                                 srcaddr, srcaddrlen, destaddr, destaddrlen, ttl, packets,
+                                                                 num_packets))
             return;
         /* non-authenticating 1-RTT packets are potentially stateless resets (FIXME handle them, note that we need to use a hashdos-
          * resistant hash map that also meets constant-time comparison requirements) */
@@ -387,12 +392,13 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
     if (conn == NULL) {
         /* Initial or 0-RTT packet, use 4-tuple to match the thread and the connection */
         assert(packets[0].cid.dest.might_be_client_generated);
-        uint64_t accept_hashkey = calc_accept_hashkey(sa, packets[0].cid.src);
+        uint64_t accept_hashkey = calc_accept_hashkey(srcaddr, packets[0].cid.src);
         if (ctx->accept_thread_divisor != 0) {
             uint32_t offending_thread = accept_hashkey % ctx->accept_thread_divisor;
             if (offending_thread != ctx->next_cid.thread_id) {
                 if (ctx->forward_packets != NULL)
-                    ctx->forward_packets(ctx, NULL, offending_thread, sa, salen, ttl, packets, num_packets);
+                    ctx->forward_packets(ctx, NULL, offending_thread, srcaddr, srcaddrlen, destaddr, destaddrlen, ttl, packets,
+                                         num_packets);
                 return;
             }
         }
@@ -403,10 +409,11 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
                 /* This is the offending thread but it is not accepting, which means that the process (or the thread) is
                  * gracefully shutting down.  Let the application process forward the packet to the next generation. */
                 if (ctx->forward_packets != NULL)
-                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, sa, salen, ttl, packets, num_packets);
+                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, srcaddr, srcaddrlen, destaddr, destaddrlen, ttl,
+                                         packets, num_packets);
                 return;
             }
-            if ((conn = ctx->acceptor(ctx, sa, salen, packets, num_packets)) == NULL)
+            if ((conn = ctx->acceptor(ctx, srcaddr, srcaddrlen, destaddr, destaddrlen, packets, num_packets)) == NULL)
                 return;
             conn->_accept_hashkey = accept_hashkey;
             int r;
@@ -421,8 +428,8 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *sa, socklen_t
 
     { /* receive packets to the found connection */
         assert(conn != NULL);
-        /* FIXME do we need this check? */
-        if (!quicly_is_destination(conn->quic, sa, salen, packets))
+        /* FIXME pass the source address to quicly_receive, and let it handle the information accordincly */
+        if (!quicly_is_destination(conn->quic, srcaddr, srcaddrlen, packets))
             return;
         size_t i;
         for (i = 0; i != num_packets; ++i) {
@@ -447,9 +454,23 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
         uint8_t buf[16384], *bufpt = buf;
         struct {
             struct msghdr mess;
-            struct sockaddr_storage sa;
+            struct {
+                union {
+                    struct sockaddr sa;
+                    struct sockaddr_in sin;
+                    struct sockaddr_in6 sin6;
+                };
+                socklen_t len;
+            } srcaddr, destaddr;
             struct iovec vec;
             uint8_t ttl;
+            char control[sizeof(struct cmsghdr)
+#ifdef IPV6_PKTINFO
+                + sizeof(struct in6_pktinfo)
+#elif defined(IP_PKTINFO)
+                + sizeof(struct in_pktinfo)
+#endif
+            ];
         } dgrams[32];
         size_t dgram_index, num_dgrams;
         ssize_t rret;
@@ -458,8 +479,8 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
         for (dgram_index = 0; dgram_index < sizeof(dgrams) / sizeof(dgrams[0]) && buf + sizeof(buf) - bufpt > 2048; ++dgram_index) {
             /* read datagram */
             memset(&dgrams[dgram_index].mess, 0, sizeof(dgrams[dgram_index].mess));
-            dgrams[dgram_index].mess.msg_name = &dgrams[dgram_index].sa;
-            dgrams[dgram_index].mess.msg_namelen = sizeof(dgrams[dgram_index].sa);
+            dgrams[dgram_index].mess.msg_name = &dgrams[dgram_index].srcaddr;
+            dgrams[dgram_index].mess.msg_namelen = sizeof(dgrams[dgram_index].srcaddr);
             dgrams[dgram_index].vec.iov_base = bufpt;
             dgrams[dgram_index].vec.iov_len = buf + sizeof(buf) - bufpt;
             dgrams[dgram_index].mess.msg_iov = &dgrams[dgram_index].vec;
@@ -469,12 +490,40 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
             if (rret <= 0)
                 break;
             dgrams[dgram_index].vec.iov_len = rret;
-            if (preprocess != NULL && preprocess(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].ttl)) {
+            dgrams[dgram_index].srcaddr.len = dgrams[dgram_index].mess.msg_namelen;
+            { /* fetch destination address */
+                struct cmsghdr *cmsg;
+                for (cmsg = CMSG_FIRSTHDR(&dgrams[dgram_index].mess); cmsg != NULL;
+                     cmsg = CMSG_NXTHDR(&dgrams[dgram_index].mess, cmsg)) {
+#ifdef IP_PKTINFO
+                    if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
+                        dgrams[dgram_index].destaddr.sin.sin_addr = ((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_addr;
+                        dgrams[dgram_index].destaddr.sin.sin_port = 12345; /* FIXME set the cached port number */
+                        dgrams[dgram_index].destaddr.len = sizeof(dgrams[dgram_index].destaddr.sin);
+                        goto DestAddrFound;
+                    }
+#endif
+#ifdef IPV6_PKTINFO
+                    if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
+                        dgrams[dgram_index].destaddr.sin6.sin6_addr = ((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr;
+                        dgrams[dgram_index].destaddr.sin6.sin6_port = 12345; /* FIXME set the cached port number */
+                        dgrams[dgram_index].destaddr.len = sizeof(dgrams[dgram_index].destaddr.sin6);
+                        goto DestAddrFound;
+                    }
+#endif
+                }
+                dgrams[dgram_index].destaddr.len = 0;
+            DestAddrFound:
+                ;
+            }
+            if (preprocess != NULL && preprocess(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].srcaddr.sa,
+                                                 &dgrams[dgram_index].srcaddr.len, &dgrams[dgram_index].destaddr.sa,
+                                                 &dgrams[dgram_index].destaddr.len, &dgrams[dgram_index].ttl)) {
                 /* preprocessed */
             } else {
                 dgrams[dgram_index].ttl = ctx->default_ttl;
             }
-            assert(dgrams[dgram_index].sa.ss_family != AF_UNIX);
+            assert(dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET || dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET6);
             bufpt += rret;
         }
         num_dgrams = dgram_index;
@@ -487,9 +536,12 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
         for (dgram_index = 0; dgram_index != num_dgrams; ++dgram_index) {
             if (packet_index != 0 &&
                 !(dgram_index == 0 ||
-                  h2o_socket_compare_address(dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index].mess.msg_name) != 0 ||
+                  h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa) != 0 ||
+                  !((dgrams[dgram_index - 1].destaddr.len == 0 && dgrams[dgram_index].destaddr.len == 0) ||
+                    h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa) == 0) ||
                   dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)) {
-                process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen,
+                process_packets(ctx, &dgrams[dgram_index - 1].srcaddr.sa, dgrams[dgram_index - 1].srcaddr.len,
+                                &dgrams[dgram_index - 1].destaddr.sa, dgrams[dgram_index - 1].destaddr.len,
                                 dgrams[dgram_index - 1].ttl, packets, packet_index);
                 packet_index = 0;
             }
@@ -504,8 +556,9 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                     !(packet_index == 0 ||
                       h2o_memis(packets[0].cid.dest.encrypted.base, packets[0].cid.dest.encrypted.len,
                                 packets[packet_index].cid.dest.encrypted.base, packets[packet_index].cid.dest.encrypted.len))) {
-                    process_packets(ctx, dgrams[dgram_index].mess.msg_name, dgrams[dgram_index].mess.msg_namelen,
-                                    dgrams[dgram_index].ttl, packets, packet_index + 1);
+                    process_packets(ctx, &dgrams[dgram_index].srcaddr.sa, dgrams[dgram_index].srcaddr.len,
+                                    &dgrams[dgram_index].destaddr.sa, dgrams[dgram_index].destaddr.len, dgrams[dgram_index].ttl,
+                                    packets, packet_index + 1);
                     packet_index = 0;
                 } else {
                     ++packet_index;
@@ -513,8 +566,9 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
             }
         }
         if (packet_index != 0)
-            process_packets(ctx, dgrams[dgram_index - 1].mess.msg_name, dgrams[dgram_index - 1].mess.msg_namelen,
-                            dgrams[dgram_index - 1].ttl, packets, packet_index);
+            process_packets(ctx, &dgrams[dgram_index - 1].srcaddr.sa, dgrams[dgram_index - 1].srcaddr.len,
+                            &dgrams[dgram_index - 1].destaddr.sa, dgrams[dgram_index - 1].destaddr.len, dgrams[dgram_index - 1].ttl,
+                            packets, packet_index);
     }
 }
 
@@ -610,17 +664,19 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
     assert(quic->stream_open != NULL);
 
     *ctx = (h2o_http3_ctx_t){loop,
-                             sock,
+                             {sock},
                              quic,
                              {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
                              kh_init_h2o_http3_idmap(),
                              kh_init_h2o_http3_acceptmap(),
                              notify_conn_update};
-    sock->data = ctx;
+    ctx->sock.sock->data = ctx;
+    ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
+    assert(ctx->sock.addrlen != 0);
     h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
 
-    h2o_socket_read_start(ctx->sock, on_read);
+    h2o_socket_read_start(ctx->sock.sock, on_read);
 }
 
 void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
@@ -629,7 +685,7 @@ void h2o_http3_dispose_context(h2o_http3_ctx_t *ctx)
     assert(kh_size(ctx->conns_accepting) == 0);
     assert(h2o_linklist_is_empty(&ctx->clients));
 
-    h2o_socket_close(ctx->sock);
+    h2o_socket_close(ctx->sock.sock);
     kh_destroy_h2o_http3_idmap(ctx->conns_by_id);
     kh_destroy_h2o_http3_acceptmap(ctx->conns_accepting);
 }
@@ -746,7 +802,7 @@ int h2o_http3_send(h2o_http3_conn_t *conn)
 {
     quicly_datagram_t *packets[16];
     size_t num_packets, i;
-    int fd = h2o_socket_get_fd(conn->ctx->sock);
+    int fd = h2o_socket_get_fd(conn->ctx->sock.sock);
 
     do {
         num_packets = sizeof(packets) / sizeof(packets[0]);

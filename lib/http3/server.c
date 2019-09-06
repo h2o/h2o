@@ -224,7 +224,8 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    return h2o_socket_getsockname(conn->h3.ctx->sock, sa);
+    memcpy(sa, &conn->h3.ctx->sock.addr, conn->h3.ctx->sock.addrlen);
+    return conn->h3.ctx->sock.addrlen;
 }
 
 static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *_sa)
@@ -245,8 +246,8 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
 
 static int skip_tracing(h2o_conn_t *conn)
 {
-    /* TODO consult blah */
-    return 0;
+    ptls_t *ptls = get_ptls(conn);
+    return ptls_skip_tracing(ptls);
 }
 
 static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
@@ -1199,9 +1200,39 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
     free(conn);
 }
 
-h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
-                                          quicly_decoded_packet_t *packets, size_t num_packets,
-                                          const h2o_http3_conn_callbacks_t *h3_callbacks)
+static __thread struct {
+    h2o_http3_ctx_t *ctx;
+    struct sockaddr *srcaddr;
+} conn_create_info;
+
+static void prepare_conn_create(h2o_http3_ctx_t *ctx, struct sockaddr *srcaddr)
+{
+    conn_create_info.ctx = ctx;
+    conn_create_info.srcaddr = srcaddr;
+}
+
+static void cleanup_conn_create(void)
+{
+    conn_create_info.ctx = NULL;
+    conn_create_info.srcaddr = NULL;
+}
+
+static int conn_create_init_ebpfkey(struct st_h2o_ebpf_map_key_t *key, void *cbdata)
+{
+    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, (void *)&conn_create_info.ctx->sock.addr, conn_create_info.srcaddr);
+}
+
+static void conn_create_cb(quicly_on_create_t *self, quicly_conn_t *conn)
+{
+    if (!h2o_socket_ebpf_lookup(conn_create_info.ctx->loop, conn_create_init_ebpfkey, NULL))
+        ptls_set_skip_tracing(quicly_get_tls(conn), 1);
+}
+
+quicly_on_create_t h2o_http3_server_on_create = {conn_create_cb};
+
+h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *srcaddr, socklen_t srcaddrlen,
+                                          struct sockaddr *destaddr, socklen_t destaddrlen, quicly_decoded_packet_t *packets,
+                                          size_t num_packets, const h2o_http3_conn_callbacks_t *h3_callbacks)
 {
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     size_t i, syn_index = SIZE_MAX;
@@ -1255,12 +1286,15 @@ SynFound : {
 
     /* accept connection */
     quicly_conn_t *qconn;
-    if (quicly_accept(&qconn, ctx->super.quic, sa, salen, packets + syn_index, ptls_iovec_init(NULL, 0), &ctx->super.next_cid,
-                      &conn->handshake_properties) != 0) {
+    prepare_conn_create(conn->h3.ctx, srcaddr);
+    if (quicly_accept(&qconn, ctx->super.quic, srcaddr, srcaddrlen, packets + syn_index, ptls_iovec_init(NULL, 0),
+                      &ctx->super.next_cid, &conn->handshake_properties) != 0) {
+        cleanup_conn_create();
         h2o_http3_dispose_conn(&conn->h3);
         free(conn);
         return NULL;
     }
+    cleanup_conn_create();
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
     /* handle the other packet */

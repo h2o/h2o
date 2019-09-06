@@ -21,6 +21,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#ifdef __APPLE__
+#define __APPLE_USE_RFC_3542 /* to use IPV6_RECVPKTINFO */
+#endif
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
@@ -1306,6 +1309,24 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         freeaddrinfo(res);
                         return -1;
                     }
+                    switch (ai->ai_family) {
+#ifdef IP_PKTINFO /* this is the de-facto API (that works on both linux, macOS) */
+                    case AF_INET: {
+                        int on = 1;
+                        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
+                            h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
+                    } break;
+#endif
+#ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
+                    case AF_INET6: {
+                        int on = 1;
+                        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
+                            h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
+                    } break;
+#endif
+                    default:
+                        break;
+                    }
                     break;
                 default:
                     break;
@@ -1316,6 +1337,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quic->transport_params.max_streams_uni = 10;
                 quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
                 quic->stream_open = &h2o_http3_server_on_stream_open;
+                quic->on_create = &h2o_http3_server_on_create;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
             }
@@ -1773,41 +1795,55 @@ struct st_h2o_quic_forwarded_t {
     union {
         struct sockaddr_in sin;
         struct sockaddr_in6 sin6;
-    } sa;
+    } srcaddr, destaddr;
     int is_v6 : 1;
 };
 
+/* FIXME forward destaddr */
 /* The format:
  * type:    0b10000000 (1 byte)
  * version: 0x91917000 (4 bytes)
  * ip_ver:  0x4 or 0x6 (1 byte)
- * ipaddr:  4 or 16 bytes
- * port:    2 bytes
+ * srcaddr:
+ *   ip:    4 or 16 bytes
+ *   port:  2 bytes
+ * destaddr:
+ *   ip:    4 or 16 bytes
+ *   port:  2 bytes
  * ttl:     1 byte
  */
-#define H2O_QUIC_FORWARDED_HEADER_MAX_SIZE (1 + 4 + 1 + 16 + 2 + 1)
+#define H2O_QUIC_FORWARDED_HEADER_MAX_SIZE (1 + 4 + 1 + (16 + 2) * 2 + 1)
 #define H2O_QUIC_FORWARDED_VERSION 0x91c17000
 
 /**
  * encodes a forwarded header
  * TODO add authentication for inter-node forwarding
  */
-static size_t encode_quic_forwarded_header(void *buf, struct sockaddr *sa, uint8_t ttl)
+static size_t encode_quic_forwarded_header(void *buf, struct sockaddr *srcaddr, struct sockaddr *destaddr, uint8_t ttl)
 {
     uint8_t *dst = buf;
 
     *dst++ = 0x80;
     dst = quicly_encode32(dst, H2O_QUIC_FORWARDED_VERSION);
-    switch (sa->sa_family) {
+    switch (srcaddr->sa_family) {
     case AF_INET: {
-        struct sockaddr_in *sin = (void *)sa;
+        static struct sockaddr_in zero_sin;
+        struct sockaddr_in *sin = (void *)srcaddr;
         *dst++ = 4;
+        dst = quicly_encode32(dst, sin->sin_addr.s_addr);
+        dst = quicly_encode16(dst, sin->sin_port);
+        sin = destaddr != NULL && destaddr->sa_family == AF_INET ? (struct sockaddr_in *)destaddr : &zero_sin;
         dst = quicly_encode32(dst, sin->sin_addr.s_addr);
         dst = quicly_encode16(dst, sin->sin_port);
     } break;
     case AF_INET6: {
-        struct sockaddr_in6 *sin6 = (void *)sa;
+        static struct sockaddr_in6 zero_sin6;
+        struct sockaddr_in6 *sin6 = (void *)srcaddr;
         *dst++ = 6;
+        memcpy(dst, sin6->sin6_addr.s6_addr, 16);
+        dst += 16;
+        dst = quicly_encode16(dst, sin6->sin6_port);
+        sin6 = destaddr != NULL && destaddr->sa_family == AF_INET6 ? (struct sockaddr_in6 *)destaddr : &zero_sin6;
         memcpy(dst, sin6->sin6_addr.s6_addr, 16);
         dst += 16;
         dst = quicly_encode16(dst, sin6->sin6_port);
@@ -1821,7 +1857,8 @@ static size_t encode_quic_forwarded_header(void *buf, struct sockaddr *sa, uint8
     return dst - (uint8_t *)buf;
 }
 
-static size_t decode_quic_forwarded_header(struct sockaddr *sa, socklen_t *salen, uint8_t *ttl, h2o_iovec_t octets)
+static size_t decode_quic_forwarded_header(struct sockaddr *srcaddr, socklen_t *srcaddrlen, struct sockaddr *destaddr,
+                                           socklen_t *destaddrlen, uint8_t *ttl, h2o_iovec_t octets)
 {
     const uint8_t *src = (uint8_t *)octets.base, *end = src + octets.len;
 
@@ -1833,23 +1870,34 @@ static size_t decode_quic_forwarded_header(struct sockaddr *sa, socklen_t *salen
         goto NotForwarded;
     switch (*src++) {
     case 4: { /* ipv4 */
-        if (end - src < 6)
+        if (end - src < 12)
             goto NotForwarded;
-        struct sockaddr_in *sin = (void *)sa;
+        struct sockaddr_in *sin = (void *)srcaddr;
         sin->sin_family = AF_INET;
         sin->sin_addr.s_addr = quicly_decode32(&src);
         sin->sin_port = quicly_decode16(&src);
-        *salen = sizeof(*sin);
+        *srcaddrlen = sizeof(*sin);
+        sin = (void *)destaddr;
+        sin->sin_family = AF_INET;
+        sin->sin_addr.s_addr = quicly_decode32(&src);
+        sin->sin_port = quicly_decode16(&src);
+        *destaddrlen = sizeof(*sin);
     } break;
     case 6: { /* ipv6 */
         if (end - src < 18)
             goto NotForwarded;
-        struct sockaddr_in6 *sin6 = (void *)sa;
+        struct sockaddr_in6 *sin6 = (void *)srcaddr;
         sin6->sin6_family = AF_INET6;
         memcpy(sin6->sin6_addr.s6_addr, src, 16);
         src += 16;
         sin6->sin6_port = quicly_decode16(&src);
-        *salen = sizeof(*sin6);
+        *srcaddrlen = sizeof(*sin6);
+        sin6 = (void *)destaddrlen;
+        sin6->sin6_family = AF_INET6;
+        memcpy(sin6->sin6_addr.s6_addr, src, 16);
+        src += 16;
+        sin6->sin6_port = quicly_decode16(&src);
+        *destaddrlen = sizeof(*sin6);
     } break;
     default:
         goto NotForwarded;
@@ -1863,8 +1911,9 @@ NotForwarded:
     return SIZE_MAX;
 }
 
-static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id, uint32_t thread_id, struct sockaddr *sa,
-                                socklen_t salen, uint8_t ttl, quicly_decoded_packet_t *packets, size_t num_packets)
+static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id, uint32_t thread_id, struct sockaddr *srcaddr,
+                                socklen_t srcaddrlen, struct sockaddr *destaddr, socklen_t destaddrlen, uint8_t ttl,
+                                quicly_decoded_packet_t *packets, size_t num_packets)
 {
     struct listener_ctx_t *ctx = H2O_STRUCT_FROM_MEMBER(struct listener_ctx_t, http3.ctx.super, h3ctx);
     size_t i;
@@ -1889,7 +1938,7 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     /* forward */
     for (i = 0; i != num_packets; ++i) {
         char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
-        size_t header_len = encode_quic_forwarded_header(header_buf, sa, ttl);
+        size_t header_len = encode_quic_forwarded_header(header_buf, srcaddr, destaddrlen != 0 ? destaddr : NULL, ttl);
         struct iovec vec[2] = {{header_buf, header_len}, {packets->octets.base, packets->octets.len}};
         writev(conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id], vec, 2);
     }
@@ -1897,11 +1946,17 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     return 1;
 }
 
-static int preprocess_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, uint8_t *ttl)
+static int preprocess_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, struct sockaddr *srcaddr, socklen_t *srcaddrlen,
+                                    struct sockaddr *destaddr, socklen_t *destaddrlen, uint8_t *ttl)
 {
     struct {
-        struct sockaddr_storage sa;
-        socklen_t salen;
+        struct {
+            union {
+                struct sockaddr sa;
+                struct sockaddr_storage ss;
+            };
+            socklen_t len;
+        } srcaddr, destaddr;
         uint8_t ttl;
         size_t offset;
     } encapsulated;
@@ -1909,15 +1964,18 @@ static int preprocess_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, 
     assert(msg->msg_iovlen == 1);
 
     if ((encapsulated.offset =
-             decode_quic_forwarded_header((struct sockaddr *)&encapsulated.sa, &encapsulated.salen, &encapsulated.ttl,
+             decode_quic_forwarded_header(&encapsulated.srcaddr.sa, &encapsulated.srcaddr.len, &encapsulated.destaddr.sa,
+                                          &encapsulated.destaddr.len, &encapsulated.ttl,
                                           h2o_iovec_init(msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len))) == SIZE_MAX)
         return 0;
 
-    /* update msghdr, TTL */
-    memcpy(msg->msg_name, &encapsulated.sa, encapsulated.salen);
-    msg->msg_namelen = encapsulated.salen;
+    /* update */
     msg->msg_iov[0].iov_base += encapsulated.offset;
     msg->msg_iov[0].iov_len -= encapsulated.offset;
+    memcpy(srcaddr, &encapsulated.srcaddr.sa, encapsulated.srcaddr.len);
+    *srcaddrlen = encapsulated.srcaddr.len;
+    memcpy(destaddr, &encapsulated.destaddr.sa, encapsulated.destaddr.len);
+    *destaddrlen = encapsulated.destaddr.len;
     *ttl = encapsulated.ttl;
     return 1;
 }
@@ -1968,8 +2026,9 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
-static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *sa, socklen_t salen,
-                                         quicly_decoded_packet_t *packets, size_t num_packets)
+static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *srcaddr, socklen_t srcaddrlen,
+                                         struct sockaddr *destaddr, socklen_t destaddrlen, quicly_decoded_packet_t *packets,
+                                         size_t num_packets)
 {
     if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections) {
         return NULL;
@@ -1978,7 +2037,8 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr 
     num_quic_connections(1);
     num_sessions(1);
 
-    return h2o_http3_server_accept(_ctx, sa, salen, packets, num_packets, &conf.quic.conn_callbacks);
+    return
+        h2o_http3_server_accept(_ctx, srcaddr, srcaddrlen, destaddr, destaddrlen, packets, num_packets, &conf.quic.conn_callbacks);
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)
