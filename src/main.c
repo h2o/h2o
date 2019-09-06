@@ -470,14 +470,6 @@ Exit:
     return ret;
 }
 
-static int tls_is_traced(ptls_is_traced_t *self, ptls_t *tls)
-{
-    h2o_socket_t *sock = *ptls_get_data_ptr(tls);
-    if (sock == NULL)
-        return 0;
-    return h2o_socket_is_traced(sock);
-}
-
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
                                               SSL_CTX *ssl_ctx)
 {
@@ -488,7 +480,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         &ptls_minicrypto_x25519,
 #endif
         &ptls_openssl_secp256r1, NULL};
-    static ptls_is_traced_t is_traced = {tls_is_traced};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
@@ -525,7 +516,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        NULL,            /* update_traffic_key */
                                        NULL,            /* decompress_certificate */
                                        NULL,            /* update_esni_key */
-                                       &is_traced,      /* is_traced */
                                        NULL},           /* on_extension */
                                       {{on_client_hello_ptls}, listener},
                                       {{on_emit_certificate_ptls}, ssl_config}};
