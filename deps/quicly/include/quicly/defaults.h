@@ -52,14 +52,6 @@ extern quicly_stream_scheduler_t quicly_default_stream_scheduler;
  *
  */
 extern quicly_now_t quicly_default_now;
-/**
- *
- */
-quicly_event_logger_t *quicly_new_default_event_logger(FILE *fp);
-/**
- *
- */
-void quicly_free_default_event_logger(quicly_event_logger_t *self);
 
 #ifdef __cplusplus
 }

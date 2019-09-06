@@ -23,6 +23,10 @@
 		E93E546A1F663851001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
 		E93E546B1F663852001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
 		E93E54BB1F69B750001C50FE /* loss.h in Headers */ = {isa = PBXBuildFile; fileRef = E93E54BA1F69B750001C50FE /* loss.h */; };
+		E95E95392290497900215ACD /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
+		E95E953C22904A4C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953A2290498E00215ACD /* picotls-probes.d */; };
+		E95E953D22904A4C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953A2290498E00215ACD /* picotls-probes.d */; };
+		E95E953E22904A4D00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953A2290498E00215ACD /* picotls-probes.d */; };
 		E98041C422383C5C008B9745 /* cc.h in Headers */ = {isa = PBXBuildFile; fileRef = E98041C322383C5C008B9745 /* cc.h */; };
 		E98041C622383C62008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
 		E98041C722383C7A008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
@@ -117,6 +121,11 @@
 		E92D43EC1F41DCF5002AC767 /* sendstate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sendstate.h; sourceTree = "<group>"; };
 		E93E54681F663849001C50FE /* pembase64.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = pembase64.c; sourceTree = "<group>"; };
 		E93E54BA1F69B750001C50FE /* loss.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = loss.h; sourceTree = "<group>"; };
+		E95E953A2290498E00215ACD /* picotls-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "picotls-probes.d"; sourceTree = "<group>"; };
+		E95EBCCB227EC07C0022C32D /* CMakeLists.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = CMakeLists.txt; sourceTree = "<group>"; };
+		E95EBCCD227EC13F0022C32D /* quicly-probes.d */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.dtrace; path = "quicly-probes.d"; sourceTree = "<group>"; };
+		E95EBCCF227ECB4B0022C32D /* build_libFuzzer.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = build_libFuzzer.sh; sourceTree = "<group>"; };
+		E95EBCD5227F3F1F0022C32D /* probe2trace.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = probe2trace.pl; sourceTree = "<group>"; };
 		E98041C322383C5C008B9745 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
 		E98041C522383C62008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
 		E980421A223952D2008B9745 /* echo.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = echo.c; sourceTree = "<group>"; };
@@ -196,6 +205,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E95EBCCE227ECB380022C32D /* misc */ = {
+			isa = PBXGroup;
+			children = (
+				E95EBCCF227ECB4B0022C32D /* build_libFuzzer.sh */,
+				E95EBCD5227F3F1F0022C32D /* probe2trace.pl */,
+			);
+			path = misc;
+			sourceTree = "<group>";
+		};
 		E9804219223952A2008B9745 /* examples */ = {
 			isa = PBXGroup;
 			children = (
@@ -215,9 +233,12 @@
 		E984480E1EA48BD400390927 = {
 			isa = PBXGroup;
 			children = (
+				E95EBCCB227EC07C0022C32D /* CMakeLists.txt */,
 				E98448211EA48C0300390927 /* deps */,
 				E984481E1EA48BEE00390927 /* include */,
 				E984481F1EA48BF400390927 /* lib */,
+				E95EBCCE227ECB380022C32D /* misc */,
+				E95EBCCD227EC13F0022C32D /* quicly-probes.d */,
 				E98448201EA48BFC00390927 /* src */,
 				E9CC44121EC1926000DC7D3E /* t */,
 				E9804219223952A2008B9745 /* examples */,
@@ -285,6 +306,7 @@
 			children = (
 				E98448231EA48C0E00390927 /* include */,
 				E98448241EA48C6400390927 /* lib */,
+				E95E953A2290498E00215ACD /* picotls-probes.d */,
 				E98047782248EA7C008B9745 /* t */,
 			);
 			path = picotls;
@@ -528,6 +550,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E95E953E22904A4D00215ACD /* picotls-probes.d in Sources */,
 				E980421E223952FD008B9745 /* openssl.c in Sources */,
 				E980421F223952FD008B9745 /* pembase64.c in Sources */,
 				E98042292239533A008B9745 /* echo.c in Sources */,
@@ -541,6 +564,7 @@
 			files = (
 				E9F6A4201F3C0B6D0083F0B2 /* ranges.c in Sources */,
 				E98041C622383C62008B9745 /* cc-reno.c in Sources */,
+				E95E95392290497900215ACD /* quicly-probes.d in Sources */,
 				E920D21E1F43E05000799777 /* recvstate.c in Sources */,
 				E98042362244A5D7008B9745 /* defaults.c in Sources */,
 				E9F6A42E1F41375B0083F0B2 /* sendstate.c in Sources */,
@@ -555,6 +579,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E95E953C22904A4C00215ACD /* picotls-probes.d in Sources */,
 				E984483B1EA48DD300390927 /* openssl.c in Sources */,
 				E93E546A1F663851001C50FE /* pembase64.c in Sources */,
 				E98042282239531A008B9745 /* cli.c in Sources */,
@@ -591,6 +616,7 @@
 				E99B75E91F5D259400CF503E /* stream-concurrency.c in Sources */,
 				E920D22E1F4981E500799777 /* sentmap.c in Sources */,
 				E9CC44261EC1963100DC7D3E /* picotest.c in Sources */,
+				E95E953D22904A4C00215ACD /* picotls-probes.d in Sources */,
 				E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */,
 				E98042372244A5D7008B9745 /* defaults.c in Sources */,
 				E99F8C271F4E9F5D00C26B3D /* frame.c in Sources */,
@@ -654,8 +680,10 @@
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
 					"$(inherited)",
+					"DEBUG=1",
+					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -706,6 +734,10 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"PICOTLS_USE_DTRACE=1",
+					"QUICLY_USE_DTRACE=1",
+				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
 				GCC_WARN_UNDECLARED_SELECTOR = YES;

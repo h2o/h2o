@@ -80,7 +80,6 @@ static void usage(const char *progname)
            "  -c <file>    specifies the certificate chain file (PEM format)\n"
            "  -k <file>    specifies the private key file (PEM format)\n"
            "  -p <number>  specifies the port number (default: 4433)\n"
-           "  -E           logs events to stderr\n"
            "  -h           prints this help\n"
            "\n"
            "When both `-c` and `-k` is specified, runs as a server.  Otherwise, runs as a\n"
@@ -319,7 +318,7 @@ int main(int argc, char **argv)
     ctx.stream_open = &stream_open;
 
     /* resolve command line options and arguments */
-    while ((ch = getopt(argc, argv, "c:k:p:Eh")) != -1) {
+    while ((ch = getopt(argc, argv, "c:k:p:h")) != -1) {
         switch (ch) {
         case 'c': /* load certificate chain */ {
             int ret;
@@ -346,10 +345,6 @@ int main(int argc, char **argv)
         } break;
         case 'p': /* port */
             port = optarg;
-            break;
-        case 'E': /* event logging */
-            ctx.event_log.cb = quicly_new_default_event_logger(stderr);
-            ctx.event_log.mask = UINT64_MAX;
             break;
         case 'h': /* help */
             usage(argv[0]);

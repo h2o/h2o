@@ -17,6 +17,8 @@ def transform(inf, outf):
     state = {}
 
     for line in inf:
+        if line[0] != "{":
+            continue
         trace = json.loads(line)
         if len(trace["type"]) < 11 or trace["type"][:9] != "quictrace": continue
 
@@ -119,8 +121,8 @@ def transform(inf, outf):
             state = {}
 
         # process ACK frame info
-        if event == "recv-ack":
-            if "ack-delay" not in trace:
+        if "recv-ack" in event:
+            if "recv-ack-delay" not in event:
                 # create ack block, add to list
                 block = {"firstPacket": str(trace["ack-block-begin"]), 
                          "lastPacket": str(trace["ack-block-end"])}

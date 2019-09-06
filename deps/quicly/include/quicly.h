@@ -60,131 +60,6 @@ typedef struct st_quicly_datagram_t {
     struct sockaddr sa;
 } quicly_datagram_t;
 
-/**
- * Event types used for logging.
- *
- * CONNECT, ACCEPT, SEND, RECEIVE are major events that correspond to the external functions of quicly (e.g. quicly_connect).
- * Timestamp, CID, first-octet, etc. are included as attributes.
- *
- * The rest are minor (i.e. in-detail) events. They are categorized by prefix (e.g., "PACKET", "CC"). They do not contain timestamp
- * or CID. The time and the connection can be determined by the major event that precedes the minor event.
- */
-typedef enum en_quicly_event_type_t {
-    QUICLY_EVENT_TYPE_CONNECT,
-    QUICLY_EVENT_TYPE_ACCEPT,
-    QUICLY_EVENT_TYPE_SEND,
-    QUICLY_EVENT_TYPE_SEND_STATELESS_RESET,
-    QUICLY_EVENT_TYPE_RECEIVE,
-    QUICLY_EVENT_TYPE_FREE,
-    QUICLY_EVENT_TYPE_IDLE_TIMEOUT,
-    QUICLY_EVENT_TYPE_PACKET_PREPARE,
-    QUICLY_EVENT_TYPE_PACKET_COMMIT,
-    QUICLY_EVENT_TYPE_PACKET_ACKED,
-    QUICLY_EVENT_TYPE_PACKET_LOST,
-    QUICLY_EVENT_TYPE_CRYPTO_DECRYPT,
-    QUICLY_EVENT_TYPE_CRYPTO_HANDSHAKE,
-    QUICLY_EVENT_TYPE_CRYPTO_UPDATE_SECRET,
-    QUICLY_EVENT_TYPE_PTO,
-    QUICLY_EVENT_TYPE_CC_ACK_RECEIVED,
-    QUICLY_EVENT_TYPE_CC_CONGESTION,
-    QUICLY_EVENT_TYPE_STREAM_SEND,
-    QUICLY_EVENT_TYPE_STREAM_RECEIVE,
-    QUICLY_EVENT_TYPE_STREAM_ACKED,
-    QUICLY_EVENT_TYPE_STREAM_LOST,
-    QUICLY_EVENT_TYPE_MAX_DATA_SEND,
-    QUICLY_EVENT_TYPE_MAX_DATA_RECEIVE,
-    QUICLY_EVENT_TYPE_DATA_BLOCKED_SEND,
-    QUICLY_EVENT_TYPE_DATA_BLOCKED_RECEIVE,
-    QUICLY_EVENT_TYPE_MAX_STREAM_DATA_SEND,
-    QUICLY_EVENT_TYPE_MAX_STREAM_DATA_RECEIVE,
-    QUICLY_EVENT_TYPE_STREAM_DATA_BLOCKED_SEND,
-    QUICLY_EVENT_TYPE_STREAM_DATA_BLOCKED_RECEIVE,
-    QUICLY_EVENT_TYPE_MAX_STREAMS_SEND,
-    QUICLY_EVENT_TYPE_MAX_STREAMS_RECEIVE,
-    QUICLY_EVENT_TYPE_STREAMS_BLOCKED_SEND,
-    QUICLY_EVENT_TYPE_STREAMS_BLOCKED_RECEIVE,
-    QUICLY_EVENT_TYPE_QUIC_VERSION_SWITCH,
-    QUICLY_EVENT_TYPE_TRANSPORT_CLOSE_SEND,
-    QUICLY_EVENT_TYPE_APPLICATION_CLOSE_SEND,
-    QUICLY_EVENT_TYPE_TRANSPORT_CLOSE_RECEIVE,
-    QUICLY_EVENT_TYPE_APPLICATION_CLOSE_RECEIVE,
-    QUICLY_EVENT_TYPE_STATELESS_RESET_RECEIVE,
-    QUICLY_EVENT_TYPE_QUICTRACE_SEND,
-    QUICLY_EVENT_TYPE_QUICTRACE_RECV,
-    QUICLY_EVENT_TYPE_QUICTRACE_LOST,
-    QUICLY_EVENT_TYPE_QUICTRACE_SEND_STREAM,
-    QUICLY_EVENT_TYPE_QUICTRACE_RECV_STREAM,
-    QUICLY_EVENT_TYPE_QUICTRACE_RECV_ACK,
-    QUICLY_EVENT_TYPE_QUICTRACE_CC_ACK,
-    QUICLY_EVENT_TYPE_QUICTRACE_CC_LOST,
-} quicly_event_type_t;
-
-/**
- * an array of event names corresponding to quicly_event_type_t
- */
-extern const char *quicly_event_type_names[];
-
-typedef enum en_quicly_event_attribute_type_t {
-    QUICLY_EVENT_ATTRIBUTE_NULL,
-    QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MIN,
-    QUICLY_EVENT_ATTRIBUTE_TIME = QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MIN,
-    QUICLY_EVENT_ATTRIBUTE_EPOCH,
-    QUICLY_EVENT_ATTRIBUTE_PACKET_TYPE,
-    QUICLY_EVENT_ATTRIBUTE_PACKET_NUMBER,
-    QUICLY_EVENT_ATTRIBUTE_PACKET_SIZE,
-    QUICLY_EVENT_ATTRIBUTE_CONNECTION,
-    QUICLY_EVENT_ATTRIBUTE_TLS_ERROR,
-    QUICLY_EVENT_ATTRIBUTE_OFFSET,
-    QUICLY_EVENT_ATTRIBUTE_LENGTH,
-    QUICLY_EVENT_ATTRIBUTE_STREAM_ID,
-    QUICLY_EVENT_ATTRIBUTE_FIN,
-    QUICLY_EVENT_ATTRIBUTE_LIMIT,
-    QUICLY_EVENT_ATTRIBUTE_UNIDIRECTIONAL,
-    QUICLY_EVENT_ATTRIBUTE_IS_ENC,
-    QUICLY_EVENT_ATTRIBUTE_ENC_LEVEL,
-    QUICLY_EVENT_ATTRIBUTE_QUIC_VERSION,
-    QUICLY_EVENT_ATTRIBUTE_ACK_ONLY,
-    QUICLY_EVENT_ATTRIBUTE_MAX_LOST_PN,
-    QUICLY_EVENT_ATTRIBUTE_END_OF_RECOVERY,
-    QUICLY_EVENT_ATTRIBUTE_BYTES_IN_FLIGHT,
-    QUICLY_EVENT_ATTRIBUTE_CWND,
-    QUICLY_EVENT_ATTRIBUTE_NUM_PTO,
-    QUICLY_EVENT_ATTRIBUTE_NEWLY_ACKED,
-    QUICLY_EVENT_ATTRIBUTE_FIRST_OCTET,
-    QUICLY_EVENT_ATTRIBUTE_CC_END_OF_RECOVERY,
-    QUICLY_EVENT_ATTRIBUTE_CC_EXIT_RECOVERY,
-    QUICLY_EVENT_ATTRIBUTE_ACKED_PACKETS,
-    QUICLY_EVENT_ATTRIBUTE_ACKED_BYTES,
-    QUICLY_EVENT_ATTRIBUTE_MIN_RTT,
-    QUICLY_EVENT_ATTRIBUTE_SMOOTHED_RTT,
-    QUICLY_EVENT_ATTRIBUTE_LATEST_RTT,
-    QUICLY_EVENT_ATTRIBUTE_STATE,
-    QUICLY_EVENT_ATTRIBUTE_ERROR_CODE,
-    QUICLY_EVENT_ATTRIBUTE_FRAME_TYPE,
-    QUICLY_EVENT_ATTRIBUTE_ACK_BLOCK_BEGIN,
-    QUICLY_EVENT_ATTRIBUTE_ACK_BLOCK_END,
-    QUICLY_EVENT_ATTRIBUTE_ACK_DELAY,
-    QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MAX,
-    QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MIN = QUICLY_EVENT_ATTRIBUTE_TYPE_INT_MAX,
-    QUICLY_EVENT_ATTRIBUTE_DCID = QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MIN,
-    QUICLY_EVENT_ATTRIBUTE_SCID,
-    QUICLY_EVENT_ATTRIBUTE_REASON_PHRASE,
-    QUICLY_EVENT_ATTRIBUTE_TYPE_VEC_MAX
-} quicly_event_attribute_type_t;
-
-/**
- * an array of attribute names corresponding to quicly_event_attribute_type_t
- */
-extern const char *quicly_event_attribute_names[];
-
-typedef struct st_quicly_event_attribute_t {
-    quicly_event_attribute_type_t type;
-    union {
-        ptls_iovec_t v;
-        int64_t i;
-    } value;
-} quicly_event_attribute_t;
-
 typedef struct st_quicly_cid_t quicly_cid_t;
 typedef struct st_quicly_cid_plaintext_t quicly_cid_plaintext_t;
 typedef struct st_quicly_context_t quicly_context_t;
@@ -266,11 +141,6 @@ QUICLY_CALLBACK_TYPE(void, closed_by_peer, quicly_conn_t *conn, int err, uint64_
  * returns current time in milliseconds
  */
 QUICLY_CALLBACK_TYPE0(int64_t, now);
-/**
- * for event logging
- */
-QUICLY_CALLBACK_TYPE(void, event_logger, quicly_event_type_t type, const quicly_event_attribute_t *attributes,
-                     size_t num_attributes);
 
 typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
@@ -394,20 +264,6 @@ struct st_quicly_context_t {
      * returns current time in milliseconds
      */
     quicly_now_t *now;
-    /**
-     * optional callback for debug logging
-     */
-    struct {
-        /**
-         * Bitmask of event types to be logged. The field is a union of (1 << event_type).
-         */
-        uint64_t mask;
-        /**
-         * The callback. The value MUST be non-NULL when mask is set to non-zero. quicly_default_event_log is a functor provided by
-         * by quicly that logs the events in JSON streaming format.
-         */
-        quicly_event_logger_t *cb;
-    } event_log;
 };
 
 /**
@@ -928,6 +784,10 @@ void quicly_amend_ptls_context(ptls_context_t *ptls);
  *
  */
 static void quicly_byte_to_hex(char *dst, uint8_t v);
+/**
+ * Builds a safe string. Supplied buffer MUST be 4x + 1 bytes bigger than the input.
+ */
+char *quicly_escape_unsafe_string(char *dst, const void *bytes, size_t len);
 /**
  *
  */
