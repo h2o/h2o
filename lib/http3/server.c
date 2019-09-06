@@ -243,10 +243,10 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return quicly_get_tls(conn->h3.quic);
 }
 
-static int is_traced(h2o_conn_t *conn)
+static int skip_tracing(h2o_conn_t *conn)
 {
     /* TODO consult blah */
-    return 1;
+    return 0;
 }
 
 static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
@@ -1220,7 +1220,7 @@ SynFound : {
         get_sockname,
         get_peername,
         get_ptls,
-        is_traced,
+        skip_tracing,
         NULL, /* push */
         NULL, /* get debug state */
         {{

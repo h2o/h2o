@@ -563,10 +563,6 @@ typedef struct st_ptls_decompress_certificate_t {
  */
 PTLS_CALLBACK_TYPE(int, update_esni_key, ptls_t *tls, ptls_iovec_t secret, ptls_hash_algorithm_t *hash,
                    const void *hashed_esni_contents);
-/**
- * return if USDT probes should be activated for the connection
- */
-PTLS_CALLBACK_TYPE(int, is_traced, ptls_t *tls);
 
 /**
  * the configuration
@@ -677,10 +673,6 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_esni_key_t *update_esni_key;
-    /**
-     *
-     */
-    ptls_is_traced_t *is_traced;
     /**
      *
      */
@@ -1019,6 +1011,14 @@ int ptls_is_psk_handshake(ptls_t *tls);
  * returns a pointer to user data pointer (client is reponsible for freeing the associated data prior to calling ptls_free)
  */
 void **ptls_get_data_ptr(ptls_t *tls);
+/**
+ *
+ */
+int ptls_skip_tracing(ptls_t *tls);
+/**
+ *
+ */
+void ptls_set_skip_tracing(ptls_t *tls, int skip_tracing);
 /**
  * proceeds with the handshake, optionally taking some input from peer. The function returns zero in case the handshake completed
  * successfully. PTLS_ERROR_IN_PROGRESS is returned in case the handshake is incomplete. Otherwise, an error value is returned. The

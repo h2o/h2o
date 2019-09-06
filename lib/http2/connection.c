@@ -1375,11 +1375,11 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return h2o_socket_get_ptls(conn->sock);
 }
 
-static int is_traced(h2o_conn_t *_conn)
+static int skip_tracing(h2o_conn_t *_conn)
 {
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
     assert(conn->sock != NULL && "it never becomes NULL, right?");
-    return h2o_socket_is_traced(conn->sock);
+    return h2o_socket_skip_tracing(conn->sock);
 }
 
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
@@ -1479,7 +1479,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_sockname, /* stringify address */
         get_peername, /* ditto */
         get_ptls,
-        is_traced,
+        skip_tracing,
         push_path,    /* HTTP2 push */
         h2o_http2_get_debug_state, /* get debug state */
         {{

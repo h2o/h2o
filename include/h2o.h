@@ -814,9 +814,9 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     ptls_t *(*get_ptls)(h2o_conn_t *conn);
     /**
-     * returns if the connection is traced
+     * returns if the connection is target of tracing
      */
-    int (*is_traced)(h2o_conn_t *conn);
+    int (*skip_tracing)(h2o_conn_t *conn);
     /**
      * optional (i.e. may be NULL) callback for server push
      */
