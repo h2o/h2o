@@ -316,7 +316,6 @@ static void usage(const char *progname)
             "Options:\n"
             "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
             "  -3           HTTP/3-only mode\n"
-            "  -E <path>    QUIC event log file (default: none)\n"
             "  -b <size>    size of request body (in bytes; default: 0)\n"
             "  -c <size>    size of body chunk (in bytes; default: 10)\n"
             "  -H <name:value>\n"
@@ -457,16 +456,6 @@ int main(int argc, char **argv)
             ctx.http3 = &h3ctx.h3;
 #endif
             break;
-        case 'E': {
-            FILE *fp;
-            if ((fp = fopen(optarg, "w")) == NULL) {
-                fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
-                exit(EXIT_FAILURE);
-            }
-            setvbuf(fp, NULL, _IONBF, 0);
-            h3ctx.quic.event_log.cb = quicly_new_default_event_logger(fp);
-            h3ctx.quic.event_log.mask = UINT64_MAX;
-        } break;
         case 'h':
             usage(argv[0]);
             exit(0);
