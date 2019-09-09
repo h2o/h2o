@@ -141,12 +141,6 @@ QUICLY_CALLBACK_TYPE(void, closed_by_peer, quicly_conn_t *conn, int err, uint64_
  * returns current time in milliseconds
  */
 QUICLY_CALLBACK_TYPE0(int64_t, now);
-/**
- * Called immediately after the connection object is created.  This API might sound ugly (why not let the application create an
- * instance before "accepting" a connection), but delaying the instatiation after processing the initial packet has performance
- * benefits. Hence the interface.
- */
-QUICLY_CALLBACK_TYPE(void, on_create, quicly_conn_t *conn);
 
 typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
@@ -270,10 +264,6 @@ struct st_quicly_context_t {
      * returns current time in milliseconds
      */
     quicly_now_t *now;
-    /**
-     *
-     */
-    quicly_on_create_t *on_create;
 };
 
 /**

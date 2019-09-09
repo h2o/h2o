@@ -1541,9 +1541,6 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
 
     *ptls_get_data_ptr(tls) = &conn->_;
 
-    if (conn->_.super.ctx->on_create != NULL)
-        conn->_.super.ctx->on_create->cb(conn->_.super.ctx->on_create, &conn->_);
-
     return &conn->_;
 }
 
