@@ -1057,11 +1057,12 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
             /* start using picotls if the first packet contains TLS 1.3 CH */
             ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
             if (ptls_ctx != NULL) {
+                unsigned ptls_skip_tracing_backup = ptls_default_skip_tracing;
+                ptls_default_skip_tracing = sock->_skip_tracing;
                 ptls_t *ptls = ptls_new(ptls_ctx, 1);
+                ptls_default_skip_tracing = ptls_skip_tracing_backup;
                 if (ptls == NULL)
                     h2o_fatal("no memory");
-                if (h2o_socket_skip_tracing(sock))
-                    ptls_set_skip_tracing(ptls, 1);
                 *ptls_get_data_ptr(ptls) = sock;
                 ret = ptls_handshake(ptls, &wbuf, sock->ssl->input.encrypted->bytes, &consumed, NULL);
                 if ((ret == 0 || ret == PTLS_ERROR_IN_PROGRESS) && wbuf.off != 0) {

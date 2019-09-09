@@ -4136,6 +4136,7 @@ ptls_t *ptls_new(ptls_context_t *ctx, int is_server)
     *tls = (ptls_t){ctx};
     tls->is_server = is_server;
     tls->send_change_cipher_spec = ctx->send_change_cipher_spec;
+    tls->skip_tracing = ptls_default_skip_tracing;
     if (!is_server) {
         tls->state = PTLS_STATE_CLIENT_HANDSHAKE_START;
         tls->ctx->random_bytes(tls->client_random, sizeof(tls->client_random));
@@ -5062,6 +5063,7 @@ static uint64_t get_time(ptls_get_time_t *self)
 }
 
 ptls_get_time_t ptls_get_time = {get_time};
+PTLS_THREADLOCAL unsigned ptls_default_skip_tracing = 1;
 
 int ptls_is_server(ptls_t *tls)
 {
