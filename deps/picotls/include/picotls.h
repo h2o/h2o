@@ -42,6 +42,12 @@ extern "C" {
 #define PTLS_UNLIKELY(x) (x)
 #endif
 
+#ifdef _WINDOWS
+#define PTLS_THREADLOCAL __declspec(thread)
+#else
+#define PTLS_THREADLOCAL __thread
+#endif
+
 #ifndef PTLS_FUZZ_HANDSHAKE
 #define PTLS_FUZZ_HANDSHAKE 0
 #endif
@@ -1198,12 +1204,10 @@ int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_
  *
  */
 void ptls_esni_dispose_context(ptls_esni_context_t *esni);
-
 /**
  * Obtain the ESNI secrets negotiated during the handshake.
  */
 ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx);
-
 /**
  *
  */
@@ -1212,6 +1216,10 @@ char *ptls_hexdump(char *dst, const void *src, size_t len);
  * the default get_time callback
  */
 extern ptls_get_time_t ptls_get_time;
+/**
+ *
+ */
+extern PTLS_THREADLOCAL unsigned ptls_default_skip_tracing;
 
 /* inline functions */
 
