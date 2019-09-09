@@ -44,10 +44,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr
 /**
  *
  */
-extern quicly_on_create_t h2o_http3_server_on_create;
-/**
- *
- */
 extern quicly_stream_open_t h2o_http3_server_on_stream_open;
 /**
  *

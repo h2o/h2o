@@ -1337,7 +1337,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quic->transport_params.max_streams_uni = 10;
                 quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
                 quic->stream_open = &h2o_http3_server_on_stream_open;
-                quic->on_create = &h2o_http3_server_on_create;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
                 listener_is_new = 1;
             }

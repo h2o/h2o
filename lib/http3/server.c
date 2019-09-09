@@ -1200,35 +1200,15 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
     free(conn);
 }
 
-static __thread struct {
-    h2o_http3_ctx_t *ctx;
-    struct sockaddr *srcaddr;
-} conn_create_info;
+struct init_ebpf_key_info_t {
+    struct sockaddr *local, *remote;
+};
 
-static void prepare_conn_create(h2o_http3_ctx_t *ctx, struct sockaddr *srcaddr)
+static int init_ebpf_key_info(struct st_h2o_ebpf_map_key_t *key, void *_info)
 {
-    conn_create_info.ctx = ctx;
-    conn_create_info.srcaddr = srcaddr;
+    struct init_ebpf_key_info_t *info = _info;
+    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
 }
-
-static void cleanup_conn_create(void)
-{
-    conn_create_info.ctx = NULL;
-    conn_create_info.srcaddr = NULL;
-}
-
-static int conn_create_init_ebpfkey(struct st_h2o_ebpf_map_key_t *key, void *cbdata)
-{
-    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, (void *)&conn_create_info.ctx->sock.addr, conn_create_info.srcaddr);
-}
-
-static void conn_create_cb(quicly_on_create_t *self, quicly_conn_t *conn)
-{
-    if (!h2o_socket_ebpf_lookup(conn_create_info.ctx->loop, conn_create_init_ebpfkey, NULL))
-        ptls_set_skip_tracing(quicly_get_tls(conn), 1);
-}
-
-quicly_on_create_t h2o_http3_server_on_create = {conn_create_cb};
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *srcaddr, socklen_t srcaddrlen,
                                           struct sockaddr *destaddr, socklen_t destaddrlen, quicly_decoded_packet_t *packets,
@@ -1285,16 +1265,18 @@ SynFound : {
     conn->scheduler.conn_blocked.uni = 0;
 
     /* accept connection */
+    struct init_ebpf_key_info_t keyinfo = {destaddr, srcaddr};
+    unsigned orig_skip_tracing = ptls_default_skip_tracing;
+    ptls_default_skip_tracing = !h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &keyinfo);
     quicly_conn_t *qconn;
-    prepare_conn_create(conn->h3.ctx, srcaddr);
-    if (quicly_accept(&qconn, ctx->super.quic, srcaddr, srcaddrlen, packets + syn_index, ptls_iovec_init(NULL, 0),
-                      &ctx->super.next_cid, &conn->handshake_properties) != 0) {
-        cleanup_conn_create();
+    int accept_ret = quicly_accept(&qconn, ctx->super.quic, srcaddr, srcaddrlen, packets + syn_index, ptls_iovec_init(NULL, 0),
+                                   &ctx->super.next_cid, &conn->handshake_properties);
+    ptls_default_skip_tracing = orig_skip_tracing;
+    if (accept_ret != 0) {
         h2o_http3_dispose_conn(&conn->h3);
         free(conn);
         return NULL;
     }
-    cleanup_conn_create();
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
     /* handle the other packet */
