@@ -90,7 +90,7 @@ static inline uint64_t h2o_now_nanosec(h2o_evloop_t *loop)
 
 static inline uint64_t h2o_evloop_get_execution_time_millisec(h2o_evloop_t *loop)
 {
-    return loop->exec_time_nanosec_counter.average * 1000000;
+    return loop->exec_time_nanosec_counter.average / 1000000;
 }
 
 static inline uint64_t h2o_evloop_get_execution_time_nanosec(h2o_evloop_t *loop)
