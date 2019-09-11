@@ -112,6 +112,7 @@ static void duration_stats_free(struct st_duration_stats_t *stats)
     gkc_summary_free(stats->process_time);
     gkc_summary_free(stats->response_time);
     gkc_summary_free(stats->total_time);
+    free(stats->evloop_latency_nanosec.entries);
 }
 
 static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
@@ -153,7 +154,6 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
 #undef BUFSIZE
     duration_stats_free(&agg_stats->stats);
-    free(agg_stats->stats.evloop_latency_nanosec.entries);
     pthread_mutex_destroy(&agg_stats->mutex);
 
     free(agg_stats);
