@@ -258,6 +258,12 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
     free(stream);
 }
 
+static int call_on_body(struct st_h2o_http2client_stream_t *stream, const char *errstr)
+{
+    h2o_httpclient_body_hints_t hints = (h2o_httpclient_body_hints_t){NULL};
+    return stream->super._cb.on_body(&stream->super, &hints, errstr);
+}
+
 static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
 {
     assert(errstr != NULL);
@@ -268,7 +274,7 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
         stream->super._cb.on_head(&stream->super, errstr, 0x200, 0, h2o_iovec_init(NULL, 0), NULL, 0, 0);
         break;
     case H2O_HTTP2CLIENT_STREAM_STATE_RECV_BODY:
-        stream->super._cb.on_body(&stream->super, errstr);
+        call_on_body(stream, errstr);
         break;
     }
 }
@@ -415,7 +421,7 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
 
     size_t max_size = get_max_buffer_size(stream->super.ctx);
     if (stream->input.body->size + payload.length > max_size) {
-        stream->super._cb.on_body(&stream->super, "buffered data size exceeds input window");
+        call_on_body(stream, "buffered data size exceeds input window");
         stream_send_error(stream->conn, stream->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
         close_stream(stream);
         return 0;
@@ -427,7 +433,7 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
     h2o_http2_window_consume_window(&stream->input.window, payload.length);
 
     int is_final = (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0;
-    if (stream->super._cb.on_body(&stream->super, is_final ? h2o_httpclient_error_is_eos : NULL) != 0) {
+    if (call_on_body(stream, is_final ? h2o_httpclient_error_is_eos : NULL) != 0) {
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_INTERNAL);
         close_stream(stream);
         return 0;

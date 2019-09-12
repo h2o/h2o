@@ -361,7 +361,7 @@ static mrb_value build_chunk(struct st_h2o_mruby_http_request_context_t *ctx)
     return chunk;
 }
 
-static int do_on_body(h2o_httpclient_t *client, const char *errstr)
+static int do_on_body(h2o_httpclient_t *client, h2o_httpclient_body_hints_t *hints, const char *errstr)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -387,7 +387,7 @@ static int do_on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-static int on_body(h2o_httpclient_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, h2o_httpclient_body_hints_t *hints, const char *errstr)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
     if (try_dispose_context(ctx))
@@ -396,7 +396,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
     mrb_gc_protect(ctx->ctx->shared->mrb, ctx->refs.input_stream);
 
-    int ret = do_on_body(client, errstr);
+    int ret = do_on_body(client, hints, errstr);
 
     mrb_gc_arena_restore(ctx->ctx->shared->mrb, gc_arena);
 

@@ -77,10 +77,16 @@ static void close_client(struct st_h2o_http1client_t *client)
     free(client);
 }
 
+static int call_on_body_with_no_hints(struct st_h2o_http1client_t *client, const char *errstr)
+{
+    h2o_httpclient_body_hints_t hints = (h2o_httpclient_body_hints_t){NULL};
+    return client->super._cb.on_body(&client->super, &hints, errstr);
+}
+
 static void on_body_error(struct st_h2o_http1client_t *client, const char *errstr)
 {
     client->_do_keepalive = 0;
-    client->super._cb.on_body(&client->super, errstr);
+    call_on_body_with_no_hints(client, errstr);
     close_client(client);
 }
 
@@ -99,13 +105,13 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
 
     if (err != NULL) {
         client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
-        client->super._cb.on_body(&client->super, h2o_httpclient_error_is_eos);
+        call_on_body_with_no_hints(client, h2o_httpclient_error_is_eos);
         close_client(client);
         return;
     }
 
     if (sock->bytes_read != 0) {
-        if (client->super._cb.on_body(&client->super, NULL) != 0) {
+        if (call_on_body_with_no_hints(client, NULL) != 0) {
             close_client(client);
             return;
         }
@@ -142,7 +148,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
             client->_body_decoder.content_length.bytesleft -= sock->bytes_read;
             errstr = NULL;
         }
-        ret = client->super._cb.on_body(&client->super, errstr);
+        ret = call_on_body_with_no_hints(client, errstr);
         if (errstr == h2o_httpclient_error_is_eos) {
             close_client(client);
             return;
@@ -173,7 +179,7 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
              */
             client->_do_keepalive = 0;
             client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
-            client->super._cb.on_body(&client->super, h2o_httpclient_error_is_eos);
+            call_on_body_with_no_hints(client, h2o_httpclient_error_is_eos);
             close_client(client);
         } else {
             on_body_error(client, "I/O error (body; chunked)");
@@ -207,7 +213,10 @@ static void on_req_chunked(h2o_socket_t *sock, const char *err)
         inbuf->size -= sock->bytes_read - newsz;
         if (inbuf->size > 0)
             client->_seen_at_least_one_chunk = 1;
-        cb_ret = client->super._cb.on_body(&client->super, errstr);
+
+        size_t bytes_left_in_chunk = client->_body_decoder.chunked.decoder.bytes_left_in_chunk;
+        h2o_httpclient_body_hints_t hints = (h2o_httpclient_body_hints_t){&bytes_left_in_chunk};
+        cb_ret = client->super._cb.on_body(&client->super, &hints, errstr);
         if (errstr != NULL) {
             close_client(client);
             return;
