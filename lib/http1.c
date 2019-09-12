@@ -28,6 +28,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#include "./probes_.h"
 
 #define MAX_PULL_BUF_SZ 65536
 
@@ -128,6 +129,8 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
+    if (conn->sock != NULL)
+        H2O_PROBE_CONN0(H1_CLOSE, &conn->super);
     h2o_timer_unlink(&conn->_timeout_entry);
     h2o_dispose_request(&conn->req);
     if (conn->sock != NULL && close_socket)
@@ -526,6 +529,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             send_bad_request(conn, "line folding of header fields is not supported");
             return;
         }
+        h2o_probe_log_request(&conn->req, conn->_req_index);
         if (entity_body_header_index != -1) {
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
             if (expect.base != NULL) {
@@ -1133,6 +1137,8 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     conn->sock = sock;
     sock->data = conn;
     h2o_linklist_insert(&ctx->ctx->http1._conns, &conn->_conns);
+
+    H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super);
 
     init_request(conn);
     reqread_start(conn);

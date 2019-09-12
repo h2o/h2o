@@ -73,6 +73,7 @@ subtest "preserve.host" => sub {
         my $server = spawn_h2o(<< "EOT");
 proxy.ssl.verify-peer: OFF
 proxy.preserve-host: @{[ $flag ? "ON" : "OFF" ]}
+proxy.ssl.session-cache: OFF # SSL_get_servername returns NULL if a session (that didn't ack the use of SNI in SH) is resumed (https://github.com/openssl/openssl/commit/a75be9f)
 hosts:
   default:
     paths:

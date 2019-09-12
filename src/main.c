@@ -470,6 +470,14 @@ Exit:
     return ret;
 }
 
+static int tls_is_traced(ptls_is_traced_t *self, ptls_t *tls)
+{
+    h2o_socket_t *sock = *ptls_get_data_ptr(tls);
+    if (sock == NULL)
+        return 0;
+    return h2o_socket_is_traced(sock);
+}
+
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_config_t *ssl_config,
                                               SSL_CTX *ssl_ctx)
 {
@@ -480,6 +488,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         &ptls_minicrypto_x25519,
 #endif
         &ptls_openssl_secp256r1, NULL};
+    static ptls_is_traced_t is_traced = {tls_is_traced};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
@@ -516,6 +525,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                        NULL,            /* update_traffic_key */
                                        NULL,            /* decompress_certificate */
                                        NULL,            /* update_esni_key */
+                                       &is_traced,      /* is_traced */
                                        NULL},           /* on_extension */
                                       {{on_client_hello_ptls}, listener},
                                       {{on_emit_certificate_ptls}, ssl_config}};
@@ -673,8 +683,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
     }
     if (max_version != NULL) {
-        if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0)
+        if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0) {
+#ifdef SSL_OP_NO_TLSv1_3
+            ssl_options |= SSL_OP_NO_TLSv1_3;
+#endif
             use_picotls = 0;
+        }
     }
     if (ocsp_update_interval_node != NULL) {
         if (h2o_configurator_scanf(cmd, *ocsp_update_interval_node, "%" PRIu64, &ocsp_update_interval) != 0)
@@ -2145,6 +2159,9 @@ int main(int argc, char **argv)
 #if H2O_USE_MRUBY
                 printf(
                     "mruby: YES\n"); /* TODO determine the way to obtain the version of mruby (that is being linked dynamically) */
+#endif
+#if H2O_USE_DTRACE
+                printf("dtrace: YES\n");
 #endif
                 exit(0);
             case 'h':

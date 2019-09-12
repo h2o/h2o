@@ -6,8 +6,8 @@ use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
 
-plan skip_all => 'test requires root privileges'
-    unless $< == 0;
+run_as_root();
+
 plan skip_all => 'user: nobody does not exist'
     unless getpwnam 'nobody';
 plan skip_all => 'user: daemon does not exist'
