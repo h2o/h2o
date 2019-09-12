@@ -38,8 +38,12 @@ typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
 
+typedef struct st_h2o_httpclient_body_hints_t {
+    size_t *bytes_left_in_chunk;
+} h2o_httpclient_body_hints_t;
+
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
-typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
+typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, h2o_httpclient_body_hints_t *hints, const char *errstr);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
                                                          h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
                                                          int header_requires_dup);

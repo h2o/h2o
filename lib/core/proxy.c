@@ -382,7 +382,7 @@ static void copy_stats(struct rp_generator_t *self)
     self->src_req->proxy_stats.bytes_written.body = self->client->bytes_written.body;
 }
 
-static int on_body(h2o_httpclient_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, h2o_httpclient_body_hints_t *hints, const char *errstr)
 {
     struct rp_generator_t *self = client->data;
 
