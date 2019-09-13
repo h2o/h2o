@@ -206,7 +206,6 @@ extern const char h2o_httpclient_error_http1_unexpected_transfer_encoding[];
 extern const char h2o_httpclient_error_http1_invalid_content_length[];
 extern const char h2o_httpclient_error_http1_parse_failed[];
 extern const char h2o_httpclient_error_http2_upstream_protocol[];
-extern const char h2o_httpclient_error_http2_goaway_received[];
 extern const char h2o_httpclient_error_http2_flow_control_window_overflow[];
 extern const char h2o_httpclient_error_internal[];
 

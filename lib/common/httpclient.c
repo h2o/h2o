@@ -34,7 +34,6 @@ const char h2o_httpclient_error_http1_unexpected_transfer_encoding[] = "unexpect
 const char h2o_httpclient_error_http1_invalid_content_length[] = "invalid content-length";
 const char h2o_httpclient_error_http1_parse_failed[] = "failed to parse the response";
 const char h2o_httpclient_error_http2_upstream_protocol[] = "upstream protocol error";
-const char h2o_httpclient_error_http2_goaway_received[] = "GOAWAY received";
 const char h2o_httpclient_error_http2_flow_control_window_overflow[] = "flow control window overflow";
 const char h2o_httpclient_error_internal[] = "internal error";
 
