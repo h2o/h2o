@@ -29,12 +29,12 @@ const char h2o_httpclient_error_io[] = "I/O error";
 const char h2o_httpclient_error_connection_timeout[] = "connection timeout";
 const char h2o_httpclient_error_first_byte_timeout[] = "first byte timeout";
 const char h2o_httpclient_error_io_timeout[] = "I/O timeout";
+const char h2o_httpclient_error_invalid_content_length[] = "invalid content-length";
+const char h2o_httpclient_error_flow_control[] = "flow control error";
 const char h2o_httpclient_error_http1_line_folding[] = "line folding of header fields is not supported";
 const char h2o_httpclient_error_http1_unexpected_transfer_encoding[] = "unexpected type of transfer-encoding";
-const char h2o_httpclient_error_http1_invalid_content_length[] = "invalid content-length";
 const char h2o_httpclient_error_http1_parse_failed[] = "failed to parse the response";
 const char h2o_httpclient_error_http2_upstream_protocol[] = "upstream protocol error";
-const char h2o_httpclient_error_flow_control[] = "flow control error";
 const char h2o_httpclient_error_internal[] = "internal error";
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)

@@ -338,7 +338,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         } else if (headers[i].name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
             if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value.base, headers[i].value.len)) ==
                 SIZE_MAX) {
-                on_error_before_head(client, h2o_httpclient_error_http1_invalid_content_length);
+                on_error_before_head(client, h2o_httpclient_error_invalid_content_length);
                 return;
             }
             if (reader != on_req_chunked)
