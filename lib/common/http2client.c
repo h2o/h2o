@@ -416,7 +416,7 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
 
     size_t max_size = get_max_buffer_size(stream->super.ctx);
     if (stream->input.body->size + payload.length > max_size) {
-        stream->super._cb.on_body(&stream->super, h2o_httpclient_error_http2_upstream_protocol);
+        stream->super._cb.on_body(&stream->super, h2o_httpclient_error_flow_control);
         stream_send_error(stream->conn, stream->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
         close_stream(stream);
         return 0;
@@ -694,7 +694,7 @@ static int handle_window_update_frame(struct st_h2o_http2client_conn_t *conn, h2
         if (stream != NULL) {
             if (update_stream_output_window(stream, payload.window_size_increment) != 0) {
                 stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
-                call_callback_with_error(stream, h2o_httpclient_error_http2_flow_control_window_overflow);
+                call_callback_with_error(stream, h2o_httpclient_error_flow_control);
                 close_stream(stream);
                 return 0;
             }
