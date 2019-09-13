@@ -860,7 +860,7 @@ static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const c
 static void do_stream_timeout(struct st_h2o_http2client_stream_t *stream)
 {
     if (stream->conn == NULL) {
-        on_connect_error(stream, h2o_httpclient_error_connection_timeout);
+        on_connect_error(stream, h2o_httpclient_error_connect_timeout);
         return;
     }
     const char *errstr = stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS ? h2o_httpclient_error_first_byte_timeout : h2o_httpclient_error_io_timeout;

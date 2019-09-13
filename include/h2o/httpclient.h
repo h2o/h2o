@@ -198,7 +198,7 @@ extern const char h2o_httpclient_error_is_eos[];
 extern const char h2o_httpclient_error_refused_stream[];
 extern const char h2o_httpclient_error_unknown_alpn_protocol[];
 extern const char h2o_httpclient_error_io[];
-extern const char h2o_httpclient_error_connection_timeout[];
+extern const char h2o_httpclient_error_connect_timeout[];
 extern const char h2o_httpclient_error_first_byte_timeout[];
 extern const char h2o_httpclient_error_io_timeout[];
 extern const char h2o_httpclient_error_invalid_content_length[];
