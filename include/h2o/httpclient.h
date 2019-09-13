@@ -34,9 +34,10 @@ typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
 typedef struct st_h2o_httpclient_properties_t {
     h2o_iovec_t *proxy_protocol;
-    int *chunked;
     h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
+
+typedef struct st_h2o_httpclient_req_body_t h2o_httpclient_req_body_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
@@ -50,10 +51,28 @@ typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *clien
  */
 typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method,
                                                             h2o_url_t *url, const h2o_header_t **headers, size_t *num_headers,
-                                                            h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
-                                                            h2o_httpclient_properties_t *props, h2o_url_t *origin);
+                                                            h2o_httpclient_req_body_t *body, h2o_httpclient_properties_t *props, h2o_url_t *origin);
 typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg,
                                                h2o_header_t *headers, size_t num_headers);
+
+struct st_h2o_httpclient_req_body_t {
+    /**
+     * type is initialized to H2O_HTTPCLIENT_REQ_BODY_NONE before calling on_connect callback
+     */
+    enum {
+        H2O_HTTPCLIENT_REQ_BODY_NONE,
+        H2O_HTTPCLIENT_REQ_BODY_VEC,
+        H2O_HTTPCLIENT_REQ_BODY_STREAMING
+    } type;
+    union {
+        h2o_iovec_t vec;
+        struct {
+            h2o_iovec_t first;
+            h2o_httpclient_proceed_req_cb proceed;
+            size_t content_length;
+        } streaming;
+    };
+};
 
 typedef struct st_h2o_httpclient_connection_pool_t {
     /**
@@ -212,6 +231,8 @@ extern const size_t h2o_httpclient__h1_size;
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
+
+void h2o_httpclient__add_cl_or_te_header(h2o_mem_pool_t *pool, h2o_iovec_t method, h2o_headers_t *headers, h2o_httpclient_req_body_t *body, int *chunked);
 
 #ifdef __cplusplus
 }

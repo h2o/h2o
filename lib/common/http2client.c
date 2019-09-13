@@ -854,7 +854,7 @@ static void enqueue_goaway(struct st_h2o_http2client_conn_t *conn, int errnum, h
 static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
 {
     assert(errstr != NULL);
-    stream->super._cb.on_connect(&stream->super, errstr, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL);
+    stream->super._cb.on_connect(&stream->super, errstr, NULL, NULL, NULL, 0, NULL, NULL, NULL);
     close_stream(stream);
 }
 
@@ -946,31 +946,46 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_url_t url;
     h2o_header_t *headers;
     size_t num_headers;
-    h2o_iovec_t body;
+    h2o_httpclient_req_body_t body = {H2O_HTTPCLIENT_REQ_BODY_NONE};
     h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
 
     register_stream(stream, conn);
 
     stream->super._cb.on_head =
         stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
-                                     &stream->streaming.proceed_req, &props, &conn->super.origin_url);
+                                     &props, &conn->super.origin_url);
     if (stream->super._cb.on_head == NULL) {
         close_stream(stream);
         return;
+    }
+
+    {
+        h2o_headers_t headers_vec = (h2o_headers_t){headers, num_headers, num_headers};
+        h2o_httpclient__add_cl_or_te_header(stream->super.pool, method, &headers_vec, &body, NULL);
+        headers = headers_vec.entries;
+        num_headers = headers_vec.size;
     }
 
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              method, &url, headers, num_headers, body.base == NULL);
+                              method, &url, headers, num_headers, body.type == H2O_HTTPCLIENT_REQ_BODY_NONE);
     transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY);
 
-    if (body.base != NULL) {
+    if (body.type == H2O_HTTPCLIENT_REQ_BODY_VEC) {
         /* send body */
         h2o_vector_reserve(stream->super.pool, &stream->output.data, stream->output.data.size + 1);
-        stream->output.data.entries[stream->output.data.size++] = body;
+        stream->output.data.entries[stream->output.data.size++] = body.vec;
+    } else if (body.type == H2O_HTTPCLIENT_REQ_BODY_STREAMING) {
+        stream->streaming.proceed_req = body.streaming.proceed;
+        if (body.streaming.first.base != NULL) {
+            /* send first chunk */
+            h2o_vector_reserve(stream->super.pool, &stream->output.data, stream->output.data.size + 1);
+            stream->output.data.entries[stream->output.data.size++] = body.streaming.first;
+        }
     }
+
     h2o_linklist_insert(&conn->output.sending_streams, &stream->output.sending_link);
     request_write(conn);
 }
