@@ -228,14 +228,13 @@ static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
     return conn->h3.ctx->sock.addrlen;
 }
 
-static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *_sa)
+static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
-    struct sockaddr *sa;
-    socklen_t salen;
-    quicly_get_peername(conn->h3.quic, &sa, &salen);
-    memcpy(_sa, sa, salen);
-    return salen;
+    struct sockaddr *src = quicly_get_peername(conn->h3.quic);
+    socklen_t len = quicly_get_socklen(src);
+    memcpy(sa, src, len);
+    return len;
 }
 
 static ptls_t *get_ptls(h2o_conn_t *_conn)
@@ -1269,8 +1268,8 @@ SynFound : {
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
     ptls_default_skip_tracing = !h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &keyinfo);
     quicly_conn_t *qconn;
-    int accept_ret = quicly_accept(&qconn, ctx->super.quic, srcaddr, srcaddrlen, packets + syn_index, ptls_iovec_init(NULL, 0),
-                                   &ctx->super.next_cid, &conn->handshake_properties);
+    int accept_ret = quicly_accept(&qconn, ctx->super.quic, NULL, srcaddr, packets + syn_index, NULL, &ctx->super.next_cid,
+                                   &conn->handshake_properties);
     ptls_default_skip_tracing = orig_skip_tracing;
     if (accept_ret != 0) {
         h2o_http3_dispose_conn(&conn->h3);
@@ -1283,7 +1282,7 @@ SynFound : {
     for (i = 0; i != num_packets; ++i) {
         if (i == syn_index)
             continue;
-        quicly_receive(conn->h3.quic, packets + i);
+        quicly_receive(conn->h3.quic, NULL, srcaddr, packets + i);
     }
     h2o_http3_send(&conn->h3);
     return &conn->h3;

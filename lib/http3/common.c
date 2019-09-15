@@ -63,8 +63,8 @@ static int send_one(int fd, quicly_datagram_t *p)
     struct msghdr mess;
     struct iovec vec;
     memset(&mess, 0, sizeof(mess));
-    mess.msg_name = &p->sa;
-    mess.msg_namelen = p->salen;
+    mess.msg_name = &p->dest.sa;
+    mess.msg_namelen = quicly_get_socklen(&p->dest.sa);
     vec.iov_base = p->data.base;
     vec.iov_len = p->data.len;
     mess.msg_iov = &vec;
@@ -367,7 +367,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *srcaddr, sock
             /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
             if (packets[0].octets.len >= QUICLY_STATELESS_RESET_PACKET_MIN_LEN) {
                 quicly_datagram_t *dgram =
-                    quicly_send_stateless_reset(ctx->quic, srcaddr, srcaddrlen, packets[0].cid.dest.encrypted.base);
+                    quicly_send_stateless_reset(ctx->quic, NULL, srcaddr, packets[0].cid.dest.encrypted.base);
                 if (dgram != NULL) {
                     send_one(h2o_socket_get_fd(ctx->sock.sock), dgram);
                     ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
@@ -429,12 +429,12 @@ static void process_packets(h2o_http3_ctx_t *ctx, struct sockaddr *srcaddr, sock
     { /* receive packets to the found connection */
         assert(conn != NULL);
         /* FIXME pass the source address to quicly_receive, and let it handle the information accordincly */
-        if (!quicly_is_destination(conn->quic, srcaddr, srcaddrlen, packets))
+        if (!quicly_is_destination(conn->quic, NULL, srcaddr, packets))
             return;
         size_t i;
         for (i = 0; i != num_packets; ++i) {
             /* FIXME process errors? */
-            quicly_receive(conn->quic, packets + i);
+            quicly_receive(conn->quic, NULL, srcaddr, packets + i);
         }
     }
 

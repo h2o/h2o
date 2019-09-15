@@ -170,10 +170,9 @@ static void start_connect(struct st_h2o_http3client_conn_t *conn, struct sockadd
     assert(h2o_timer_is_linked(&conn->timeout));
     assert(conn->timeout.cb == on_connect_timeout);
 
-    /* create QUIC connection context and attach */
-    if ((ret = quicly_connect(&qconn, conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, salen,
-                              &conn->ctx->http3->next_cid, &conn->handshake_properties, NULL /* TODO pass transport params */)) !=
-        0) {
+    /* create QUIC connection context and attach (TODO pass address token, transport params) */
+    if ((ret = quicly_connect(&qconn, conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, NULL,
+                              &conn->ctx->http3->next_cid, ptls_iovec_init(NULL, 0), &conn->handshake_properties, NULL)) != 0) {
         conn->super.quic = NULL; /* just in case */
         goto Fail;
     }
