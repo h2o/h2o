@@ -66,14 +66,13 @@ const quicly_context_t quicly_performant_context = {
     &quicly_default_now
 };
 
-static quicly_datagram_t *default_alloc_packet(quicly_packet_allocator_t *self, socklen_t salen, size_t payloadsize)
+static quicly_datagram_t *default_alloc_packet(quicly_packet_allocator_t *self, size_t payloadsize)
 {
     quicly_datagram_t *packet;
 
-    if ((packet = malloc(offsetof(quicly_datagram_t, sa) + salen + payloadsize)) == NULL)
+    if ((packet = malloc(sizeof(*packet) + payloadsize)) == NULL)
         return NULL;
-    packet->salen = salen;
-    packet->data.base = (uint8_t *)packet + offsetof(quicly_datagram_t, sa) + salen;
+    packet->data.base = (uint8_t *)packet + sizeof(*packet);
 
     return packet;
 }

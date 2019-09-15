@@ -215,7 +215,7 @@ typedef struct st_quicly_ack_frame_t {
 int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_frame_t *frame, int is_ack_ecn);
 
 static size_t quicly_new_token_frame_capacity(ptls_iovec_t token);
-static uint8_t *quicly_encode_new_token_frame(uint8_t *dst, const uint8_t *dst_end, ptls_iovec_t token);
+static uint8_t *quicly_encode_new_token_frame(uint8_t *dst, ptls_iovec_t token);
 
 typedef struct st_quicly_new_token_frame_t {
     ptls_iovec_t token;
@@ -650,7 +650,7 @@ inline size_t quicly_new_token_frame_capacity(ptls_iovec_t token)
     return 1 + quicly_encodev_capacity(token.len) + token.len;
 }
 
-inline uint8_t *quicly_encode_new_token_frame(uint8_t *dst, const uint8_t *dst_end, ptls_iovec_t token)
+inline uint8_t *quicly_encode_new_token_frame(uint8_t *dst, ptls_iovec_t token)
 {
     *dst++ = QUICLY_FRAME_TYPE_NEW_TOKEN;
     dst = quicly_encodev(dst, token.len);

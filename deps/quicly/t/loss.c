@@ -125,7 +125,7 @@ static int transmit_cond(quicly_conn_t *src, quicly_conn_t *dst, size_t *num_sen
                 size_t num_decoded = decode_packets(decoded, packets + i, 1), j;
                 assert(num_decoded != 0);
                 for (j = 0; j != num_decoded; ++j) {
-                    ret = quicly_receive(dst, decoded + j);
+                    ret = quicly_receive(dst, NULL, &fake_address.sa, decoded + j);
                     if (!(ret == 0 || ret == QUICLY_ERROR_PACKET_IGNORED)) {
                         fprintf(stderr, "%s: quicly_receive: i=%zu, j=%zu, ret=%d\n", __FUNCTION__, i, j, ret);
                         return ret;
@@ -159,7 +159,8 @@ static void test_even(void)
         size_t num_packets;
         quicly_decoded_packet_t decoded;
 
-        ret = quicly_connect(&client, &quic_ctx, "example.com", (void *)"abc", 3, new_master_id(), NULL, NULL);
+        ret = quicly_connect(&client, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0),
+                             NULL, NULL);
         ok(ret == 0);
         num_packets = 1;
         ret = quicly_send(client, &raw, &num_packets);
@@ -167,7 +168,7 @@ static void test_even(void)
         ok(num_packets == 1);
         decode_packets(&decoded, &raw, 1);
         ok(num_packets == 1);
-        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, &decoded, ptls_iovec_init(NULL, 0), new_master_id(), NULL);
+        ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
         ok(ret == 0);
         free_packets(&raw, 1);
         cond_up.cb(&cond_up);
@@ -262,7 +263,8 @@ static void loss_core(void)
         size_t num_packets;
         quicly_decoded_packet_t decoded;
 
-        ret = quicly_connect(&client, &quic_ctx, "example.com", (void *)"abc", 3, new_master_id(), NULL, NULL);
+        ret = quicly_connect(&client, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0),
+                             NULL, NULL);
         ok(ret == 0);
         num_packets = 1;
         ret = quicly_send(client, &raw, &num_packets);
@@ -271,7 +273,7 @@ static void loss_core(void)
         quic_now += 10;
         decode_packets(&decoded, &raw, 1);
         ok(num_packets == 1);
-        ret = quicly_accept(&server, &quic_ctx, (void *)"abc", 3, &decoded, ptls_iovec_init(NULL, 0), new_master_id(), NULL);
+        ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL);
         ok(ret == 0);
         free_packets(&raw, 1);
         quic_now += 10;

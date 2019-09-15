@@ -105,6 +105,10 @@ struct st_quicly_sent_t {
         struct {
             quicly_stream_id_t stream_id;
         } stream_state_sender;
+        struct {
+            int is_inflight;
+            uint64_t generation;
+        } new_token;
     } data;
 };
 

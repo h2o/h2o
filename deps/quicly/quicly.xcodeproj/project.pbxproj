@@ -57,6 +57,7 @@
 		E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448281EA48D0000390927 /* picotls.c */; };
 		E9CC44251EC1962700DC7D3E /* test.c in Sources */ = {isa = PBXBuildFile; fileRef = E9CC44241EC1962700DC7D3E /* test.c */; };
 		E9CC44261EC1963100DC7D3E /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = E9CC44151EC195CA00DC7D3E /* picotest.c */; };
+		E9D31DD1232DEDB400ACD5EC /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
 		E9D3CCCD21D22E7E00516202 /* streambuf.h in Headers */ = {isa = PBXBuildFile; fileRef = E9D3CCCC21D22E7E00516202 /* streambuf.h */; };
 		E9D3CCCF21D22F4300516202 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
 		E9D3CCD021D6D24000516202 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
@@ -601,6 +602,7 @@
 			files = (
 				E99F8C291F4EAEF800C26B3D /* frame.c in Sources */,
 				E98041C722383C7A008B9745 /* cc-reno.c in Sources */,
+				E9D31DD1232DEDB400ACD5EC /* quicly-probes.d in Sources */,
 				E920D22C1F49533800799777 /* sentmap.c in Sources */,
 				E920D2301F49EE0B00799777 /* loss.c in Sources */,
 				E99B75E71F5CF96900CF503E /* maxsender.c in Sources */,

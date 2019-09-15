@@ -174,14 +174,14 @@ static void process_msg(int is_client, quicly_conn_t **conns, struct msghdr *msg
             return;
         /* find the corresponding connection (TODO handle version negotiation, rebinding, retry, etc.) */
         for (i = 0; conns[i] != NULL; ++i)
-            if (quicly_is_destination(conns[i], msg->msg_name, msg->msg_namelen, &decoded))
+            if (quicly_is_destination(conns[i], NULL, msg->msg_name, &decoded))
                 break;
         if (conns[i] != NULL) {
             /* let the current connection handle ingress packets */
-            quicly_receive(conns[i], &decoded);
+            quicly_receive(conns[i], NULL, msg->msg_name, &decoded);
         } else if (!is_client) {
             /* assume that the packet is a new connection */
-            quicly_accept(conns + i, &ctx, msg->msg_name, msg->msg_namelen, &decoded, ptls_iovec_init(NULL, 0), &next_cid, NULL);
+            quicly_accept(conns + i, &ctx, NULL, msg->msg_name, &decoded, NULL, &next_cid, NULL);
         }
     }
 }
@@ -189,7 +189,8 @@ static void process_msg(int is_client, quicly_conn_t **conns, struct msghdr *msg
 static int send_one(int fd, quicly_datagram_t *p)
 {
     struct iovec vec = {.iov_base = p->data.base, .iov_len = p->data.len};
-    struct msghdr mess = {.msg_name = &p->sa, .msg_namelen = p->salen, .msg_iov = &vec, .msg_iovlen = 1};
+    struct msghdr mess = {
+        .msg_name = &p->dest.sa, .msg_namelen = quicly_get_socklen(&p->dest.sa), .msg_iov = &vec, .msg_iovlen = 1};
     int ret;
 
     while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
@@ -391,7 +392,8 @@ int main(int argc, char **argv)
     if (!is_server()) {
         /* initiate a connection, and open a stream */
         int ret;
-        if ((ret = quicly_connect(&client, &ctx, host, (struct sockaddr *)&sa, salen, &next_cid, NULL, NULL)) != 0) {
+        if ((ret = quicly_connect(&client, &ctx, host, NULL, (struct sockaddr *)&sa, &next_cid, ptls_iovec_init(NULL, 0), NULL,
+                                  NULL)) != 0) {
             fprintf(stderr, "quicly_connect failed:%d\n", ret);
             exit(1);
         }

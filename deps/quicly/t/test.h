@@ -35,6 +35,7 @@ typedef struct st_test_streambuf_t {
     int is_detached;
 } test_streambuf_t;
 
+extern quicly_address_t fake_address;
 extern int64_t quic_now;
 extern quicly_context_t quic_ctx;
 extern quicly_stream_callbacks_t stream_callbacks;
