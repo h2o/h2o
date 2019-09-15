@@ -3398,9 +3398,17 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
     for (*psk_index = 0; *psk_index < ch->psk.identities.count; ++*psk_index) {
         struct st_ptls_client_hello_psk_t *identity = ch->psk.identities.list + *psk_index;
         /* decrypt and decode */
+        int can_accept_early_data = 1;
         decbuf.off = 0;
-        if ((tls->ctx->encrypt_ticket->cb(tls->ctx->encrypt_ticket, tls, 0, &decbuf, identity->identity)) != 0)
+        switch (tls->ctx->encrypt_ticket->cb(tls->ctx->encrypt_ticket, tls, 0, &decbuf, identity->identity)) {
+        case 0: /* decrypted */
+            break;
+        case PTLS_ERROR_REJECT_EARLY_DATA: /* decrypted, but early data is rejected */
+            can_accept_early_data = 0;
+            break;
+        default: /* decryption failure */
             continue;
+        }
         if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_server_name, &ticket_key_exchange_id, &ticket_csid,
                                       &ticket_negotiated_protocol, decbuf.base, decbuf.base + decbuf.off) != 0)
             continue;
@@ -3410,7 +3418,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
         if (now - issue_at > (uint64_t)tls->ctx->ticket_lifetime * 1000)
             continue;
         *accept_early_data = 0;
-        if (ch->psk.early_data_indication) {
+        if (ch->psk.early_data_indication && can_accept_early_data) {
             /* accept early-data if abs(diff) between the reported age and the actual age is within += 10 seconds */
             int64_t delta = (now - issue_at) - (identity->obfuscated_ticket_age - age_add);
             if (delta < 0)
@@ -3599,7 +3607,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             server_name = ch.server_name;
         }
         if (tls->ctx->on_client_hello != NULL) {
-            ptls_on_client_hello_parameters_t params = {server_name,
+            ptls_on_client_hello_parameters_t params = {server_name, message,
                                                         {ch.alpn.list, ch.alpn.count},
                                                         {ch.signature_algorithms.list, ch.signature_algorithms.count},
                                                         {ch.cert_compression_algos.list, ch.cert_compression_algos.count},
