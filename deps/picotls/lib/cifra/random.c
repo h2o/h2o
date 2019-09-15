@@ -111,11 +111,7 @@ static void read_entropy(uint8_t *entropy, size_t size)
 
 void ptls_minicrypto_random_bytes(void *buf, size_t len)
 {
-#ifdef _WINDOWS
-    static __declspec(thread) cf_hash_drbg_sha256 ctx;
-#else
-    static __thread cf_hash_drbg_sha256 ctx;
-#endif
+    static PTLS_THREADLOCAL cf_hash_drbg_sha256 ctx;
 
     if (cf_hash_drbg_sha256_needs_reseed(&ctx)) {
         uint8_t entropy[256];

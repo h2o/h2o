@@ -112,10 +112,9 @@ struct st_h2o_socket_t {
      */
     size_t bytes_written;
     /**
-     * boolean flag to indicate if sock is being traced
+     * boolean flag to indicate if sock is NOT being traced
      */
-    int _is_traced;
-
+    unsigned _skip_tracing : 1;
     struct {
         void (*cb)(void *data);
         void *data;
@@ -350,9 +349,24 @@ void h2o_ssl_register_alpn_protocols(SSL_CTX *ctx, const h2o_iovec_t *protocols)
  */
 void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
 /**
- * helper to check if socket is to be traced according to eBPF map
+ * helper to check if socket the socket is target of tracing
  */
-static int h2o_socket_is_traced(h2o_socket_t *sock);
+static int h2o_socket_skip_tracing(h2o_socket_t *sock);
+
+struct st_h2o_ebpf_map_key_t;
+/**
+ * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.
+ */
+int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+/**
+ * callback for initializing the ebpf lookup key from raw information
+ */
+int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);
+/**
+ * callback for initializing the ebpf lookup key from `h2o_socket_t`
+ */
+int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *_sock);
+
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);
@@ -418,9 +432,9 @@ inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t n
     counter->cur.start_at = now;
 }
 
-inline int h2o_socket_is_traced(h2o_socket_t *sock)
+inline int h2o_socket_skip_tracing(h2o_socket_t *sock)
 {
-    return sock->_is_traced;
+    return sock->_skip_tracing;
 }
 
 #ifdef __cplusplus
