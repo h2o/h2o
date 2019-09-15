@@ -390,7 +390,7 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:H:i:k2:3E:h")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:c:H:i:k2:3h")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
