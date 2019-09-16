@@ -1800,18 +1800,13 @@ struct st_h2o_quic_forwarded_t {
 
 /* FIXME forward destaddr */
 /* The format:
- * type:    0b10000000 (1 byte)
- * version: 0x91917000 (4 bytes)
- * ip_ver:  0x4 or 0x6 (1 byte)
- * srcaddr:
- *   ip:    4 or 16 bytes
- *   port:  2 bytes
- * destaddr:
- *   ip:    4 or 16 bytes
- *   port:  2 bytes
- * ttl:     1 byte
+ * type:     0b10000000 (1 byte)
+ * version:  0x91917000 (4 bytes)
+ * destaddr: 1 or 7 or 19 bytes (UNSPEC, v4, v6)
+ * srcaddr:  same as above
+ * ttl:      1 byte
  */
-#define H2O_QUIC_FORWARDED_HEADER_MAX_SIZE (1 + 4 + 1 + (16 + 2) * 2 + 1)
+#define H2O_QUIC_FORWARDED_HEADER_MAX_SIZE (1 + 4 + (1 + 16 + 2) * 2 + 1)
 #define H2O_QUIC_FORWARDED_VERSION 0x91c17000
 
 static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
@@ -1851,8 +1846,10 @@ static int decode_quic_address(quicly_address_t *addr, const uint8_t **src, cons
         if (end - *src < 6)
             return 0;
         addr->sin.sin_family = AF_INET;
-        addr->sin.sin_addr.s_addr = quicly_decode32(src);
-        addr->sin.sin_port = quicly_decode16(src);
+        memcpy(&addr->sin.sin_addr.s_addr, *src, 4);
+        *src += 4;
+        memcpy(&addr->sin.sin_port, *src, 2);
+        *src += 2;
         break;
     case 6: /* ipv6 */
         if (end - *src < 18)
@@ -1860,7 +1857,8 @@ static int decode_quic_address(quicly_address_t *addr, const uint8_t **src, cons
         addr->sin6.sin6_family = AF_INET6;
         memcpy(addr->sin6.sin6_addr.s6_addr, *src, 16);
         *src += 16;
-        addr->sin6.sin6_port = quicly_decode16(src);
+        memcpy(&addr->sin6.sin6_port, *src, 2);
+        *src += 2;
         break;
     case 0: /* unspec */
         addr->sa.sa_family = AF_UNSPEC;
