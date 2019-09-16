@@ -110,9 +110,8 @@ typedef struct st_h2o_http3_priority_frame_t {
 uint8_t *h2o_http3_encode_priority_frame(uint8_t *dst, const h2o_http3_priority_frame_t *frame);
 int h2o_http3_decode_priority_frame(h2o_http3_priority_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc);
 
-typedef h2o_http3_conn_t *(*h2o_http3_accept_cb)(h2o_http3_ctx_t *ctx, struct sockaddr *srcaddr, socklen_t srcaddrlen,
-                                                 struct sockaddr *destaddr, socklen_t destaddrlen, quicly_decoded_packet_t *packets,
-                                                 size_t num_packets);
+typedef h2o_http3_conn_t *(*h2o_http3_accept_cb)(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                                 quicly_decoded_packet_t *packets, size_t num_packets);
 typedef void (*h2o_http3_notify_connection_update_cb)(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
 /**
  * Forwards a packet to given node/thread.
@@ -125,15 +124,13 @@ typedef void (*h2o_http3_notify_connection_update_cb)(h2o_http3_ctx_t *ctx, h2o_
  * @return true if packet was forwarded (or was forwardable), otherwise false
  */
 typedef int (*h2o_http3_forward_packets_cb)(h2o_http3_ctx_t *ctx, const uint64_t *node_id, uint32_t thread_id,
-                                            struct sockaddr *srcaddr, socklen_t srcaddrlen, struct sockaddr *destaddr,
-                                            socklen_t destaddrlen, uint8_t ttl, quicly_decoded_packet_t *packets,
-                                            size_t num_packets);
+                                            quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t ttl,
+                                            quicly_decoded_packet_t *packets, size_t num_packets);
 /**
  * preprocess a received datagram (e.g., rewrite the sockaddr). Returns if the packet was modified.
  */
-typedef int (*h2o_http3_preprocess_received_cb)(h2o_http3_ctx_t *ctx, struct msghdr *msghdr, struct sockaddr *srcaddr,
-                                                socklen_t *srcaddrlen, struct sockaddr *destaddr, socklen_t *destaddrlen,
-                                                uint8_t *ttl);
+typedef int (*h2o_http3_preprocess_received_cb)(h2o_http3_ctx_t *ctx, struct msghdr *msghdr, quicly_address_t *destaddr,
+                                                quicly_address_t *srcaddr, uint8_t *ttl);
 
 struct st_h2o_http3_ctx_t {
     /**

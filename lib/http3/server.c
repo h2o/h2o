@@ -1209,9 +1209,9 @@ static int init_ebpf_key_info(struct st_h2o_ebpf_map_key_t *key, void *_info)
     return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
 }
 
-h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *srcaddr, socklen_t srcaddrlen,
-                                          struct sockaddr *destaddr, socklen_t destaddrlen, quicly_decoded_packet_t *packets,
-                                          size_t num_packets, const h2o_http3_conn_callbacks_t *h3_callbacks)
+h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                          quicly_decoded_packet_t *packets, size_t num_packets,
+                                          const h2o_http3_conn_callbacks_t *h3_callbacks)
 {
     h2o_http3_server_ctx_t *ctx = (void *)_ctx;
     size_t i, syn_index = SIZE_MAX;
@@ -1264,12 +1264,12 @@ SynFound : {
     conn->scheduler.conn_blocked.uni = 0;
 
     /* accept connection */
-    struct init_ebpf_key_info_t keyinfo = {destaddr, srcaddr};
+    struct init_ebpf_key_info_t keyinfo = {&destaddr->sa, &srcaddr->sa};
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
     ptls_default_skip_tracing = !h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &keyinfo);
     quicly_conn_t *qconn;
-    int accept_ret = quicly_accept(&qconn, ctx->super.quic, NULL, srcaddr, packets + syn_index, NULL, &ctx->super.next_cid,
-                                   &conn->handshake_properties);
+    int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packets + syn_index, NULL,
+                                   &ctx->super.next_cid, &conn->handshake_properties);
     ptls_default_skip_tracing = orig_skip_tracing;
     if (accept_ret != 0) {
         h2o_http3_dispose_conn(&conn->h3);
@@ -1282,7 +1282,7 @@ SynFound : {
     for (i = 0; i != num_packets; ++i) {
         if (i == syn_index)
             continue;
-        quicly_receive(conn->h3.quic, NULL, srcaddr, packets + i);
+        quicly_receive(conn->h3.quic, &destaddr->sa, &srcaddr->sa, packets + i);
     }
     h2o_http3_send(&conn->h3);
     return &conn->h3;

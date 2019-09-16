@@ -1814,50 +1814,81 @@ struct st_h2o_quic_forwarded_t {
 #define H2O_QUIC_FORWARDED_HEADER_MAX_SIZE (1 + 4 + 1 + (16 + 2) * 2 + 1)
 #define H2O_QUIC_FORWARDED_VERSION 0x91c17000
 
+static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
+{
+    switch (addr->sa.sa_family) {
+    case AF_INET:
+        *dst++ = 4;
+        memcpy(dst, &addr->sin.sin_addr.s_addr, 4);
+        dst += 4;
+        memcpy(dst, &addr->sin.sin_port, 2);
+        dst += 2;
+        break;
+    case AF_INET6:
+        *dst++ = 6;
+        memcpy(dst, addr->sin6.sin6_addr.s6_addr, 16);
+        dst += 16;
+        memcpy(dst, &addr->sin.sin_port, 2);
+        dst += 2;
+        break;
+    case AF_UNSPEC:
+        *dst++ = 0;
+    default:
+        h2o_fatal("unknown protocol family");
+        break;
+    }
+    return dst;
+}
+
+static int decode_quic_address(quicly_address_t *addr, const uint8_t **src, const uint8_t *end)
+{
+    memset(addr, 0, sizeof(*addr));
+
+    if (*src >= end)
+        return 0;
+    switch (*(*src)++) {
+    case 4: /* ipv4 */
+        if (end - *src < 6)
+            return 0;
+        addr->sin.sin_family = AF_INET;
+        addr->sin.sin_addr.s_addr = quicly_decode32(src);
+        addr->sin.sin_port = quicly_decode16(src);
+        break;
+    case 6: /* ipv6 */
+        if (end - *src < 18)
+            return 0;
+        addr->sin6.sin6_family = AF_INET6;
+        memcpy(addr->sin6.sin6_addr.s6_addr, *src, 16);
+        *src += 16;
+        addr->sin6.sin6_port = quicly_decode16(src);
+        break;
+    case 0: /* unspec */
+        addr->sa.sa_family = AF_UNSPEC;
+        break;
+    default:
+        return 0;
+    }
+    return 1;
+}
+
 /**
  * encodes a forwarded header
  * TODO add authentication for inter-node forwarding
  */
-static size_t encode_quic_forwarded_header(void *buf, struct sockaddr *srcaddr, struct sockaddr *destaddr, uint8_t ttl)
+static size_t encode_quic_forwarded_header(void *buf, quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t ttl)
 {
     uint8_t *dst = buf;
 
     *dst++ = 0x80;
     dst = quicly_encode32(dst, H2O_QUIC_FORWARDED_VERSION);
-    switch (srcaddr->sa_family) {
-    case AF_INET: {
-        static struct sockaddr_in zero_sin;
-        struct sockaddr_in *sin = (void *)srcaddr;
-        *dst++ = 4;
-        dst = quicly_encode32(dst, sin->sin_addr.s_addr);
-        dst = quicly_encode16(dst, sin->sin_port);
-        sin = destaddr != NULL && destaddr->sa_family == AF_INET ? (struct sockaddr_in *)destaddr : &zero_sin;
-        dst = quicly_encode32(dst, sin->sin_addr.s_addr);
-        dst = quicly_encode16(dst, sin->sin_port);
-    } break;
-    case AF_INET6: {
-        static struct sockaddr_in6 zero_sin6;
-        struct sockaddr_in6 *sin6 = (void *)srcaddr;
-        *dst++ = 6;
-        memcpy(dst, sin6->sin6_addr.s6_addr, 16);
-        dst += 16;
-        dst = quicly_encode16(dst, sin6->sin6_port);
-        sin6 = destaddr != NULL && destaddr->sa_family == AF_INET6 ? (struct sockaddr_in6 *)destaddr : &zero_sin6;
-        memcpy(dst, sin6->sin6_addr.s6_addr, 16);
-        dst += 16;
-        dst = quicly_encode16(dst, sin6->sin6_port);
-    } break;
-    default:
-        h2o_fatal("unknown protocol family");
-        break;
-    }
+    dst = encode_quic_address(dst, destaddr);
+    dst = encode_quic_address(dst, srcaddr);
     *dst++ = ttl;
 
     return dst - (uint8_t *)buf;
 }
 
-static size_t decode_quic_forwarded_header(struct sockaddr *srcaddr, socklen_t *srcaddrlen, struct sockaddr *destaddr,
-                                           socklen_t *destaddrlen, uint8_t *ttl, h2o_iovec_t octets)
+static size_t decode_quic_forwarded_header(quicly_address_t *destaddr, quicly_address_t *srcaddr, uint8_t *ttl, h2o_iovec_t octets)
 {
     const uint8_t *src = (uint8_t *)octets.base, *end = src + octets.len;
 
@@ -1867,40 +1898,10 @@ static size_t decode_quic_forwarded_header(struct sockaddr *srcaddr, socklen_t *
         goto NotForwarded;
     if (quicly_decode32(&src) != H2O_QUIC_FORWARDED_VERSION)
         goto NotForwarded;
-    switch (*src++) {
-    case 4: { /* ipv4 */
-        if (end - src < 12)
-            goto NotForwarded;
-        struct sockaddr_in *sin = (void *)srcaddr;
-        sin->sin_family = AF_INET;
-        sin->sin_addr.s_addr = quicly_decode32(&src);
-        sin->sin_port = quicly_decode16(&src);
-        *srcaddrlen = sizeof(*sin);
-        sin = (void *)destaddr;
-        sin->sin_family = AF_INET;
-        sin->sin_addr.s_addr = quicly_decode32(&src);
-        sin->sin_port = quicly_decode16(&src);
-        *destaddrlen = sizeof(*sin);
-    } break;
-    case 6: { /* ipv6 */
-        if (end - src < 18)
-            goto NotForwarded;
-        struct sockaddr_in6 *sin6 = (void *)srcaddr;
-        sin6->sin6_family = AF_INET6;
-        memcpy(sin6->sin6_addr.s6_addr, src, 16);
-        src += 16;
-        sin6->sin6_port = quicly_decode16(&src);
-        *srcaddrlen = sizeof(*sin6);
-        sin6 = (void *)destaddrlen;
-        sin6->sin6_family = AF_INET6;
-        memcpy(sin6->sin6_addr.s6_addr, src, 16);
-        src += 16;
-        sin6->sin6_port = quicly_decode16(&src);
-        *destaddrlen = sizeof(*sin6);
-    } break;
-    default:
+    if (!decode_quic_address(destaddr, &src, end))
         goto NotForwarded;
-    }
+    if (!decode_quic_address(srcaddr, &src, end))
+        goto NotForwarded;
     if (end - src < 1)
         goto NotForwarded;
     *ttl = *src++;
@@ -1910,9 +1911,8 @@ NotForwarded:
     return SIZE_MAX;
 }
 
-static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id, uint32_t thread_id, struct sockaddr *srcaddr,
-                                socklen_t srcaddrlen, struct sockaddr *destaddr, socklen_t destaddrlen, uint8_t ttl,
-                                quicly_decoded_packet_t *packets, size_t num_packets)
+static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id, uint32_t thread_id, quicly_address_t *destaddr,
+                                quicly_address_t *srcaddr, uint8_t ttl, quicly_decoded_packet_t *packets, size_t num_packets)
 {
     struct listener_ctx_t *ctx = H2O_STRUCT_FROM_MEMBER(struct listener_ctx_t, http3.ctx.super, h3ctx);
     size_t i;
@@ -1937,7 +1937,7 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     /* forward */
     for (i = 0; i != num_packets; ++i) {
         char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
-        size_t header_len = encode_quic_forwarded_header(header_buf, srcaddr, destaddrlen != 0 ? destaddr : NULL, ttl);
+        size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl);
         struct iovec vec[2] = {{header_buf, header_len}, {packets->octets.base, packets->octets.len}};
         writev(conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id], vec, 2);
     }
@@ -1945,36 +1945,27 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     return 1;
 }
 
-static int preprocess_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, struct sockaddr *srcaddr, socklen_t *srcaddrlen,
-                                    struct sockaddr *destaddr, socklen_t *destaddrlen, uint8_t *ttl)
+static int preprocess_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr *msg, quicly_address_t *destaddr,
+                                    quicly_address_t *srcaddr, uint8_t *ttl)
 {
     struct {
-        struct {
-            union {
-                struct sockaddr sa;
-                struct sockaddr_storage ss;
-            };
-            socklen_t len;
-        } srcaddr, destaddr;
+        quicly_address_t destaddr, srcaddr;
         uint8_t ttl;
         size_t offset;
     } encapsulated;
 
     assert(msg->msg_iovlen == 1);
 
-    if ((encapsulated.offset =
-             decode_quic_forwarded_header(&encapsulated.srcaddr.sa, &encapsulated.srcaddr.len, &encapsulated.destaddr.sa,
-                                          &encapsulated.destaddr.len, &encapsulated.ttl,
-                                          h2o_iovec_init(msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len))) == SIZE_MAX)
+    if ((encapsulated.offset = decode_quic_forwarded_header(&encapsulated.destaddr, &encapsulated.srcaddr, &encapsulated.ttl,
+                                                            h2o_iovec_init(msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len))) ==
+        SIZE_MAX)
         return 0;
 
     /* update */
     msg->msg_iov[0].iov_base += encapsulated.offset;
     msg->msg_iov[0].iov_len -= encapsulated.offset;
-    memcpy(srcaddr, &encapsulated.srcaddr.sa, encapsulated.srcaddr.len);
-    *srcaddrlen = encapsulated.srcaddr.len;
-    memcpy(destaddr, &encapsulated.destaddr.sa, encapsulated.destaddr.len);
-    *destaddrlen = encapsulated.destaddr.len;
+    *destaddr = encapsulated.destaddr;
+    *srcaddr = encapsulated.srcaddr;
     *ttl = encapsulated.ttl;
     return 1;
 }
@@ -2025,9 +2016,8 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
-static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr *srcaddr, socklen_t srcaddrlen,
-                                         struct sockaddr *destaddr, socklen_t destaddrlen, quicly_decoded_packet_t *packets,
-                                         size_t num_packets)
+static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                         quicly_decoded_packet_t *packets, size_t num_packets)
 {
     if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections) {
         return NULL;
@@ -2036,8 +2026,7 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, struct sockaddr 
     num_quic_connections(1);
     num_sessions(1);
 
-    return
-        h2o_http3_server_accept(_ctx, srcaddr, srcaddrlen, destaddr, destaddrlen, packets, num_packets, &conf.quic.conn_callbacks);
+    return h2o_http3_server_accept(_ctx, destaddr, srcaddr, packets, num_packets, &conf.quic.conn_callbacks);
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)
