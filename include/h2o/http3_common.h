@@ -144,6 +144,7 @@ struct st_h2o_http3_ctx_t {
         h2o_socket_t *sock;
         struct sockaddr_storage addr;
         socklen_t addrlen;
+        in_port_t *port; /* points to the port number in addr */
     } sock;
     /**
      * quic context

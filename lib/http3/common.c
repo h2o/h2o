@@ -547,7 +547,7 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                     if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
                         dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                         dgrams[dgram_index].destaddr.sin.sin_addr = ((struct in_pktinfo *)CMSG_DATA(cmsg))->ipi_addr;
-                        dgrams[dgram_index].destaddr.sin.sin_port = 12345; /* FIXME set the cached port number */
+                        dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
                         goto DestAddrFound;
                     }
 #endif
@@ -555,7 +555,7 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                     if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
                         dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
                         dgrams[dgram_index].destaddr.sin6.sin6_addr = ((struct in6_pktinfo *)CMSG_DATA(cmsg))->ipi6_addr;
-                        dgrams[dgram_index].destaddr.sin6.sin6_port = 12345; /* FIXME set the cached port number */
+                        dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
                         goto DestAddrFound;
                     }
 #endif
@@ -717,6 +717,17 @@ void h2o_http3_init_context(h2o_http3_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t
     ctx->sock.sock->data = ctx;
     ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
     assert(ctx->sock.addrlen != 0);
+    switch (ctx->sock.addr.ss_family) {
+    case AF_INET:
+        ctx->sock.port = &((struct sockaddr_in *)&ctx->sock.addr)->sin_port;
+        break;
+    case AF_INET6:
+        ctx->sock.port = &((struct sockaddr_in6 *)&ctx->sock.addr)->sin6_port;
+        break;
+    default:
+        assert(!"unexpected address family");
+        break;
+    }
     h2o_linklist_init_anchor(&ctx->clients);
     ctx->acceptor = acceptor;
 
