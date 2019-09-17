@@ -481,7 +481,6 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
 
     { /* receive packets to the found connection */
         assert(conn != NULL);
-        /* FIXME pass the source address to quicly_receive, and let it handle the information accordingly */
         if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
             return;
         size_t i;
