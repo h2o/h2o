@@ -525,6 +525,7 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
         /* read datagrams */
         for (dgram_index = 0; dgram_index < sizeof(dgrams) / sizeof(dgrams[0]) && buf + sizeof(buf) - bufpt > 2048; ++dgram_index) {
             /* read datagram */
+        Read:
             memset(dgrams + dgram_index, 0, sizeof(dgrams[dgram_index]));
             dgrams[dgram_index].mess.msg_name = &dgrams[dgram_index].srcaddr;
             dgrams[dgram_index].mess.msg_namelen = sizeof(dgrams[dgram_index].srcaddr);
@@ -563,9 +564,11 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                 dgrams[dgram_index].destaddr.sa.sa_family = AF_UNSPEC;
             DestAddrFound:;
             }
-            if (preprocess != NULL && preprocess(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].destaddr,
-                                                 &dgrams[dgram_index].srcaddr, &dgrams[dgram_index].ttl)) {
-                /* preprocessed */
+            if (preprocess != NULL) {
+                /* preprocess (and drop the packet if it failed) */
+                if (!preprocess(ctx, &dgrams[dgram_index].mess, &dgrams[dgram_index].destaddr, &dgrams[dgram_index].srcaddr,
+                                &dgrams[dgram_index].ttl))
+                    goto Read;
             } else {
                 dgrams[dgram_index].ttl = ctx->default_ttl;
             }
