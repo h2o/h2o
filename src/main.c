@@ -1963,6 +1963,18 @@ static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr
         SIZE_MAX)
         return 0;
 
+    /* assert that the source port matches the exposed port number */
+    switch (encapsulated.srcaddr.sa.sa_family) {
+    case AF_UNSPEC:
+        break;
+    case AF_INET:
+        assert(encapsulated.destaddr.sin.sin_port == *h3ctx->sock.port);
+        break;
+    case AF_INET6:
+        assert(encapsulated.destaddr.sin6.sin6_port == *h3ctx->sock.port);
+        break;
+    }
+
     /* update */
     msg->msg_iov[0].iov_base += encapsulated.offset;
     msg->msg_iov[0].iov_len -= encapsulated.offset;
