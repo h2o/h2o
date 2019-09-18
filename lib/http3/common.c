@@ -87,6 +87,7 @@ static int send_one(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
     mess.msg_iov = &vec;
     mess.msg_iovlen = 1;
     if (p->src.sa.sa_family != AF_UNSPEC) {
+        size_t cmsg_bodylen = 0;
         memset(&cmsg, 0, sizeof(cmsg));
         switch (p->src.sa.sa_family) {
         case AF_INET:
@@ -95,7 +96,7 @@ static int send_one(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
                 return 0;
             cmsg.hdr.cmsg_level = IPPROTO_IP;
             cmsg.hdr.cmsg_type = IP_PKTINFO;
-            cmsg.hdr.cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo));
+            cmsg_bodylen = sizeof(struct in_pktinfo);
             ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_addr = p->src.sin.sin_addr;
 #else
             h2o_fatal("IP_PKTINFO not available");
@@ -107,7 +108,7 @@ static int send_one(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
                 return 0;
             cmsg.hdr.cmsg_level = IPPROTO_IPV6;
             cmsg.hdr.cmsg_type = IPV6_PKTINFO;
-            cmsg.hdr.cmsg_len = CMSG_LEN(sizeof(struct in6_pktinfo));
+            cmsg_bodylen = sizeof(struct in6_pktinfo);
             ((struct in6_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi6_addr = p->src.sin6.sin6_addr;
 #else
             h2o_fatal("IPV6_PKTINFO not available");
@@ -118,7 +119,8 @@ static int send_one(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
             break;
         }
         mess.msg_control = &cmsg;
-        mess.msg_controllen = (socklen_t)CMSG_SPACE(cmsg.hdr.cmsg_len);
+        cmsg.hdr.cmsg_len = (socklen_t)CMSG_LEN(cmsg_bodylen);
+        mess.msg_controllen = (socklen_t)CMSG_SPACE(cmsg_bodylen);
     }
 
     while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
