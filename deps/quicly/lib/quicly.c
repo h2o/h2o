@@ -1341,6 +1341,8 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int is_client, co
                                      { pushv(buf, QUICLY_LOCAL_ACK_DELAY_EXPONENT); });
         if (QUICLY_LOCAL_MAX_ACK_DELAY != QUICLY_DEFAULT_MAX_ACK_DELAY)
             PUSH_TRANSPORT_PARAMETER(buf, QUICLY_TRANSPORT_PARAMETER_ID_MAX_ACK_DELAY, { pushv(buf, QUICLY_LOCAL_MAX_ACK_DELAY); });
+        if (params->disable_migration)
+            PUSH_TRANSPORT_PARAMETER(buf, QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_MIGRATION, {});
     });
 #undef pushv
 
@@ -1443,6 +1445,9 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
                         v = QUICLY_DEFAULT_MAX_ACK_DELAY;
                     params->max_ack_delay = (uint16_t)v;
                 } break;
+                case QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_MIGRATION:
+                    params->disable_migration = 1;
+                    break;
                 default:
                     src = end;
                     break;
@@ -1580,34 +1585,35 @@ static int client_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
     assert(slots[1].type == UINT16_MAX);
 
     const uint8_t *src = slots[0].data.base, *end = src + slots[0].data.len;
+    quicly_transport_parameters_t params;
+    quicly_cid_t odcid;
 
-    {
-        quicly_transport_parameters_t params;
-        quicly_cid_t odcid;
-        if ((ret = quicly_decode_transport_parameter_list(&params, &odcid, conn->super.peer.stateless_reset._buf, 1, src, end)) !=
-            0)
-            goto Exit;
-        conn->super.peer.stateless_reset.token = conn->super.peer.stateless_reset._buf;
-        if (odcid.len != conn->retry_odcid.len || memcmp(odcid.cid, conn->retry_odcid.cid, odcid.len) != 0) {
-            ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
-            goto Exit;
-        }
-        if (properties->client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTED) {
+    /* decode and validate */
+    if ((ret = quicly_decode_transport_parameter_list(&params, &odcid, conn->super.peer.stateless_reset._buf, 1, src, end)) !=
+        0)
+        goto Exit;
+    if (odcid.len != conn->retry_odcid.len || memcmp(odcid.cid, conn->retry_odcid.cid, odcid.len) != 0) {
+        ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
+        goto Exit;
+    }
+    if (properties->client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTED) {
 #define ZERORTT_VALIDATE(x)                                                                                                        \
     if (params.x < conn->super.peer.transport_params.x) {                                                                          \
         ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;                                                                          \
         goto Exit;                                                                                                                 \
     }
-            ZERORTT_VALIDATE(max_data);
-            ZERORTT_VALIDATE(max_stream_data.bidi_local);
-            ZERORTT_VALIDATE(max_stream_data.bidi_remote);
-            ZERORTT_VALIDATE(max_stream_data.uni);
-            ZERORTT_VALIDATE(max_streams_bidi);
-            ZERORTT_VALIDATE(max_streams_uni);
+        ZERORTT_VALIDATE(max_data);
+        ZERORTT_VALIDATE(max_stream_data.bidi_local);
+        ZERORTT_VALIDATE(max_stream_data.bidi_remote);
+        ZERORTT_VALIDATE(max_stream_data.uni);
+        ZERORTT_VALIDATE(max_streams_bidi);
+        ZERORTT_VALIDATE(max_streams_uni);
 #undef ZERORTT_VALIDATE
-        }
-        conn->super.peer.transport_params = params;
     }
+
+    /* store the results */
+    conn->super.peer.stateless_reset.token = conn->super.peer.stateless_reset._buf;
+    conn->super.peer.transport_params = params;
 
 Exit:
     return ret; /* negative error codes used to transmit QUIC errors through picotls */
@@ -4301,6 +4307,11 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
                 conn->crypto.handshake_scheduled_for_discard = 1;
             }
         }
+        /* when running as a client, respect "disable_migration" TP sent by the peer at the end of the TLS handshake */
+        if (quicly_is_client(conn) && conn->super.host.address.sa.sa_family == AF_UNSPEC && dest_addr != NULL &&
+            dest_addr->sa_family != AF_UNSPEC && ptls_handshake_is_complete(conn->crypto.tls) &&
+            conn->super.peer.transport_params.disable_migration)
+            set_address(&conn->super.host.address, dest_addr);
         break;
     case QUICLY_EPOCH_1RTT:
         if (!is_ack_only && should_send_max_data(conn))
