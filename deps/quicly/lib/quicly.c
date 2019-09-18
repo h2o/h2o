@@ -68,7 +68,7 @@
 #define QUICLY_TRANSPORT_PARAMETER_ID_INITIAL_MAX_STREAMS_UNI 9
 #define QUICLY_TRANSPORT_PARAMETER_ID_ACK_DELAY_EXPONENT 10
 #define QUICLY_TRANSPORT_PARAMETER_ID_MAX_ACK_DELAY 11
-#define QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_MIGRATION 12
+#define QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_ACTIVE_MIGRATION 12
 #define QUICLY_TRANSPORT_PARAMETER_ID_PREFERRED_ADDRESS 13
 
 #define QUICLY_EPOCH_INITIAL 0
@@ -1225,8 +1225,8 @@ Exit:
 static int setup_initial_encryption(ptls_cipher_suite_t *cs, struct st_quicly_cipher_context_t *ingress,
                                     struct st_quicly_cipher_context_t *egress, ptls_iovec_t cid, int is_client)
 {
-    static const uint8_t salt[] = {0x7f, 0xbc, 0xdb, 0x0e, 0x7c, 0x66, 0xbb, 0xe9, 0x19, 0x3a,
-                                   0x96, 0xcd, 0x21, 0x51, 0x9e, 0xbd, 0x7a, 0x02, 0x64, 0x4a};
+    static const uint8_t salt[] = {0xc3, 0xee, 0xf7, 0x12, 0xc7, 0x2e, 0xbb, 0x5a, 0x11, 0xa7,
+                                   0xd2, 0x43, 0x2b, 0xb4, 0x63, 0x65, 0xbe, 0xf9, 0xf5, 0x02};
     static const char *labels[2] = {"client in", "server in"};
     uint8_t secret[PTLS_MAX_DIGEST_SIZE];
     int ret;
@@ -1341,8 +1341,8 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int is_client, co
                                      { pushv(buf, QUICLY_LOCAL_ACK_DELAY_EXPONENT); });
         if (QUICLY_LOCAL_MAX_ACK_DELAY != QUICLY_DEFAULT_MAX_ACK_DELAY)
             PUSH_TRANSPORT_PARAMETER(buf, QUICLY_TRANSPORT_PARAMETER_ID_MAX_ACK_DELAY, { pushv(buf, QUICLY_LOCAL_MAX_ACK_DELAY); });
-        if (params->disable_migration)
-            PUSH_TRANSPORT_PARAMETER(buf, QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_MIGRATION, {});
+        if (params->disable_active_migration)
+            PUSH_TRANSPORT_PARAMETER(buf, QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_ACTIVE_MIGRATION, {});
     });
 #undef pushv
 
@@ -1445,8 +1445,8 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
                         v = QUICLY_DEFAULT_MAX_ACK_DELAY;
                     params->max_ack_delay = (uint16_t)v;
                 } break;
-                case QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_MIGRATION:
-                    params->disable_migration = 1;
+                case QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_ACTIVE_MIGRATION:
+                    params->disable_active_migration = 1;
                     break;
                 default:
                     src = end;
@@ -4310,7 +4310,7 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
         /* when running as a client, respect "disable_migration" TP sent by the peer at the end of the TLS handshake */
         if (quicly_is_client(conn) && conn->super.host.address.sa.sa_family == AF_UNSPEC && dest_addr != NULL &&
             dest_addr->sa_family != AF_UNSPEC && ptls_handshake_is_complete(conn->crypto.tls) &&
-            conn->super.peer.transport_params.disable_migration)
+            conn->super.peer.transport_params.disable_active_migration)
             set_address(&conn->super.host.address, dest_addr);
         break;
     case QUICLY_EPOCH_1RTT:

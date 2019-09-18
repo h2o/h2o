@@ -49,7 +49,7 @@ extern "C" {
 #define QUICLY_LONG_HEADER_BIT 0x80
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff000016
+#define QUICLY_PROTOCOL_VERSION 0xff000017
 
 #define QUICLY_MAX_CID_LEN_V1 20
 #define QUICLY_STATELESS_RESET_TOKEN_LEN 16
@@ -197,7 +197,7 @@ typedef struct st_quicly_transport_parameters_t {
     /**
      *
      */
-    uint8_t disable_migration : 1;
+    uint8_t disable_active_migration : 1;
 } quicly_transport_parameters_t;
 
 struct st_quicly_cid_t {
