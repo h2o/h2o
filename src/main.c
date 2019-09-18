@@ -1963,8 +1963,8 @@ static int rewrite_forwarded_quic_datagram(h2o_http3_ctx_t *h3ctx, struct msghdr
         SIZE_MAX)
         return 0;
 
-    /* assert that the source port matches the exposed port number */
-    switch (encapsulated.srcaddr.sa.sa_family) {
+    /* assert that the destination port matches the exposed port number */
+    switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
         break;
     case AF_INET:
