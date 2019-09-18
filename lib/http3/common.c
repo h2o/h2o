@@ -57,8 +57,11 @@ struct st_h2o_http3_ingress_unistream_t {
 
 const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-22")}};
 
-/* FIXME check in the caller that the port number in p->src is equivalent to the bound port of fd */
-static int send_one(int fd, quicly_datagram_t *p)
+/**
+ * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
+ * designated source address).
+ */
+static int send_one(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
 {
     int ret;
     struct msghdr mess;
@@ -88,6 +91,8 @@ static int send_one(int fd, quicly_datagram_t *p)
         switch (p->src.sa.sa_family) {
         case AF_INET:
 #ifdef IP_PKTINFO
+            if (*ctx->sock.port != p->src.sin.sin_port)
+                return 0;
             cmsg.hdr.cmsg_level = IPPROTO_IP;
             cmsg.hdr.cmsg_type = IP_PKTINFO;
             cmsg.hdr.cmsg_len = CMSG_LEN(sizeof(struct in_pktinfo));
@@ -98,6 +103,8 @@ static int send_one(int fd, quicly_datagram_t *p)
             break;
         case AF_INET6:
 #ifdef IPV6_PKTINFO
+            if (*ctx->sock.port != p->src.sin6.sin6_port)
+                return 0;
             cmsg.hdr.cmsg_level = IPPROTO_IPV6;
             cmsg.hdr.cmsg_type = IPV6_PKTINFO;
             cmsg.hdr.cmsg_len = CMSG_LEN(sizeof(struct in6_pktinfo));
@@ -114,11 +121,21 @@ static int send_one(int fd, quicly_datagram_t *p)
         mess.msg_controllen = (socklen_t)CMSG_SPACE(cmsg.hdr.cmsg_len);
     }
 
-    while ((ret = (int)sendmsg(fd, &mess, 0)) == -1 && errno == EINTR)
+    while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
         ;
-    return ret;
-    /* FIXME check errno and abort-close the connection if sendmsg failed due to the source address being unavailable (macOS:
-     * EADDRNOTAVAIL, linux: EINVAL) */
+
+    if (ret == -1) {
+        /* The UDP stack returns EINVAL (linux) or EADDRNOTAVAIL (darwin, and presumably other BSD) when it was unable to use the
+         * designated source address.  We communicate that back to the caller so that the connection can be closed immediately. */
+        if (p->src.sa.sa_family != AF_UNSPEC && (errno == EINVAL || errno == EADDRNOTAVAIL))
+            return 0;
+
+        /* Temporary failure to send a packet is not a permanent error fo the connection. (TODO do we want do something more
+         * specific?) */
+        perror("sendmsg failed");
+    }
+
+    return 1;
 }
 
 static void ingress_unistream_on_destroy(quicly_stream_t *qs, int err)
@@ -425,7 +442,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
                 quicly_datagram_t *dgram =
                     quicly_send_stateless_reset(ctx->quic, &destaddr->sa, &srcaddr->sa, packets[0].cid.dest.encrypted.base);
                 if (dgram != NULL) {
-                    send_one(h2o_socket_get_fd(ctx->sock.sock), dgram);
+                    send_one(ctx, dgram);
                     ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
                 }
             }
@@ -860,7 +877,6 @@ int h2o_http3_send(h2o_http3_conn_t *conn)
 {
     quicly_datagram_t *packets[16];
     size_t num_packets, i;
-    int fd = h2o_socket_get_fd(conn->ctx->sock.sock);
 
     do {
         num_packets = sizeof(packets) / sizeof(packets[0]);
@@ -868,10 +884,14 @@ int h2o_http3_send(h2o_http3_conn_t *conn)
         switch (ret) {
         case 0:
             for (i = 0; i != num_packets; ++i) {
-                if (send_one(fd, packets[i]) == -1)
-                    perror("sendmsg failed");
+                if (!send_one(conn->ctx, packets[i])) {
+                    /* FIXME close the connection immediately */
+                    break;
+                }
                 conn->ctx->quic->packet_allocator->free_packet(conn->ctx->quic->packet_allocator, packets[i]);
             }
+            for (; i != num_packets; ++i)
+                conn->ctx->quic->packet_allocator->free_packet(conn->ctx->quic->packet_allocator, packets[i]);
             break;
         case QUICLY_ERROR_FREE_CONNECTION:
             conn->callbacks->destroy_connection(conn);
