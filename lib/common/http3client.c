@@ -392,7 +392,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
         switch (frame.type) {
         case H2O_HTTP3_FRAME_TYPE_DATA:
             *err_desc = "received DATA frame before HEADERS";
-            return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+            return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
         default:
             return 0;
         }
@@ -555,7 +555,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     /* save data to partial buffer (if necessary) */
     if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
         if (is_eos)
-            return H2O_HTTP3_ERROR_MALFORMED_FRAME(src == src_end ? H2O_HTTP3_FRAME_TYPE_DATA : *src);
+            return H2O_HTTP3_ERROR_FRAME; /* TODO communicate err_desc (or set one) */
         assert(src < src_end);
         if (req->recvbuf.partial_frame->size != 0) {
             assert(src_end == (const uint8_t *)req->recvbuf.partial_frame->bytes + req->recvbuf.partial_frame->size);

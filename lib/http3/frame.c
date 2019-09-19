@@ -67,5 +67,5 @@ int h2o_http3_decode_priority_frame(h2o_http3_priority_frame_t *frame, const uin
     return 0;
 Fail:
     *err_desc = "invalid PRIORITY frame";
-    return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+    return H2O_HTTP3_ERROR_FRAME;
 }

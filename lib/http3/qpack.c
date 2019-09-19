@@ -226,7 +226,7 @@ Invalid:
 static int decode_int(int64_t *value, const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits)
 {
     if ((*value = h2o_hpack_decode_int(src, src_end, prefix_bits)) < 0)
-        return *value == H2O_HTTP2_ERROR_INCOMPLETE ? H2O_HTTP3_ERROR_INCOMPLETE : H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return *value == H2O_HTTP2_ERROR_INCOMPLETE ? H2O_HTTP3_ERROR_INCOMPLETE : H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     return 0;
 }
 
@@ -306,7 +306,7 @@ static int decode_value_and_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpa
     return 0;
 Fail:
     h2o_mem_release_shared(header);
-    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
 }
 
 static int insert_token_header(h2o_qpack_decoder_t *qpack, const h2o_token_t *name, int value_is_huff, const uint8_t *value,
@@ -340,23 +340,23 @@ static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_st
 {
     if (value_len >= MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
     if (name_is_static) {
         const h2o_qpack_static_table_entry_t *ref;
         if ((ref = resolve_static_abs(name_index, err_desc)) == NULL)
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         return insert_token_header(qpack, ref->name, value_is_huff, value, value_len, err_desc);
     } else {
         struct st_h2o_qpack_header_t *ref;
         int64_t base_index = qpack->table.base_offset + (qpack->table.last - qpack->table.first) - 1;
         if (name_index > base_index) {
             *err_desc = h2o_qpack_err_invalid_dynamic_reference;
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         }
         if ((ref = resolve_dynamic_abs(&qpack->table, base_index - name_index, err_desc)) == NULL)
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         if (h2o_iovec_is_token(ref->name)) {
             return insert_token_header(qpack, (h2o_token_t *)ref->name, value_is_huff, value, value_len, err_desc);
         } else {
@@ -372,20 +372,20 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
 
     if (qnlen >= MAX_HEADER_NAME_LENGTH) {
         *err_desc = h2o_qpack_err_header_name_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
     if (qvlen >= MAX_HEADER_VALUE_LENGTH) {
         *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
     if (qnhuff) {
         name.base = alloca(qnlen * 2);
         if ((name.len = h2o_hpack_decode_huffman(name.base, qn, qnlen, 1, err_desc)) == SIZE_MAX)
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     } else {
         if (!h2o_hpack_validate_header_name((void *)qn, qnlen, err_desc))
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         name = h2o_iovec_init(qn, qnlen);
     }
 
@@ -401,7 +401,7 @@ static int duplicate(h2o_qpack_decoder_t *qpack, int64_t index, const char **err
 {
     if (index >= qpack->table.last - qpack->table.first) {
         *err_desc = h2o_qpack_err_invalid_duplicate;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
     struct st_h2o_qpack_header_t *header = qpack->table.last[-index - 1];
@@ -414,7 +414,7 @@ static int dynamic_table_size_update(h2o_qpack_decoder_t *qpack, int64_t max_siz
 {
     if (max_size > qpack->header_table_size) {
         *err_desc = h2o_qpack_err_invalid_max_size;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     }
 
     qpack->table.max_size = max_size;
@@ -724,7 +724,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
 
     return 0;
 Fail:
-    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
 }
 
 static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_decode_header_ctx_t *ctx, int64_t stream_id,
@@ -734,10 +734,10 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 
     /* largest reference */
     if (decode_int(&ctx->largest_ref, src, src_end, 8) != 0)
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     if (ctx->largest_ref > 0) {
         if (qpack->max_entries == 0)
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         const uint32_t full_range = 2 * qpack->max_entries;
         uint64_t max_value = qpack->total_inserts + qpack->max_entries;
         uint64_t rounded = max_value / full_range * full_range;
@@ -749,16 +749,16 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 
     /* base index */
     if (*src >= src_end)
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     int sign = (**src & 0x80) != 0;
     if (decode_int(&ctx->base_index, src, src_end, 7) != 0)
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     ctx->base_index = sign == 0 ? ctx->largest_ref + ctx->base_index : ctx->largest_ref - ctx->base_index - 1;
 
     /* is the stream blocked? */
     if (ctx->largest_ref >= qpack->table.base_offset + qpack->table.last - qpack->table.first) {
         if (qpack->blocked_streams.list.size + 1 >= qpack->max_blocked)
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         decoder_link_blocked(qpack, stream_id, ctx->largest_ref);
         return H2O_HTTP3_ERROR_INCOMPLETE;
     }
@@ -770,7 +770,7 @@ static int normalize_error_code(int err)
 {
     /* convert H2 errors (except invaild_header_char) to QPACK error code */
     if (err < 0 && err != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
-        err = H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+        err = H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     return err;
 }
 
@@ -841,7 +841,7 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
     return 0;
 Error:
     *err_desc = "Table State Synchronize: invalid argument";
-    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
 }
 
 static void evict_inflight_by_index(h2o_qpack_encoder_t *qpack, size_t index)
@@ -867,7 +867,7 @@ static int handle_header_ack(h2o_qpack_encoder_t *qpack, int64_t stream_id, cons
             goto Found;
     /* not found */
     *err_desc = "Header Acknowledgement: invalid stream id";
-    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION;
+    return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
 
 Found:
     /* update largest reference */

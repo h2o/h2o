@@ -505,7 +505,7 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
             if (!h2o_timer_is_linked(&conn->timeout))
                 h2o_timer_link(conn->super.ctx->loop, 0, &conn->timeout);
         } else {
-            quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_INCOMPLETE_REQUEST);
+            quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_REQUEST_INCOMPLETE);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         }
     } else {
@@ -609,7 +609,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
         if (!(quicly_stream_is_client_initiated(id) && !quicly_stream_is_unidirectional(id) &&
               id / 4 < quicly_get_ingress_max_streams(conn->h3.quic, 0))) {
             *err_desc = "invalid request stream id in PRIORITY frame";
-            return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+            return H2O_HTTP3_ERROR_FRAME;
         }
         if ((qs = quicly_get_stream(conn->h3.quic, id)) != NULL) {
             struct st_h2o_http3_server_stream_t *stream = qs->data;
@@ -633,7 +633,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
         /* return a placeholder, initializing it to the default values if it is not open yet */
         if (id >= H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS) {
             *err_desc = "invalid placeholder id found in PRIORITY frame";
-            return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+            return H2O_HTTP3_ERROR_FRAME;
         }
         *node = &get_freestanding_scheduler_ref(conn, -1 - id, 1)->node;
         break;
@@ -641,7 +641,7 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
     case H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT:
         if (root == NULL) {
             *err_desc = "invalid depedency type in PRIORITY frame";
-            return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_PRIORITY);
+            return H2O_HTTP3_ERROR_FRAME;
         }
         *node = root;
         break;
@@ -689,7 +689,7 @@ int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, cons
     case H2O_HTTP3_FRAME_TYPE_PRIORITY:
     case H2O_HTTP3_FRAME_TYPE_HEADERS:
     case H2O_HTTP3_FRAME_TYPE_DATA:
-        return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+        return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
     default:
         break;
     }
@@ -727,7 +727,7 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
         return ret;
     switch (frame.type) {
     case H2O_HTTP3_FRAME_TYPE_PRIORITY:
-        return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+        return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
     case H2O_HTTP3_FRAME_TYPE_HEADERS: /* trailers, ignore but disallow succeeding DATA or HEADERS frame */
         stream->recvbuf.handle_input = handle_input_post_trailers;
         return 0;
@@ -761,7 +761,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS) {
         switch (frame.type) {
         case H2O_HTTP3_FRAME_TYPE_DATA:
-            return H2O_HTTP3_ERROR_UNEXPECTED_FRAME;
+            return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
         default:
             break;
         }

@@ -55,7 +55,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-22")}};
+const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-23")}};
 
 /**
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
@@ -227,7 +227,7 @@ static int control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_htt
         }
         if (h2o_http3_has_received_settings(conn) == (frame.type == H2O_HTTP3_FRAME_TYPE_SETTINGS) ||
             frame.type == H2O_HTTP3_FRAME_TYPE_DATA)
-            return H2O_HTTP3_ERROR_MALFORMED_FRAME(frame.type);
+            return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
         if ((ret = conn->callbacks->handle_control_stream_frame(conn, frame.type, frame.payload, frame.length, err_desc)) != 0)
             break;
     } while (*src != src_end);
@@ -665,7 +665,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
         if (frame->length >= MAX_FRAME_SIZE) {
             *err_desc = "H3 frame too large";
-            return H2O_HTTP3_ERROR_MALFORMED_FRAME(frame->type); /* FIXME is this the correct code? */
+            return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
         if (src_end - src < frame->length)
             return H2O_HTTP3_ERROR_INCOMPLETE;
@@ -717,7 +717,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         /* ignore extension frames that we do not handle */
         goto Validation_Success;
     }
-    return H2O_HTTP3_ERROR_WRONG_STREAM;
+    return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
 Validation_Success:;
 
     *_src = src;
@@ -971,7 +971,8 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
     conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, 100 /* FIXME */);
     return 0;
 Malformed:
-    return H2O_HTTP3_ERROR_MALFORMED_FRAME(H2O_HTTP3_FRAME_TYPE_SETTINGS);
+    *err_desc = "malformed SETTINGS frame";
+    return H2O_HTTP3_ERROR_FRAME;
 }
 
 void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
