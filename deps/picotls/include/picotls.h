@@ -42,6 +42,12 @@ extern "C" {
 #define PTLS_UNLIKELY(x) (x)
 #endif
 
+#ifdef _WINDOWS
+#define PTLS_THREADLOCAL __declspec(thread)
+#else
+#define PTLS_THREADLOCAL __thread
+#endif
+
 #ifndef PTLS_FUZZ_HANDSHAKE
 #define PTLS_FUZZ_HANDSHAKE 0
 #endif
@@ -563,10 +569,6 @@ typedef struct st_ptls_decompress_certificate_t {
  */
 PTLS_CALLBACK_TYPE(int, update_esni_key, ptls_t *tls, ptls_iovec_t secret, ptls_hash_algorithm_t *hash,
                    const void *hashed_esni_contents);
-/**
- * return if USDT probes should be activated for the connection
- */
-PTLS_CALLBACK_TYPE(int, is_traced, ptls_t *tls);
 
 /**
  * the configuration
@@ -677,10 +679,6 @@ struct st_ptls_context_t {
      *
      */
     ptls_update_esni_key_t *update_esni_key;
-    /**
-     *
-     */
-    ptls_is_traced_t *is_traced;
     /**
      *
      */
@@ -1020,6 +1018,14 @@ int ptls_is_psk_handshake(ptls_t *tls);
  */
 void **ptls_get_data_ptr(ptls_t *tls);
 /**
+ *
+ */
+int ptls_skip_tracing(ptls_t *tls);
+/**
+ *
+ */
+void ptls_set_skip_tracing(ptls_t *tls, int skip_tracing);
+/**
  * proceeds with the handshake, optionally taking some input from peer. The function returns zero in case the handshake completed
  * successfully. PTLS_ERROR_IN_PROGRESS is returned in case the handshake is incomplete. Otherwise, an error value is returned. The
  * contents of sendbuf should be sent to the client, regardless of whether if an error is returned. inlen is an argument used for
@@ -1198,12 +1204,10 @@ int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_
  *
  */
 void ptls_esni_dispose_context(ptls_esni_context_t *esni);
-
 /**
  * Obtain the ESNI secrets negotiated during the handshake.
  */
 ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx);
-
 /**
  *
  */
@@ -1212,6 +1216,10 @@ char *ptls_hexdump(char *dst, const void *src, size_t len);
  * the default get_time callback
  */
 extern ptls_get_time_t ptls_get_time;
+/**
+ *
+ */
+extern PTLS_THREADLOCAL unsigned ptls_default_skip_tracing;
 
 /* inline functions */
 

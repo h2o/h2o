@@ -945,8 +945,8 @@ void h2o_cleanup_thread(void)
     h2o_mem_clear_recycle(&h2o_socket_buffer_prototype.allocator);
 }
 
-int h2o_conn_is_traced(h2o_conn_t *conn)
+int h2o_conn_skip_tracing(h2o_conn_t *conn)
 {
     h2o_socket_t *sock = conn->callbacks->get_socket(conn);
-    return sock != NULL ? h2o_socket_is_traced(sock) : 0;
+    return sock != NULL ? h2o_socket_skip_tracing(sock) : 1;
 }

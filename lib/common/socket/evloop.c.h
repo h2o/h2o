@@ -420,9 +420,18 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
     h2o_socket_t *sock;
 
+    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup) */
+#if h2O_USE_EBPF_MAP
+    struct sockaddr_storage peeraddr[1];
+    socklen_t peeraddrlen[1] = {sizeof(peeraddr[0])};
+#else
+    struct sockaddr_storage *peeraddr = NULL;
+    socklen_t *peeraddrlen = NULL;
+#endif
+
 #if H2O_USE_ACCEPT4
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
-    if ((fd = accept4(listener->fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
+    if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
 #if !defined(NDEBUG) && defined(DEBUG)
     { /* assert that TCP_NODELAY flag is inherited */
@@ -435,13 +444,16 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 #endif
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
-    if ((fd = cloexec_accept(listener->fd, NULL, NULL)) == -1)
+    if ((fd = cloexec_accept(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket_set_nodelay(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
 
-    init_is_traced(sock);
+    if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
+        h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
+    if (!h2o_socket_ebpf_lookup(listener->loop, h2o_socket_ebpf_init_key, sock))
+        sock->_skip_tracing = 1;
     return sock;
 }
 
@@ -625,9 +637,9 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
     assert(loop->_pending_as_client == NULL);
     assert(loop->_pending_as_server == NULL);
 
-    if (h2o_sliding_counter_is_running(&loop->exec_time_counter)) {
+    if (h2o_sliding_counter_is_running(&loop->exec_time_nanosec_counter)) {
         update_now(loop);
-        h2o_sliding_counter_stop(&loop->exec_time_counter, loop->_now_millisec);
+        h2o_sliding_counter_stop(&loop->exec_time_nanosec_counter, loop->_now_nanosec);
     }
 
     return 0;

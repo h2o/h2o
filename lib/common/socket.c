@@ -52,6 +52,10 @@
 #define TCP_NOTSENT_LOWAT 25
 #endif
 
+#if H2O_USE_DTRACE && defined(__linux__)
+#define H2O_USE_EBPF_MAP 1
+#endif
+
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -116,7 +120,6 @@ static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
-static void init_is_traced(h2o_socket_t *sock);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.c.h"
@@ -606,7 +609,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
     can_prepare = 0;
 #else
     if (can_prepare)
-        loop_time = h2o_evloop_get_execution_time(h2o_socket_get_loop(sock));
+        loop_time = h2o_evloop_get_execution_time_millisec(h2o_socket_get_loop(sock));
 #endif
 
     /* obtain TCP states */
@@ -1078,7 +1081,10 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
             /* start using picotls if the first packet contains TLS 1.3 CH */
             ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
             if (ptls_ctx != NULL) {
+                unsigned ptls_skip_tracing_backup = ptls_default_skip_tracing;
+                ptls_default_skip_tracing = sock->_skip_tracing;
                 ptls_t *ptls = ptls_new(ptls_ctx, 1);
+                ptls_default_skip_tracing = ptls_skip_tracing_backup;
                 if (ptls == NULL)
                     h2o_fatal("no memory");
                 *ptls_get_data_ptr(ptls) = sock;
@@ -1478,7 +1484,7 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
     counter->average = counter->prev.sum / (sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]));
 }
 
-#if H2O_USE_DTRACE && defined(__linux__)
+#if H2O_USE_EBPF_MAP
 #include <linux/bpf.h>
 #include <linux/unistd.h>
 #include "h2o-probes.h"
@@ -1528,71 +1534,84 @@ static int lookup_map(const void *key, const void *value)
     return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == 0; // return 1 if found, 0 otherwise
 }
 
-static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
+static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, h2o_ebpf_address_t *ea)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
-        memcpy(ip, &sin->sin_addr, sizeof(sin->sin_addr));
-        *port = sin->sin_port;
+        memcpy(ea->ip, &sin->sin_addr, sizeof(sin->sin_addr));
+        ea->port = sin->sin_port;
         return 1;
     } else if (sa->sa_family == AF_INET6) {
         struct sockaddr_in6 *sin = (void *)sa;
-        memcpy(ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
-        *port = sin->sin6_port;
+        memcpy(ea->ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
+        ea->port = sin->sin6_port;
         return 1;
     } else {
         return 0;
     }
 }
 
-static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
+int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
-    struct sockaddr_storage ss;
-    unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
     memset(key, 0, sizeof(*key));
-
-    // fetch sock/peer name and socket type
-    if (h2o_socket_getsockname(sock, (void *)&ss) == 0)
+    if (!set_ebpf_map_key_tuples(local, &key->local))
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->source.ip[0], &key->source.port))
+    if (!set_ebpf_map_key_tuples(remote, &key->remote))
         return 0;
-    if (h2o_socket_getpeername(sock, (void *)&ss) == 0)
-        return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->destination.ip[0], &key->destination.port))
-        return 0;
-    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0)
-        return 0;
-    key->family = ss.ss_family == AF_INET6 ? 6 : 4;
+    key->family = local->sa_family == AF_INET6 ? 6 : 4;
     key->protocol = sock_type;
     return 1;
 }
 
-void init_is_traced(h2o_socket_t *sock)
+int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
+{
+    h2o_socket_t *sock = _sock;
+    struct sockaddr_storage local, remote;
+    unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
+
+    /* fetch info */
+    if (h2o_socket_getsockname(sock, (void *)&local) == 0)
+        return 0;
+    if (h2o_socket_getpeername(sock, (void *)&remote) == 0)
+        return 0;
+    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0) /* can't the info be cached? */
+        return 0;
+
+    return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
+}
+
+int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
 {
     // try open map if not opened
-    open_tracing_map(h2o_socket_get_loop(sock));
-    if (tracing_map_fd < 0) {
-        // map is not connected, fallback accepting probe
-        sock->_is_traced = 1;
-        return;
-    }
+    open_tracing_map(loop);
 
-    // define key/vals - we are only interrested in presence of the key, discard values
-    h2o_ebpf_map_key_t key;
-    void *vals = NULL;
-
-    // init key - fallback refusing probe if key can't be initialized
-    if (!init_ebpf_map_key(&key, sock)) {
-        sock->_is_traced = 0;
-        return;
-    }
+    // map is not connected, fallback accepting probe
+    if (tracing_map_fd < 0)
+        return 1;
 
     // lookup map for our key
-    sock->_is_traced = lookup_map(&key, &vals);
+    h2o_ebpf_map_key_t key;
+    void *vals = NULL;
+    if (!init_key(&key, cbdata))
+        return 0;
+    return lookup_map(&key, &vals);
 }
+
 #else
-void init_is_traced(h2o_socket_t *sock)
+
+int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
-    sock->_is_traced = 1;
+    h2o_fatal("unimplemented");
 }
+
+int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
+{
+    h2o_fatal("unimplemented");
+}
+
+int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
+{
+    return 1;
+}
+
 #endif

@@ -117,7 +117,7 @@ static void on_error(struct st_h2o_http1client_t *client, const char *errstr)
 static void on_body_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1client_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_t, super._timeout, entry);
-    on_error(client, "I/O timeout");
+    on_error(client, h2o_httpclient_error_io_timeout);
 }
 
 static void do_update_window(h2o_httpclient_t *_client);
@@ -153,7 +153,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&client->super._timeout);
 
     if (err != NULL) {
-        on_error(client, "I/O error (body; content-length)");
+        on_error(client, h2o_httpclient_error_io);
         return;
     }
 
@@ -206,7 +206,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
             client->super._cb.on_body(&client->super, h2o_httpclient_error_is_eos);
             close_response(client);
         } else {
-            on_error(client, "I/O error (body; chunked)");
+            on_error(client, h2o_httpclient_error_io);
         }
         return;
     }
@@ -221,7 +221,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
         case -1: /* error */
             newsz = sock->bytes_read;
             client->_do_keepalive = 0;
-            errstr = "failed to parse the response (chunked)";
+            errstr = h2o_httpclient_error_http1_parse_failed;
             break;
         case -2: /* incomplete */
             errstr = NULL;
@@ -256,6 +256,12 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
+static void on_head_timeout(h2o_timer_t *entry)
+{
+    struct st_h2o_http1client_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_t, super._timeout, entry);
+    on_error(client, h2o_httpclient_error_io_timeout);
+}
+
 static void on_head(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
@@ -270,9 +276,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&client->super._timeout);
 
     if (err != NULL) {
-        on_error(client, "I/O error (head)");
+        on_error(client, h2o_httpclient_error_io);
         return;
     }
+
+    client->super._timeout.cb = on_head_timeout;
 
     headers = h2o_mem_alloc_pool(client->super.pool, *headers, MAX_HEADERS);
     header_names = h2o_mem_alloc_pool(client->super.pool, *header_names, MAX_HEADERS);
@@ -286,7 +294,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
                                   &num_headers, 0);
         switch (rlen) {
         case -1: /* error */
-            on_error(client, "failed to parse the response");
+            on_error(client, h2o_httpclient_error_http1_parse_failed);
             return;
         case -2: /* incomplete */
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
@@ -299,7 +307,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         for (i = 0; i != num_headers; ++i) {
             if (src_headers[i].name_len == 0) {
                 /* reject multiline header */
-                on_error(client, "line folding of header fields is not supported");
+                on_error(client, h2o_httpclient_error_http1_line_folding);
                 return;
             }
             const h2o_token_t *token;
@@ -351,13 +359,13 @@ static void on_head(h2o_socket_t *sock, const char *err)
             } else if (h2o_memis(headers[i].value.base, headers[i].value.len, H2O_STRLIT("identity"))) {
                 /* continue */
             } else {
-                on_error(client, "unexpected type of transfer-encoding");
+                on_error(client, h2o_httpclient_error_http1_unexpected_transfer_encoding);
                 return;
             }
         } else if (headers[i].name == &H2O_TOKEN_CONTENT_LENGTH->buf) {
             if ((client->_body_decoder.content_length.bytesleft = h2o_strtosize(headers[i].value.base, headers[i].value.len)) ==
                 SIZE_MAX) {
-                on_error(client, "invalid content-length");
+                on_error(client, h2o_httpclient_error_invalid_content_length);
                 return;
             }
             if (reader != on_body_chunked)
@@ -403,10 +411,10 @@ static void on_head(h2o_socket_t *sock, const char *err)
 #undef MAX_HEADERS
 }
 
-static void on_head_timeout(h2o_timer_t *entry)
+static void on_head_first_byte_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1client_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_t, super._timeout, entry);
-    on_error(client, "I/O timeout");
+    on_error(client, h2o_httpclient_error_first_byte_timeout);
 }
 
 static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
@@ -416,7 +424,7 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&client->super._timeout);
 
     if (err != NULL) {
-        on_error(client, "I/O error (send request)");
+        on_error(client, h2o_httpclient_error_io);
         return;
     }
 
@@ -434,7 +442,7 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
 
     switch (client->state.res) {
     case STREAM_STATE_HEAD:
-        client->super._timeout.cb = on_head_timeout;
+        client->super._timeout.cb = on_head_first_byte_timeout;
         h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
         break;
     case STREAM_STATE_BODY:
@@ -548,7 +556,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 static void on_send_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_http1client_t *client = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1client_t, super._timeout, entry);
-    on_error(client, "I/O timeout");
+    on_error(client, h2o_httpclient_error_io_timeout);
 }
 
 static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, h2o_url_t url, h2o_iovec_t connection,
@@ -659,7 +667,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
         if (body.base != NULL) {
             h2o_buffer_init(&client->_body_buf, &h2o_socket_buffer_prototype);
             if (!h2o_buffer_try_append(&client->_body_buf, body.base, body.len)) {
-                on_whole_request_sent(client->sock, "Internal error");
+                on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
                 return;
             }
         }

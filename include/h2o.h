@@ -1193,12 +1193,10 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, uns
  * setups accept context for redis SSL resumption
  */
 void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsigned expiration, const char *prefix);
-
 /**
- * helper to return if the socket is to be traced
+ * helper to return if the socket is target of tracing
  */
-int h2o_conn_is_traced(h2o_conn_t *conn);
-
+int h2o_conn_skip_tracing(h2o_conn_t *conn);
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */

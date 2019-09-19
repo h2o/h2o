@@ -93,10 +93,7 @@
 #endif
 
 #if PICOTLS_USE_DTRACE
-#define PTLS_SHOULD_PROBE(LABEL, tls)                                                                                              \
-    (PTLS_UNLIKELY(PICOTLS_##LABEL##_ENABLED()) &&                                                                                 \
-     (tls->ctx->is_traced == NULL || tls->ctx->is_traced->cb(tls->ctx->is_traced, tls)))
-
+#define PTLS_SHOULD_PROBE(LABEL, tls) (PTLS_UNLIKELY(PICOTLS_##LABEL##_ENABLED()) && !(tls)->skip_tracing)
 #define PTLS_PROBE0(LABEL, tls)                                                                                                    \
     do {                                                                                                                           \
         ptls_t *_tls = (tls);                                                                                                      \
@@ -233,6 +230,7 @@ struct st_ptls_t {
     unsigned send_change_cipher_spec : 1;
     unsigned needs_key_update : 1;
     unsigned key_update_send_request : 1;
+    unsigned skip_tracing : 1;
     /**
      * misc.
      */
@@ -4138,6 +4136,7 @@ ptls_t *ptls_new(ptls_context_t *ctx, int is_server)
     *tls = (ptls_t){ctx};
     tls->is_server = is_server;
     tls->send_change_cipher_spec = ctx->send_change_cipher_spec;
+    tls->skip_tracing = ptls_default_skip_tracing;
     if (!is_server) {
         tls->state = PTLS_STATE_CLIENT_HANDSHAKE_START;
         tls->ctx->random_bytes(tls->client_random, sizeof(tls->client_random));
@@ -4272,6 +4271,16 @@ int ptls_is_psk_handshake(ptls_t *tls)
 void **ptls_get_data_ptr(ptls_t *tls)
 {
     return &tls->data_ptr;
+}
+
+int ptls_skip_tracing(ptls_t *tls)
+{
+    return tls->skip_tracing;
+}
+
+void ptls_set_skip_tracing(ptls_t *tls, int skip_tracing)
+{
+    tls->skip_tracing = skip_tracing;
 }
 
 static int handle_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message, int is_end_of_record,
@@ -5054,6 +5063,7 @@ static uint64_t get_time(ptls_get_time_t *self)
 }
 
 ptls_get_time_t ptls_get_time = {get_time};
+PTLS_THREADLOCAL unsigned ptls_default_skip_tracing = 1;
 
 int ptls_is_server(ptls_t *tls)
 {
