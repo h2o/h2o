@@ -253,7 +253,7 @@ EOT
             is scalar(@$access_logs), 1, 'access log count';
             isnt scalar(@$error_logs), 0, 'error log count';
             is $access_logs->[0], '', 'access log';
-            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:failed to parse the response (chunked)', 'error log';
+            is $error_logs->[-1], '[lib/core/proxy.c] in request:/:failed to parse the response', 'error log';
 
             live_check($proto, $port, $curl);
         });

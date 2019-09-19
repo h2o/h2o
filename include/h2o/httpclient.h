@@ -196,6 +196,18 @@ typedef struct st_h2o_httpclient__h2_conn_t {
 
 extern const char h2o_httpclient_error_is_eos[];
 extern const char h2o_httpclient_error_refused_stream[];
+extern const char h2o_httpclient_error_unknown_alpn_protocol[];
+extern const char h2o_httpclient_error_io[];
+extern const char h2o_httpclient_error_connect_timeout[];
+extern const char h2o_httpclient_error_first_byte_timeout[];
+extern const char h2o_httpclient_error_io_timeout[];
+extern const char h2o_httpclient_error_invalid_content_length[];
+extern const char h2o_httpclient_error_flow_control[];
+extern const char h2o_httpclient_error_http1_line_folding[];
+extern const char h2o_httpclient_error_http1_unexpected_transfer_encoding[];
+extern const char h2o_httpclient_error_http1_parse_failed[];
+extern const char h2o_httpclient_error_http2_protocol_violation[];
+extern const char h2o_httpclient_error_internal[];
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 

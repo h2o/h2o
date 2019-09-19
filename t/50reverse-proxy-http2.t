@@ -41,7 +41,7 @@ subtest 'no :status header' => sub {
     my $server = create_h2o($upstream_port);
     my ($headers, $body) = run_prog("curl -s --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}");
     like $headers, qr{^HTTP/[0-9.]+ 502}is;
-    like $body, qr/upstream error \(connection level\)/;
+    like $body, qr/protocol violation/;
     ok check_port($server->{port}), 'live check';
 };
 
