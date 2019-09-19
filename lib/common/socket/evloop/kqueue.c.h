@@ -123,8 +123,9 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     if (nevents == -1)
         return -1;
 
-    if (nevents != 0)
-        h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now_millisec);
+    if (nevents != 0) {
+        h2o_sliding_counter_start(&loop->super.exec_time_nanosec_counter, loop->super._now_nanosec);
+    }
 
     /* update readable flags, perform writes */
     for (i = 0; i != nevents; ++i) {

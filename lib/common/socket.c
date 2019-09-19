@@ -609,7 +609,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
     can_prepare = 0;
 #else
     if (can_prepare)
-        loop_time = h2o_evloop_get_execution_time(h2o_socket_get_loop(sock));
+        loop_time = h2o_evloop_get_execution_time_millisec(h2o_socket_get_loop(sock));
 #endif
 
     /* obtain TCP states */
