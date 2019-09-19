@@ -32,9 +32,25 @@ extern "C" {
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
+/**
+ * This is a struct used for passing additional properties from the application to the HTTP client implementation, when the
+ * connection to the server is being established.
+ */
 typedef struct st_h2o_httpclient_properties_t {
+    /**
+     * When the value is a non-NULL pointer (at the moment, only happens with the HTTP/1 client), the application MAY set it to an
+     * iovec pointing to the payload of the PROXY protocol (i.e., the first line).
+     */
     h2o_iovec_t *proxy_protocol;
+    /**
+     * When the value is a non-NULL pointer (at the moment, only happens with the HTTP/1 client), the application MAY set it to 1 to
+     * indicate that the request body should be encoded using the chunked transfer-encoding.
+     */
     int *chunked;
+    /**
+     * When the value is a non-NULL pointer (at the moment, only happens with the HTTP/1 client), the application MAY set it to the
+     * value of the connection header field to be sent to the server. This can be used for upgrading an HTTP/1.1 connection.
+     */
     h2o_iovec_t *connection_header;
 } h2o_httpclient_properties_t;
 
