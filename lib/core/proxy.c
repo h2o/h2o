@@ -39,9 +39,9 @@ struct rp_generator_t {
     } up_req;
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
-    int is_websocket_handshake;
-    int had_body_error; /* set if an error happened while fetching the body so that we can propagate the error */
     h2o_timer_t send_headers_timeout;
+    unsigned is_websocket_handshake : 1;
+    unsigned had_body_error : 1; /* set if an error happened while fetching the body so that we can propagate the error */
     unsigned req_done : 1;
     unsigned res_done : 1;
 };
