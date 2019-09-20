@@ -1155,7 +1155,7 @@ static void on_http3_conn_destroy(h2o_http3_conn_t *conn)
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
-    yoml_t **ssl_node = NULL, **quic_node = NULL, **owner_node = NULL, **permission_node = NULL;
+    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -1165,18 +1165,15 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,quic:m,proxy-protocol:*",
-                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node, &quic_node,
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
+                                           &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
                                            &proxy_protocol_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
-        if (type_node != NULL) {
+        if (type_node != NULL)
             type = (*type_node)->data.scalar;
-        } else if (quic_node != NULL) {
-            type = "quic";
-        }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
@@ -1193,10 +1190,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         int listener_is_new;
         struct listener_config_t *listener;
 
-        if (quic_node != NULL) {
-            h2o_configurator_errprintf(cmd, *quic_node, "QUIC support on UNIX domain socket is unavailable");
-            return -1;
-        }
         /* build sockaddr */
         memset(&sa, 0, sizeof(sa));
         if (strlen(servname) >= sizeof(sa.sun_path)) {
@@ -1238,10 +1231,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
 
         /* TCP socket */
         struct addrinfo *res, *ai;
-        if (quic_node != NULL) {
-            h2o_configurator_errprintf(cmd, *quic_node, "QUIC cannot be used on a TCP socket");
-            return -1;
-        }
         if ((res = resolve_address(cmd, node, SOCK_STREAM, IPPROTO_TCP, hostname, servname)) == NULL)
             return -1;
         for (ai = res; ai != NULL; ai = ai->ai_next) {
@@ -1291,9 +1280,6 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (ssl_node == NULL) {
             h2o_configurator_errprintf(cmd, node, "QUIC endpoint must have an accompanying SSL configuration");
             return -1;
-        }
-        if (quic_node != NULL) {
-            /* nothing QUIC-specific for the moment */
         }
         if ((res = resolve_address(cmd, node, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
             return -1;
