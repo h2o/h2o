@@ -54,6 +54,7 @@ extern "C" {
 #include "h2o/version.h"
 #include "h2o/balancer.h"
 #include "h2o/http2_common.h"
+#include "h2o/send_state.h"
 
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
@@ -682,12 +683,6 @@ typedef struct st_h2o_generator_t {
     void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
-typedef enum h2o_send_state {
-    H2O_SEND_STATE_IN_PROGRESS,
-    H2O_SEND_STATE_FINAL,
-    H2O_SEND_STATE_ERROR,
-} h2o_send_state_t;
-
 typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
 
 /**
@@ -898,7 +893,7 @@ typedef struct st_h2o_filereq_t {
     h2o_iovec_t local_path;
 } h2o_filereq_t;
 
-typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, int is_end_stream);
+typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, h2o_send_state_t send_state);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
 typedef void (*h2o_on_request_streaming_selected_cb)(h2o_req_t *, int is_streaming);
 

@@ -458,7 +458,9 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
 void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
     if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
-        h2o_http2_stream_close(conn, stream);
+        if (!stream->_req_streaming_in_progress) {
+            h2o_http2_stream_close(conn, stream);
+        }
     } else {
         if (!stream->blocked_by_server)
             h2o_http2_stream_set_blocked_by_server(conn, stream, 1);

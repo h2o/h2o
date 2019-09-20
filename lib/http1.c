@@ -32,9 +32,15 @@
 
 #define MAX_PULL_BUF_SZ 65536
 
+enum enum_h2o_http1_ostream_state {
+    OSTREAM_STATE_HEAD,
+    OSTREAM_STATE_BODY,
+    OSTREAM_STATE_DONE,
+};
+
 struct st_h2o_http1_finalostream_t {
     h2o_ostream_t super;
-    int sent_headers;
+    enum enum_h2o_http1_ostream_state state;
     char *chunked_buf; /* buffer used for chunked-encoding (NULL unless chunked encoding is used) */
     struct {
         void *buf;
@@ -139,6 +145,30 @@ static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
     free(conn);
 }
 
+static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
+{
+    if (!conn->req.http1_is_persistent) {
+        /* TODO use lingering close */
+        close_connection(conn, 1);
+        return;
+    }
+
+    assert(conn->req.proceed_req == NULL);
+    assert(conn->_req_entity_reader == NULL);
+
+    /* handle next request */
+    if (conn->_unconsumed_request_size)
+        h2o_buffer_consume(&conn->sock->input, conn->_unconsumed_request_size);
+    init_request(conn);
+    conn->req._req_body.bytes_received = 0;
+    conn->req.write_req.cb = NULL;
+    conn->req.write_req.ctx = NULL;
+    conn->req.proceed_req = NULL;
+    conn->_prevreqlen = 0;
+    conn->_unconsumed_request_size = 0;
+    reqread_start(conn);
+}
+
 /**
  * timer is activated if cb != NULL, disactivated otherwise
  */
@@ -165,16 +195,29 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
     h2o_process_request(&conn->req);
 }
 
+static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int status, size_t status_error_index, const char *reason,
+                                      const char *body)
+{
+    conn->req.proceed_req = NULL;
+    conn->_req_entity_reader = NULL;
+    set_timeout(conn, 0, NULL);
+    h2o_socket_read_stop(conn->sock);
+    /* FIXME We should check if `h2o_proceed_request` has been called, rather than trying to guess if we have (I'm unsure if the
+     * contract is for h2o_req_t::_generator to become non-NULL immediately after `h2o_proceed_request` is being called). */
+    if (conn->req._generator == NULL && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {
+        conn->super.ctx->emitted_error_status[status_error_index]++;
+        h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+    } else {
+        conn->req.http1_is_persistent = 0;
+        if (conn->_ostr_final.state == OSTREAM_STATE_DONE)
+            cleanup_connection(conn);
+    }
+}
+
 #define DECL_ENTITY_READ_SEND_ERROR_XXX(status_)                                                                                   \
     static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
     {                                                                                                                              \
-        if (conn->_ostr_final.sent_headers)                                                                                        \
-            return;                                                                                                                \
-        conn->_req_entity_reader = NULL;                                                                                           \
-        set_timeout(conn, 0, NULL);                                                                                                \
-        h2o_socket_read_stop(conn->sock);                                                                                          \
-        conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                       \
-        h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                          \
+        entity_read_do_send_error(conn, status_, H2O_STATUS_ERROR_##status_, reason, body);                                        \
     }
 
 DECL_ENTITY_READ_SEND_ERROR_XXX(400)
@@ -194,6 +237,9 @@ static void handle_one_body_fragment(struct st_h2o_http1_conn_t *conn, size_t fr
     if (complete) {
         conn->req.proceed_req = NULL;
         conn->_req_entity_reader = NULL;
+        if (conn->_ostr_final.state == OSTREAM_STATE_DONE) {
+            cleanup_connection(conn);
+        }
     }
 }
 
@@ -449,9 +495,15 @@ static void send_bad_request(struct st_h2o_http1_conn_t *conn, const char *body)
     h2o_send_error_400(&conn->req, "Bad Request", body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
 }
 
-static void proceed_request(h2o_req_t *req, size_t written, int is_end_entity)
+static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t send_state)
 {
     struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, req, req);
+
+    if (send_state == H2O_SEND_STATE_ERROR) {
+        entity_read_send_error_502(conn, "Bad Gateway", "Bad Gateway");
+        return;
+    }
+
     set_timeout(conn, conn->super.ctx->globalconf->http1.req_timeout, reqread_on_timeout);
     h2o_socket_read_start(conn->sock, reqread_on_read);
     return;
@@ -469,7 +521,7 @@ static int write_req_non_streaming(void *_req, h2o_iovec_t payload, int is_end_e
         conn->req.proceed_req = NULL;
         h2o_process_request(&conn->req);
     } else {
-        proceed_request(&conn->req, payload.len, is_end_entity);
+        proceed_request(&conn->req, payload.len, is_end_entity ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
     }
     return 0;
 }
@@ -648,34 +700,11 @@ static void on_send_next_pull(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
-    if (err != NULL)
+    if (err != NULL) {
         close_connection(conn, 1);
-    else
+    } else {
         proceed_pull(conn, 0);
-}
-
-static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
-{
-    if (!conn->req.http1_is_persistent) {
-        /* TODO use lingering close */
-        close_connection(conn, 1);
-        return;
     }
-
-    assert(conn->req.proceed_req == NULL);
-    assert(conn->_req_entity_reader == NULL);
-
-    /* handle next request */
-    if (conn->_unconsumed_request_size)
-        h2o_buffer_consume(&conn->sock->input, conn->_unconsumed_request_size);
-    init_request(conn);
-    conn->req._req_body.bytes_received = 0;
-    conn->req.write_req.cb = NULL;
-    conn->req.write_req.ctx = NULL;
-    conn->req.proceed_req = NULL;
-    conn->_prevreqlen = 0;
-    conn->_unconsumed_request_size = 0;
-    reqread_start(conn);
 }
 
 static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)
@@ -684,7 +713,10 @@ static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)
 
     if (err != NULL)
         conn->req.http1_is_persistent = 0;
-    cleanup_connection(conn);
+
+    conn->_ostr_final.state = OSTREAM_STATE_DONE;
+    if (conn->req.proceed_req == NULL)
+        cleanup_connection(conn);
 }
 
 static void on_send_complete(h2o_socket_t *sock, const char *err)
@@ -707,7 +739,11 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
-    cleanup_connection(conn);
+    /* TODO Consider if we should shut down the send side in case HTTP/1 is running without Content-Length header, as there is no
+     * other way to communicate the end of the response. T-E chunked will communicate the end when HTTP/1.1 is being used. */
+    conn->_ostr_final.state = OSTREAM_STATE_DONE;
+    if (conn->req.proceed_req == NULL)
+        cleanup_connection(conn);
 }
 
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
@@ -892,7 +928,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
     size_t bufsz, headers_len;
 
     assert(conn->req._ostr_top == &conn->_ostr_final.super);
-    assert(!conn->_ostr_final.sent_headers);
+    assert(conn->_ostr_final.state == OSTREAM_STATE_HEAD);
 
     conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
 
@@ -917,7 +953,7 @@ static void finalostream_start_pull(h2o_ostream_t *_self, h2o_ostream_pull_cb cb
 
     /* fill-in the header */
     headers_len = flatten_headers(conn->_ostr_final.pull.buf, &conn->req, connection);
-    conn->_ostr_final.sent_headers = 1;
+    conn->_ostr_final.state = OSTREAM_STATE_BODY;
 
     proceed_pull(conn, headers_len);
 }
@@ -963,7 +999,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
         }
     }
 
-    if (!self->sent_headers) {
+    if (self->state == OSTREAM_STATE_HEAD) {
         conn->req.timestamps.response_start_at = h2o_gettimeofday(conn->super.ctx->loop);
         setup_chunked(self, req);
         if (conn->req.send_server_timing)
@@ -976,7 +1012,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs
             flatten_headers_estimate_size(req, conn->super.ctx->globalconf->server_name.len + strlen(connection)));
         bufs[bufcnt].len = flatten_headers(bufs[bufcnt].base, req, connection);
         ++bufcnt;
-        self->sent_headers = 1;
+        self->state = OSTREAM_STATE_BODY;
     }
 
     if (self->chunked_buf != NULL) {

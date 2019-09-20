@@ -16,7 +16,8 @@ EOT
 my $output = run_with_h2get($server, <<"EOR");
     to_process = []
     h2g = H2.new
-    host = ARGV[0] || "localhost:8080"
+    authority = ARGV[0] || "localhost:8080"
+    host = "https://#{authority}"
     h2g.connect(host)
     h2g.send_prefix()
     h2g.send_settings([[SETTINGS_INITIAL_WINDOW_SIZE,0]])
