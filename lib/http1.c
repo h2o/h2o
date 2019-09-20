@@ -195,22 +195,27 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
     h2o_process_request(&conn->req);
 }
 
+static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int status, size_t status_error_index, const char *reason,
+                                      const char *body)
+{
+    conn->req.proceed_req = NULL;
+    conn->_req_entity_reader = NULL;
+    set_timeout(conn, 0, NULL);
+    h2o_socket_read_stop(conn->sock);
+    if (!h2o_is_sending_response(&conn->req) && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {
+        conn->super.ctx->emitted_error_status[status_error_index]++;
+        h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+    } else {
+        conn->req.http1_is_persistent = 0;
+        if (conn->_ostr_final.state == OSTREAM_STATE_DONE)
+            cleanup_connection(conn);
+    }
+}
+
 #define DECL_ENTITY_READ_SEND_ERROR_XXX(status_)                                                                                   \
     static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
     {                                                                                                                              \
-        conn->req.proceed_req = NULL;                                                                                              \
-        conn->_req_entity_reader = NULL;                                                                                           \
-        set_timeout(conn, 0, NULL);                                                                                                \
-        h2o_socket_read_stop(conn->sock);                                                                                          \
-        if (!h2o_is_sending_response(&conn->req) && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {                               \
-            conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                   \
-            h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                      \
-        } else {                                                                                                                   \
-            conn->req.http1_is_persistent = 0;                                                                                     \
-            if (conn->_ostr_final.state == OSTREAM_STATE_DONE) {                                                                   \
-                cleanup_connection(conn);                                                                                          \
-            }                                                                                                                      \
-        }                                                                                                                          \
+        entity_read_do_send_error(conn, status_, H2O_STATUS_ERROR_##status_, reason, body);                                        \
     }
 
 DECL_ENTITY_READ_SEND_ERROR_XXX(400)
