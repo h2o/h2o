@@ -304,7 +304,7 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
     int r;
     /* ... by destructing the entry at oldest_index */
     if (closed->entries[closed->oldest_index].id != -1) {
-        iter = kh_get(h2o_http3_freestanding_priority, conn->scheduler.reqs.freestanding, stream->quic->stream_id);
+        iter = kh_get(h2o_http3_freestanding_priority, conn->scheduler.reqs.freestanding, closed->entries[closed->oldest_index].id);
         assert(iter != kh_end(conn->scheduler.reqs.freestanding));
         kh_del(h2o_http3_freestanding_priority, conn->scheduler.reqs.freestanding, iter);
         h2o_http2_scheduler_close(&closed->entries[closed->oldest_index].ref);
@@ -1179,6 +1179,7 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
             assert(iter != kh_end(conn->scheduler.reqs.freestanding));
             kh_del(h2o_http3_freestanding_priority, conn->scheduler.reqs.freestanding, iter);
             h2o_http2_scheduler_close(&closed->entries[closed->oldest_index].ref);
+            closed->entries[closed->oldest_index].id = -1;
         }
     }
     { /* ... then releasing the entries that were never associated to a stream (incl. placeholders) */
