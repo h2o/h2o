@@ -202,7 +202,9 @@ static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int stat
     conn->_req_entity_reader = NULL;
     set_timeout(conn, 0, NULL);
     h2o_socket_read_stop(conn->sock);
-    if (!h2o_is_sending_response(&conn->req) && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {
+    /* FIXME We should check if `h2o_proceed_request` has been called, rather than trying to guess if we have (I'm unsure if the
+     * contract is for h2o_req_t::_generator to become non-NULL immediately after `h2o_proceed_request` is being called). */
+    if (conn->req._generator == NULL && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {
         conn->super.ctx->emitted_error_status[status_error_index]++;
         h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
     } else {
