@@ -22,7 +22,7 @@
 module H2O
   class Prometheus
 
-    @@gauge_types = ['uptime', 'connections', 'num-sessions']
+    @@gauge_types = ['uptime', 'connections', 'num-sessions', 'evloop-latency-nanosec']
 
     def initialize(app)
       @app = app
@@ -43,7 +43,7 @@ module H2O
       status, headers, body = @app.call(env)
       stats = JSON.parse(body.join)
       version = stats.delete('server-version') || ''
-      stats = stats.select {|k, v| v.kind_of?(Numeric) }
+      stats = stats.select {|k, v| v.kind_of?(Numeric) || v.kind_of?(Array) }
       s = ""
       stats.each {|k, v|
         v = 0 if v.nil?
@@ -55,7 +55,14 @@ module H2O
 
         s += "# HELP #{pk} #{k}\n"
         s += "# TYPE #{pk} #{type}\n" if type
-        s += "#{pk}{version=\"#{version}\"} #{v}\n"
+
+        if k == 'evloop-latency-nanosec' then
+          v.each_with_index do |vv, i|
+            s += "#{pk}{version=\"#{version}\", thread=\"#{i}\"} #{vv}\n"
+          end
+        else
+          s += "#{pk}{version=\"#{version}\"} #{v}\n"
+        end
       }
       [status, headers, [s]]
     end

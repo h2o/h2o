@@ -588,7 +588,7 @@ EOT
 
         my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         like $headers, qr{HTTP/[^ ]+ 504\s}is;
-        is $body, 'client warning: I/O timeout';
+        is $body, 'client warning: first byte timeout';
     };
 };
 

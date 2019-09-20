@@ -187,22 +187,29 @@ static void process_request(struct st_h2o_http1_conn_t *conn)
     h2o_process_request(&conn->req);
 }
 
+static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int status, size_t status_error_index, const char *reason,
+                                      const char *body)
+{
+    conn->req.proceed_req = NULL;
+    conn->_req_entity_reader = NULL;
+    set_timeout(conn, 0, NULL);
+    h2o_socket_read_stop(conn->sock);
+    /* FIXME We should check if `h2o_proceed_request` has been called, rather than trying to guess if we have (I'm unsure if the
+     * contract is for h2o_req_t::_generator to become non-NULL immediately after `h2o_proceed_request` is being called). */
+    if (conn->req._generator == NULL && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {
+        conn->super.ctx->emitted_error_status[status_error_index]++;
+        h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+    } else {
+        conn->req.http1_is_persistent = 0;
+        if (conn->_ostr_final.state == OSTREAM_STATE_DONE)
+            cleanup_connection(conn);
+    }
+}
+
 #define DECL_ENTITY_READ_SEND_ERROR_XXX(status_)                                                                                   \
     static void entity_read_send_error_##status_(struct st_h2o_http1_conn_t *conn, const char *reason, const char *body)           \
     {                                                                                                                              \
-        conn->req.proceed_req = NULL;                                                                                              \
-        conn->_req_entity_reader = NULL;                                                                                           \
-        set_timeout(conn, 0, NULL);                                                                                                \
-        h2o_socket_read_stop(conn->sock);                                                                                          \
-        if (!h2o_is_sending_response(&conn->req) && conn->_ostr_final.state == OSTREAM_STATE_HEAD) {                               \
-            conn->super.ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                   \
-            h2o_send_error_generic(&conn->req, status_, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);                      \
-        } else {                                                                                                                   \
-            conn->req.http1_is_persistent = 0;                                                                                     \
-            if (conn->_ostr_final.state == OSTREAM_STATE_DONE) {                                                                   \
-                cleanup_connection(conn);                                                                                          \
-            }                                                                                                                      \
-        }                                                                                                                          \
+        entity_read_do_send_error(conn, status_, H2O_STATUS_ERROR_##status_, reason, body);                                        \
     }
 
 DECL_ENTITY_READ_SEND_ERROR_XXX(400)
@@ -689,9 +696,8 @@ static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)
         conn->req.http1_is_persistent = 0;
 
     conn->_ostr_final.state = OSTREAM_STATE_DONE;
-    if (conn->req.proceed_req == NULL) {
+    if (conn->req.proceed_req == NULL)
         cleanup_connection(conn);
-    }
 }
 
 static void on_send_complete(h2o_socket_t *sock, const char *err)
@@ -714,10 +720,11 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         }
     }
 
+    /* TODO Consider if we should shut down the send side in case HTTP/1 is running without Content-Length header, as there is no
+     * other way to communicate the end of the response. T-E chunked will communicate the end when HTTP/1.1 is being used. */
     conn->_ostr_final.state = OSTREAM_STATE_DONE;
-    if (conn->req.proceed_req == NULL) {
+    if (conn->req.proceed_req == NULL)
         cleanup_connection(conn);
-    }
 }
 
 static void on_upgrade_complete(h2o_socket_t *socket, const char *err)

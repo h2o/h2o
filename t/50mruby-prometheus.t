@@ -10,6 +10,8 @@ plan skip_all => 'mruby support is off'
 
 subtest "basic" => sub {
     my $server = spawn_h2o(<< 'EOT');
+duration-stats: ON
+num-threads: 2
 hosts:
   default:
     paths:
@@ -33,7 +35,7 @@ sub parse_output {
     my ($out) = @_;
     my @ret;
     my @lines = split(/\n/, $out);
-    while (my ($helpline, $typeline, $valueline) = splice(@lines, 0, 3)) {
+    while (my ($helpline, $typeline) = splice(@lines, 0, 2)) {
         my ($name, $type, $version, $value);
         if ($helpline =~ /^# HELP (\w+)/) {
             $name = $1;
@@ -47,19 +49,27 @@ sub parse_output {
             fail("invalid typeline: $typeline");
             return;
         }
-        if ($valueline =~ /^$name\{version="(.*)"\} (.*)$/) {
-            $version = $1;
-            $value = $2;
-        } else {
-            fail("invalid valueline: $valueline");
-            return;
+        # there can be multiple valuelines per typeline
+        while (@lines && $lines[0] !~ /^#/) {
+            my $valueline = splice(@lines, 0, 1);
+            unless ($valueline =~ /^$name\{version="(.*?)"(?:, (.+))?\} (.*)$/) {
+                fail("invalid valueline: $valueline");
+            }
+            my %attrs = ();
+            if (my $other_attrs = $2) {
+                for my $attr (split(', ', $other_attrs)) {
+                    $attr =~ /(.+)="(.+)"/ or fail("invalid valueline attribute: $attr");
+                    $attrs{$1} = $2;
+                }
+            }
+            push(@ret, +{
+                name => $name,
+                type => $type,
+                version => $1,
+                value => $3,
+                %attrs,
+            });
         }
-        push(@ret, +{
-            name => $name,
-            type => $type,
-            version => $version,
-            value => $value,
-        });
     }
     return \@ret;
 }
