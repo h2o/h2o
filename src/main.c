@@ -942,7 +942,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     return listener;
 }
 
-static int find_listener_from_server_starter(struct sockaddr *addr)
+static int find_listener_from_server_starter(struct sockaddr *addr, int type)
 {
     size_t i;
 
@@ -950,14 +950,26 @@ static int find_listener_from_server_starter(struct sockaddr *addr)
     assert(conf.server_starter.num_fds != 0);
 
     for (i = 0; i != conf.server_starter.num_fds; ++i) {
-        struct sockaddr_storage sa;
-        socklen_t salen = sizeof(sa);
-        if (getsockname(conf.server_starter.fds[i], (void *)&sa, &salen) != 0) {
+        struct {
+            union {
+                struct sockaddr sa;
+                struct sockaddr_storage ss;
+            } addr;
+            int type;
+        } actual;
+        socklen_t l = sizeof(actual.addr);
+        if (getsockname(conf.server_starter.fds[i], &actual.addr.sa, &l) != 0) {
             fprintf(stderr, "could not get the socket address of fd %d given as $" SERVER_STARTER_PORT "\n",
                     conf.server_starter.fds[i]);
             exit(EX_CONFIG);
         }
-        if (h2o_socket_compare_address((void *)&sa, addr) == 0)
+        l = sizeof(actual.type);
+        if (getsockopt(conf.server_starter.fds[i], SOL_SOCKET, SO_TYPE, &actual.type, &l) != 0) {
+            fprintf(stderr, "could not get the socket type of fd %d given as $" SERVER_STARTER_PORT "\n",
+                    conf.server_starter.fds[i]);
+            exit(EX_CONFIG);
+        }
+        if (h2o_socket_compare_address(&actual.addr.sa, addr) == 0 && actual.type == type)
             goto Found;
     }
     /* not found */
@@ -1205,7 +1217,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             switch (conf.run_mode) {
             case RUN_MODE_WORKER:
                 if (conf.server_starter.fds != NULL) {
-                    if ((fd = find_listener_from_server_starter((void *)&sa)) == -1) {
+                    if ((fd = find_listener_from_server_starter((void *)&sa, SOCK_STREAM)) == -1) {
                         h2o_configurator_errprintf(cmd, node, "unix socket:%s is not being bound to the server\n", sa.sun_path);
                         return -1;
                     }
@@ -1241,7 +1253,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 switch (conf.run_mode) {
                 case RUN_MODE_WORKER:
                     if (conf.server_starter.fds != NULL) {
-                        if ((fd = find_listener_from_server_starter(ai->ai_addr)) == -1) {
+                        if ((fd = find_listener_from_server_starter(ai->ai_addr, SOCK_STREAM)) == -1) {
                             h2o_configurator_errprintf(cmd, node, "tcp socket:%s:%s is not being bound to the server\n", hostname,
                                                        servname);
                             freeaddrinfo(res);
@@ -1290,8 +1302,15 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 int fd = -1;
                 switch (conf.run_mode) {
                 case RUN_MODE_WORKER:
-                    if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                 ai->ai_addr, ai->ai_addrlen)) == -1) {
+                    if (conf.server_starter.fds != NULL) {
+                        if ((fd = find_listener_from_server_starter(ai->ai_addr, ai->ai_socktype)) == -1) {
+                            h2o_configurator_errprintf(cmd, node, "udp socket:%s:%s is not being bound to the server\n", hostname,
+                                                       servname);
+                            freeaddrinfo(res);
+                            return -1;
+                        }
+                    } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -2210,10 +2229,16 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
         char *newarg;
         switch (conf.listeners[i]->addr.ss_family) {
         default: {
-            char host[NI_MAXHOST], serv[NI_MAXSERV];
+            char host[NI_MAXHOST], serv[NI_MAXSERV + 1];
             int err;
-            if ((err = getnameinfo((void *)&conf.listeners[i]->addr, conf.listeners[i]->addrlen, host, sizeof(host), serv,
-                                   sizeof(serv), NI_NUMERICHOST | NI_NUMERICSERV)) != 0) {
+            /* add "u" prefix if binding to a UDP port */
+            if (conf.listeners[i]->quic.ctx != NULL) {
+                strcpy(serv, "u");
+            } else {
+                serv[0] = '\0';
+            }
+            if ((err = getnameinfo((void *)&conf.listeners[i]->addr, conf.listeners[i]->addrlen, host, sizeof(host),
+                                   serv + strlen(serv), NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV)) != 0) {
                 fprintf(stderr, "failed to stringify the address of %zu-th listen directive:%s\n", i, gai_strerror(err));
                 exit(EX_OSERR);
             }
