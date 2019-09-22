@@ -1749,7 +1749,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         }
         listeners[i].accept_ctx.expect_proxy_line = listener_config->proxy_protocol;
         listeners[i].accept_ctx.libmemcached_receiver = &conf.threads[thread_index].memcached;
-        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_ACCEPTING_DEFAULT);
         listeners[i].sock->data = listeners + i;
     }
     /* and start listening */

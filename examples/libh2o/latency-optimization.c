@@ -362,7 +362,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "failed to listen to %s:%s:%s\n", host, port, strerror(errno));
             exit(1);
         }
-        h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        h2o_socket_t *listen_sock = h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_ACCEPTING_DEFAULT);
         h2o_socket_read_start(listen_sock, on_accept);
     } else {
         if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {

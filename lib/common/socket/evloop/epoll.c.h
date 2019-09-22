@@ -82,6 +82,12 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
                 } else {
                     assert(ev.events != 0);
                     op = EPOLL_CTL_ADD;
+                    if ((sock->_flags & H2O_SOCKET_FLAG_POLL_EXCLUSIVE) != 0) {
+#if defined(EPOLLEXCLUSIVE)
+                        /* EPOLLEXCLUSIVE: since Linux 4.5 glibc 2.24. */
+                        ev.events |= EPOLLEXCLUSIVE;
+#endif
+                    }
                 }
                 ev.data.ptr = sock;
                 while ((ret = epoll_ctl(loop->ep, op, sock->fd, &ev)) != 0 && errno == EINTR)
