@@ -118,8 +118,6 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_MRUBY "whether or not to build with mruby support" ${WITH_MRUBY_DEFAULT})
 
-OPTION(WITH_PICOTLS "whether or not to build with picotls" "ON")
-
 FIND_PROGRAM(CCACHE ccache)
 IF (CCACHE)
     SET(WITH_CCACHE_DEFAULT "ON")
@@ -163,6 +161,11 @@ INCLUDE_DIRECTORIES(
     deps/neverbleed
     deps/picohttpparser
     deps/picotest
+    deps/picotls/deps/cifra/src/ext
+    deps/picotls/deps/cifra/src
+    deps/picotls/deps/micro-ecc
+    deps/picotls/include
+    deps/quicly/include
     deps/yaml/include
     deps/yoml
     ${CMAKE_CURRENT_BINARY_DIR})
@@ -264,24 +267,6 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/c/enc/utf8_util.c
     lib/handler/compress/brotli.c)
 
-SET(PICOTLS_INCLUDE_DIRECTORIES
-    deps/picotls/deps/cifra/src/ext
-    deps/picotls/deps/cifra/src
-    deps/picotls/deps/micro-ecc
-    deps/picotls/include)
-
-SET(PICOTLS_SOURCE_FILES
-    deps/picotls/deps/cifra/src/blockwise.c
-    deps/picotls/deps/cifra/src/chash.c
-    deps/picotls/deps/cifra/src/curve25519.c
-    deps/picotls/deps/cifra/src/drbg.c
-    deps/picotls/deps/cifra/src/hmac.c
-    deps/picotls/deps/cifra/src/sha256.c
-    deps/picotls/lib/picotls.c
-    deps/picotls/lib/cifra/random.c
-    deps/picotls/lib/cifra/x25519.c
-    deps/picotls/lib/openssl.c)
-
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
     deps/hiredis/async.c
@@ -299,6 +284,25 @@ SET(LIB_SOURCE_FILES
     deps/libyrmcds/strerror.c
     deps/libyrmcds/text_mode.c
     deps/picohttpparser/picohttpparser.c
+    deps/picotls/deps/cifra/src/blockwise.c
+    deps/picotls/deps/cifra/src/chash.c
+    deps/picotls/deps/cifra/src/curve25519.c
+    deps/picotls/deps/cifra/src/drbg.c
+    deps/picotls/deps/cifra/src/hmac.c
+    deps/picotls/deps/cifra/src/sha256.c
+    deps/picotls/lib/picotls.c
+    deps/picotls/lib/openssl.c
+    deps/picotls/lib/cifra/random.c
+    deps/picotls/lib/cifra/x25519.c
+    deps/quicly/lib/cc-reno.c
+    deps/quicly/lib/defaults.c
+    deps/quicly/lib/frame.c
+    deps/quicly/lib/quicly.c
+    deps/quicly/lib/ranges.c
+    deps/quicly/lib/recvstate.c
+    deps/quicly/lib/sendstate.c
+    deps/quicly/lib/sentmap.c
+    deps/quicly/lib/streambuf.c
 
     lib/common/cache.c
     lib/common/file.c
@@ -306,6 +310,7 @@ SET(LIB_SOURCE_FILES
     lib/common/hostinfo.c
     lib/common/http1client.c
     lib/common/http2client.c
+    lib/common/http3client.c
     lib/common/httpclient.c
     lib/common/memcached.c
     lib/common/memory.c
@@ -379,17 +384,24 @@ SET(LIB_SOURCE_FILES
     lib/http2/hpack.c
     lib/http2/scheduler.c
     lib/http2/stream.c
-    lib/http2/http2_debug_state.c)
+    lib/http2/http2_debug_state.c
+
+    lib/http3/frame.c
+    lib/http3/qpack.c
+    lib/http3/common.c
+    lib/http3/server.c)
 
 IF (WITH_DTRACE)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1 -DH2O_USE_DTRACE=1")
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/h2o-probes.d h2o)
-    LIST(APPEND PICOTLS_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.h)
-    LIST(APPEND LIB_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.h)
+    LIST(APPEND LIB_SOURCE_FILES
+         ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.h
+         ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.h)
     IF (DTRACE_USES_OBJFILE)
-        LIST(APPEND PICOTLS_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o)
-        LIST(APPEND LIB_SOURCE_FILES ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.o)
+        LIST(APPEND LIB_SOURCE_FILES
+             ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o
+             ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.o)
     ENDIF ()
 ENDIF ()
 
@@ -424,6 +436,8 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
+    t/00unit/lib/http3/frame.c
+    t/00unit/lib/http3/qpack.c
     t/00unit/src/ssl.c
     t/00unit/issues/293.c
     t/00unit/issues/percent-encode-zero-byte.c)
@@ -454,7 +468,9 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/hpack.c
-    lib/http2/scheduler.c)
+    lib/http2/scheduler.c
+    lib/http3/frame.c
+    lib/http3/qpack.c)
 
 SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
@@ -491,6 +507,12 @@ TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+
+ADD_EXECUTABLE(t-qif t/qif.c)
+SET_TARGET_PROPERTIES(t-qif PROPERTIES
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
+    EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(t-qif libh2o-evloop ${EXTRA_LIBS})
 
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-httpclient-libuv examples-simple-libuv examples-socket-client-libuv)
 IF (WSLAY_FOUND)
@@ -593,11 +615,6 @@ IF (WITH_MRUBY)
         lib/handler/configurator/mruby.c)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_MRUBY=1")
 ENDIF (WITH_MRUBY)
-IF (WITH_PICOTLS)
-    LIST(APPEND STANDALONE_SOURCE_FILES ${PICOTLS_SOURCE_FILES})
-    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_PICOTLS=1")
-    INCLUDE_DIRECTORIES(${PICOTLS_INCLUDE_DIRECTORIES})
-ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS ${STANDALONE_COMPILE_FLAGS})
 TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})

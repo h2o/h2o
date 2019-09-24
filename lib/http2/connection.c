@@ -660,11 +660,9 @@ static void proceed_request(h2o_req_t *req, size_t written, h2o_send_state_t sen
 
     if (send_state == H2O_SEND_STATE_ERROR) {
         finish_body_streaming(stream);
-        if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
-            stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
-            if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
-                h2o_http2_stream_close(conn, stream);
-            }
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
+            h2o_http2_stream_close(conn, stream);
         }
         return;
     }
@@ -1370,10 +1368,18 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return h2o_socket_getpeername(conn->sock, sa);
 }
 
-static h2o_socket_t *get_socket(h2o_conn_t *_conn)
+static ptls_t *get_ptls(h2o_conn_t *_conn)
 {
-    h2o_http2_conn_t *conn = (void *)_conn;
-    return conn->sock;
+    struct st_h2o_http2_conn_t *conn = (void *)_conn;
+    assert(conn->sock != NULL && "it never becomes NULL, right?");
+    return h2o_socket_get_ptls(conn->sock);
+}
+
+static int skip_tracing(h2o_conn_t *_conn)
+{
+    struct st_h2o_http2_conn_t *conn = (void *)_conn;
+    assert(conn->sock != NULL && "it never becomes NULL, right?");
+    return h2o_socket_skip_tracing(conn->sock);
 }
 
 #define DEFINE_TLS_LOGGER(name)                                                                                                    \
@@ -1470,10 +1476,11 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
-        get_sockname,              /* stringify address */
-        get_peername,              /* ditto */
-        push_path,                 /* HTTP2 push */
-        get_socket,                /* get underlying socket */
+        get_sockname, /* stringify address */
+        get_peername, /* ditto */
+        get_ptls,
+        skip_tracing,
+        push_path,    /* HTTP2 push */
         h2o_http2_get_debug_state, /* get debug state */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */

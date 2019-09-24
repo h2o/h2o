@@ -24,14 +24,17 @@
 #include "../../src/standalone.h"
 #include "./test.h"
 
-static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t send_state)
+static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
+                             h2o_send_state_t send_state)
 {
     h2o_loopback_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_loopback_conn_t, _ostr_final, self);
     size_t i;
 
     for (i = 0; i != inbufcnt; ++i) {
         h2o_buffer_reserve(&conn->body, inbufs[i].len);
-        memcpy(conn->body->bytes + conn->body->size, inbufs[i].base, inbufs[i].len);
+        if (!(*inbufs[i].callbacks->flatten)(inbufs + i, req, h2o_iovec_init(conn->body->bytes + conn->body->size, inbufs[i].len),
+                                             0))
+            h2o_fatal("ohoh");
         conn->body->size += inbufs[i].len;
     }
 
@@ -59,14 +62,9 @@ static socklen_t get_peername(h2o_conn_t *conn, struct sockaddr *sa)
     return sizeof(*sin);
 }
 
-static h2o_socket_t *get_socket(h2o_conn_t *conn)
-{
-    return NULL;
-}
-
 h2o_loopback_conn_t *h2o_loopback_create(h2o_context_t *ctx, h2o_hostconf_t **hosts)
 {
-    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername, NULL, get_socket};
+    static const h2o_conn_callbacks_t callbacks = {get_sockname, get_peername, NULL};
     h2o_loopback_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, (struct timeval){0}, &callbacks);
 
     memset((char *)conn + sizeof(conn->super), 0, offsetof(struct st_h2o_loopback_conn_t, req) - sizeof(conn->super));
@@ -177,6 +175,8 @@ int main(int argc, char **argv)
         subtest("lib/http2/scheduler.c", test_lib__http2__scheduler);
         subtest("lib/http2/casper.c", test_lib__http2__casper);
         subtest("lib/http2/cache_digests.c", test_lib__http2__cache_digests);
+        subtest("lib/http3/frame.c", test_lib__http3_frames);
+        subtest("lib/http3/qpack.c", test_lib__http3_qpack);
     }
 
     { /* tests that use the run loop */

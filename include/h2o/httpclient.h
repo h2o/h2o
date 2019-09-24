@@ -34,8 +34,33 @@ extern "C" {
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
 /**
- * This is a struct used for passing additional properties from the application to the HTTP client implementation, when the
- * connection to the server is being established.
+ * let's the client uses Firefox-like priority tree
+ */
+typedef enum en_h2o_httpclient_precedence_t {
+    /**
+     * like HTML
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_NORMAL,
+    /**
+     * like blocking CSS, JS
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_BLOCKING,
+    /**
+     * like image
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_NONBLOCKING,
+    /**
+     * like <script async>
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_DELAYED
+} h2o_httpclient_precedence_t;
+
+/**
+ * Additional properties related to the HTTP request being issued.
+ * When the connect callback is being called, the properties of the objects are set to their initial values. Applications MAY alter
+ * the properties to achieve desirable behavior. The reason we require the protocol stacks to initialize the values to their default
+ * values instead of requiring applications to set all the values correctly is to avoid requiring applications making changes
+ * every time a new field is added to the object.
  */
 typedef struct st_h2o_httpclient_properties_t {
     /**
@@ -53,6 +78,10 @@ typedef struct st_h2o_httpclient_properties_t {
      * value of the connection header field to be sent to the server. This can be used for upgrading an HTTP/1.1 connection.
      */
     h2o_iovec_t *connection_header;
+    /**
+     * The precedence of the HTTP request being issued.
+     */
+    h2o_httpclient_precedence_t precedence;
 } h2o_httpclient_properties_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);
@@ -100,11 +129,17 @@ typedef struct st_h2o_httpclient_ctx_t {
     struct {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         uint32_t max_concurrent_streams;
-
-        /* for weighted fair queueing */
+        /**
+         * ratio of requests to use HTTP/2; between 0 to 100
+         */
         int8_t ratio;
         int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
+
+    /**
+     * 1-to-(0|1) relationship; NULL when h3 is not used
+     */
+    struct st_h2o_http3_ctx_t *http3;
 
 } h2o_httpclient_ctx_t;
 
@@ -243,6 +278,17 @@ extern const size_t h2o_httpclient__h1_size;
 void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
+
+#ifdef quicly_h /* create http3client.h? */
+
+#include "h2o/http3_common.h"
+
+void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                               h2o_url_t *target, h2o_httpclient_connect_cb cb);
+void h2o_httpclient_http3_notify_connection_update(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
+extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
+
+#endif
 
 #ifdef __cplusplus
 }

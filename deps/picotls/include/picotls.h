@@ -154,6 +154,7 @@ extern "C" {
 #define PTLS_ERROR_NOT_AVAILABLE (PTLS_ERROR_CLASS_INTERNAL + 7)
 #define PTLS_ERROR_COMPRESSION_FAILURE (PTLS_ERROR_CLASS_INTERNAL + 8)
 #define PTLS_ERROR_ESNI_RETRY (PTLS_ERROR_CLASS_INTERNAL + 8)
+#define PTLS_ERROR_REJECT_EARLY_DATA (PTLS_ERROR_CLASS_INTERNAL + 9)
 
 #define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
 #define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
@@ -469,6 +470,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
      */
     ptls_iovec_t server_name;
     /**
+     * Raw value of the client_hello message.
+     */
+    ptls_iovec_t raw_message;
+    /**
      *
      */
     struct {
@@ -523,7 +528,10 @@ PTLS_CALLBACK_TYPE(int, verify_certificate, ptls_t *tls,
                    int (**verify_sign)(void *verify_ctx, ptls_iovec_t data, ptls_iovec_t sign), void **verify_data,
                    ptls_iovec_t *certs, size_t num_certs);
 /**
- * encrypt-and-signs (or verify-and-decrypts) a ticket (server-only)
+ * Encrypt-and-signs (or verify-and-decrypts) a ticket (server-only).
+ * When used for encryption (i.e., is_encrypt being set), the function should return 0 if successful, or else a non-zero value.
+ * When used for decryption, the function should return 0 (successful), PTLS_ERROR_REJECT_EARLY_DATA (successful, but 0-RTT is
+ * forbidden), or any other value to indicate failure.
  */
 PTLS_CALLBACK_TYPE(int, encrypt_ticket, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src);
 /**

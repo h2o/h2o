@@ -402,6 +402,10 @@ struct st_h2o_globalconf_t {
     } http2;
 
     struct {
+        h2o_protocol_callbacks_t callbacks;
+    } http3;
+
+    struct {
         /**
          * io timeout (in milliseconds)
          */
@@ -683,7 +687,49 @@ typedef struct st_h2o_generator_t {
     void (*stop)(struct st_h2o_generator_t *self, h2o_req_t *req);
 } h2o_generator_t;
 
-typedef h2o_send_state_t (*h2o_ostream_pull_cb)(h2o_generator_t *generator, h2o_req_t *req, h2o_iovec_t *buf);
+/**
+ * the maximum size of sendvec when a pull (i.e. non-raw) vector is used. Note also that bufcnt must be set to one when a pull mode
+ * vector is used.
+ */
+#define H2O_PULL_SENDVEC_MAX_SIZE 65536
+
+typedef struct st_h2o_sendvec_t h2o_sendvec_t;
+
+typedef struct st_h2o_sendvec_callbacks_t {
+    /**
+     * optional callback used to serialize the bytes held by the vector. Returns if the operation succeeded. When false is returned,
+     * the generator is considered as been error-closed by itself.  If the callback is NULL, the data is pre-flattened and available
+     * in `h2o_sendvec_t::raw`.
+     */
+    int (*flatten)(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
+    /**
+     * optional callback that can be used to retain the buffer after flattening all data. This allows H3 to re-flatten data upon
+     * retransmission. Increments the reference counter if `is_incr` is set to true, otherwise the counter is decremented.
+     */
+    void (*update_refcnt)(h2o_sendvec_t *vec, h2o_req_t *req, int is_incr);
+} h2o_sendvec_callbacks_t;
+
+/**
+ * send vector. Unlike an ordinary `h2o_iovec_t`, the vector has a callback that allows the sender to delay the flattening of data
+ * until it becomes necessary.
+ */
+struct st_h2o_sendvec_t {
+    /**
+     *
+     */
+    const h2o_sendvec_callbacks_t *callbacks;
+    /**
+     * size of the vector
+     */
+    size_t len;
+    /**
+     *
+     */
+    union {
+        char *raw;
+        uint64_t cb_arg[2];
+    };
+};
 
 /**
  * an output stream that may alter the output.
@@ -699,16 +745,11 @@ struct st_h2o_ostream_t {
      * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
      * sent.
      */
-    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+    void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
     /**
      * called by the core when there is a need to terminate the response abruptly
      */
     void (*stop)(struct st_h2o_ostream_t *self, h2o_req_t *req);
-    /**
-     * whether if the ostream supports "pull" interface
-     */
-    void (*start_pull)(struct st_h2o_ostream_t *self, h2o_ostream_pull_cb cb);
-
     /**
      * called by the core via h2o_send_informational
      */
@@ -769,19 +810,23 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     socklen_t (*get_peername)(h2o_conn_t *conn, struct sockaddr *sa);
     /**
-     * callback for server push (may be NULL)
+     * returns picotls connection object used by the connection (or NULL if TLS is not used)
+     */
+    ptls_t *(*get_ptls)(h2o_conn_t *conn);
+    /**
+     * returns if the connection is target of tracing
+     */
+    int (*skip_tracing)(h2o_conn_t *conn);
+    /**
+     * optional (i.e. may be NULL) callback for server push
      */
     void (*push_path)(h2o_req_t *req, const char *abspath, size_t abspath_len, int is_critical);
     /**
-     * Return the underlying socket struct
-     */
-    h2o_socket_t *(*get_socket)(h2o_conn_t *_conn);
-    /**
-     * debug state callback (may be NULL)
+     * debug state callback (optional)
      */
     h2o_http2_debug_state_t *(*get_debug_state)(h2o_req_t *req, int hpack_enabled);
     /**
-     * logging callbacks (may be NULL)
+     * logging callbacks (all of them are optional)
      */
     union {
         struct {
@@ -1042,7 +1087,7 @@ struct st_h2o_req_t {
     /**
      * number of bytes sent by the generator (excluding headers)
      */
-    size_t bytes_sent;
+    uint64_t bytes_sent;
     /**
      * the number of times the request can be reprocessed (excluding delegation)
      */
@@ -1182,7 +1227,7 @@ void h2o_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock);
 static h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_hostconf_t **hosts, struct timeval connected_at,
                                          const h2o_conn_callbacks_t *callbacks);
 /**
- *
+ * returns if the connection is still in early-data state (i.e., if there is a risk of received requests being a replay)
  */
 static int h2o_conn_is_early_data(h2o_conn_t *conn);
 /**
@@ -1193,10 +1238,6 @@ void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *ctx, uns
  * setups accept context for redis SSL resumption
  */
 void h2o_accept_setup_redis_ssl_resumption(const char *host, uint16_t port, unsigned expiration, const char *prefix);
-/**
- * helper to return if the socket is target of tracing
- */
-int h2o_conn_skip_tracing(h2o_conn_t *conn);
 /**
  * returns the protocol version (e.g. "HTTP/1.1", "HTTP/2")
  */
@@ -1316,6 +1357,14 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
  */
 static int h2o_send_state_is_in_progress(h2o_send_state_t s);
 /**
+ *
+ */
+void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
+/**
+ *
+ */
+int h2o_sendvec_flatten_raw(h2o_sendvec_t *vec, h2o_req_t *req, h2o_iovec_t dst, size_t off);
+/**
  * called by the generators to send output
  * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
  * @param req the request
@@ -1324,10 +1373,7 @@ static int h2o_send_state_is_in_progress(h2o_send_state_t s);
  * @param state describes if the output is final, has an error, or is in progress
  */
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
-/**
- * called by the connection layer to pull the content from generator (if pull mode is being used)
- */
-static h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf);
+void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *vecs, size_t veccnt, h2o_send_state_t state);
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
@@ -1350,7 +1396,7 @@ static void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot);
  * @param bufcnt length of the buffers array
  * @param state whether the output is in progress, final, or in error
  */
-void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+void h2o_ostream_send_next(h2o_ostream_t *ostream, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 /**
  * called by the connection layer to request additional data to the generator
  */
@@ -1690,10 +1736,14 @@ typedef struct st_h2o_compress_context_t {
      */
     h2o_iovec_t name;
     /**
-     * compress or decompress callback
+     * compress or decompress callback (inbufs are raw buffers)
      */
-    void (*transform)(struct st_h2o_compress_context_t *self, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
-                      h2o_iovec_t **outbufs, size_t *outbufcnt);
+    h2o_send_state_t (*do_transform)(struct st_h2o_compress_context_t *self, h2o_sendvec_t *inbufs, size_t inbufcnt,
+                                     h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt);
+    /**
+     * push buffer
+     */
+    char *push_buf;
 } h2o_compress_context_t;
 
 typedef struct st_h2o_compress_args_t {
@@ -1710,6 +1760,11 @@ typedef struct st_h2o_compress_args_t {
  * registers the gzip/brotli encoding output filter (added by default, for now)
  */
 void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args);
+/**
+ * compresses given chunk
+ */
+h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
+                                        h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt);
 /**
  * instantiates the gzip compressor
  */
@@ -2014,8 +2069,14 @@ inline h2o_conn_t *h2o_create_connection(size_t sz, h2o_context_t *ctx, h2o_host
 
 inline int h2o_conn_is_early_data(h2o_conn_t *conn)
 {
-    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
-    return sock != NULL && sock->ssl != NULL && h2o_socket_ssl_is_early_data(sock);
+    ptls_t *tls;
+    if (conn->callbacks->get_ptls == NULL)
+        return 0;
+    if ((tls = conn->callbacks->get_ptls(conn)) == NULL)
+        return 0;
+    if (ptls_handshake_is_complete(tls))
+        return 0;
+    return 1;
 }
 
 inline void h2o_proceed_response(h2o_req_t *req)
@@ -2057,16 +2118,6 @@ Found:
 inline int h2o_send_state_is_in_progress(h2o_send_state_t s)
 {
     return s == H2O_SEND_STATE_IN_PROGRESS;
-}
-
-inline h2o_send_state_t h2o_pull(h2o_req_t *req, h2o_ostream_pull_cb cb, h2o_iovec_t *buf)
-{
-    h2o_send_state_t send_state;
-    assert(req->_generator != NULL);
-    send_state = cb(req->_generator, req, buf);
-    if (!h2o_send_state_is_in_progress(send_state))
-        req->_generator = NULL;
-    return send_state;
 }
 
 inline void h2o_setup_next_ostream(h2o_req_t *req, h2o_ostream_t **slot)

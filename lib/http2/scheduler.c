@@ -316,8 +316,9 @@ void h2o_http2_scheduler_rebind(h2o_http2_scheduler_openref_t *ref, h2o_http2_sc
 
     ref->weight = weight;
 
-    { /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16
-         5.3.3) */
+    /* if new_parent is dependent to ref, make new_parent a sibling of ref before applying the final transition (see draft-16
+       5.3.3) */
+    if (!h2o_linklist_is_empty(&ref->node._all_refs)) {
         h2o_http2_scheduler_node_t *t;
         for (t = new_parent; t->_parent != NULL; t = t->_parent) {
             if (t->_parent == &ref->node) {

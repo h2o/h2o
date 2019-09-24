@@ -243,7 +243,7 @@ h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mr
 /**
  * a wrapper of h2o_send with counting and checking content-length
  */
-void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 /**
  * utility function used by sender implementations that needs buffering
  */
