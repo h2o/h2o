@@ -142,7 +142,8 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
 #undef DURATION_VALS
     char *delim = "";
     ret.len += sprintf(ret.base + ret.len, ",\n\"evloop-latency-nanosec\": [");
-    for(int i = 0; i < agg_stats->stats.evloop_latency_nanosec.size; i++) {
+    size_t i;
+    for(i = 0; i < agg_stats->stats.evloop_latency_nanosec.size; i++) {
         size_t len = snprintf(NULL, 0, "%s%" PRIu64, delim, agg_stats->stats.evloop_latency_nanosec.entries[i]);
         /* require that there's enough space for the closing "]\0" */
         if (ret.len + len + 1 >= BUFSIZE)
