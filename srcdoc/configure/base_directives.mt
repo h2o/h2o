@@ -255,6 +255,10 @@ listen:
   permission: 600
 EOT
 ?>
+<h4 id="listen-quic">Listening to HTTP/3 (QUIC)</h4>
+<p>
+If the <code>type</code> attribute is set to <code>quic</code>, then the <code>port</code> attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
+</p>
 ? })
 
 <?
