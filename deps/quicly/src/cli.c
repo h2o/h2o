@@ -107,7 +107,7 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.smoothed);
 }
 
-static int parse_request(ptls_iovec_t input, ptls_iovec_t *path, int *is_http1)
+static int parse_request(ptls_iovec_t input, char **path, int *is_http1)
 {
     size_t off = 0, path_start;
 
@@ -125,17 +125,10 @@ EndOfMethod:
     return 0;
 
 EndOfPath:
-    *path = ptls_iovec_init(input.base + path_start, off - path_start);
+    *path = (char *)(input.base + path_start);
     *is_http1 = input.base[off] == ' ';
+    input.base[off] = '\0';
     return 1;
-}
-
-static int path_is(ptls_iovec_t path, const char *expected)
-{
-    size_t expected_len = strlen(expected);
-    if (path.len != expected_len)
-        return 0;
-    return memcmp(path.base, expected, path.len) == 0;
 }
 
 static void send_str(quicly_stream_t *stream, const char *s)
@@ -180,7 +173,7 @@ static int send_file(quicly_stream_t *stream, int is_http1, const char *fn, cons
 
     if ((fd = open(fn, O_RDONLY)) == -1)
         return 0;
-    if (fstat(fd, &st) != 0) {
+    if (fstat(fd, &st) != 0 || S_ISDIR(st.st_mode)) {
         close(fd);
         return 0;
     }
@@ -223,19 +216,15 @@ static int flatten_sized_text(quicly_sendbuf_vec_t *vec, void *dst, size_t off, 
 #undef PATTERN
 }
 
-static int send_sized_text(quicly_stream_t *stream, ptls_iovec_t path, int is_http1)
+static int send_sized_text(quicly_stream_t *stream, const char *path, int is_http1)
 {
-    if (!(path.len > 5 && path.base[0] == '/' && memcmp(path.base + path.len - 4, ".txt", 4) == 0))
+    size_t size;
+    int lastpos;
+
+    if (sscanf(path, "/%zu.txt%n", &size, &lastpos) != 1)
         return 0;
-    unsigned size = 0;
-    {
-        const char *p;
-        for (p = (const char *)path.base + 1; *p != '.'; ++p) {
-            if (!('0' <= *p && *p <= '9'))
-                return 0;
-            size = size * 10 + (*p - '0');
-        }
-    }
+    if (lastpos != strlen(path))
+        return 0;
 
     send_header(stream, is_http1, 200, "text/plain; charset=utf-8");
     static const quicly_streambuf_sendvec_callbacks_t callbacks = {flatten_sized_text};
@@ -260,7 +249,7 @@ static int on_receive_reset(quicly_stream_t *stream, int err)
 
 static int server_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
-    ptls_iovec_t path;
+    char *path;
     int is_http1;
     int ret;
 
@@ -278,11 +267,13 @@ static int server_on_receive(quicly_stream_t *stream, size_t off, const void *sr
     if (!quicly_recvstate_transfer_complete(&stream->recvstate))
         quicly_request_stop(stream, 0);
 
-    if (path_is(path, "/logo.jpg") && send_file(stream, is_http1, "assets/logo.jpg", "image/jpeg"))
+    if (strcmp(path, "/logo.jpg") == 0 && send_file(stream, is_http1, "assets/logo.jpg", "image/jpeg"))
         goto Sent;
-    if (path_is(path, "/main.jpg") && send_file(stream, is_http1, "assets/main.jpg", "image/jpeg"))
+    if (strcmp(path, "/main.jpg") == 0 && send_file(stream, is_http1, "assets/main.jpg", "image/jpeg"))
         goto Sent;
     if (send_sized_text(stream, path, is_http1))
+        goto Sent;
+    if (path[0] == '/' && strstr(path, "/.") == NULL && send_file(stream, is_http1, path + 1, "text/plain"))
         goto Sent;
 
     if (!quicly_sendstate_is_open(&stream->sendstate))
@@ -1059,8 +1050,8 @@ int main(int argc, char **argv)
             tlsctx.random_bytes(random_key, sizeof(random_key) - 1);
             cid_key = random_key;
         }
-        ctx.cid_encryptor =
-            quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, strlen(cid_key)));
+        ctx.cid_encryptor = quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256,
+                                                             ptls_iovec_init(cid_key, strlen(cid_key)));
     } else {
         /* client */
         if (session_file != NULL)

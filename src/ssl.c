@@ -1142,7 +1142,7 @@ static void update_cid_keys(void)
             struct st_quic_cid_key_t *slot = quic_cid_keys.keys.entries + quic_cid_keys.keys.size;
             slot->name = ticket->name[0];
             slot->encryptor = quicly_new_default_cid_encryptor(
-                &ptls_openssl_bfecb, &ptls_openssl_sha256,
+                &ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256,
                 ptls_iovec_init(ticket->keybuf, EVP_CIPHER_key_length(ticket->cipher) + EVP_MD_block_size(ticket->hmac)));
             assert(slot->encryptor != NULL);
         }
