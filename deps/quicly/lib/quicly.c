@@ -52,6 +52,8 @@
 #define QUICLY_PACKET_TYPE_RETRY (QUICLY_LONG_HEADER_BIT | QUICLY_QUIC_BIT | 0x30)
 #define QUICLY_PACKET_TYPE_BITMASK 0xf0
 
+#define QUICLY_MIN_INITIAL_DCID_LEN 8
+
 #define QUICLY_MAX_PN_SIZE 4  /* maximum defined by the RFC used for calculating header protection sampling offset */
 #define QUICLY_SEND_PN_SIZE 2 /* size of PN used for sending */
 
@@ -1383,7 +1385,7 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
                 switch (id) {
                 case QUICLY_TRANSPORT_PARAMETER_ID_ORIGINAL_CONNECTION_ID: {
                     size_t cidlen = end - src;
-                    if (!(is_client && 4 <= cidlen && cidlen <= 18)) {
+                    if (!(is_client && cidlen <= QUICLY_MAX_CID_LEN_V1)) {
                         ret = QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
                         goto Exit;
                     }
@@ -1509,8 +1511,8 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, const char *serve
     }
     conn->_.super.state = QUICLY_STATE_FIRSTFLIGHT;
     if (server_name != NULL) {
-        ctx->tls->random_bytes(conn->_.super.peer.cid.cid, 8);
-        conn->_.super.peer.cid.len = 8;
+        ctx->tls->random_bytes(conn->_.super.peer.cid.cid, QUICLY_MIN_INITIAL_DCID_LEN);
+        conn->_.super.peer.cid.len = QUICLY_MIN_INITIAL_DCID_LEN;
         conn->_.super.host.bidi.next_stream_id = 0;
         conn->_.super.host.uni.next_stream_id = 2;
         conn->_.super.peer.bidi.next_stream_id = 1;

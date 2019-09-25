@@ -36,9 +36,13 @@ extern const quicly_context_t quicly_performant_context;
  */
 extern quicly_packet_allocator_t quicly_default_packet_allocator;
 /**
- *
+ * Instantiates a CID cipher.
+ * The CID cipher MUST be a block cipher. It MAY be a 64-bit block cipher (e.g., blowfish) when `quicly_cid_plaintext_t::node_id` is
+ * not utilized by the application. Otherwise, it MUST be a 128-bit block cipher (e.g., AES).
+ * The reset token cipher MUST be a 128-bit block cipher.
  */
-quicly_cid_encryptor_t *quicly_new_default_cid_encryptor(ptls_cipher_algorithm_t *cipher, ptls_hash_algorithm_t *hash,
+quicly_cid_encryptor_t *quicly_new_default_cid_encryptor(ptls_cipher_algorithm_t *cid_cipher,
+                                                         ptls_cipher_algorithm_t *reset_token_cipher, ptls_hash_algorithm_t *hash,
                                                          ptls_iovec_t key);
 /**
  *
