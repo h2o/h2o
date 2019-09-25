@@ -378,8 +378,8 @@ int main(int argc, char **argv)
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));
-        h3ctx.quic.cid_encryptor = quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_sha256,
-                                                                    ptls_iovec_init(random_key, sizeof(random_key)));
+        h3ctx.quic.cid_encryptor = quicly_new_default_cid_encryptor(
+            &ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(random_key, sizeof(random_key)));
         ptls_clear_memory(random_key, sizeof(random_key));
     }
     h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
