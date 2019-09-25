@@ -1105,7 +1105,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     get_peername, /* ditto */
     get_ptls,
     skip_tracing,
-    NULL,         /* push */
+    NULL, /* push */
     NULL, /* get debug state */
     {{
         {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */

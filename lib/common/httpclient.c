@@ -75,7 +75,8 @@ static void do_cancel(h2o_httpclient_t *_client)
     close_client(client);
 }
 
-static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb on_connect)
+static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                                       h2o_httpclient_connect_cb on_connect)
 {
 #define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
     size_t sz = SZ_MAX(h2o_httpclient__h1_size, h2o_httpclient__h2_size);

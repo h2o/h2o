@@ -721,8 +721,8 @@ static void on_request_streaming_selected(h2o_req_t *req, int is_streaming)
     }
     /* TODO elect input streams one by one for non-streaming case as well? */
     update_stream_input_window(conn, stream,
-            conn->super.ctx->globalconf->http2.active_stream_window_size -
-            H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+                               conn->super.ctx->globalconf->http2.active_stream_window_size -
+                                   H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
     req->write_req.cb = write_req_non_streaming;
 }
 
@@ -1480,7 +1480,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         get_peername, /* ditto */
         get_ptls,
         skip_tracing,
-        push_path,    /* HTTP2 push */
+        push_path,                 /* HTTP2 push */
         h2o_http2_get_debug_state, /* get debug state */
         {{
             {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */

@@ -281,7 +281,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 {
     int ret;
 
-//    assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
+    //    assert(stream->state == H2O_HTTP2CLIENT_STREAM_STATE_RECV_HEADERS);
 
     if ((ret = h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table,
                                         &stream->input.status, &stream->input.headers, src, len, err_desc)) != 0) {
@@ -1010,7 +1010,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
         if (stream->streaming.proceed_req != NULL) {
             size_t bytes_written = stream->streaming.bytes_in_flight;
             stream->streaming.bytes_in_flight = 0;
-            stream->streaming.proceed_req(&stream->super, bytes_written, stream->streaming.done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
+            stream->streaming.proceed_req(&stream->super, bytes_written,
+                                          stream->streaming.done ? H2O_SEND_STATE_FINAL : H2O_SEND_STATE_IN_PROGRESS);
         }
 
         if (stream->streaming.proceed_req == NULL || stream->streaming.done) {
@@ -1059,8 +1060,8 @@ static size_t stream_emit_pending_data(struct st_h2o_http2client_stream_t *strea
         return 0;
     char *dst = h2o_buffer_reserve(&stream->conn->output.buf, H2O_HTTP2_FRAME_HEADER_SIZE + payload_size).base;
     int end_stream = (stream->streaming.proceed_req == NULL || stream->streaming.done) && payload_size == stream->output.buf->size;
-    h2o_http2_encode_frame_header((void *)dst, stream->output.buf->size,
-                                  H2O_HTTP2_FRAME_TYPE_DATA, end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
+    h2o_http2_encode_frame_header((void *)dst, stream->output.buf->size, H2O_HTTP2_FRAME_TYPE_DATA,
+                                  end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0, stream->stream_id);
     h2o_memcpy(dst + H2O_HTTP2_FRAME_HEADER_SIZE, stream->output.buf->bytes, payload_size);
     stream->conn->output.buf->size += H2O_HTTP2_FRAME_HEADER_SIZE + payload_size;
     h2o_buffer_consume(&stream->output.buf, payload_size);

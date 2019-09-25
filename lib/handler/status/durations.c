@@ -72,7 +72,8 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
 
 #if !H2O_USE_LIBUV
         h2o_vector_reserve(NULL, &agg_stats->stats.evloop_latency_nanosec, agg_stats->stats.evloop_latency_nanosec.size + 1);
-        agg_stats->stats.evloop_latency_nanosec.entries[agg_stats->stats.evloop_latency_nanosec.size] = h2o_evloop_get_execution_time_nanosec(ctx->loop);
+        agg_stats->stats.evloop_latency_nanosec.entries[agg_stats->stats.evloop_latency_nanosec.size] =
+            h2o_evloop_get_execution_time_nanosec(ctx->loop);
         agg_stats->stats.evloop_latency_nanosec.size++;
 #endif
         pthread_mutex_unlock(&agg_stats->mutex);
@@ -143,13 +144,13 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     char *delim = "";
     ret.len += sprintf(ret.base + ret.len, ",\n\"evloop-latency-nanosec\": [");
     size_t i;
-    for(i = 0; i < agg_stats->stats.evloop_latency_nanosec.size; i++) {
+    for (i = 0; i < agg_stats->stats.evloop_latency_nanosec.size; i++) {
         size_t len = snprintf(NULL, 0, "%s%" PRIu64, delim, agg_stats->stats.evloop_latency_nanosec.entries[i]);
         /* require that there's enough space for the closing "]\0" */
         if (ret.len + len + 1 >= BUFSIZE)
             break;
-        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%s%" PRIu64,
-                            delim, agg_stats->stats.evloop_latency_nanosec.entries[i]);
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%s%" PRIu64, delim,
+                            agg_stats->stats.evloop_latency_nanosec.entries[i]);
         delim = ",";
     }
     ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");

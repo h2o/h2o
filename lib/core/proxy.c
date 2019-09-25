@@ -332,10 +332,12 @@ static void do_send(struct rp_generator_t *self)
     size_t veccnt;
     h2o_send_state_t ststate;
 
-    vecs[0] = h2o_doublebuffer_prepare(&self->sending, self->last_content_before_send != NULL ? &self->last_content_before_send : self->client->buf,
+    vecs[0] = h2o_doublebuffer_prepare(&self->sending,
+                                       self->last_content_before_send != NULL ? &self->last_content_before_send : self->client->buf,
                                        self->src_req->preferred_chunk_size);
 
-    if (self->last_content_before_send != NULL && vecs[0].len == self->sending.buf->size && self->last_content_before_send->size == 0) {
+    if (self->last_content_before_send != NULL && vecs[0].len == self->sending.buf->size &&
+        self->last_content_before_send->size == 0) {
         veccnt = vecs[0].len != 0 ? 1 : 0;
         ststate = H2O_SEND_STATE_FINAL;
     } else {

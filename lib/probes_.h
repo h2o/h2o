@@ -76,8 +76,8 @@
 
 /* define the functions as non-inlineable, as bcc cannot handle relative offset against a static const (e.g.,
  * H2O_TOKEN_PATH->buf.base) */
-__attribute__((noinline))
-static void h2o_probe_request_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name, h2o_iovec_t value)
+__attribute__((noinline)) static void h2o_probe_request_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name,
+                                                               h2o_iovec_t value)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
 }
@@ -85,7 +85,7 @@ static void h2o_probe_request_header(h2o_req_t *req, uint64_t req_index, h2o_iov
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
-     if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
+    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
         h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         h2o_probe_request_header(req, req_index, H2O_TOKEN_METHOD->buf, req->input.method);
         h2o_probe_request_header(req, req_index, H2O_TOKEN_PATH->buf, req->input.path);

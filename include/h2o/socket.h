@@ -72,7 +72,7 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now);
 
 #define H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE 4096
 
-#define H2O_SESSID_CTX ((const uint8_t*)"h2o")
+#define H2O_SESSID_CTX ((const uint8_t *)"h2o")
 #define H2O_SESSID_CTX_LEN (sizeof("h2o") - 1)
 
 typedef struct st_h2o_socket_t h2o_socket_t;
@@ -371,7 +371,6 @@ int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_typ
  * callback for initializing the ebpf lookup key from `h2o_socket_t`
  */
 int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *_sock);
-
 
 void h2o_socket__write_pending(h2o_socket_t *sock);
 void h2o_socket__write_on_complete(h2o_socket_t *sock, int status);

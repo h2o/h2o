@@ -941,7 +941,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
         kh_del(h2o_http3_freestanding_priority, conn->scheduler.reqs.freestanding, iter);
         free(v);
     } else {
-    /* set priority (if yet unknown) */
+        /* set priority (if yet unknown) */
         h2o_http2_scheduler_open(&stream->scheduler.ref, get_orphan_placeholder(conn), H2O_HTTP3_DEFAULT_WEIGHT, 0);
     }
     stream->scheduler.conn_blocked = (h2o_linklist_t){NULL};

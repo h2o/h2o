@@ -171,7 +171,8 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
         } else {
             client->_body_decoder.content_length.bytesleft -= sock->bytes_read;
         }
-        ret = client->super._cb.on_body(&client->super, client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL);
+        ret = client->super._cb.on_body(&client->super,
+                                        client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL);
         if (client->state.res == STREAM_STATE_CLOSED) {
             close_response(client);
             return;
@@ -194,7 +195,8 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&client->super._timeout);
 
     if (err != NULL) {
-        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder) && client->_seen_at_least_one_chunk) {
+        if (err == h2o_socket_error_closed && !phr_decode_chunked_is_in_data(&client->_body_decoder.chunked.decoder) &&
+            client->_seen_at_least_one_chunk) {
             /*
              * if the peer closed after a full chunk, treat this
              * as if the transfer had complete, browsers appear to ignore
@@ -388,8 +390,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* call the callback. sock may be stealed */
     client->bytes_to_consume = rlen;
-    client->super._cb.on_body = client->super._cb.on_head(&client->super, client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL, version,
-                                                          http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, 1);
+    client->super._cb.on_body =
+        client->super._cb.on_head(&client->super, client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL,
+                                  version, http_status, h2o_iovec_init(msg, msg_len), headers, num_headers, 1);
 
     if (client->state.res == STREAM_STATE_CLOSED) {
         close_response(client);
