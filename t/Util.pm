@@ -196,7 +196,7 @@ $conf
 listen:
   host: 0.0.0.0
   port: $port
-listen:
+listen: &ssl_base
   host: 0.0.0.0
   port: $tls_port
   ssl:
@@ -204,6 +204,13 @@ listen:
     certificate-file: examples/h2o/server.crt
     @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
 EOT
+    if (!$max_ssl_version) {
+$conf .= <<"EOT";
+listen:
+  <<: *ssl_base
+  type: quic
+EOT
+    }
 
     my $ret = spawn_h2o_raw($conf, [$port, $tls_port], \@opts);
     return {
@@ -287,6 +294,10 @@ sub curl_supports_http2 {
     return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
 }
 
+sub curl_supports_http3 {
+    return !! (`curl --version` =~ /^Features:.*\sHTTP3(?:\s|$)/m);
+}
+
 sub run_with_curl {
     my ($server, $cb) = @_;
     plan skip_all => "curl not found"
@@ -304,6 +315,11 @@ sub run_with_curl {
         plan skip_all => "curl does not support HTTP/2"
             unless curl_supports_http2();
         $cb->("https", $server->{tls_port}, "curl --insecure --http2", 512);
+    };
+    subtest "https/3" => sub {
+        plan skip_all => "curl does not support HTTP/3"
+            unless curl_supports_http3();
+        $cb->("https", $server->{tls_port}, "curl --insecure --http3", 768);
     };
 }
 
