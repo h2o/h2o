@@ -1,4 +1,4 @@
-H2O - an optimized HTTP server with support for HTTP/1.x and HTTP/2
+H2O - an optimized HTTP server with support for HTTP/1.x, HTTP/2 and HTTP/3 (experimental)
 ===
 
 [![Build Status](https://travis-ci.org/h2o/h2o.svg?branch=master)](https://travis-ci.org/h2o/h2o)
