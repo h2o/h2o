@@ -158,6 +158,7 @@ struct st_h2o_http3_server_stream_t {
         h2o_http2_scheduler_openref_t ref;
         h2o_linklist_t conn_blocked;
     } scheduler;
+    h2o_buffer_t *req_body;
     h2o_req_t req;
 };
 
@@ -187,6 +188,10 @@ static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
         if (vec->callbacks->update_refcnt != NULL)
             vec->callbacks->update_refcnt(vec, &stream->req, 0);
     }
+
+    /* dispose request body buffer */
+    if (stream->req_body != NULL)
+        h2o_buffer_dispose(&stream->req_body);
 
     /* dispose the request */
     h2o_dispose_request(&stream->req);
@@ -705,7 +710,7 @@ static int handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t 
     /* append data to body buffer */
     if (bytes_avail > stream->recvbuf.bytes_left_in_data_frame)
         bytes_avail = stream->recvbuf.bytes_left_in_data_frame;
-    if (!h2o_buffer_try_append(&stream->req._req_body.body, *src, bytes_avail))
+    if (!h2o_buffer_try_append(&stream->req_body, *src, bytes_avail))
         return H2O_HTTP3_ERROR_INTERNAL;
     stream->recvbuf.bytes_left_in_data_frame -= bytes_avail;
     *src += bytes_avail;
@@ -946,10 +951,11 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     }
     stream->scheduler.conn_blocked = (h2o_linklist_t){NULL};
 
+    stream->req_body = NULL;
+
     h2o_init_request(&stream->req, &conn->super, NULL);
     stream->req.version = 0x0300;
     stream->req._ostr_top = &stream->ostr_final;
-    h2o_buffer_init(&stream->req._req_body.body, &h2o_socket_buffer_prototype);
 
     stream->quic->data = stream;
     stream->quic->callbacks = &callbacks;

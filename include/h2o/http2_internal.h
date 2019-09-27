@@ -123,6 +123,10 @@ struct st_h2o_http2_stream_t {
      */
     h2o_send_state_t send_state;
     /**
+     * request body buffer
+     */
+    h2o_buffer_t *req_body;
+    /**
      * the request object; placed at last since it is large and has it's own ctor
      */
     h2o_req_t req;
