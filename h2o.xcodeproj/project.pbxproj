@@ -262,20 +262,12 @@
 		E901C40C213E1C5500D17C93 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F0213E1C4000D17C93 /* frame.c */; };
 		E901C40F213E1C5500D17C93 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F3213E1C4000D17C93 /* quicly.c */; };
 		E901C410213E1C5500D17C93 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C3F2213E1C4000D17C93 /* ranges.c */; };
-		E901C428213E529000D17C93 /* aes.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AEC1E49A2910029E0A5 /* aes.c */; };
 		E901C429213E529F00D17C93 /* blockwise.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AF11E49A2B90029E0A5 /* blockwise.c */; };
-		E901C42A213E52A200D17C93 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E61F00E72D00EB7A09 /* chacha20.c */; };
 		E901C42B213E52A500D17C93 /* chash.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AF71E49A3130029E0A5 /* chash.c */; };
 		E901C42C213E52A800D17C93 /* curve25519.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AF91E49A3130029E0A5 /* curve25519.c */; };
 		E901C42D213E52AB00D17C93 /* drbg.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AFC1E49A3130029E0A5 /* drbg.c */; };
-		E901C42E213E52AF00D17C93 /* gcm.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AFE1E49A3130029E0A5 /* gcm.c */; };
-		E901C42F213E52B100D17C93 /* gf128.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AFF1E49A3130029E0A5 /* gf128.c */; };
 		E901C430213E52B500D17C93 /* hmac.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708B011E49A3130029E0A5 /* hmac.c */; };
-		E901C431213E52B800D17C93 /* modes.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708B031E49A3130029E0A5 /* modes.c */; };
-		E901C432213E52BB00D17C93 /* poly1305.c in Sources */ = {isa = PBXBuildFile; fileRef = E9BC76E91F00E74C00EB7A09 /* poly1305.c */; };
 		E901C433213E52BF00D17C93 /* sha256.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708B061E49A3130029E0A5 /* sha256.c */; };
-		E901C434213E52C200D17C93 /* sha512.c in Sources */ = {isa = PBXBuildFile; fileRef = E927CD612074855300D4797E /* sha512.c */; };
-		E901C435213E52C700D17C93 /* cifra.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD81E499E040029E0A5 /* cifra.c */; };
 		E901C436213E52CA00D17C93 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
 		E901C437213E52CD00D17C93 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
 		E901C43B213E59A000D17C93 /* qpack.c in Sources */ = {isa = PBXBuildFile; fileRef = E901C439213E59A000D17C93 /* qpack.c */; };
@@ -2288,6 +2280,7 @@
 				E93C7F9922701806007BF39A /* frame.c */,
 			);
 			path = http3;
+			sourceTree = "<group>";
 		};
 		E908A2AC2320AE210039BCEE /* docker-ci */ = {
 			isa = PBXGroup;
@@ -2962,7 +2955,7 @@
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
 				E98042162238D35B008B9745 /* cc-reno.c in Sources */,
 				10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */,
-                                E95E954022914F0600215ACD /* picotls-probes.d in Sources */,
+				E95E954022914F0600215ACD /* picotls-probes.d in Sources */,
 				E901C3FB213E1C4000D17C93 /* ranges.c in Sources */,
 				104B9A461A5F608A009EEE64 /* serverutil.c in Sources */,
 				1065E6ED19B7B9CB00686E72 /* websocket.c in Sources */,
@@ -3034,7 +3027,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E901C42F213E52B100D17C93 /* gf128.c in Sources */,
 				107D4D441B588021004A9B21 /* ssl.c in Sources */,
 				1079244A19A3266700C52AD6 /* frame.c in Sources */,
 				E9F677D720077603006476D3 /* roundrobin.c in Sources */,
@@ -3056,7 +3048,6 @@
 				E901C406213E1C5400D17C93 /* quicly.c in Sources */,
 				105534C11A3B911300627ECB /* hpack.c in Sources */,
 				E98042172238D362008B9745 /* cc-reno.c in Sources */,
-				E901C42A213E52A200D17C93 /* chacha20.c in Sources */,
 				E987E5EB1FD8C01E00DE4346 /* dictionary.c in Sources */,
 				E987E5F01FD8C04D00DE4346 /* brotli_bit_stream.c in Sources */,
 				107E34221C7FEE2200AEF5F8 /* brotli.c in Sources */,
@@ -3077,20 +3068,17 @@
 				E93C7F9A22701806007BF39A /* frame.c in Sources */,
 				107D4D461B5880BC004A9B21 /* dumper.c in Sources */,
 				107D4D451B5880BC004A9B21 /* api.c in Sources */,
-				E901C428213E529000D17C93 /* aes.c in Sources */,
 				E98884D521E7F3D80060F010 /* sentmap.c in Sources */,
 				E987E5F31FD8C04D00DE4346 /* compress_fragment.c in Sources */,
 				1079245119A3266700C52AD6 /* token.c in Sources */,
 				E901C42B213E52A500D17C93 /* chash.c in Sources */,
 				E98884D321E7F3D80060F010 /* recvstate.c in Sources */,
-				E901C432213E52BB00D17C93 /* poly1305.c in Sources */,
 				1070866A1B70A00F002B8F18 /* casper.c in Sources */,
 				E987E5F51FD8C04D00DE4346 /* encode.c in Sources */,
 				E901C429213E529F00D17C93 /* blockwise.c in Sources */,
 				E987E5FC1FD8C04D00DE4346 /* utf8_util.c in Sources */,
 				107D4D491B5880BC004A9B21 /* parser.c in Sources */,
 				104B9A481A5F9472009EEE64 /* headers.c in Sources */,
-				E901C435213E52C700D17C93 /* cifra.c in Sources */,
 				E987E5F11FD8C04D00DE4346 /* cluster.c in Sources */,
 				E987E5F81FD8C04D00DE4346 /* literal_cost.c in Sources */,
 				E987E5F71FD8C04D00DE4346 /* histogram.c in Sources */,
@@ -3119,14 +3107,11 @@
 				107D4D4A1B5880BC004A9B21 /* reader.c in Sources */,
 				E980423E22463057008B9745 /* defaults.c in Sources */,
 				1079244819A3265C00C52AD6 /* connection.c in Sources */,
-				E901C431213E52B800D17C93 /* modes.c in Sources */,
 				1079244119A3264300C52AD6 /* picohttpparser.c in Sources */,
 				106530A71D82C0A6005B2C60 /* percent-encode-zero-byte.c in Sources */,
 				7DD70D79210F2EC400727A17 /* httpclient.c in Sources */,
 				10DA96A01CD2BFEE00679165 /* cache.c in Sources */,
-				E901C42E213E52AF00D17C93 /* gcm.c in Sources */,
 				1070E1631B4508B0001CCAFA /* util.c in Sources */,
-				E901C434213E52C200D17C93 /* sha512.c in Sources */,
 				1058C87D1AA41789008D6180 /* headers.c in Sources */,
 				10AA2EAE1A8E22DA004322AC /* multithread.c in Sources */,
 			);
@@ -3616,7 +3601,6 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
-					"H2O_USE_BROTLI=1",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
@@ -3666,6 +3650,7 @@
 					"DEBUG=1",
 					"H2O_UNITTEST=1",
 					"$(inherited)",
+					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
@@ -3772,7 +3757,6 @@
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
-					"H2O_USE_BROTLI=1",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
@@ -3816,7 +3800,10 @@
 		1065E71619BF754100686E72 /* libuv-release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				GCC_PREPROCESSOR_DEFINITIONS = "H2O_UNITTEST=1";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"H2O_UNITTEST=1",
+					"H2O_USE_BROTLI=1",
+				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
 					deps/brotli/c/include,
@@ -3916,7 +3903,6 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
-					"H2O_USE_BROTLI=1",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
@@ -3963,7 +3949,6 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
-					"H2O_USE_BROTLI=1",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 				);
@@ -4136,6 +4121,7 @@
 					"DEBUG=1",
 					"H2O_UNITTEST=1",
 					"$(inherited)",
+					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
@@ -4165,6 +4151,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_UNITTEST=1",
 					"H2O_USE_LIBUV=0",
+					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
 					"/usr/local/openssl-1.0.2/include",
@@ -4514,6 +4501,7 @@
 					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
+					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -4586,6 +4574,7 @@
 					"H2O_USE_PICOTLS=1",
 					"PICOTLS_USE_DTRACE=1",
 					"H2O_USE_DTRACE=1",
+					"H2O_USE_BROTLI=1",
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
