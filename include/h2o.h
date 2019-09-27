@@ -940,7 +940,6 @@ typedef struct st_h2o_filereq_t {
 
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, size_t written, h2o_send_state_t send_state);
 typedef int (*h2o_write_req_cb)(void *ctx, h2o_iovec_t chunk, int is_end_stream);
-typedef void (*h2o_on_request_streaming_selected_cb)(h2o_req_t *, int is_streaming);
 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
@@ -1053,6 +1052,10 @@ struct st_h2o_req_t {
      */
     h2o_iovec_t entity;
     /**
+     * amount of request body being received
+     */
+    size_t req_body_bytes_received;
+    /**
      * If different of SIZE_MAX, the numeric value of the received content-length: header
      */
     size_t content_length;
@@ -1164,15 +1167,7 @@ struct st_h2o_req_t {
     struct {
         h2o_write_req_cb cb;
         void *ctx;
-        h2o_on_request_streaming_selected_cb on_streaming_selected;
     } write_req;
-    /**
-     * structure used for request body processing; `body` is NULL unless request body IS expected
-     */
-    struct {
-        size_t bytes_received;
-        h2o_buffer_t *body;
-    } _req_body;
 
     /**
      * callback and context for receiving more request body (see h2o_handler_t::supports_request_streaming for details)
@@ -1618,7 +1613,7 @@ void h2o_send_informational(h2o_req_t *req);
 /**
  *
  */
-int h2o_write_req_first(void *_req, h2o_iovec_t payload, int is_end_entity);
+static int h2o_req_can_stream_request(h2o_req_t *req);
 /**
  * logs an error
  */
@@ -2245,6 +2240,12 @@ static inline void h2o_doublebuffer_consume(h2o_doublebuffer_t *db)
 
     h2o_buffer_consume(&db->buf, db->_bytes_inflight);
     db->_bytes_inflight = 0;
+}
+
+inline int h2o_req_can_stream_request(h2o_req_t *req)
+{
+    h2o_handler_t *first_handler = h2o_get_first_handler(req);
+    return first_handler != NULL && first_handler->supports_request_streaming;
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \
