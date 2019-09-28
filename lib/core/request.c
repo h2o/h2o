@@ -334,6 +334,9 @@ h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 
 void h2o_process_request(h2o_req_t *req)
 {
+    assert(!req->process_called);
+    req->process_called = 1;
+
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
         setup_pathconf(req, hostconf);
