@@ -538,18 +538,31 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
     int ret = 0;
 
     /* consume contiguous bytes */
-    while (src != src_end) {
-        if ((ret = stream->recvbuf.handle_input(stream, &src, src_end, err_desc)) != 0)
-            break;
+    if (quicly_stop_requested(stream->quic)) {
+        src = src_end;
+    } else {
+        while (src != src_end) {
+            if ((ret = stream->recvbuf.handle_input(stream, &src, src_end, err_desc)) != 0)
+                break;
+            if (quicly_stop_requested(stream->quic)) {
+                src = src_end;
+                break;
+            }
+        }
     }
+    if (!(ret == 0 || ret == H2O_HTTP3_ERROR_INCOMPLETE))
+        return ret;
     size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
     h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
     quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
+    if (quicly_stop_requested(stream->quic))
+        return 0;
 
     if (quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
         if (ret != 0) {
-            /* FIXME send MALFORMED_FRAME(last_frame); we might need to observe the value of handle_input */
-            quicly_reset_stream(stream->quic, ret == H2O_HTTP3_ERROR_INCOMPLETE ? H2O_HTTP3_ERROR_GENERAL_PROTOCOL : ret);
+            /* partial frame */
+            assert(ret == H2O_HTTP3_ERROR_INCOMPLETE);
+            quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_GENERAL_PROTOCOL);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         } else if (stream->recvbuf.buf->size == 0 && (stream->recvbuf.handle_input == handle_input_expect_data ||
                                                       stream->recvbuf.handle_input == handle_input_post_trailers)) {
@@ -584,28 +597,18 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         }
     } else {
-        switch (ret) {
-        case 0:
-        case H2O_HTTP3_ERROR_INCOMPLETE:
-            if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK && stream->req_body != NULL &&
-                stream->req_body->size >= H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK) {
-                /* switch to blocked state if the request body is becoming large (this limits the concurrency to the backend) */
-                stream->read_blocked = 1;
-                h2o_linklist_insert(&conn->delayed_streams.recv_body_blocked, &stream->link);
-                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED);
-                check_run_blocked(conn);
-            } else if (stream->req.write_req.cb != NULL && stream->req_body->size != 0) {
-                /* in streaming mode, let the run_delayed invoke write_req */
-                if (!h2o_linklist_is_linked(&stream->link))
-                    h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
-                request_run_delayed(conn);
-            }
-            break;
-        default:
-            quicly_request_stop(stream->quic, ret);
-            quicly_reset_stream(stream->quic, ret);
-            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
-            break;
+        if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK && stream->req_body != NULL &&
+            stream->req_body->size >= H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK) {
+            /* switch to blocked state if the request body is becoming large (this limits the concurrency to the backend) */
+            stream->read_blocked = 1;
+            h2o_linklist_insert(&conn->delayed_streams.recv_body_blocked, &stream->link);
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED);
+            check_run_blocked(conn);
+        } else if (stream->req.write_req.cb != NULL && stream->req_body->size != 0) {
+            /* in streaming mode, let the run_delayed invoke write_req */
+            if (!h2o_linklist_is_linked(&stream->link))
+                h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
+            request_run_delayed(conn);
         }
     }
 
@@ -859,7 +862,12 @@ int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, cons
     case H2O_HTTP3_FRAME_TYPE_PRIORITY:
     case H2O_HTTP3_FRAME_TYPE_HEADERS:
     case H2O_HTTP3_FRAME_TYPE_DATA:
-        return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
+        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+            quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_FRAME_UNEXPECTED);
+        if (quicly_sendstate_is_open(&stream->quic->sendstate))
+            quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_FRAME_UNEXPECTED);
+        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
+        return 0;
     default:
         break;
     }
@@ -906,9 +914,16 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
         stream->recvbuf.handle_input = handle_input_post_trailers;
         return 0;
     case H2O_HTTP3_FRAME_TYPE_DATA:
-        if (stream->req.content_length != SIZE_MAX) {
-            if (stream->req.content_length - stream->req.req_body_bytes_received < frame.length)
-                return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+        if (stream->req.content_length != SIZE_MAX &&
+            stream->req.content_length - stream->req.req_body_bytes_received < frame.length) {
+            if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+                quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE); /* FIXME numberspace */
+            /* Because we might have already called h2o_process_request, the only "consistent" behavior in this case would be to
+             * reset the stream. */
+            if (!quicly_sendstate_is_open(&stream->quic->sendstate))
+                quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_GENERAL_PROTOCOL);
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
+            return 0;
         }
         break;
     default:
@@ -960,10 +975,18 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
             *err_desc = NULL;
             return 0;
         }
-        return ret;
     }
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
+
+    /* check if content-length is within the permitted bounds */
+    if (stream->req.content_length > conn->super.ctx->globalconf->max_request_entity_size) {
+        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+            quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
+        h2o_send_error_413(&stream->req, "Request Entity Too Large", "request entity is too large", 0);
+        return 0;
+    }
 
     /* change state */
     stream->recvbuf.handle_input = handle_input_expect_data;
