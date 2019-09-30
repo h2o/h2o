@@ -824,6 +824,10 @@ void quicly_request_stop(quicly_stream_t *stream, int err);
 /**
  *
  */
+static int quicly_stop_requested(quicly_stream_t *stream);
+/**
+ *
+ */
 int quicly_stream_sync_sendbuf(quicly_stream_t *stream, int activate);
 /**
  *
@@ -984,6 +988,11 @@ inline void **quicly_get_data(quicly_conn_t *conn)
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
     return &c->data;
+}
+
+inline int quicly_stop_requested(quicly_stream_t *stream)
+{
+    return stream->_send_aux.stop_sending.sender_state != QUICLY_SENDER_STATE_NONE;
 }
 
 inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)
