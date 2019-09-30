@@ -553,24 +553,31 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         } else if (stream->recvbuf.buf->size == 0 && (stream->recvbuf.handle_input == handle_input_expect_data ||
                                                       stream->recvbuf.handle_input == handle_input_post_trailers)) {
-            /* have complete request, advance the state and process the request (TODO check content-length) */
-            if (stream->req.write_req.cb != NULL) {
-                if (!h2o_linklist_is_linked(&stream->link))
-                    h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
-                request_run_delayed(conn);
-            } else if (!stream->req.process_called) {
-                switch (stream->state) {
-                case H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS:
-                case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK:
-                case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED:
-                    break;
-                default:
-                    assert(!"unexpected state");
-                    break;
+            /* have complete request, advance the state and process the request */
+            if (stream->req.content_length != SIZE_MAX && stream->req.content_length != stream->req.req_body_bytes_received) {
+                quicly_reset_stream(stream->quic, stream->req.req_body_bytes_received < stream->req.content_length
+                                                      ? H2O_HTTP3_ERROR_INCOMPLETE
+                                                      : H2O_HTTP3_ERROR_GENERAL_PROTOCOL);
+                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
+            } else {
+                if (stream->req.write_req.cb != NULL) {
+                    if (!h2o_linklist_is_linked(&stream->link))
+                        h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
+                    request_run_delayed(conn);
+                } else if (!stream->req.process_called) {
+                    switch (stream->state) {
+                    case H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS:
+                    case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK:
+                    case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED:
+                        break;
+                    default:
+                        assert(!"unexpected state");
+                        break;
+                    }
+                    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
+                    h2o_linklist_insert(&conn->delayed_streams.pending, &stream->link);
+                    request_run_delayed(conn);
                 }
-                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
-                h2o_linklist_insert(&conn->delayed_streams.pending, &stream->link);
-                request_run_delayed(conn);
             }
         } else {
             quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_REQUEST_INCOMPLETE);
@@ -873,6 +880,7 @@ static int handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t 
     if (!h2o_buffer_try_append(&stream->req_body, *src, bytes_avail))
         return H2O_HTTP3_ERROR_INTERNAL;
     stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
+    stream->req.req_body_bytes_received += bytes_avail;
     stream->recvbuf.bytes_left_in_data_frame -= bytes_avail;
     *src += bytes_avail;
 
@@ -898,6 +906,10 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
         stream->recvbuf.handle_input = handle_input_post_trailers;
         return 0;
     case H2O_HTTP3_FRAME_TYPE_DATA:
+        if (stream->req.content_length != SIZE_MAX) {
+            if (stream->req.content_length - stream->req.req_body_bytes_received < frame.length)
+                return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+        }
         break;
     default:
         return 0;
