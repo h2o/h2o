@@ -115,6 +115,7 @@ static int tm_is_lessthan(struct tm *x, struct tm *y)
 static void do_close(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
+    assert(self->refcnt > 0);
     if (--self->refcnt == 0)
         h2o_filecache_close_file(self->file.ref);
 }

@@ -138,6 +138,7 @@ Exit:
 
 void h2o_filecache_close_file(h2o_filecache_ref_t *ref)
 {
+    assert(ref->_refcnt > 0);
     if (--ref->_refcnt != 0)
         return;
     assert(!h2o_linklist_is_linked(&ref->_lru));
