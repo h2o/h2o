@@ -41,23 +41,23 @@ enum h2o_http3_server_stream_state {
      */
     H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS,
     /**
-     *
+     * receiving request body (runs concurrently)
      */
     H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK,
     /**
-     *
+     * blocked, waiting to be unblocked one by one (either in streaming mode or in non-streaming mode)
      */
     H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED,
     /**
-     *
+     * in non-streaming mode, receiving body
      */
-    H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_POST_BLOCK,
+    H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED,
     /**
-     * received request but haven't been assigned a handler
+     * in non-streaming mode, waiting for the request to be processed
      */
     H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING,
     /**
-     * waiting for receiving response headers from the handler
+     * request has been processed, waiting for the response headers
      */
     H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS,
     /**
@@ -80,9 +80,19 @@ struct st_h2o_http3_server_conn_t {
      * link-list of pending requests using st_h2o_http3_server_stream_t::link
      */
     struct {
-        h2o_linklist_t recv_body;
-        h2o_linklist_t reqs;
-    } pending;
+        /**
+         * holds streams in RECV_BODY_BLOCKED state. They are promoted one by one to the POST_BLOCK State.
+         */
+        h2o_linklist_t recv_body_blocked;
+        /**
+         * holds streams that are in request streaming mode.
+         */
+        h2o_linklist_t req_streaming;
+        /**
+         * holds streams in REQ_PENDING state or RECV_BODY_POST_BLOCK state (that is using streaming; i.e., write_req.cb != NULL).
+         */
+        h2o_linklist_t pending;
+    } delayed_streams;
     /**
      * next application-level timeout
      */
@@ -95,7 +105,7 @@ struct st_h2o_http3_server_conn_t {
             uint32_t recv_headers;
             uint32_t recv_body_before_block;
             uint32_t recv_body_blocked;
-            uint32_t recv_body_post_block;
+            uint32_t recv_body_unblocked;
             uint32_t req_pending;
             uint32_t send_headers;
             uint32_t send_body;
@@ -103,6 +113,10 @@ struct st_h2o_http3_server_conn_t {
         };
         uint32_t counters[1];
     } num_streams;
+    /**
+     * Number of streams that is request streaming. The state can be in either one of SEND_HEADERS, SEND_BODY, CLOSE_WAIT.
+     */
+    uint32_t num_streams_req_streaming;
     /**
      * scheduler
      */
@@ -170,7 +184,11 @@ struct st_h2o_http3_server_stream_t {
         h2o_linklist_t conn_blocked;
     } scheduler;
     /**
-     * buffer to hold a chunk of request body
+     * if read is blocked
+     */
+    uint8_t read_blocked : 1;
+    /**
+     * buffer to hold the request body (or a chunk of, if in streaming mode)
      */
     h2o_buffer_t *req_body;
     /**
@@ -195,6 +213,19 @@ static uint32_t *get_state_counter(struct st_h2o_http3_server_conn_t *conn, enum
     return conn->num_streams.counters + (size_t)state;
 }
 
+static void request_run_delayed(struct st_h2o_http3_server_conn_t *conn)
+{
+    if (!h2o_timer_is_linked(&conn->timeout))
+        h2o_timer_link(conn->super.ctx->loop, 0, &conn->timeout);
+}
+
+static void check_run_blocked(struct st_h2o_http3_server_conn_t *conn)
+{
+    if (conn->num_streams.recv_body_unblocked + conn->num_streams_req_streaming == 0 &&
+        !h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked))
+        request_run_delayed(conn);
+}
+
 static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
 {
     size_t i;
@@ -209,6 +240,14 @@ static void dispose_request(struct st_h2o_http3_server_stream_t *stream)
     /* dispose request body buffer */
     if (stream->req_body != NULL)
         h2o_buffer_dispose(&stream->req_body);
+
+    /* clean up request streaming */
+    if (stream->req.write_req.cb != NULL) {
+        struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+        assert(conn->num_streams_req_streaming != 0);
+        --conn->num_streams_req_streaming;
+        check_run_blocked(conn);
+    }
 
     /* dispose the request */
     h2o_dispose_request(&stream->req);
@@ -225,7 +264,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 
     switch (state) {
     case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED:
-        assert(conn->pending.recv_body.prev == &stream->link || !"stream is not registered to the recv_body list?");
+        assert(conn->delayed_streams.recv_body_blocked.prev == &stream->link || !"stream is not registered to the recv_body list?");
         break;
     case H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT: {
         dispose_request(stream);
@@ -239,12 +278,6 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     } break;
     default:
         break;
-    }
-
-    /* unblock the next request being blocked */
-    if (conn->num_streams.recv_body_post_block == 0 && !h2o_linklist_is_empty(&conn->pending.recv_body)) {
-        if (!h2o_timer_is_linked(&conn->timeout))
-            h2o_timer_link(conn->super.ctx->loop, 0, &conn->timeout);
     }
 }
 
@@ -498,14 +531,11 @@ static int on_send_stop(quicly_stream_t *qs, int err)
 
 static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, const char **err_desc)
 {
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
     assert(bytes_available <= stream->recvbuf.buf->size);
     const uint8_t *src = (const uint8_t *)stream->recvbuf.buf->bytes, *src_end = src + bytes_available;
     int ret = 0;
-
-    /* do nothing, if the stream is in body-blocked state */
-    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED)
-        return 0;
 
     /* consume contiguous bytes */
     while (src != src_end) {
@@ -523,16 +553,25 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         } else if (stream->recvbuf.buf->size == 0 && (stream->recvbuf.handle_input == handle_input_expect_data ||
                                                       stream->recvbuf.handle_input == handle_input_post_trailers)) {
-            /* have complete request */
-            /* TODO check if content-length is correct */
-            /* process the request */
-            if (stream->req_body != NULL)
-                stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
-            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
-            struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-            h2o_linklist_insert(&conn->pending.reqs, &stream->link);
-            if (!h2o_timer_is_linked(&conn->timeout))
-                h2o_timer_link(conn->super.ctx->loop, 0, &conn->timeout);
+            /* have complete request, advance the state and process the request (TODO check content-length) */
+            if (stream->req.write_req.cb != NULL) {
+                if (!h2o_linklist_is_linked(&stream->link))
+                    h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
+                request_run_delayed(conn);
+            } else if (!stream->req.process_called) {
+                switch (stream->state) {
+                case H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS:
+                case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK:
+                case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED:
+                    break;
+                default:
+                    assert(!"unexpected state");
+                    break;
+                }
+                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
+                h2o_linklist_insert(&conn->delayed_streams.pending, &stream->link);
+                request_run_delayed(conn);
+            }
         } else {
             quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_REQUEST_INCOMPLETE);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
@@ -541,12 +580,18 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
         switch (ret) {
         case 0:
         case H2O_HTTP3_ERROR_INCOMPLETE:
-            /* Switch to block mode if the request body is becoming large (this limits the concurrency to the backend). */
             if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK && stream->req_body != NULL &&
                 stream->req_body->size >= H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK) {
-                struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
-                h2o_linklist_insert(&conn->pending.recv_body, &stream->link);
+                /* switch to blocked state if the request body is becoming large (this limits the concurrency to the backend) */
+                stream->read_blocked = 1;
+                h2o_linklist_insert(&conn->delayed_streams.recv_body_blocked, &stream->link);
                 set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED);
+                check_run_blocked(conn);
+            } else if (stream->req.write_req.cb != NULL && stream->req_body->size != 0) {
+                /* in streaming mode, let the run_delayed invoke write_req */
+                if (!h2o_linklist_is_linked(&stream->link))
+                    h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
+                request_run_delayed(conn);
             }
             break;
         default:
@@ -569,6 +614,9 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
     /* save received data (FIXME avoid copying if possible; see hqclient.c) */
     if ((ret = h2o_http3_update_recvbuf(&stream->recvbuf.buf, off, input, len)) != 0)
         return ret;
+
+    if (stream->read_blocked)
+        return 0;
 
     /* handle input (FIXME propage err_desc) */
     return handle_buffered_input(stream, &err_desc);
@@ -677,30 +725,118 @@ static int get_scheduler_node(struct st_h2o_http3_server_conn_t *conn, h2o_http2
     return 0;
 }
 
-static void run_delayed(h2o_timer_t *timer)
+static void proceed_request_streaming(h2o_req_t *_req, size_t bytes_written, h2o_send_state_t state)
 {
-    struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, timeout, timer);
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
-    /* promote blocked stream to unblocked state, if possible */
-    if (conn->num_streams.recv_body_post_block == 0 && !h2o_linklist_is_empty(&conn->pending.recv_body)) {
-        struct st_h2o_http3_server_stream_t *stream =
-            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->pending.recv_body.next);
-        int ret;
-        const char *err_desc = NULL;
-        if ((ret = handle_buffered_input(stream, &err_desc)) != 0) {
-            h2o_http3_close_connection(&conn->h3, ret, err_desc);
+    assert(stream->req_body != NULL);
+    assert(!h2o_linklist_is_linked(&stream->link));
+    assert(conn->num_streams_req_streaming != 0);
+
+    if (state != H2O_SEND_STATE_IN_PROGRESS) {
+        /* tidy up the request streaming */
+        stream->req.write_req.cb = NULL;
+        stream->req.write_req.ctx = NULL;
+        stream->req.proceed_req = NULL;
+        --conn->num_streams_req_streaming;
+        check_run_blocked(conn);
+        /* close the stream if an error occurred */
+        if (state == H2O_SEND_STATE_ERROR) {
+            quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_INTERNAL);
+            quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_INTERNAL);
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
             return;
         }
     }
 
-    /* TODO cap the maximum */
-    while (!h2o_linklist_is_empty(&conn->pending.reqs)) {
-        struct st_h2o_http3_server_stream_t *stream =
-            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->pending.reqs.next);
-        h2o_linklist_unlink(&stream->link);
-        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
-        h2o_process_request(&stream->req);
+    /* remove the bytes from the requset body buffer */
+    assert(stream->req_body->size == bytes_written);
+    h2o_buffer_consume(&stream->req_body, bytes_written);
+    stream->req.entity = h2o_iovec_init(NULL, 0);
+
+    /* unblock read until the next invocation of write_req, or after the final invocation */
+    stream->read_blocked = 0;
+
+    /* handle input in the receive buffer */
+    int ret;
+    const char *err_desc = NULL;
+    if ((ret = handle_buffered_input(stream, &err_desc)) != 0) {
+        h2o_http3_close_connection(&conn->h3, ret, err_desc);
+        return;
     }
+}
+
+static void run_delayed(h2o_timer_t *timer)
+{
+    struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, timeout, timer);
+    int made_progress;
+
+    do {
+        made_progress = 0;
+
+        /* promote blocked stream to unblocked state, if possible */
+        if (conn->num_streams.recv_body_unblocked + conn->num_streams_req_streaming == 0 &&
+            !h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked)) {
+            struct st_h2o_http3_server_stream_t *stream =
+                H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.recv_body_blocked.next);
+            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED);
+            assert(stream->read_blocked);
+            h2o_linklist_unlink(&stream->link);
+            made_progress = 1;
+            if (h2o_req_can_stream_request(&stream->req)) {
+                /* use streaming mode */
+                ++conn->num_streams_req_streaming;
+                stream->req.proceed_req = proceed_request_streaming;
+                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
+                h2o_process_request(&stream->req);
+            } else {
+                /* unblock, read the bytes in receive buffer */
+                stream->read_blocked = 0;
+                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED);
+                int ret;
+                const char *err_desc = NULL;
+                if ((ret = handle_buffered_input(stream, &err_desc)) != 0) {
+                    h2o_http3_close_connection(&conn->h3, ret, err_desc);
+                    return;
+                }
+            }
+        }
+
+        /* process streams using request streaming, that have new data to submit */
+        while (!h2o_linklist_is_empty(&conn->delayed_streams.req_streaming)) {
+            struct st_h2o_http3_server_stream_t *stream =
+                H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.req_streaming.next);
+            assert(stream->req.process_called);
+            assert(stream->req.write_req.cb != NULL);
+            assert(stream->req_body != NULL);
+            assert(stream->req_body->size != 0);
+            assert(!stream->read_blocked);
+            h2o_linklist_unlink(&stream->link);
+            stream->read_blocked = 1;
+            made_progress = 1;
+            if (stream->req.write_req.cb(stream->req.write_req.ctx, h2o_iovec_init(stream->req_body->bytes, stream->req_body->size),
+                                         quicly_recvstate_transfer_complete(&stream->quic->recvstate)) != 0) {
+                quicly_reset_stream(stream->quic, H2O_HTTP3_ERROR_INTERNAL);
+                quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_INTERNAL);
+                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
+            }
+        }
+
+        /* process the requests (not in streaming mode); TODO cap concurrency? */
+        while (!h2o_linklist_is_empty(&conn->delayed_streams.pending)) {
+            struct st_h2o_http3_server_stream_t *stream =
+                H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.pending.next);
+            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
+            assert(!stream->req.process_called);
+            assert(!stream->read_blocked);
+            h2o_linklist_unlink(&stream->link);
+            made_progress = 1;
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
+            h2o_process_request(&stream->req);
+        }
+
+    } while (made_progress);
 }
 
 int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
@@ -736,6 +872,7 @@ static int handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t 
         h2o_buffer_init(&stream->req_body, &h2o_socket_buffer_prototype);
     if (!h2o_buffer_try_append(&stream->req_body, *src, bytes_avail))
         return H2O_HTTP3_ERROR_INTERNAL;
+    stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
     stream->recvbuf.bytes_left_in_data_frame -= bytes_avail;
     *src += bytes_avail;
 
@@ -1187,8 +1324,10 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
     assert(conn->num_streams.send_headers == 0);
     assert(conn->num_streams.send_body == 0);
     assert(conn->num_streams.close_wait == 0);
-    assert(h2o_linklist_is_empty(&conn->pending.recv_body));
-    assert(h2o_linklist_is_empty(&conn->pending.reqs));
+    assert(conn->num_streams_req_streaming == 0);
+    assert(h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked));
+    assert(h2o_linklist_is_empty(&conn->delayed_streams.req_streaming));
+    assert(h2o_linklist_is_empty(&conn->delayed_streams.pending));
 
     if (h2o_timer_is_linked(&conn->timeout))
         h2o_timer_unlink(&conn->timeout);
@@ -1274,10 +1413,12 @@ SynFound : {
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
     h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
-    h2o_linklist_init_anchor(&conn->pending.recv_body);
-    h2o_linklist_init_anchor(&conn->pending.reqs);
+    h2o_linklist_init_anchor(&conn->delayed_streams.recv_body_blocked);
+    h2o_linklist_init_anchor(&conn->delayed_streams.req_streaming);
+    h2o_linklist_init_anchor(&conn->delayed_streams.pending);
     h2o_timer_init(&conn->timeout, run_delayed);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
+    conn->num_streams_req_streaming = 0;
     h2o_http2_scheduler_init(&conn->scheduler.reqs.root);
     conn->scheduler.reqs.orphan_placeholder = NULL;
     conn->scheduler.reqs.freestanding = kh_init(h2o_http3_freestanding_priority);
