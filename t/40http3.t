@@ -33,6 +33,7 @@ hosts:
       /:
         file.dir: t/assets/doc_root
 EOT
+    sleep 1; # there's no way to check if UDP port 443 is up and running, hence wait
     subtest "hello world" => sub {
         my $resp = `$client_prog -3 https://127.0.0.1:$quic_port 2>&1`;
         like $resp, qr{^HTTP/.*\n\nhello\n$}s;
