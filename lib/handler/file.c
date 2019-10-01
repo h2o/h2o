@@ -40,7 +40,6 @@
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
-    size_t refcnt;
     struct {
         h2o_filecache_ref_t *ref;
         off_t off;
@@ -51,7 +50,6 @@ struct st_h2o_sendfile_generator_t {
     unsigned send_vary : 1;
     unsigned send_etag : 1;
     unsigned gunzip : 1;
-    unsigned read_last_byte : 1;
     struct {
         char *multirange_buf; /* multi-range mode uses push */
         size_t filesize;
@@ -112,11 +110,18 @@ static int tm_is_lessthan(struct tm *x, struct tm *y)
 #undef CMP
 }
 
-static void do_close(h2o_generator_t *_self, h2o_req_t *req)
+static void close_file(struct st_h2o_sendfile_generator_t *self)
 {
-    struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    if (--self->refcnt == 0)
+    if (self->file.ref != NULL) {
         h2o_filecache_close_file(self->file.ref);
+        self->file.ref = NULL;
+    }
+}
+
+static void on_generator_dispose(void *_self)
+{
+    struct st_h2o_sendfile_generator_t *self = _self;
+    close_file(self);
 }
 
 static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t off)
@@ -134,18 +139,11 @@ static int do_pread(h2o_sendvec_t *src, h2o_req_t *req, h2o_iovec_t dst, size_t 
                    -1 &&
                errno == EINTR)
             ;
-        if (rret == -1) {
-            do_close(&self->super, req);
+        if (rret == -1)
             return 0;
-        }
         bytes_read += rret;
     }
 
-    /* close if sent all */
-    if (self->bytesleft == 0 && off + dst.len == src->len && !self->read_last_byte) {
-        self->read_last_byte = 1;
-        do_close(&self->super, req);
-    }
     return 1;
 }
 
@@ -153,12 +151,10 @@ static void sendvec_update_refcnt(h2o_sendvec_t *vec, h2o_req_t *req, int is_inc
 {
     struct st_h2o_sendfile_generator_t *self = (void *)vec->cb_arg[0];
 
-    assert(self->refcnt != 0);
-
     if (is_incr) {
-        ++self->refcnt;
+        h2o_mem_addref_shared(self);
     } else {
-        do_close(&self->super, req);
+        h2o_mem_release_shared(self);
     }
 }
 
@@ -232,13 +228,10 @@ static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
     h2o_send(req, vec, vecarrsize, send_state);
-    if (send_state == H2O_SEND_STATE_FINAL)
-        do_close(&self->super, req);
     return;
 
 Error:
     h2o_send(req, NULL, 0, H2O_SEND_STATE_ERROR);
-    do_close(&self->super, req);
     return;
 }
 
@@ -291,10 +284,9 @@ Opened:
         return NULL;
     }
 
-    self = h2o_mem_alloc_pool(&req->pool, *self, 1);
+    self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
     self->super.proceed = do_proceed;
-    self->super.stop = do_close;
-    self->refcnt = 1;
+    self->super.stop = NULL;
     self->file.ref = fileref;
     self->file.off = 0;
     self->req = NULL;
@@ -305,7 +297,6 @@ Opened:
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0;
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
-    self->read_last_byte = 0;
 
     return self;
 }
@@ -378,7 +369,6 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
         static h2o_generator_t generator = {NULL, NULL};
         h2o_start_response(req, &generator);
         h2o_send(req, NULL, 0, H2O_SEND_STATE_FINAL);
-        do_close(&self->super, req);
         return;
     }
 
@@ -643,7 +633,8 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
 
     /* obtain mime type */
     if (mime_type->type == H2O_MIMEMAP_TYPE_DYNAMIC) {
-        do_close(&generator->super, req);
+        assert(generator->file.ref != NULL);
+        close_file(generator);
         return delegate_dynamic_request(req, resolved_path, h2o_iovec_init(NULL, 0), rpath, rpath_len, mime_type);
     }
     assert(mime_type->type == H2O_MIMEMAP_TYPE_MIMETYPE);
@@ -667,7 +658,7 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
 
     /* only allow GET or HEAD for static files */
     if (method_type == METHOD_IS_OTHER) {
-        do_close(&generator->super, req);
+        close_file(generator);
         send_method_not_allowed(req);
         return 0;
     }
@@ -762,7 +753,7 @@ NotModified:
     add_headers_unconditional(generator, req);
     h2o_send_inline(req, NULL, 0);
 Close:
-    do_close(&generator->super, req);
+    close_file(generator);
     return 0;
 }
 
@@ -880,7 +871,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
     h2o_mimemap_on_context_dispose(self->mimemap, ctx);
 }
 
-static void on_dispose(h2o_handler_t *_self)
+static void on_handler_dispose(h2o_handler_t *_self)
 {
     h2o_file_handler_t *self = (void *)_self;
     size_t i;
@@ -910,7 +901,7 @@ h2o_file_handler_t *h2o_file_register(h2o_pathconf_t *pathconf, const char *real
     /* setup callbacks */
     self->super.on_context_init = on_context_init;
     self->super.on_context_dispose = on_context_dispose;
-    self->super.dispose = on_dispose;
+    self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
 
     /* setup attributes */
