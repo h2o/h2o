@@ -982,7 +982,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
 
     /* check if content-length is within the permitted bounds */
-    if (stream->req.content_length > conn->super.ctx->globalconf->max_request_entity_size) {
+    if (stream->req.content_length != SIZE_MAX &&
+        stream->req.content_length > conn->super.ctx->globalconf->max_request_entity_size) {
         if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
             quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
