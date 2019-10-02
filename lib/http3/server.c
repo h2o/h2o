@@ -577,7 +577,8 @@ static int handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, co
                     if (!h2o_linklist_is_linked(&stream->link))
                         h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
                     request_run_delayed(conn);
-                } else if (!stream->req.process_called) {
+                } else if (!stream->req.process_called && stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
+                    /* process the request, if we haven't called h2o_process_request nor send an error response */
                     switch (stream->state) {
                     case H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS:
                     case H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK:
@@ -960,6 +961,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         }
         return 0;
     }
+    stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
@@ -989,7 +991,6 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     /* change state */
-    stream->recvbuf.handle_input = handle_input_expect_data;
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK);
 
     return 0;
