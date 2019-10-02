@@ -404,6 +404,7 @@ inline void h2o_mem_addref_shared(void *p)
 inline int h2o_mem_release_shared(void *p)
 {
     struct st_h2o_mem_pool_shared_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mem_pool_shared_entry_t, bytes, p);
+    assert(entry->refcnt != 0);
     if (--entry->refcnt == 0) {
         if (entry->dispose != NULL)
             entry->dispose(entry->bytes);

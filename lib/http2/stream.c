@@ -387,7 +387,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
     } else if (nextbuf != stream->_data.entries) {
         /* adjust the buffer */
         size_t newsize = stream->_data.size - (nextbuf - stream->_data.entries);
-        memmove(stream->_data.entries, nextbuf, sizeof(h2o_iovec_t) * newsize);
+        memmove(stream->_data.entries, nextbuf, sizeof(stream->_data.entries[0]) * newsize);
         stream->_data.size = newsize;
     }
 

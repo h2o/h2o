@@ -1077,44 +1077,48 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
         return;
     }
 
-    /* try dynamic indexed */
-    if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
-        flatten_dynamic_indexed(ctx, dynamic_index);
-        return;
-    }
-
-    /* emit to encoder buf and dynamic index?
-     * At the moment the strategy is dumb; we emit encoder stream data until the table becomes full. Never triggers eviction.
-     */
-    if (likely_to_repeat && ctx->encoder_buf != NULL && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
-        name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
-        /* emit instruction to decoder stream */
-        if (static_index >= 0) {
-            emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
-        } else if (dynamic_index >= 0) {
-            emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0, dynamic_index, value);
-        } else {
-            emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
+    if (ctx->qpack != NULL) {
+        /* try dynamic indexed */
+         if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
+            flatten_dynamic_indexed(ctx, dynamic_index);
+            return;
         }
-        /* register the entry to table */
-        struct st_h2o_qpack_header_t *added;
-        if (h2o_iovec_is_token(name)) {
-            added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value.len + 1, NULL);
-            added->name = (h2o_iovec_t *)name;
-        } else {
-            added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1, NULL);
-            added->name = &added->_name_buf;
-            added->_name_buf = h2o_iovec_init(added->value + added->value_len + 1, name->len);
-            memcpy(added->_name_buf.base, name->base, name->len);
-            added->_name_buf.base[name->len] = '\0';
+        /* emit to encoder buf and dynamic index?
+         * At the moment the strategy is dumb; we emit encoder stream data until the table becomes full. Never triggers eviction.
+         */
+        if (likely_to_repeat && ctx->encoder_buf != NULL && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
+            name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
+            /* emit instruction to decoder stream */
+            if (static_index >= 0) {
+                emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
+            } else if (dynamic_index >= 0) {
+                emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0, dynamic_index, value);
+            } else {
+                emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
+            }
+            /* register the entry to table */
+            struct st_h2o_qpack_header_t *added;
+            if (h2o_iovec_is_token(name)) {
+                added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value.len + 1, NULL);
+                added->name = (h2o_iovec_t *)name;
+            } else {
+                added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1,
+                                             NULL);
+                added->name = &added->_name_buf;
+                added->_name_buf = h2o_iovec_init(added->value + added->value_len + 1, name->len);
+                memcpy(added->_name_buf.base, name->base, name->len);
+                added->_name_buf.base[name->len] = '\0';
+            }
+            added->value_len = value.len;
+            memcpy(added->value, value.base, value.len);
+            added->value[value.len] = '\0';
+            header_table_insert(&ctx->qpack->table, added);
+            /* emit header field to headers block */
+            flatten_dynamic_indexed(ctx, ctx->qpack->table.base_offset + ctx->qpack->table.last - ctx->qpack->table.first - 1);
+            return;
         }
-        added->value_len = value.len;
-        memcpy(added->value, value.base, value.len);
-        added->value[value.len] = '\0';
-        header_table_insert(&ctx->qpack->table, added);
-        /* emit header field to headers block */
-        flatten_dynamic_indexed(ctx, ctx->qpack->table.base_offset + ctx->qpack->table.last - ctx->qpack->table.first - 1);
-        return;
+    } else {
+        dynamic_index = -1;
     }
 
     if (static_index >= 0) {
@@ -1158,9 +1162,9 @@ static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpac
     ctx->qpack = qpack;
     ctx->pool = pool;
     ctx->stream_id = stream_id;
-    ctx->encoder_buf = qpack->num_blocked < qpack->max_blocked ? encoder_buf : NULL;
+    ctx->encoder_buf = qpack != NULL && qpack->num_blocked < qpack->max_blocked ? encoder_buf : NULL;
     ctx->headers_buf = headers_buf;
-    ctx->base_index = qpack->table.base_offset + qpack->table.last - qpack->table.first - 1;
+    ctx->base_index = qpack != NULL ? qpack->table.base_offset + qpack->table.last - qpack->table.first - 1 : 0;
     ctx->largest_ref = 0;
     ctx->header_data_prefix_at = headers_buf->size;
 
