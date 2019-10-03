@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
-use Net::EmptyPort qw(empty_port);
+use Net::EmptyPort qw(empty_port wait_port);
 use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
@@ -33,6 +33,7 @@ hosts:
       /:
         file.dir: t/assets/doc_root
 EOT
+    wait_port({port => $quic_port, proto => 'udp'});
     subtest "hello world" => sub {
         my $resp = `$client_prog -3 https://127.0.0.1:$quic_port 2>&1`;
         like $resp, qr{^HTTP/.*\n\nhello\n$}s;
