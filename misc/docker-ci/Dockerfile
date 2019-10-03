@@ -41,8 +41,10 @@ RUN (cd openssl-${OPENSSL_VERSION} && \
 RUN apt-get install --yes cpanminus
 RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-perl libjson-perl liblist-moreutils-perl libplack-perl libscope-guard-perl libtest-exception-perl libwww-perl libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN sudo cpanm --notest Starlet Test::TCP Protocol::HTTP2
+RUN sudo cpanm --notest Starlet Protocol::HTTP2
 
+# Test-TCP 2.21
+RUN sudo cpanm --notest https://github.com/tokuhirom/Test-TCP.git@2.21
 # h2spec
 RUN curl -Ls https://github.com/i110/h2spec/releases/download/v2.2.0-4e8cc7e/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
