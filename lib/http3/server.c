@@ -1447,6 +1447,8 @@ SynFound : {
             {NULL}                                                                                       /* http2 */
         }}                                                                                               /* loggers */
     };
+    struct init_ebpf_key_info_t ebpf_keyinfo = {&destaddr->sa, &srcaddr->sa};
+    h2o_ebpf_map_value_t ebpf_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &ebpf_keyinfo);
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
     h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks);
@@ -1474,9 +1476,8 @@ SynFound : {
     conn->scheduler.conn_blocked.uni = 0;
 
     /* accept connection */
-    struct init_ebpf_key_info_t keyinfo = {&destaddr->sa, &srcaddr->sa};
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
-    ptls_default_skip_tracing = !h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &keyinfo);
+    ptls_default_skip_tracing = !ebpf_value.trace;
     quicly_conn_t *qconn;
     int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packets + syn_index, NULL,
                                    &ctx->super.next_cid, &conn->handshake_properties);
