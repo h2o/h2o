@@ -1938,10 +1938,10 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     }
 
     /* forward */
+    char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
+    size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl);
     for (i = 0; i != num_packets; ++i) {
-        char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
-        size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl);
-        struct iovec vec[2] = {{header_buf, header_len}, {packets->octets.base, packets->octets.len}};
+        struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
         writev(conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id], vec, 2);
     }
 
