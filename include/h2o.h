@@ -1139,6 +1139,10 @@ struct st_h2o_req_t {
      * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
      */
     unsigned char upstream_refused : 1;
+    /**
+     * if h2o_process_request has been called
+     */
+    unsigned char process_called : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
@@ -1578,6 +1582,7 @@ H2O_SEND_ERROR_XXX(400)
 H2O_SEND_ERROR_XXX(403)
 H2O_SEND_ERROR_XXX(404)
 H2O_SEND_ERROR_XXX(405)
+H2O_SEND_ERROR_XXX(413)
 H2O_SEND_ERROR_XXX(416)
 H2O_SEND_ERROR_XXX(417)
 H2O_SEND_ERROR_XXX(500)
