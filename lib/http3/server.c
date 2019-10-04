@@ -1477,7 +1477,7 @@ SynFound : {
 
     /* accept connection */
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
-    ptls_default_skip_tracing = !ebpf_value.trace;
+    ptls_default_skip_tracing = ebpf_value.skip_tracing;
     quicly_conn_t *qconn;
     int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packets + syn_index, NULL,
                                    &ctx->super.next_cid, &conn->handshake_properties);

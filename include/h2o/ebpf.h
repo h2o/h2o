@@ -34,7 +34,7 @@ typedef struct st_h2o_ebpf_map_key_t {
 } h2o_ebpf_map_key_t;
 
 typedef struct st_h2o_ebpf_map_value_t {
-    uint64_t trace : 1;
+    uint64_t skip_tracing : 1;
 } h2o_ebpf_map_value_t;
 
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
