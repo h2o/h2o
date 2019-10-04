@@ -1149,6 +1149,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     }
     stream->scheduler.conn_blocked = (h2o_linklist_t){NULL};
 
+    stream->read_blocked = 0;
     stream->req_body = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
