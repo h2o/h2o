@@ -30,6 +30,7 @@
 typedef struct st_h2o_http3_server_ctx_t {
     h2o_http3_ctx_t super;
     h2o_accept_ctx_t *accept_ctx;
+    unsigned send_retry : 1;
 } h2o_http3_server_ctx_t;
 
 extern const h2o_protocol_callbacks_t H2O_HTTP3_SERVER_CALLBACKS;

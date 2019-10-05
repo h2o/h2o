@@ -112,6 +112,10 @@ struct listener_config_t {
          * an array of file descriptors (size: `num_threads`) used for packet forwarding between threads
          */
         int *thread_fds;
+        /**
+         * whether to send retry
+         */
+        unsigned send_retry : 1;
     } quic;
     int proxy_protocol;
 };
@@ -919,8 +923,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
-                                              quicly_context_t *quic)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -935,8 +938,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     listener->proxy_protocol = proxy_protocol;
-    listener->quic.ctx = quic;
-    listener->quic.thread_fds = NULL;
+    memset(&listener->quic, 0, sizeof(listener->quic));
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1169,7 +1171,7 @@ static void on_http3_conn_destroy(h2o_http3_conn_t *conn)
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
-    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL;
+    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -1179,15 +1181,18 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node) != 0)
+                                           &proxy_protocol_node, &quic_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
-        if (type_node != NULL)
+        if (type_node != NULL) {
             type = (*type_node)->data.scalar;
+        } else if (quic_node != NULL) {
+            type = "quic";
+        }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
@@ -1231,7 +1236,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, NULL);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1272,7 +1277,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, NULL);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
@@ -1345,7 +1350,19 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
                 quic->stream_open = &h2o_http3_server_on_stream_open;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
+                listener->quic.ctx = quic;
+                if (quic_node != NULL) {
+                    yoml_t **retry_node;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s", &retry_node) != 0)
+                        return -1;
+                    if (retry_node != NULL) {
+                        int on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.send_retry = 1;
+                    }
+                }
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
@@ -2094,18 +2111,30 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
     }
 
     /* send retry if necessary */
-    if ((0 /* FIXME consult the default config */ || ebpf_value.quic_send_retry == H2O_EBPF_QUIC_SEND_RETRY_ON) &&
-        (token == NULL || !token->is_retry)) {
-        uint8_t scid[16], token_prefix;
-        ptls_openssl_random_bytes(scid, sizeof(scid));
-        ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
-        quicly_datagram_t *rp = quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
-                                                  ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
-                                                  ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0));
-        assert(rp != NULL);
-        h2o_http3_send_datagram(&ctx->super, rp);
-        ctx->super.quic->packet_allocator->free_packet(ctx->super.quic->packet_allocator, rp);
-        return NULL;
+    if (token == NULL || !token->is_retry) {
+        int send_retry = ctx->send_retry;
+        switch (ebpf_value.quic_send_retry) {
+        case H2O_EBPF_QUIC_SEND_RETRY_ON:
+            send_retry = 1;
+            break;
+        case H2O_EBPF_QUIC_SEND_RETRY_OFF:
+            send_retry = 0;
+            break;
+        default:
+            break;
+        }
+        if (send_retry) {
+            uint8_t scid[16], token_prefix;
+            ptls_openssl_random_bytes(scid, sizeof(scid));
+            ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
+            quicly_datagram_t *rp = quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                                                      ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
+                                                      ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0));
+            assert(rp != NULL);
+            h2o_http3_send_datagram(&ctx->super, rp);
+            ctx->super.quic->packet_allocator->free_packet(ctx->super.quic->packet_allocator, rp);
+            return NULL;
+        }
     }
 
     /* accept the connection */
@@ -2205,6 +2234,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, (uint32_t)conf.quic.num_threads, (uint32_t)thread_index,
                                              0, 1, forward_quic_packets);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
+            listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             int fds[2];
             /* TODO switch to using named socket in temporary directory to forward packets between server generations */
             if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {
