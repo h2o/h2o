@@ -428,6 +428,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
                             quicly_decoded_packet_t *packets, size_t num_packets)
 {
     h2o_http3_conn_t *conn = NULL;
+    size_t accepted_packet_index = SIZE_MAX;
 
     /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
     if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&
@@ -485,8 +486,15 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
                     ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets);
                 return;
             }
-            if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets, num_packets)) == NULL)
+            /* try to accept any of the Initial packets being received */
+            size_t i;
+            for (i = 0; i != num_packets; ++i)
+                if ((packets[i].octets.base[0] & 0xf0) == 0xc0)
+                    if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL)
+                        break;
+            if (conn == NULL)
                 return;
+            accepted_packet_index = i;
             conn->_accept_hashkey = accept_hashkey;
             int r;
             iter = kh_put_h2o_http3_acceptmap(conn->ctx->conns_accepting, accept_hashkey, &r);
@@ -505,7 +513,8 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
         size_t i;
         for (i = 0; i != num_packets; ++i) {
             /* FIXME process errors? */
-            quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
+            if (i != accepted_packet_index)
+                quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
         }
     }
 

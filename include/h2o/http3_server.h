@@ -39,8 +39,7 @@ extern const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS;
  * the acceptor callback to be used together with h2o_http3_server_ctx_t
  */
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                          quicly_decoded_packet_t *packets, size_t num_packets,
-                                          const h2o_http3_conn_callbacks_t *h3_callbacks);
+                                          quicly_decoded_packet_t *packet, const h2o_http3_conn_callbacks_t *h3_callbacks);
 /**
  *
  */

@@ -2036,7 +2036,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 }
 
 static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                         quicly_decoded_packet_t *packets, size_t num_packets)
+                                         quicly_decoded_packet_t *packet)
 {
     if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections) {
         return NULL;
@@ -2045,7 +2045,7 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
     num_quic_connections(1);
     num_sessions(1);
 
-    return h2o_http3_server_accept(_ctx, destaddr, srcaddr, packets, num_packets, &conf.quic.conn_callbacks);
+    return h2o_http3_server_accept(_ctx, destaddr, srcaddr, packet, &conf.quic.conn_callbacks);
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)

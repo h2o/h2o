@@ -112,7 +112,7 @@ uint8_t *h2o_http3_encode_priority_frame(uint8_t *dst, const h2o_http3_priority_
 int h2o_http3_decode_priority_frame(h2o_http3_priority_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc);
 
 typedef h2o_http3_conn_t *(*h2o_http3_accept_cb)(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                                 quicly_decoded_packet_t *packets, size_t num_packets);
+                                                 quicly_decoded_packet_t *packet);
 typedef void (*h2o_http3_notify_connection_update_cb)(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
 /**
  * Forwards a packet to given node/thread.
