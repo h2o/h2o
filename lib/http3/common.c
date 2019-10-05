@@ -61,7 +61,7 @@ const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-23")}};
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
  * designated source address).
  */
-static int send_one(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
+int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
 {
     int ret;
     struct msghdr mess;
@@ -445,7 +445,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
                 quicly_datagram_t *dgram =
                     quicly_send_stateless_reset(ctx->quic, &destaddr->sa, &srcaddr->sa, packets[0].cid.dest.encrypted.base);
                 if (dgram != NULL) {
-                    send_one(ctx, dgram);
+                    h2o_http3_send_datagram(ctx, dgram);
                     ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
                 }
             }
@@ -613,10 +613,10 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
         for (dgram_index = 0; dgram_index != num_dgrams; ++dgram_index) {
             if (packet_index != 0 &&
                 !(dgram_index == 0 ||
-                  h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa) != 0 ||
+                  h2o_socket_compare_address(&dgrams[dgram_index - 1].srcaddr.sa, &dgrams[dgram_index].srcaddr.sa, 1) != 0 ||
                   !((dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
                      dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) ||
-                    h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa) == 0) ||
+                    h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) == 0) ||
                   dgrams[dgram_index - 1].ttl != dgrams[dgram_index].ttl)) {
                 process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr,
                                 dgrams[dgram_index - 1].ttl, packets, packet_index);
@@ -895,7 +895,7 @@ int h2o_http3_send(h2o_http3_conn_t *conn)
         switch (ret) {
         case 0:
             for (i = 0; i != num_packets; ++i) {
-                if (!send_one(conn->ctx, packets[i])) {
+                if (!h2o_http3_send_datagram(conn->ctx, packets[i])) {
                     /* FIXME close the connection immediately */
                     break;
                 }

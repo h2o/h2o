@@ -286,7 +286,7 @@ int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 /**
  * compares socket addresses
  */
-int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
+int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check_port);
 /**
  * getnameinfo (buf should be NI_MAXHOST in length), returns SIZE_MAX if failed
  */
