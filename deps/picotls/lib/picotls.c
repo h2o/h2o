@@ -5071,7 +5071,7 @@ static uint64_t get_time(ptls_get_time_t *self)
 }
 
 ptls_get_time_t ptls_get_time = {get_time};
-PTLS_THREADLOCAL unsigned ptls_default_skip_tracing = 1;
+PTLS_THREADLOCAL unsigned ptls_default_skip_tracing = 0;
 
 int ptls_is_server(ptls_t *tls)
 {
