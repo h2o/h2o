@@ -1357,10 +1357,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s", &retry_node) != 0)
                         return -1;
                     if (retry_node != NULL) {
-                        int on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
                         if (on == -1)
                             return -1;
-                        listener->quic.send_retry = 1;
+                        listener->quic.send_retry = (unsigned)on;
                     }
                 }
                 listener_is_new = 1;
