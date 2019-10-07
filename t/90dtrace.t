@@ -58,10 +58,18 @@ EOT
     } else {
         exec(
             qw(unbuffer dtrace -p), $server->{pid}, "-n", <<'EOT',
-:h2o::receive_request {printf("\nXXXX*** %u:%u version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
+:h2o::receive_request {
+    printf("\nXXXX*** %u:%u version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256);
+}
 EOT
             "-n", <<'EOT',
-:h2o::receive_request_header {printf("\nXXXX%s: %s\n", stringof(copyin(arg2, arg3)), stringof(copyin(arg4, arg5)))}
+:h2o::receive_request_header {
+    name = (char *)copyin(arg2, arg3);
+    name[arg3] = '\0';
+    value = (char *)copyin(arg4, arg5);
+    value[arg5] = '\0';
+    printf("\nXXXX%s: %s\n", stringof(name), stringof(value));
+}
 EOT
         );
         die "failed to spawn dtrace:$!";
