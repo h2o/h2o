@@ -392,15 +392,18 @@ SET(LIB_SOURCE_FILES
     lib/http3/server.c)
 
 IF (WITH_DTRACE)
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1 -DH2O_USE_DTRACE=1")
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1 -DQUICLY_USE_DTRACE=1 -DH2O_USE_DTRACE=1")
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
+    DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/quicly/quicly-probes.d quicly)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/h2o-probes.d h2o)
     LIST(APPEND LIB_SOURCE_FILES
          ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.h
+         ${CMAKE_CURRENT_BINARY_DIR}/quicly-probes.h
          ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.h)
     IF (DTRACE_USES_OBJFILE)
         LIST(APPEND LIB_SOURCE_FILES
              ${CMAKE_CURRENT_BINARY_DIR}/picotls-probes.o
+             ${CMAKE_CURRENT_BINARY_DIR}/quicly-probes.o
              ${CMAKE_CURRENT_BINARY_DIR}/h2o-probes.o)
     ENDIF ()
 ENDIF ()
