@@ -1475,12 +1475,16 @@ SynFound : {
 
     /* accept connection */
     struct init_ebpf_key_info_t keyinfo = {&destaddr->sa, &srcaddr->sa};
+#if PICOTLS_USE_DTRACE
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
     ptls_default_skip_tracing = !h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &keyinfo);
+#endif
     quicly_conn_t *qconn;
     int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packets + syn_index, NULL,
                                    &ctx->super.next_cid, &conn->handshake_properties);
+#if PICOTLS_USE_DTRACE
     ptls_default_skip_tracing = orig_skip_tracing;
+#endif
     if (accept_ret != 0) {
         h2o_http3_dispose_conn(&conn->h3);
         free(conn);
