@@ -701,7 +701,8 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                         new_server_cid[0] ^= 0xff;
                         quicly_datagram_t *rp = quicly_send_retry(&ctx, address_token_aead.enc, &sa, packet.cid.src, NULL,
                                                                   ptls_iovec_init(new_server_cid, sizeof(new_server_cid)),
-                                                                  packet.cid.dest.encrypted, ptls_iovec_init(NULL, 0));
+                                                                  packet.cid.dest.encrypted, ptls_iovec_init(NULL, 0),
+                                                                  ptls_iovec_init(NULL, 0));
                         assert(rp != NULL);
                         if (send_one(fd, rp) == -1)
                             perror("sendmsg failed");
