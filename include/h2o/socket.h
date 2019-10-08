@@ -31,6 +31,7 @@ extern "C" {
 #include <openssl/ssl.h>
 #include "picotls.h"
 #include "h2o/cache.h"
+#include "h2o/ebpf.h"
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
@@ -285,7 +286,7 @@ int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 /**
  * compares socket addresses
  */
-int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y);
+int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check_port);
 /**
  * getnameinfo (buf should be NI_MAXHOST in length), returns SIZE_MAX if failed
  */
@@ -362,7 +363,8 @@ struct st_h2o_ebpf_map_key_t;
 /**
  * function to lookup if the connection is tagged for special treatment. At the moment, the results are: 0 - no, 1 - trace.
  */
-int h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
+                                            void *cbdata);
 /**
  * callback for initializing the ebpf lookup key from raw information
  */

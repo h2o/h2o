@@ -303,7 +303,7 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return quicly_get_tls(conn->h3.quic);
 }
 
-static int skip_tracing(h2o_conn_t *conn)
+static int get_skip_tracing(h2o_conn_t *conn)
 {
     ptls_t *ptls = get_ptls(conn);
     return ptls_skip_tracing(ptls);
@@ -1407,38 +1407,15 @@ static void on_h3_destroy(h2o_http3_conn_t *h3)
     free(conn);
 }
 
-struct init_ebpf_key_info_t {
-    struct sockaddr *local, *remote;
-};
-
-static int init_ebpf_key_info(struct st_h2o_ebpf_map_key_t *key, void *_info)
+h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                          quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
+                                          int skip_tracing, const h2o_http3_conn_callbacks_t *h3_callbacks)
 {
-    struct init_ebpf_key_info_t *info = _info;
-    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
-}
-
-h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                          quicly_decoded_packet_t *packets, size_t num_packets,
-                                          const h2o_http3_conn_callbacks_t *h3_callbacks)
-{
-    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
-    size_t i, syn_index = SIZE_MAX;
-
-    /* find the Initial packet */
-    for (i = 0; i != num_packets; ++i) {
-        if ((packets[i].octets.base[0] & 0xf0) == 0xc0) {
-            syn_index = i;
-            goto SynFound;
-        }
-    }
-    return NULL;
-
-SynFound : {
     static const h2o_conn_callbacks_t conn_callbacks = {
         get_sockname,
         get_peername,
         get_ptls,
-        skip_tracing,
+        get_skip_tracing,
         NULL, /* push */
         NULL, /* get debug state */
         {{
@@ -1447,6 +1424,8 @@ SynFound : {
             {NULL}                                                                                       /* http2 */
         }}                                                                                               /* loggers */
     };
+
+    /* setup the structure */
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
     h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks);
@@ -1463,6 +1442,7 @@ SynFound : {
     assert(conn->scheduler.reqs.freestanding != NULL);
     {
         struct st_h2o_http3_closed_priorities_t *closed = &conn->scheduler.reqs.closed_streams;
+        size_t i;
         for (i = 0; i != sizeof(closed->entries) / sizeof(closed->entries[0]); ++i) {
             closed->entries[i].id = -1;
             memset(&closed->entries[i].ref, 0, sizeof(closed->entries[i].ref));
@@ -1474,13 +1454,12 @@ SynFound : {
     conn->scheduler.conn_blocked.uni = 0;
 
     /* accept connection */
-    struct init_ebpf_key_info_t keyinfo = {&destaddr->sa, &srcaddr->sa};
 #if PICOTLS_USE_DTRACE
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
-    ptls_default_skip_tracing = !h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &keyinfo);
+    ptls_default_skip_tracing = skip_tracing;
 #endif
     quicly_conn_t *qconn;
-    int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packets + syn_index, NULL,
+    int accept_ret = quicly_accept(&qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token,
                                    &ctx->super.next_cid, &conn->handshake_properties);
 #if PICOTLS_USE_DTRACE
     ptls_default_skip_tracing = orig_skip_tracing;
@@ -1492,15 +1471,10 @@ SynFound : {
     }
     ++ctx->super.next_cid.master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
-    /* handle the other packet */
-    for (i = 0; i != num_packets; ++i) {
-        if (i == syn_index)
-            continue;
-        quicly_receive(conn->h3.quic, &destaddr->sa, &srcaddr->sa, packets + i);
-    }
+
     h2o_http3_send(&conn->h3);
+
     return &conn->h3;
-}
 }
 
 static void initiate_graceful_shutdown(h2o_context_t *ctx)
