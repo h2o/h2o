@@ -53,6 +53,8 @@
 #include <openssl/ssl.h>
 #ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
+#include <quicly.h>
+
 #endif
 #include "picotls.h"
 #include "picotls/minicrypto.h"
@@ -110,6 +112,10 @@ struct listener_config_t {
          * an array of file descriptors (size: `num_threads`) used for packet forwarding between threads
          */
         int *thread_fds;
+        /**
+         * whether to send retry
+         */
+        unsigned send_retry : 1;
     } quic;
     int proxy_protocol;
 };
@@ -909,7 +915,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
 
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener = conf.listeners[i];
-        if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr) == 0 &&
+        if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr, 1) == 0 &&
             (listener->quic.ctx != NULL) == is_quic)
             return listener;
     }
@@ -917,8 +923,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
-                                              quicly_context_t *quic)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -933,8 +938,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     listener->proxy_protocol = proxy_protocol;
-    listener->quic.ctx = quic;
-    listener->quic.thread_fds = NULL;
+    memset(&listener->quic, 0, sizeof(listener->quic));
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -969,7 +973,7 @@ static int find_listener_from_server_starter(struct sockaddr *addr, int type)
                     conf.server_starter.fds[i]);
             exit(EX_CONFIG);
         }
-        if (h2o_socket_compare_address(&actual.addr.sa, addr) == 0 && actual.type == type)
+        if (h2o_socket_compare_address(&actual.addr.sa, addr, 1) == 0 && actual.type == type)
             goto Found;
     }
     /* not found */
@@ -1167,7 +1171,7 @@ static void on_http3_conn_destroy(h2o_http3_conn_t *conn)
 static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
-    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL;
+    yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL;
     int proxy_protocol = 0;
 
     /* fetch servname (and hostname) */
@@ -1177,15 +1181,18 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         break;
     case YOML_TYPE_MAPPING: {
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*",
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node) != 0)
+                                           &proxy_protocol_node, &quic_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
-        if (type_node != NULL)
+        if (type_node != NULL) {
             type = (*type_node)->data.scalar;
+        } else if (quic_node != NULL) {
+            type = "quic";
+        }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
@@ -1229,7 +1236,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, NULL);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1270,7 +1277,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, NULL);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
@@ -1342,7 +1349,20 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quic->transport_params.max_streams_uni = 10;
                 quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
                 quic->stream_open = &h2o_http3_server_on_stream_open;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, quic);
+                quic->generate_resumption_token = &quic_resumption_token_generator;
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
+                listener->quic.ctx = quic;
+                if (quic_node != NULL) {
+                    yoml_t **retry_node;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s", &retry_node) != 0)
+                        return -1;
+                    if (retry_node != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.send_retry = (unsigned)on;
+                    }
+                }
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, listener, listener_is_new) != 0) {
@@ -2035,17 +2055,96 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
-static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                         quicly_decoded_packet_t *packets, size_t num_packets)
+struct init_ebpf_key_info_t {
+    struct sockaddr *local, *remote;
+};
+
+static int init_ebpf_key_info(struct st_h2o_ebpf_map_key_t *key, void *_info)
 {
-    if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections) {
-        return NULL;
+    struct init_ebpf_key_info_t *info = _info;
+    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
+}
+
+static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
+                          quicly_address_token_plaintext_t *token)
+{
+    int64_t age;
+
+    if ((age = ctx->super.quic->now->cb(ctx->super.quic->now) - token->issued_at) < 0)
+        age = 0;
+    if (h2o_socket_compare_address(remote, &token->remote.sa, token->is_retry) != 0)
+        return 0;
+    if (token->is_retry) {
+        if (age > 30 * 1000)
+            return 0;
+        uint64_t cidhash_actual;
+        if (quicly_retry_calc_cidpair_hash(&ptls_openssl_sha256, client_cid, server_cid, &cidhash_actual) != 0)
+            return 0;
+        if (token->retry.cidpair_hash != cidhash_actual)
+            return 0;
+    } else {
+        if (age > 10 * 60 * 1000)
+            return 0;
     }
+
+    return 1;
+}
+
+static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                         quicly_decoded_packet_t *packet)
+{
+    h2o_http3_server_ctx_t *ctx = (void *)_ctx;
+    struct init_ebpf_key_info_t ebpf_keyinfo = {&destaddr->sa, &srcaddr->sa};
+    h2o_ebpf_map_value_t ebpf_value = h2o_socket_ebpf_lookup(ctx->super.loop, init_ebpf_key_info, &ebpf_keyinfo);
+    quicly_address_token_plaintext_t *token = NULL, token_buf;
+    h2o_http3_conn_t *conn;
+
+    /* just drop when handling too many connections */
+    if (num_connections(0) >= conf.max_connections || num_quic_connections(0) >= conf.max_quic_connections)
+        return NULL;
+
+    /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
+    if (packet->token.len != 0) {
+        if (quic_decrypt_address_token(&token_buf, packet->token) == 0 &&
+            validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))
+            token = &token_buf;
+    }
+
+    /* send retry if necessary */
+    if (token == NULL || !token->is_retry) {
+        int send_retry = ctx->send_retry;
+        switch (ebpf_value.quic_send_retry) {
+        case H2O_EBPF_QUIC_SEND_RETRY_ON:
+            send_retry = 1;
+            break;
+        case H2O_EBPF_QUIC_SEND_RETRY_OFF:
+            send_retry = 0;
+            break;
+        default:
+            break;
+        }
+        if (send_retry) {
+            uint8_t scid[16], token_prefix;
+            ptls_openssl_random_bytes(scid, sizeof(scid));
+            ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
+            quicly_datagram_t *rp = quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
+                                                      ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
+                                                      ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0));
+            assert(rp != NULL);
+            h2o_http3_send_datagram(&ctx->super, rp);
+            ctx->super.quic->packet_allocator->free_packet(ctx->super.quic->packet_allocator, rp);
+            return NULL;
+        }
+    }
+
+    /* accept the connection */
+    if ((conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, ebpf_value.skip_tracing,
+                                        &conf.quic.conn_callbacks)) == NULL)
+        return NULL;
     num_connections(1);
     num_quic_connections(1);
     num_sessions(1);
-
-    return h2o_http3_server_accept(_ctx, destaddr, srcaddr, packets, num_packets, &conf.quic.conn_callbacks);
+    return conn;
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)
@@ -2135,6 +2234,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, (uint32_t)conf.quic.num_threads, (uint32_t)thread_index,
                                              0, 1, forward_quic_packets);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
+            listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             int fds[2];
             /* TODO switch to using named socket in temporary directory to forward packets between server generations */
             if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {

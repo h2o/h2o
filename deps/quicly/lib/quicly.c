@@ -2865,7 +2865,7 @@ int quicly_retry_calc_cidpair_hash(ptls_hash_algorithm_t *sha256, ptls_iovec_t c
 
 quicly_datagram_t *quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encrypt_ctx, struct sockaddr *dest_addr,
                                      ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, ptls_iovec_t odcid,
-                                     ptls_iovec_t appdata)
+                                     ptls_iovec_t token_prefix, ptls_iovec_t appdata)
 {
     quicly_address_token_plaintext_t token;
     quicly_datagram_t *packet = NULL;
@@ -2902,7 +2902,13 @@ quicly_datagram_t *quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t 
     ptls_buffer_push_block(&buf, 1, { ptls_buffer_pushv(&buf, dest_cid.base, dest_cid.len); });
     ptls_buffer_push_block(&buf, 1, { ptls_buffer_pushv(&buf, src_cid.base, src_cid.len); });
     ptls_buffer_push_block(&buf, 1, { ptls_buffer_pushv(&buf, odcid.base, odcid.len); });
-    if ((ret = quicly_encrypt_address_token(ctx->tls->random_bytes, token_encrypt_ctx, &buf, buf.off, &token)) != 0)
+    if (token_prefix.len != 0) {
+        assert(token_prefix.len <= buf.capacity - buf.off);
+        memcpy(buf.base + buf.off, token_prefix.base, token_prefix.len);
+        buf.off += token_prefix.len;
+    }
+    if ((ret = quicly_encrypt_address_token(ctx->tls->random_bytes, token_encrypt_ctx, &buf, buf.off - token_prefix.len, &token)) !=
+        0)
         goto Exit;
     assert(!buf.is_allocated);
     packet->data.len = buf.off;

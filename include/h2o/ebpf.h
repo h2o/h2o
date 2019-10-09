@@ -33,6 +33,15 @@ typedef struct st_h2o_ebpf_map_key_t {
     h2o_ebpf_address_t local, remote;
 } h2o_ebpf_map_key_t;
 
+#define H2O_EBPF_QUIC_SEND_RETRY_DEFAULT 0
+#define H2O_EBPF_QUIC_SEND_RETRY_ON 1
+#define H2O_EBPF_QUIC_SEND_RETRY_OFF 2
+
+typedef struct st_h2o_ebpf_map_value_t {
+    uint64_t skip_tracing : 1;
+    uint64_t quic_send_retry : 2;
+} h2o_ebpf_map_value_t;
+
 #define H2O_EBPF_MAP_PATH "/sys/fs/bpf/h2o_map"
 
 #endif

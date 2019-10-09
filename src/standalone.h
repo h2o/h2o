@@ -37,5 +37,8 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
 void ssl_session_ticket_register_setup_barrier(h2o_barrier_t *barrier);
 
 extern quicly_cid_encryptor_t quic_cid_encryptor;
+int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input);
+ptls_aead_context_t *quic_get_address_token_encryptor(uint8_t *prefix);
+extern quicly_generate_resumption_token_t quic_resumption_token_generator;
 
 #endif
