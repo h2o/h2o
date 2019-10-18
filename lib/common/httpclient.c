@@ -24,6 +24,18 @@
 
 const char h2o_httpclient_error_is_eos[] = "end of stream";
 const char h2o_httpclient_error_refused_stream[] = "refused stream";
+const char h2o_httpclient_error_unknown_alpn_protocol[] = "unknown alpn protocol";
+const char h2o_httpclient_error_io[] = "I/O error";
+const char h2o_httpclient_error_connect_timeout[] = "connection timeout";
+const char h2o_httpclient_error_first_byte_timeout[] = "first byte timeout";
+const char h2o_httpclient_error_io_timeout[] = "I/O timeout";
+const char h2o_httpclient_error_invalid_content_length[] = "invalid content-length";
+const char h2o_httpclient_error_flow_control[] = "flow control error";
+const char h2o_httpclient_error_http1_line_folding[] = "line folding of header fields is not supported";
+const char h2o_httpclient_error_http1_unexpected_transfer_encoding[] = "unexpected type of transfer-encoding";
+const char h2o_httpclient_error_http1_parse_failed[] = "failed to parse the response";
+const char h2o_httpclient_error_http2_protocol_violation[] = "protocol violation";
+const char h2o_httpclient_error_internal[] = "internal error";
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
 {
@@ -54,7 +66,7 @@ static void on_connect_error(h2o_httpclient_t *client, const char *errstr)
 static void on_connect_timeout(h2o_timer_t *entry)
 {
     h2o_httpclient_t *client = H2O_STRUCT_FROM_MEMBER(h2o_httpclient_t, _timeout, entry);
-    on_connect_error(client, "connection timeout");
+    on_connect_error(client, h2o_httpclient_error_connect_timeout);
 }
 
 static void do_cancel(h2o_httpclient_t *_client)
@@ -63,7 +75,8 @@ static void do_cancel(h2o_httpclient_t *_client)
     close_client(client);
 }
 
-static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_httpclient_connect_cb cb)
+static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                                       h2o_httpclient_connect_cb on_connect)
 {
 #define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
     size_t sz = SZ_MAX(h2o_httpclient__h1_size, h2o_httpclient__h2_size);
@@ -78,7 +91,7 @@ static h2o_httpclient_t *create_client(h2o_mem_pool_t *pool, void *data, h2o_htt
     client->get_socket = NULL;
     client->update_window = NULL;
     client->write_req = NULL;
-    client->_cb.on_connect = cb;
+    client->_cb.on_connect = on_connect;
     client->_timeout.cb = on_connect_timeout;
 
     return client;
@@ -109,7 +122,7 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
         } else if (memcmp(alpn_proto.base, "http/1.1", alpn_proto.len) == 0) {
             h2o_httpclient__h1_on_connect(client, sock, origin);
         } else {
-            on_connect_error(client, "unknown alpn protocol");
+            on_connect_error(client, h2o_httpclient_error_unknown_alpn_protocol);
         }
     }
 }
@@ -126,7 +139,7 @@ static int should_use_h2(int8_t ratio, int8_t *counter)
 }
 
 void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb cb)
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb on_connect)
 {
     static const h2o_iovec_t both_protos = {H2O_STRLIT("\x02"
                                                        "h2"
@@ -135,7 +148,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
     assert(connpool != NULL);
     h2o_iovec_t alpn_protos = h2o_iovec_init(NULL, 0);
 
-    h2o_httpclient_t *client = create_client(pool, data, ctx, cb);
+    h2o_httpclient_t *client = create_client(pool, data, ctx, on_connect);
     client->connpool = connpool;
     if (_client != NULL)
         *_client = client;

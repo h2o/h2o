@@ -537,10 +537,11 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
 #undef PREFIX
         *p++ = '0' + (version & 0xff);
     } else {
-#define PROTO "HTTP/2"
-        memcpy(p, PROTO, sizeof(PROTO) - 1);
-        p += sizeof(PROTO) - 1;
-#undef PROTO
+#define PREFIX "HTTP/"
+        memcpy(p, PREFIX, sizeof(PREFIX) - 1);
+        p += sizeof(PREFIX) - 1;
+#undef PREFIX
+        *p++ = (version >> 8) + '0';
     }
 
     *p = '\0';
@@ -943,10 +944,4 @@ void h2o_cleanup_thread(void)
     h2o_mem_clear_recycle(&h2o_mem_pool_allocator);
     h2o_mem_clear_recycle(&h2o_http2_wbuf_buffer_prototype.allocator);
     h2o_mem_clear_recycle(&h2o_socket_buffer_prototype.allocator);
-}
-
-int h2o_conn_is_traced(h2o_conn_t *conn)
-{
-    h2o_socket_t *sock = conn->callbacks->get_socket(conn);
-    return sock != NULL ? h2o_socket_is_traced(sock) : 0;
 }

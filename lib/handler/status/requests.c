@@ -69,11 +69,9 @@ static void requests_status_per_thread(void *priv, h2o_context_t *ctx)
         return;
 
     h2o_buffer_init(&cbdata.buffer, &h2o_socket_buffer_prototype);
-    if (ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0) {
-        h2o_buffer_dispose(&cbdata.buffer);
-        return;
-    }
-    if (ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0) {
+    if (ctx->globalconf->http1.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0 ||
+        ctx->globalconf->http2.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0 ||
+        ctx->globalconf->http3.callbacks.foreach_request(ctx, collect_req_status, &cbdata) != 0) {
         h2o_buffer_dispose(&cbdata.buffer);
         return;
     }

@@ -95,7 +95,7 @@ static int test_adjust_notsent_lowat(h2o_socket_t *sock, unsigned notsent_lowat)
 
 static void test_prepare_for_latency_optimization(void)
 {
-    struct st_h2o_socket_ssl_t sock_ssl = {NULL, NULL, NULL, 5 + 8 + 16 /* GCM overhead */};
+    struct st_h2o_socket_ssl_t sock_ssl = {NULL, NULL, NULL, NULL, 5 + 8 + 16 /* GCM overhead */};
     h2o_socket_t sock = {NULL, &sock_ssl};
     h2o_socket_latency_optimization_conditions_t cond = {UINT_MAX, 10, 65535};
 

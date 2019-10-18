@@ -93,10 +93,7 @@
 #endif
 
 #if PICOTLS_USE_DTRACE
-#define PTLS_SHOULD_PROBE(LABEL, tls)                                                                                              \
-    (PTLS_UNLIKELY(PICOTLS_##LABEL##_ENABLED()) &&                                                                                 \
-     (tls->ctx->is_traced == NULL || tls->ctx->is_traced->cb(tls->ctx->is_traced, tls)))
-
+#define PTLS_SHOULD_PROBE(LABEL, tls) (PTLS_UNLIKELY(PICOTLS_##LABEL##_ENABLED()) && !(tls)->skip_tracing)
 #define PTLS_PROBE0(LABEL, tls)                                                                                                    \
     do {                                                                                                                           \
         ptls_t *_tls = (tls);                                                                                                      \
@@ -233,6 +230,7 @@ struct st_ptls_t {
     unsigned send_change_cipher_spec : 1;
     unsigned needs_key_update : 1;
     unsigned key_update_send_request : 1;
+    unsigned skip_tracing : 1;
     /**
      * misc.
      */
@@ -3400,9 +3398,17 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
     for (*psk_index = 0; *psk_index < ch->psk.identities.count; ++*psk_index) {
         struct st_ptls_client_hello_psk_t *identity = ch->psk.identities.list + *psk_index;
         /* decrypt and decode */
+        int can_accept_early_data = 1;
         decbuf.off = 0;
-        if ((tls->ctx->encrypt_ticket->cb(tls->ctx->encrypt_ticket, tls, 0, &decbuf, identity->identity)) != 0)
+        switch (tls->ctx->encrypt_ticket->cb(tls->ctx->encrypt_ticket, tls, 0, &decbuf, identity->identity)) {
+        case 0: /* decrypted */
+            break;
+        case PTLS_ERROR_REJECT_EARLY_DATA: /* decrypted, but early data is rejected */
+            can_accept_early_data = 0;
+            break;
+        default: /* decryption failure */
             continue;
+        }
         if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_server_name, &ticket_key_exchange_id, &ticket_csid,
                                       &ticket_negotiated_protocol, decbuf.base, decbuf.base + decbuf.off) != 0)
             continue;
@@ -3412,7 +3418,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
         if (now - issue_at > (uint64_t)tls->ctx->ticket_lifetime * 1000)
             continue;
         *accept_early_data = 0;
-        if (ch->psk.early_data_indication) {
+        if (ch->psk.early_data_indication && can_accept_early_data) {
             /* accept early-data if abs(diff) between the reported age and the actual age is within += 10 seconds */
             int64_t delta = (now - issue_at) - (identity->obfuscated_ticket_age - age_add);
             if (delta < 0)
@@ -3601,7 +3607,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             server_name = ch.server_name;
         }
         if (tls->ctx->on_client_hello != NULL) {
-            ptls_on_client_hello_parameters_t params = {server_name,
+            ptls_on_client_hello_parameters_t params = {server_name, message,
                                                         {ch.alpn.list, ch.alpn.count},
                                                         {ch.signature_algorithms.list, ch.signature_algorithms.count},
                                                         {ch.cert_compression_algos.list, ch.cert_compression_algos.count},
@@ -4138,6 +4144,7 @@ ptls_t *ptls_new(ptls_context_t *ctx, int is_server)
     *tls = (ptls_t){ctx};
     tls->is_server = is_server;
     tls->send_change_cipher_spec = ctx->send_change_cipher_spec;
+    tls->skip_tracing = ptls_default_skip_tracing;
     if (!is_server) {
         tls->state = PTLS_STATE_CLIENT_HANDSHAKE_START;
         tls->ctx->random_bytes(tls->client_random, sizeof(tls->client_random));
@@ -4272,6 +4279,16 @@ int ptls_is_psk_handshake(ptls_t *tls)
 void **ptls_get_data_ptr(ptls_t *tls)
 {
     return &tls->data_ptr;
+}
+
+int ptls_skip_tracing(ptls_t *tls)
+{
+    return tls->skip_tracing;
+}
+
+void ptls_set_skip_tracing(ptls_t *tls, int skip_tracing)
+{
+    tls->skip_tracing = skip_tracing;
 }
 
 static int handle_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message, int is_end_of_record,
@@ -5054,6 +5071,9 @@ static uint64_t get_time(ptls_get_time_t *self)
 }
 
 ptls_get_time_t ptls_get_time = {get_time};
+#if PICOTLS_USE_DTRACE
+PTLS_THREADLOCAL unsigned ptls_default_skip_tracing = 0;
+#endif
 
 int ptls_is_server(ptls_t *tls)
 {

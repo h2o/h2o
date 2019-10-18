@@ -197,11 +197,15 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     return resp;
 }
 
-static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, size_t inbufcnt)
+static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_sendvec_t *inbufs, size_t inbufcnt)
 {
-    int i;
+    size_t i;
     for (i = 0; i != inbufcnt; ++i) {
-        h2o_buffer_append(&subreq->buf, inbufs[i].base, inbufs[i].len);
+        char *dst = h2o_buffer_reserve(&subreq->buf, inbufs[i].len).base;
+        assert(dst != NULL && "no memory or disk space; FIXME bail out gracefully");
+        if (!(*inbufs[i].callbacks->flatten)(inbufs + i, &subreq->super, h2o_iovec_init(dst, inbufs[i].len), 0))
+            h2o_fatal("FIXME handle error from pull handler");
+        subreq->buf->size += inbufs[i].len;
     }
 }
 
@@ -216,7 +220,7 @@ static mrb_value detach_receiver(struct st_mruby_subreq_t *subreq)
 }
 
 static void send_response_shortcutted(struct st_mruby_subreq_t *subreq);
-static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_iovec_t *inbufs, size_t inbufcnt,
+static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_sendvec_t *inbufs, size_t inbufcnt,
                                 h2o_send_state_t state)
 {
     struct st_mruby_subreq_t *subreq = (void *)_subreq;
@@ -389,9 +393,9 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return conn->remote.len;
 }
 
-static h2o_socket_t *get_socket(h2o_conn_t *conn)
+static int skip_tracing(h2o_conn_t *conn)
 {
-    return NULL;
+    return 1;
 }
 
 static int handle_header_env_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *env_key, h2o_iovec_t value, void *_req)
@@ -590,8 +594,9 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 {
     static const h2o_conn_callbacks_t callbacks = {get_sockname, /* stringify address */
                                                    get_peername, /* ditto */
+                                                   NULL,         /* get ptls */
+                                                   skip_tracing, /* if the connection is target of tracing */
                                                    NULL,         /* push (no push in subrequest) */
-                                                   get_socket,   /* get underlying socket */
                                                    NULL,         /* get debug state */
                                                    {{{NULL}}}};
 

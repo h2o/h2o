@@ -33,9 +33,7 @@
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
-#if H2O_USE_PICOTLS
 #include "picotls.h"
-#endif
 #include "h2o/socket.h"
 #include "h2o/multithread.h"
 
@@ -52,6 +50,10 @@
 #define TCP_NOTSENT_LOWAT 25
 #endif
 
+#if H2O_USE_DTRACE && defined(__linux__)
+#define H2O_USE_EBPF_MAP 1
+#endif
+
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -62,9 +64,7 @@
 struct st_h2o_socket_ssl_t {
     SSL_CTX *ssl_ctx;
     SSL *ossl;
-#if H2O_USE_PICOTLS
     ptls_t *ptls;
-#endif
     int *did_write_in_read; /* used for detecting and closing the connection upon renegotiation (FIXME implement renegotiation) */
     size_t record_overhead;
     struct {
@@ -116,7 +116,6 @@ static socklen_t get_peername_uncached(h2o_socket_t *sock, struct sockaddr *sa);
 /* internal functions called from the backend */
 static const char *decode_ssl_input(h2o_socket_t *sock);
 static void on_write_complete(h2o_socket_t *sock, const char *err);
-static void init_is_traced(h2o_socket_t *sock);
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.c.h"
@@ -235,7 +234,6 @@ const char *decode_ssl_input(h2o_socket_t *sock)
     assert(sock->ssl != NULL);
     assert(sock->ssl->handshake.cb == NULL);
 
-#if H2O_USE_PICOTLS
     if (sock->ssl->ptls != NULL) {
         if (sock->ssl->input.encrypted->size != 0) {
             const char *src = sock->ssl->input.encrypted->bytes, *src_end = src + sock->ssl->input.encrypted->size;
@@ -266,7 +264,6 @@ const char *decode_ssl_input(h2o_socket_t *sock)
         }
         return NULL;
     }
-#endif
 
     while (sock->ssl->input.encrypted->size != 0 || SSL_pending(sock->ssl->ossl)) {
         int rlen;
@@ -310,12 +307,10 @@ static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
 
 static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
 {
-#if H2O_USE_PICOTLS
     if (ssl->ptls != NULL) {
         ptls_free(ssl->ptls);
         ssl->ptls = NULL;
     }
-#endif
     if (ssl->ossl != NULL) {
         if (!SSL_is_server(ssl->ossl)) {
             free(ssl->handshake.client.server_name);
@@ -367,7 +362,6 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         goto Close;
     }
 
-#if H2O_USE_PICOTLS
     if (sock->ssl->ptls != NULL) {
         ptls_buffer_t wbuf;
         uint8_t wbuf_small[32];
@@ -377,9 +371,7 @@ static void shutdown_ssl(h2o_socket_t *sock, const char *err)
         write_ssl_bytes(sock, wbuf.base, wbuf.off);
         ptls_buffer_dispose(&wbuf);
         ret = 1; /* close the socket after sending close_notify */
-    } else
-#endif
-        if (sock->ssl->ossl != NULL) {
+    } else if (sock->ssl->ossl != NULL) {
         ERR_clear_error();
         if ((ret = SSL_shutdown(sock->ssl->ossl)) == -1)
             goto Close;
@@ -607,7 +599,7 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
     can_prepare = 0;
 #else
     if (can_prepare)
-        loop_time = h2o_evloop_get_execution_time(h2o_socket_get_loop(sock));
+        loop_time = h2o_evloop_get_execution_time_millisec(h2o_socket_get_loop(sock));
 #endif
 
     /* obtain TCP states */
@@ -664,7 +656,6 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                 size_t sz = bufs[0].len - off;
                 if (sz > ssl_record_size)
                     sz = ssl_record_size;
-#if H2O_USE_PICOTLS
                 if (sock->ssl->ptls != NULL) {
                     size_t dst_size = sz + ptls_get_record_overhead(sock->ssl->ptls);
                     void *dst = h2o_mem_alloc_pool(&sock->ssl->output.pool, char, dst_size);
@@ -681,9 +672,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
                     }
                     h2o_vector_reserve(&sock->ssl->output.pool, &sock->ssl->output.bufs, sock->ssl->output.bufs.size + 1);
                     sock->ssl->output.bufs.entries[sock->ssl->output.bufs.size++] = h2o_iovec_init(dst, dst_size);
-                } else
-#endif
-                {
+                } else {
                     ret = SSL_write(sock->ssl->ossl, bufs[0].base + off, (int)sz);
                     if (ret != sz) {
                         /* The error happens if SSL_write is called after SSL_read returns a fatal error (e.g. due to corrupt TCP
@@ -753,13 +742,16 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa)
     return len;
 }
 
+ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock)
+{
+    return sock->ssl != NULL ? sock->ssl->ptls : NULL;
+}
+
 const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-#if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL)
             return "TLSv1.3";
-#endif
         if (sock->ssl->ossl != NULL)
             return SSL_get_version(sock->ssl->ossl);
     }
@@ -769,10 +761,8 @@ const char *h2o_socket_get_ssl_protocol_version(h2o_socket_t *sock)
 int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-#if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL)
             return ptls_is_psk_handshake(sock->ssl->ptls);
-#endif
         if (sock->ssl->ossl != NULL)
             return (int)SSL_session_reused(sock->ssl->ossl);
     }
@@ -782,15 +772,13 @@ int h2o_socket_get_ssl_session_reused(h2o_socket_t *sock)
 const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-#if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
             if (cipher != NULL)
                 return cipher->aead->name;
-        } else
-#endif
-            if (sock->ssl->ossl != NULL)
+        } else if (sock->ssl->ossl != NULL) {
             return SSL_get_cipher_name(sock->ssl->ossl);
+        }
     }
     return NULL;
 }
@@ -798,16 +786,14 @@ const char *h2o_socket_get_ssl_cipher(h2o_socket_t *sock)
 int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-#if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             ptls_cipher_suite_t *cipher = ptls_get_cipher(sock->ssl->ptls);
             if (cipher == NULL)
                 return 0;
             return (int)cipher->aead->key_size;
-        } else
-#endif
-            if (sock->ssl->ossl != NULL)
+        } else if (sock->ssl->ossl != NULL) {
             return SSL_get_cipher_bits(sock->ssl->ossl, NULL);
+        }
     }
     return 0;
 }
@@ -815,12 +801,9 @@ int h2o_socket_get_ssl_cipher_bits(h2o_socket_t *sock)
 h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock)
 {
     if (sock->ssl != NULL) {
-#if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             /* FIXME */
-        } else
-#endif
-            if (sock->ssl->ossl != NULL) {
+        } else if (sock->ssl->ossl != NULL) {
             SSL_SESSION *session;
             if (sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_COMPLETE &&
                 (session = SSL_get_session(sock->ssl->ossl)) != NULL) {
@@ -836,17 +819,17 @@ h2o_iovec_t h2o_socket_get_ssl_session_id(h2o_socket_t *sock)
 
 const char *h2o_socket_get_ssl_server_name(const h2o_socket_t *sock)
 {
-  if (sock->ssl != NULL) {
+    if (sock->ssl != NULL) {
 #if H2O_USE_PICOTLS
-      if (sock->ssl->ptls != NULL) {
-          return ptls_get_server_name(sock->ssl->ptls);
-      } else
+        if (sock->ssl->ptls != NULL) {
+            return ptls_get_server_name(sock->ssl->ptls);
+        } else
 #endif
-      if (sock->ssl->ossl != NULL) {
-          return SSL_get_servername(sock->ssl->ossl, TLSEXT_NAMETYPE_host_name);
-      }
-  }
-  return NULL;
+            if (sock->ssl->ossl != NULL) {
+            return SSL_get_servername(sock->ssl->ossl, TLSEXT_NAMETYPE_host_name);
+        }
+    }
+    return NULL;
 }
 
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool)
@@ -875,11 +858,13 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
     }
 }
 
-int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)
+int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check_port)
 {
 #define CMP(a, b)                                                                                                                  \
-    if (a != b)                                                                                                                    \
-    return a < b ? -1 : 1
+    do {                                                                                                                           \
+        if (a != b)                                                                                                                \
+            return a < b ? -1 : 1;                                                                                                 \
+    } while (0)
 
     CMP(x->sa_family, y->sa_family);
 
@@ -891,13 +876,15 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y)
     } else if (x->sa_family == AF_INET) {
         struct sockaddr_in *xin = (void *)x, *yin = (void *)y;
         CMP(ntohl(xin->sin_addr.s_addr), ntohl(yin->sin_addr.s_addr));
-        CMP(ntohs(xin->sin_port), ntohs(yin->sin_port));
+        if (check_port)
+            CMP(ntohs(xin->sin_port), ntohs(yin->sin_port));
     } else if (x->sa_family == AF_INET6) {
         struct sockaddr_in6 *xin6 = (void *)x, *yin6 = (void *)y;
         int r = memcmp(xin6->sin6_addr.s6_addr, yin6->sin6_addr.s6_addr, sizeof(xin6->sin6_addr.s6_addr));
         if (r != 0)
             return r;
-        CMP(ntohs(xin6->sin6_port), ntohs(yin6->sin6_port));
+        if (check_port)
+            CMP(ntohs(xin6->sin6_port), ntohs(yin6->sin6_port));
         CMP(xin6->sin6_flowinfo, yin6->sin6_flowinfo);
         CMP(xin6->sin6_scope_id, yin6->sin6_scope_id);
     } else {
@@ -1009,12 +996,9 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     if (err == NULL) {
-#if H2O_USE_PICOTLS
         if (sock->ssl->ptls != NULL) {
             sock->ssl->record_overhead = ptls_get_record_overhead(sock->ssl->ptls);
-        } else
-#endif
-        {
+        } else {
             const SSL_CIPHER *cipher = SSL_get_current_cipher(sock->ssl->ossl);
             switch (SSL_CIPHER_get_id(cipher)) {
             case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
@@ -1066,7 +1050,6 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
     }
 
     if (sock->ssl->ossl == NULL) {
-#if H2O_USE_PICOTLS
         /* prepare I/O */
         size_t consumed = sock->ssl->input.encrypted->size;
         ptls_buffer_t wbuf;
@@ -1079,7 +1062,14 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
             /* start using picotls if the first packet contains TLS 1.3 CH */
             ptls_context_t *ptls_ctx = h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx);
             if (ptls_ctx != NULL) {
+#if PICOTLS_USE_DTRACE
+                unsigned ptls_skip_tracing_backup = ptls_default_skip_tracing;
+                ptls_default_skip_tracing = sock->_skip_tracing;
+#endif
                 ptls_t *ptls = ptls_new(ptls_ctx, 1);
+#if PICOTLS_USE_DTRACE
+                ptls_default_skip_tracing = ptls_skip_tracing_backup;
+#endif
                 if (ptls == NULL)
                     h2o_fatal("no memory");
                 *ptls_get_data_ptr(ptls) = sock;
@@ -1116,7 +1106,6 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
             return;
         }
         ptls_buffer_dispose(&wbuf);
-#endif
 
         /* fallback to openssl if the attempt failed */
         create_ossl(sock);
@@ -1313,8 +1302,6 @@ void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx)
     /* if necessary, it is the responsibility of the caller to disable the internal cache */
 }
 
-#if H2O_USE_PICOTLS
-
 static int get_ptls_index(void)
 {
     static volatile int index;
@@ -1331,8 +1318,6 @@ void h2o_socket_ssl_set_picotls_context(SSL_CTX *ossl, ptls_context_t *ptls)
 {
     SSL_CTX_set_ex_data(ossl, get_ptls_index(), ptls);
 }
-
-#endif
 
 static void on_dispose_ssl_ctx_session_cache(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
 {
@@ -1371,12 +1356,10 @@ h2o_iovec_t h2o_socket_ssl_get_selected_protocol(h2o_socket_t *sock)
 
     assert(sock->ssl != NULL);
 
-#if H2O_USE_PICOTLS
     if (sock->ssl->ptls != NULL) {
         const char *proto = ptls_get_negotiated_protocol(sock->ssl->ptls);
         return proto != NULL ? h2o_iovec_init(proto, strlen(proto)) : h2o_iovec_init(NULL, 0);
     }
-#endif
 
 #if H2O_USE_ALPN
     if (len == 0)
@@ -1394,10 +1377,8 @@ int h2o_socket_ssl_is_early_data(h2o_socket_t *sock)
 {
     assert(sock->ssl != NULL);
 
-#if H2O_USE_PICOTLS
     if (sock->ssl->ptls != NULL && !ptls_handshake_is_complete(sock->ssl->ptls))
         return 1;
-#endif
     return 0;
 }
 
@@ -1479,11 +1460,10 @@ void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
     counter->average = counter->prev.sum / (sizeof(counter->prev.slots) / sizeof(counter->prev.slots[0]));
 }
 
-#if H2O_USE_DTRACE && defined(__linux__)
+#if H2O_USE_EBPF_MAP
 #include <linux/bpf.h>
 #include <linux/unistd.h>
 #include "h2o-probes.h"
-#include "h2o/ebpf.h"
 #include <sys/stat.h>
 
 static __thread int tracing_map_fd = -1;
@@ -1519,81 +1499,101 @@ static void open_tracing_map(h2o_loop_t *loop)
     tracing_map_fd = syscall(__NR_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
 }
 
-static int lookup_map(const void *key, const void *value)
+static h2o_ebpf_map_value_t lookup_map(const void *key)
 {
     union bpf_attr attr;
+    h2o_ebpf_map_value_t value;
+
     memset(&attr, 0, sizeof(attr));
     attr.map_fd = tracing_map_fd;
     attr.key = (uint64_t)key;
-    attr.value = (uint64_t)value;
-    return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == 0; // return 1 if found, 0 otherwise
+    attr.value = (uint64_t)&value;
+
+    if (syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) != 0)
+        return (h2o_ebpf_map_value_t){0};
+
+    return value;
 }
 
-static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, uint8_t *ip, uint16_t *port)
+static inline int set_ebpf_map_key_tuples(struct sockaddr *sa, h2o_ebpf_address_t *ea)
 {
     if (sa->sa_family == AF_INET) {
         struct sockaddr_in *sin = (void *)sa;
-        memcpy(ip, &sin->sin_addr, sizeof(sin->sin_addr));
-        *port = sin->sin_port;
+        memcpy(ea->ip, &sin->sin_addr, sizeof(sin->sin_addr));
+        ea->port = sin->sin_port;
         return 1;
     } else if (sa->sa_family == AF_INET6) {
         struct sockaddr_in6 *sin = (void *)sa;
-        memcpy(ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
-        *port = sin->sin6_port;
+        memcpy(ea->ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
+        ea->port = sin->sin6_port;
         return 1;
     } else {
         return 0;
     }
 }
 
-static inline int init_ebpf_map_key(h2o_ebpf_map_key_t *key, h2o_socket_t *sock)
+int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
-    struct sockaddr_storage ss;
-    unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
     memset(key, 0, sizeof(*key));
-
-    // fetch sock/peer name and socket type
-    if (h2o_socket_getsockname(sock, (void *)&ss) == 0)
+    if (!set_ebpf_map_key_tuples(local, &key->local))
         return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->source.ip[0], &key->source.port))
+    if (!set_ebpf_map_key_tuples(remote, &key->remote))
         return 0;
-    if (h2o_socket_getpeername(sock, (void *)&ss) == 0)
-        return 0;
-    if (!set_ebpf_map_key_tuples((void *)&ss, &key->destination.ip[0], &key->destination.port))
-        return 0;
-    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0)
-        return 0;
-    key->family = ss.ss_family == AF_INET6 ? 6 : 4;
+    key->family = local->sa_family == AF_INET6 ? 6 : 4;
     key->protocol = sock_type;
     return 1;
 }
 
-void init_is_traced(h2o_socket_t *sock)
+int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
+{
+    h2o_socket_t *sock = _sock;
+    struct sockaddr_storage local, remote;
+    unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
+
+    /* fetch info */
+    if (h2o_socket_getsockname(sock, (void *)&local) == 0)
+        return 0;
+    if (h2o_socket_getpeername(sock, (void *)&remote) == 0)
+        return 0;
+    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0) /* can't the info be cached? */
+        return 0;
+
+    return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
+}
+
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
+                                            void *cbdata)
 {
     // try open map if not opened
-    open_tracing_map(h2o_socket_get_loop(sock));
-    if (tracing_map_fd < 0) {
-        // map is not connected, fallback accepting probe
-        sock->_is_traced = 1;
-        return;
-    }
+    open_tracing_map(loop);
 
-    // define key/vals - we are only interrested in presence of the key, discard values
-    h2o_ebpf_map_key_t key;
-    void *vals = NULL;
-
-    // init key - fallback refusing probe if key can't be initialized
-    if (!init_ebpf_map_key(&key, sock)) {
-        sock->_is_traced = 0;
-        return;
-    }
+    // map is not connected, fallback accepting probe
+    if (tracing_map_fd < 0)
+        return (h2o_ebpf_map_value_t){0};
 
     // lookup map for our key
-    sock->_is_traced = lookup_map(&key, &vals);
+    h2o_ebpf_map_key_t key;
+    if (!init_key(&key, cbdata))
+        return (h2o_ebpf_map_value_t){0};
+    return lookup_map(&key);
 }
+
 #else
-void init_is_traced(h2o_socket_t *sock)
+
+int h2o_socket_ebpf_init_key_raw(struct st_h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
 {
-    sock->_is_traced = 1;
+    h2o_fatal("unimplemented");
 }
+
+int h2o_socket_ebpf_init_key(struct st_h2o_ebpf_map_key_t *key, void *sock)
+{
+    h2o_fatal("unimplemented");
+}
+
+h2o_ebpf_map_value_t h2o_socket_ebpf_lookup(h2o_loop_t *loop, int (*init_key)(struct st_h2o_ebpf_map_key_t *key, void *cbdata),
+                                            void *cbdata)
+{
+    return (h2o_ebpf_map_value_t){0};
+}
+
 #endif

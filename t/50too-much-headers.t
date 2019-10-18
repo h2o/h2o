@@ -24,7 +24,7 @@ hosts:
 EOT
 
 sub test {
-    my ($iter, $data_size, $sleep, $second_end_stream) = @_;
+    my ($iter, $data_size, $sleep) = @_;
     my $output = run_with_h2get_simple($server, <<"EOR");
     req = {
         ":method" => "GET",
@@ -38,7 +38,7 @@ sub test {
 
     h2g.send_headers(req, 1, END_HEADERS)
     (1..$iter).each { |c| h2g.send_data(1, 0, "a" * $data_size) }
-    h2g.send_headers(more, 1, END_HEADERS|END_STREAM)
+    h2g.send_headers(more, 1, END_HEADERS|END_STREAM) # trailer
     $sleep
     h2g.send_headers(more, 1, END_HEADERS|END_STREAM)
 
@@ -48,20 +48,23 @@ sub test {
             puts "timeout"
             exit 1
         end
-        puts "#{f.type}, stream_id:#{f.stream_id}, len:#{f.len}, flags:#{f.flags}"
+        if f.type == 'GOAWAY'
+            puts f.to_s
+        else
+            puts "#{f.type}, stream_id:#{f.stream_id}, len:#{f.len}, flags:#{f.flags}"
+        end
     end
 EOR
 
-    like $output, qr{GOAWAY}, "h2get script got at GOAWAY";
+    like $output, qr{GOAWAY.+(closed|invalid) stream id in HEADERS frame}is, "h2get script got at GOAWAY";
 }
 
 foreach my $iter ((1, 10, 100)) {
     foreach my $sleep (("", "sleep 1")) {
         foreach my $data_size ((1, 10000)) {
-            foreach my $second_end_stream (("true", "false")) {
-                diag("nr DATA packets: $iter, DATA size: $data_size, sleep directive: '$sleep', second END_HEADERS: $second_end_stream");
-                test($iter, $data_size, $sleep, $second_end_stream);
-            }
+            subtest "nr DATA packets: $iter, DATA size: $data_size, sleep directive: '$sleep'" => sub {
+                test($iter, $data_size, $sleep);
+            };
         }
     }
 }

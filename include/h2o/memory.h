@@ -26,6 +26,7 @@
 #include <alloca.h>
 #endif
 #include <assert.h>
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -160,6 +161,7 @@ struct st_h2o_buffer_prototype_t {
     }
 
 typedef H2O_VECTOR(void) h2o_vector_t;
+typedef H2O_VECTOR(uint8_t) h2o_byte_vector_t;
 typedef H2O_VECTOR(h2o_iovec_t) h2o_iovec_vector_t;
 
 extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
@@ -402,6 +404,7 @@ inline void h2o_mem_addref_shared(void *p)
 inline int h2o_mem_release_shared(void *p)
 {
     struct st_h2o_mem_pool_shared_entry_t *entry = H2O_STRUCT_FROM_MEMBER(struct st_h2o_mem_pool_shared_entry_t, bytes, p);
+    assert(entry->refcnt != 0);
     if (--entry->refcnt == 0) {
         if (entry->dispose != NULL)
             entry->dispose(entry->bytes);

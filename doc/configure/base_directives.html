@@ -423,6 +423,11 @@ If omitted, the permission of the socket file will reflect the umask of the call
 </code></pre>
 </div>
 
+<h4 id="listen-quic">Listening to HTTP/3 (QUIC)</h4>
+<p>
+If the <code>type</code> attribute is set to <code>quic</code>, the <code>port</code> attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
+This is an experimental feature introduced in v2.3.0-beta3.
+</p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
@@ -1217,7 +1222,7 @@ hosts:
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2019 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

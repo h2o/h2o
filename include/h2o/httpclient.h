@@ -27,15 +27,62 @@ extern "C" {
 #endif
 
 #include "h2o/header.h"
+#include "h2o/send_state.h"
 #include "h2o/socket.h"
 #include "h2o/socketpool.h"
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
+/**
+ * let's the client uses Firefox-like priority tree
+ */
+typedef enum en_h2o_httpclient_precedence_t {
+    /**
+     * like HTML
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_NORMAL,
+    /**
+     * like blocking CSS, JS
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_BLOCKING,
+    /**
+     * like image
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_NONBLOCKING,
+    /**
+     * like <script async>
+     */
+    H2O_HTTPCLIENT_PRECEDENCE_DELAYED
+} h2o_httpclient_precedence_t;
+
+/**
+ * Additional properties related to the HTTP request being issued.
+ * When the connect callback is being called, the properties of the objects are set to their initial values. Applications MAY alter
+ * the properties to achieve desirable behavior. The reason we require the protocol stacks to initialize the values to their default
+ * values instead of requiring applications to set all the values correctly is to avoid requiring applications making changes
+ * every time a new field is added to the object.
+ */
 typedef struct st_h2o_httpclient_properties_t {
+    /**
+     * When the value is a non-NULL pointer (at the moment, only happens with the HTTP/1 client), the application MAY set it to an
+     * iovec pointing to the payload of the PROXY protocol (i.e., the first line).
+     */
     h2o_iovec_t *proxy_protocol;
+    /**
+     * When the value is a non-NULL pointer (at the moment, only happens with the HTTP/1 client), the application MAY set it to 1 to
+     * indicate that the request body should be encoded using the chunked transfer-encoding.
+     */
     int *chunked;
+    /**
+     * When the value is a non-NULL pointer (at the moment, only happens with the HTTP/1 client), the application MAY set it to the
+     * value of the connection header field to be sent to the server. This can be used for upgrading an HTTP/1.1 connection.
+     */
     h2o_iovec_t *connection_header;
+    /**
+     * The precedence of the HTTP request being issued.
+     */
+    h2o_httpclient_precedence_t precedence;
+
     h2o_iovec_t *proto;
 } h2o_httpclient_properties_t;
 
@@ -43,7 +90,7 @@ typedef struct st_h2o_httpclient_body_hints_t {
     size_t *bytes_left_in_chunk;
 } h2o_httpclient_body_hints_t;
 
-typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, int is_end_stream);
+typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, size_t written, h2o_send_state_t send_state);
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, h2o_httpclient_body_hints_t *hints, const char *errstr);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr, int version, int status,
                                                          h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers,
@@ -59,6 +106,8 @@ typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *cl
                                                             h2o_httpclient_properties_t *props, h2o_url_t *origin);
 typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg,
                                                h2o_header_t *headers, size_t num_headers);
+
+typedef void (*h2o_httpclient_finish_cb)(h2o_httpclient_t *client);
 
 typedef struct st_h2o_httpclient_connection_pool_t {
     /**
@@ -86,11 +135,17 @@ typedef struct st_h2o_httpclient_ctx_t {
     struct {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         uint32_t max_concurrent_streams;
-
-        /* for weighted fair queueing */
+        /**
+         * ratio of requests to use HTTP/2; between 0 to 100
+         */
         int8_t ratio;
         int8_t counter; /* default is -1. then it'll be initialized by 50 / ratio */
     } http2;
+
+    /**
+     * 1-to-(0|1) relationship; NULL when h3 is not used
+     */
+    struct st_h2o_http3_ctx_t *http3;
 
 } h2o_httpclient_ctx_t;
 
@@ -205,6 +260,18 @@ typedef struct st_h2o_httpclient__h2_conn_t {
 
 extern const char h2o_httpclient_error_is_eos[];
 extern const char h2o_httpclient_error_refused_stream[];
+extern const char h2o_httpclient_error_unknown_alpn_protocol[];
+extern const char h2o_httpclient_error_io[];
+extern const char h2o_httpclient_error_connect_timeout[];
+extern const char h2o_httpclient_error_first_byte_timeout[];
+extern const char h2o_httpclient_error_io_timeout[];
+extern const char h2o_httpclient_error_invalid_content_length[];
+extern const char h2o_httpclient_error_flow_control[];
+extern const char h2o_httpclient_error_http1_line_folding[];
+extern const char h2o_httpclient_error_http1_unexpected_transfer_encoding[];
+extern const char h2o_httpclient_error_http1_parse_failed[];
+extern const char h2o_httpclient_error_http2_protocol_violation[];
+extern const char h2o_httpclient_error_internal[];
 
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
@@ -213,7 +280,9 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
  * TODO: create H1- or H2-specific connect function that works without the connection pool?
  */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
-                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb cb);
+                            h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, h2o_httpclient_connect_cb on_connect);
+void h2o_httpclient_connect_with_socket(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                            h2o_socket_t *sock, h2o_httpclient_connect_cb cb);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 extern const size_t h2o_httpclient__h1_size;
@@ -222,7 +291,16 @@ void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock,
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
 
-void h2o_httpclient_connect_with_socket(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx, h2o_socket_t *sock, h2o_httpclient_connect_cb cb);
+#ifdef quicly_h /* create http3client.h? */
+
+#include "h2o/http3_common.h"
+
+void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
+                               h2o_url_t *target, h2o_httpclient_connect_cb cb);
+void h2o_httpclient_http3_notify_connection_update(h2o_http3_ctx_t *ctx, h2o_http3_conn_t *conn);
+extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
+
+#endif
 
 #ifdef __cplusplus
 }

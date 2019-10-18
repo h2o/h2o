@@ -37,6 +37,7 @@ typedef struct st_h2o_token_flags_t {
     unsigned char http2_should_reject : 1;
     unsigned char copy_for_push_request : 1;
     unsigned char dont_compress : 1; /* consult `h2o_header_t:dont_compress` as well */
+    unsigned char likely_to_repeat : 1;
 } h2o_token_flags_t;
 
 /**
@@ -54,6 +55,14 @@ typedef struct st_h2o_hpack_static_table_entry_t {
     const h2o_token_t *name;
     const h2o_iovec_t value;
 } h2o_hpack_static_table_entry_t;
+
+/**
+ * qpack static tables entries
+ */
+typedef struct st_h2o_qpack_static_table_entry_t {
+    const h2o_token_t *name;
+    const h2o_iovec_t value;
+} h2o_qpack_static_table_entry_t;
 
 #ifndef H2O_MAX_TOKENS
 #define H2O_MAX_TOKENS 100

@@ -23,6 +23,7 @@
 #define h2o__standalone_h
 
 #include <openssl/ssl.h>
+#include "quicly.h"
 
 #if defined(SSL_CTRL_SET_TLSEXT_TICKET_KEY_CB) && !defined(OPENSSL_NO_TLSEXT)
 #define H2O_USE_SESSION_TICKETS 1
@@ -33,5 +34,11 @@
 void init_openssl(void);
 void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts);
 int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node);
+void ssl_session_ticket_register_setup_barrier(h2o_barrier_t *barrier);
+
+extern quicly_cid_encryptor_t quic_cid_encryptor;
+int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input);
+ptls_aead_context_t *quic_get_address_token_encryptor(uint8_t *prefix);
+extern quicly_generate_resumption_token_t quic_resumption_token_generator;
 
 #endif

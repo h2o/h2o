@@ -35,6 +35,11 @@ struct st_duration_stats_t {
     struct gkc_summary *process_time;
     struct gkc_summary *response_time;
     struct gkc_summary *total_time;
+
+    /**
+     * average event loop latency per worker thread
+     */
+    H2O_VECTOR(uint64_t) evloop_latency_nanosec;
 };
 
 struct st_duration_agg_stats_t {
@@ -64,6 +69,13 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
         ADD_DURATION(response_time);
         ADD_DURATION(total_time);
 #undef ADD_DURATION
+
+#if !H2O_USE_LIBUV
+        h2o_vector_reserve(NULL, &agg_stats->stats.evloop_latency_nanosec, agg_stats->stats.evloop_latency_nanosec.size + 1);
+        agg_stats->stats.evloop_latency_nanosec.entries[agg_stats->stats.evloop_latency_nanosec.size] =
+            h2o_evloop_get_execution_time_nanosec(ctx->loop);
+        agg_stats->stats.evloop_latency_nanosec.size++;
+#endif
         pthread_mutex_unlock(&agg_stats->mutex);
     }
 }
@@ -77,6 +89,7 @@ static void duration_stats_init(struct st_duration_stats_t *stats)
     stats->process_time = gkc_summary_alloc(GK_EPSILON);
     stats->response_time = gkc_summary_alloc(GK_EPSILON);
     stats->total_time = gkc_summary_alloc(GK_EPSILON);
+    memset(&stats->evloop_latency_nanosec, 0, sizeof(stats->evloop_latency_nanosec));
 }
 
 static void *durations_status_init(void)
@@ -100,6 +113,7 @@ static void duration_stats_free(struct st_duration_stats_t *stats)
     gkc_summary_free(stats->process_time);
     gkc_summary_free(stats->response_time);
     gkc_summary_free(stats->total_time);
+    free(stats->evloop_latency_nanosec.entries);
 }
 
 static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
@@ -125,11 +139,22 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
             "request-total-time") "," DURATION_FMT("process-time") "," DURATION_FMT("response-time") "," DURATION_FMT("duration"),
         DURATION_VALS(connect_time), DURATION_VALS(header_time), DURATION_VALS(body_time), DURATION_VALS(request_total_time),
         DURATION_VALS(process_time), DURATION_VALS(response_time), DURATION_VALS(total_time));
-
-#undef BUFSIZE
 #undef DURATION_FMT
 #undef DURATION_VALS
-
+    char *delim = "";
+    ret.len += sprintf(ret.base + ret.len, ",\n\"evloop-latency-nanosec\": [");
+    size_t i;
+    for (i = 0; i < agg_stats->stats.evloop_latency_nanosec.size; i++) {
+        size_t len = snprintf(NULL, 0, "%s%" PRIu64, delim, agg_stats->stats.evloop_latency_nanosec.entries[i]);
+        /* require that there's enough space for the closing "]\0" */
+        if (ret.len + len + 1 >= BUFSIZE)
+            break;
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%s%" PRIu64, delim,
+                            agg_stats->stats.evloop_latency_nanosec.entries[i]);
+        delim = ",";
+    }
+    ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
+#undef BUFSIZE
     duration_stats_free(&agg_stats->stats);
     pthread_mutex_destroy(&agg_stats->mutex);
 
@@ -163,14 +188,14 @@ static void stat_access(h2o_logger_t *_self, h2o_req_t *req)
 #undef ADD_OBSERVATION
 }
 
-void on_context_init(struct st_h2o_logger_t *self, h2o_context_t *ctx)
+static void on_context_init(struct st_h2o_logger_t *self, h2o_context_t *ctx)
 {
     struct st_duration_stats_t *duration_stats = h2o_mem_alloc(sizeof(struct st_duration_stats_t));
     duration_stats_init(duration_stats);
     h2o_context_set_logger_context(ctx, self, duration_stats);
 }
 
-void on_context_dispose(struct st_h2o_logger_t *self, h2o_context_t *ctx)
+static void on_context_dispose(struct st_h2o_logger_t *self, h2o_context_t *ctx)
 {
     struct st_duration_stats_t *duration_stats;
     duration_stats = h2o_context_get_logger_context(ctx, self);

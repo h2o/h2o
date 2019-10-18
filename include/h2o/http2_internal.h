@@ -97,8 +97,8 @@ struct st_h2o_http2_stream_t {
         size_t bytes_unnotified;
     } input_window;
     h2o_http2_priority_t received_priority;
-    H2O_VECTOR(h2o_iovec_t) _data;
-    h2o_ostream_pull_cb _pull_cb;
+    H2O_VECTOR(h2o_sendvec_t) _data;
+    size_t _data_off; /* offset within _data.entries[0] */
     /**
      * points to http2_conn_t::num_streams::* in which the stream is counted
      */
@@ -117,11 +117,15 @@ struct st_h2o_http2_stream_t {
     /**
      * if the response body is streaming
      */
-    unsigned _conn_stream_in_progress : 1;
+    unsigned _req_streaming_in_progress : 1;
     /**
      *  steate of the ostream, only used in push mode
      */
     h2o_send_state_t send_state;
+    /**
+     * request body buffer
+     */
+    h2o_buffer_t *req_body;
     /**
      * the request object; placed at last since it is large and has it's own ctor
      */
@@ -155,7 +159,7 @@ struct st_h2o_http2_conn_t {
         h2o_http2_conn_num_streams_t pull;
         h2o_http2_conn_num_streams_t push;
         uint32_t blocked_by_server;
-        uint32_t _request_body_in_progress;
+        uint32_t _req_streaming_in_progress;
     } num_streams;
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
