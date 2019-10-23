@@ -210,25 +210,25 @@ static struct {
     char *crash_handler;
     int crash_handler_wait_pipe_close;
 } conf = {
-    {NULL},                                 /* globalconf */
-    RUN_MODE_WORKER,                        /* dry-run */
-    {NULL},                                 /* server_starter */
-    NULL,                                   /* listeners */
-    0,                                      /* num_listeners */
-    NULL,                                   /* pid_file */
-    NULL,                                   /* error_log */
-    1024,                                   /* max_connections */
-    INT_MAX,                                /* max_quic_connections (INT_MAX = i.e., allow up to max_connections) */
-    {NULL},                                 /* thread_map, initialized in main() */
-    {0},                                    /* .quic = {num_threads (0 defaults to all), conn_callbacks (initialized in main()} */
-    0,                                      /* tfo_queues, initialized in main() */
-    0,                                      /* launch_time initialized in main() */
-    NULL,                                   /* thread_ids */
-    0,                                      /* shutdown_requested */
-    H2O_BARRIER_INITIALIZER(SIZE_MAX),      /* startup_sync_barrier */
-    {{0}},                                  /* state */
-    "share/h2o/annotate-backtrace-symbols", /* crash_handler */
-    0,                                      /* crash_handler_wait_pipe_close */
+    .globalconf = { 0 },
+    .run_mode = RUN_MODE_WORKER,
+    .server_starter = { 0 },
+    .listeners = NULL,
+    .num_listeners = 0,
+    .pid_file = NULL,
+    .error_log = NULL,
+    .max_connections = 1024,
+    .max_quic_connections = INT_MAX,        /* (INT_MAX = i.e., allow up to max_connections) */
+    .thread_map = { 0 },                    /* initialized in main() */
+    .quic = { 0 },                          /* 0 defaults to all, conn_callbacks (initialized in main() */
+    .tfo_queues = 0,                        /* initialized in main() */
+    .launch_time = 0,                       /* initialized in main() */
+    .threads =  NULL,
+    .shutdown_requested = 0,
+    .startup_sync_barrier = H2O_BARRIER_INITIALIZER(SIZE_MAX),
+    .state = {{ 0 }},
+    .crash_handler = "share/h2o/annotate-backtrace-symbols",
+    .crash_handler_wait_pipe_close = 0,
 };
 
 static neverbleed_t *neverbleed = NULL;
@@ -531,35 +531,49 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     STACK_OF(X509) * cert_chain;
     int ret;
 
-    *pctx = (struct st_fat_context_t){{ptls_openssl_random_bytes,
-                                       &ptls_get_time,
-                                       key_exchanges,
-                                       ptls_openssl_cipher_suites,
-                                       {NULL, 0},       /* certificates (filled later) */
-                                       NULL,            /* ESNI context (filled later) */
-                                       &pctx->ch.super, /* on_client_hello */
-                                       &pctx->ec.super, /* emit_certificate */
-                                       &pctx->sc.super, /* sign_certificate */
-                                       NULL,            /* verify_certificate */
-                                       0,               /* ticket_lifetime (initialized alongside encrypt_ticket) */
-                                       8192,            /* max_early_data_size */
-                                       NULL,            /* obsolete */
-                                       1,               /* require_dhe_on_psk */
-                                       0,               /* use_exporter */
-                                       0,               /* send_change_cipher_spec (FIXME set this?) */
-                                       0,               /* require_client_authentication */
-                                       0,               /* omit_end_of_early_data */
-                                       NULL,            /* encrypt_ticket (initialized later) */
-                                       NULL,            /* save_ticket (initialized later) */
-                                       NULL,            /* log_event */
-                                       NULL,            /* update_open_count */
-                                       NULL,            /* update_traffic_key */
-                                       NULL,            /* decompress_certificate */
-                                       NULL,            /* update_esni_key */
-                                       NULL},           /* on_extension */
-                                      {{on_client_hello_ptls}, listener},
-                                      {{on_emit_certificate_ptls}, ssl_config}};
+    *pctx = (struct st_fat_context_t){
+        .ctx = {
+            .random_bytes = ptls_openssl_random_bytes,
+            .get_time = &ptls_get_time,
+            .key_exchanges = key_exchanges,
+            .cipher_suites = ptls_openssl_cipher_suites,
+            .certificates = { 0 },              /* fill later */
+            .esni = NULL,                       /* fill later */
+            .on_client_hello = &pctx->ch.super,
+            .emit_certificate = &pctx->ec.super,
+            .sign_certificate = &pctx->sc.super,
+            .verify_certificate = NULL,
+            .ticket_lifetime = 0,               /* initialized alongside encrypt_ticket */
+            .max_early_data_size = 8192,
+            .hkdf_label_prefix__obsolete = NULL,
+            .require_dhe_on_psk = 1,
+            .use_exporter = 0,
+            .send_change_cipher_spec = 0,       /* FIXME set this? */
+            .require_client_authentication = 0,
+            .omit_end_of_early_data = 0,
+            .encrypt_ticket = NULL,             /* initialized later */
+            .save_ticket = NULL,                /* initialized later */
+            .log_event = NULL,
+            .update_open_count = NULL,
+            .update_traffic_key = NULL,
+            .decompress_certificate = NULL,
+            .update_esni_key = NULL,
+            .on_extension = NULL,
 
+        },
+        .ch = {
+            .listener = listener,
+            .super = {
+                .cb = on_client_hello_ptls,
+            },
+        },
+        .ec = {
+            .conf = ssl_config,
+            .super = {
+                .cb = on_emit_certificate_ptls,
+            },
+        },
+    };
     { /* obtain key and cert (via fake connection for libressl compatibility) */
         SSL *fakeconn = SSL_new(ssl_ctx);
         assert(fakeconn != NULL);
