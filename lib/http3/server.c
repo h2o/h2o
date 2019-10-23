@@ -1412,17 +1412,19 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                                           int skip_tracing, const h2o_http3_conn_callbacks_t *h3_callbacks)
 {
     static const h2o_conn_callbacks_t conn_callbacks = {
-        get_sockname,
-        get_peername,
-        get_ptls,
-        get_skip_tracing,
-        NULL, /* push */
-        NULL, /* get debug state */
-        {{
-            {log_tls_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-            {NULL},                                                                                      /* http1 */
-            {NULL}                                                                                       /* http2 */
-        }}                                                                                               /* loggers */
+        .get_sockname = get_sockname,
+        .get_peername = get_peername,
+        .get_ptls = get_ptls,
+        .skip_tracing = get_skip_tracing,
+        .log_ = {{
+            .ssl = {
+              .protocol_version = log_tls_protocol_version,
+              .session_reused = log_session_reused,
+              .cipher = log_cipher,
+              .cipher_bits = log_cipher_bits,
+              .session_id = log_session_id,
+            },
+        }},
     };
 
     /* setup the structure */

@@ -592,13 +592,11 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
 
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env, int is_reprocess)
 {
-    static const h2o_conn_callbacks_t callbacks = {get_sockname, /* stringify address */
-                                                   get_peername, /* ditto */
-                                                   NULL,         /* get ptls */
-                                                   skip_tracing, /* if the connection is target of tracing */
-                                                   NULL,         /* push (no push in subrequest) */
-                                                   NULL,         /* get debug state */
-                                                   {{{NULL}}}};
+    static const h2o_conn_callbacks_t callbacks = {
+        .get_sockname = get_sockname,  /* stringify address */
+        .get_peername = get_peername,  /* ditto */
+        .skip_tracing = skip_tracing,  /* if the connection is target of tracing */
+    };
 
     mrb_state *mrb = ctx->shared->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
