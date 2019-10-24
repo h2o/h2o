@@ -6,6 +6,7 @@ use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
 use IO::Socket::INET;
 use IO::Socket::SSL;
+use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use Net::EmptyPort qw(check_port empty_port);
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -513,6 +514,38 @@ sub spawn_h2_server {
         }
     });
     return $server;
+}
+
+sub find_blackhole_ip {
+    my %ips;
+    my $port = $_[0] || 23;
+    my $blackhole_ip = undef;
+    my $poll = IO::Poll->new();
+    my $start = [ Time::HiRes::gettimeofday() ];
+
+    foreach my $ip ('10.0.0.1', '192.168.0.1', '172.16.0.1', '240.0.0.1', '192.0.2.0') {
+        my $sock = IO::Socket::INET->new(Blocking => 0, PeerPort => $port, PeerAddr => $ip);
+        $ips{$sock} = $ip;
+        $poll->mask($sock => POLLOUT|POLLIN|POLLERR|POLLHUP);
+    }
+    while (scalar($poll->handles()) > 0 and Time::HiRes::tv_interval($start) < 2.00) {
+        if ($poll->poll(.1) > 0) {
+            foreach my $sock ($poll->handles(POLLOUT|POLLIN|POLLERR|POLLHUP)) {
+                delete($ips{$sock});
+                $poll->remove($sock);
+                $sock->close()
+            }
+        }
+    }
+    if (scalar($poll->handles()) > 0) {
+        $blackhole_ip = $ips{(keys %ips)[rand(keys %ips)]}
+    }
+    foreach my $sock ($poll->handles()) {
+        $poll->remove($sock);
+        $sock->close();
+    }
+    die unless $poll->handles() == 0;
+    return $blackhole_ip;
 }
 
 1;
