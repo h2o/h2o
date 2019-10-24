@@ -373,6 +373,7 @@ EOT
 };
 
 subtest 'connect timeout' => sub {
+    my $blackhole = t::Util::find_blackhole_ip();
     my $spawner = sub {
         my $conf = <<"EOT";
 num-threads: 1
@@ -383,7 +384,7 @@ hosts:
         mruby.handler: |
           proc {|env|
             # if query string is empty, wait forever
-            redis = H2O::Redis.new(:host => '192.0.2.0', :port => 6379, :connect_timeout => env['QUERY_STRING'])
+            redis = H2O::Redis.new(:host => '$blackhole', :port => 6379, :connect_timeout => env['QUERY_STRING'])
             begin
               redis.get('hoge').join
             rescue H2O::Redis::ConnectTimeoutError
