@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use IO::Socket::INET;
 use JSON;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port empty_port find_blackhole_ip);
 use Scope::Guard qw/scope_guard/;
 use Time::HiRes;
 use Test::More;
@@ -373,7 +373,7 @@ EOT
 };
 
 subtest 'connect timeout' => sub {
-    my $blackhole = t::Util::find_blackhole_ip();
+    my $blackhole = find_blackhole_ip(6379);
     my $spawner = sub {
         my $conf = <<"EOT";
 num-threads: 1

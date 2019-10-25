@@ -14,7 +14,7 @@ use Protocol::HTTP2::Connection;
 use Protocol::HTTP2::Constants;
 use Scope::Guard qw(scope_guard);
 use Test::More;
-use Time::HiRes qw(sleep);
+use Time::HiRes qw(sleep gettimeofday tv_interval);
 
 use base qw(Exporter);
 our @EXPORT = qw(ASSETS_DIR DOC_ROOT bindir run_as_root server_features exec_unittest exec_mruby_unittest spawn_server spawn_h2o spawn_h2o_raw empty_ports create_data_file md5_file prog_exists run_prog openssl_can_negotiate curl_supports_http2 run_with_curl h2get_exists run_with_h2get run_with_h2get_simple one_shot_http_upstream wait_debugger spawn_forked spawn_h2_server);
@@ -521,14 +521,14 @@ sub find_blackhole_ip {
     my $port = $_[0] || 23;
     my $blackhole_ip = undef;
     my $poll = IO::Poll->new();
-    my $start = [ Time::HiRes::gettimeofday() ];
+    my $start = [ gettimeofday() ];
 
     foreach my $ip ('10.0.0.1', '192.168.0.1', '172.16.0.1', '240.0.0.1', '192.0.2.0') {
         my $sock = IO::Socket::INET->new(Blocking => 0, PeerPort => $port, PeerAddr => $ip);
         $ips{$sock} = $ip;
         $poll->mask($sock => POLLOUT|POLLIN|POLLERR|POLLHUP);
     }
-    while (scalar($poll->handles()) > 0 and Time::HiRes::tv_interval($start) < 2.00) {
+    while (scalar($poll->handles()) > 0 and tv_interval($start) < 2.00) {
         if ($poll->poll(.1) > 0) {
             foreach my $sock ($poll->handles(POLLOUT|POLLIN|POLLERR|POLLHUP)) {
                 delete($ips{$sock});
