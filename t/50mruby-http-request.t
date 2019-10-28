@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port check_port find_blackhole_ip);
+use Net::EmptyPort qw(empty_port check_port);
 use Test::More;
 use t::Util;
 
@@ -542,7 +542,7 @@ EOT
 };
 
 subtest 'timeout' => sub {
-    my $blackhole = find_blackhole_ip(443);
+    my $blackhole = t::Util::find_blackhole_ip(443);
     subtest 'connect timeout' => sub {
         my $server = spawn_h2o(<< "EOT");
 proxy.timeout.connect: 100
