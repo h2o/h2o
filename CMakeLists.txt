@@ -70,7 +70,7 @@ return 0;
 }" ARCH_SUPPORTS_64BIT_ATOMICS)
 
 CMAKE_PUSH_CHECK_STATE()
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+SET(CMAKE_C_FLAGS "-std=c99 ${CMAKE_C_FLAGS} -pthread")
 CHECK_C_SOURCE_COMPILES("
 #define _GNU_SOURCE
 #include <sched.h>

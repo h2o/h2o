@@ -853,7 +853,7 @@ typedef struct st_h2o_conn_callbacks_t {
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
     } log_;
-} h2o_conn_callbacks_t;
+} __attribute__ ((designated_init)) h2o_conn_callbacks_t;
 
 /**
  * basic structure of an HTTP connection (HTTP/1, HTTP/2, etc.)
