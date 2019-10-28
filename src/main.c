@@ -209,7 +209,7 @@ static struct {
     } state;
     char *crash_handler;
     int crash_handler_wait_pipe_close;
-} __attribute__ ((designated_init)) conf = {
+} __designated_init__ conf = {
     .globalconf = { 0 },
     .run_mode = RUN_MODE_WORKER,
     .server_starter = { 0 },

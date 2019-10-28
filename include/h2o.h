@@ -56,6 +56,12 @@ extern "C" {
 #include "h2o/http2_common.h"
 #include "h2o/send_state.h"
 
+#ifdef __clang__
+#define __designated_init__ /* attr not supported by clang */
+#else
+#define __designated_init__ __attribute__((designated_init))
+#endif
+
 #ifndef H2O_USE_BROTLI
 /* disabled for all but the standalone server, since the encoder is written in C++ */
 #define H2O_USE_BROTLI 0
@@ -853,7 +859,7 @@ typedef struct st_h2o_conn_callbacks_t {
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
     } log_;
-} __attribute__ ((designated_init)) h2o_conn_callbacks_t;
+} __designated_init__ h2o_conn_callbacks_t;
 
 /**
  * basic structure of an HTTP connection (HTTP/1, HTTP/2, etc.)
