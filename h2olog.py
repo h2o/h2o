@@ -26,6 +26,14 @@ struct req_line_t {
     char header_name[MAX_STR_LEN];
     char header_value[MAX_STR_LEN];
 };
+
+int trace_receive_req(void *ctx) {
+    return 0;
+}
+
+int trace_receive_req_header(void *ctx) {
+    return 0;
+}
 """
 
 try:
@@ -40,3 +48,9 @@ except getopt.error as msg:
 
 if h2o_pid == 0:
     sys.exit("USAGE: h2olog -p PID")
+
+u = USDT(pid=int(h2o_pid))
+u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
+u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
+
+b = BPF(text=bpf, usdt_contexts=[u])
