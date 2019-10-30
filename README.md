@@ -5,5 +5,7 @@
 ## Quickstart
 
 ```
-$ h2olog -p $(pgrep -o h2o)
+$ sudo h2olog -p $(pgrep -o h2o)
 ```
+
+Root privilege is required to interact with the BPF virtual machine.
