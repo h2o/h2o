@@ -48,6 +48,12 @@ int trace_receive_req_header(void *ctx) {
 }
 """
 
+def print_req_line(cpu, data, size):
+    line = b["reqbuf"].event(data)
+    if line.http_version:
+        v = "HTTP/%d.%d" % (line.http_version / 256, line.http_version % 256)
+        print("%u %u: %s" % (line.conn_id, line.req_id, v))
+
 try:
     h2o_pid = 0
     opts, args = getopt.getopt(sys.argv[1:], 'p:')
@@ -66,7 +72,7 @@ u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
 u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
 
 b = BPF(text=bpf, usdt_contexts=[u])
-b["reqbuf"].open_perf_buffer(None)
+b["reqbuf"].open_perf_buffer(print_req_line)
 
 while 1:
     try:
