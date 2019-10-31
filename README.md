@@ -23,6 +23,11 @@ Root privilege is required to interact with the BPF virtual machine.
 - [BCC](https://iovisor.github.io/bcc/) (BPF Compiler Collection) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
 - Root privilege to execute the program
 
+## Program Anatomy
+
+h2olog is a [BCC](https://github.com/iovisor/bcc) based single-file [Python](https://www.python.org/) program ([learn more](https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md#bcc-python)).
+This might change in the future (e.g. switch to [bpftrace](https://github.com/iovisor/bpftrace)), but the same CLI interface will be kept.
+
 ## TODO
 
 - Option for output filtering
