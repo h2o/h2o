@@ -6,6 +6,13 @@
 
 ```
 $ sudo h2olog -p $(pgrep -o h2o)
+
+888 1: HTTP/2.0
+888 1: :authority torumk.com
+888 1: :method GET
+888 1: :path /
+888 1: :scheme https
+... and more ...
 ```
 
 Root privilege is required to interact with the BPF virtual machine.
