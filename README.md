@@ -22,3 +22,8 @@ Root privilege is required to interact with the BPF virtual machine.
 - H2O server built after [886db137](https://github.com/h2o/h2o/pull/2057/commits/886db13791bb03794901710974fb52cd1238968e)
 - [BCC](https://iovisor.github.io/bcc/) (BPF Compiler Collection) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
 - Root privilege to execute the program
+
+## TODO
+
+- Option for output filtering
+- Option to redirect the output to a file
