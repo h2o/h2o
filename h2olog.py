@@ -26,8 +26,20 @@ struct req_line_t {
     char header_name[MAX_STR_LEN];
     char header_value[MAX_STR_LEN];
 };
+BPF_PERF_OUTPUT(reqbuf);
 
 int trace_receive_req(void *ctx) {
+    struct req_line_t line = {};
+    uint64_t conn_id, req_id;
+    uint32_t http_version;
+
+    bpf_usdt_readarg(1, ctx, &line.conn_id);
+    bpf_usdt_readarg(2, ctx, &line.req_id);
+    bpf_usdt_readarg(3, ctx, &line.http_version);
+
+    if (reqbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
     return 0;
 }
 
@@ -54,3 +66,10 @@ u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
 u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
 
 b = BPF(text=bpf, usdt_contexts=[u])
+b["reqbuf"].open_perf_buffer(None)
+
+while 1:
+    try:
+        b.perf_buffer_poll()
+    except KeyboardInterrupt:
+        exit()
