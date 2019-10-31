@@ -83,6 +83,8 @@
 
 #define H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS 10
 
+#define H2O_DEFAULT_PACKET_TIMESTAMPING_RATE 10000
+
 struct listener_ssl_config_t {
     H2O_VECTOR(h2o_iovec_t) hostnames;
     char *certificate_file;
@@ -118,6 +120,9 @@ struct listener_config_t {
         unsigned send_retry : 1;
     } quic;
     int proxy_protocol;
+    int timestamping;
+    long long timestamping_rate;
+    long long timestamping_rate_counter;
 };
 
 struct listener_ctx_t {
@@ -923,7 +928,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     return NULL;
 }
 
-static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol)
+static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol, int timestamping, long long timestamping_rate)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -939,6 +944,15 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     listener->proxy_protocol = proxy_protocol;
     memset(&listener->quic, 0, sizeof(listener->quic));
+
+#if defined(__linux__)
+    listener->timestamping = timestamping;
+    listener->timestamping_rate = timestamping_rate;
+    listener->timestamping_rate_counter = 0;
+#else /* !defined(__linux__) */
+    listener->timestamping = 0;
+    listener->timestamping_rate = 0;
+#endif /* defined(__linux__) */
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -1043,7 +1057,7 @@ ErrorExit:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int timestamping)
 {
     int fd;
 
@@ -1055,6 +1069,21 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
             goto Error;
     }
+
+   {
+        int flag = 1;
+
+        if (timestamping) {
+#if defined(__linux__)
+            if (setsockopt(fd, SOL_SOCKET, SO_TIMESTAMPNS, &flag, sizeof(flag)) != 0) {
+                goto Error;
+            }
+#else /* !defined(__linux__) */
+            fprintf(stderr, "[warning] cannot set SO_TIMESTAMPNS because the platform does not support it\n");
+#endif /* defined(__linux__) */
+        }
+    }
+
 #ifdef IPV6_V6ONLY
     /* set IPv6only */
     if (domain == AF_INET6) {
@@ -1173,6 +1202,8 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL;
     int proxy_protocol = 0;
+    int packet_timestamping_enabled = 0;
+    long long packet_timestamping_rate = 0;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -1180,10 +1211,10 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node;
-        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m",
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **packet_timestamping_node, **packet_timestamping_rate_node;
+        if (h2o_configurator_parse_mapping(cmd, node, "port:s", "host:s,type:s,owner:s,permission:*,ssl:m,proxy-protocol:*,quic:m,packet-timestamping:s,packet-timestamping-sample-rate:s",
                                            &port_node, &host_node, &type_node, &owner_node, &permission_node, &ssl_node,
-                                           &proxy_protocol_node, &quic_node) != 0)
+                                           &proxy_protocol_node, &quic_node, &packet_timestamping_node, &packet_timestamping_rate_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -1196,6 +1227,38 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
             return -1;
+        if (packet_timestamping_node != NULL) {
+            if ((*packet_timestamping_node)->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, node, "`packet-timestamping` must be a string");
+                return -1;
+            }
+            if (strcasecmp((*packet_timestamping_node)->data.scalar, "ON") == 0) {
+                packet_timestamping_enabled = 1;
+            } else if (strcasecmp((*packet_timestamping_node)->data.scalar, "OFF") == 0) {
+                packet_timestamping_enabled = 0;
+            } else {
+                h2o_configurator_errprintf(cmd, node, "value of `packet-timestamping` must be either of: ON,OFF");
+                return -1;
+            }
+        }
+
+        if (packet_timestamping_rate_node != NULL) {
+            if ((*packet_timestamping_rate_node)->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, node, "`packet-timestamping` must be a string");
+                return -1;
+            }
+            packet_timestamping_rate = strtoll((*packet_timestamping_rate_node)->data.scalar, NULL, 10);
+            if (packet_timestamping_rate < 0 || ((packet_timestamping_rate == LLONG_MIN || packet_timestamping_rate == LLONG_MAX) && errno == ERANGE)) {
+                h2o_configurator_errprintf(cmd, node, "`packet-timestamping-sample-rate` value is out of range");
+                return -1;
+            } else if (packet_timestamping_rate == 0 && errno == EINVAL) {
+                h2o_configurator_errprintf(cmd, node, "`packet-timestamping-sample-rate` must be a whole number");
+                return -1;
+            }
+        } else if (packet_timestamping_rate_node == NULL && packet_timestamping_enabled) {
+          h2o_configurator_errprintf(cmd, node, "[warning] packet timestamping enabled, but no sample rate set, using default of 10,000");
+          packet_timestamping_rate = H2O_DEFAULT_PACKET_TIMESTAMPING_RATE;
+        }
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
@@ -1236,7 +1299,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
             default:
                 break;
             }
-            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol);
+            listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, 0, 0);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -1268,7 +1331,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
                     } else {
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen, packet_timestamping_enabled)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1277,7 +1340,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 default:
                     break;
                 }
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, packet_timestamping_enabled, packet_timestamping_rate);
                 listener_is_new = 1;
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
@@ -1317,7 +1380,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, packet_timestamping_enabled)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -1350,7 +1413,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 quic->stream_scheduler = &h2o_http3_server_stream_scheduler;
                 quic->stream_open = &h2o_http3_server_on_stream_open;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, packet_timestamping_enabled, packet_timestamping_rate);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node;
@@ -2049,6 +2112,9 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
+        sock->timestamping = listener->timestamping;
+        sock->timestamping_rate = listener->timestamping_rate;
+        sock->timestamping_rate_counter = &conf.listeners[ctx->listener_index]->timestamping_rate_counter;
 
         h2o_accept(&ctx->accept_ctx, sock);
 
@@ -2226,6 +2292,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
         }
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        listeners[i].sock->timestamping = listener_config->timestamping;
+        listeners[i].sock->timestamping_rate = listener_config->timestamping_rate;
+        listeners[i].sock->timestamping_rate_counter = &listener_config->timestamping_rate_counter;
+
         listeners[i].sock->data = listeners + i;
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {

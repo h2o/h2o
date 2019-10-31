@@ -50,6 +50,11 @@
 #define TCP_NOTSENT_LOWAT 25
 #endif
 
+#if defined(__linux__)
+#include <linux/errqueue.h>
+#include <linux/net_tstamp.h>
+#endif /* defined(__linux__) */
+
 #if H2O_USE_DTRACE && defined(__linux__)
 #define H2O_USE_EBPF_MAP 1
 #endif
@@ -452,6 +457,55 @@ void h2o_socket_close(h2o_socket_t *sock)
         shutdown_ssl(sock, 0);
     }
 }
+
+void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+{
+#if defined(__linux__)
+    struct scm_timestamping *ts = NULL;
+    struct timespec tp = { 0 };
+    uint64_t time_now = 0, packet_ts = 0;
+
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(msg); cmsg;
+            cmsg = CMSG_NXTHDR(msg, cmsg)) {
+
+        /* in the future we may want to harvest IP_RECVERR messages here, which could have interesting data */
+        if (cmsg->cmsg_level != SOL_SOCKET)
+            continue;
+
+        switch (cmsg->cmsg_type) {
+            case SO_TIMESTAMPNS:
+                ts = (struct scm_timestamping *)CMSG_DATA(cmsg);
+                if (clock_gettime(CLOCK_REALTIME, &tp) == -1) {
+                    h2o_error_printf("error getting clock time: %s\n", strerror(errno));
+                    break;
+                }
+
+                time_now = tp.tv_sec * 1000000000 + tp.tv_nsec;
+                packet_ts = (long long)ts->ts[0].tv_sec * 1000000000 + ts->ts[0].tv_nsec;
+
+                /* packet_ts has the timestamp the packet arrived in the kernel before (most) of the
+                 * network stack processing.
+                 *
+                 * time_now is the current time in nanoseconds as obtained by
+                 * clock_gettime. This should be safe to call as it is implemented
+                 * by the vDSO on Linux and should not incur the cost of a system
+                 * call.
+                 */
+                h2o_sliding_counter_start(&sock->loop->packet_latency_nanosec_counter, packet_ts);
+                h2o_sliding_counter_stop(&sock->loop->packet_latency_nanosec_counter, time_now);
+                break;
+            default:
+                /* Ignore other cmsg options */
+                break;
+        }
+    }
+
+    return;
+#else /* !defined(__linux__) */
+    return;
+#endif /* defined(__linux__) */
+}
+
 
 static uint16_t calc_suggested_tls_payload_size(h2o_socket_t *sock, uint16_t suggested_tls_record_size)
 {
