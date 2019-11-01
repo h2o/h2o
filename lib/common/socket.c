@@ -458,7 +458,7 @@ void h2o_socket_close(h2o_socket_t *sock)
     }
 }
 
-void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msghdr *msg)
+void h2o_socket_handle_timestamp(h2o_loop_t *loop, struct msghdr *msg)
 {
 #if defined(__linux__)
     struct scm_timestamping *ts = NULL;
@@ -491,8 +491,8 @@ void h2o_socket_handle_timestamp(struct st_h2o_evloop_socket_t *sock, struct msg
                  * by the vDSO on Linux and should not incur the cost of a system
                  * call.
                  */
-                h2o_sliding_counter_start(&sock->loop->packet_latency_nanosec_counter, packet_ts);
-                h2o_sliding_counter_stop(&sock->loop->packet_latency_nanosec_counter, time_now);
+                h2o_sliding_counter_start(&loop->packet_latency_nanosec_counter, packet_ts);
+                h2o_sliding_counter_stop(&loop->packet_latency_nanosec_counter, time_now);
                 break;
             default:
                 /* Ignore other cmsg options */

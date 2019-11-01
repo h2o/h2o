@@ -158,7 +158,7 @@ static const char *on_read_core(struct st_h2o_evloop_socket_t *sock)
                 if (timestamping_rate_counter != NULL && timestamping_rate > 0) {
                     if (*timestamping_rate_counter >= timestamping_rate) {
                         *timestamping_rate_counter = 0;
-                        h2o_socket_handle_timestamp(sock, &msg);
+                        h2o_socket_handle_timestamp(sock->loop, &msg);
                     } else {
                         *timestamping_rate_counter = (*timestamping_rate_counter) + 1;
                     }
