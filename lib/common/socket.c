@@ -460,7 +460,7 @@ void h2o_socket_close(h2o_socket_t *sock)
 
 void h2o_socket_handle_timestamp(h2o_loop_t *loop, struct msghdr *msg)
 {
-#if defined(__linux__)
+#if defined(__linux__) && H2O_USE_LIBUV
     struct scm_timestamping *ts = NULL;
     struct timespec tp = { 0 };
     uint64_t time_now = 0, packet_ts = 0;
