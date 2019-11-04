@@ -5,7 +5,7 @@
 ## Quickstart
 
 Root privilege is required to interact with the BPF virtual machine.
-The format is: `ConnID ReqID HeaderName HeaderValue`, except the first line that represents the HTTP protocol version.
+The log line format is: `ConnID ReqID HeaderName HeaderValue`, except the first line that represents the HTTP protocol version.
 
 ```
 $ sudo h2olog -p $(pgrep -o h2o)
