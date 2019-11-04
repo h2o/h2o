@@ -4,6 +4,9 @@
 
 ## Quickstart
 
+Root privilege is required to interact with the BPF virtual machine.
+The format is: `ConnID ReqID HeaderName HeaderValue`, except the first line that represents the HTTP protocol version.
+
 ```
 $ sudo h2olog -p $(pgrep -o h2o)
 
@@ -14,8 +17,6 @@ $ sudo h2olog -p $(pgrep -o h2o)
 888 1: :scheme https
 ... and more ...
 ```
-
-Root privilege is required to interact with the BPF virtual machine.
 
 ## Requirements
 
