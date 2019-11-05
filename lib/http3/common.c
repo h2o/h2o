@@ -97,7 +97,7 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
             cmsg.hdr.cmsg_level = IPPROTO_IP;
             cmsg.hdr.cmsg_type = IP_PKTINFO;
             cmsg_bodylen = sizeof(struct in_pktinfo);
-            ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_addr = p->src.sin.sin_addr;
+            ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst = p->src.sin.sin_addr;
 #else
             h2o_fatal("IP_PKTINFO not available");
 #endif
