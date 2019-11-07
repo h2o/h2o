@@ -113,13 +113,9 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
 
     static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-    static int once = 0;
     pthread_mutex_lock(&mutex);
 
-    if (once == 0) {
-        once++;
-        h2o_socketpool_register_loop(&ctx->globalconf->proxy.global_socketpool, loop);
-    }
+    h2o_socketpool_register_loop(&ctx->globalconf->proxy.global_socketpool, loop);
 
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
