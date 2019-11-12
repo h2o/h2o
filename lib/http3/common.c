@@ -55,7 +55,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-23")}};
+const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-24")}};
 
 /**
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
