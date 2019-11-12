@@ -895,6 +895,7 @@ int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
 
     /* set or generate the non-pre-built stats fields here */
     stats->rtt = conn->egress.loss.rtt;
+    stats->cc = conn->egress.cc;
 
     return 0;
 }
@@ -3965,7 +3966,7 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *_src
          *   |                      | IN | 0R | HS | 1R |               |
          *   +----------------------+----+----+----+----+---------------+ */
         FRAME( padding              ,  1 ,  1 ,  1 ,  1 ,             0 ), /* 0 */
-        FRAME( ping                 ,  0 ,  1 ,  0 ,  1 ,             1 ),
+        FRAME( ping                 ,  1 ,  1 ,  1 ,  1 ,             1 ),
         FRAME( ack                  ,  1 ,  0 ,  1 ,  1 ,             0 ),
         FRAME( ack                  ,  1 ,  0 ,  1 ,  1 ,             0 ),
         FRAME( reset_stream         ,  0 ,  1 ,  0 ,  1 ,             1 ),
@@ -3992,8 +3993,8 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *_src
         FRAME( retire_connection_id ,  0 ,  0 ,  0 ,  1 ,             1 ),
         FRAME( path_challenge       ,  0 ,  1 ,  0 ,  1 ,             1 ),
         FRAME( path_response        ,  0 ,  0 ,  0 ,  1 ,             1 ),
-        FRAME( transport_close      ,  1 ,  1 ,  1 ,  1 ,             1 ),
-        FRAME( application_close    ,  0 ,  1 ,  0 ,  1 ,             1 )
+        FRAME( transport_close      ,  1 ,  1 ,  1 ,  1 ,             0 ),
+        FRAME( application_close    ,  0 ,  1 ,  0 ,  1 ,             0 )
         /*   +----------------------+----+----+----+----+---------------+ */
 #undef FRAME
     };
