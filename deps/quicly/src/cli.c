@@ -826,7 +826,7 @@ int save_session(const quicly_transport_parameters_t *transport_params)
     /* build data (session ticket and transport parameters) */
     ptls_buffer_push_block(&buf, 2, { ptls_buffer_pushv(&buf, session_info.tls_ticket.base, session_info.tls_ticket.len); });
     ptls_buffer_push_block(&buf, 2, {
-        if ((ret = quicly_encode_transport_parameter_list(&buf, 1, transport_params, NULL, NULL)) != 0)
+        if ((ret = quicly_encode_transport_parameter_list(&buf, 1, transport_params, NULL, NULL, 0)) != 0)
             goto Exit;
     });
     ptls_buffer_push_block(&buf, 2, { ptls_buffer_pushv(&buf, session_info.address_token.base, session_info.address_token.len); });
@@ -905,6 +905,7 @@ static void usage(const char *cmd)
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
            "  -e event-log-file         file to log events\n"
+           "  -E                        expand Client Hello (sends multiple client Initials)\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
            "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
            "  -l log-file               file to log traffic secrets\n"
@@ -952,7 +953,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:C:c:k:e:i:I:l:M:m:Nnp:P:Rr:S:s:Vvx:X:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:C:c:k:Ee:i:I:l:M:m:Nnp:P:Rr:S:s:Vvx:X:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < sizeof(negotiated_protocols.list) / sizeof(negotiated_protocols.list[0]));
@@ -966,6 +967,9 @@ int main(int argc, char **argv)
             break;
         case 'k':
             load_private_key(ctx.tls, optarg);
+            break;
+        case 'E':
+            ctx.expand_client_hello = 1;
             break;
         case 'e':
             if ((quicly_trace_fp = fopen(optarg, "w")) == NULL) {

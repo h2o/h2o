@@ -264,6 +264,10 @@ struct st_quicly_context_t {
      */
     unsigned is_clustered : 1;
     /**
+     * expand client hello so that it does not fit into one datagram
+     */
+    unsigned expand_client_hello : 1;
+    /**
      * callback for allocating memory for raw packet
      */
     quicly_packet_allocator_t *packet_allocator;
@@ -779,7 +783,7 @@ int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struc
  *
  */
 int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int is_client, const quicly_transport_parameters_t *params,
-                                           const quicly_cid_t *odcid, const void *stateless_reset_token);
+                                           const quicly_cid_t *odcid, const void *stateless_reset_token, int expand);
 /**
  *
  */

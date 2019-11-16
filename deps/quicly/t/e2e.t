@@ -69,6 +69,17 @@ subtest "retry" => sub {
     }, "CH deemed lost in response to retry";
 };
 
+subtest "large-client-hello" => sub {
+    my $guard = spawn_server();
+    my $resp = `$cli -E -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n";
+    my $events = slurp_file("$tempdir/events");
+    complex $events, sub {
+        my $before_receive = (split /"receive"/, $_)[0];
+        $before_receive =~ /"stream-send".*?\n.*?"stream-send"/s;
+    };
+};
+
 unlink "$tempdir/session";
 
 subtest "0-rtt" => sub {
