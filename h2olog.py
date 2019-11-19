@@ -72,8 +72,7 @@ int trace_receive_req_header(struct pt_regs *ctx) {
 }
 """
 
-def print_req_line(cpu, data, size):
-    line = b["reqbuf"].event(data)
+def print_req_line(line):
     if line.http_version:
         v = "HTTP/%d.%d" % (line.http_version / 256, line.http_version % 256)
         print("%u %u: %s" % (line.conn_id, line.req_id, v))
@@ -81,7 +80,7 @@ def print_req_line(cpu, data, size):
         print("%u %u: %s %s" % (line.conn_id, line.req_id, line.header_name, line.header_value))
 
 def handle_req_line(cpu, data, size):
-    print_req_line(cpu, data, size)
+    print_req_line(b["reqbuf"].event(data))
 
 try:
     h2o_pid = 0
