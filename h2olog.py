@@ -80,6 +80,9 @@ def print_req_line(cpu, data, size):
     else:
         print("%u %u: %s %s" % (line.conn_id, line.req_id, line.header_name, line.header_value))
 
+def handle_req_line(cpu, data, size):
+    print_req_line(cpu, data, size)
+
 try:
     h2o_pid = 0
     opts, args = getopt.getopt(sys.argv[1:], 'p:')
@@ -98,7 +101,7 @@ u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
 u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
 
 b = BPF(text=bpf, usdt_contexts=[u])
-b["reqbuf"].open_perf_buffer(print_req_line)
+b["reqbuf"].open_perf_buffer(handle_req_line)
 
 while 1:
     try:
