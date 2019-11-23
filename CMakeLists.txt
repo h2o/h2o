@@ -148,6 +148,7 @@ OPTION(WITH_DTRACE "use USDT (userspace Dtrace probes)" ${HAVE_DTRACE})
 IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
+OPTION(WITH_ASAN "Enabling Compiler AddressSanitizer" OFF)
 
 INCLUDE_DIRECTORIES(
     include
@@ -224,6 +225,16 @@ IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     ENDIF ()
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.5"))
         SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-result")
+    ENDIF ()
+    IF (WITH_ASAN AND NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.8"))
+        SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-stack-protector -fno-omit-frame-pointer")
+    ENDIF ()
+ENDIF ()
+
+IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
+    IF (WITH_ASAN AND NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "3.1"))
+        SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=address -fno-stack-protector -fno-omit-frame-pointer")
+        SET(CMAKE_EXE_LINKER_FLAGS "-fsanitize=address")
     ENDIF ()
 ENDIF ()
 
