@@ -90,7 +90,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 static void on_exit_deferred(h2o_timer_t *entry)
 {
     h2o_timer_unlink(entry);
-    exit(1);
+    cnt_left = -1; /* skip calling h2o_evloop_run */
 }
 static h2o_timer_t exit_deferred;
 
@@ -139,12 +139,12 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             h2o_httpclient_connection_pool_init(connpool, sockpool);
 
             /* obtain root */
-            char *root, *crt_fullpath;
+            char *root;
             if ((root = getenv("H2O_ROOT")) == NULL)
                 root = H2O_TO_STR(H2O_ROOT);
 #define CA_PATH "/share/h2o/ca-bundle.crt"
-            crt_fullpath = h2o_mem_alloc(strlen(root) + strlen(CA_PATH) + 1);
-            sprintf(crt_fullpath, "%s%s", root, CA_PATH);
+            static char crt_fullpath[256];
+            snprintf(crt_fullpath, sizeof(crt_fullpath), "%s%s", root, CA_PATH);
 #undef CA_PATH
 
             SSL_CTX *ssl_ctx = SSL_CTX_new(TLSv1_client_method());
@@ -353,6 +353,7 @@ static h2o_socket_t *create_quic_socket(h2o_loop_t *loop)
 
 int main(int argc, char **argv)
 {
+    int rc = -1;
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_httpclient_ctx_t ctx = {
@@ -394,6 +395,10 @@ int main(int argc, char **argv)
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
+            if (cnt_left <= 0) {
+                fprintf(stderr, "number of requests must be greater than 0\n");
+                goto exit;
+            }
             break;
         case 'm':
             req.method = optarg;
@@ -401,32 +406,32 @@ int main(int argc, char **argv)
         case 'o':
             if (freopen(optarg, "w", stdout) == NULL) {
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
-                exit(EXIT_FAILURE);
+                goto exit;
             }
             break;
         case 'b':
             req.body_size = atoi(optarg);
             if (req.body_size <= 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
-                exit(EXIT_FAILURE);
+                goto exit;
             }
             break;
         case 'c':
             chunk_size = atoi(optarg);
             if (chunk_size <= 0) {
                 fprintf(stderr, "chunk size must be greater than 0\n");
-                exit(EXIT_FAILURE);
+                goto exit;
             }
             break;
         case 'H': {
             const char *colon, *value_start;
             if ((colon = index(optarg, ':')) == NULL) {
                 fprintf(stderr, "no `:` found in -H\n");
-                exit(EXIT_FAILURE);
+                goto exit;
             }
             if (req.num_headers >= sizeof(req.headers) / sizeof(req.headers[0])) {
                 fprintf(stderr, "too many request headers\n");
-                exit(EXIT_FAILURE);
+                goto exit;
             }
             for (value_start = colon + 1; *value_start == ' ' || *value_start == '\t'; ++value_start)
                 ;
@@ -443,13 +448,13 @@ int main(int argc, char **argv)
         case '2':
             if (sscanf(optarg, "%" SCNd8, &ctx.http2.ratio) != 1 || !(0 <= ctx.http2.ratio && ctx.http2.ratio <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
-                exit(EXIT_FAILURE);
+                goto exit;
             }
             break;
         case '3':
 #if H2O_USE_LIBUV
             fprintf(stderr, "HTTP/3 is currently not supported by the libuv backend.\n");
-            exit(EXIT_FAILURE);
+            goto exit;
 #else
             h2o_http3_init_context(&h3ctx.h3, ctx.loop, create_quic_socket(ctx.loop), &h3ctx.quic, NULL,
                                    h2o_httpclient_http3_notify_connection_update);
@@ -458,10 +463,11 @@ int main(int argc, char **argv)
             break;
         case 'h':
             usage(argv[0]);
-            exit(0);
+            rc = 0;
+            goto exit;
             break;
         default:
-            exit(EXIT_FAILURE);
+            goto exit;
             break;
         }
     }
@@ -470,7 +476,7 @@ int main(int argc, char **argv)
 
     if (argc < 1) {
         fprintf(stderr, "no URL\n");
-        exit(EXIT_FAILURE);
+        goto exit;
     }
     req.url = argv[0];
 
@@ -488,7 +494,7 @@ int main(int argc, char **argv)
     /* setup the first request */
     start_request(&ctx);
 
-    while (cnt_left != 0) {
+    while (cnt_left > 0) {
 #if H2O_USE_LIBUV
         uv_run(ctx.loop, UV_RUN_ONCE);
 #else
@@ -507,5 +513,24 @@ int main(int argc, char **argv)
         }
     }
 
-    return 0;
+    h2o_multithread_unregister_receiver(queue, ctx.getaddr_receiver);
+    h2o_multithread_destroy_queue(queue);
+    rc = (cnt_left == 0 ? 0 : -1);
+
+exit:
+    if (connpool) {
+        if (connpool->socketpool) {
+            h2o_socketpool_dispose(connpool->socketpool);
+            free(connpool->socketpool);
+        }
+        free(connpool);
+    }
+
+#if H2O_USE_LIBUV
+    uv_loop_delete(ctx.loop);
+#else
+    h2o_evloop_destroy(ctx.loop);
+#endif
+    h2o_cleanup_thread();
+    return rc;
 }
