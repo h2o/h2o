@@ -26,6 +26,7 @@
 #include <sys/types.h>
 #include "h2o/socket.h"
 #include "h2o/string_.h"
+#include "h2o/hostinfo.h"
 
 static h2o_loop_t *loop;
 const char *host;
@@ -88,6 +89,27 @@ static void on_connect(h2o_socket_t *sock, const char *err)
     }
 }
 
+static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *cbdata)
+{
+    static h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
+    if (errstr != NULL) {
+        /* connection failed */
+        fprintf(stderr, "failed to resolve address:%s\n", errstr);
+        exit_loop = 1;
+        return;
+    }
+
+    struct addrinfo *selected = h2o_hostinfo_select_one(res);
+
+    h2o_socket_t *sock;
+    if ((sock = h2o_socket_connect(loop, selected->ai_addr, selected->ai_addrlen, on_connect)) == NULL) {
+        fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
+        exit_loop = 1;
+        return;
+    }
+    sock->data = &send_data;
+}
+
 static void usage(const char *cmd)
 {
     fprintf(stderr, "Usage: %s [--tls] <host> <port>\n", cmd);
@@ -96,10 +118,9 @@ static void usage(const char *cmd)
 
 int main(int argc, char **argv)
 {
-    struct addrinfo hints, *res = NULL;
-    int err, ret = 1;
-    h2o_socket_t *sock;
-    h2o_iovec_t send_data = {H2O_STRLIT("GET / HTTP/1.0\r\n\r\n")};
+    h2o_multithread_receiver_t getaddr_receiver;
+    h2o_multithread_queue_t *queue;
+    int ret = 1;
 
     const char *cmd = (--argc, *argv++);
     if (argc < 2)
@@ -110,7 +131,16 @@ int main(int argc, char **argv)
         SSL_library_init();
         OpenSSL_add_all_algorithms();
         ssl_ctx = SSL_CTX_new(TLSv1_client_method());
-        SSL_CTX_load_verify_locations(ssl_ctx, H2O_TO_STR(H2O_ROOT) "/share/h2o/ca-bundle.crt", NULL);
+
+        /* obtain root */
+        char *root;
+        if ((root = getenv("H2O_ROOT")) == NULL)
+            root = H2O_TO_STR(H2O_ROOT);
+#define CA_PATH "/share/h2o/ca-bundle.crt"
+        static char crt_fullpath[256];
+        snprintf(crt_fullpath, sizeof(crt_fullpath), "%s%s", root, CA_PATH);
+#undef CA_PATH
+        SSL_CTX_load_verify_locations(ssl_ctx, crt_fullpath, NULL);
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
     }
     if (argc != 2)
@@ -124,21 +154,12 @@ int main(int argc, char **argv)
     loop = h2o_evloop_create();
 #endif
 
-    /* resolve destination (FIXME use the function supplied by the loop) */
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_ADDRCONFIG;
-    if ((err = getaddrinfo(host, port, &hints, &res)) != 0) {
-        fprintf(stderr, "failed to resolve %s:%s:%s\n", host, port, gai_strerror(err));
-        goto Exit;
-    }
+    queue = h2o_multithread_create_queue(loop);
+    h2o_multithread_register_receiver(queue, &getaddr_receiver, h2o_hostinfo_getaddr_receiver);
 
-    if ((sock = h2o_socket_connect(loop, res->ai_addr, res->ai_addrlen, on_connect)) == NULL) {
-        fprintf(stderr, "failed to create socket:%s\n", strerror(errno));
-        goto Exit;
-    }
-    sock->data = &send_data;
+    /* resolve the name, and connect */
+    h2o_hostinfo_getaddr(&getaddr_receiver, h2o_iovec_init(host, strlen(host)), h2o_iovec_init(port, strlen(port)), AF_UNSPEC,
+                         SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG, on_getaddr, NULL);
 
     while (!exit_loop) {
 #if H2O_USE_LIBUV
@@ -150,14 +171,15 @@ int main(int argc, char **argv)
 
     ret = 0;
 
-Exit:
-    if (loop != NULL) {
+    h2o_multithread_unregister_receiver(queue, &getaddr_receiver);
+    h2o_multithread_destroy_queue(queue);
+
 #if H2O_USE_LIBUV
-        uv_loop_delete(loop);
+    uv_loop_delete(loop);
 #else
-// FIXME
-// h2o_evloop_destroy(loop);
+    h2o_evloop_destroy(loop);
 #endif
-    }
+    extern void h2o_cleanup_thread(void);
+    h2o_cleanup_thread();
     return ret;
 }
