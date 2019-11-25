@@ -105,7 +105,7 @@ struct st_h2o_http2client_stream_t {
     } streaming;
 };
 
-static __thread h2o_buffer_prototype_t wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
+__thread h2o_buffer_prototype_t h2o__http2client_wbuf_buffer_prototype = {{16}, {H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
 
@@ -1108,7 +1108,7 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
         h2o_iovec_t buf = {conn->output.buf->bytes, conn->output.buf->size};
         h2o_socket_write(conn->super.sock, &buf, 1, on_write_complete);
         conn->output.buf_in_flight = conn->output.buf;
-        h2o_buffer_init(&conn->output.buf, &wbuf_buffer_prototype);
+        h2o_buffer_init(&conn->output.buf, &h2o__http2client_wbuf_buffer_prototype);
         if (!h2o_timer_is_linked(&conn->io_timeout))
             h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->io_timeout, &conn->io_timeout);
     }
@@ -1139,7 +1139,7 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
     /* output */
     conn->output.header_table.hpack_capacity = H2O_HTTP2_SETTINGS_CLIENT_HEADER_TABLE_SIZE;
     h2o_http2_window_init(&conn->output.window, conn->peer_settings.initial_window_size);
-    h2o_buffer_init(&conn->output.buf, &wbuf_buffer_prototype);
+    h2o_buffer_init(&conn->output.buf, &h2o__http2client_wbuf_buffer_prototype);
     conn->output.defer_timeout.cb = emit_writereq;
     h2o_linklist_init_anchor(&conn->output.sending_streams);
     h2o_linklist_init_anchor(&conn->output.sent_streams);
