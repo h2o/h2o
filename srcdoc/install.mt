@@ -69,6 +69,23 @@ It is turned on by default if the prerequisites (<a href="https://www.gnu.org/so
 </dl>
 </p>
 
+<h3>Installing from Source, enable AddressSanitizer</h3>
+
+<p>
+AddressSanitizer (or <a href="https://en.wikipedia.org/wiki/AddressSanitizer">ASan</a>) is an open source programming tool by Google that detects memory corruption bugs such as buffer overflows or accesses to a dangling pointer (use-after-free). AddressSanitizer is based on compiler instrumentation and directly-mapped shadow memory. AddressSanitizer is currently implemented in Clang (starting from version 3.1) , GCC (starting from version 4.8) and Xcode (starting from version 7.0)
+</p>
+
+<p>
+Once your compiler support ASan, enable it is easy, just add some parameters to CMAKE_C_FLAGS.
+</p>
+
+<?= $ctx->{code}->(<< 'EOT')
+% cmake -DCMAKE_C_FLAGS="-fsanitize=address -fno-stack-protector -fno-omit-frame-pointer" .
+% make
+% sudo make install
+EOT
+?>
+
 <h3>Installing from Source, using OpenSSL</h3>
 
 <p>
