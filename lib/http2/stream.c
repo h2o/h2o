@@ -22,6 +22,7 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
+#include "../probes_.h"
 
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req);
@@ -330,6 +331,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
             send_refused_stream(conn, stream);
             return;
         }
+        h2o_probe_log_response_status(&stream->req, stream->stream_id, stream->req.res.status);
         if (send_headers(conn, stream) != 0)
             return;
     /* fallthru */
