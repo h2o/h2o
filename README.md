@@ -10,11 +10,11 @@ The log line format is: `ConnID ReqID HeaderName HeaderValue`, except the first 
 ```
 $ sudo h2olog -p $(pgrep -o h2o)
 
-888 1: HTTP/2.0
-888 1: :authority torumk.com
-888 1: :method GET
-888 1: :path /
-888 1: :scheme https
+888 1 RxProtocol HTTP/2.0
+888 1 RxHeader   :authority torumk.com
+888 1 RxHeader   :method GET
+888 1 RxHeader   :path /
+888 1 RxHeader   :scheme https
 ... and more ...
 ```
 
