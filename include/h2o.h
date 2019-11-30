@@ -1028,6 +1028,10 @@ struct st_h2o_req_t {
      */
     size_t *norm_indexes;
     /**
+     * authority's prefix matched with `*` against defined hosts
+     */
+    h2o_iovec_t authority_wildcard_match;
+    /**
      * filters assigned per request
      */
     h2o_req_prefilter_t *prefilters;
