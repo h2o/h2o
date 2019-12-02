@@ -1117,17 +1117,25 @@ static int foreach_request(h2o_context_t *ctx, int (*cb)(h2o_req_t *req, void *c
 }
 
 static const h2o_conn_callbacks_t h1_callbacks = {
-    get_sockname, /* stringify address */
-    get_peername, /* ditto */
-    get_ptls,
-    skip_tracing,
-    NULL, /* push */
-    NULL, /* get debug state */
-    {{
-        {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-        {log_request_index},                                                                     /* http1 */
-        {NULL}                                                                                   /* http2 */
-    }}};
+    .get_sockname = get_sockname,
+    .get_peername = get_peername,
+    .get_ptls = get_ptls,
+    .skip_tracing = skip_tracing,
+    .log_ = {{
+        .ssl =
+            {
+                .protocol_version = log_protocol_version,
+                .session_reused = log_session_reused,
+                .cipher = log_cipher,
+                .cipher_bits = log_cipher_bits,
+                .session_id = log_session_id,
+            },
+        .http1 =
+            {
+                .request_index = log_request_index,
+            },
+    }},
+};
 
 static int conn_is_h1(h2o_conn_t *conn)
 {

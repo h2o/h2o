@@ -1481,18 +1481,33 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
-        get_sockname, /* stringify address */
-        get_peername, /* ditto */
-        get_ptls,
-        skip_tracing,
-        push_path,                 /* HTTP2 push */
-        h2o_http2_get_debug_state, /* get debug state */
-        {{
-            {log_protocol_version, log_session_reused, log_cipher, log_cipher_bits, log_session_id}, /* ssl */
-            {NULL},                                                                                  /* http1 */
-            {log_stream_id, log_priority_received, log_priority_received_exclusive, log_priority_received_parent,
-             log_priority_received_weight, log_priority_actual, log_priority_actual_parent, log_priority_actual_weight} /* http2 */
-        }} /* loggers */
+        .get_sockname = get_sockname,
+        .get_peername = get_peername,
+        .get_ptls = get_ptls,
+        .skip_tracing = skip_tracing,
+        .push_path = push_path,
+        .get_debug_state = h2o_http2_get_debug_state,
+        .log_ = {{
+            .ssl =
+                {
+                    .protocol_version = log_protocol_version,
+                    .session_reused = log_session_reused,
+                    .cipher = log_cipher,
+                    .cipher_bits = log_cipher_bits,
+                    .session_id = log_session_id,
+                },
+            .http2 =
+                {
+                    .stream_id = log_stream_id,
+                    .priority_received = log_priority_received,
+                    .priority_received_exclusive = log_priority_received_exclusive,
+                    .priority_received_parent = log_priority_received_parent,
+                    .priority_received_weight = log_priority_received_weight,
+                    .priority_actual = log_priority_actual,
+                    .priority_actual_parent = log_priority_actual_parent,
+                    .priority_actual_weight = log_priority_actual_weight,
+                },
+        }},
     };
 
     h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &callbacks);
