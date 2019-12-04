@@ -28,3 +28,5 @@ Makefile
 deps/picotest
 /picotlsvs/cifra/cifra.vcxproj.user
 /picotlsvs/testopenssl/testopenssl.vcxproj.user
+/fuzz/fuzzer-asn1-type-and-length.c
+/fuzz/fuzzer-asn1-validation.c
