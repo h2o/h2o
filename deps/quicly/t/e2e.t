@@ -185,6 +185,43 @@ subtest "alpn" => sub {
     like $resp, qr/transport close:code=0x178;/, "ALPN mismatch";
 };
 
+subtest "key-update" => sub {
+    my $doit = sub {
+        my ($server_opts, $client_opts, $doing_updates) = @_;
+        my $guard = spawn_server(@$server_opts, "-e", "$tempdir/events");
+        # ensure at least 30 round-trips
+        my $resp = `$cli -p /120000 -M 4000 @{[join " ", @$client_opts]} 127.0.0.1 $port 2> /dev/null`;
+        is $resp, "hello world\n" x 10000;
+        undef $guard;
+        my $num_key_updates = do {
+            my $loglines = do {
+                open my $fh, "<", "$tempdir/events"
+                    or die "failed to open file:$tempdir/events:$!";
+                local $/;
+                <$fh>;
+            };
+            () = $loglines =~ /{"type":"crypto-send-key-update",/sg;
+        };
+        if ($doing_updates) {
+            cmp_ok($num_key_updates, ">=", 4);
+        } else {
+            is $num_key_updates, 0;
+        }
+    };
+    subtest "none" => sub {
+        $doit->([], [], undef);
+    };
+    subtest "client" => sub {
+        $doit->([], [qw(-K 1)], 1);
+    };
+    subtest "server" => sub {
+        $doit->([qw(-K 1)], [], 1);
+    };
+    subtest "both" => sub {
+        $doit->([qw(-K 1)], [qw(-K 1)], 1);
+    };
+};
+
 done_testing;
 
 sub spawn_server {
