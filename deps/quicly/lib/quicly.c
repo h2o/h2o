@@ -351,7 +351,10 @@ static __thread int64_t now;
 
 static void update_now(quicly_context_t *ctx)
 {
-    now = ctx->now->cb(ctx->now);
+    int64_t newval = ctx->now->cb(ctx->now);
+
+    if (now < newval)
+        now = newval;
 }
 
 /**
@@ -895,6 +898,7 @@ int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats)
 
     /* set or generate the non-pre-built stats fields here */
     stats->rtt = conn->egress.loss.rtt;
+    stats->cc = conn->egress.cc;
 
     return 0;
 }
@@ -1202,6 +1206,9 @@ void quicly_free(quicly_conn_t *conn)
     free_handshake_space(&conn->handshake);
     free_application_space(&conn->application);
 
+    ptls_buffer_dispose(&conn->crypto.transport_params.buf);
+    ptls_free(conn->crypto.tls);
+
     free(conn->token.base);
     free(conn);
 }
@@ -1301,7 +1308,7 @@ static int apply_stream_frame(quicly_stream_t *stream, quicly_stream_frame_t *fr
     } while (0)
 
 int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int is_client, const quicly_transport_parameters_t *params,
-                                           const quicly_cid_t *odcid, const void *stateless_reset_token)
+                                           const quicly_cid_t *odcid, const void *stateless_reset_token, int expand)
 {
     int ret;
 
@@ -1345,6 +1352,15 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int is_client, co
             PUSH_TRANSPORT_PARAMETER(buf, QUICLY_TRANSPORT_PARAMETER_ID_MAX_ACK_DELAY, { pushv(buf, QUICLY_LOCAL_MAX_ACK_DELAY); });
         if (params->disable_active_migration)
             PUSH_TRANSPORT_PARAMETER(buf, QUICLY_TRANSPORT_PARAMETER_ID_DISABLE_ACTIVE_MIGRATION, {});
+        /* if requested, add a greasing TP of 1 MTU size so that CH spans across multiple packets */
+        if (expand) {
+            PUSH_TRANSPORT_PARAMETER(buf, 31 * 100 + 27, {
+                if ((ret = ptls_buffer_reserve(buf, QUICLY_MAX_PACKET_SIZE)) != 0)
+                    goto Exit;
+                memset(buf->base + buf->off, 0, QUICLY_MAX_PACKET_SIZE);
+                buf->off += QUICLY_MAX_PACKET_SIZE;
+            });
+        }
     });
 #undef pushv
 
@@ -1661,7 +1677,7 @@ int quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, const char *ser
     /* handshake */
     ptls_buffer_init(&conn->crypto.transport_params.buf, "", 0);
     if ((ret = quicly_encode_transport_parameter_list(&conn->crypto.transport_params.buf, 1, &conn->super.ctx->transport_params,
-                                                      NULL, NULL)) != 0)
+                                                      NULL, NULL, conn->super.ctx->expand_client_hello)) != 0)
         goto Exit;
     conn->crypto.transport_params.ext[0] =
         (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS,
@@ -1723,7 +1739,7 @@ static int server_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
     if ((ret = quicly_encode_transport_parameter_list(
              &conn->crypto.transport_params.buf, 0, &conn->super.ctx->transport_params,
              conn->retry_odcid.len != 0 ? &conn->retry_odcid : NULL,
-             conn->super.ctx->cid_encryptor != NULL ? conn->super.host.stateless_reset_token : NULL)) != 0)
+             conn->super.ctx->cid_encryptor != NULL ? conn->super.host.stateless_reset_token : NULL, 0)) != 0)
         goto Exit;
     properties->additional_extensions = conn->crypto.transport_params.ext;
     conn->crypto.transport_params.ext[0] =
@@ -3965,7 +3981,7 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *_src
          *   |                      | IN | 0R | HS | 1R |               |
          *   +----------------------+----+----+----+----+---------------+ */
         FRAME( padding              ,  1 ,  1 ,  1 ,  1 ,             0 ), /* 0 */
-        FRAME( ping                 ,  0 ,  1 ,  0 ,  1 ,             1 ),
+        FRAME( ping                 ,  1 ,  1 ,  1 ,  1 ,             1 ),
         FRAME( ack                  ,  1 ,  0 ,  1 ,  1 ,             0 ),
         FRAME( ack                  ,  1 ,  0 ,  1 ,  1 ,             0 ),
         FRAME( reset_stream         ,  0 ,  1 ,  0 ,  1 ,             1 ),
@@ -3992,8 +4008,8 @@ static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *_src
         FRAME( retire_connection_id ,  0 ,  0 ,  0 ,  1 ,             1 ),
         FRAME( path_challenge       ,  0 ,  1 ,  0 ,  1 ,             1 ),
         FRAME( path_response        ,  0 ,  0 ,  0 ,  1 ,             1 ),
-        FRAME( transport_close      ,  1 ,  1 ,  1 ,  1 ,             1 ),
-        FRAME( application_close    ,  0 ,  1 ,  0 ,  1 ,             1 )
+        FRAME( transport_close      ,  1 ,  1 ,  1 ,  1 ,             0 ),
+        FRAME( application_close    ,  0 ,  1 ,  0 ,  1 ,             0 )
         /*   +----------------------+----+----+----+----+---------------+ */
 #undef FRAME
     };

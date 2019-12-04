@@ -161,7 +161,7 @@ typedef struct st_h2o_mruby_error_stream_t {
     h2o_mruby_generator_t *generator;
 } h2o_mruby_error_stream_t;
 
-typedef struct st_h2o_mruby_generator_t {
+struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
@@ -172,7 +172,7 @@ typedef struct st_h2o_mruby_generator_t {
         mrb_value generator;
         mrb_value error_stream;
     } refs;
-} h2o_mruby_generator_t;
+};
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
     do {                                                                                                                           \

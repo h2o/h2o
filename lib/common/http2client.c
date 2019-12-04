@@ -767,8 +767,6 @@ static ssize_t expect_settings(struct st_h2o_http2client_conn_t *conn, const uin
 
 static void close_connection_now(struct st_h2o_http2client_conn_t *conn)
 {
-    assert(!h2o_timer_is_linked(&conn->output.defer_timeout));
-
     free(conn->super.origin_url.authority.base);
     free(conn->super.origin_url.host.base);
     free(conn->super.origin_url.path.base);

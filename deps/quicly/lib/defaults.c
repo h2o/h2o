@@ -36,6 +36,7 @@ const quicly_context_t quicly_spec_context = {
     },
     0, /* enforce_version_negotiation */
     0, /* is_clustered */
+    0, /* enlarge_client_hello */
     &quicly_default_packet_allocator,
     NULL,
     NULL, /* on_stream_open */
@@ -58,6 +59,7 @@ const quicly_context_t quicly_performant_context = {
     },
     0, /* enforce_version_negotiation */
     0, /* is_clustered */
+    0, /* enlarge_client_hello */
     &quicly_default_packet_allocator,
     NULL,
     NULL, /* on_stream_open */

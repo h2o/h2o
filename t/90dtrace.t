@@ -53,6 +53,7 @@ if ($tracer_pid == 0) {
         exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
 usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
+usdt::h2o:send_response_status {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
 EOT
         die "failed to spawn bpftrace:$!";
     } else {
@@ -131,6 +132,7 @@ run_with_curl($server, sub {
     like $trace, qr{^:scheme: $proto$}m;
     like $trace, qr{^:authority: 127\.0\.0\.1:$port$}m;
     like $trace, qr{^:path: /$}m;
+    like $trace, qr{^\d+:1 status:200}m;
 });
 
 # wait until the server and the tracer exits

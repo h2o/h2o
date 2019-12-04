@@ -55,7 +55,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-23")}};
+const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-24")}};
 
 /**
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
@@ -97,7 +97,7 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
             cmsg.hdr.cmsg_level = IPPROTO_IP;
             cmsg.hdr.cmsg_type = IP_PKTINFO;
             cmsg_bodylen = sizeof(struct in_pktinfo);
-            ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_addr = p->src.sin.sin_addr;
+            ((struct in_pktinfo *)CMSG_DATA(&cmsg.hdr))->ipi_spec_dst = p->src.sin.sin_addr;
 #else
             h2o_fatal("IP_PKTINFO not available");
 #endif
@@ -429,6 +429,17 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
 {
     h2o_http3_conn_t *conn = NULL;
     size_t accepted_packet_index = SIZE_MAX;
+
+    assert(num_packets != 0);
+
+    /* send VN on mimatch */
+    if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0]) && packets[0].version != QUICLY_PROTOCOL_VERSION) {
+        quicly_datagram_t *dgram = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
+                                                                   packets[0].cid.dest.encrypted);
+        h2o_http3_send_datagram(ctx, dgram);
+        ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
+        return;
+    }
 
     /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
     if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&

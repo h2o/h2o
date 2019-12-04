@@ -37,6 +37,7 @@ extern "C" {
 #include "quicly/frame.h"
 #include "quicly/linklist.h"
 #include "quicly/loss.h"
+#include "quicly/cc.h"
 #include "quicly/recvstate.h"
 #include "quicly/sendstate.h"
 #include "quicly/maxsender.h"
@@ -49,7 +50,9 @@ extern "C" {
 #define QUICLY_LONG_HEADER_BIT 0x80
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff000017
+#define QUICLY_PROTOCOL_VERSION 0xff000018
+
+#define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte)&0xf0) == 0xc0)
 
 #define QUICLY_MAX_CID_LEN_V1 20
 #define QUICLY_STATELESS_RESET_TOKEN_LEN 16
@@ -261,6 +264,10 @@ struct st_quicly_context_t {
      */
     unsigned is_clustered : 1;
     /**
+     * expand client hello so that it does not fit into one datagram
+     */
+    unsigned expand_client_hello : 1;
+    /**
      * callback for allocating memory for raw packet
      */
     quicly_packet_allocator_t *packet_allocator;
@@ -346,6 +353,10 @@ typedef struct st_quicly_stats_t {
      * RTT
      */
     quicly_rtt_t rtt;
+    /**
+     * Congestion control (experimental; TODO cherry-pick what can be exposed as part of a stable API)
+     */
+    quicly_cc_t cc;
 } quicly_stats_t;
 
 /**
@@ -772,7 +783,7 @@ int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struc
  *
  */
 int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int is_client, const quicly_transport_parameters_t *params,
-                                           const quicly_cid_t *odcid, const void *stateless_reset_token);
+                                           const quicly_cid_t *odcid, const void *stateless_reset_token, int expand);
 /**
  *
  */

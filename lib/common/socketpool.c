@@ -104,11 +104,11 @@ static uint64_t destroy_expired_locked(h2o_socketpool_t *pool)
 }
 
 /* caller should lock the mutex */
-static void check_pool_expired_locked(h2o_socketpool_t *pool)
+static void check_pool_expired_locked(h2o_socketpool_t *pool, h2o_loop_t *this_loop)
 {
     uint64_t next_expired = destroy_expired_locked(pool);
     if (next_expired != UINT64_MAX) {
-        if (!h2o_timer_is_linked(&pool->_interval_cb.timeout)) {
+        if (this_loop == pool->_interval_cb.loop && !h2o_timer_is_linked(&pool->_interval_cb.timeout)) {
             if (next_expired < CHECK_EXPIRATION_MIN_INTERVAL)
                 next_expired = CHECK_EXPIRATION_MIN_INTERVAL;
             h2o_timer_link(pool->_interval_cb.loop, next_expired, &pool->_interval_cb.timeout);
@@ -124,7 +124,7 @@ static void on_timeout(h2o_timer_t *timeout)
     h2o_socketpool_t *pool = H2O_STRUCT_FROM_MEMBER(h2o_socketpool_t, _interval_cb.timeout, timeout);
 
     if (pthread_mutex_trylock(&pool->_shared.mutex) == 0) {
-        check_pool_expired_locked(pool);
+        check_pool_expired_locked(pool, pool->_interval_cb.loop);
         pthread_mutex_unlock(&pool->_shared.mutex);
     }
 }
@@ -473,7 +473,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
 
     /* fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);
-    check_pool_expired_locked(pool);
+    check_pool_expired_locked(pool, loop);
 
     /* TODO lookup outside this critical section */
     if (is_global_pool(pool)) {
@@ -601,7 +601,7 @@ int h2o_socketpool_return(h2o_socketpool_t *pool, h2o_socket_t *sock)
     __sync_add_and_fetch(&pool->_shared.pooled_count, 1);
 
     pthread_mutex_lock(&pool->_shared.mutex);
-    check_pool_expired_locked(pool);
+    check_pool_expired_locked(pool, h2o_socket_get_loop(sock));
     h2o_linklist_insert(&pool->_shared.sockets, &entry->all_link);
     h2o_linklist_insert(&pool->targets.entries[target]->_shared.sockets, &entry->target_link);
     pthread_mutex_unlock(&pool->_shared.mutex);
