@@ -36,13 +36,11 @@ struct st_h2o_redirect_handler_t {
 static void on_dispose(h2o_handler_t *_self)
 {
     h2o_redirect_handler_t *self = (void *)_self;
-    if (self->prefix_list.entries != NULL) {
-        size_t i;
-        for (i = 0; i != self->prefix_list.size; ++i) {
-            free(self->prefix_list.entries[i].base);
-        }
-        free(self->prefix_list.entries);
+    size_t i;
+    for (i = 0; i != self->prefix_list.size; ++i) {
+        free(self->prefix_list.entries[i].base);
     }
+    free(self->prefix_list.entries);
 }
 
 static void redirect_internally(h2o_redirect_handler_t *self, h2o_req_t *req, h2o_iovec_t dest)
@@ -89,39 +87,32 @@ SendInternalError:
 
 static h2o_iovec_t join_list(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t delimiter)
 {
-    h2o_iovec_vector_t joined = (h2o_iovec_vector_t){ 0 };
-
     assert(list->size > 0);
-    h2o_vector_reserve(pool, &joined, list->size * 2 - 1);
+    size_t joined_len = 0;
+    h2o_iovec_t *joined = alloca(sizeof(*joined) * (list->size * 2 - 1));
 
     size_t i;
     for (i = 0; i != list->size; ++i) {
         if (i != 0) {
-            joined.entries[joined.size++] = delimiter;
+            joined[joined_len++] = delimiter;
         }
-        joined.entries[joined.size++] = list->entries[i];
+        joined[joined_len++] = list->entries[i];
     }
-    return h2o_concat_list(pool, joined.entries, joined.size);
+    return h2o_concat_list(pool, joined, joined_len);
 }
 
-static void build_prefix_list(h2o_iovec_t str, h2o_iovec_vector_t *dest)
+static void build_prefix_list(const char *str, h2o_iovec_vector_t *dest)
 {
     *dest = (h2o_iovec_vector_t){ 0 };
-    if (str.base == NULL) {
-        return;
-    }
-    char *start = str.base;
-    char *end = start + str.len;
-    char *p = start;
+    char *p = (char *)str;
     char *found;
-    while (p < end && (found = memchr(p, '*', end - p)) != NULL) {
+    while ((found = strchr(p, '*')) != NULL) {
         h2o_vector_reserve(NULL, dest, dest->size + 1);
         dest->entries[dest->size++] = h2o_strdup(NULL, p, found - p);;
         p = found + 1;
     }
-    assert(p <= end);
     h2o_vector_reserve(NULL, dest, dest->size + 1);
-    dest->entries[dest->size++] = h2o_strdup(NULL, p, end - p);
+    dest->entries[dest->size++] = h2o_strdup(NULL, p, strlen(str) - (p - str));
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
@@ -149,7 +140,7 @@ h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int inte
     self->super.on_req = on_req;
     self->internal = internal;
     self->status = status;
-    build_prefix_list(h2o_iovec_init(prefix, strlen(prefix)), &self->prefix_list);
+    build_prefix_list(prefix, &self->prefix_list);
 
     return self;
 }
