@@ -148,7 +148,7 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
 /**
  * joins the separated strings of iovecs into a single iovec
  */
-h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t delimiter);
+h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count, h2o_iovec_t delimiter);
 
 /**
  * splits the string str into a list of iovec

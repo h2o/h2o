@@ -325,15 +325,15 @@ static void test_join_list(void)
     h2o_mem_pool_t pool;
     h2o_mem_init_pool(&pool);
 
-    h2o_iovec_vector_t list = (h2o_iovec_vector_t){ 0 };
-    h2o_vector_reserve(&pool, &list, 5);
-    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT(""));
-    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT("a"));
-    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT(""));
-    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT("b"));
-    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT(""));
+    h2o_iovec_t list[5] = {
+        h2o_iovec_init(H2O_STRLIT("")),
+        h2o_iovec_init(H2O_STRLIT("a")),
+        h2o_iovec_init(H2O_STRLIT("")),
+        h2o_iovec_init(H2O_STRLIT("b")),
+        h2o_iovec_init(H2O_STRLIT("")),
+    };
 
-    h2o_iovec_t ret = h2o_join_list(&pool, &list, h2o_iovec_init(H2O_STRLIT("...")));
+    h2o_iovec_t ret = h2o_join_list(&pool, list, sizeof(list) / sizeof(list[0]), h2o_iovec_init(H2O_STRLIT("...")));
     ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("...a......b...")));
 
     h2o_mem_clear_pool(&pool);

@@ -554,21 +554,21 @@ h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t coun
     return ret;
 }
 
-h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t delimiter)
+h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count, h2o_iovec_t delimiter)
 {
-    if (list->size == 0) {
+    if (count == 0) {
         return h2o_iovec_init(NULL, 0);
     }
 
     size_t joined_len = 0;
-    h2o_iovec_t *joined = alloca(sizeof(*joined) * (list->size * 2 - 1));
+    h2o_iovec_t *joined = alloca(sizeof(*joined) * (count * 2 - 1));
 
     size_t i;
-    for (i = 0; i != list->size; ++i) {
+    for (i = 0; i != count; ++i) {
         if (i != 0) {
             joined[joined_len++] = delimiter;
         }
-        joined[joined_len++] = list->entries[i];
+        joined[joined_len++] = list[i];
     }
     return h2o_concat_list(pool, joined, joined_len);
 }
