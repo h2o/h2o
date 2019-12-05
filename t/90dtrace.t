@@ -50,7 +50,7 @@ if ($tracer_pid == 0) {
     open STDOUT, ">", "$tempdir/trace.out"
         or die "failed to create temporary file:$tempdir/trace.out:$!";
     if ($^O eq 'linux') {
-        exec qw(bpftrace -B none -p), $server->{pid}, "-e", <<'EOT';
+        exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
 usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 usdt::h2o:send_response_status {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
@@ -87,7 +87,7 @@ while (1) {
         $read_trace = sub {
             seek $fh, $off, 0
                 or die "seek failed:$!";
-            read $fh, my $bytes, 10000;
+            read $fh, my $bytes, 13000;
             $bytes = ''
                 unless defined $bytes;
             $off += length $bytes;
