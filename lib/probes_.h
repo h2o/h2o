@@ -82,6 +82,12 @@ __attribute__((noinline)) static void h2o_probe_request_header(h2o_req_t *req, u
     H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
 }
 
+__attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name,
+                                                                h2o_iovec_t value)
+{
+    H2O_PROBE_CONN(SEND_RESPONSE_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
+}
+
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);

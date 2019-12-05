@@ -27,4 +27,6 @@ provider h2o {
     probe receive_request_header(uint64_t conn_id, uint64_t req_id, const char *name, size_t name_len, const char *value,
                                  size_t value_len);
     probe send_response_status(uint64_t conn_id, uint64_t req_id, int status);
+    probe send_response_header(uint64_t conn_id, uint64_t req_id, const char *name, size_t name_len, const char *value,
+                               size_t value_len);
 };
