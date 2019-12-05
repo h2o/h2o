@@ -144,6 +144,17 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len);
 #define h2o_concat(pool, ...)                                                                                                      \
     h2o_concat_list(pool, (h2o_iovec_t[]){__VA_ARGS__}, sizeof((h2o_iovec_t[]){__VA_ARGS__}) / sizeof(h2o_iovec_t))
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count);
+
+/**
+ * joins the separated strings of iovecs into a single iovec
+ */
+h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t delimiter);
+
+/**
+ * splits the string str into a list of iovec
+ */
+h2o_iovec_vector_t h2o_split(h2o_mem_pool_t *pool, h2o_iovec_t str, const char needle);
+
 /**
  * emits a two-line string to buf that graphically points to given location within the source string
  * @return 0 if successful

@@ -320,6 +320,48 @@ static void test_at_position(void)
     ok(ret != 0);
 }
 
+static void test_join_list(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+
+    h2o_iovec_vector_t list = (h2o_iovec_vector_t){ 0 };
+    h2o_vector_reserve(&pool, &list, 5);
+    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT(""));
+    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT("a"));
+    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT(""));
+    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT("b"));
+    list.entries[list.size++] = h2o_iovec_init(H2O_STRLIT(""));
+
+    h2o_iovec_t ret = h2o_join_list(&pool, &list, h2o_iovec_init(H2O_STRLIT("...")));
+    ok(h2o_memis(ret.base, ret.len, H2O_STRLIT("...a......b...")));
+
+    h2o_mem_clear_pool(&pool);
+}
+
+static void test_split(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+
+#define TEST(str, needle, ...) \
+    do { \
+        const char *expected[] = { __VA_ARGS__ }; \
+        h2o_iovec_vector_t ret = h2o_split(&pool, h2o_iovec_init(H2O_STRLIT((str))), (needle)); \
+        size_t expected_len = sizeof(expected) / sizeof(expected[0]); \
+        ok(expected_len == ret.size); \
+        size_t i; \
+        for (i = 0; i != ret.size; ++i) { \
+            ok(h2o_memis(ret.entries[i].base, ret.entries[i].len, expected[i], strlen(expected[i]))); \
+        } \
+    } while (0);
+
+    TEST("foo*bar*baz", '*', "foo", "bar", "baz");
+    TEST("***", '*', "", "", "", "");
+
+    h2o_mem_clear_pool(&pool);
+}
+
 void test_lib__common__string_c(void)
 {
     subtest("strstr", test_strstr);
@@ -332,4 +374,6 @@ void test_lib__common__string_c(void)
     subtest("htmlescape", test_htmlescape);
     subtest("uri_escape", test_uri_escape);
     subtest("at_position", test_at_position);
+    subtest("join_list", test_join_list);
+    subtest("split", test_split);
 }

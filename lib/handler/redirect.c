@@ -85,42 +85,12 @@ SendInternalError:
     h2o_send_error_503(req, "Internal Server Error", "internal server error", 0);
 }
 
-static h2o_iovec_t join_list(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t delimiter)
-{
-    assert(list->size > 0);
-    size_t joined_len = 0;
-    h2o_iovec_t *joined = alloca(sizeof(*joined) * (list->size * 2 - 1));
-
-    size_t i;
-    for (i = 0; i != list->size; ++i) {
-        if (i != 0) {
-            joined[joined_len++] = delimiter;
-        }
-        joined[joined_len++] = list->entries[i];
-    }
-    return h2o_concat_list(pool, joined, joined_len);
-}
-
-static h2o_iovec_vector_t build_prefix_list(const char *str)
-{
-    h2o_iovec_vector_t dest = (h2o_iovec_vector_t){ 0 };
-    const char *found;
-    while ((found = strchr(str, '*')) != NULL) {
-        h2o_vector_reserve(NULL, &dest, dest.size + 1);
-        dest.entries[dest.size++] = h2o_strdup(NULL, str, found - str);
-        str = found + 1;
-    }
-    h2o_vector_reserve(NULL, &dest, dest.size + 1);
-    dest.entries[dest.size++] = h2o_strdup(NULL, str, strlen(str));
-    return dest;
-}
-
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     h2o_redirect_handler_t *self = (void *)_self;
 
     h2o_iovec_t delimiter = req->authority_wildcard_match.base == NULL ? h2o_iovec_init(H2O_STRLIT("*")) : req->authority_wildcard_match;
-    h2o_iovec_t prefix = join_list(&req->pool, &self->prefix_list, delimiter);
+    h2o_iovec_t prefix = h2o_join_list(&req->pool, &self->prefix_list, delimiter);
     h2o_iovec_t dest = h2o_build_destination(req, prefix.base, prefix.len, 1);
 
     /* redirect */
@@ -140,7 +110,7 @@ h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int inte
     self->super.on_req = on_req;
     self->internal = internal;
     self->status = status;
-    self->prefix_list = build_prefix_list(prefix);
+    self->prefix_list = h2o_split(NULL, h2o_iovec_init(prefix, strlen(prefix)), '*');
 
     return self;
 }
