@@ -101,18 +101,18 @@ static h2o_iovec_t join_list(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o
     return h2o_concat_list(pool, joined, joined_len);
 }
 
-static void build_prefix_list(const char *str, h2o_iovec_vector_t *dest)
+static h2o_iovec_vector_t build_prefix_list(const char *str)
 {
-    *dest = (h2o_iovec_vector_t){ 0 };
-    char *p = (char *)str;
-    char *found;
-    while ((found = strchr(p, '*')) != NULL) {
-        h2o_vector_reserve(NULL, dest, dest->size + 1);
-        dest->entries[dest->size++] = h2o_strdup(NULL, p, found - p);;
-        p = found + 1;
+    h2o_iovec_vector_t dest = (h2o_iovec_vector_t){ 0 };
+    const char *found;
+    while ((found = strchr(str, '*')) != NULL) {
+        h2o_vector_reserve(NULL, &dest, dest.size + 1);
+        dest.entries[dest.size++] = h2o_strdup(NULL, str, found - str);
+        str = found + 1;
     }
-    h2o_vector_reserve(NULL, dest, dest->size + 1);
-    dest->entries[dest->size++] = h2o_strdup(NULL, p, strlen(str) - (p - str));
+    h2o_vector_reserve(NULL, &dest, dest.size + 1);
+    dest.entries[dest.size++] = h2o_strdup(NULL, str, strlen(str));
+    return dest;
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
@@ -140,7 +140,7 @@ h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int inte
     self->super.on_req = on_req;
     self->internal = internal;
     self->status = status;
-    build_prefix_list(prefix, &self->prefix_list);
+    self->prefix_list = build_prefix_list(prefix);
 
     return self;
 }
