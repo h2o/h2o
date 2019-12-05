@@ -947,7 +947,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         } else {
             bufs[bufcnt].base = h2o_mem_alloc_pool(&conn->req.pool, char, headers_est_size);
         }
-        h2o_probe_log_response_status(&conn->req, conn->_req_index);
+        h2o_probe_log_response(&conn->req, conn->_req_index);
         bufs[bufcnt].len = flatten_headers(bufs[bufcnt].base, &conn->req, connection);
         if (pull_mode == IS_PULL) {
             pull_mode = LASTBUF_IS_PULL;

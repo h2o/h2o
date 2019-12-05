@@ -331,7 +331,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
             send_refused_stream(conn, stream);
             return;
         }
-        h2o_probe_log_response_status(&stream->req, stream->stream_id);
+        h2o_probe_log_response(&stream->req, stream->stream_id);
         if (send_headers(conn, stream) != 0)
             return;
     /* fallthru */
