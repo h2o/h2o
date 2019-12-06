@@ -575,7 +575,7 @@ h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count,
 
 h2o_iovec_vector_t h2o_split(h2o_mem_pool_t *pool, h2o_iovec_t str, const char needle)
 {
-    h2o_iovec_vector_t list = (h2o_iovec_vector_t){ 0 };
+    h2o_iovec_vector_t list = (h2o_iovec_vector_t){0};
     const char *p = str.base;
     const char *end = str.base + str.len;
     const char *found;

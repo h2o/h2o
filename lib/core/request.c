@@ -71,7 +71,8 @@ static struct st_deferred_request_action_t *create_deferred_action(h2o_req_t *re
     return action;
 }
 
-static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority, uint16_t default_port, h2o_iovec_t *wildcard_match)
+static h2o_hostconf_t *find_hostconf(h2o_hostconf_t **hostconfs, h2o_iovec_t authority, uint16_t default_port,
+                                     h2o_iovec_t *wildcard_match)
 {
     h2o_iovec_t hostname;
     uint16_t port;
@@ -124,7 +125,8 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
     /* find the host context */
     if (req->input.authority.base != NULL) {
         if (req->conn->hosts[1] == NULL ||
-            (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port, &req->authority_wildcard_match)) == NULL)
+            (hostconf = find_hostconf(req->conn->hosts, req->input.authority, req->input.scheme->default_port,
+                                      &req->authority_wildcard_match)) == NULL)
             hostconf = *req->conn->hosts;
     } else {
         /* set the authority name to the default one */
@@ -372,7 +374,8 @@ void h2o_delegate_request_deferred(h2o_req_t *req)
 static void process_resolved_request(h2o_req_t *req, h2o_hostconf_t **hosts)
 {
     h2o_hostconf_t *hostconf;
-    if (req->overrides == NULL && (hostconf = find_hostconf(hosts, req->authority, req->scheme->default_port, &req->authority_wildcard_match)) != NULL) {
+    if (req->overrides == NULL &&
+        (hostconf = find_hostconf(hosts, req->authority, req->scheme->default_port, &req->authority_wildcard_match)) != NULL) {
         setup_pathconf(req, hostconf);
         call_handlers(req, req->pathconf->handlers.entries);
         return;
@@ -836,4 +839,3 @@ Clear:
     req->res.status = 0;
     req->res.headers = (h2o_headers_t){NULL, 0, 0};
 }
-
