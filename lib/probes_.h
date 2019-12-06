@@ -108,10 +108,12 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(SEND_RESPONSE_STATUS, req->conn, req_index, req->res.status);
     if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
-        h2o_iovec_t cl_buf;
-        cl_buf.base = h2o_mem_alloc_pool(&req->pool, char, req->res.content_length);
-        cl_buf.len = sprintf(cl_buf.base, "%zu", req->res.content_length);
-        h2o_probe_response_header(req, req_index, H2O_TOKEN_CONTENT_LENGTH->buf, cl_buf);
+        if (req->res.content_length != SIZE_MAX) {
+            h2o_iovec_t cl_buf;
+            cl_buf.base = h2o_mem_alloc_pool(&req->pool, char, req->res.content_length);
+            cl_buf.len = sprintf(cl_buf.base, "%zu", req->res.content_length);
+            h2o_probe_response_header(req, req_index, H2O_TOKEN_CONTENT_LENGTH->buf, cl_buf);
+        }
         size_t i;
         for (i = 0; i != req->res.headers.size; ++i) {
             h2o_header_t *h = req->res.headers.entries + i;
