@@ -37,6 +37,7 @@ extern "C" {
 #include "quicly/frame.h"
 #include "quicly/linklist.h"
 #include "quicly/loss.h"
+#include "quicly/cc.h"
 #include "quicly/recvstate.h"
 #include "quicly/sendstate.h"
 #include "quicly/maxsender.h"
@@ -47,13 +48,29 @@ extern "C" {
 
 /* invariants! */
 #define QUICLY_LONG_HEADER_BIT 0x80
+#define QUICLY_QUIC_BIT 0x40
+#define QUICLY_KEY_PHASE_BIT 0x4
+#define QUICLY_LONG_HEADER_RESERVED_BITS 0xc
+#define QUICLY_SHORT_HEADER_RESERVED_BITS 0x18
+
+#define QUICLY_PACKET_TYPE_INITIAL (QUICLY_LONG_HEADER_BIT | QUICLY_QUIC_BIT | 0)
+#define QUICLY_PACKET_TYPE_0RTT (QUICLY_LONG_HEADER_BIT | QUICLY_QUIC_BIT | 0x10)
+#define QUICLY_PACKET_TYPE_HANDSHAKE (QUICLY_LONG_HEADER_BIT | QUICLY_QUIC_BIT | 0x20)
+#define QUICLY_PACKET_TYPE_RETRY (QUICLY_LONG_HEADER_BIT | QUICLY_QUIC_BIT | 0x30)
+#define QUICLY_PACKET_TYPE_BITMASK 0xf0
+
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff000017
+#define QUICLY_PROTOCOL_VERSION 0xff000018
+
+#define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte)&0xf0) == 0xc0)
 
 #define QUICLY_MAX_CID_LEN_V1 20
 #define QUICLY_STATELESS_RESET_TOKEN_LEN 16
 #define QUICLY_STATELESS_RESET_PACKET_MIN_LEN 39
+
+#define QUICLY_MAX_PN_SIZE 4  /* maximum defined by the RFC used for calculating header protection sampling offset */
+#define QUICLY_SEND_PN_SIZE 2 /* size of PN used for sending */
 
 typedef union st_quicly_address_t {
     struct sockaddr sa;
@@ -157,6 +174,12 @@ QUICLY_CALLBACK_TYPE(int, save_resumption_token, quicly_conn_t *conn, ptls_iovec
  */
 QUICLY_CALLBACK_TYPE(int, generate_resumption_token, quicly_conn_t *conn, ptls_buffer_t *buf,
                      quicly_address_token_plaintext_t *token);
+/**
+ *
+ */
+QUICLY_CALLBACK_TYPE(void, finalize_send_packet, quicly_conn_t *conn, ptls_cipher_context_t *hp, ptls_aead_context_t *aead,
+                     quicly_datagram_t *packet, size_t first_byte_at, size_t payload_from, int coalesced);
+
 
 typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
@@ -253,6 +276,14 @@ struct st_quicly_context_t {
      */
     quicly_transport_parameters_t transport_params;
     /**
+     * number of packets that can be sent without a key update
+     */
+    uint64_t max_packets_per_key;
+    /**
+     * maximum number of bytes that can be transmitted on a CRYPTO stream (per each epoch)
+     */
+    uint64_t max_crypto_bytes;
+    /**
      * client-only
      */
     unsigned enforce_version_negotiation : 1;
@@ -260,6 +291,10 @@ struct st_quicly_context_t {
      * if inter-node routing is used (by utilising quicly_cid_plaintext_t::node_id)
      */
     unsigned is_clustered : 1;
+    /**
+     * expand client hello so that it does not fit into one datagram
+     */
+    unsigned expand_client_hello : 1;
     /**
      * callback for allocating memory for raw packet
      */
@@ -292,6 +327,10 @@ struct st_quicly_context_t {
      *
      */
     quicly_generate_resumption_token_t *generate_resumption_token;
+    /**
+     * optional callback for encryption offloading
+     */
+    quicly_finalize_send_packet_t *finalize_send_packet;
 };
 
 /**
@@ -346,6 +385,10 @@ typedef struct st_quicly_stats_t {
      * RTT
      */
     quicly_rtt_t rtt;
+    /**
+     * Congestion control (experimental; TODO cherry-pick what can be exposed as part of a stable API)
+     */
+    quicly_cc_t cc;
 } quicly_stats_t;
 
 /**
@@ -454,8 +497,9 @@ typedef struct st_quicly_stream_callbacks_t {
     /**
      * asks the application to fill the frame payload.  `off` is the offset within the buffer (the beginning position of the buffer
      * changes as `on_send_shift` is invoked). `len` is an in/out argument that specifies the size of the buffer / amount of data
-     * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.  See
-     * also quicly_stream_sync_sendbuf.
+     * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.
+     * As this callback is triggered by calling quicly_stream_sync_sendbuf (stream, 1) when tx data is present, it assumes data
+     * to be available - that is `len` return value should be non-zero.
      */
     int (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
@@ -593,13 +637,17 @@ typedef struct st_quicly_decoded_packet_t {
     ptls_iovec_t token;
     /**
      * starting offset of data (i.e., version-dependent area of a long header packet (version numbers in case of VN), odcid (in case
-     * of retry), or encrypted PN)
+     * of retry), encrypted PN (if decrypted_pn is UINT64_MAX) or data (if decrypted_pn is not UINT64_MAX))
      */
     size_t encrypted_off;
     /**
      * size of the datagram
      */
     size_t datagram_size;
+    /**
+     * if not UINT64_MAX, indicates that the packet has been decrypted prior to being passed to `quicly_receive`.
+     */
+    uint64_t decrypted_pn;
     /**
      *
      */
@@ -772,7 +820,7 @@ int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struc
  *
  */
 int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int is_client, const quicly_transport_parameters_t *params,
-                                           const quicly_cid_t *odcid, const void *stateless_reset_token);
+                                           const quicly_cid_t *odcid, const void *stateless_reset_token, int expand);
 /**
  *
  */

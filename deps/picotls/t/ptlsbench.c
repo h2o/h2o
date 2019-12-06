@@ -38,11 +38,14 @@
 #include <openssl/opensslv.h>
 
 #ifdef _WINDOWS
+#include <bcrypt.h>
+#include "picotls/ptlsbcrypt.h"
 #ifdef _DEBUG
 #define BENCH_MODE "check"
 #else
 #define BENCH_MODE "release"
 #endif
+#include "../lib/ptlsbcrypt.c"
 #else
 #ifdef PTLS_DEBUG
 #define BENCH_MODE "debug"
@@ -242,17 +245,23 @@ typedef struct st_ptls_bench_entry_t {
     const char *algo_name;
     ptls_aead_algorithm_t *aead;
     ptls_hash_algorithm_t *hash;
+    int enabled_by_defaut;
 } ptls_bench_entry_t;
 
 static ptls_bench_entry_t aead_list[] = {
-    {"minicrypto", "aes128gcm", &ptls_minicrypto_aes128gcm, &ptls_minicrypto_sha256},
-    {"minicrypto", "aes256gcm", &ptls_minicrypto_aes256gcm, &ptls_minicrypto_sha384},
-    {"minicrypto", "chacha20poly1305", &ptls_minicrypto_chacha20poly1305, &ptls_minicrypto_sha256},
-#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
-    {"openssl", "chacha20poly1305", &ptls_openssl_chacha20poly1305, &ptls_minicrypto_sha256},
+    /* Minicrypto AES disabled by defaut because of atrocious perf */
+    {"minicrypto", "aes128gcm", &ptls_minicrypto_aes128gcm, &ptls_minicrypto_sha256, 0},
+    {"minicrypto", "aes256gcm", &ptls_minicrypto_aes256gcm, &ptls_minicrypto_sha384, 0},
+    {"minicrypto", "chacha20poly1305", &ptls_minicrypto_chacha20poly1305, &ptls_minicrypto_sha256, 1},
+#ifdef _WINDOWS
+    {"ptlsbcrypt", "aes128gcm", &ptls_bcrypt_aes128gcm, &ptls_bcrypt_sha256, 1},
+    {"ptlsbcrypt", "aes256gcm", &ptls_bcrypt_aes256gcm, &ptls_bcrypt_sha384, 1},
 #endif
-    {"openssl", "aes128gcm", &ptls_openssl_aes128gcm, &ptls_minicrypto_sha256},
-    {"openssl", "aes256gcm", &ptls_openssl_aes256gcm, &ptls_minicrypto_sha384}};
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+    {"openssl", "chacha20poly1305", &ptls_openssl_chacha20poly1305, &ptls_minicrypto_sha256, 1},
+#endif
+    {"openssl", "aes128gcm", &ptls_openssl_aes128gcm, &ptls_minicrypto_sha256, 1},
+    {"openssl", "aes256gcm", &ptls_openssl_aes256gcm, &ptls_minicrypto_sha384, 1}};
 
 static size_t nb_aead_list = sizeof(aead_list) / sizeof(ptls_bench_entry_t);
 
@@ -280,6 +289,7 @@ static int bench_basic(uint64_t *x)
 int main(int argc, char **argv)
 {
     int ret = 0;
+    int force_all_tests = 0;
     uint64_t x = 0xdeadbeef;
     uint64_t s = 0;
     int basic_ref = bench_basic(&x);
@@ -305,17 +315,24 @@ int main(int argc, char **argv)
     }
 #endif
 
-    
-    printf("OS, HW, bits, mode, 10M ops, provider, version, algorithm, N, L, encrypt us, decrypt us, encrypt mbps, decrypt mbps,\n");
-    
+    if (argc == 2 && strcmp(argv[1], "-f") == 0) {
+        force_all_tests = 1;
+    } else if (argc > 1) {
+        fprintf(stderr, "Usage: %s [-f]\n   Use option \"-f\" to force execution of the slower tests.\n", argv[0]);
+        exit (-1);
+    }
 
+    printf("OS, HW, bits, mode, 10M ops, provider, version, algorithm, N, L, encrypt us, decrypt us, encrypt mbps, decrypt mbps,\n");
+ 
     for (size_t i = 0; ret == 0 && i < nb_aead_list; i++) {
-        ret = bench_run_aead(OS, HW, basic_ref, x, aead_list[i].provider, aead_list[i].algo_name, aead_list[i].aead, aead_list[i].hash, 1000,
-                             1500, &s);
+        if (aead_list[i].enabled_by_defaut || force_all_tests) {
+            ret = bench_run_aead(OS, HW, basic_ref, x, aead_list[i].provider, aead_list[i].algo_name, aead_list[i].aead,
+                                 aead_list[i].hash, 1000, 1500, &s);
+        }
     }
 
     /* Gratuitous test, designed to ensure that the initial computation
-     * of the basic reference benchmark is not optimised away. */
+     * of the basic reference benchmark is not optimized away. */
     if (s == 0){
        printf("Unexpected value of test sum s = %llx\n", (unsigned long long)s);
     } 

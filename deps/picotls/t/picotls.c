@@ -445,9 +445,12 @@ static int test_fragmented_message_record(ptls_t *tls, struct st_ptls_message_em
 
 static void test_fragmented_message(void)
 {
-    ptls_t tls = {NULL};
+    ptls_context_t tlsctx = {NULL};
+    ptls_t tls = {&tlsctx};
     struct st_ptls_record_t rec = {PTLS_CONTENT_TYPE_HANDSHAKE, 0x0301};
     int ret;
+
+    tlsctx.max_buffer_size = 14;
 
 #define SET_RECORD(lit)                                                                                                            \
     do {                                                                                                                           \
@@ -505,6 +508,22 @@ static void test_fragmented_message(void)
               "end",
               7) == 0);
     ok(test_fragmented_message_queue.vec[2].is_end_of_record);
+
+    /* overflow (post-cb) */
+    test_fragmented_message_queue.count = 0;
+    SET_RECORD("\x01\x00\x00\xff" "0123456789ab");
+    ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
+    ok(ret == PTLS_ALERT_HANDSHAKE_FAILURE);
+    ok(test_fragmented_message_queue.count == 0);
+
+    /* overflow (pre-cb) */
+    SET_RECORD("\x01\x00\x00\xff" "0123456789");
+    ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    SET_RECORD("abcdef");
+    ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
+    ok(ret == PTLS_ALERT_HANDSHAKE_FAILURE);
+    ok(test_fragmented_message_queue.count == 0);
 
 #undef SET_RECORD
 }

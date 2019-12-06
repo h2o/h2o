@@ -34,7 +34,7 @@ my $tempdir = tempdir(CLEANUP => 1);
 
 subtest "hello" => sub {
     my $guard = spawn_server();
-    my $resp = `$cli -e $tempdir/events -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    my $resp = `$cli -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     subtest "events" => sub {
         my $events = slurp_file("$tempdir/events");
@@ -47,12 +47,12 @@ subtest "hello" => sub {
 
 subtest "version-negotiation" => sub {
     my $guard = spawn_server();
-    my $resp = `$cli -n -e $tempdir/events -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    my $resp = `$cli -n -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     my $events = slurp_file("$tempdir/events");
     if ($events =~ /"type":"connect",.*"version":(\d+)(?:.|\n)*"type":"version-switch",.*"new-version":(\d+)/m) {
-        is $2, 0xff000017;
-        isnt $1, 0xff000017;
+        is $2, 0xff000018;
+        isnt $1, 0xff000018;
     } else {
         fail "no quic-version-switch event";
         diag $events;
@@ -61,7 +61,7 @@ subtest "version-negotiation" => sub {
 
 subtest "retry" => sub {
     my $guard = spawn_server("-R");
-    my $resp = `$cli -e $tempdir/events -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    my $resp = `$cli -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     my $events = slurp_file("$tempdir/events");
     complex $events, sub {
@@ -69,11 +69,22 @@ subtest "retry" => sub {
     }, "CH deemed lost in response to retry";
 };
 
+subtest "large-client-hello" => sub {
+    my $guard = spawn_server();
+    my $resp = `$cli -E -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n";
+    my $events = slurp_file("$tempdir/events");
+    complex $events, sub {
+        my $before_receive = (split /"receive"/, $_)[0];
+        $before_receive =~ /"stream-send".*?\n.*?"stream-send"/s;
+    };
+};
+
 unlink "$tempdir/session";
 
 subtest "0-rtt" => sub {
     my $guard = spawn_server();
-    my $resp = `$cli -s $tempdir/session -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    my $resp = `$cli -s $tempdir/session -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     ok -e "$tempdir/session", "session saved";
     system "$cli -s $tempdir/session -e $tempdir/events 127.0.0.1 $port > /dev/null 2>&1";
@@ -108,7 +119,7 @@ subtest "stateless-reset" => sub {
 
 subtest "idle-timeout" => sub {
     my $guard = spawn_server(qw(-I 1000 -e), "$tempdir/server-events");
-    my $resp = `$cli -e $tempdir/client-events -p /12.txt -i 2000 127.0.0.1 $port 2> /dev/null`;
+    my $resp = `$cli -e $tempdir/client-events -p /12 -i 2000 127.0.0.1 $port 2> /dev/null`;
     # Because we start using idle timeout at the moment we dispose handshake key (currently 3PTO after handshake), there is an
     # uncertainty in if the first request-response is covered by the idle timeout.  Therefore, we check if we have either one or
     # to responses, add a sleep in case server timeouts after client does, pass the case where the server sends stateless-reset...
@@ -121,17 +132,17 @@ subtest "idle-timeout" => sub {
 
 subtest "blocked-streams" => sub {
     my $guard = spawn_server(qw(-X 2));
-    my $resp = `$cli -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    my $resp = `$cli -p /12 -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\nhello world\n";
-    $resp = `$cli -p /12.txt -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    $resp = `$cli -p /12 -p /12 -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\nhello world\nhello world\n";
-    $resp = `$cli -p /12.txt -p /12.txt -p /12.txt -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    $resp = `$cli -p /12 -p /12 -p /12 -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\nhello world\nhello world\nhello world\n";
 };
 
 subtest "max-data-crapped" => sub {
     my $guard = spawn_server('-e', "$tempdir/events");
-    my $resp = `$cli -m 10 -p /12.txt 127.0.0.1 $port 2> /dev/null`;
+    my $resp = `$cli -m 10 -p /12 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello world\n";
     undef $guard;
     # build list of filtered events
@@ -156,12 +167,59 @@ subtest "0-rtt-vs-hrr" => sub {
     plan skip_all => "no support for x25519, we need multiple key exchanges to run this test"
         if `$cli -x x25519 2>&1` =~ /unknown key exchange/;
     my $guard = spawn_server(qw(-x x25519));
-    my $resp = `$cli -x x25519 -x secp256r1 -s $tempdir/session -p /12.txt 127.0.0.1 $port 2> $tempdir/stderr.log; cat $tempdir/stderr.log`;
+    my $resp = `$cli -x x25519 -x secp256r1 -s $tempdir/session -p /12 127.0.0.1 $port 2> $tempdir/stderr.log; cat $tempdir/stderr.log`;
     like $resp, qr/^hello world\n/s;
     undef $guard;
     $guard = spawn_server(qw(-x secp256r1));
-    $resp = `$cli -x x25519 -x secp256r1 -s $tempdir/session -p /12.txt 127.0.0.1 $port 2> $tempdir/stderr.log; cat $tempdir/stderr.log`;
+    $resp = `$cli -x x25519 -x secp256r1 -s $tempdir/session -p /12 127.0.0.1 $port 2> $tempdir/stderr.log; cat $tempdir/stderr.log`;
     like $resp, qr/^hello world\n/s;
+};
+
+subtest "alpn" => sub {
+    my $guard = spawn_server(qw(-a hq-23));
+    my $resp = `$cli -p /12 127.0.0.1 $port 2>&1`;
+    like $resp, qr/transport close:code=0x178;/, "no ALPN";
+    $resp = `$cli -a hq-23 -p /12 127.0.0.1 $port 2>&1`;
+    like $resp, qr/^hello world$/m, "ALPN match";
+    $resp = `$cli -a hX-23 -p /12 127.0.0.1 $port 2>&1`;
+    like $resp, qr/transport close:code=0x178;/, "ALPN mismatch";
+};
+
+subtest "key-update" => sub {
+    my $doit = sub {
+        my ($server_opts, $client_opts, $doing_updates) = @_;
+        my $guard = spawn_server(@$server_opts, "-e", "$tempdir/events");
+        # ensure at least 30 round-trips
+        my $resp = `$cli -p /120000 -M 4000 @{[join " ", @$client_opts]} 127.0.0.1 $port 2> /dev/null`;
+        is $resp, "hello world\n" x 10000;
+        undef $guard;
+        my $num_key_updates = do {
+            my $loglines = do {
+                open my $fh, "<", "$tempdir/events"
+                    or die "failed to open file:$tempdir/events:$!";
+                local $/;
+                <$fh>;
+            };
+            () = $loglines =~ /{"type":"crypto-send-key-update",/sg;
+        };
+        if ($doing_updates) {
+            cmp_ok($num_key_updates, ">=", 4);
+        } else {
+            is $num_key_updates, 0;
+        }
+    };
+    subtest "none" => sub {
+        $doit->([], [], undef);
+    };
+    subtest "client" => sub {
+        $doit->([], [qw(-K 1)], 1);
+    };
+    subtest "server" => sub {
+        $doit->([qw(-K 1)], [], 1);
+    };
+    subtest "both" => sub {
+        $doit->([qw(-K 1)], [qw(-K 1)], 1);
+    };
 };
 
 done_testing;
