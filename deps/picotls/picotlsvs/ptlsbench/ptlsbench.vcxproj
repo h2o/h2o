@@ -100,7 +100,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(OPENSSL64DIR);$(OPENSSL64DIR)\lib;$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>picotls-core.lib;picotls-openssl.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;bcrypt.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>bcrypt.lib;picotls-core.lib;picotls-openssl.lib;picotls-bcrypt.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -118,7 +118,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(OPENSSLDIR);$(OutDir)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>picotls-core.lib;picotls-openssl.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;bcrypt.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>bcrypt.lib;picotls-core.lib;picotls-openssl.lib;picotls-bcrypt.lib;picotls-minicrypto.lib;picotls-minicrypto-deps.lib;libcrypto.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

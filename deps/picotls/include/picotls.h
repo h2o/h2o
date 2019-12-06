@@ -632,6 +632,10 @@ struct st_ptls_context_t {
      */
     uint32_t max_early_data_size;
     /**
+     * maximum size of the message buffer (default: 0 = unlimited = 3 + 2^24 bytes)
+     */
+    size_t max_buffer_size;
+    /**
      * the field is obsolete; should be set to NULL for QUIC draft-17.  Note also that even though everybody did, it was incorrect
      * to set the value to "quic " in the earlier versions of the draft.
      */
@@ -967,10 +971,17 @@ int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
     } while (0)
 
 /**
- * create a object to handle new TLS connection. Client-side of a TLS connection is created if server_name is non-NULL. Otherwise,
- * a server-side connection is created.
+ * create a client object to handle new TLS connection
  */
-ptls_t *ptls_new(ptls_context_t *ctx, int is_server);
+ptls_t *ptls_client_new(ptls_context_t *ctx);
+/**
+ * create a server object to handle new TLS connection
+ */
+ptls_t *ptls_server_new(ptls_context_t *ctx);
+/**
+ * creates a object handle new TLS connection
+ */
+static ptls_t *ptls_new(ptls_context_t *ctx, int is_server);
 /**
  * releases all resources associated to the object
  */
@@ -1107,7 +1118,9 @@ void ptls_cipher_free(ptls_cipher_context_t *ctx);
  */
 static void ptls_cipher_init(ptls_cipher_context_t *ctx, const void *iv);
 /**
- * encrypts given text
+ * Encrypts given text. The function must be used in a way that the output length would be equal to the input length. For example,
+ * when using a block cipher in ECB mode, `len` must be a multiple of the block size when using a block cipher. The length can be
+ * of any value when using a stream cipher or a block cipher in CTR mode.
  */
 static void ptls_cipher_encrypt(ptls_cipher_context_t *ctx, void *output, const void *input, size_t len);
 /**
@@ -1172,6 +1185,10 @@ size_t ptls_get_read_epoch(ptls_t *tls);
  */
 int ptls_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offsets[5], size_t in_epoch, const void *input,
                         size_t inlen, ptls_handshake_properties_t *properties);
+int ptls_client_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offsets[5], size_t in_epoch, const void *input,
+                               size_t inlen, ptls_handshake_properties_t *properties);
+int ptls_server_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offsets[5], size_t in_epoch, const void *input,
+                               size_t inlen, ptls_handshake_properties_t *properties);
 /**
  * internal
  */
@@ -1232,6 +1249,11 @@ extern PTLS_THREADLOCAL unsigned ptls_default_skip_tracing;
 #endif
 
 /* inline functions */
+
+inline ptls_t *ptls_new(ptls_context_t *ctx, int is_server)
+{
+    return is_server ? ptls_server_new(ctx) : ptls_client_new(ctx);
+}
 
 inline ptls_iovec_t ptls_iovec_init(const void *p, size_t len)
 {

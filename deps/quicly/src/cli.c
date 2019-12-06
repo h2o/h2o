@@ -138,7 +138,6 @@ static int parse_request(ptls_iovec_t input, char **path, int *is_http1)
 {
     size_t off = 0, path_start;
     
-    printf("Request received: %s\n", input.base);
     for (off = 0; off != input.len; ++off)
         if (input.base[off] == ' ')
             goto EndOfMethod;
@@ -281,6 +280,9 @@ static int server_on_receive(quicly_stream_t *stream, size_t off, const void *sr
     int is_http1;
     int ret;
 
+    if (!quicly_sendstate_is_open(&stream->sendstate))
+        return 0;
+
     if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
         return ret;
 
@@ -303,9 +305,6 @@ static int server_on_receive(quicly_stream_t *stream, size_t off, const void *sr
         goto Sent;
     if (validate_path(path) && send_file(stream, is_http1, path + 1, "text/plain"))
         goto Sent;
-
-    if (!quicly_sendstate_is_open(&stream->sendstate))
-        return 0;
 
     send_header(stream, is_http1, 404, "text/plain; charset=utf-8");
     send_str(stream, "not found\n");
@@ -904,6 +903,7 @@ static void usage(const char *cmd)
            "  -c certificate-file\n"
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
+           "  -K num-packets            perform key update every num-packets packets\n"
            "  -e event-log-file         file to log events\n"
            "  -E                        expand Client Hello (sends multiple client Initials)\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
@@ -953,7 +953,7 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:C:c:k:Ee:i:I:l:M:m:Nnp:P:Rr:S:s:Vvx:X:h")) != -1) {
+    while ((ch = getopt(argc, argv, "a:C:c:k:K:Ee:i:I:l:M:m:Nnp:P:Rr:S:s:Vvx:X:h")) != -1) {
         switch (ch) {
         case 'a':
             assert(negotiated_protocols.count < sizeof(negotiated_protocols.list) / sizeof(negotiated_protocols.list[0]));
@@ -967,6 +967,12 @@ int main(int argc, char **argv)
             break;
         case 'k':
             load_private_key(ctx.tls, optarg);
+            break;
+        case 'K':
+            if (sscanf(optarg, "%" PRIu64, &ctx.max_packets_per_key) != 1) {
+                fprintf(stderr, "failed to parse key update interval: %s\n", optarg);
+                exit(1);
+            }
             break;
         case 'E':
             ctx.expand_client_hello = 1;
