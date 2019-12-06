@@ -583,7 +583,7 @@ void h2o_split(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t str, 
         p = found + 1;
     }
     h2o_vector_reserve(pool, list, list->size + 1);
-    list->entries[list->size++] = h2o_strdup(pool, p, str.len - (p - str.base));
+    list->entries[list->size++] = h2o_strdup(pool, p, end - p);
 }
 
 int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column)
