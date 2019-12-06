@@ -542,7 +542,7 @@ EOT
 };
 
 subtest 'timeout' => sub {
-    my $blackhole = t::Util::find_blackhole_ip(443);
+    my $blackhole = find_blackhole_ip(443);
     subtest 'connect timeout' => sub {
         my $server = spawn_h2o(<< "EOT");
 proxy.timeout.connect: 100

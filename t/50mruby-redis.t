@@ -373,7 +373,7 @@ EOT
 };
 
 subtest 'connect timeout' => sub {
-    my $blackhole = t::Util::find_blackhole_ip(6379);
+    my $blackhole = find_blackhole_ip(6379);
     my $spawner = sub {
         my $conf = <<"EOT";
 num-threads: 1
