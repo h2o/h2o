@@ -326,11 +326,8 @@ static void test_join_list(void)
     h2o_mem_init_pool(&pool);
 
     h2o_iovec_t list[5] = {
-        h2o_iovec_init(H2O_STRLIT("")),
-        h2o_iovec_init(H2O_STRLIT("a")),
-        h2o_iovec_init(H2O_STRLIT("")),
-        h2o_iovec_init(H2O_STRLIT("b")),
-        h2o_iovec_init(H2O_STRLIT("")),
+        h2o_iovec_init(H2O_STRLIT("")),  h2o_iovec_init(H2O_STRLIT("a")), h2o_iovec_init(H2O_STRLIT("")),
+        h2o_iovec_init(H2O_STRLIT("b")), h2o_iovec_init(H2O_STRLIT("")),
     };
 
     h2o_iovec_t ret = h2o_join_list(&pool, list, sizeof(list) / sizeof(list[0]), h2o_iovec_init(H2O_STRLIT("...")));
@@ -344,17 +341,17 @@ static void test_split(void)
     h2o_mem_pool_t pool;
     h2o_mem_init_pool(&pool);
 
-#define TEST(str, needle, ...) \
-    do { \
-        const char *expected[] = { __VA_ARGS__ }; \
-        h2o_iovec_vector_t list = {0}; \
-        h2o_split(&pool, &list, h2o_iovec_init(H2O_STRLIT((str))), (needle)); \
-        size_t expected_len = sizeof(expected) / sizeof(expected[0]); \
-        ok(expected_len == list.size); \
-        size_t i; \
-        for (i = 0; i != list.size; ++i) { \
-            ok(h2o_memis(list.entries[i].base, list.entries[i].len, expected[i], strlen(expected[i]))); \
-        } \
+#define TEST(str, needle, ...)                                                                                                     \
+    do {                                                                                                                           \
+        const char *expected[] = {__VA_ARGS__};                                                                                    \
+        h2o_iovec_vector_t list = {0};                                                                                             \
+        h2o_split(&pool, &list, h2o_iovec_init(H2O_STRLIT((str))), (needle));                                                      \
+        size_t expected_len = sizeof(expected) / sizeof(expected[0]);                                                              \
+        ok(expected_len == list.size);                                                                                             \
+        size_t i;                                                                                                                  \
+        for (i = 0; i != list.size; ++i) {                                                                                         \
+            ok(h2o_memis(list.entries[i].base, list.entries[i].len, expected[i], strlen(expected[i])));                            \
+        }                                                                                                                          \
     } while (0);
 
     TEST("foo*bar*baz", '*', "foo", "bar", "baz");
