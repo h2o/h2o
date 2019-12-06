@@ -22,6 +22,9 @@
 #include <sys/time.h>
 #include "quicly/defaults.h"
 
+#define DEFAULT_MAX_PACKETS_PER_KEY 16777216
+#define DEFAULT_MAX_CRYPTO_BYTES 65536
+
 /* profile that employs IETF specified values */
 const quicly_context_t quicly_spec_context = {
     NULL,                   /* tls */
@@ -34,6 +37,8 @@ const quicly_context_t quicly_spec_context = {
         100,                                                 /* max_concurrent_streams_bidi */
         0                                                    /* max_concurrent_streams_uni */
     },
+    DEFAULT_MAX_PACKETS_PER_KEY,
+    DEFAULT_MAX_CRYPTO_BYTES,
     0, /* enforce_version_negotiation */
     0, /* is_clustered */
     0, /* enlarge_client_hello */
@@ -57,6 +62,8 @@ const quicly_context_t quicly_performant_context = {
         100,                                                 /* max_concurrent_streams_bidi */
         0                                                    /* max_concurrent_streams_uni */
     },
+    DEFAULT_MAX_PACKETS_PER_KEY,
+    DEFAULT_MAX_CRYPTO_BYTES,
     0, /* enforce_version_negotiation */
     0, /* is_clustered */
     0, /* enlarge_client_hello */

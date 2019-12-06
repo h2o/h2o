@@ -12,7 +12,6 @@ How to build
 % git submodule update --init --recursive
 % cmake .
 % make
-% make check
 ```
 
 Building the software requires OpenSSL 1.0.2 or above.
@@ -20,6 +19,26 @@ If you have OpenSSL installed in a non-standard directory, you can pass the loca
 
 ```
 % PKG_CONFIG_PATH=/path/to/openssl/lib/pkgconfig cmake .
+```
+
+How to test
+---
+
+Install dependencies first:
+
+```
+# If you use system perl, use --sudo
+% curl -sL https://cpanmin.us | perl - --sudo --self-upgrade
+% cpanm --installdeps --notest --sudo .
+
+# Otherwise, you'd better omit --sudo
+% curl -sL https://cpanmin.us | perl - --self-upgrade
+% cpanm --installdeps --notest .
+```
+
+Then, run the tests:
+```
+% make check
 ```
 
 Running quicly

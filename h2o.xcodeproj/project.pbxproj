@@ -242,7 +242,6 @@
 		7DD70D79210F2EC400727A17 /* httpclient.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DD70D77210F2EC400727A17 /* httpclient.c */; };
 		7DE1DB37212B1CC00055F500 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DE1DB35212B1CC00055F500 /* ssl.c */; };
 		7DE1DB38212B1CC00055F500 /* ssl.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DE1DB35212B1CC00055F500 /* ssl.c */; };
-		7DEB6DA82398D1C5009AB783 /* ebpf.h in Headers */ = {isa = PBXBuildFile; fileRef = E908A2A923163CB70039BCEE /* ebpf.h */; };
 		7DF26B091FBC020600FBE2E7 /* middleware.c in Sources */ = {isa = PBXBuildFile; fileRef = 7DF26B071FBC020600FBE2E7 /* middleware.c */; };
 		D081373A1FD400F4004679DF /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137381FD400F4004679DF /* least_conn.c */; };
 		D081373B1FD400F4004679DF /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
@@ -470,6 +469,7 @@
 		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
 		E9F677D720077603006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373E1FD40431004679DF /* roundrobin.c */; };
+		E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */ = {isa = PBXBuildFile; fileRef = E908A2A923163CB70039BCEE /* ebpf.h */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -2598,7 +2598,7 @@
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				E901C3E6213E1C3600D17C93 /* ranges.h in Headers */,
 				E98884CA21E7F3AF0060F010 /* sentmap.h in Headers */,
-				7DEB6DA82398D1C5009AB783 /* ebpf.h in Headers */,
+				E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */,
 				10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */,
 				E901C3ED213E1C3600D17C93 /* constants.h in Headers */,
 				08790DE01D8015A400A04BC1 /* sds.h in Headers */,

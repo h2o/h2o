@@ -19,16 +19,21 @@ matrix:
       before_install: *bs_linux
     - name: macOS (Xcode)
       os: osx
+      addons: &addons_macos
+        homebrew:
+          packages:
+            - libfaketime
+            - openssl
       env:
         - CMAKE_OPTS=" -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/"
       before_install: &bs_macos
         - curl -L https://cpanmin.us | sudo perl - App::cpanminus
         - sudo cpanm --notest Scope::Guard
         - sudo cpanm --notest Test::TCP
-        - brew install libfaketime
     - name: macOS (Xcode 10.1/clang-10)
       os: osx
       osx_image: xcode10.1
+      addons: *addons_macos
       env:
         - CMAKE_OPTS=" -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/"
       before_install: *bs_macos

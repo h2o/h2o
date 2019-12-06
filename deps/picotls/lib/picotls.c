@@ -471,7 +471,6 @@ static uint16_t ntoh16(const uint8_t *src)
 }
 #endif
 
-
 #ifndef ntoh24
 static uint32_t ntoh24(const uint8_t *src)
 {
@@ -1796,8 +1795,8 @@ Exit:
     return ret;
 }
 
-static int emit_esni_extension(ptls_esni_secret_t *esni, ptls_buffer_t *buf, ptls_iovec_t esni_keys,
-                               const char *server_name, size_t key_share_ch_off, size_t key_share_ch_len)
+static int emit_esni_extension(ptls_esni_secret_t *esni, ptls_buffer_t *buf, ptls_iovec_t esni_keys, const char *server_name,
+                               size_t key_share_ch_off, size_t key_share_ch_len)
 {
     ptls_aead_context_t *aead = NULL;
     int ret;
@@ -3607,7 +3606,8 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             server_name = ch.server_name;
         }
         if (tls->ctx->on_client_hello != NULL) {
-            ptls_on_client_hello_parameters_t params = {server_name, message,
+            ptls_on_client_hello_parameters_t params = {server_name,
+                                                        message,
                                                         {ch.alpn.list, ch.alpn.count},
                                                         {ch.signature_algorithms.list, ch.signature_algorithms.count},
                                                         {ch.cert_compression_algos.list, ch.cert_compression_algos.count},
@@ -4131,7 +4131,7 @@ static void update_open_count(ptls_context_t *ctx, ssize_t delta)
         ctx->update_open_count->cb(ctx->update_open_count, delta);
 }
 
-ptls_t *ptls_new(ptls_context_t *ctx, int is_server)
+static ptls_t *new_instance(ptls_context_t *ctx, int is_server)
 {
     ptls_t *tls;
 
@@ -4145,17 +4145,28 @@ ptls_t *ptls_new(ptls_context_t *ctx, int is_server)
     tls->is_server = is_server;
     tls->send_change_cipher_spec = ctx->send_change_cipher_spec;
     tls->skip_tracing = ptls_default_skip_tracing;
-    if (!is_server) {
-        tls->state = PTLS_STATE_CLIENT_HANDSHAKE_START;
-        tls->ctx->random_bytes(tls->client_random, sizeof(tls->client_random));
-        log_client_random(tls);
-        tls->ctx->random_bytes(tls->client.legacy_session_id, sizeof(tls->client.legacy_session_id));
-    } else {
-        tls->state = PTLS_STATE_SERVER_EXPECT_CLIENT_HELLO;
-        tls->server.early_data_skipped_bytes = UINT32_MAX;
-    }
+    return tls;
+}
 
-    PTLS_PROBE(NEW, tls, is_server);
+ptls_t *ptls_client_new(ptls_context_t *ctx)
+{
+    ptls_t *tls = new_instance(ctx, 0);
+    tls->state = PTLS_STATE_CLIENT_HANDSHAKE_START;
+    tls->ctx->random_bytes(tls->client_random, sizeof(tls->client_random));
+    log_client_random(tls);
+    tls->ctx->random_bytes(tls->client.legacy_session_id, sizeof(tls->client.legacy_session_id));
+
+    PTLS_PROBE(NEW, tls, 0);
+    return tls;
+}
+
+ptls_t *ptls_server_new(ptls_context_t *ctx)
+{
+    ptls_t *tls = new_instance(ctx, 1);
+    tls->state = PTLS_STATE_SERVER_EXPECT_CLIENT_HELLO;
+    tls->server.early_data_skipped_bytes = UINT32_MAX;
+
+    PTLS_PROBE(NEW, tls, 1);
     return tls;
 }
 
@@ -4291,8 +4302,8 @@ void ptls_set_skip_tracing(ptls_t *tls, int skip_tracing)
     tls->skip_tracing = skip_tracing;
 }
 
-static int handle_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message, int is_end_of_record,
-                                    ptls_handshake_properties_t *properties)
+static int handle_client_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message, int is_end_of_record,
+                                           ptls_handshake_properties_t *properties)
 {
     uint8_t type = message.base[0];
     int ret;
@@ -4346,6 +4357,38 @@ static int handle_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter
             ret = PTLS_ALERT_UNEXPECTED_MESSAGE;
         }
         break;
+    case PTLS_STATE_CLIENT_POST_HANDSHAKE:
+        switch (type) {
+        case PTLS_HANDSHAKE_TYPE_NEW_SESSION_TICKET:
+            ret = client_handle_new_session_ticket(tls, message);
+            break;
+        case PTLS_HANDSHAKE_TYPE_KEY_UPDATE:
+            ret = handle_key_update(tls, emitter, message);
+            break;
+        default:
+            ret = PTLS_ALERT_UNEXPECTED_MESSAGE;
+            break;
+        }
+        break;
+    default:
+        assert(!"unexpected state");
+        ret = PTLS_ALERT_INTERNAL_ERROR;
+        break;
+    }
+
+    PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
+               message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
+
+    return ret;
+}
+
+static int handle_server_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message, int is_end_of_record,
+                                           ptls_handshake_properties_t *properties)
+{
+    uint8_t type = message.base[0];
+    int ret;
+
+    switch (tls->state) {
     case PTLS_STATE_SERVER_EXPECT_CLIENT_HELLO:
     case PTLS_STATE_SERVER_EXPECT_SECOND_CLIENT_HELLO:
         if (type == PTLS_HANDSHAKE_TYPE_CLIENT_HELLO && is_end_of_record) {
@@ -4383,19 +4426,6 @@ static int handle_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter
             ret = PTLS_ALERT_HANDSHAKE_FAILURE;
         }
         break;
-    case PTLS_STATE_CLIENT_POST_HANDSHAKE:
-        switch (type) {
-        case PTLS_HANDSHAKE_TYPE_NEW_SESSION_TICKET:
-            ret = client_handle_new_session_ticket(tls, message);
-            break;
-        case PTLS_HANDSHAKE_TYPE_KEY_UPDATE:
-            ret = handle_key_update(tls, emitter, message);
-            break;
-        default:
-            ret = PTLS_ALERT_UNEXPECTED_MESSAGE;
-            break;
-        }
-        break;
     case PTLS_STATE_SERVER_POST_HANDSHAKE:
         switch (type) {
         case PTLS_HANDSHAKE_TYPE_KEY_UPDATE:
@@ -4408,6 +4438,7 @@ static int handle_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter
         break;
     default:
         assert(!"unexpected state");
+        ret = PTLS_ALERT_INTERNAL_ERROR;
         break;
     }
 
@@ -4428,6 +4459,15 @@ static int handle_alert(ptls_t *tls, const uint8_t *src, size_t len)
     return PTLS_ALERT_TO_PEER_ERROR(desc);
 }
 
+static int message_buffer_is_overflow(ptls_context_t *ctx, size_t size)
+{
+    if (ctx->max_buffer_size == 0)
+        return 0;
+    if (size <= ctx->max_buffer_size)
+        return 0;
+    return 1;
+}
+
 static int handle_handshake_record(ptls_t *tls,
                                    int (*cb)(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message,
                                              int is_end_of_record, ptls_handshake_properties_t *properties),
@@ -4446,6 +4486,8 @@ static int handle_handshake_record(ptls_t *tls,
         src = rec->fragment;
         src_end = src + rec->length;
     } else {
+        if (message_buffer_is_overflow(tls->ctx, tls->recvbuf.mess.off + rec->length))
+            return PTLS_ALERT_HANDSHAKE_FAILURE;
         if ((ret = ptls_buffer_reserve(&tls->recvbuf.mess, rec->length)) != 0)
             return ret;
         memcpy(tls->recvbuf.mess.base + tls->recvbuf.mess.off, rec->fragment, rec->length);
@@ -4474,15 +4516,18 @@ static int handle_handshake_record(ptls_t *tls,
 
     /* keep last partial message in buffer */
     if (src != src_end) {
+        size_t new_size = src_end - src;
+        if (message_buffer_is_overflow(tls->ctx, new_size))
+            return PTLS_ALERT_HANDSHAKE_FAILURE;
         if (tls->recvbuf.mess.base == NULL) {
             ptls_buffer_init(&tls->recvbuf.mess, "", 0);
-            if ((ret = ptls_buffer_reserve(&tls->recvbuf.mess, src_end - src)) != 0)
+            if ((ret = ptls_buffer_reserve(&tls->recvbuf.mess, new_size)) != 0)
                 return ret;
-            memcpy(tls->recvbuf.mess.base, src, src_end - src);
+            memcpy(tls->recvbuf.mess.base, src, new_size);
         } else {
-            memmove(tls->recvbuf.mess.base, src, src_end - src);
+            memmove(tls->recvbuf.mess.base, src, new_size);
         }
-        tls->recvbuf.mess.off = src_end - src;
+        tls->recvbuf.mess.off = new_size;
         ret = PTLS_ERROR_IN_PROGRESS;
     } else {
         ptls_buffer_dispose(&tls->recvbuf.mess);
@@ -4540,7 +4585,8 @@ static int handle_input(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_buffe
 
     if (tls->recvbuf.mess.base != NULL || rec.type == PTLS_CONTENT_TYPE_HANDSHAKE) {
         /* handshake record */
-        ret = handle_handshake_record(tls, handle_handshake_message, emitter, &rec, properties);
+        ret = handle_handshake_record(tls, tls->is_server ? handle_server_handshake_message : handle_client_handshake_message,
+                                      emitter, &rec, properties);
     } else {
         /* handling of an alert or an application record */
         switch (rec.type) {
@@ -4577,7 +4623,7 @@ ServerSkipEarlyData:
     goto NextRecord;
 }
 
-static void init_record_message_emmitter(ptls_t *tls, struct st_ptls_record_message_emitter_t *emitter, ptls_buffer_t *sendbuf)
+static void init_record_message_emitter(ptls_t *tls, struct st_ptls_record_message_emitter_t *emitter, ptls_buffer_t *sendbuf)
 {
     *emitter = (struct st_ptls_record_message_emitter_t){
         {sendbuf, &tls->traffic_protection.enc, 5, begin_record_message, commit_record_message}};
@@ -4590,7 +4636,7 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size
 
     assert(tls->state < PTLS_STATE_POST_HANDSHAKE_MIN);
 
-    init_record_message_emmitter(tls, &emitter, _sendbuf);
+    init_record_message_emitter(tls, &emitter, _sendbuf);
     size_t sendbuf_orig_off = emitter.super.buf->off;
 
     /* special handlings */
@@ -4683,7 +4729,7 @@ static int update_send_key(ptls_t *tls, ptls_buffer_t *_sendbuf, int request_upd
     struct st_ptls_record_message_emitter_t emitter;
     int ret;
 
-    init_record_message_emmitter(tls, &emitter, _sendbuf);
+    init_record_message_emitter(tls, &emitter, _sendbuf);
     size_t sendbuf_orig_off = emitter.super.buf->off;
 
     ptls_push_message(&emitter.super, NULL, PTLS_HANDSHAKE_TYPE_KEY_UPDATE,
@@ -5147,6 +5193,15 @@ size_t ptls_get_read_epoch(ptls_t *tls)
 int ptls_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offsets[5], size_t in_epoch, const void *input,
                         size_t inlen, ptls_handshake_properties_t *properties)
 {
+    return tls->is_server ? ptls_server_handle_message(tls, sendbuf, epoch_offsets, in_epoch, input, inlen, properties)
+                          : ptls_client_handle_message(tls, sendbuf, epoch_offsets, in_epoch, input, inlen, properties);
+}
+
+int ptls_client_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offsets[5], size_t in_epoch, const void *input,
+                               size_t inlen, ptls_handshake_properties_t *properties)
+{
+    assert(!tls->is_server);
+
     struct st_ptls_raw_message_emitter_t emitter = {
         {sendbuf, &tls->traffic_protection.enc, 0, begin_raw_message, commit_raw_message}, SIZE_MAX, epoch_offsets};
     struct st_ptls_record_t rec = {PTLS_CONTENT_TYPE_HANDSHAKE, 0, inlen, input};
@@ -5157,7 +5212,24 @@ int ptls_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offset
     if (ptls_get_read_epoch(tls) != in_epoch)
         return PTLS_ALERT_UNEXPECTED_MESSAGE;
 
-    return handle_handshake_record(tls, handle_handshake_message, &emitter.super, &rec, properties);
+    return handle_handshake_record(tls, handle_client_handshake_message, &emitter.super, &rec, properties);
+}
+
+int ptls_server_handle_message(ptls_t *tls, ptls_buffer_t *sendbuf, size_t epoch_offsets[5], size_t in_epoch, const void *input,
+                               size_t inlen, ptls_handshake_properties_t *properties)
+{
+    assert(tls->is_server);
+
+    struct st_ptls_raw_message_emitter_t emitter = {
+        {sendbuf, &tls->traffic_protection.enc, 0, begin_raw_message, commit_raw_message}, SIZE_MAX, epoch_offsets};
+    struct st_ptls_record_t rec = {PTLS_CONTENT_TYPE_HANDSHAKE, 0, inlen, input};
+
+    assert(input);
+
+    if (ptls_get_read_epoch(tls) != in_epoch)
+        return PTLS_ALERT_UNEXPECTED_MESSAGE;
+
+    return handle_handshake_record(tls, handle_server_handshake_message, &emitter.super, &rec, properties);
 }
 
 int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_iovec_t esni_keys,
