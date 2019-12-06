@@ -1356,8 +1356,7 @@ static int apply_stream_frame(quicly_stream_t *stream, quicly_stream_frame_t *fr
     if ((ret = quicly_recvstate_update(&stream->recvstate, frame->offset, &apply_len, frame->is_fin)) != 0)
         return ret;
 
-    if (stream->_send_aux.stop_sending.sender_state == QUICLY_SENDER_STATE_NONE &&
-        (apply_len != 0 || quicly_recvstate_transfer_complete(&stream->recvstate))) {
+    if (apply_len != 0 || quicly_recvstate_transfer_complete(&stream->recvstate)) {
         uint64_t buf_offset = frame->offset + frame->data.len - apply_len - stream->recvstate.data_off;
         if ((ret = stream->callbacks->on_receive(stream, (size_t)buf_offset, frame->data.base + frame->data.len - apply_len,
                                                  apply_len)) != 0)
@@ -2687,6 +2686,7 @@ int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
                                                &wrote_all)) != 0)
         return ret;
     assert(len <= capacity);
+    assert(len != 0);
 
     /* update s->dst, insert length if necessary */
     if (frame_type_at == NULL || len < s->dst_end - s->dst) {
@@ -3725,7 +3725,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
                         }
                         if ((ret = quicly_sentmap_update(&conn->egress.sentmap, &iter, QUICLY_SENTMAP_EVENT_ACKED, conn)) != 0)
                             return ret;
-                        if (sent->ack_epoch == QUICLY_EPOCH_1RTT) {
+                        if (state->epoch == QUICLY_EPOCH_1RTT) {
                             struct st_quicly_application_space_t *space = conn->application;
                             if (space->cipher.egress.key_update_pn.last <= packet_number) {
                                 space->cipher.egress.key_update_pn.last = UINT64_MAX;

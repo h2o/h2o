@@ -52,11 +52,11 @@ int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len
         if (is_fin) {
             state->eos = off + *len;
             if (state->eos < state->received.ranges[state->received.num_ranges - 1].end)
-                return QUICLY_TRANSPORT_ERROR_FINAL_OFFSET;
+                return QUICLY_TRANSPORT_ERROR_FINAL_SIZE;
         }
     } else {
         if (off + *len > state->eos)
-            return QUICLY_TRANSPORT_ERROR_FINAL_OFFSET;
+            return QUICLY_TRANSPORT_ERROR_FINAL_SIZE;
     }
 
     /* no state change; entire data has already been received */
@@ -94,9 +94,9 @@ int quicly_recvstate_reset(quicly_recvstate_t *state, uint64_t eos_at, uint64_t 
 
     /* validate */
     if (state->eos != UINT64_MAX && state->eos != eos_at)
-        return QUICLY_TRANSPORT_ERROR_FINAL_OFFSET;
+        return QUICLY_TRANSPORT_ERROR_FINAL_SIZE;
     if (eos_at < state->received.ranges[state->received.num_ranges - 1].end)
-        return QUICLY_TRANSPORT_ERROR_FINAL_OFFSET;
+        return QUICLY_TRANSPORT_ERROR_FINAL_SIZE;
 
     /* calculate bytes missing */
     *bytes_missing = eos_at - state->received.ranges[state->received.num_ranges - 1].end;

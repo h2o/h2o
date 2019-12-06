@@ -497,8 +497,9 @@ typedef struct st_quicly_stream_callbacks_t {
     /**
      * asks the application to fill the frame payload.  `off` is the offset within the buffer (the beginning position of the buffer
      * changes as `on_send_shift` is invoked). `len` is an in/out argument that specifies the size of the buffer / amount of data
-     * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.  See
-     * also quicly_stream_sync_sendbuf.
+     * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.
+     * As this callback is triggered by calling quicly_stream_sync_sendbuf (stream, 1) when tx data is present, it assumes data
+     * to be available - that is `len` return value should be non-zero.
      */
     int (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
