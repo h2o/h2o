@@ -89,4 +89,41 @@ EOT
     });
 };
 
+subtest "wildcard substitution" => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        return << "EOT";
+hosts:
+  default:
+    paths:
+      /:
+        redirect: /***
+  "*.example.com:$port":
+    paths:
+      /no-wildcard:
+        redirect: /
+      /wildcard1:
+        redirect: /*
+      /wildcard2:
+        redirect: "*/"
+      /wildcard3:
+        redirect: https://***.example.com/*/**/
+EOT
+    });
+
+    my $doit = sub {
+        my ($path, $host, $expected_location) = @_;
+        $host ||= '';
+        $host = "-H 'Host: $host:$server->{port}'" if $host;
+        my ($stderr, $stdout) = run_prog("curl --silent --show-error --max-redirs 0 --dump-header /dev/stderr $host http://127.0.0.1:$server->{port}$path");
+        # $stderr;
+        like $stderr, qr{^location:\s*\Q$expected_location\E\r$}im;
+    };
+    $doit->('/', undef, '/***/');
+    $doit->('/no-wildcard', 'foo.example.com', '/');
+    $doit->('/wildcard1', 'bar.example.com', '/bar');
+    $doit->('/wildcard2', 'baz.example.com', 'baz/');
+    $doit->('/wildcard3/index.html', 'xxx.example.com', 'https://xxxxxxxxx.example.com/xxx/xxxxxx/index.html');
+};
+
 done_testing;
