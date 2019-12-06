@@ -347,12 +347,13 @@ static void test_split(void)
 #define TEST(str, needle, ...) \
     do { \
         const char *expected[] = { __VA_ARGS__ }; \
-        h2o_iovec_vector_t ret = h2o_split(&pool, h2o_iovec_init(H2O_STRLIT((str))), (needle)); \
+        h2o_iovec_vector_t list = {0}; \
+        h2o_split(&pool, &list, h2o_iovec_init(H2O_STRLIT((str))), (needle)); \
         size_t expected_len = sizeof(expected) / sizeof(expected[0]); \
-        ok(expected_len == ret.size); \
+        ok(expected_len == list.size); \
         size_t i; \
-        for (i = 0; i != ret.size; ++i) { \
-            ok(h2o_memis(ret.entries[i].base, ret.entries[i].len, expected[i], strlen(expected[i]))); \
+        for (i = 0; i != list.size; ++i) { \
+            ok(h2o_memis(list.entries[i].base, list.entries[i].len, expected[i], strlen(expected[i]))); \
         } \
     } while (0);
 
