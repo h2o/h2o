@@ -111,7 +111,7 @@ h2o_redirect_handler_t *h2o_redirect_register(h2o_pathconf_t *pathconf, int inte
     self->super.on_req = on_req;
     self->internal = internal;
     self->status = status;
-    self->prefix_list = h2o_split(NULL, h2o_iovec_init(prefix, strlen(prefix)), '*');
+    h2o_split(NULL, &self->prefix_list, h2o_iovec_init(prefix, strlen(prefix)), '*');
 
     return self;
 }

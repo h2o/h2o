@@ -573,20 +573,17 @@ h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count,
     return h2o_concat_list(pool, joined, joined_len);
 }
 
-h2o_iovec_vector_t h2o_split(h2o_mem_pool_t *pool, h2o_iovec_t str, const char needle)
+void h2o_split(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t str, const char needle)
 {
-    h2o_iovec_vector_t list = (h2o_iovec_vector_t){0};
-    const char *p = str.base;
-    const char *end = str.base + str.len;
-    const char *found;
+    const char *p = str.base, *end = str.base + str.len, *found;
+
     while (p < end && (found = memchr(p, needle, end - p)) != NULL) {
-        h2o_vector_reserve(pool, &list, list.size + 1);
-        list.entries[list.size++] = h2o_strdup(pool, p, found - p);
+        h2o_vector_reserve(pool, list, list->size + 1);
+        list->entries[list->size++] = h2o_strdup(pool, p, found - p);
         p = found + 1;
     }
-    h2o_vector_reserve(pool, &list, list.size + 1);
-    list.entries[list.size++] = h2o_strdup(pool, p, str.len - (p - str.base));
-    return list;
+    h2o_vector_reserve(pool, list, list->size + 1);
+    list->entries[list->size++] = h2o_strdup(pool, p, str.len - (p - str.base));
 }
 
 int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column)
