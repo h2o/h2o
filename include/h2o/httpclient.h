@@ -263,6 +263,8 @@ extern const char h2o_httpclient_error_http1_parse_failed[];
 extern const char h2o_httpclient_error_http2_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
 
+extern __thread h2o_buffer_prototype_t h2o__http2client_wbuf_buffer_prototype;
+
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool);
 
 /**
