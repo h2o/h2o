@@ -32,7 +32,6 @@ BPF_PERF_OUTPUT(reqbuf);
 int trace_receive_req(struct pt_regs *ctx) {
     struct req_line_t line = {};
     uint64_t conn_id, req_id;
-    uint32_t http_version;
 
     bpf_usdt_readarg(1, ctx, &line.conn_id);
     bpf_usdt_readarg(2, ctx, &line.req_id);
