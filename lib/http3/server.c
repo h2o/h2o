@@ -283,6 +283,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 
 static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int stop_sending_code, int reset_code)
 {
+    assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
         quicly_request_stop(stream->quic, stop_sending_code);
     if (quicly_stream_has_send_side(0, stream->quic->stream_id) && !quicly_sendstate_transfer_complete(&stream->quic->sendstate))
