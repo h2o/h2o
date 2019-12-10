@@ -29,6 +29,17 @@ struct req_line_t {
 };
 BPF_PERF_OUTPUT(reqbuf);
 
+/*
+ * "resp_line_t" represents an individual log line for a given response.
+ * Like "req_line_t", the structure is pushed into the BPF ring buffer.
+ */
+struct resp_line_t {
+    u64 conn_id;
+    u64 req_id;
+    u32 http_status;
+};
+BPF_PERF_OUTPUT(respbuf);
+
 int trace_receive_req(struct pt_regs *ctx) {
     struct req_line_t line = {};
 
