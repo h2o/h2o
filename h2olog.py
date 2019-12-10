@@ -31,7 +31,6 @@ BPF_PERF_OUTPUT(reqbuf);
 
 int trace_receive_req(struct pt_regs *ctx) {
     struct req_line_t line = {};
-    uint64_t conn_id, req_id;
 
     bpf_usdt_readarg(1, ctx, &line.conn_id);
     bpf_usdt_readarg(2, ctx, &line.req_id);
@@ -45,7 +44,6 @@ int trace_receive_req(struct pt_regs *ctx) {
 
 int trace_receive_req_header(struct pt_regs *ctx) {
     struct req_line_t line = {};
-    uint64_t conn_id, req_id = 0;
     size_t n_len, v_len;
     void *pos = NULL;
 
