@@ -79,6 +79,19 @@ int trace_receive_req_header(struct pt_regs *ctx) {
 
     return 0;
 }
+
+int trace_send_response_status(struct pt_regs *ctx) {
+    struct resp_line_t line = {};
+
+    bpf_usdt_readarg(1, ctx, &line.conn_id);
+    bpf_usdt_readarg(2, ctx, &line.req_id);
+    bpf_usdt_readarg(3, ctx, &line.http_status);
+
+    if (txbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 def print_req_line(line):
@@ -90,6 +103,10 @@ def print_req_line(line):
 
 def handle_req_line(cpu, data, size):
     print_req_line(b["rxbuf"].event(data))
+
+def handle_resp_line(cpu, data, size):
+    line = b["txbuf"].event(data)
+    print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
 
 try:
     h2o_pid = 0
@@ -107,9 +124,11 @@ if h2o_pid == 0:
 u = USDT(pid=int(h2o_pid))
 u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
 u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
+u.enable_probe(probe="send_response_status", fn_name="trace_send_response_status")
 
 b = BPF(text=bpf, usdt_contexts=[u])
 b["rxbuf"].open_perf_buffer(handle_req_line)
+b["txbuf"].open_perf_buffer(handle_resp_line)
 
 while 1:
     try:
