@@ -27,7 +27,6 @@ struct req_line_t {
     char header_name[MAX_STR_LEN];
     char header_value[MAX_STR_LEN];
 };
-BPF_PERF_OUTPUT(reqbuf);
 
 /*
  * "resp_line_t" represents an individual log line for a given response.
@@ -38,7 +37,9 @@ struct resp_line_t {
     u64 req_id;
     u32 http_status;
 };
-BPF_PERF_OUTPUT(respbuf);
+
+BPF_PERF_OUTPUT(rxbuf);
+BPF_PERF_OUTPUT(txbuf);
 
 int trace_receive_req(struct pt_regs *ctx) {
     struct req_line_t line = {};
@@ -47,7 +48,7 @@ int trace_receive_req(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &line.req_id);
     bpf_usdt_readarg(3, ctx, &line.http_version);
 
-    if (reqbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (rxbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -73,7 +74,7 @@ int trace_receive_req_header(struct pt_regs *ctx) {
     line.header_value_len = MIN(MAX_STR_LEN, v_len);
     bpf_probe_read(&line.header_value, line.header_value_len, pos);
 
-    if (reqbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (rxbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -88,7 +89,7 @@ def print_req_line(line):
         print("%u %u RxHeader   %s %s" % (line.conn_id, line.req_id, line.header_name, line.header_value))
 
 def handle_req_line(cpu, data, size):
-    print_req_line(b["reqbuf"].event(data))
+    print_req_line(b["rxbuf"].event(data))
 
 try:
     h2o_pid = 0
@@ -108,7 +109,7 @@ u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
 u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
 
 b = BPF(text=bpf, usdt_contexts=[u])
-b["reqbuf"].open_perf_buffer(handle_req_line)
+b["rxbuf"].open_perf_buffer(handle_req_line)
 
 while 1:
     try:
