@@ -29,6 +29,7 @@ extern "C" {
 #include <stdint.h>
 #include <sys/socket.h>
 #include <openssl/ssl.h>
+#include <openssl/opensslconf.h>
 #include "picotls.h"
 #include "h2o/cache.h"
 #include "h2o/ebpf.h"
@@ -46,7 +47,11 @@ extern "C" {
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
 #define H2O_USE_ALPN 1
+#ifndef OPENSSL_NO_NEXTPROTONEG
 #define H2O_USE_NPN 1
+#else
+#define H2O_USE_NPN 0
+#endif
 #elif OPENSSL_VERSION_NUMBER >= 0x10001000L
 #define H2O_USE_ALPN 0
 #define H2O_USE_NPN 1
