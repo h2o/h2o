@@ -161,10 +161,11 @@ builder {
         my $env = shift;
         my $query = Plack::Request->new($env)->query_parameters;
         my $sleep = $query->{sleep} // 0.1;
+        my $count = $query->{count} // 30;
         return sub {
             my $responder = shift;
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
-            for my $i (1..30) {
+            for my $i (1..$count) {
                 sleep $sleep;
                 $writer->write($i);
             }

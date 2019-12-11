@@ -38,25 +38,46 @@ access-log:
 EOT
 
 
-my ($headers) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/alice.txt");
-like $headers, qr{^HTTP/1\.1 200 }s;
+subtest 'non-streaming' => sub {
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/alice.txt");
+    like $headers, qr{^HTTP/1\.1 200 }s;
 
-sleep 0.1;
+    sleep 0.1;
 
-my @log = do {
-    open my $fh, "<", $logfile
-        or die "failed to open $logfile: $!";
-    map { my $l = $_; chomp $l; $l } <$fh>;
+    my $expected_body_size = 1661;
+    my $expected_header_size = 217;
+
+    my $log = parse_log();
+    is $log->{'proxy.response-bytes-body'}, $expected_body_size, 'body';
+    is $log->{'proxy.response-bytes-header'}, $expected_header_size, 'header';
+    is $log->{'proxy.response-bytes'}, $expected_body_size + $expected_header_size, 'total';
 };
-my $log = pop(@log);
-my %map = map { split(':', $_) } split("\t", $log);
 
-my $expected_body_size = 1661;
-my $expected_header_size = 217;
+subtest 'streaming' => sub {
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/streaming-body?count=10");
+    like $headers, qr{^HTTP/1\.1 200 }s;
 
-is $map{'proxy.response-bytes-body'}, $expected_body_size, 'body';
-is $map{'proxy.response-bytes-header'}, $expected_header_size, 'header';
-is $map{'proxy.response-bytes'}, $expected_body_size + $expected_header_size, 'total';
+    sleep 0.1;
+
+    my $expected_body_size = 66;
+    my $expected_header_size = 162;
+
+    my $log = parse_log();
+    is $log->{'proxy.response-bytes-body'}, $expected_body_size, 'body';
+    is $log->{'proxy.response-bytes-header'}, $expected_header_size, 'header';
+    is $log->{'proxy.response-bytes'}, $expected_body_size + $expected_header_size, 'total';
+};
+
+sub parse_log {
+    my @log = do {
+        open my $fh, "<", $logfile
+            or die "failed to open $logfile: $!";
+        map { my $l = $_; chomp $l; $l } <$fh>;
+    };
+    my $log = pop(@log);
+    my %map = map { split(':', $_) } split("\t", $log);
+    return \%map;
+}
 
 done_testing();
 
