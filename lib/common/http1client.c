@@ -135,6 +135,9 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
         return;
     }
 
+    client->super.bytes_read.body += sock->bytes_read;
+    client->super.bytes_read.total += sock->bytes_read;
+
     if (sock->bytes_read != 0) {
         if (client->super._cb.on_body(&client->super, NULL) != 0) {
             close_client(client);
@@ -156,6 +159,9 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
         on_error(client, h2o_httpclient_error_io);
         return;
     }
+
+    client->super.bytes_read.body += sock->bytes_read;
+    client->super.bytes_read.total += sock->bytes_read;
 
     if (sock->bytes_read != 0 || client->_body_decoder.content_length.bytesleft == 0) {
         int ret;
@@ -212,6 +218,9 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
         }
         return;
     }
+
+    client->super.bytes_read.body += sock->bytes_read;
+    client->super.bytes_read.total += sock->bytes_read;
 
     inbuf = client->sock->input;
     if (sock->bytes_read != 0) {
@@ -283,6 +292,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
     }
 
     client->super._timeout.cb = on_head_timeout;
+
+    client->super.bytes_read.header += sock->bytes_read;
+    client->super.bytes_read.total += sock->bytes_read;
 
     headers = h2o_mem_alloc_pool(client->super.pool, *headers, MAX_HEADERS);
     header_names = h2o_mem_alloc_pool(client->super.pool, *header_names, MAX_HEADERS);
