@@ -67,6 +67,11 @@ This option specifies the directory to which H2O will be installed (default: <co
 This option instructs whether or not to build the standalone server with support for <a href="configure/mruby.html">scripting using mruby</a>.
 It is turned on by default if the prerequisites (<a href="https://www.gnu.org/software/bison/">bison</a>, <a href="https://www.ruby-lang.org/">ruby</a> and the development files<?= $ctx->{note}->(q{<code>mkmf</code> - a program for building ruby extensions is required.  In many distributions, the program is packaged as part of <code>ruby-dev<code> or <code>ruby-devel</code> package.}) ?>) are found.
 </dl>
+<dt><code>-DCMAKE_C_FLAGS=...</code></dt>
+<dd>
+This option can be used to add or override the compile options being passed to the C compiler.
+As an example, <a href="https://en.wikipedia.org/wiki/AddressSanitizer">AddressSanitizer (ASan)</a> can be enabled when using recent versions of GCC or Clang, by passing <code>-DCMAKE_C_FLAGS="-fsanitize=address -fno-stack-protector -fno-omit-frame-pointer"</code>.
+</dd>
 </p>
 
 <h3>Installing from Source, using OpenSSL</h3>

@@ -331,6 +331,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
             return;
         }
 
+        client->super.bytes_read.header += rlen;
+        client->super.bytes_read.total += rlen;
+
         version = 0x100 | (minor_version != 0);
 
         /* fill-in the headers */
