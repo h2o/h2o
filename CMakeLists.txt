@@ -217,7 +217,7 @@ IF (ZLIB_FOUND)
     LINK_DIRECTORIES(${ZLIB_LIBRARY_DIRS})
 ENDIF (ZLIB_FOUND)
 
-SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function")
+SET(CC_WARNING_FLAGS "-Wall -Wno-unused-value -Wno-unused-function -Wno-nullability-completeness -Wno-expansion-to-defined")
 IF ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     IF (NOT ("${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.6"))
         SET(CC_WARNING_FLAGS "${CC_WARNING_FLAGS} -Wno-unused-but-set-variable")
