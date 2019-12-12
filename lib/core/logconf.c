@@ -74,6 +74,9 @@ enum {
     ELEMENT_TYPE_PROXY_REQUEST_BYTES,           /* %{proxy.request-bytes}x */
     ELEMENT_TYPE_PROXY_REQUEST_BYTES_HEADER,    /* %{proxy.request-bytes-header}x */
     ELEMENT_TYPE_PROXY_REQUEST_BYTES_BODY,      /* %{proxy.request-bytes-body}x */
+    ELEMENT_TYPE_PROXY_RESPONSE_BYTES,          /* %{proxy.response-bytes}x */
+    ELEMENT_TYPE_PROXY_RESPONSE_BYTES_HEADER,   /* %{proxy.response-bytes-header}x */
+    ELEMENT_TYPE_PROXY_RESPONSE_BYTES_BODY,     /* %{proxy.response-bytes-body}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -266,6 +269,9 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("proxy.request-bytes", ELEMENT_TYPE_PROXY_REQUEST_BYTES);
                     MAP_EXT_TO_TYPE("proxy.request-bytes-header", ELEMENT_TYPE_PROXY_REQUEST_BYTES_HEADER);
                     MAP_EXT_TO_TYPE("proxy.request-bytes-body", ELEMENT_TYPE_PROXY_REQUEST_BYTES_BODY);
+                    MAP_EXT_TO_TYPE("proxy.response-bytes", ELEMENT_TYPE_PROXY_RESPONSE_BYTES);
+                    MAP_EXT_TO_TYPE("proxy.response-bytes-header", ELEMENT_TYPE_PROXY_RESPONSE_BYTES_HEADER);
+                    MAP_EXT_TO_TYPE("proxy.response-bytes-body", ELEMENT_TYPE_PROXY_RESPONSE_BYTES_BODY);
                     MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
                     MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
                     MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);
@@ -805,6 +811,21 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_PROXY_REQUEST_BYTES_BODY:
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_written.body);
+            break;
+
+        case ELEMENT_TYPE_PROXY_RESPONSE_BYTES:
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_read.total);
+            break;
+
+        case ELEMENT_TYPE_PROXY_RESPONSE_BYTES_HEADER:
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_read.header);
+            break;
+
+        case ELEMENT_TYPE_PROXY_RESPONSE_BYTES_BODY:
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_read.body);
             break;
 
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {

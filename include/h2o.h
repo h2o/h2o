@@ -1085,6 +1085,11 @@ struct st_h2o_req_t {
             uint64_t header;
             uint64_t body;
         } bytes_written;
+        struct {
+            uint64_t total;
+            uint64_t header;
+            uint64_t body;
+        } bytes_read;
         h2o_httpclient_timings_t timestamps;
     } proxy_stats;
     /**

@@ -191,6 +191,15 @@ struct st_h2o_httpclient_t {
     } bytes_written;
 
     /**
+     * bytes read (above the TLS layer)
+     */
+    struct {
+        uint64_t header;
+        uint64_t body;
+        uint64_t total;
+    } bytes_read;
+
+    /**
      * cancels a in-flight request
      */
     void (*cancel)(h2o_httpclient_t *client);

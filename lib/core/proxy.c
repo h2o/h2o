@@ -393,6 +393,9 @@ static void copy_stats(struct rp_generator_t *self)
     self->src_req->proxy_stats.bytes_written.total = self->client->bytes_written.total;
     self->src_req->proxy_stats.bytes_written.header = self->client->bytes_written.header;
     self->src_req->proxy_stats.bytes_written.body = self->client->bytes_written.body;
+    self->src_req->proxy_stats.bytes_read.total = self->client->bytes_read.total;
+    self->src_req->proxy_stats.bytes_read.header = self->client->bytes_read.header;
+    self->src_req->proxy_stats.bytes_read.body = self->client->bytes_read.body;
 }
 
 static int on_body(h2o_httpclient_t *client, const char *errstr)
