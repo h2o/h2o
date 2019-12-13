@@ -72,6 +72,11 @@ EOT
     printf("\nXXXX%s: %s\n", stringof(name), stringof(value));
 }
 EOT
+            "-n", <<'EOT',
+:h2o::send_response_status {
+    printf("\nXXXX%u:%u status:%u\n", arg0, arg1, arg2);
+}
+EOT
         );
         die "failed to spawn dtrace:$!";
     }
