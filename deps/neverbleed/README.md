@@ -1,7 +1,7 @@
 Neverbleed
 ===============
 
-Neverbleed is an [OpenSSL engine](https://www.openssl.org/docs/manmaster/crypto/engine.html) that runs RSA private key operations in an isolated process, thereby minimizing the risk of private key leak in case of vulnerability such as [Heartbleed](http://heartbleed.com/).
+Neverbleed is an [OpenSSL engine](https://www.openssl.org/docs/man1.0.2/crypto/engine.html) that runs RSA private key operations in an isolated process, thereby minimizing the risk of private key leak in case of vulnerability such as [Heartbleed](http://heartbleed.com/).
 
 The engine is known to work together with existing versions of OpenSSL or LibreSSL, with minimal changes to the server source code.
 
