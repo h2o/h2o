@@ -135,7 +135,7 @@ static int req_requires_content_length(h2o_req_t *req)
 static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 {
     h2o_iovec_t cl_buf;
-    cl_buf.base = h2o_mem_alloc_pool(pool, char, sizeof(H2O_UINT64_LONGEST_STR) - 1);
+    cl_buf.base = h2o_mem_alloc_pool(pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
     cl_buf.len = sprintf(cl_buf.base, "%zu", cl);
     return cl_buf;
 }
