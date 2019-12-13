@@ -109,9 +109,9 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
     H2O_PROBE_CONN(SEND_RESPONSE_STATUS, req->conn, req_index, req->res.status);
     if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
         if (req->res.content_length != SIZE_MAX) {
-            h2o_iovec_t cl_buf;
-            cl_buf.base = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT64_LONGEST_STR) - 1);
-            cl_buf.len = sprintf(cl_buf.base, "%zu", req->res.content_length);
+            char buf[sizeof(H2O_UINT64_LONGEST_STR)];
+            h2o_iovec_t cl_buf = {.base = buf};
+            cl_buf.len = sprintf(cl_buf.base, "%" PRIu64, req->res.content_length);
             h2o_probe_response_header(req, req_index, H2O_TOKEN_CONTENT_LENGTH->buf, cl_buf);
         }
         size_t i;
