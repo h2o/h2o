@@ -38,6 +38,10 @@ provider quicly {
     probe crypto_decrypt(struct st_quicly_conn_t *conn, uint64_t pn, const void *decrypted, size_t decrypted_len);
     probe crypto_handshake(struct st_quicly_conn_t *conn, int ret);
     probe crypto_update_secret(struct st_quicly_conn_t *conn, int is_enc, uint8_t epoch, const char *label, const char *secret);
+    probe crypto_send_key_update(struct st_quicly_conn_t *conn, uint64_t phase, const char *secret);
+    probe crypto_send_key_update_confirmed(struct st_quicly_conn_t *conn, uint64_t next_pn);
+    probe crypto_receive_key_update(struct st_quicly_conn_t *conn, uint64_t phase, const char *secret);
+    probe crypto_receive_key_update_prepare(struct st_quicly_conn_t *conn, uint64_t phase, const char *secret);
 
     probe packet_prepare(struct st_quicly_conn_t *conn, int64_t at, uint8_t first_octet, const char *dcid);
     probe packet_commit(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, size_t len, int ack_only);

@@ -96,6 +96,13 @@
 		E97577032212405D00D1EF74 /* ffx.c in Sources */ = {isa = PBXBuildFile; fileRef = E97577022212405D00D1EF74 /* ffx.c */; };
 		E97577042212407900D1EF74 /* ffx.c in Sources */ = {isa = PBXBuildFile; fileRef = E97577022212405D00D1EF74 /* ffx.c */; };
 		E97577052212407900D1EF74 /* ffx.c in Sources */ = {isa = PBXBuildFile; fileRef = E97577022212405D00D1EF74 /* ffx.c */; };
+		E9925A122354C37500CA2082 /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCC0227B71170022C32D /* picotls-probes.d */; };
+		E9925A132354C37600CA2082 /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCC0227B71170022C32D /* picotls-probes.d */; };
+		E9925A142354C3CF00CA2082 /* aes128.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE222E34B340018D260 /* aes128.c */; };
+		E9925A152354C3DC00CA2082 /* aes256.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE022E34B340018D260 /* aes256.c */; };
+		E9925A162354C3DF00CA2082 /* chacha20.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE422E34B340018D260 /* chacha20.c */; };
+		E9925A172354C3E200CA2082 /* random.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BF922E34C110018D260 /* random.c */; };
+		E9925A182354C3E500CA2082 /* x25519.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F20BE122E34B340018D260 /* x25519.c */; };
 		E992F7A320E99A7C0008154D /* libpicotls-openssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1059008C1DC8E1A300FB4085 /* libpicotls-openssl.a */; };
 		E992F7A420E99A7C0008154D /* libpicotls-core.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 106530DA1D9B3E6F005B2C60 /* libpicotls-core.a */; };
 		E992F7AA20E99AA10008154D /* esni.c in Sources */ = {isa = PBXBuildFile; fileRef = E992F79A20E99A6B0008154D /* esni.c */; };
@@ -764,6 +771,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E9925A132354C37600CA2082 /* picotls-probes.d in Sources */,
 				105900B61DC943D400FB4085 /* aes.c in Sources */,
 				E99B75E51F5CE64E00CF503E /* pembase64.c in Sources */,
 				E97577052212407900D1EF74 /* ffx.c in Sources */,
@@ -807,19 +815,25 @@
 				E97577042212407900D1EF74 /* ffx.c in Sources */,
 				E9BC76E01EF3CCDD00EB7A09 /* poly1305.c in Sources */,
 				105900CF1DCBECFB00FB4085 /* modes.c in Sources */,
+				E9925A122354C37500CA2082 /* picotls-probes.d in Sources */,
 				106530EA1D9B7C13005B2C60 /* picotls.c in Sources */,
+				E9925A142354C3CF00CA2082 /* aes128.c in Sources */,
 				105900CD1DCBECF400FB4085 /* gcm.c in Sources */,
 				E9E865EC203BD46600E2FFCD /* sha512.c in Sources */,
 				105900D01DCBECFE00FB4085 /* sha256.c in Sources */,
 				1059004C1DC8D5B700FB4085 /* openssl.c in Sources */,
 				105900D21DCBED0A00FB4085 /* uecc.c in Sources */,
+				E9925A182354C3E500CA2082 /* x25519.c in Sources */,
 				E99B75E21F5CE54D00CF503E /* asn1.c in Sources */,
 				105900C81DCBECDD00FB4085 /* blockwise.c in Sources */,
+				E9925A172354C3E200CA2082 /* random.c in Sources */,
 				105900D31DCBED1D00FB4085 /* uECC.c in Sources */,
 				105900C91DCBECE100FB4085 /* chash.c in Sources */,
+				E9925A152354C3DC00CA2082 /* aes256.c in Sources */,
 				106530E51D9B4021005B2C60 /* picotest.c in Sources */,
 				105900C71DCBECD800FB4085 /* aes.c in Sources */,
 				105900D11DCBED0600FB4085 /* cifra.c in Sources */,
+				E9925A162354C3DF00CA2082 /* chacha20.c in Sources */,
 				105900CE1DCBECF700FB4085 /* gf128.c in Sources */,
 				105900CC1DCBECF100FB4085 /* hmac.c in Sources */,
 				E9BC76D41EF3A37200EB7A09 /* chacha20.c in Sources */,

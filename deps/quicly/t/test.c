@@ -231,8 +231,8 @@ static void test_vector(void)
     ok(quicly_decode_packet(&quic_ctx, &packet, datagram, sizeof(datagram)) == sizeof(datagram));
     ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0);
     ok(ret == 0);
-    payload = decrypt_packet(ingress.header_protection, &ingress.aead, &next_expected_pn, &packet, &pn);
-    ok(payload.base != NULL);
+    ok(decrypt_packet(ingress.header_protection, aead_decrypt_fixed_key, ingress.aead, &next_expected_pn, &packet, &pn, &payload) ==
+       0);
     ok(pn == 2);
     ok(sizeof(expected_payload) <= payload.len);
     ok(memcmp(expected_payload, payload.base, sizeof(expected_payload)) == 0);

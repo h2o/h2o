@@ -235,14 +235,6 @@ static int control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_htt
     return ret;
 }
 
-static int unknown_stream_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
-                                            const uint8_t **src, const uint8_t *src_end, const char **err_desc)
-{
-    /* just consume the input */
-    *src = src_end;
-    return 0;
-}
-
 static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
                                      const uint8_t *src_end, const char **err_desc)
 {
@@ -271,9 +263,9 @@ static int unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3
         break;
     default:
         quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_STREAM_CREATION);
-        stream->handle_input =
-            unknown_stream_type_handle_input; /* TODO reconsider quicly API; do we need to read data after sending STOP_SENDING? */
-        break;
+        stream->handle_input = NULL;
+        h2o_buffer_consume(&stream->recvbuf, stream->recvbuf->size);
+        return 0;
     }
 
     return stream->handle_input(conn, stream, src, src_end, err_desc);
