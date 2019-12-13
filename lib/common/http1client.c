@@ -309,9 +309,6 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     client->super._timeout.cb = on_head_timeout;
 
-    client->super.bytes_read.header += sock->bytes_read;
-    client->super.bytes_read.total += sock->bytes_read;
-
     headers = h2o_mem_alloc_pool(client->super.pool, *headers, MAX_HEADERS);
     header_names = h2o_mem_alloc_pool(client->super.pool, *header_names, MAX_HEADERS);
 
