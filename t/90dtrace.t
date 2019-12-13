@@ -53,7 +53,7 @@ if ($tracer_pid == 0) {
         exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
 usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
-usdt::h2o:send_response_status {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
+usdt::h2o:send_response {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
 usdt::h2o:send_response_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 EOT
         die "failed to spawn bpftrace:$!";
@@ -74,7 +74,7 @@ EOT
 }
 EOT
             "-n", <<'EOT',
-:h2o::send_response_status {
+:h2o::send_response {
     printf("\nXXXX%u:%u status:%u\n", arg0, arg1, arg2);
 }
 EOT
