@@ -28,6 +28,9 @@
 
 h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
 {
+    /* We do not need this check to be here, but it needs to be somewhere, see the definition of H2O_SIZE_T_LONGEST_STR */
+    H2O_BUILD_ASSERT(sizeof(size_t) <= sizeof(uint64_t));
+
     h2o_iovec_t ret;
 
     if (slen == SIZE_MAX)

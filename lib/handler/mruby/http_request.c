@@ -595,7 +595,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
             // FIXME: how to handle fastpath and who frees this?
             ctx->req.body = h2o_strdup(&ctx->pool, RSTRING_PTR(body), RSTRING_LEN(body));
             if (!ctx->req.has_transfer_encoding) {
-                char *buf = h2o_mem_alloc_pool(&ctx->pool, char, sizeof(H2O_UINT64_LONGEST_STR) - 1);
+                char *buf = h2o_mem_alloc_pool(&ctx->pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
                 size_t l = (size_t)sprintf(buf, "%zu", ctx->req.body.len);
                 h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONTENT_LENGTH, NULL, buf, l);
             }
