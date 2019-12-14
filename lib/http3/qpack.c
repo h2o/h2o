@@ -1300,10 +1300,10 @@ void h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_po
         if (content_length == 0) {
             flatten_static_indexed(&ctx, 4);
         } else {
-            char cl_str[sizeof(H2O_UINT64_LONGEST_STR)];
-            sprintf(cl_str, "%" PRIu64, (uint64_t)content_length);
+            char cl_str[sizeof(H2O_SIZE_T_LONGEST_STR)];
+            size_t cl_len = (size_t)sprintf(cl_str, "%zu", content_length);
             do_flatten_header(&ctx, 4, 0, H2O_TOKEN_CONTENT_LENGTH->flags.likely_to_repeat, &H2O_TOKEN_CONTENT_LENGTH->buf,
-                              h2o_iovec_init(cl_str, strlen(cl_str)), (h2o_header_flags_t){0});
+                              h2o_iovec_init(cl_str, cl_len), (h2o_header_flags_t){0});
         }
     }
 
