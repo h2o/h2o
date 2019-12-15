@@ -53,7 +53,8 @@ if ($tracer_pid == 0) {
         exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
 usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
-usdt::h2o:send_response_status {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
+usdt::h2o:send_response {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
+usdt::h2o:send_response_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 EOT
         die "failed to spawn bpftrace:$!";
     } else {
@@ -73,7 +74,7 @@ EOT
 }
 EOT
             "-n", <<'EOT',
-:h2o::send_response_status {
+:h2o::send_response {
     printf("\nXXXX%u:%u status:%u\n", arg0, arg1, arg2);
 }
 EOT
@@ -91,7 +92,7 @@ while (1) {
         $read_trace = sub {
             seek $fh, $off, 0
                 or die "seek failed:$!";
-            read $fh, my $bytes, 10000;
+            read $fh, my $bytes, 13000;
             $bytes = ''
                 unless defined $bytes;
             $off += length $bytes;
@@ -138,6 +139,9 @@ run_with_curl($server, sub {
     like $trace, qr{^:authority: 127\.0\.0\.1:$port$}m;
     like $trace, qr{^:path: /$}m;
     like $trace, qr{^\d+:1 status:200}m;
+    like $trace, qr{content-length: 6}m;
+    like $trace, qr{content-type: text/plain}m;
+    like $trace, qr{accept-ranges: bytes}m;
 });
 
 # wait until the server and the tracer exits

@@ -82,6 +82,12 @@ __attribute__((noinline)) static void h2o_probe_request_header(h2o_req_t *req, u
     H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
 }
 
+__attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name,
+                                                                h2o_iovec_t value)
+{
+    H2O_PROBE_CONN(SEND_RESPONSE_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
+}
+
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
@@ -98,9 +104,21 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
     }
 }
 
-static inline void h2o_probe_log_response_status(h2o_req_t *req, uint64_t req_index)
+static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
 {
-    H2O_PROBE_CONN(SEND_RESPONSE_STATUS, req->conn, req_index, req->res.status);
+    H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status);
+    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
+        if (req->res.content_length != SIZE_MAX) {
+            char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
+            size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);
+            h2o_probe_response_header(req, req_index, H2O_TOKEN_CONTENT_LENGTH->buf, h2o_iovec_init(buf, len));
+        }
+        size_t i;
+        for (i = 0; i != req->res.headers.size; ++i) {
+            h2o_header_t *h = req->res.headers.entries + i;
+            h2o_probe_response_header(req, req_index, *h->name, h->value);
+        }
+    }
 }
 
 #endif
