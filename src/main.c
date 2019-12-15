@@ -861,10 +861,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     ssl_config->certificate_file = h2o_strdup(NULL, (*certificate_file)->data.scalar, SIZE_MAX).base;
     ssl_config->http2_origin_frame = http2_origin_frame;
 
-#if !H2O_USE_OCSP
-    if (ocsp_update_interval != 0)
-        fprintf(stderr, "[OCSP Stapling] disabled (not support by the SSL library)\n");
-#else
 #ifndef OPENSSL_NO_OCSP
     SSL_CTX_set_tlsext_status_cb(ssl_ctx, on_staple_ocsp_ossl);
     SSL_CTX_set_tlsext_status_arg(ssl_ctx, ssl_config);
@@ -904,7 +900,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         } break;
         }
     }
-#endif
 
     if (use_picotls) {
         const char *errstr = listener_setup_ssl_picotls(listener, ssl_config, ssl_ctx);
