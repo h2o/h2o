@@ -80,7 +80,7 @@ int trace_receive_req_header(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_send_response_status(struct pt_regs *ctx) {
+int trace_send_resp(struct pt_regs *ctx) {
     struct resp_line_t line = {};
 
     bpf_usdt_readarg(1, ctx, &line.conn_id);
@@ -124,7 +124,7 @@ if h2o_pid == 0:
 u = USDT(pid=int(h2o_pid))
 u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
 u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
-u.enable_probe(probe="send_response_status", fn_name="trace_send_response_status")
+u.enable_probe(probe="send_response", fn_name="trace_send_resp")
 
 b = BPF(text=bpf, usdt_contexts=[u])
 b["rxbuf"].open_perf_buffer(handle_req_line)
