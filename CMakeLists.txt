@@ -290,7 +290,11 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/writer.c)
 
 SET(BROTLI_SOURCE_FILES
+    deps/brotli/c/common/constants.c
+    deps/brotli/c/common/context.c
     deps/brotli/c/common/dictionary.c
+    deps/brotli/c/common/platform.c
+    deps/brotli/c/common/transform.c
     deps/brotli/c/dec/bit_reader.c
     deps/brotli/c/dec/decode.c
     deps/brotli/c/dec/huffman.c
@@ -301,11 +305,14 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/c/enc/block_splitter.c
     deps/brotli/c/enc/brotli_bit_stream.c
     deps/brotli/c/enc/cluster.c
+    deps/brotli/c/enc/command.c
     deps/brotli/c/enc/compress_fragment.c
     deps/brotli/c/enc/compress_fragment_two_pass.c
     deps/brotli/c/enc/dictionary_hash.c
     deps/brotli/c/enc/encode.c
+    deps/brotli/c/enc/encoder_dict.c
     deps/brotli/c/enc/entropy_encode.c
+    deps/brotli/c/enc/fast_log.c
     deps/brotli/c/enc/histogram.c
     deps/brotli/c/enc/literal_cost.c
     deps/brotli/c/enc/memory.c
