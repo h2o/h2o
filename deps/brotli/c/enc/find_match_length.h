@@ -9,16 +9,15 @@
 #ifndef BROTLI_ENC_FIND_MATCH_LENGTH_H_
 #define BROTLI_ENC_FIND_MATCH_LENGTH_H_
 
+#include "../common/platform.h"
 #include <brotli/types.h>
-#include "./port.h"
 
 #if defined(__cplusplus) || defined(c_plusplus)
 extern "C" {
 #endif
 
 /* Separate implementation for little-endian 64-bit targets, for speed. */
-#if defined(__GNUC__) && defined(_LP64) && defined(BROTLI_LITTLE_ENDIAN)
-
+#if defined(BROTLI_TZCNT64) && BROTLI_64_BITS && BROTLI_LITTLE_ENDIAN
 static BROTLI_INLINE size_t FindMatchLengthWithLimit(const uint8_t* s1,
                                                      const uint8_t* s2,
                                                      size_t limit) {
@@ -32,7 +31,7 @@ static BROTLI_INLINE size_t FindMatchLengthWithLimit(const uint8_t* s1,
     } else {
       uint64_t x = BROTLI_UNALIGNED_LOAD64LE(s2) ^
           BROTLI_UNALIGNED_LOAD64LE(s1 + matched);
-      size_t matching_bits = (size_t)__builtin_ctzll(x);
+      size_t matching_bits = (size_t)BROTLI_TZCNT64(x);
       matched += matching_bits >> 3;
       return matched;
     }
@@ -60,8 +59,8 @@ static BROTLI_INLINE size_t FindMatchLengthWithLimit(const uint8_t* s1,
      the first non-matching bit and use that to calculate the total
      length of the match. */
   while (s2_ptr <= s2_limit - 4 &&
-         BROTLI_UNALIGNED_LOAD32(s2_ptr) ==
-         BROTLI_UNALIGNED_LOAD32(s1 + matched)) {
+         BrotliUnalignedRead32(s2_ptr) ==
+         BrotliUnalignedRead32(s1 + matched)) {
     s2_ptr += 4;
     matched += 4;
   }

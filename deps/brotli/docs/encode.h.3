@@ -1,4 +1,4 @@
-.TH "encode.h" 3 "Wed Sep 20 2017" "Brotli" \" -*- nroff -*-
+.TH "encode.h" 3 "Thu Feb 22 2018" "Brotli" \" -*- nroff -*-
 .ad l
 .nh
 .SH NAME
@@ -22,6 +22,10 @@ encode.h \- API for Brotli compression\&.
 .RI "#define \fBBROTLI_DEFAULT_WINDOW\fP   22"
 .br
 .RI "\fIDefault value for \fBBROTLI_PARAM_LGWIN\fP parameter\&. \fP"
+.ti -1c
+.RI "#define \fBBROTLI_LARGE_MAX_WINDOW_BITS\fP   30"
+.br
+.RI "\fIMaximal value for \fBBROTLI_PARAM_LGWIN\fP parameter in 'Large Window Brotli' (32-bit)\&. \fP"
 .ti -1c
 .RI "#define \fBBROTLI_MAX_INPUT_BLOCK_BITS\fP   24"
 .br
@@ -287,6 +291,31 @@ Flag that affects usage of 'literal context modeling' format feature\&. This fla
 .TP
 \fB\fIBROTLI_PARAM_SIZE_HINT \fP\fP
 Estimated total input size for all \fBBrotliEncoderCompressStream\fP calls\&. The default value is 0, which means that the total input size is unknown\&. 
+.TP
+\fB\fIBROTLI_PARAM_LARGE_WINDOW \fP\fP
+Flag that determines if 'Large Window Brotli' is used\&. 
+.TP
+\fB\fIBROTLI_PARAM_NPOSTFIX \fP\fP
+Recommended number of postfix bits (NPOSTFIX)\&. Encoder may change this value\&.
+.PP
+Range is from 0 to \fBBROTLI_MAX_NPOSTFIX\fP\&. 
+.TP
+\fB\fIBROTLI_PARAM_NDIRECT \fP\fP
+Recommended number of direct distance codes (NDIRECT)\&. Encoder may change this value\&.
+.PP
+Range is from 0 to (15 << NPOSTFIX) in steps of (1 << NPOSTFIX)\&. 
+.TP
+\fB\fIBROTLI_PARAM_STREAM_OFFSET \fP\fP
+Number of bytes of input stream already processed by a different instance\&. 
+.PP
+\fBNote:\fP
+.RS 4
+It is important to configure all the encoder instances with same parameters (except this one) in order to allow all the encoded parts obey the same restrictions implied by header\&.
+.RE
+.PP
+If offset is not 0, then stream header is omitted\&. In any case output start is byte aligned, so for proper streams stitching 'predecessor' stream must be flushed\&.
+.PP
+Range is not artificially limited, but all the values greater or equal to maximal window size have the same effect\&. Values greater than 2**30 are not allowed\&. 
 .SH "Function Documentation"
 .PP 
 .SS "\fBBROTLI_BOOL\fP BrotliEncoderCompress (int quality, int lgwin, \fBBrotliEncoderMode\fP mode, size_t input_size, const uint8_t input_buffer[input_size], size_t * encoded_size, uint8_t encoded_buffer[*encoded_size])"
@@ -297,6 +326,8 @@ Performs one-shot memory-to-memory compression\&. Compresses the data in \fCinpu
 \fBNote:\fP
 .RS 4
 If \fBBrotliEncoderMaxCompressedSize\fP(\fCinput_size\fP) returns non-zero value, then output is guaranteed to be no longer than that\&.
+.PP
+If \fClgwin\fP is greater than \fBBROTLI_MAX_WINDOW_BITS\fP then resulting stream might be incompatible with RFC 7932; to decode such streams, decoder should be configured with \fBBROTLI_DECODER_PARAM_LARGE_WINDOW\fP = \fC1\fP 
 .RE
 .PP
 \fBParameters:\fP
@@ -391,13 +422,13 @@ When flushing and finishing, \fCop\fP should not change until operation is compl
 .SS "\fBBrotliEncoderState\fP* BrotliEncoderCreateInstance (\fBbrotli_alloc_func\fP alloc_func, \fBbrotli_free_func\fP free_func, void * opaque)"
 
 .PP
-Creates an instance of \fBBrotliEncoderState\fP and initializes it\&. \fCalloc_func\fP and \fCfree_func\fP \fBMUST\fP be both zero or both non-zero\&. In the case they are both zero, default memory allocators are used\&. \fCopaque\fP is passed to \fCalloc_func\fP and \fCfree_func\fP when they are called\&.
+Creates an instance of \fBBrotliEncoderState\fP and initializes it\&. \fCalloc_func\fP and \fCfree_func\fP \fBMUST\fP be both zero or both non-zero\&. In the case they are both zero, default memory allocators are used\&. \fCopaque\fP is passed to \fCalloc_func\fP and \fCfree_func\fP when they are called\&. \fCfree_func\fP has to return without doing anything when asked to free a NULL pointer\&.
 .PP
 \fBParameters:\fP
 .RS 4
 \fIalloc_func\fP custom memory allocation function 
 .br
-\fIfree_func\fP custom memory fee function 
+\fIfree_func\fP custom memory free function 
 .br
 \fIopaque\fP custom memory manager handle 
 .RE
@@ -464,7 +495,7 @@ Calculates the output size bound for the given \fCinput_size\fP\&.
 .PP
 \fBWarning:\fP
 .RS 4
-Result is not applicable to \fBBrotliEncoderCompressStream\fP output, because every 'flush' adds extra overhead bytes, and some encoder settings (e\&.g\&. quality \fC0\fP and \fC1\fP) might imply a 'soft flush' after every chunk of input\&.
+Result is only valid if quality is at least \fC2\fP and, in case \fBBrotliEncoderCompressStream\fP was used, no flushes (\fBBROTLI_OPERATION_FLUSH\fP) were performed\&.
 .RE
 .PP
 \fBParameters:\fP

@@ -414,7 +414,7 @@ static BROTLI_BOOL decompress_stream(BrotliDecoderState* dec,
       (*output).insert((*output).end(), buffer, buffer + buffer_length);
     }
   }
-  ok = result != BROTLI_DECODER_RESULT_ERROR;
+  ok = result != BROTLI_DECODER_RESULT_ERROR && !available_in;
 
   Py_END_ALLOW_THREADS
   return ok;
@@ -672,7 +672,7 @@ static PyObject* brotli_decompress(PyObject *self, PyObject *args, PyObject *key
     if (available_out != 0)
       output.insert(output.end(), next_out, next_out + available_out);
   }
-  ok = result == BROTLI_DECODER_RESULT_SUCCESS;
+  ok = result == BROTLI_DECODER_RESULT_SUCCESS && !available_in;
   BrotliDecoderDestroyInstance(state);
 
   Py_END_ALLOW_THREADS
@@ -703,13 +703,14 @@ PyDoc_STRVAR(brotli_doc, "Implementation module for the Brotli library.");
 
 static struct PyModuleDef brotli_module = {
   PyModuleDef_HEAD_INIT,
-  "_brotli",
-  brotli_doc,
-  0,
-  brotli_methods,
-  NULL,
-  NULL,
-  NULL
+  "_brotli",      /* m_name */
+  brotli_doc,     /* m_doc */
+  0,              /* m_size */
+  brotli_methods, /* m_methods */
+  NULL,           /* m_reload */
+  NULL,           /* m_traverse */
+  NULL,           /* m_clear */
+  NULL            /* m_free */
 };
 #else
 #define INIT_BROTLI   init_brotli

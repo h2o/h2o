@@ -1,11 +1,17 @@
 # !/bin/sh -e
 
+if [ `uname -s` = "Darwin" ]; then
+echo "WARNING: OSX autogen build is not supported"
+fi
+
 REQUIRED='is required, but not installed.'
 bc -v >/dev/null 2>&1 || { echo >&2 "'bc' $REQUIRED"; exit 1; }
 if [ `uname -s` != "FreeBSD" ]; then
 sed --version >/dev/null 2>&1 || { echo >&2 "'sed' $REQUIRED"; exit 1; }
 fi
 autoreconf --version >/dev/null 2>&1 || { echo >&2 "'autoconf' $REQUIRED"; exit 1; }
+
+# If libtool is not installed -> "error: Libtool library used but 'LIBTOOL' is undefined"
 
 mkdir m4 2>/dev/null
 
