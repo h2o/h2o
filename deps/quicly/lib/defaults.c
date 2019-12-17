@@ -47,7 +47,10 @@ const quicly_context_t quicly_spec_context = {
     NULL, /* on_stream_open */
     &quicly_default_stream_scheduler,
     NULL, /* on_conn_close */
-    &quicly_default_now
+    &quicly_default_now,
+    NULL,
+    NULL,
+    &quicly_default_crypto_engine
 };
 
 /* profile with a focus on reducing latency for the HTTP use case */
@@ -72,7 +75,10 @@ const quicly_context_t quicly_performant_context = {
     NULL, /* on_stream_open */
     &quicly_default_stream_scheduler,
     NULL, /* on_conn_close */
-    &quicly_default_now
+    &quicly_default_now,
+    NULL,
+    NULL,
+    &quicly_default_crypto_engine
 };
 
 static quicly_datagram_t *default_alloc_packet(quicly_packet_allocator_t *self, size_t payloadsize)
@@ -373,3 +379,71 @@ static int64_t default_now(quicly_now_t *self)
 }
 
 quicly_now_t quicly_default_now = {default_now};
+
+static int default_setup_cipher(quicly_crypto_engine_t *engine, quicly_conn_t *conn, size_t epoch, int is_enc,
+                                ptls_cipher_context_t **hp_ctx, ptls_aead_context_t **aead_ctx, ptls_aead_algorithm_t *aead,
+                                ptls_hash_algorithm_t *hash, const void *secret)
+{
+    uint8_t hpkey[PTLS_MAX_SECRET_SIZE];
+    int ret;
+
+    if (hp_ctx != NULL)
+        *hp_ctx = NULL;
+    *aead_ctx = NULL;
+
+    /* generate new header protection key */
+    if (hp_ctx != NULL) {
+        if ((ret = ptls_hkdf_expand_label(hash, hpkey, aead->ctr_cipher->key_size, ptls_iovec_init(secret, hash->digest_size),
+                                          "quic hp", ptls_iovec_init(NULL, 0), NULL)) != 0)
+            goto Exit;
+        if ((*hp_ctx = ptls_cipher_new(aead->ctr_cipher, is_enc, hpkey)) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+    }
+
+    /* generate new AEAD context */
+    if ((*aead_ctx = ptls_aead_new(aead, hash, is_enc, secret, QUICLY_AEAD_BASE_LABEL)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if (QUICLY_DEBUG) {
+        char *secret_hex = quicly_hexdump(secret, hash->digest_size, SIZE_MAX),
+             *hpkey_hex = quicly_hexdump(hpkey, aead->ctr_cipher->key_size, SIZE_MAX);
+        fprintf(stderr, "%s:\n  aead-secret: %s\n  hp-key: %s\n", __FUNCTION__, secret_hex, hpkey_hex);
+        free(secret_hex);
+        free(hpkey_hex);
+    }
+
+    ret = 0;
+Exit:
+    if (ret != 0) {
+        if (*aead_ctx != NULL) {
+            ptls_aead_free(*aead_ctx);
+            *aead_ctx = NULL;
+        }
+        if (*hp_ctx != NULL) {
+            ptls_cipher_free(*hp_ctx);
+            *hp_ctx = NULL;
+        }
+    }
+    ptls_clear_memory(hpkey, sizeof(hpkey));
+    return ret;
+}
+
+static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn,
+                                         ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
+                                         quicly_datagram_t *packet, size_t first_byte_at, size_t payload_from, int coalesced)
+{
+    uint8_t hpmask[1 + QUICLY_SEND_PN_SIZE] = {0};
+    size_t i;
+
+    ptls_cipher_init(header_protect_ctx, packet->data.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE);
+    ptls_cipher_encrypt(header_protect_ctx, hpmask, hpmask, sizeof(hpmask));
+
+    packet->data.base[first_byte_at] ^= hpmask[0] & (QUICLY_PACKET_IS_LONG_HEADER(packet->data.base[first_byte_at]) ? 0xf : 0x1f);
+    for (i = 0; i != QUICLY_SEND_PN_SIZE; ++i)
+        packet->data.base[payload_from + i - QUICLY_SEND_PN_SIZE] ^= hpmask[i + 1];
+}
+
+quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_finalize_send_packet};
