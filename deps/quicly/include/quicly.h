@@ -72,6 +72,8 @@ extern "C" {
 #define QUICLY_MAX_PN_SIZE 4  /* maximum defined by the RFC used for calculating header protection sampling offset */
 #define QUICLY_SEND_PN_SIZE 2 /* size of PN used for sending */
 
+#define QUICLY_AEAD_BASE_LABEL "tls13 quic "
+
 typedef union st_quicly_address_t {
     struct sockaddr sa;
     struct sockaddr_in sin;
@@ -175,11 +177,38 @@ QUICLY_CALLBACK_TYPE(int, save_resumption_token, quicly_conn_t *conn, ptls_iovec
 QUICLY_CALLBACK_TYPE(int, generate_resumption_token, quicly_conn_t *conn, ptls_buffer_t *buf,
                      quicly_address_token_plaintext_t *token);
 /**
- *
+ * crypto offload API
  */
-QUICLY_CALLBACK_TYPE(void, finalize_send_packet, quicly_conn_t *conn, ptls_cipher_context_t *hp, ptls_aead_context_t *aead,
-                     quicly_datagram_t *packet, size_t first_byte_at, size_t payload_from, int coalesced);
-
+typedef struct st_quicly_crypto_engine_t {
+    /**
+     * Callback used for setting up the header protection keys / packet protection keys. The callback MUST initialize or replace
+     * `header_protect_ctx` and `packet_protect_ctx` as specified by QUIC-TLS. This callback might be called more than once for
+     * 1-RTT epoch, when the key is updated. In such case, there is no need to update the header protection context, and therefore
+     * `header_protect_ctx` will be NULL.
+     *
+     * @param header_protect_ctx  address of where the header protection context should be written. Might be NULL when called to
+     *                            handle 1-RTT Key Update.
+     * @param packet_protect_ctx  address of where the packet protection context should be written.
+     * @param secret              the secret from which the protection keys is derived. The length of the secret is
+                                  `hash->digest_size`.
+     * @note At the moment, the callback is not invoked for Initial keys when running as server.
+     */
+    int (*setup_cipher)(struct st_quicly_crypto_engine_t *engine, quicly_conn_t *conn, size_t epoch, int is_enc,
+                        ptls_cipher_context_t **header_protect_ctx, ptls_aead_context_t **packet_protect_ctx,
+                        ptls_aead_algorithm_t *aead, ptls_hash_algorithm_t *hash, const void *secret);
+    /**
+     * Callback used for sealing the send packet. What "sealing" means depends on the packet_protection_ctx being returned by the
+     * `setup_cipher` callback.
+     * * If the packet protection context was a real cipher, the payload of the packet is already encrypted when this callback is
+     *   invoked. The responsibility of this callback is to apply header protection.
+     * * If the packet protection context was a fake (i.e. path-through) cipher, the responsibility of this callback is to
+     *   AEAD-protect the packet and to apply header protection.
+     * The protection can be delayed until after `quicly_datagram_t` is returned by the `quicly_send` function.
+     */
+    void (*finalize_send_packet)(struct st_quicly_crypto_engine_t *engine, quicly_conn_t *conn,
+                                 ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
+                                 quicly_datagram_t *packet, size_t first_byte_at, size_t payload_from, int coalesced);
+} quicly_crypto_engine_t;
 
 typedef struct st_quicly_max_stream_data_t {
     uint64_t bidi_local, bidi_remote, uni;
@@ -328,9 +357,9 @@ struct st_quicly_context_t {
      */
     quicly_generate_resumption_token_t *generate_resumption_token;
     /**
-     * optional callback for encryption offloading
+     * crypto engine (offload API)
      */
-    quicly_finalize_send_packet_t *finalize_send_packet;
+    quicly_crypto_engine_t *crypto_engine;
 };
 
 /**
@@ -637,7 +666,7 @@ typedef struct st_quicly_decoded_packet_t {
     ptls_iovec_t token;
     /**
      * starting offset of data (i.e., version-dependent area of a long header packet (version numbers in case of VN), odcid (in case
-     * of retry), encrypted PN (if decrypted_pn is UINT64_MAX) or data (if decrypted_pn is not UINT64_MAX))
+     * of retry), encrypted PN (if decrypted.pn is UINT64_MAX) or data (if decrypted_pn is not UINT64_MAX))
      */
     size_t encrypted_off;
     /**
@@ -645,9 +674,12 @@ typedef struct st_quicly_decoded_packet_t {
      */
     size_t datagram_size;
     /**
-     * if not UINT64_MAX, indicates that the packet has been decrypted prior to being passed to `quicly_receive`.
+     * when decrypted.pn is not UINT64_MAX, indicates that the packet has been decrypted prior to being passed to `quicly_receive`.
      */
-    uint64_t decrypted_pn;
+    struct {
+        uint64_t pn;
+        uint64_t key_phase;
+    } decrypted;
     /**
      *
      */

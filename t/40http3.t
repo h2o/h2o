@@ -50,6 +50,10 @@ EOT
         is length($resp), (stat "t/assets/doc_root/halfdome.jpg")[7];
         is md5_hex($resp), md5_file("t/assets/doc_root/halfdome.jpg");
     };
+    subtest "more than stream-concurrency" => sub {
+        my $resp = `$client_prog -3 -t 1000 https://127.0.0.1:$quic_port 2> /dev/null`;
+        is $resp, "hello\n" x 1000;
+    };
 };
 
 subtest "single-thread" => sub {

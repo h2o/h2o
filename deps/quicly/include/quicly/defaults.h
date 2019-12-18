@@ -56,6 +56,10 @@ extern quicly_stream_scheduler_t quicly_default_stream_scheduler;
  *
  */
 extern quicly_now_t quicly_default_now;
+/**
+ *
+ */
+extern quicly_crypto_engine_t quicly_default_crypto_engine;
 
 #ifdef __cplusplus
 }
