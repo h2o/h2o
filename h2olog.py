@@ -14,35 +14,25 @@ bpf = """
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 /*
- * "req_line_t" represents an individual log line for a given request.
- * This structure is pushed into the BPF ring buffer for later collection
- * by the user-space script (Python part of this script).
+ * "trace_line_t" is a general structure to store the data emitted by
+ * USDT probes. This structure is pushed into the BPF ring buffer.
  */
-struct req_line_t {
+struct trace_line_t {
     u64 conn_id;
     u64 req_id;
     u32 http_version;
+    u32 http_status;
     u64 header_name_len;
     u64 header_value_len;
     char header_name[MAX_STR_LEN];
     char header_value[MAX_STR_LEN];
 };
 
-/*
- * "resp_line_t" represents an individual log line for a given response.
- * Like "req_line_t", the structure is pushed into the BPF ring buffer.
- */
-struct resp_line_t {
-    u64 conn_id;
-    u64 req_id;
-    u32 http_status;
-};
-
 BPF_PERF_OUTPUT(rxbuf);
 BPF_PERF_OUTPUT(txbuf);
 
 int trace_receive_req(struct pt_regs *ctx) {
-    struct req_line_t line = {};
+    struct trace_line_t line = {};
 
     bpf_usdt_readarg(1, ctx, &line.conn_id);
     bpf_usdt_readarg(2, ctx, &line.req_id);
@@ -55,7 +45,7 @@ int trace_receive_req(struct pt_regs *ctx) {
 }
 
 int trace_receive_req_header(struct pt_regs *ctx) {
-    struct req_line_t line = {};
+    struct trace_line_t line = {};
     size_t n_len, v_len;
     void *pos = NULL;
 
@@ -81,7 +71,7 @@ int trace_receive_req_header(struct pt_regs *ctx) {
 }
 
 int trace_send_resp(struct pt_regs *ctx) {
-    struct resp_line_t line = {};
+    struct trace_line_t line = {};
 
     bpf_usdt_readarg(1, ctx, &line.conn_id);
     bpf_usdt_readarg(2, ctx, &line.req_id);
