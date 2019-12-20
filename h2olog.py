@@ -84,15 +84,13 @@ int trace_send_resp(struct pt_regs *ctx) {
 }
 """
 
-def print_req_line(line):
+def handle_req_line(cpu, data, size):
+    line = b["rxbuf"].event(data)
     if line.http_version:
         v = "HTTP/%d.%d" % (line.http_version / 256, line.http_version % 256)
         print("%u %u RxProtocol %s" % (line.conn_id, line.req_id, v))
     else:
         print("%u %u RxHeader   %s %s" % (line.conn_id, line.req_id, line.header_name, line.header_value))
-
-def handle_req_line(cpu, data, size):
-    print_req_line(b["rxbuf"].event(data))
 
 def handle_resp_line(cpu, data, size):
     line = b["txbuf"].event(data)
