@@ -448,6 +448,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/time.c
     t/00unit/lib/common/url.c
     t/00unit/lib/common/timerwheel.c
+    t/00unit/lib/common/absprio.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
