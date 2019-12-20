@@ -207,6 +207,7 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits);
 void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+void h2o_http2_conn_preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src);
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);

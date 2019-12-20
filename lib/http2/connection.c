@@ -265,7 +265,7 @@ void h2o_http2_conn_register_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *
     kh_val(conn->streams, iter) = stream;
 }
 
-static void preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src)
+void h2o_http2_conn_preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src)
 {
     assert(h2o_http2_scheduler_is_open(&src->_scheduler));
 
@@ -294,7 +294,7 @@ static void finish_body_streaming(h2o_http2_stream_t *stream)
 
 void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    preserve_stream_scheduler(conn, stream);
+    h2o_http2_conn_preserve_stream_scheduler(conn, stream);
 
     khiter_t iter = kh_get(h2o_http2_stream_t, conn->streams, stream->stream_id);
     assert(iter != kh_end(conn->streams));
