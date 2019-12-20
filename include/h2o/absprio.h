@@ -34,4 +34,14 @@ typedef enum en_h2o_absprio_urgency_type_t {
 } h2o_absprio_urgency_type_t;
 
 void h2o_absprio_parse_priority(const h2o_iovec_t *header_value, uint8_t *urgency, int *incremental);
+
+/* Convert urgency value in absolute priority header to HTTP2 weight,
+ * having Chromium as a client in mind. */
+static inline uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency)
+{
+    uint16_t weight;
+    assert(urgency < 8);
+    weight = (8 - urgency) * 32;
+    return weight;
+}
 #endif

@@ -27,6 +27,7 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
+#include "h2o/absprio.h"
 #include "../probes_.h"
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
@@ -618,19 +619,28 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
 
     /* determine the parent */
     if (priority->dependency != 0) {
-        h2o_http2_stream_t *parent_stream = h2o_http2_conn_get_stream(conn, priority->dependency);
-        if (parent_stream != NULL) {
-            parent_sched = &parent_stream->_scheduler.node;
-        } else {
-            size_t i;
-            for (i = 0; i < HTTP2_CLOSED_STREAM_PRIORITIES; i++) {
-                if (conn->_recently_closed_streams.streams[i] &&
-                    conn->_recently_closed_streams.streams[i]->stream_id == priority->dependency) {
-                    parent_sched = &conn->_recently_closed_streams.streams[i]->_scheduler.node;
-                    break;
-                }
+        size_t i;
+        /* First look for "recently closed" stream priorities.
+         * This includes not only actually closed streams but also streams whose priority was modified
+         * by H2O (e.g. through priority header).
+         * By searching this list first, priority of a newly arrived stream can correctly refer to a priority
+         * specified by client before. */
+        for (i = 0; i < HTTP2_CLOSED_STREAM_PRIORITIES; i++) {
+            if (conn->_recently_closed_streams.streams[i] &&
+                conn->_recently_closed_streams.streams[i]->stream_id == priority->dependency) {
+                parent_sched = &conn->_recently_closed_streams.streams[i]->_scheduler.node;
+                break;
             }
-            if (parent_sched == NULL) {
+        }
+        if (parent_sched == NULL) {
+            /* If the above search for recently closed streams did not succeed (either the parent was not closed
+             * recently or modified priority), get the priority scheduler currently associated with the parent
+             * stream.
+             */
+            h2o_http2_stream_t *parent_stream = h2o_http2_conn_get_stream(conn, priority->dependency);
+            if (parent_stream != NULL) {
+                parent_sched = &parent_stream->_scheduler.node;
+            } else {
                 /* A dependency on a stream that is not currently in the tree - such as a stream in the "idle" state - results in
                  * that stream being given a default priority. (RFC 7540 5.3.1) It is possible for a stream to become closed while
                  * prioritization information that creates a dependency on that stream is in transit. If a stream identified in a
@@ -640,9 +650,52 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
                 parent_sched = &conn->scheduler;
                 priority = &h2o_http2_default_priority;
             }
+        } else if (conn->is_chromium_dependency_tree) {
+            /* Parent stream was found in the recently closed streams.
+             * There are two possible cases for this.
+             * 1) the parent stream was actually closed recently
+             * 2) the parent stream's priority was modified by H2O (e.g. priority headers)
+             * In case of 2), we might need to ignore the original dependency specified by the client,
+             * if such a modification was a demotion (decreasing urgency/weight).
+             *
+             * This block handles case 2).
+             */
+            h2o_http2_scheduler_openref_t *orig_parent_ref =
+                H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, node, parent_sched);
+            if (orig_parent_ref->weight < priority->weight || !priority->exclusive) {
+                /* Turns out the client's dependency tree does not look like Chromium's */
+                conn->is_chromium_dependency_tree = 0;
+            } else {
+                h2o_http2_stream_t *current_parent_stream = h2o_http2_conn_get_stream(conn, priority->dependency);
+                if (orig_parent_ref->weight > current_parent_stream->_scheduler.weight && priority->exclusive) {
+                    /* Parent stream was demoted as a result of reprioritization via priority header.
+                     * In this case, search the new parent from the root so that this stream is handled before
+                     * the parent originally specified by the client.
+                     * This entire logic assumes Chromium-type dependency tree, thus guarded by
+                     * `chromium_dependency_tree` */
+                    parent_sched = h2o_http2_scheduler_find_parent_by_weight(&conn->scheduler, priority->weight);
+                }
+            }
         }
     } else {
         parent_sched = &conn->scheduler;
+    }
+
+    /* Verify if the client's dependency tree looks like Chromium's */
+    if (priority->exclusive && conn->is_chromium_dependency_tree) {
+        int parent_weight = 256;
+        if (parent_sched->_parent != NULL && parent_sched->_parent->_parent != NULL) {
+            h2o_http2_scheduler_openref_t *parent_ref =
+                H2O_STRUCT_FROM_MEMBER(h2o_http2_scheduler_openref_t, node, parent_sched->_parent);
+            parent_weight = parent_ref->weight;
+        }
+        if (parent_weight < priority->weight) {
+            /* Child's weight is bigger than parent's -- not Chromium */
+            conn->is_chromium_dependency_tree = 0;
+        }
+    } else {
+        /* Stream doesn't have the exclusive flag -- not Chromium */
+        conn->is_chromium_dependency_tree = 0;
     }
 
     /* setup the scheduler */
@@ -1530,6 +1583,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     conn->_write.timeout_entry.cb = emit_writereq;
     h2o_http2_window_init(&conn->_write.window, conn->peer_settings.initial_window_size);
     h2o_linklist_init_anchor(&conn->early_data.blocked_streams);
+    conn->is_chromium_dependency_tree = 1; /* initially assume the client is Chromium until proven otherwise */
 
     return conn;
 }
