@@ -360,6 +360,7 @@ static uint8_t *accept_hashkey_flatten_address(uint8_t *p, quicly_address_t *add
         break;
     case AF_UNSPEC:
         *p++ = 0;
+        break;
     default:
         h2o_fatal("unknown protocol family");
         break;
