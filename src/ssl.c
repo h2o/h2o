@@ -1126,7 +1126,7 @@ struct st_quic_keyset_t {
 static __thread struct {
     unsigned generation;
     H2O_VECTOR(struct st_quic_keyset_t) keys;
-} quic_keys = {UINT_MAX /* the value needs to be one smaller than session_tickets.generation */};
+} quic_keys = {UINT8_MAX /* the value needs to be one smaller than session_tickets.generation */};
 
 static void init_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls_iovec_t master_secret)
 {
