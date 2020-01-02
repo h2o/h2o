@@ -470,6 +470,9 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
     if (conn == NULL) {
         /* Initial or 0-RTT packet, use 4-tuple to match the thread and the connection */
         assert(packets[0].cid.dest.might_be_client_generated);
+        /* we can't handle packets of that length */
+        if (packets[0].cid.src.len > QUICLY_MAX_CID_LEN_V1)
+            return;
         uint64_t accept_hashkey = calc_accept_hashkey(destaddr, srcaddr, packets[0].cid.src);
         if (ctx->accept_thread_divisor != 0) {
             uint32_t offending_thread = accept_hashkey % ctx->accept_thread_divisor;
