@@ -31,7 +31,7 @@
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
-#define LIT16(x) ((uint32_t)(x) >> 16) & 0xff, (x)&0xff
+#define LIT16(x) ((uint32_t)(x) >> 8) & 0xff, (x)&0xff
 #define LIT24(x) LIT16((x) >> 8), (x)&0xff
 #define LIT32(x) LIT24((x) >> 8), (x)&0xff
 #define LIT_FRAME_HEADER(size, type, flags, stream_id) LIT24(size), (type), (flags), LIT32(stream_id)
