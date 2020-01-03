@@ -514,7 +514,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                                               SSL_CTX *ssl_ctx)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
-#ifdef PTLS_OPENSSL_HAS_X25519
+#ifdef PTLS_OPENSSL_HAVE_X25519
         &ptls_openssl_x25519,
 #else
         &ptls_minicrypto_x25519,
