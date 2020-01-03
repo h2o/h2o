@@ -101,7 +101,7 @@ while (1) {
         $read_trace = sub {
             seek $fh, $off, 0
                 or die "seek failed:$!";
-            read $fh, my $bytes, 13000;
+            read $fh, my $bytes, 65000;
             $bytes = ''
                 unless defined $bytes;
             $off += length $bytes;
