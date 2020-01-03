@@ -280,6 +280,7 @@ __DATA__
 59 0 0 0 0 0 0 1 vary
 60 0 0 0 0 0 0 0 via
 61 0 0 0 0 0 0 0 www-authenticate
+62 0 0 0 0 0 0 0 priority
 0 1 1 0 1 0 0 0 connection
 0 0 0 0 0 0 0 0 x-reproxy-url
 0 1 1 1 1 0 0 0 upgrade
