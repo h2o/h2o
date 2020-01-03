@@ -1416,13 +1416,14 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_ptls = get_ptls,
         .skip_tracing = get_skip_tracing,
         .log_ = {{
-            .ssl = {
-              .protocol_version = log_tls_protocol_version,
-              .session_reused = log_session_reused,
-              .cipher = log_cipher,
-              .cipher_bits = log_cipher_bits,
-              .session_id = log_session_id,
-            },
+            .ssl =
+                {
+                    .protocol_version = log_tls_protocol_version,
+                    .session_reused = log_session_reused,
+                    .cipher = log_cipher,
+                    .cipher_bits = log_cipher_bits,
+                    .session_id = log_session_id,
+                },
         }},
     };
 

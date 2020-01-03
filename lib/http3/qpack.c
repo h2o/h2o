@@ -1079,7 +1079,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
 
     if (ctx->qpack != NULL) {
         /* try dynamic indexed */
-         if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
+        if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
             flatten_dynamic_indexed(ctx, dynamic_index);
             return;
         }
@@ -1102,8 +1102,8 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                 added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value.len + 1, NULL);
                 added->name = (h2o_iovec_t *)name;
             } else {
-                added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1,
-                                             NULL);
+                added =
+                    h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1, NULL);
                 added->name = &added->_name_buf;
                 added->_name_buf = h2o_iovec_init(added->value + added->value_len + 1, name->len);
                 memcpy(added->_name_buf.base, name->base, name->len);
