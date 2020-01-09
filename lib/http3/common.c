@@ -425,14 +425,17 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
     assert(num_packets != 0);
 
     /* send VN on mimatch */
-    if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0]) && packets[0].version != QUICLY_PROTOCOL_VERSION) {
-        quicly_datagram_t *dgram = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
-                                                                   packets[0].cid.dest.encrypted);
-        h2o_http3_send_datagram(ctx, dgram);
-        ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
-        return;
+    if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0])) {
+        if (packets[0].version != QUICLY_PROTOCOL_VERSION) {
+            quicly_datagram_t *dgram = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
+                                                                       packets[0].cid.dest.encrypted);
+            h2o_http3_send_datagram(ctx, dgram);
+            ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
+            return;
+        } else if (packets[0].cid.src.len > QUICLY_MAX_CID_LEN_V1) {
+            return;
+        }
     }
-
     /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
     if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&
         packets[0].cid.dest.plaintext.thread_id == ctx->next_cid.thread_id) {
@@ -470,9 +473,6 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
     if (conn == NULL) {
         /* Initial or 0-RTT packet, use 4-tuple to match the thread and the connection */
         assert(packets[0].cid.dest.might_be_client_generated);
-        /* we can't handle packets of that length */
-        if (packets[0].cid.src.len > QUICLY_MAX_CID_LEN_V1)
-            return;
         uint64_t accept_hashkey = calc_accept_hashkey(destaddr, srcaddr, packets[0].cid.src);
         if (ctx->accept_thread_divisor != 0) {
             uint32_t offending_thread = accept_hashkey % ctx->accept_thread_divisor;
