@@ -305,18 +305,22 @@ static void clear_output_buffer(struct st_h2o_socket_ssl_t *ssl)
     h2o_mem_clear_pool(&ssl->output.pool);
 }
 
-static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl)
+static void destroy_ssl(struct st_h2o_socket_ssl_t *ssl, int forged)
 {
     if (ssl->ptls != NULL) {
-        ptls_free(ssl->ptls);
+        if (!forged) {
+            ptls_free(ssl->ptls);
+        }
         ssl->ptls = NULL;
     }
     if (ssl->ossl != NULL) {
-        if (!SSL_is_server(ssl->ossl)) {
-            free(ssl->handshake.client.server_name);
-            free(ssl->handshake.client.session_cache_key.base);
+        if (!forged) {
+            if (!SSL_is_server(ssl->ossl)) {
+                free(ssl->handshake.client.server_name);
+                free(ssl->handshake.client.session_cache_key.base);
+            }
+            SSL_free(ssl->ossl);
         }
-        SSL_free(ssl->ossl);
         ssl->ossl = NULL;
     }
     h2o_buffer_dispose(&ssl->input.encrypted);
@@ -330,7 +334,7 @@ static void dispose_socket(h2o_socket_t *sock, const char *err)
     void *close_cb_data;
 
     if (sock->ssl != NULL) {
-        destroy_ssl(sock->ssl);
+        destroy_ssl(sock->ssl, sock->forged);
         sock->ssl = NULL;
     }
     h2o_buffer_dispose(&sock->input);
@@ -395,15 +399,16 @@ Close:
 
 void h2o_socket_dispose_export(h2o_socket_export_t *info)
 {
+    assert(info->fd != -1);
     if (info->ssl != NULL) {
-        destroy_ssl(info->ssl);
+        destroy_ssl(info->ssl, info->forged);
         info->ssl = NULL;
     }
     h2o_buffer_dispose(&info->input);
-    if (info->fd != -1) {
+    if (!info->forged) {
         close(info->fd);
-        info->fd = -1;
     }
+    info->fd = -1;
 }
 
 int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
@@ -422,10 +427,31 @@ int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info)
     info->input = sock->input;
     h2o_buffer_set_prototype(&info->input, &nonpooling_prototype);
     h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
+    info->forged = sock->forged;
 
     h2o_socket_close(sock);
 
     return 0;
+}
+
+void h2o_socket_forge_export(int fd, SSL *ssl, h2o_socket_export_t *info)
+{
+    static h2o_buffer_prototype_t nonpooling_prototype;
+
+    info->fd = fd;
+    h2o_buffer_init(&info->input, &nonpooling_prototype);
+
+    if (ssl == NULL) {
+        info->ssl = NULL;
+    } else {
+        info->ssl = h2o_mem_alloc(sizeof(*info->ssl));
+        memset(info->ssl, 0, offsetof(struct st_h2o_socket_ssl_t, output.pool));
+        info->ssl->ssl_ctx = SSL_get_SSL_CTX(ssl);
+        info->ssl->ossl = ssl;
+        h2o_buffer_init(&info->ssl->input.encrypted, &nonpooling_prototype);
+        h2o_mem_init_pool(&info->ssl->output.pool);
+    }
+    info->forged = 1;
 }
 
 h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
@@ -442,12 +468,13 @@ h2o_socket_t *h2o_socket_import(h2o_loop_t *loop, h2o_socket_export_t *info)
     }
     sock->input = info->input;
     h2o_buffer_set_prototype(&sock->input, &h2o_socket_buffer_prototype);
+    sock->forged = info->forged;
     return sock;
 }
 
 void h2o_socket_close(h2o_socket_t *sock)
 {
-    if (sock->ssl == NULL) {
+    if (sock->ssl == NULL || sock->forged) {
         dispose_socket(sock, 0);
     } else {
         shutdown_ssl(sock, 0);

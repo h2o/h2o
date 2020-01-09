@@ -255,7 +255,9 @@ void do_dispose_socket(h2o_socket_t *_sock)
     evloop_do_on_socket_close(sock);
     wreq_free_buffer_if_allocated(sock);
     if (sock->fd != -1) {
-        close(sock->fd);
+        if (!sock->super.forged) {
+            close(sock->fd);
+        }
         sock->fd = -1;
     }
     sock->_flags = H2O_SOCKET_FLAG_IS_DISPOSED;

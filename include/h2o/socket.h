@@ -118,6 +118,7 @@ struct st_h2o_socket_t {
      * total bytes written (above the TLS layer)
      */
     size_t bytes_written;
+    unsigned forged : 1;
     /**
      * boolean flag to indicate if sock is NOT being traced
      */
@@ -143,6 +144,7 @@ typedef struct st_h2o_socket_export_t {
     int fd;
     struct st_h2o_socket_ssl_t *ssl;
     h2o_buffer_t *input;
+    unsigned forged : 1;
 } h2o_socket_export_t;
 
 /**
@@ -188,6 +190,9 @@ h2o_loop_t *h2o_socket_get_loop(h2o_socket_t *sock);
  * detaches a socket from loop.
  */
 int h2o_socket_export(h2o_socket_t *sock, h2o_socket_export_t *info);
+
+void h2o_socket_forge_export(int fd, SSL *ssl, h2o_socket_export_t *info);
+
 /**
  * attaches a socket onto a loop.
  */
