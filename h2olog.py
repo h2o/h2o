@@ -56,13 +56,13 @@ int trace_receive_req_header(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_usdt_readarg(4, ctx, &n_len);
     line.header_name_len = MIN(MAX_STR_LEN, n_len);
-    bpf_probe_read_str(&line.header_name, line.header_name_len, pos);
+    bpf_probe_read(&line.header_name, line.header_name_len, pos);
 
     // Extract the Header Value
     bpf_usdt_readarg(5, ctx, &pos);
     bpf_usdt_readarg(6, ctx, &v_len);
     line.header_value_len = MIN(MAX_STR_LEN, v_len);
-    bpf_probe_read_str(&line.header_value, line.header_value_len, pos);
+    bpf_probe_read(&line.header_value, line.header_value_len, pos);
 
     if (rxbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
