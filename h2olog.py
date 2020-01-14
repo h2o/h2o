@@ -46,7 +46,6 @@ int trace_receive_req(struct pt_regs *ctx) {
 
 int trace_receive_req_header(struct pt_regs *ctx) {
     struct trace_line_t line = {};
-    size_t n_len, v_len;
     void *pos = NULL;
 
     bpf_usdt_readarg(1, ctx, &line.conn_id);
@@ -54,14 +53,14 @@ int trace_receive_req_header(struct pt_regs *ctx) {
 
     // Extract the Header Name
     bpf_usdt_readarg(3, ctx, &pos);
-    bpf_usdt_readarg(4, ctx, &n_len);
-    line.header_name_len = MIN(MAX_STR_LEN, n_len);
+    bpf_usdt_readarg(4, ctx, &line.header_name_len);
+    line.header_name_len = MIN(MAX_STR_LEN, line.header_name_len);
     bpf_probe_read(&line.header_name, line.header_name_len, pos);
 
     // Extract the Header Value
     bpf_usdt_readarg(5, ctx, &pos);
-    bpf_usdt_readarg(6, ctx, &v_len);
-    line.header_value_len = MIN(MAX_STR_LEN, v_len);
+    bpf_usdt_readarg(6, ctx, &line.header_value_len);
+    line.header_value_len = MIN(MAX_STR_LEN, line.header_value_len);
     bpf_probe_read(&line.header_value, line.header_value_len, pos);
 
     if (rxbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
