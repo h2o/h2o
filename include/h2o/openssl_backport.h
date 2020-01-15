@@ -45,10 +45,25 @@ static inline BIO_METHOD *BIO_meth_new(int type, const char *name)
     return bm;
 }
 
-#define BIO_meth_set_write(bm, cb) ((bm)->bwrite = cb)
-#define BIO_meth_set_read(bm, cb) ((bm)->bread = cb)
-#define BIO_meth_set_puts(bm, cb) ((bm)->bputs = cb)
-#define BIO_meth_set_ctrl(bm, cb) ((bm)->ctrl = cb)
+#define BIO_meth_free(bm) free(bm)
+
+#define BIO_meth_set_write(bm, cb) ((bm)->bwrite = (cb))
+#define BIO_meth_set_read(bm, cb) ((bm)->bread = (cb))
+#define BIO_meth_set_puts(bm, cb) ((bm)->bputs = (cb))
+#define BIO_meth_set_gets(bm, cb) ((bm)->bgets = (cb))
+#define BIO_meth_set_ctrl(bm, cb) ((bm)->ctrl = (cb))
+#define BIO_meth_set_create(bm, cb) ((bm)->create = (cb))
+#define BIO_meth_set_destroy(bm, cb) ((bm)->destroy = (cb))
+#define BIO_meth_set_callback_ctrl(bm, cb) ((bm)->callback_ctrl = (cb))
+
+#define BIO_meth_get_write(bm) ((bm)->bwrite)
+#define BIO_meth_get_read(bm) ((bm)->bread)
+#define BIO_meth_get_puts(bm) ((bm)->bputs)
+#define BIO_meth_get_gets(bm) ((bm)->bgets)
+#define BIO_meth_get_ctrl(bm) ((bm)->ctrl)
+#define BIO_meth_get_create(bm) ((bm)->create)
+#define BIO_meth_get_destroy(bm) ((bm)->destroy)
+#define BIO_meth_get_callback_ctrl(bm) ((bm)->callback_ctrl)
 
 #ifndef OPENSSL_IS_BORINGSSL
 #define SSL_CTX_up_ref(ctx) CRYPTO_add(&(ctx)->references, 1, CRYPTO_LOCK_SSL_CTX)
