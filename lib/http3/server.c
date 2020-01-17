@@ -966,6 +966,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+            h2o_probe_log_request(&stream->req, stream->quic->stream_id);
             h2o_send_error_400(&stream->req, "Invalid Request", *err_desc, 0);
             *err_desc = NULL;
             return 0;
@@ -973,6 +974,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
+
+    h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
     /* check if content-length is within the permitted bounds */
     if (stream->req.content_length != SIZE_MAX &&
@@ -983,8 +986,6 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         h2o_send_error_413(&stream->req, "Request Entity Too Large", "request entity is too large", 0);
         return 0;
     }
-
-    h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
     /* change state */
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK);
