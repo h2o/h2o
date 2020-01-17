@@ -53,6 +53,7 @@ typedef struct st_h2o_http2_scheduler_openref_t {
     size_t _active_cnt;       /* COUNT(active_streams_in_dependents) + _self_is_active */
     int _self_is_active;
     h2o_http2_scheduler_queue_node_t _queue_node;
+    int _is_relocated; /* indicates whether this entry is sent to _recently_closed_stream */
 } h2o_http2_scheduler_openref_t;
 
 /**
