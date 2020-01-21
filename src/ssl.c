@@ -1065,6 +1065,7 @@ void ssl_session_ticket_register_setup_barrier(h2o_barrier_t *barrier)
     session_tickets.barrier = barrier;
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
 static pthread_mutex_t *mutexes;
 
 static void lock_callback(int mode, int n, const char *file, int line)
@@ -1091,9 +1092,11 @@ static int add_lock_callback(int *num, int amount, int type, const char *file, i
 
     return __sync_add_and_fetch(num, amount);
 }
+#endif
 
 void init_openssl(void)
 {
+#if OPENSSL_VERSION_NUMBER < 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
     int nlocks = CRYPTO_num_locks(), i;
     mutexes = h2o_mem_alloc(sizeof(*mutexes) * nlocks);
     for (i = 0; i != nlocks; ++i)
@@ -1107,6 +1110,7 @@ void init_openssl(void)
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
+#endif
 
     cache_init_defaults();
 #if H2O_USE_SESSION_TICKETS
