@@ -95,6 +95,10 @@ def handle_resp_line(cpu, data, size):
     line = b["txbuf"].event(data)
     print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
 
+def usage():
+    print ("USAGE: h2olog -p PID")
+    exit()
+
 def trace_http(pid):
     u = USDT(pid=int(pid))
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
@@ -111,6 +115,9 @@ def trace_http(pid):
         except KeyboardInterrupt:
             exit()
 
+if len(sys.argv) == 0:
+    usage()
+
 try:
     h2o_pid = 0
     opts, args = getopt.getopt(sys.argv[1:], 'p:')
@@ -122,6 +129,6 @@ except getopt.error as msg:
     sys.exit(2)
 
 if h2o_pid == 0:
-    sys.exit("USAGE: h2olog -p PID")
+    usage()
 
 trace_http(h2o_pid)
