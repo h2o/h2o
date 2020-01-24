@@ -83,6 +83,28 @@ int trace_send_resp(struct pt_regs *ctx) {
 }
 """
 
+quic_bpf = """
+struct quic_line_t {
+    char type[32];
+    u64 at;
+};
+
+BPF_PERF_OUTPUT(quic_events);
+
+int trace_quic_accept(struct pt_regs *ctx) {
+ bpf_trace_printk("Hello, World!\\n");
+    struct quic_line_t line = {};
+    sprintf(line.type, "accept");
+
+    bpf_usdt_readarg(2, ctx, &line.at);
+
+    if (quic_events.perf_submit(ctx, &line, sizeof(line)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+"""
+
 def handle_req_line(cpu, data, size):
     line = b["rxbuf"].event(data)
     if line.http_version:
@@ -94,6 +116,10 @@ def handle_req_line(cpu, data, size):
 def handle_resp_line(cpu, data, size):
     line = b["txbuf"].event(data)
     print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
+
+def handle_quic_line(cpu, data, size):
+    line = b["quic_events"].event(data)
+    print("type: %s, at: %u" % (line.type, line.at))
 
 def usage():
     print ("USAGE: h2olog -p PID")
@@ -111,8 +137,12 @@ def trace_http():
             exit()
 
 def trace_quic():
-    print("coming soon: QUIC event tracing")
-    exit()
+    b["quic_events"].open_perf_buffer(handle_quic_line)
+    while 1:
+        try:
+            b.perf_buffer_poll()
+        except KeyboardInterrupt:
+            exit()
 
 if len(sys.argv) < 1:
     usage()
@@ -137,10 +167,13 @@ if h2o_pid == 0:
     usage()
 
 u = USDT(pid=int(h2o_pid))
-if sys.argv[1] != "quic":
+if sys.argv[1] == "quic":
+    u.enable_probe(probe="accept", fn_name="trace_quic_accept")
+    b = BPF(text=quic_bpf, usdt_contexts=[u])
+else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
     u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
     u.enable_probe(probe="send_response", fn_name="trace_send_resp")
+    b = BPF(text=bpf, usdt_contexts=[u])
 
-b = BPF(text=bpf, usdt_contexts=[u])
 tracer_func()
