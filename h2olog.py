@@ -84,20 +84,35 @@ int trace_send_resp(struct pt_regs *ctx) {
 """
 
 quic_bpf = """
+#define MAX_STR_LEN 32
+
+struct st_quicly_conn_t {
+    u32 dummy[4];
+    u32 master_id;
+};
+
 struct quic_line_t {
-    char type[32];
+    char type[MAX_STR_LEN];
+    char dcid[MAX_STR_LEN];
     u64 at;
+    u32 master_conn_id;
 };
 
 BPF_PERF_OUTPUT(quic_events);
 
 int trace_quic_accept(struct pt_regs *ctx) {
- bpf_trace_printk("Hello, World!\\n");
     struct quic_line_t line = {};
-    sprintf(line.type, "accept");
+    struct st_quicly_conn_t conn = {};
+    void *pos = NULL;
 
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    line.master_conn_id = conn.master_id;
     bpf_usdt_readarg(2, ctx, &line.at);
+    bpf_usdt_readarg(3, ctx, &pos);
+    bpf_probe_read(&line.dcid, MAX_STR_LEN, pos);
 
+    sprintf(line.type, "accept");
     if (quic_events.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
@@ -119,7 +134,7 @@ def handle_resp_line(cpu, data, size):
 
 def handle_quic_line(cpu, data, size):
     line = b["quic_events"].event(data)
-    print("type: %s, at: %u" % (line.type, line.at))
+    print("type: %s, at: %u, master_id: %d, dcid: %s" % (line.type, line.at, line.master_conn_id, line.dcid))
 
 def usage():
     print ("USAGE: h2olog -p PID")
