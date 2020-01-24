@@ -7,7 +7,7 @@
 # Copyright 2019 Fastly, Toru Maesaka
 
 from bcc import BPF, USDT
-import getopt, sys
+import getopt, json, sys
 
 bpf = """
 #define MAX_STR_LEN 128
@@ -134,7 +134,11 @@ def handle_resp_line(cpu, data, size):
 
 def handle_quic_line(cpu, data, size):
     line = b["quic_events"].event(data)
-    print("type: %s, at: %u, master_id: %d, dcid: %s" % (line.type, line.at, line.master_conn_id, line.dcid))
+    rv = {}
+    if line.type == "accept":
+        for k in ['type', 'at', 'dcid', 'master_conn_id']:
+            rv[k] = getattr(line, k)
+    print(json.dumps(rv))
 
 def usage():
     print ("USAGE: h2olog -p PID")
