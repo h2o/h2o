@@ -97,6 +97,7 @@ def handle_resp_line(cpu, data, size):
 
 def usage():
     print ("USAGE: h2olog -p PID")
+    print ("       h2olog quic -p PID")
     exit()
 
 def trace_http():
@@ -109,12 +110,22 @@ def trace_http():
         except KeyboardInterrupt:
             exit()
 
+def trace_quic():
+    print("coming soon: QUIC event tracing")
+    exit()
+
 if len(sys.argv) < 1:
     usage()
 
+tracer_func = trace_http
+optidx = 1
+if sys.argv[1] == "quic":
+    tracer_func = trace_quic
+    optidx = 2
+
 try:
     h2o_pid = 0
-    opts, args = getopt.getopt(sys.argv[1:], 'p:')
+    opts, args = getopt.getopt(sys.argv[optidx:], 'p:')
     for opt, arg in opts:
         if opt == "-p":
             h2o_pid = arg
@@ -127,7 +138,6 @@ if h2o_pid == 0:
 
 u = USDT(pid=int(h2o_pid))
 if sys.argv[1] != "quic":
-    tracer_func = trace_http
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
     u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
     u.enable_probe(probe="send_response", fn_name="trace_send_resp")
