@@ -96,14 +96,16 @@ struct quic_line_t {
     char dcid[MAX_STR_LEN];
     u64 at;
     u32 master_conn_id;
+    u8 first_octet;
 };
 
 BPF_PERF_OUTPUT(quic_events);
 
-int trace_quic_accept(struct pt_regs *ctx) {
+int trace_accept(struct pt_regs *ctx) {
     struct quic_line_t line = {};
     struct st_quicly_conn_t conn = {};
     void *pos = NULL;
+    sprintf(line.type, "accept");
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
@@ -112,7 +114,26 @@ int trace_quic_accept(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_probe_read(&line.dcid, MAX_STR_LEN, pos);
 
-    sprintf(line.type, "accept");
+    if (quic_events.perf_submit(ctx, &line, sizeof(line)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
+int trace_packet_prepare(struct pt_regs *ctx) {
+    struct quic_line_t line = {};
+    struct st_quicly_conn_t conn = {};
+    void *pos = NULL;
+    sprintf(line.type, "packet_prepare");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    line.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &line.at);
+    bpf_usdt_readarg(3, ctx, &line.first_octet);
+    bpf_usdt_readarg(4, ctx, &pos);
+    bpf_probe_read(&line.dcid, MAX_STR_LEN, pos);
+
     if (quic_events.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
@@ -136,8 +157,12 @@ def handle_quic_line(cpu, data, size):
     line = b["quic_events"].event(data)
     rv = {}
     if line.type == "accept":
-        for k in ['type', 'at', 'dcid', 'master_conn_id']:
+        for k in ['type', 'at', 'master_conn_id', 'dcid']:
             rv[k] = getattr(line, k)
+    elif line.type == "packet_prepare":
+        for k in ['type', 'at', 'master_conn_id', 'first_octet', 'dcid']:
+            rv[k] = getattr(line, k)
+
     print(json.dumps(rv))
 
 def usage():
@@ -187,7 +212,8 @@ if h2o_pid == 0:
 
 u = USDT(pid=int(h2o_pid))
 if sys.argv[1] == "quic":
-    u.enable_probe(probe="accept", fn_name="trace_quic_accept")
+    u.enable_probe(probe="accept", fn_name="trace_accept")
+    u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
