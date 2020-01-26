@@ -95,11 +95,14 @@ struct quic_line_t {
     char type[MAX_STR_LEN];
     char dcid[MAX_STR_LEN];
     u64 at;
+    u64 packet_num;
+    u64 packet_len;
+    u32 ack_only;
     u32 master_conn_id;
     u8 first_octet;
 };
 
-BPF_PERF_OUTPUT(quic_events);
+BPF_PERF_OUTPUT(events);
 
 int trace_accept(struct pt_regs *ctx) {
     struct quic_line_t line = {};
@@ -114,7 +117,7 @@ int trace_accept(struct pt_regs *ctx) {
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_probe_read(&line.dcid, MAX_STR_LEN, pos);
 
-    if (quic_events.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -134,7 +137,27 @@ int trace_packet_prepare(struct pt_regs *ctx) {
     bpf_usdt_readarg(4, ctx, &pos);
     bpf_probe_read(&line.dcid, MAX_STR_LEN, pos);
 
-    if (quic_events.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
+int trace_packet_commit(struct pt_regs *ctx) {
+    struct quic_line_t line = {};
+    struct st_quicly_conn_t conn = {};
+    void *pos = NULL;
+    sprintf(line.type, "packet_commit");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    line.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &line.at);
+    bpf_usdt_readarg(3, ctx, &line.packet_num);
+    bpf_usdt_readarg(4, ctx, &line.packet_len);
+    bpf_usdt_readarg(5, ctx, &line.ack_only);
+
+    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -154,13 +177,16 @@ def handle_resp_line(cpu, data, size):
     print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
 
 def handle_quic_line(cpu, data, size):
-    line = b["quic_events"].event(data)
+    line = b["events"].event(data)
     rv = {}
     if line.type == "accept":
         for k in ['type', 'at', 'master_conn_id', 'dcid']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_prepare":
         for k in ['type', 'at', 'master_conn_id', 'first_octet', 'dcid']:
+            rv[k] = getattr(line, k)
+    elif line.type == "packet_commit":
+        for k in ['type', 'at', 'master_conn_id', 'packet_num', 'packet_len', 'ack_only']:
             rv[k] = getattr(line, k)
 
     print(json.dumps(rv))
@@ -181,7 +207,7 @@ def trace_http():
             exit()
 
 def trace_quic():
-    b["quic_events"].open_perf_buffer(handle_quic_line)
+    b["events"].open_perf_buffer(handle_quic_line)
     while 1:
         try:
             b.perf_buffer_poll()
@@ -214,6 +240,7 @@ u = USDT(pid=int(h2o_pid))
 if sys.argv[1] == "quic":
     u.enable_probe(probe="accept", fn_name="trace_accept")
     u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
+    u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
