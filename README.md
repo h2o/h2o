@@ -24,6 +24,27 @@ $ sudo h2olog -p $(pgrep -o h2o)
 - [BCC](https://iovisor.github.io/bcc/) (BPF Compiler Collection) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
 - Root privilege to execute the program
 
+## Tracing QUIC events
+
+Server-side QUIC events can be traced using the `quic` subcommand.
+Events are rendered in [JSON](https://en.wikipedia.org/wiki/JSON) format.
+This feature is heavily a [WIP](https://en.wikipedia.org/wiki/Work_in_process).
+
+```
+$ sudo h2olog quic -p $(pgrep -o h2o)
+               ^
+               |_ The quic subcommand
+```
+
+Here's an example trace.
+
+```
+{"type": "accept", "at": 1580154303455, "master_conn_id": 1, "dcid": "4070a82916f79d71"}
+{"type": "packet_prepare", "at": 1580154303457, "master_conn_id": 1, "first_octet": 192, "dcid": "9e4605bc54ec8b9d"}
+{"type": "packet_commit", "at": 1580154303457, "master_conn_id": 1, "packet_num": 0, "packet_len": 176, "ack_only": 0}
+... and more ...
+```
+
 ## Program Anatomy
 
 h2olog is a [BCC](https://github.com/iovisor/bcc) based single-file [Python](https://www.python.org/) program ([learn more](https://github.com/iovisor/bcc/blob/master/docs/reference_guide.md#bcc-python)).
