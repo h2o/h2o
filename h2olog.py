@@ -7,6 +7,7 @@
 # Copyright 2019 Fastly, Toru Maesaka
 
 from bcc import BPF, USDT
+from collections import OrderedDict
 import getopt, json, sys
 
 bpf = """
@@ -216,7 +217,7 @@ def handle_resp_line(cpu, data, size):
 
 def handle_quic_line(cpu, data, size):
     line = b["events"].event(data)
-    rv = {}
+    rv = OrderedDict()
     if line.type == "accept":
         for k in ['type', 'at', 'master_conn_id', 'dcid']:
             rv[k] = getattr(line, k)
