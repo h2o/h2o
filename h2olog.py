@@ -182,6 +182,24 @@ int trace_packet_acked(struct pt_regs *ctx) {
 
     return 0;
 }
+
+int trace_packet_lost(struct pt_regs *ctx) {
+    struct quic_line_t line = {};
+    struct st_quicly_conn_t conn = {};
+    void *pos = NULL;
+    sprintf(line.type, "packet_lost");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    line.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &line.at);
+    bpf_usdt_readarg(3, ctx, &line.packet_num);
+
+    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 def handle_req_line(cpu, data, size):
@@ -210,6 +228,9 @@ def handle_quic_line(cpu, data, size):
             rv[k] = getattr(line, k)
     elif line.type == "packet_acked":
         for k in ['type', 'at', 'master_conn_id', 'packet_num', 'newly_acked']:
+            rv[k] = getattr(line, k)
+    elif line.type == "packet_lost":
+        for k in ['type', 'at', 'master_conn_id', 'packet_num']:
             rv[k] = getattr(line, k)
 
     print(json.dumps(rv))
@@ -265,6 +286,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
     u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
     u.enable_probe(probe="packet_acked", fn_name="trace_packet_acked")
+    u.enable_probe(probe="packet_lost", fn_name="trace_packet_lost")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
