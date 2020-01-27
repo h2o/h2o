@@ -26,7 +26,7 @@ $ sudo h2olog -p $(pgrep -o h2o)
 
 ## Tracing QUIC events
 
-Server-side QUIC events can be traced using the `quic` subcommand.
+Server-side [QUIC](https://en.wikipedia.org/wiki/QUIC) events can be traced using the `quic` subcommand.
 Events are rendered in [JSON](https://en.wikipedia.org/wiki/JSON) format.
 This feature is heavily a [WIP](https://en.wikipedia.org/wiki/Work_in_process).
 
