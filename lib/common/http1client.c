@@ -60,6 +60,10 @@ struct st_h2o_http1client_t {
     char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
+    /**
+     * maintain the number of bytes being already processed on the associated socket
+     */
+    uint64_t _socket_bytes_processed;
     unsigned _is_chunked : 1;
     unsigned _body_buf_is_done : 1;
     unsigned _seen_at_least_one_chunk : 1;
@@ -134,11 +138,13 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
         close_response(client);
         return;
     }
+    uint64_t size = sock->bytes_read - client->_socket_bytes_processed;
+    client->_socket_bytes_processed = sock->bytes_read;
 
-    client->super.bytes_read.body += sock->bytes_read;
-    client->super.bytes_read.total += sock->bytes_read;
+    client->super.bytes_read.body += size;
+    client->super.bytes_read.total += size;
 
-    if (sock->bytes_read != 0) {
+    if (size != 0) {
         if (client->super._cb.on_body(&client->super, NULL) != 0) {
             close_client(client);
             return;
@@ -159,23 +165,25 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
         on_error(client, h2o_httpclient_error_io);
         return;
     }
+    uint64_t size = sock->bytes_read - client->_socket_bytes_processed;
+    client->_socket_bytes_processed = sock->bytes_read;
 
-    client->super.bytes_read.body += sock->bytes_read;
-    client->super.bytes_read.total += sock->bytes_read;
+    client->super.bytes_read.body += size;
+    client->super.bytes_read.total += size;
 
-    if (sock->bytes_read != 0 || client->_body_decoder.content_length.bytesleft == 0) {
+    if (size != 0 || client->_body_decoder.content_length.bytesleft == 0) {
         int ret;
-        if (client->_body_decoder.content_length.bytesleft <= sock->bytes_read) {
-            if (client->_body_decoder.content_length.bytesleft < sock->bytes_read) {
+        if (client->_body_decoder.content_length.bytesleft <= size) {
+            if (client->_body_decoder.content_length.bytesleft < size) {
                 /* remove the trailing garbage from buf, and disable keepalive */
-                client->sock->input->size -= sock->bytes_read - client->_body_decoder.content_length.bytesleft;
+                client->sock->input->size -= size - client->_body_decoder.content_length.bytesleft;
                 client->_do_keepalive = 0;
             }
             client->_body_decoder.content_length.bytesleft = 0;
             client->state.res = STREAM_STATE_CLOSED;
             client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
         } else {
-            client->_body_decoder.content_length.bytesleft -= sock->bytes_read;
+            client->_body_decoder.content_length.bytesleft -= size;
         }
         ret = client->super._cb.on_body(&client->super,
                                         client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL);
@@ -218,19 +226,21 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
         }
         return;
     }
+    uint64_t size = sock->bytes_read - client->_socket_bytes_processed;
+    client->_socket_bytes_processed = sock->bytes_read;
 
-    client->super.bytes_read.body += sock->bytes_read;
-    client->super.bytes_read.total += sock->bytes_read;
+    client->super.bytes_read.body += size;
+    client->super.bytes_read.total += size;
 
     inbuf = client->sock->input;
-    if (sock->bytes_read != 0) {
+    if (size != 0) {
         const char *errstr;
         int cb_ret;
-        size_t newsz = sock->bytes_read;
+        size_t newsz = size;
 
         switch (phr_decode_chunked(&client->_body_decoder.chunked.decoder, inbuf->bytes + inbuf->size - newsz, &newsz)) {
         case -1: /* error */
-            newsz = sock->bytes_read;
+            newsz = size;
             client->_do_keepalive = 0;
             errstr = h2o_httpclient_error_http1_parse_failed;
             break;
@@ -246,7 +256,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
             client->super.timings.response_end_at = h2o_gettimeofday(client->super.ctx->loop);
             break;
         }
-        inbuf->size -= sock->bytes_read - newsz;
+        inbuf->size -= size - newsz;
         if (inbuf->size > 0)
             client->_seen_at_least_one_chunk = 1;
         cb_ret = client->super._cb.on_body(&client->super, errstr);
@@ -417,7 +427,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     h2o_buffer_consume(&sock->input, client->bytes_to_consume);
     client->bytes_to_consume = 0;
-    client->sock->bytes_read = client->sock->input->size;
+    client->_socket_bytes_processed = client->sock->bytes_read - client->sock->input->size;
 
     client->super._timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);

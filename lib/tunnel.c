@@ -68,7 +68,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (sock->bytes_read == 0)
+    if (sock->input->size == 0)
         return;
 
     h2o_socket_read_stop(sock);
