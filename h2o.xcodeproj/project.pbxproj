@@ -3638,11 +3638,11 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-debug";
@@ -3792,11 +3792,11 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "libuv-release";
@@ -3984,11 +3984,11 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-debug";
@@ -4005,11 +4005,11 @@
 				);
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					"/usr/local/openssl-1.0.2/include",
+					/usr/local/openssl/include,
 					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					/usr/local/include,
 				);
-				LIBRARY_SEARCH_PATHS = "/usr/local/openssl-1.0.2/lib";
+				LIBRARY_SEARCH_PATHS = /usr/local/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "evloop-release";
