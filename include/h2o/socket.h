@@ -113,11 +113,11 @@ struct st_h2o_socket_t {
     /**
      * total bytes read (above the TLS layer)
      */
-    size_t bytes_read;
+    uint64_t bytes_read;
     /**
      * total bytes written (above the TLS layer)
      */
-    size_t bytes_written;
+    uint64_t bytes_written;
     /**
      * boolean flag to indicate if sock is NOT being traced
      */

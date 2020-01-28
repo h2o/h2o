@@ -60,7 +60,7 @@ struct st_h2o_http1client_t {
     char _chunk_len_str[(sizeof(H2O_UINT64_LONGEST_HEX_STR) - 1) + 2 + 1]; /* SIZE_MAX in hex + CRLF + '\0' */
     h2o_buffer_t *_body_buf;
     h2o_buffer_t *_body_buf_in_flight;
-    size_t _last_bytes_read;
+    uint64_t _last_bytes_read;
     unsigned _is_chunked : 1;
     unsigned _body_buf_is_done : 1;
     unsigned _seen_at_least_one_chunk : 1;
@@ -135,7 +135,7 @@ static void on_body_until_close(h2o_socket_t *sock, const char *err)
         close_response(client);
         return;
     }
-    size_t size = sock->bytes_read - client->_last_bytes_read;
+    uint64_t size = sock->bytes_read - client->_last_bytes_read;
     client->_last_bytes_read = sock->bytes_read;
 
     client->super.bytes_read.body += size;
@@ -162,7 +162,7 @@ static void on_body_content_length(h2o_socket_t *sock, const char *err)
         on_error(client, h2o_httpclient_error_io);
         return;
     }
-    size_t size = sock->bytes_read - client->_last_bytes_read;
+    uint64_t size = sock->bytes_read - client->_last_bytes_read;
     client->_last_bytes_read = sock->bytes_read;
 
     client->super.bytes_read.body += size;
@@ -223,7 +223,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
         }
         return;
     }
-    size_t size = sock->bytes_read - client->_last_bytes_read;
+    uint64_t size = sock->bytes_read - client->_last_bytes_read;
     client->_last_bytes_read = sock->bytes_read;
 
     client->super.bytes_read.body += size;
@@ -425,7 +425,6 @@ static void on_head(h2o_socket_t *sock, const char *err)
     h2o_buffer_consume(&sock->input, client->bytes_to_consume);
     client->bytes_to_consume = 0;
     client->_last_bytes_read = client->sock->bytes_read - client->sock->input->size;
-//    client->sock->bytes_read = client->sock->input->size;
 
     client->super._timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);

@@ -619,7 +619,8 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
 
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
-    size_t i, prev_bytes_written = sock->bytes_written;
+    size_t i;
+    uint64_t prev_bytes_written = sock->bytes_written;
 
     assert(bufcnt > 0);
     for (i = 0; i != bufcnt; ++i) {
