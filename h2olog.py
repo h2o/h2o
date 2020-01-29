@@ -92,14 +92,14 @@ struct st_quicly_conn_t {
     u32 master_id;
 };
 
-struct quic_line_t {
+struct quic_event_t {
     char type[MAX_STR_LEN];
     char dcid[MAX_STR_LEN];
     u64 at;
+    u32 master_conn_id;
     u64 packet_num;
     u64 packet_len;
     u32 ack_only;
-    u32 master_conn_id;
     u8 first_octet;
     u32 newly_acked;
 };
@@ -107,96 +107,96 @@ struct quic_line_t {
 BPF_PERF_OUTPUT(events);
 
 int trace_accept(struct pt_regs *ctx) {
-    struct quic_line_t line = {};
+    struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
     void *pos = NULL;
-    sprintf(line.type, "accept");
+    sprintf(event.type, "accept");
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
-    line.master_conn_id = conn.master_id;
-    bpf_usdt_readarg(2, ctx, &line.at);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &pos);
-    bpf_probe_read(&line.dcid, MAX_STR_LEN, pos);
+    bpf_probe_read(&event.dcid, MAX_STR_LEN, pos);
 
-    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
 }
 
 int trace_packet_prepare(struct pt_regs *ctx) {
-    struct quic_line_t line = {};
+    struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
     void *pos = NULL;
-    sprintf(line.type, "packet_prepare");
+    sprintf(event.type, "packet_prepare");
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
-    line.master_conn_id = conn.master_id;
-    bpf_usdt_readarg(2, ctx, &line.at);
-    bpf_usdt_readarg(3, ctx, &line.first_octet);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.first_octet);
     bpf_usdt_readarg(4, ctx, &pos);
-    bpf_probe_read(&line.dcid, MAX_STR_LEN, pos);
+    bpf_probe_read(&event.dcid, MAX_STR_LEN, pos);
 
-    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
 }
 
 int trace_packet_commit(struct pt_regs *ctx) {
-    struct quic_line_t line = {};
+    struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
     void *pos = NULL;
-    sprintf(line.type, "packet_commit");
+    sprintf(event.type, "packet_commit");
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
-    line.master_conn_id = conn.master_id;
-    bpf_usdt_readarg(2, ctx, &line.at);
-    bpf_usdt_readarg(3, ctx, &line.packet_num);
-    bpf_usdt_readarg(4, ctx, &line.packet_len);
-    bpf_usdt_readarg(5, ctx, &line.ack_only);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.packet_num);
+    bpf_usdt_readarg(4, ctx, &event.packet_len);
+    bpf_usdt_readarg(5, ctx, &event.ack_only);
 
-    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
 }
 
 int trace_packet_acked(struct pt_regs *ctx) {
-    struct quic_line_t line = {};
+    struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
     void *pos = NULL;
-    sprintf(line.type, "packet_acked");
+    sprintf(event.type, "packet_acked");
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
-    line.master_conn_id = conn.master_id;
-    bpf_usdt_readarg(2, ctx, &line.at);
-    bpf_usdt_readarg(3, ctx, &line.packet_num);
-    bpf_usdt_readarg(4, ctx, &line.newly_acked);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.packet_num);
+    bpf_usdt_readarg(4, ctx, &event.newly_acked);
 
-    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
 }
 
 int trace_packet_lost(struct pt_regs *ctx) {
-    struct quic_line_t line = {};
+    struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
     void *pos = NULL;
-    sprintf(line.type, "packet_lost");
+    sprintf(event.type, "packet_lost");
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
-    line.master_conn_id = conn.master_id;
-    bpf_usdt_readarg(2, ctx, &line.at);
-    bpf_usdt_readarg(3, ctx, &line.packet_num);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.packet_num);
 
-    if (events.perf_submit(ctx, &line, sizeof(line)) < 0)
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
 
     return 0;
@@ -219,19 +219,19 @@ def handle_quic_line(cpu, data, size):
     line = b["events"].event(data)
     rv = OrderedDict()
     if line.type == "accept":
-        for k in ['type', 'at', 'master_conn_id', 'dcid']:
+        for k in ['at', 'type', 'master_conn_id', 'dcid']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_prepare":
-        for k in ['type', 'at', 'master_conn_id', 'first_octet', 'dcid']:
+        for k in ['at', 'type', 'master_conn_id', 'first_octet', 'dcid']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_commit":
-        for k in ['type', 'at', 'master_conn_id', 'packet_num', 'packet_len', 'ack_only']:
+        for k in ['at', 'type', 'master_conn_id', 'packet_num', 'packet_len', 'ack_only']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_acked":
-        for k in ['type', 'at', 'master_conn_id', 'packet_num', 'newly_acked']:
+        for k in ['at','type',  'master_conn_id', 'packet_num', 'newly_acked']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_lost":
-        for k in ['type', 'at', 'master_conn_id', 'packet_num']:
+        for k in ['at', 'type', 'master_conn_id', 'packet_num']:
             rv[k] = getattr(line, k)
 
     print(json.dumps(rv))
