@@ -102,6 +102,7 @@ struct quic_event_t {
     u32 ack_only;
     u8 first_octet;
     u32 newly_acked;
+    u32 new_version;
 };
 
 BPF_PERF_OUTPUT(events);
@@ -137,6 +138,24 @@ int trace_receive(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.at);
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_probe_read(&event.dcid, MAX_STR_LEN, pos);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
+int trace_version_switch(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "version_switch");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.new_version);
 
     if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
@@ -281,6 +300,8 @@ def handle_quic_line(cpu, data, size):
         rv["dcid"] = getattr(line, "dcid")
     elif line.type == "receive":
         rv["dcid"] = getattr(line, "dcid")
+    elif line.type == "version_switch":
+        rv["new_version"] = getattr(line, "new_version")
     elif line.type == "packet_prepare":
         for k in ["first_octet", "dcid"]:
             rv[k] = getattr(line, k)
@@ -345,6 +366,7 @@ u = USDT(pid=int(h2o_pid))
 if sys.argv[1] == "quic":
     u.enable_probe(probe="accept", fn_name="trace_accept")
     u.enable_probe(probe="receive", fn_name="trace_receive")
+    u.enable_probe(probe="version_switch", fn_name="trace_version_switch")
     u.enable_probe(probe="idle_timeout", fn_name="trace_idle_timeout")
     u.enable_probe(probe="stateless_reset_receive", fn_name="trace_stateless_reset_receive")
     u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
