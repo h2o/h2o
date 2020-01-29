@@ -232,26 +232,29 @@ def handle_resp_line(cpu, data, size):
     line = b["txbuf"].event(data)
     print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
 
+def load_common_fields(hsh, line):
+    for k in ['at', 'type', 'master_conn_id']:
+        hsh[k] = getattr(line, k)
+
 def handle_quic_line(cpu, data, size):
     line = b["events"].event(data)
     rv = OrderedDict()
+    load_common_fields(rv, line)
+
     if line.type == "accept":
-        for k in ['at', 'type', 'master_conn_id', 'dcid']:
-            rv[k] = getattr(line, k)
-    if line.type == "idle_timeout":
-        for k in ['at', 'type', 'master_conn_id']:
+        for k in ['dcid']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_prepare":
-        for k in ['at', 'type', 'master_conn_id', 'first_octet', 'dcid']:
+        for k in ['first_octet', 'dcid']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_commit":
-        for k in ['at', 'type', 'master_conn_id', 'packet_num', 'packet_len', 'ack_only']:
+        for k in ['packet_num', 'packet_len', 'ack_only']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_acked":
-        for k in ['at','type',  'master_conn_id', 'packet_num', 'newly_acked']:
+        for k in ['packet_num', 'newly_acked']:
             rv[k] = getattr(line, k)
     elif line.type == "packet_lost":
-        for k in ['at', 'type', 'master_conn_id', 'packet_num']:
+        for k in ['packet_num']:
             rv[k] = getattr(line, k)
 
     print(json.dumps(rv))
