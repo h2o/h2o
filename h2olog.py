@@ -125,6 +125,23 @@ int trace_accept(struct pt_regs *ctx) {
     return 0;
 }
 
+int trace_idle_timeout(struct pt_regs *ctx) {
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    void *pos = NULL;
+    sprintf(event.type, "idle_timeout");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
 int trace_packet_prepare(struct pt_regs *ctx) {
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
@@ -221,6 +238,9 @@ def handle_quic_line(cpu, data, size):
     if line.type == "accept":
         for k in ['at', 'type', 'master_conn_id', 'dcid']:
             rv[k] = getattr(line, k)
+    if line.type == "idle_timeout":
+        for k in ['at', 'type', 'master_conn_id']:
+            rv[k] = getattr(line, k)
     elif line.type == "packet_prepare":
         for k in ['at', 'type', 'master_conn_id', 'first_octet', 'dcid']:
             rv[k] = getattr(line, k)
@@ -284,6 +304,7 @@ if h2o_pid == 0:
 u = USDT(pid=int(h2o_pid))
 if sys.argv[1] == "quic":
     u.enable_probe(probe="accept", fn_name="trace_accept")
+    u.enable_probe(probe="idle_timeout", fn_name="trace_idle_timeout")
     u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
     u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
     u.enable_probe(probe="packet_acked", fn_name="trace_packet_acked")
