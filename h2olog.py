@@ -107,9 +107,9 @@ struct quic_event_t {
 BPF_PERF_OUTPUT(events);
 
 int trace_accept(struct pt_regs *ctx) {
+    void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    void *pos = NULL;
     sprintf(event.type, "accept");
 
     bpf_usdt_readarg(1, ctx, &pos);
@@ -125,10 +125,29 @@ int trace_accept(struct pt_regs *ctx) {
     return 0;
 }
 
-int trace_idle_timeout(struct pt_regs *ctx) {
+int trace_receive(struct pt_regs *ctx) {
+    void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "receive");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &pos);
+    bpf_probe_read(&event.dcid, MAX_STR_LEN, pos);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
+int trace_idle_timeout(struct pt_regs *ctx) {
     void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
     sprintf(event.type, "idle_timeout");
 
     bpf_usdt_readarg(1, ctx, &pos);
@@ -143,9 +162,9 @@ int trace_idle_timeout(struct pt_regs *ctx) {
 }
 
 int trace_packet_prepare(struct pt_regs *ctx) {
+    void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    void *pos = NULL;
     sprintf(event.type, "packet_prepare");
 
     bpf_usdt_readarg(1, ctx, &pos);
@@ -163,9 +182,9 @@ int trace_packet_prepare(struct pt_regs *ctx) {
 }
 
 int trace_packet_commit(struct pt_regs *ctx) {
+    void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    void *pos = NULL;
     sprintf(event.type, "packet_commit");
 
     bpf_usdt_readarg(1, ctx, &pos);
@@ -183,9 +202,9 @@ int trace_packet_commit(struct pt_regs *ctx) {
 }
 
 int trace_packet_acked(struct pt_regs *ctx) {
+    void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    void *pos = NULL;
     sprintf(event.type, "packet_acked");
 
     bpf_usdt_readarg(1, ctx, &pos);
@@ -202,9 +221,9 @@ int trace_packet_acked(struct pt_regs *ctx) {
 }
 
 int trace_packet_lost(struct pt_regs *ctx) {
+    void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    void *pos = NULL;
     sprintf(event.type, "packet_lost");
 
     bpf_usdt_readarg(1, ctx, &pos);
@@ -242,19 +261,20 @@ def handle_quic_line(cpu, data, size):
     load_common_fields(rv, line)
 
     if line.type == "accept":
-        for k in ['dcid']:
-            rv[k] = getattr(line, k)
+        rv["dcid"] = getattr(line, "dcid")
+    elif line.type == "receive":
+        rv["dcid"] = getattr(line, "dcid")
     elif line.type == "packet_prepare":
-        for k in ['first_octet', 'dcid']:
+        for k in ["first_octet", "dcid"]:
             rv[k] = getattr(line, k)
     elif line.type == "packet_commit":
-        for k in ['packet_num', 'packet_len', 'ack_only']:
+        for k in ["packet_num", "packet_len", "ack_only"]:
             rv[k] = getattr(line, k)
     elif line.type == "packet_acked":
-        for k in ['packet_num', 'newly_acked']:
+        for k in ["packet_num", "newly_acked"]:
             rv[k] = getattr(line, k)
     elif line.type == "packet_lost":
-        for k in ['packet_num']:
+        for k in ["packet_num"]:
             rv[k] = getattr(line, k)
 
     print(json.dumps(rv))
@@ -307,6 +327,7 @@ if h2o_pid == 0:
 u = USDT(pid=int(h2o_pid))
 if sys.argv[1] == "quic":
     u.enable_probe(probe="accept", fn_name="trace_accept")
+    u.enable_probe(probe="receive", fn_name="trace_receive")
     u.enable_probe(probe="idle_timeout", fn_name="trace_idle_timeout")
     u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
     u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
