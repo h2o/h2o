@@ -8,7 +8,7 @@
 
 from bcc import BPF, USDT
 from collections import OrderedDict
-import getopt, json, sys
+import binascii, getopt, json, sys
 
 bpf = """
 #define MAX_STR_LEN 128
@@ -86,6 +86,7 @@ int trace_send_resp(struct pt_regs *ctx) {
 
 quic_bpf = """
 #define MAX_STR_LEN 32
+#define TOKEN_PREVIEW_LEN 8
 
 struct st_quicly_conn_t {
     u32 dummy[4];
@@ -95,6 +96,7 @@ struct st_quicly_conn_t {
 struct quic_event_t {
     char type[MAX_STR_LEN];
     char dcid[MAX_STR_LEN];
+    char token_preview[TOKEN_PREVIEW_LEN];
     u64 at;
     u32 master_conn_id;
     u64 packet_num;
@@ -103,6 +105,8 @@ struct quic_event_t {
     u8 first_octet;
     u32 newly_acked;
     u32 new_version;
+    u64 len;
+    u64 token_generation;
 };
 
 BPF_PERF_OUTPUT(events);
@@ -273,6 +277,27 @@ int trace_packet_lost(struct pt_regs *ctx) {
 
     return 0;
 }
+
+int trace_new_token_send(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "new_token_send");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &pos);
+    bpf_probe_read(&event.token_preview, TOKEN_PREVIEW_LEN, pos);
+    bpf_usdt_readarg(4, ctx, &event.len);
+    bpf_usdt_readarg(5, ctx, &event.token_generation);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 def handle_req_line(cpu, data, size):
@@ -317,6 +342,10 @@ def handle_quic_line(cpu, data, size):
     elif line.type == "packet_lost":
         for k in ["packet_num"]:
             rv[k] = getattr(line, k)
+    elif line.type == "new_token_send":
+        for k in ["token_preview", "len", "token_generation"]:
+            rv[k] = getattr(line, k)
+        rv["token_preview"] = binascii.hexlify(rv["token_preview"])
 
     print(json.dumps(rv))
 
@@ -380,6 +409,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
     u.enable_probe(probe="packet_acked", fn_name="trace_packet_acked")
     u.enable_probe(probe="packet_lost", fn_name="trace_packet_lost")
+    u.enable_probe(probe="new_token_send", fn_name="trace_new_token_send")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
