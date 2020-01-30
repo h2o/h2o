@@ -316,9 +316,9 @@ def load_common_fields(hsh, line):
     for k in ['at', 'type', 'master_conn_id']:
         hsh[k] = getattr(line, k)
 
-def handle_quic_line(cpu, data, size):
+def handle_quic_event(cpu, data, size):
     line = b["events"].event(data)
-    if line.type != allowed_quic_event:
+    if allowed_quic_event and line.type != allowed_quic_event:
         return
 
     rv = OrderedDict()
@@ -366,7 +366,7 @@ def trace_http():
             exit()
 
 def trace_quic():
-    b["events"].open_perf_buffer(handle_quic_line)
+    b["events"].open_perf_buffer(handle_quic_event)
     while 1:
         try:
             b.perf_buffer_poll()
