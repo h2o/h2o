@@ -102,6 +102,10 @@ struct quic_event_t {
     u64 packet_num;
     u64 packet_len;
     u32 ack_only;
+    u64 largest_acked;
+    u64 bytes_acked;
+    u64 inflight;
+    u32 cwnd;
     u8 first_octet;
     u32 newly_acked;
     u32 new_version;
@@ -278,6 +282,27 @@ int trace_packet_lost(struct pt_regs *ctx) {
     return 0;
 }
 
+int trace_cc_ack_received(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "cc_ack_received");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.largest_acked);
+    bpf_usdt_readarg(4, ctx, &event.bytes_acked);
+    bpf_usdt_readarg(5, ctx, &event.cwnd);
+    bpf_usdt_readarg(6, ctx, &event.inflight);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
 int trace_new_token_send(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
@@ -380,6 +405,9 @@ def handle_quic_event(cpu, data, size):
     elif line.type == "packet_lost":
         for k in ["packet_num"]:
             rv[k] = getattr(line, k)
+    elif line.type == "cc_ack_received":
+        for k in ["largest_acked", "bytes_acked", "cwnd", "inflight"]:
+            rv[k] = getattr(line, k)
     elif line.type == "new_token_send":
         for k in ["token_preview", "len", "token_generation"]:
             rv[k] = getattr(line, k)
@@ -449,6 +477,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
     u.enable_probe(probe="packet_acked", fn_name="trace_packet_acked")
     u.enable_probe(probe="packet_lost", fn_name="trace_packet_lost")
+    u.enable_probe(probe="cc_ack_received", fn_name="trace_cc_ack_received")
     u.enable_probe(probe="new_token_send", fn_name="trace_new_token_send")
     u.enable_probe(probe="new_token_acked", fn_name="trace_new_token_acked")
     u.enable_probe(probe="new_token_receive", fn_name="trace_new_token_receive")
