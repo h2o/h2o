@@ -667,7 +667,8 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
                 conn->is_chromium_dependency_tree = 0;
             } else {
                 h2o_http2_stream_t *current_parent_stream = h2o_http2_conn_get_stream(conn, priority->dependency);
-                if (orig_parent_ref->weight > current_parent_stream->_scheduler.weight && priority->exclusive) {
+                if (current_parent_stream != NULL && orig_parent_ref->weight > current_parent_stream->_scheduler.weight &&
+                    priority->exclusive) {
                     /* Parent stream was demoted as a result of reprioritization via priority header.
                      * In this case, search the new parent from the root so that this stream is handled before
                      * the parent originally specified by the client.
