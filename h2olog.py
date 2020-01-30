@@ -316,6 +316,26 @@ int trace_new_token_acked(struct pt_regs *ctx) {
 
     return 0;
 }
+
+int trace_new_token_receive(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "new_token_receive");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &pos);
+    bpf_probe_read(&event.token_preview, TOKEN_PREVIEW_LEN, pos);
+    bpf_usdt_readarg(4, ctx, &event.len);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 def handle_req_line(cpu, data, size):
@@ -431,6 +451,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="packet_lost", fn_name="trace_packet_lost")
     u.enable_probe(probe="new_token_send", fn_name="trace_new_token_send")
     u.enable_probe(probe="new_token_acked", fn_name="trace_new_token_acked")
+    u.enable_probe(probe="new_token_receive", fn_name="trace_new_token_receive")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
