@@ -106,7 +106,7 @@
 #define H2O_TOKEN_X_TRAFFIC (h2o__tokens + 79)
 #define H2O_TOKEN_X_XSS_PROTECTION (h2o__tokens + 80)
 
-extern const h2o_hpack_static_table_entry_t h2o_hpack_static_table[62];
+extern const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61];
 extern const h2o_qpack_static_table_entry_t h2o_qpack_static_table[99];
 
 typedef int32_t (*h2o_qpack_lookup_static_cb)(h2o_iovec_t value, int *is_exact);
