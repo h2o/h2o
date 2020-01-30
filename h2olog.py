@@ -293,6 +293,9 @@ def load_common_fields(hsh, line):
 
 def handle_quic_line(cpu, data, size):
     line = b["events"].event(data)
+    if line.type != allowed_quic_event:
+        return
+
     rv = OrderedDict()
     load_common_fields(rv, line)
 
@@ -320,6 +323,7 @@ def handle_quic_line(cpu, data, size):
 def usage():
     print ("USAGE: h2olog -p PID")
     print ("       h2olog quic -p PID")
+    print ("       h2olog quic -t event_type -p PID")
     exit()
 
 def trace_http():
@@ -351,10 +355,13 @@ if sys.argv[1] == "quic":
 
 try:
     h2o_pid = 0
-    opts, args = getopt.getopt(sys.argv[optidx:], 'p:')
+    allowed_quic_event = None
+    opts, args = getopt.getopt(sys.argv[optidx:], 'p:t:')
     for opt, arg in opts:
         if opt == "-p":
             h2o_pid = arg
+        if opt == "-t":
+            allowed_quic_event = arg
 except getopt.error as msg:
     print(msg)
     sys.exit(2)
