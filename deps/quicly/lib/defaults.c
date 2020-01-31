@@ -280,7 +280,7 @@ static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, qu
             /* Saturated. Lazily move such streams to the "blocked" list, at the same time checking if anything can be sent. */
             while (quicly_linklist_is_linked(&sched->active)) {
                 quicly_stream_t *stream =
-                    (void *)((char *)(sched->active.next - offsetof(quicly_stream_t, _send_aux.pending_link.default_scheduler)));
+                    (void *)((char *)sched->active.next - offsetof(quicly_stream_t, _send_aux.pending_link.default_scheduler));
                 if (quicly_sendstate_can_send(&stream->sendstate, NULL))
                     return 1;
                 quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
@@ -309,6 +309,9 @@ static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, qui
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)conn)->_default_scheduler;
     int conn_is_flow_capped = quicly_is_flow_capped(conn), ret = 0;
+
+    if (!conn_is_flow_capped)
+        quicly_linklist_insert_list(&sched->active, &sched->blocked);
 
     while (quicly_can_send_stream_data((quicly_conn_t *)conn, s) && quicly_linklist_is_linked(&sched->active)) {
         /* detach the first active stream */

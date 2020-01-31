@@ -49,7 +49,7 @@ matrix:
         - make && make check
     - os: osx
       env:
-        - label=osx10.10/i386
+        - label=osx10.13/i386
       before_install: *bs_osx
       script:
         - curl -O https://www.openssl.org/source/openssl-1.1.0i.tar.gz

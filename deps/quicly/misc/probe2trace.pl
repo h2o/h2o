@@ -86,11 +86,11 @@ for my $probe (@probes) {
         if ($type eq 'struct st_quicly_conn_t *') {
             push @fmt, '"conn":%u';
             if ($arch eq 'linux') {
-                push @ap, '((struct st_quicly_conn_t *)arg' . $i . ')->master_id';
+                push @ap, 'arg ' . $i . ' != NULL ? ((struct st_quicly_conn_t *)arg' . $i . ')->master_id : 0';
             } elsif ($arch eq 'darwin') {
-                push @ap, '*(uint32_t *)copyin(arg' . $i . ' + 16, 4)';
+                push @ap, 'arg ' . $i . ' != NULL ? *(uint32_t *)copyin(arg' . $i . ' + 16, 4) : 0';
             } else {
-                push @ap, "((struct _st_quicly_conn_public_t *)arg$i)->master_id.master_id";
+                push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->master_id.master_id : 0";
             }
         } elsif ($type eq 'struct st_quicly_stream_t *') {
             push @fmt, '"stream-id":%d';

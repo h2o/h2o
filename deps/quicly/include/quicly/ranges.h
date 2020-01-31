@@ -30,6 +30,12 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 
+/**
+ * maximum number of ranges (inclusive) that can be contained by quicly_ranges_t.  Functions would report error if the requested
+ * operation causes the structure to exceed that limit.
+ */
+#define QUICLY_MAX_RANGES 63
+
 typedef struct st_quicly_range_t {
     uint64_t start;
     uint64_t end; /* non-inclusive */
@@ -41,12 +47,30 @@ typedef struct st_quicly_ranges_t {
     quicly_range_t _initial;
 } quicly_ranges_t;
 
+/**
+ * initializes the structure
+ */
 static void quicly_ranges_init(quicly_ranges_t *ranges);
+/**
+ * initializes the structure, registering given range
+ */
 int quicly_ranges_init_with_range(quicly_ranges_t *ranges, uint64_t start, uint64_t end);
+/**
+ * clears the structure
+ */
 static void quicly_ranges_clear(quicly_ranges_t *ranges);
+/**
+ * adds given range, returns 0 if successful
+ */
 int quicly_ranges_add(quicly_ranges_t *ranges, uint64_t start, uint64_t end);
+/**
+ * subtracts given range, returns 0 if sucessful
+ */
 int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end);
-void quicly_ranges_shrink(quicly_ranges_t *ranges, size_t start, size_t end);
+/**
+ * removes the smallest range (e.g., the old ACK range)
+ */
+void quicly_ranges_drop_smallest_range(quicly_ranges_t *ranges);
 
 /* inline functions */
 

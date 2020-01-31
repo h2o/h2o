@@ -56,6 +56,7 @@ extern "C" {
 #define QUICLY_FRAME_TYPE_PATH_RESPONSE 27
 #define QUICLY_FRAME_TYPE_TRANSPORT_CLOSE 28
 #define QUICLY_FRAME_TYPE_APPLICATION_CLOSE 29
+#define QUICLY_FRAME_TYPE_HANDSHAKE_DONE 30
 
 #define QUICLY_FRAME_TYPE_STREAM_BITS 0x7
 #define QUICLY_FRAME_TYPE_STREAM_BIT_OFF 0x4
@@ -73,8 +74,6 @@ extern "C" {
 #define QUICLY_ACK_FRAME_CAPACITY (1 + 8 + 8 + 1 + 8)
 #define QUICLY_PATH_CHALLENGE_FRAME_CAPACITY (1 + 8)
 #define QUICLY_STREAM_FRAME_CAPACITY (1 + 8 + 8 + 1)
-
-#define QUICLY_STATELESS_RESET_TOKEN_LEN 16
 
 static uint16_t quicly_decode16(const uint8_t **src);
 static uint32_t quicly_decode24(const uint8_t **src);
@@ -200,7 +199,6 @@ typedef struct st_quicly_stop_sending_frame_t {
 
 static int quicly_decode_stop_sending_frame(const uint8_t **src, const uint8_t *end, quicly_stop_sending_frame_t *frame);
 
-#define QUICLY_ENCODE_ACK_MAX_BLOCKS 63 /* exclusive, see encode_ack_frame */
 uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t *ranges, uint64_t ack_delay);
 
 typedef struct st_quicly_ack_frame_t {
@@ -606,14 +604,10 @@ inline int quicly_decode_new_connection_id_frame(const uint8_t **src, const uint
 
     { /* cid */
         uint8_t cid_len = *(*src)++;
-        if (cid_len == 0) {
-            frame->cid = ptls_iovec_init(NULL, 0);
-        } else if (4 <= cid_len && cid_len <= 18) {
-            frame->cid = ptls_iovec_init(src, cid_len);
-            *src += cid_len;
-        } else {
+        if (!(1 <= cid_len && cid_len <= QUICLY_MAX_CID_LEN_V1))
             goto Fail;
-        }
+        frame->cid = ptls_iovec_init(src, cid_len);
+        *src += cid_len;
     }
 
     /* stateless reset token */

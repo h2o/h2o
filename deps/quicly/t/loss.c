@@ -174,7 +174,7 @@ static void test_even(void)
         cond_up.cb(&cond_up);
     }
 
-    /* drop 2nd packet from server */
+    /* server sends 2 datagrams (Initial+Handshake,Handshake+1RTT), the latter gets dropped */
     ret = transmit_cond(server, client, &num_sent, &num_received, &cond_down, 0);
     ok(ret == 0);
     ok(num_sent == 2);
@@ -184,7 +184,7 @@ static void test_even(void)
 
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
 
-    /* client sends delayed-ack that gets dropped */
+    /* client sends Handshake that gets dropped */
     ret = transmit_cond(client, server, &num_sent, &num_received, &cond_up, 0);
     ok(ret == 0);
     ok(num_sent == 1);
@@ -195,17 +195,17 @@ static void test_even(void)
 
     quic_now += 1000;
 
-    /* server resends the contents of all the packets (in cleartext) */
+    /* server resends 2 datagrams, the latter gets dropped again */
     ret = transmit_cond(server, client, &num_sent, &num_received, &cond_down, 0);
     ok(ret == 0);
-    ok(num_sent == 1);
+    ok(num_sent == 2);
     ok(num_received == 1);
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(!quicly_connection_is_ready(client));
 
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
 
-    /* client arms the retransmit timer */
+    /* client sends Handshake again */
     ret = transmit_cond(client, server, &num_sent, &num_received, &cond_up, 0);
     ok(ret == 0);
     ok(num_sent == 1);
@@ -213,24 +213,7 @@ static void test_even(void)
 
     quic_now += 1000;
 
-    /* server resends the contents of all the packets (in cleartext) */
-    ret = transmit_cond(server, client, &num_sent, &num_received, &cond_down, 0);
-    ok(ret == 0);
-    ok(num_sent == 1);
-    ok(num_received == 0);
-
-    ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
-    ok(!quicly_connection_is_ready(client));
-
-    /* client sends a probe, that gets lost */
-    ret = transmit_cond(client, server, &num_sent, &num_received, &cond_up, 0);
-    ok(ret == 0);
-    ok(num_sent == 1);
-    ok(num_received == 0);
-
-    quic_now += 1000;
-
-    /* server retransmits the handshake packets */
+    /* server retransmits the unacked (Handshake+1RTT) packet */
     ret = transmit_cond(server, client, &num_sent, &num_received, &cond_down, 0);
     ok(ret == 0);
     ok(num_sent == 1);
@@ -238,6 +221,31 @@ static void test_even(void)
 
     ok(quicly_get_state(client) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(client));
+
+    /* client sends ClientFinished, gets lost */
+    ret = transmit_cond(client, server, &num_sent, &num_received, &cond_up, 0);
+    ok(ret == 0);
+    ok(num_sent == 1);
+    ok(num_received == 0);
+
+    quic_now += 1000;
+
+    /* server retransmits the unacked packet */
+    ret = transmit_cond(server, client, &num_sent, &num_received, &cond_down, 0);
+    ok(ret == 0);
+    ok(num_sent == 1);
+    ok(num_received == 0);
+
+    quic_now += 1000;
+
+    /* client resends ClientFinished */
+    ret = transmit_cond(client, server, &num_sent, &num_received, &cond_up, 0);
+    ok(ret == 0);
+    ok(num_sent == 1);
+    ok(num_received == 1);
+
+    ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
+    ok(quicly_connection_is_ready(server));
 
     quic_ctx.loss = (quicly_loss_conf_t)QUICLY_LOSS_SPEC_CONF;
 }
@@ -408,10 +416,10 @@ void test_loss(void)
 {
     subtest("even", test_even);
 
-    uint64_t idle_timeout_backup = quic_ctx.transport_params.idle_timeout;
-    quic_ctx.transport_params.idle_timeout = (uint64_t)300 * 1000; /* 30 seconds */
+    uint64_t idle_timeout_backup = quic_ctx.transport_params.max_idle_timeout;
+    quic_ctx.transport_params.max_idle_timeout = (uint64_t)600 * 1000; /* 600 seconds */
     subtest("downstream", test_downstream);
-    quic_ctx.transport_params.idle_timeout = (uint64_t)300 * 1000; /* 30 seconds */
+    quic_ctx.transport_params.max_idle_timeout = (uint64_t)600 * 1000; /* 600 seconds */
     subtest("bidirectional", test_bidirectional);
-    quic_ctx.transport_params.idle_timeout = idle_timeout_backup;
+    quic_ctx.transport_params.max_idle_timeout = idle_timeout_backup;
 }

@@ -77,6 +77,7 @@ void test_stream_concurrency(void)
     quicly_reset_stream(client_streams[i - 1], QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(123));
     quicly_request_stop(client_streams[i - 1], QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(456));
     transmit(client, server);
+    quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
     ok(server_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(123));
     ok(server_streambuf->error_received.stop_sending == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(456));
