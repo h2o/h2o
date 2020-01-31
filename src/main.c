@@ -2138,12 +2138,13 @@ static h2o_http3_conn_t *on_http3_accept(h2o_http3_ctx_t *_ctx, quicly_address_t
             break;
         }
         if (send_retry) {
+            static __thread ptls_aead_context_t *retry_aead_cache = NULL;
             uint8_t scid[16], token_prefix;
             ptls_openssl_random_bytes(scid, sizeof(scid));
             ptls_aead_context_t *aead = quic_get_address_token_encryptor(&token_prefix);
-            quicly_datagram_t *rp = quicly_send_retry(ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa,
-                                                      ptls_iovec_init(scid, sizeof(scid)), packet->cid.dest.encrypted,
-                                                      ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0));
+            quicly_datagram_t *rp = quicly_send_retry(
+                ctx->super.quic, aead, &srcaddr->sa, packet->cid.src, &destaddr->sa, ptls_iovec_init(scid, sizeof(scid)),
+                packet->cid.dest.encrypted, ptls_iovec_init(&token_prefix, 1), ptls_iovec_init(NULL, 0), &retry_aead_cache);
             assert(rp != NULL);
             h2o_http3_send_datagram(&ctx->super, rp);
             ctx->super.quic->packet_allocator->free_packet(ctx->super.quic->packet_allocator, rp);
