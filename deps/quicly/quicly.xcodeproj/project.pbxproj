@@ -23,6 +23,15 @@
 		E93E546A1F663851001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
 		E93E546B1F663852001C50FE /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
 		E93E54BB1F69B750001C50FE /* loss.h in Headers */ = {isa = PBXBuildFile; fileRef = E93E54BA1F69B750001C50FE /* loss.h */; };
+		E941428A23B0B454002D3CE0 /* quicly.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448411EA490A500390927 /* quicly.c */; };
+		E941428C23B0B831002D3CE0 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98041C522383C62008B9745 /* cc-reno.c */; };
+		E941428D23B0B839002D3CE0 /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C251F4E9EBF00C26B3D /* frame.c */; };
+		E941428E23B0B845002D3CE0 /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042352244A5D7008B9745 /* defaults.c */; };
+		E941428F23B0B84F002D3CE0 /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */; };
+		E941429023B0B861002D3CE0 /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
+		E941429123B0B86D002D3CE0 /* recvstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D21D1F43E05000799777 /* recvstate.c */; };
+		E941429223B0B870002D3CE0 /* sendstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A42D1F41375B0083F0B2 /* sendstate.c */; };
+		E941429323B0B879002D3CE0 /* sentmap.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D22A1F49533800799777 /* sentmap.c */; };
 		E95E95392290497900215ACD /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
 		E95E953C22904A4C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953A2290498E00215ACD /* picotls-probes.d */; };
 		E95E953D22904A4C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953A2290498E00215ACD /* picotls-probes.d */; };
@@ -40,7 +49,6 @@
 		E98042362244A5D7008B9745 /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042352244A5D7008B9745 /* defaults.c */; };
 		E98042372244A5D7008B9745 /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042352244A5D7008B9745 /* defaults.c */; };
 		E984482C1EA48D1200390927 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E984482B1EA48D1200390927 /* picotls.h */; };
-		E984483A1EA48D7A00390927 /* libquicly.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E98448171EA48BD400390927 /* libquicly.a */; };
 		E984483B1EA48DD300390927 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448271EA48D0000390927 /* openssl.c */; };
 		E984483C1EA48DD300390927 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448281EA48D0000390927 /* picotls.c */; };
 		E98448401EA48F6B00390927 /* quicly.h in Headers */ = {isa = PBXBuildFile; fileRef = E984483F1EA48F6800390927 /* quicly.h */; };
@@ -185,7 +193,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E984483A1EA48D7A00390927 /* libquicly.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -460,6 +467,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = E98448371EA48D6B00390927 /* Build configuration list for PBXNativeTarget "cli" */;
 			buildPhases = (
+				E941428B23B0B70F002D3CE0 /* ShellScript */,
 				E984482F1EA48D6B00390927 /* Sources */,
 				E98448301EA48D6B00390927 /* Frameworks */,
 				E98448311EA48D6B00390927 /* CopyFiles */,
@@ -530,6 +538,7 @@
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				English,
 				en,
 			);
 			mainGroup = E984480E1EA48BD400390927;
@@ -545,6 +554,28 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		E941428B23B0B70F002D3CE0 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/quicly-probes.d",
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILES_DIR)/embedded-probes.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n\nexec $SRCROOT/misc/probe2trace.pl -a embedded < $SRCROOT/quicly-probes.d > $DERIVED_FILES_DIR/embedded-probes.h\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		E980421D223952FD008B9745 /* Sources */ = {
@@ -581,9 +612,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				E95E953C22904A4C00215ACD /* picotls-probes.d in Sources */,
+				E941428F23B0B84F002D3CE0 /* ranges.c in Sources */,
+				E941428C23B0B831002D3CE0 /* cc-reno.c in Sources */,
 				E984483B1EA48DD300390927 /* openssl.c in Sources */,
+				E941428D23B0B839002D3CE0 /* frame.c in Sources */,
+				E941429123B0B86D002D3CE0 /* recvstate.c in Sources */,
+				E941428E23B0B845002D3CE0 /* defaults.c in Sources */,
+				E941429023B0B861002D3CE0 /* streambuf.c in Sources */,
 				E93E546A1F663851001C50FE /* pembase64.c in Sources */,
 				E98042282239531A008B9745 /* cli.c in Sources */,
+				E941429223B0B870002D3CE0 /* sendstate.c in Sources */,
+				E941428A23B0B454002D3CE0 /* quicly.c in Sources */,
+				E941429323B0B879002D3CE0 /* sentmap.c in Sources */,
 				E984483C1EA48DD300390927 /* picotls.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -778,6 +818,10 @@
 		E98448381EA48D6B00390927 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"QUICLY_USE_EMBEDDED_PROBES=1",
+				);
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",
@@ -789,6 +833,10 @@
 		E98448391EA48D6B00390927 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"QUICLY_USE_EMBEDDED_PROBES=1",
+				);
 				OTHER_LDFLAGS = (
 					"-L/usr/local/opt/openssl@1.1/lib",
 					"-lcrypto",

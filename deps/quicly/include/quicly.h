@@ -61,12 +61,10 @@ extern "C" {
 
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff000018
+#define QUICLY_PROTOCOL_VERSION 0xff000019
 
 #define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte)&0xf0) == 0xc0)
 
-#define QUICLY_MAX_CID_LEN_V1 20
-#define QUICLY_STATELESS_RESET_TOKEN_LEN 16
 #define QUICLY_STATELESS_RESET_PACKET_MIN_LEN 39
 
 #define QUICLY_MAX_PN_SIZE 4  /* maximum defined by the RFC used for calculating header protection sampling offset */
@@ -88,7 +86,6 @@ typedef struct st_quicly_datagram_t {
 typedef struct st_quicly_cid_t quicly_cid_t;
 typedef struct st_quicly_cid_plaintext_t quicly_cid_plaintext_t;
 typedef struct st_quicly_context_t quicly_context_t;
-typedef struct st_quicly_conn_t quicly_conn_t;
 typedef struct st_quicly_stream_t quicly_stream_t;
 typedef struct st_quicly_send_context_t quicly_send_context_t;
 typedef struct st_quicly_address_token_plaintext_t quicly_address_token_plaintext_t;
@@ -229,7 +226,7 @@ typedef struct st_quicly_transport_parameters_t {
     /**
      * in milliseconds
      */
-    uint64_t idle_timeout;
+    uint64_t max_idle_timeout;
     /**
      *
      */
@@ -396,6 +393,7 @@ struct st_quicly_conn_streamgroup_state_t {
 #define QUICLY_STATS_PREBUILT_FIELDS                                                                                               \
     struct {                                                                                                                       \
         uint64_t received;                                                                                                         \
+        uint64_t decryption_failed;                                                                                                \
         uint64_t sent;                                                                                                             \
         uint64_t lost;                                                                                                             \
         uint64_t ack_received;                                                                                                     \
@@ -665,8 +663,8 @@ typedef struct st_quicly_decoded_packet_t {
      */
     ptls_iovec_t token;
     /**
-     * starting offset of data (i.e., version-dependent area of a long header packet (version numbers in case of VN), odcid (in case
-     * of retry), encrypted PN (if decrypted.pn is UINT64_MAX) or data (if decrypted_pn is not UINT64_MAX))
+     * starting offset of data (i.e., version-dependent area of a long header packet (version numbers in case of VN), AEAD tag (in
+     * case of retry), encrypted PN (if decrypted.pn is UINT64_MAX) or data (if decrypted_pn is not UINT64_MAX))
      */
     size_t encrypted_off;
     /**
@@ -821,11 +819,12 @@ quicly_datagram_t *quicly_send_version_negotiation(quicly_context_t *ctx, struct
 int quicly_retry_calc_cidpair_hash(ptls_hash_algorithm_t *sha256, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
                                    uint64_t *value);
 /**
- *
+ * @param retry_aead_cache pointer to `ptls_aead_context_t *` that the function can store a AEAD context for future reuse. The cache
+ *                         cannot be shared between multiple threads. Can be set to NULL when caching is unnecessary.
  */
 quicly_datagram_t *quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encrypt_ctx, struct sockaddr *dest_addr,
                                      ptls_iovec_t dest_cid, struct sockaddr *src_addr, ptls_iovec_t src_cid, ptls_iovec_t odcid,
-                                     ptls_iovec_t token_prefix, ptls_iovec_t appdata);
+                                     ptls_iovec_t token_prefix, ptls_iovec_t appdata, ptls_aead_context_t **retry_aead_cache);
 /**
  *
  */

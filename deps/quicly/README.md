@@ -1,4 +1,4 @@
-quicly
+quicly [![Build Status](https://travis-ci.org/h2o/quicly.svg?branch=master)](https://travis-ci.org/h2o/quicly)
 ===
 
 Quicly is a QUIC implementation, written from the ground up to be used within the H2O HTTP server.

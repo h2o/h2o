@@ -79,6 +79,9 @@ provider quicly {
     probe new_token_acked(struct st_quicly_conn_t *conn, int64_t at, uint64_t generation);
     probe new_token_receive(struct st_quicly_conn_t *conn, int64_t at, uint8_t *token, size_t len);
 
+    probe handshake_done_send(struct st_quicly_conn_t *conn, int64_t at);
+    probe handshake_done_receive(struct st_quicly_conn_t *conn, int64_t at);
+
     probe streams_blocked_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t limit, int is_unidirectional);
     probe streams_blocked_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t limit, int is_unidirectional);
 
@@ -96,4 +99,6 @@ provider quicly {
     probe quictrace_lost(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
     probe quictrace_cc_ack(struct st_quicly_conn_t *conn, int64_t at, struct quicly_rtt_t *rtt, uint32_t cwnd, size_t inflight);
     probe quictrace_cc_lost(struct st_quicly_conn_t *conn, int64_t at, struct quicly_rtt_t *rtt, uint32_t cwnd, size_t inflight);
+
+    probe debug_message(struct st_quicly_conn_t *conn, const char *function, int line, const char *message);
 };

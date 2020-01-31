@@ -84,10 +84,13 @@ static struct {
     size_t count;
 } negotiated_protocols;
 
+/**
+ * list of requests to be processed, terminated by reqs[N].path == NULL
+ */
 struct {
     const char *path;
     int to_file;
-} reqs[1024];
+} *reqs;
 
 struct st_stream_data_t {
     quicly_streambuf_t streambuf;
@@ -118,10 +121,10 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
 
     quicly_get_stats(conn, &stats);
     fprintf(fp,
-            "packets-received: %" PRIu64 ", packets-sent: %" PRIu64 ", packets-lost: %" PRIu64 ", ack-received: %" PRIu64
-            ", bytes-received: %" PRIu64 ", bytes-sent: %" PRIu64 ", srtt: %" PRIu32 "\n",
-            stats.num_packets.received, stats.num_packets.sent, stats.num_packets.lost, stats.num_packets.ack_received,
-            stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.smoothed);
+            "packets-received: %" PRIu64 ", packets-decryption-failed: %" PRIu64 ", packets-sent: %" PRIu64 ", packets-lost: %"
+            PRIu64 ", ack-received: %" PRIu64 ", bytes-received: %" PRIu64 ", bytes-sent: %" PRIu64 ", srtt: %" PRIu32 "\n",
+            stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
+            stats.num_packets.ack_received, stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.smoothed);
 }
 
 static int validate_path(const char *path)
@@ -176,7 +179,7 @@ static void send_header(quicly_stream_t *stream, int is_http1, int status, const
 
 static int flatten_file_vec(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
 {
-    int fd = (int)vec->cbdata;
+    int fd = (intptr_t)vec->cbdata;
     ssize_t rret;
 
     /* FIXME handle partial read */
@@ -188,7 +191,7 @@ static int flatten_file_vec(quicly_sendbuf_vec_t *vec, void *dst, size_t off, si
 
 static void discard_file_vec(quicly_sendbuf_vec_t *vec)
 {
-    int fd = (int)vec->cbdata;
+    int fd = (intptr_t)vec->cbdata;
     close(fd);
 }
 
@@ -713,10 +716,10 @@ static int run_server(struct sockaddr *sa, socklen_t salen)
                         uint8_t new_server_cid[8];
                         memcpy(new_server_cid, packet.cid.dest.encrypted.base, sizeof(new_server_cid));
                         new_server_cid[0] ^= 0xff;
-                        quicly_datagram_t *rp = quicly_send_retry(&ctx, address_token_aead.enc, &sa, packet.cid.src, NULL,
-                                                                  ptls_iovec_init(new_server_cid, sizeof(new_server_cid)),
-                                                                  packet.cid.dest.encrypted, ptls_iovec_init(NULL, 0),
-                                                                  ptls_iovec_init(NULL, 0));
+                        quicly_datagram_t *rp =
+                            quicly_send_retry(&ctx, address_token_aead.enc, &sa, packet.cid.src, NULL,
+                                              ptls_iovec_init(new_server_cid, sizeof(new_server_cid)), packet.cid.dest.encrypted,
+                                              ptls_iovec_init(NULL, 0), ptls_iovec_init(NULL, 0), NULL);
                         assert(rp != NULL);
                         if (send_one(fd, rp) == -1)
                             perror("sendmsg failed");
@@ -928,6 +931,17 @@ static void usage(const char *cmd)
            cmd);
 }
 
+static void push_req(const char *path, int to_file)
+{
+    size_t i;
+    for (i = 0; reqs[i].path != NULL; ++i)
+        ;
+    reqs = realloc(reqs, sizeof(*reqs) * (i + 2));
+    reqs[i].path = path;
+    reqs[i].to_file = to_file;
+    memset(reqs + i + 1, 0, sizeof(*reqs));
+}
+
 int main(int argc, char **argv)
 {
     const char *host, *port, *cid_key = NULL;
@@ -935,7 +949,8 @@ int main(int argc, char **argv)
     socklen_t salen;
     int ch;
 
-    memset(reqs, 0, sizeof(reqs));
+    reqs = malloc(sizeof(*reqs));
+    memset(reqs, 0, sizeof(*reqs));
     ctx = quicly_spec_context;
     ctx.tls = &tlsctx;
     ctx.stream_open = &stream_open;
@@ -991,7 +1006,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'I':
-            if (sscanf(optarg, "%" SCNd64, &ctx.transport_params.idle_timeout) != 1) {
+            if (sscanf(optarg, "%" SCNd64, &ctx.transport_params.max_idle_timeout) != 1) {
                 fprintf(stderr, "failed to parse idle timeout: %s\n", optarg);
                 exit(1);
             }
@@ -1026,11 +1041,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "invalid path:%s\n", optarg);
                 exit(1);
             }
-            size_t i;
-            for (i = 0; reqs[i].path != NULL; ++i)
-                ;
-            reqs[i].path = optarg;
-            reqs[i].to_file = ch == 'P';
+            push_req(optarg, ch == 'P');
         } break;
         case 'R':
             enforce_retry = 1;
@@ -1094,7 +1105,7 @@ int main(int argc, char **argv)
     argv += optind;
 
     if (reqs[0].path == NULL)
-        reqs[0].path = "/";
+        push_req("/", 0);
 
     if (key_exchanges[0] == NULL)
         key_exchanges[0] = &ptls_openssl_secp256r1;

@@ -183,6 +183,10 @@ static void quicly_sentmap_init(quicly_sentmap_t *map);
 void quicly_sentmap_dispose(quicly_sentmap_t *map);
 
 /**
+ * if transaction is open (i.e. between prepare and commit)
+ */
+static int quicly_sentmap_is_open(quicly_sentmap_t *map);
+/**
  * prepares a write
  */
 int quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch);
@@ -224,9 +228,14 @@ inline void quicly_sentmap_init(quicly_sentmap_t *map)
     *map = (quicly_sentmap_t){NULL};
 }
 
+inline int quicly_sentmap_is_open(quicly_sentmap_t *map)
+{
+    return map->_pending_packet != NULL;
+}
+
 inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight)
 {
-    assert(map->_pending_packet != NULL);
+    assert(quicly_sentmap_is_open(map));
 
     if (bytes_in_flight != 0) {
         map->_pending_packet->data.packet.ack_eliciting = 1;

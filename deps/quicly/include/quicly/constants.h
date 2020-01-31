@@ -42,6 +42,9 @@ extern "C" {
 #define QUICLY_MAX_PACKET_SIZE 1280 /* must be >= 1200 bytes */
 #define QUICLY_AEAD_TAG_SIZE 16
 
+#define QUICLY_MAX_CID_LEN_V1 20
+#define QUICLY_STATELESS_RESET_TOKEN_LEN 16
+
 /* coexists with picotls error codes, assuming that int is at least 32-bits */
 #define QUICLY_ERROR_IS_QUIC(e) (((e) & ~0x1ffff) == 0x20000)
 #define QUICLY_ERROR_IS_QUIC_TRANSPORT(e) (((e) & ~0xffff) == 0x20000)
@@ -74,6 +77,17 @@ extern "C" {
 #define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 
 typedef int64_t quicly_stream_id_t;
+
+typedef struct st_quicly_conn_t quicly_conn_t;
+
+/**
+ * Used for emitting arbitrary debug message through probes. The debug message might get emitted unescaped as a JSON string,
+ * therefore cannot contain characters that are required to be escaped as a JSON string (e.g., `\n`, `"`).
+ */
+void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, const char *fmt, ...)
+    __attribute__((format(printf, 4, 5)));
+
+#define quicly_debug_printf(conn, ...) quicly__debug_printf((conn), __FUNCTION__, __LINE__, __VA_ARGS__)
 
 #ifdef __cplusplus
 }

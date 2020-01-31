@@ -185,6 +185,7 @@ static void test_send_then_close(void)
     ok(buffer_is(&server_streambuf->super.ingress, ""));
     quicly_streambuf_egress_shutdown(server_stream);
 
+    quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
 
     ok(client_streambuf->is_detached);
@@ -230,6 +231,7 @@ static void test_reset_after_close(void)
 
     quicly_streambuf_egress_shutdown(server_stream);
 
+    quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
 
     ok(client_streambuf->is_detached);
@@ -365,10 +367,13 @@ static void test_rst_during_loss(void)
     ok(tmp == max_data_at_start + 8);
 
     {
-        quicly_decoded_packet_t decoded;
-        decode_packets(&decoded, &reordered_packet, 1);
-        ret = quicly_receive(server, NULL, &fake_address.sa, &decoded);
-        ok(ret == 0);
+        quicly_decoded_packet_t decoded[4];
+        size_t i, num_decoded = decode_packets(decoded, &reordered_packet, 1);
+        ok(num_decoded != 0);
+        for (i = 0; i < num_decoded; ++i) {
+            ret = quicly_receive(server, NULL, &fake_address.sa, decoded + i);
+            ok(ret == 0 || ret == QUICLY_ERROR_PACKET_IGNORED);
+        }
     }
 
     quicly_get_max_data(server, NULL, NULL, &tmp);

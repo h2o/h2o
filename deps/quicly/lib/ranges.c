@@ -40,7 +40,11 @@
 static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size_t slot)
 {
     if (ranges->num_ranges == ranges->capacity) {
+        if (ranges->num_ranges == QUICLY_MAX_RANGES)
+            return -1;
         size_t new_capacity = ranges->capacity < 4 ? 4 : ranges->capacity * 2;
+        if (new_capacity > QUICLY_MAX_RANGES)
+            new_capacity = QUICLY_MAX_RANGES;
         quicly_range_t *new_ranges = malloc(new_capacity * sizeof(*new_ranges));
         if (new_ranges == NULL)
             return -1;
@@ -58,6 +62,22 @@ static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size
     return 0;
 }
 
+static void shrink_ranges(quicly_ranges_t *ranges, size_t begin_range_index, size_t end_range_index)
+{
+    assert(begin_range_index < end_range_index);
+
+    MOVE(ranges->ranges + begin_range_index, ranges->ranges + end_range_index, ranges->num_ranges - end_range_index);
+    ranges->num_ranges -= end_range_index - begin_range_index;
+    if (ranges->capacity > 4 && ranges->num_ranges * 3 <= ranges->capacity) {
+        size_t new_capacity = ranges->capacity / 2;
+        quicly_range_t *new_ranges = realloc(ranges->ranges, new_capacity * sizeof(*new_ranges));
+        if (new_ranges != NULL) {
+            ranges->ranges = new_ranges;
+            ranges->capacity = new_capacity;
+        }
+    }
+}
+
 static inline int merge_update(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size_t slot, size_t end_slot)
 {
     if (start < ranges->ranges[slot].start)
@@ -65,7 +85,7 @@ static inline int merge_update(quicly_ranges_t *ranges, uint64_t start, uint64_t
     ranges->ranges[slot].end = end < ranges->ranges[end_slot].end ? ranges->ranges[end_slot].end : end;
 
     if (slot != end_slot)
-        quicly_ranges_shrink(ranges, slot + 1, end_slot + 1);
+        shrink_ranges(ranges, slot + 1, end_slot + 1);
 
     return 0;
 }
@@ -154,7 +174,7 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
         }
         /* remove the slot if the range has become empty */
         if (ranges->ranges[slot].start == ranges->ranges[slot].end)
-            quicly_ranges_shrink(ranges, slot, slot + 1);
+            shrink_ranges(ranges, slot, slot + 1);
         return 0;
     }
 
@@ -178,23 +198,13 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
 
     /* remove shrink_from..slot */
     if (shrink_from != slot)
-        quicly_ranges_shrink(ranges, shrink_from, slot);
+        shrink_ranges(ranges, shrink_from, slot);
 
     return 0;
 }
 
-void quicly_ranges_shrink(quicly_ranges_t *ranges, size_t start, size_t end)
+void quicly_ranges_drop_smallest_range(quicly_ranges_t *ranges)
 {
-    assert(start < end);
-
-    MOVE(ranges->ranges + start, ranges->ranges + end, ranges->num_ranges - end);
-    ranges->num_ranges -= end - start;
-    if (ranges->capacity > 4 && ranges->num_ranges * 3 <= ranges->capacity) {
-        size_t new_capacity = ranges->capacity / 2;
-        quicly_range_t *new_ranges = realloc(ranges->ranges, new_capacity * sizeof(*new_ranges));
-        if (new_ranges != NULL) {
-            ranges->ranges = new_ranges;
-            ranges->capacity = new_capacity;
-        }
-    }
+    assert(ranges->num_ranges != 0);
+    shrink_ranges(ranges, 0, 1);
 }
