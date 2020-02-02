@@ -75,6 +75,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("location")}, {46, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("max-forwards")}, {47, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("origin")}, {0, 0, 0, 0, 0, 0, 0, 1}},
+                             {{H2O_STRLIT("priority")}, {0, 0, 0, 0, 0, 0, 0, 1}},
                              {{H2O_STRLIT("proxy-authenticate")}, {48, 1, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("proxy-authorization")}, {49, 1, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("purpose")}, {0, 0, 0, 0, 0, 0, 0, 1}},
@@ -101,7 +102,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("x-reproxy-url")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-traffic")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-xss-protection")}, {0, 0, 0, 0, 0, 0, 0, 1}}};
-size_t h2o__num_tokens = 80;
+size_t h2o__num_tokens = 81;
 
 const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61] = {{H2O_TOKEN_AUTHORITY, {H2O_STRLIT("")}},
                                                                    {H2O_TOKEN_METHOD, {H2O_STRLIT("GET")}},
@@ -402,6 +403,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 'n':
             if (memcmp(name, "locatio", 7) == 0)
                 return H2O_TOKEN_LOCATION;
+            break;
+        case 'y':
+            if (memcmp(name, "priorit", 7) == 0)
+                return H2O_TOKEN_PRIORITY;
             break;
         }
         break;
@@ -1324,6 +1329,12 @@ int32_t h2o_qpack_lookup_origin(h2o_iovec_t value, int *is_exact)
     return 90;
 }
 
+int32_t h2o_qpack_lookup_priority(h2o_iovec_t value, int *is_exact)
+{
+    *is_exact = 0;
+    return -1;
+}
+
 int32_t h2o_qpack_lookup_proxy_authenticate(h2o_iovec_t value, int *is_exact)
 {
     *is_exact = 0;
@@ -1552,7 +1563,7 @@ int32_t h2o_qpack_lookup_x_xss_protection(h2o_iovec_t value, int *is_exact)
     return 62;
 }
 
-const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[80] = {h2o_qpack_lookup_authority,
+const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[81] = {h2o_qpack_lookup_authority,
                                                                 h2o_qpack_lookup_method,
                                                                 h2o_qpack_lookup_path,
                                                                 h2o_qpack_lookup_scheme,
@@ -1606,6 +1617,7 @@ const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[80] = {h2o_qpack_lookup
                                                                 h2o_qpack_lookup_location,
                                                                 h2o_qpack_lookup_max_forwards,
                                                                 h2o_qpack_lookup_origin,
+                                                                h2o_qpack_lookup_priority,
                                                                 h2o_qpack_lookup_proxy_authenticate,
                                                                 h2o_qpack_lookup_proxy_authorization,
                                                                 h2o_qpack_lookup_purpose,

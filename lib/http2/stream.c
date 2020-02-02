@@ -22,6 +22,7 @@
 #include "h2o.h"
 #include "h2o/http2.h"
 #include "h2o/http2_internal.h"
+#include "h2o/absprio.h"
 #include "../probes_.h"
 
 static void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
@@ -271,12 +272,40 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         if (is_blocking_asset(&stream->req))
             h2o_http2_scheduler_rebind(&stream->_scheduler, &conn->scheduler, 257, 0);
     } else {
-        /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
-         * prioritization (e.g. that of Firefox)
-         */
-        if (conn->num_streams.priority.open == 0 && stream->req.hostconf->http2.reprioritize_blocking_assets &&
-            h2o_http2_scheduler_get_parent(&stream->_scheduler) == &conn->scheduler && is_blocking_asset(&stream->req))
+        /* Handle absolute priority header */
+        ssize_t absprio_cursor = h2o_find_header(&stream->req.res.headers, H2O_TOKEN_PRIORITY, -1);
+        if (absprio_cursor != -1 && conn->is_chromium_dependency_tree) {
+            /* Found absolute priority header in the response header */
+            uint8_t urgency = H2O_ABSPRIO_URGENCY_DEFAULT;
+            int incremental = 0;
+            int new_weight;
+            h2o_http2_scheduler_node_t *new_parent;
+
+            h2o_absprio_parse_priority(&stream->req.res.headers.entries[absprio_cursor].value, &urgency, &incremental);
+            new_weight = h2o_absprio_urgency_to_chromium_weight(urgency);
+            new_parent = h2o_http2_scheduler_find_parent_by_weight(&conn->scheduler, new_weight);
+            if (new_parent == &stream->_scheduler.node) {
+                /* find_new_parent might return `stream` itself. In this case re-specify the current
+                 * parent as a new parent */
+                new_parent = h2o_http2_scheduler_get_parent(&stream->_scheduler);
+            }
+            if (new_parent != h2o_http2_scheduler_get_parent(&stream->_scheduler) ||
+                new_weight != h2o_http2_scheduler_get_weight(&stream->_scheduler)) {
+                /* Reprioritize the stream based on priority header information */
+
+                /* First, preserve the current (client-given) priority information so that subsequent
+                 * streams from the client can correctly refer to the original priority. */
+                h2o_http2_conn_preserve_stream_scheduler(conn, stream);
+                /* Open a new scheduler for the modified priority information for this stream */
+                h2o_http2_scheduler_open(&stream->_scheduler, new_parent, new_weight, 1);
+            }
+        } else if (conn->num_streams.priority.open == 0 && stream->req.hostconf->http2.reprioritize_blocking_assets &&
+                   h2o_http2_scheduler_get_parent(&stream->_scheduler) == &conn->scheduler && is_blocking_asset(&stream->req)) {
+            /* raise the priority of asset files that block rendering to highest if the user-agent is _not_ using dependency-based
+             * prioritization (e.g. that of Firefox)
+             */
             h2o_http2_scheduler_rebind(&stream->_scheduler, &conn->scheduler, 257, 0);
+        }
     }
 
     /* send HEADERS, as well as start sending body */

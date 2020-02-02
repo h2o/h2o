@@ -164,6 +164,12 @@ struct st_h2o_http2_conn_t {
     /* internal */
     h2o_http2_scheduler_node_t scheduler;
     h2o_http2_conn_state_t state;
+    int is_chromium_dependency_tree; /* indicates whether the client-generated dependency tree is from Chromium
+                                      * Dependency tree from Chromium satisfies the following properties:
+                                      * 1) Every stream has the exclusive bit set
+                                      * 2) On a dependency tree, child's weight is lower than or equal to parent's
+                                      */
+
     h2o_linklist_t _conns; /* linklist to h2o_context_t::http2._conns */
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
     h2o_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
@@ -207,6 +213,7 @@ void h2o_http2_conn_register_for_proceed_callback(h2o_http2_conn_t *conn, h2o_ht
 static ssize_t h2o_http2_conn_get_buffer_window(h2o_http2_conn_t *conn);
 static void h2o_http2_conn_init_casper(h2o_http2_conn_t *conn, unsigned capacity_bits);
 void h2o_http2_conn_register_for_replay(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream);
+void h2o_http2_conn_preserve_stream_scheduler(h2o_http2_conn_t *conn, h2o_http2_stream_t *src);
 
 /* stream */
 static int h2o_http2_stream_is_push(uint32_t stream_id);

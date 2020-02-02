@@ -309,6 +309,7 @@ __DATA__
 0 0 0 0 0 0 0 1 timing-allow-origin
 0 0 0 0 0 0 0 1 upgrade-insecure-requests
 0 0 0 0 0 0 0 1 x-frame-options
+0 0 0 0 0 0 0 1 priority
 
 # QPACK static table (index, name, value)
 0 :authority

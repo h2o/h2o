@@ -348,6 +348,7 @@ SET(LIB_SOURCE_FILES
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
+    lib/common/absprio.c
 
     lib/core/config.c
     lib/core/configurator.c
@@ -447,6 +448,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/time.c
     t/00unit/lib/common/url.c
     t/00unit/lib/common/timerwheel.c
+    t/00unit/lib/common/absprio.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
@@ -479,6 +481,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/time.c
     lib/common/timerwheel.c
     lib/common/url.c
+    lib/common/absprio.c
     lib/core/headers.c
     lib/core/proxy.c
     lib/core/util.c
