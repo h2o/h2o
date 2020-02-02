@@ -39,6 +39,7 @@ static void test_priority(void)
     frame.prioritized.id_ = 12345; /* should be ignored */
     frame.dependency.type = H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT;
     frame.dependency.id_ = 67890; /* ignored */
+    frame.exclusive = 0;
     frame.weight_m1 = 123;
     encoded_len = h2o_http3_encode_priority_frame(encoded, &frame) - encoded;
 
