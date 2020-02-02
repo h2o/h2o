@@ -25,44 +25,45 @@
 
 static void test_parser(void)
 {
-    uint8_t urgency = 255;
-    int incremental = -1;
+    h2o_absprio_t p;
 
-    h2o_absprio_parse_priority(H2O_STRLIT("u=1, i=?0"), &urgency, &incremental);
-    ok(urgency == 1);
-    ok(incremental == 0);
+    p.urgency = 0;
+    p.incremental = 1;
+    h2o_absprio_parse_priority(H2O_STRLIT("u=1, i=?0"), &p);
+    ok(p.urgency == 1);
+    ok(p.incremental == 0);
 
-    urgency = 255;
-    incremental = -1;
-    h2o_absprio_parse_priority(H2O_STRLIT("i=?1, u=7"), &urgency, &incremental);
-    ok(urgency == 7);
-    ok(incremental == 1);
+    p.urgency = 0;
+    p.incremental = 0;
+    h2o_absprio_parse_priority(H2O_STRLIT("i=?1, u=7"), &p);
+    ok(p.urgency == 7);
+    ok(p.incremental == 1);
 
-    /* Omitted value for "i" means "?1" */
-    urgency = 255;
-    incremental = -1;
-    h2o_absprio_parse_priority(H2O_STRLIT("i"), &urgency, &incremental);
-    ok(urgency == 255);
-    ok(incremental == 1);
+    /* Omitted value for "i" means "?1", u is preserved */
+    p.urgency = 0;
+    p.incremental = 0;
+    h2o_absprio_parse_priority(H2O_STRLIT("i"), &p);
+    ok(p.urgency == 0);
+    ok(p.incremental == 1);
 
-    urgency = 255;
-    incremental = -1;
-    h2o_absprio_parse_priority(H2O_STRLIT("u=3"), &urgency, &incremental);
-    ok(urgency == 3);
-    ok(incremental == -1);
+    p.urgency = 0;
+    p.incremental = 1;
+    h2o_absprio_parse_priority(H2O_STRLIT("u=3"), &p);
+    ok(p.urgency == 3);
+    ok(p.incremental == 1);
 
     /* Invalid values */
-    urgency = 255;
-    incremental = -1;
-    h2o_absprio_parse_priority(H2O_STRLIT("i=?10, u=77"), &urgency, &incremental);
-    ok(urgency == 255);
-    ok(incremental == -1);
+    p.urgency = 0;
+    p.incremental = 1;
+    h2o_absprio_parse_priority(H2O_STRLIT("i=?10, u=77"), &p);
+    ok(p.urgency == 0);
+    ok(p.incremental == 1);
 
-    urgency = 255;
-    incremental = -1;
-    h2o_absprio_parse_priority(H2O_STRLIT("invalid"), &urgency, &incremental);
-    ok(urgency == 255);
-    ok(incremental == -1);
+    p.urgency = 0;
+    p.incremental = 1;
+    h2o_absprio_parse_priority(H2O_STRLIT("invalid"), &p);
+    ok(p.urgency == 0);
+    ok(p.incremental == 1);
 }
 
 void test_lib__common__absprio_c(void)

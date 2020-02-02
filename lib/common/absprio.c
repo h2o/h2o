@@ -24,7 +24,9 @@
 #include "h2o.h"
 #include "h2o/absprio.h"
 
-void h2o_absprio_parse_priority(const char *s, size_t len, uint8_t *urgency, int *incremental)
+h2o_absprio_t h2o_absprio_default = {H2O_ABSPRIO_URGENCY_DEFAULT, 0};
+
+void h2o_absprio_parse_priority(const char *s, size_t len, h2o_absprio_t *prio)
 {
     h2o_iovec_t iter = h2o_iovec_init(s, len), value;
     const char *token;
@@ -41,21 +43,21 @@ void h2o_absprio_parse_priority(const char *s, size_t len, uint8_t *urgency, int
             H2O_BUILD_ASSERT(H2O_ABSPRIO_URGENCY_MAX < 10);
             if (value.base != NULL && value.len == 1 && '0' <= value.base[0] &&
                 value.base[0] <= '0' + H2O_ABSPRIO_URGENCY_BACKGROUND)
-                *urgency = value.base[0] - '0';
+                prio->urgency = value.base[0] - '0';
         } else if (token[0] == 'i') {
             if (value.base != NULL) {
                 if (value.len == 2 && value.base[0] == '?') {
                     /* value should contain '?0' or '?1' */
                     if (value.base[1] == '0')
-                        *incremental = 0;
+                        prio->incremental = 0;
                     else if (value.base[1] == '1')
-                        *incremental = 1;
+                        prio->incremental = 1;
 
                     /* All other cases mean invalid format. Just ignore. */
                 }
             } else {
                 /* value omitted, meaning that i is true */
-                *incremental = 1;
+                prio->incremental = 1;
             }
         }
     }
