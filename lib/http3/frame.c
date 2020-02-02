@@ -19,53 +19,35 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include "h2o/absprio.h"
 #include "h2o/http3_common.h"
 
-uint8_t *h2o_http3_encode_priority_frame(uint8_t *dst, const h2o_http3_priority_frame_t *frame)
+uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame)
 {
-    assert(frame->prioritized.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT);
-    uint8_t *base = dst;
-
-    *dst++ = H2O_HTTP3_FRAME_TYPE_PRIORITY;
-    ++dst; /* skip length; determined laterwards */
-    *dst++ = ((uint8_t)frame->prioritized.type << 6) | ((uint8_t)frame->dependency.type << 4) | (frame->exclusive << 3);
-    dst = quicly_encodev(dst, frame->prioritized.id_);
-    if (frame->dependency.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT)
-        dst = quicly_encodev(dst, frame->dependency.id_);
-    *dst++ = frame->weight_m1;
-    base[1] = dst - (base + 2);
-
-    assert(dst - base < H2O_HTTP3_PRIORITY_FRAME_CAPACITY);
+    *dst++ = H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE;
+    dst = quicly_encodev(dst, frame->stream_id);
+    *dst++ = 'u';
+    *dst++ = '=';
+    *dst++ = '0' + frame->priority.urgency;
+    if (!frame->priority.incremental) {
+        static const h2o_iovec_t s = {H2O_STRLIT(",i=1")};
+        memcpy(dst, s.base, s.len);
+        dst += s.len;
+    }
     return dst;
 }
 
-int h2o_http3_decode_priority_frame(h2o_http3_priority_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc)
+int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, const uint8_t *payload, size_t len,
+                                           const char **err_desc)
 {
     const uint8_t *src = payload, *end = src + len;
 
-    if (end - src < 2)
-        goto Fail;
-
-    if ((*src & 0x7) != 0)
-        goto Fail;
-    frame->prioritized.type = (*src >> 6) & 0x3;
-    frame->dependency.type = (*src >> 4) & 0x3;
-    frame->exclusive = (*src & 0x8) != 0;
-    ++src;
-    if (frame->prioritized.type == H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT)
-        goto Fail;
-    if ((frame->prioritized.id_ = quicly_decodev(&src, end)) == UINT64_MAX)
-        goto Fail;
-    frame->dependency.id_ = 0;
-    if (frame->dependency.type != H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT)
-        if ((frame->dependency.id_ = quicly_decodev(&src, end)) == UINT64_MAX)
-            goto Fail;
-    if (end - src != 1)
-        goto Fail;
-    frame->weight_m1 = *src++;
+    if ((frame->stream_id = quicly_decodev(&src, end)) == UINT64_MAX) {
+        *err_desc = "invalid PRIORITY frame";
+        return H2O_HTTP3_ERROR_FRAME;
+    }
+    frame->priority = h2o_absprio_default;
+    h2o_absprio_parse_priority((const char *)src, end - src, &frame->priority);
 
     return 0;
-Fail:
-    *err_desc = "invalid PRIORITY frame";
-    return H2O_HTTP3_ERROR_FRAME;
 }

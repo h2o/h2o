@@ -711,21 +711,21 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         }                                                                                                                          \
         break
         /* clang-format off */
-        /*   +----------------+-------------+-------------+
-         *   |                | req-stream  | ctrl-stream |
-         *   |     frame      +------+------+------+------+
-         *   |                |client|server|client|server|
-         *   +----------------+------+------+------+------+ */
-        FRAME( DATA           ,    1 ,    1 ,    0 ,    0 );
-        FRAME( HEADERS        ,    1 ,    1 ,    0 ,    0 );
-        FRAME( PRIORITY       ,    0 ,    0 ,    1 ,    0 );
-        FRAME( CANCEL_PUSH    ,    0 ,    0 ,    1 ,    1 );
-        FRAME( SETTINGS       ,    0 ,    0 ,    1 ,    1 );
-        FRAME( PUSH_PROMISE   ,    0 ,    1 ,    0 ,    0 );
-        FRAME( GOAWAY         ,    0 ,    0 ,    1 ,    1 );
-        FRAME( MAX_PUSH_ID    ,    0 ,    0 ,    1 ,    0 );
-        FRAME( DUPLICATE_PUSH ,    0 ,    1 ,    0 ,    0 );
-        /*   +----------------+------+------+------+------+ */
+        /*   +-----------------+-------------+-------------+
+         *   |                 | req-stream  | ctrl-stream |
+         *   |      frame      +------+------+------+------+
+         *   |                 |client|server|client|server|
+         *   +-----------------+------+------+------+------+ */
+        FRAME( DATA            ,    1 ,    1 ,    0 ,    0 );
+        FRAME( HEADERS         ,    1 ,    1 ,    0 ,    0 );
+        FRAME( CANCEL_PUSH     ,    0 ,    0 ,    1 ,    1 );
+        FRAME( SETTINGS        ,    0 ,    0 ,    1 ,    1 );
+        FRAME( PUSH_PROMISE    ,    0 ,    1 ,    0 ,    0 );
+        FRAME( GOAWAY          ,    0 ,    0 ,    1 ,    1 );
+        FRAME( MAX_PUSH_ID     ,    0 ,    0 ,    1 ,    0 );
+        FRAME( DUPLICATE_PUSH  ,    0 ,    1 ,    0 ,    0 );
+        FRAME( PRIORITY_UPDATE ,    0 ,    0 ,    1 ,    0 );
+        /*   +-----------------+------+------+------+------+ */
         /* clang-format on */
 #undef FRAME
     default:
@@ -867,8 +867,7 @@ int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 
     { /* open control streams, send SETTINGS */
         static const uint8_t client_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
-        static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 2,
-                                                      H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS, H2O_HTTP3_MAX_PLACEHOLDERS};
+        static const uint8_t server_first_flight[] = {H2O_HTTP3_STREAM_TYPE_CONTROL, H2O_HTTP3_FRAME_TYPE_SETTINGS, 0};
         h2o_iovec_t first_flight = quicly_is_client(conn->quic) ? h2o_iovec_init(client_first_flight, sizeof(client_first_flight))
                                                                 : h2o_iovec_init(server_first_flight, sizeof(server_first_flight));
         if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, first_flight)) != 0)
@@ -968,11 +967,6 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         switch (id) {
         case H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE:
             conn->peer_settings.max_header_list_size = (uint64_t)value;
-            break;
-        case H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS:
-            if (!quicly_is_client(conn->quic))
-                goto Malformed;
-            conn->peer_settings.num_placeholders = (uint64_t)value;
             break;
         case H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE:
             header_table_size = (uint32_t)value;
