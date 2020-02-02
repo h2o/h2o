@@ -278,7 +278,8 @@ static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
             /* Found absolute priority header in the response header */
             uint8_t urgency = H2O_ABSPRIO_URGENCY_DEFAULT;
             int incremental = 0;
-            h2o_absprio_parse_priority(&stream->req.res.headers.entries[absprio_cursor].value, &urgency, &incremental);
+            h2o_iovec_t *header_value = &stream->req.res.headers.entries[absprio_cursor].value;
+            h2o_absprio_parse_priority(header_value->base, header_value->len, &urgency, &incremental);
             uint16_t new_weight = h2o_absprio_urgency_to_chromium_weight(urgency);
             h2o_http2_scheduler_node_t *new_parent = h2o_http2_scheduler_find_parent_by_weight(&conn->scheduler, new_weight);
             if (new_parent == &stream->_scheduler.node) {

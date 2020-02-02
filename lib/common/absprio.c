@@ -24,9 +24,9 @@
 #include "h2o.h"
 #include "h2o/absprio.h"
 
-void h2o_absprio_parse_priority(const h2o_iovec_t *input, uint8_t *urgency, int *incremental)
+void h2o_absprio_parse_priority(const char *s, size_t len, uint8_t *urgency, int *incremental)
 {
-    h2o_iovec_t iter = *input, value;
+    h2o_iovec_t iter = h2o_iovec_init(s, len), value;
     const char *token;
     size_t token_len;
 

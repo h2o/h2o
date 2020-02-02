@@ -25,49 +25,42 @@
 
 static void test_parser(void)
 {
-    h2o_iovec_t value;
     uint8_t urgency = 255;
     int incremental = -1;
 
-    value = (h2o_iovec_t){H2O_STRLIT("u=1, i=?0")};
-    h2o_absprio_parse_priority(&value, &urgency, &incremental);
+    h2o_absprio_parse_priority(H2O_STRLIT("u=1, i=?0"), &urgency, &incremental);
     ok(urgency == 1);
     ok(incremental == 0);
 
     urgency = 255;
     incremental = -1;
-    value = (h2o_iovec_t){H2O_STRLIT("i=?1, u=7")};
-    h2o_absprio_parse_priority(&value, &urgency, &incremental);
+    h2o_absprio_parse_priority(H2O_STRLIT("i=?1, u=7"), &urgency, &incremental);
     ok(urgency == 7);
     ok(incremental == 1);
 
     /* Omitted value for "i" means "?1" */
     urgency = 255;
     incremental = -1;
-    value = (h2o_iovec_t){H2O_STRLIT("i")};
-    h2o_absprio_parse_priority(&value, &urgency, &incremental);
+    h2o_absprio_parse_priority(H2O_STRLIT("i"), &urgency, &incremental);
     ok(urgency == 255);
     ok(incremental == 1);
 
     urgency = 255;
     incremental = -1;
-    value = (h2o_iovec_t){H2O_STRLIT("u=3")};
-    h2o_absprio_parse_priority(&value, &urgency, &incremental);
+    h2o_absprio_parse_priority(H2O_STRLIT("u=3"), &urgency, &incremental);
     ok(urgency == 3);
     ok(incremental == -1);
 
     /* Invalid values */
     urgency = 255;
     incremental = -1;
-    value = (h2o_iovec_t){H2O_STRLIT("i=?10, u=77")};
-    h2o_absprio_parse_priority(&value, &urgency, &incremental);
+    h2o_absprio_parse_priority(H2O_STRLIT("i=?10, u=77"), &urgency, &incremental);
     ok(urgency == 255);
     ok(incremental == -1);
 
     urgency = 255;
     incremental = -1;
-    value = (h2o_iovec_t){H2O_STRLIT("invalid")};
-    h2o_absprio_parse_priority(&value, &urgency, &incremental);
+    h2o_absprio_parse_priority(H2O_STRLIT("invalid"), &urgency, &incremental);
     ok(urgency == 255);
     ok(incremental == -1);
 }
