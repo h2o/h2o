@@ -22,6 +22,10 @@
 #ifndef h2o__absprio_h
 #define h2o__absprio_h
 
+#include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
+
 #define H2O_ABSPRIO_URGENCY_PREREQUISITE 0
 #define H2O_ABSPRIO_URGENCY_DEFAULT 1
 #define H2O_ABSPRIO_URGENCY_SUPPLEMENTARY_0 2
