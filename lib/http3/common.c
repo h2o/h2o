@@ -429,6 +429,8 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
     if (QUICLY_PACKET_IS_LONG_HEADER(packets[0].octets.base[0]) && packets[0].version != QUICLY_PROTOCOL_VERSION) {
         quicly_datagram_t *dgram = quicly_send_version_negotiation(ctx->quic, &srcaddr->sa, packets[0].cid.src, &destaddr->sa,
                                                                    packets[0].cid.dest.encrypted);
+        if (dgram == NULL)
+            return;
         h2o_http3_send_datagram(ctx, dgram);
         ctx->quic->packet_allocator->free_packet(ctx->quic->packet_allocator, dgram);
         return;
