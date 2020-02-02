@@ -299,6 +299,10 @@
 		E95E954222914F1600215ACD /* h2o-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCD72281148C0022C32D /* h2o-probes.d */; };
 		E95E954322914F1C00215ACD /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953F22914F0600215ACD /* picotls-probes.d */; };
 		E95EBCDA228117620022C32D /* probes_.h in Headers */ = {isa = PBXBuildFile; fileRef = E95EBCD9228117620022C32D /* probes_.h */; };
+		E96A24CD23E673F400CA970A /* absprio.h in Headers */ = {isa = PBXBuildFile; fileRef = E96A24CC23E673F400CA970A /* absprio.h */; };
+		E96A24CF23E6743600CA970A /* absprio.c in Sources */ = {isa = PBXBuildFile; fileRef = E96A24CE23E6743600CA970A /* absprio.c */; };
+		E96A24D023E6744900CA970A /* absprio.c in Sources */ = {isa = PBXBuildFile; fileRef = E96A24CE23E6743600CA970A /* absprio.c */; };
+		E96A24D323E6747A00CA970A /* absprio.c in Sources */ = {isa = PBXBuildFile; fileRef = E96A24D123E6747500CA970A /* absprio.c */; };
 		E9708AE01E49A2120029E0A5 /* picotls.h in Headers */ = {isa = PBXBuildFile; fileRef = E9708ADF1E49A2120029E0A5 /* picotls.h */; };
 		E9708AE71E49A2420029E0A5 /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708AD91E499E040029E0A5 /* openssl.c */; };
 		E9708AE81E49A2420029E0A5 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E9708ADA1E499E040029E0A5 /* picotls.c */; };
@@ -1023,6 +1027,9 @@
 		E95E953F22914F0600215ACD /* picotls-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "picotls-probes.d"; sourceTree = "<group>"; };
 		E95EBCD72281148C0022C32D /* h2o-probes.d */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.dtrace; path = "h2o-probes.d"; sourceTree = "<group>"; };
 		E95EBCD9228117620022C32D /* probes_.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = probes_.h; sourceTree = "<group>"; };
+		E96A24CC23E673F400CA970A /* absprio.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = absprio.h; sourceTree = "<group>"; };
+		E96A24CE23E6743600CA970A /* absprio.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = absprio.c; sourceTree = "<group>"; };
+		E96A24D123E6747500CA970A /* absprio.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = absprio.c; sourceTree = "<group>"; };
 		E9708AD91E499E040029E0A5 /* openssl.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = openssl.c; sourceTree = "<group>"; };
 		E9708ADA1E499E040029E0A5 /* picotls.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = picotls.c; sourceTree = "<group>"; };
 		E9708ADF1E49A2120029E0A5 /* picotls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = picotls.h; sourceTree = "<group>"; };
@@ -1334,6 +1341,7 @@
 		104B9A4A1A5FA7E5009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				E96A24CE23E6743600CA970A /* absprio.c */,
 				D08137371FD400F4004679DF /* balancer */,
 				10DA969D1CD2BFAC00679165 /* cache.c */,
 				107D4D541B5B30EE004A9B21 /* file.c */,
@@ -1409,6 +1417,7 @@
 		104B9A4D1A5FAA7B009EEE64 /* common */ = {
 			isa = PBXGroup;
 			children = (
+				E96A24D123E6747500CA970A /* absprio.c */,
 				D081373C1FD40431004679DF /* balancer */,
 				10DA969F1CD2BFEE00679165 /* cache.c */,
 				10F9F2661AFC5F550056F26B /* hostinfo.c */,
@@ -1742,6 +1751,7 @@
 		1079239F19A3215F00C52AD6 /* h2o */ = {
 			isa = PBXGroup;
 			children = (
+				E96A24CC23E673F400CA970A /* absprio.h */,
 				D08137411FD408C1004679DF /* balancer.h */,
 				10DA969B1CD2BF9000679165 /* cache.h */,
 				1024A3FD1D22546800EB13F1 /* cache_digests.h */,
@@ -2588,6 +2598,7 @@
 				107923A719A3215F00C52AD6 /* token.h in Headers */,
 				E901C3E8213E1C3600D17C93 /* loss.h in Headers */,
 				107923A919A3215F00C52AD6 /* h2o.h in Headers */,
+				E96A24CD23E673F400CA970A /* absprio.h in Headers */,
 				108867751AD9069900987967 /* defaults.c.h in Headers */,
 				1058C8881AA6DE4B008D6180 /* hostinfo.h in Headers */,
 				7D2DF4EE20297EEF004AD361 /* header.h in Headers */,
@@ -2955,6 +2966,7 @@
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
 				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
+				E96A24CF23E6743600CA970A /* absprio.c in Sources */,
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				08790DDA1D80153600A04BC1 /* net.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
@@ -3090,6 +3102,7 @@
 				E901C42C213E52A800D17C93 /* curve25519.c in Sources */,
 				107086701B7925D5002B8F18 /* compress.c in Sources */,
 				E987E5F41FD8C04D00DE4346 /* dictionary_hash.c in Sources */,
+				E96A24D323E6747A00CA970A /* absprio.c in Sources */,
 				7D937300202AC717005FE6AB /* server_timing.c in Sources */,
 				107D4D4C1B5880BC004A9B21 /* writer.c in Sources */,
 				E987E5EC1FD8C04D00DE4346 /* backward_references_hq.c in Sources */,
@@ -3152,6 +3165,7 @@
 			files = (
 				7D0285C91EF422D40094292B /* sleep.c in Sources */,
 				E9708B7C1E52C83D0029E0A5 /* status.c in Sources */,
+				E96A24D023E6744900CA970A /* absprio.c in Sources */,
 				E987E5D81FD7BEB500DE4346 /* block_splitter.c in Sources */,
 				E9708B7D1E52C8430029E0A5 /* durations.c in Sources */,
 				E9708B3F1E52C7860029E0A5 /* send_text.c in Sources */,
