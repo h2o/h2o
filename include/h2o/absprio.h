@@ -37,10 +37,14 @@
 #define H2O_ABSPRIO_URGENCY_MAX H2O_ABSPRIO_URGENCY_BACKGROUND
 
 void h2o_absprio_parse_priority(const char *s, size_t len, uint8_t *urgency, int *incremental);
+/**
+ * Convert urgency value in absolute priority header to HTTP2 weight, having Chromium as a client in mind.
+ */
+static uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency);
 
-/* Convert urgency value in absolute priority header to HTTP2 weight,
- * having Chromium as a client in mind. */
-static inline uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency)
+/* inline functions */
+
+inline uint16_t h2o_absprio_urgency_to_chromium_weight(uint8_t urgency)
 {
     uint16_t weight;
     assert(urgency < 8);
