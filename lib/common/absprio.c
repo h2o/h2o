@@ -38,7 +38,9 @@ void h2o_absprio_parse_priority(const h2o_iovec_t *input, uint8_t *urgency, int 
         }
 
         if (token[0] == 'u') {
-            if (value.base != NULL && value.len == 1 && '0' <= value.base[0] && value.base[0] <= '7')
+            H2O_BUILD_ASSERT(H2O_ABSPRIO_URGENCY_MAX < 10);
+            if (value.base != NULL && value.len == 1 && '0' <= value.base[0] &&
+                value.base[0] <= '0' + H2O_ABSPRIO_URGENCY_BACKGROUND)
                 *urgency = value.base[0] - '0';
         } else if (token[0] == 'i') {
             if (value.base != NULL) {
