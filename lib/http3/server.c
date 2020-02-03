@@ -863,6 +863,15 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         return 0;
     }
 
+    { /* set priority */
+        assert(!h2o_linklist_is_linked(&stream->scheduler.link));
+        ssize_t index;
+        if ((index = h2o_find_header(&stream->req.headers, H2O_TOKEN_PRIORITY, -1)) != -1) {
+            h2o_iovec_t *value = &stream->req.headers.entries[index].value;
+            h2o_absprio_parse_priority(value->base, value->len, &stream->scheduler.priority);
+        }
+    }
+
     /* change state */
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK);
 
