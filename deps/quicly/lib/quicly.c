@@ -70,7 +70,7 @@
  */
 #define QUICLY_MAX_TOKEN_LEN 512
 /**
- * do not try to send frames that require ACK if the send window is below this value
+ * do not try to send ACK-eliciting frames if the available CWND is below this value
  */
 #define MIN_SEND_WINDOW 64
 /**
@@ -578,7 +578,7 @@ static void assert_consistency(quicly_conn_t *conn, int timer_must_be_in_future)
         return;
     }
 
-    if (conn->egress.sentmap.bytes_in_flight != 0) {
+    if (conn->egress.sentmap.bytes_in_flight != 0 || conn->super.peer.address_validation.send_probe) {
         assert(conn->egress.loss.alarm_at != INT64_MAX);
     } else {
         assert(conn->egress.loss.loss_time == INT64_MAX);
@@ -1001,9 +1001,10 @@ static int scheduler_can_send(quicly_conn_t *conn)
 
 static void update_loss_alarm(quicly_conn_t *conn)
 {
-    quicly_loss_update_alarm(&conn->egress.loss, now, conn->egress.last_retransmittable_sent_at,
-                             conn->egress.sentmap.bytes_in_flight != 0 || conn->super.peer.address_validation.send_probe,
-                             scheduler_can_send(conn), conn->egress.max_data.sent);
+    int has_outstanding = conn->egress.sentmap.bytes_in_flight != 0 || conn->super.peer.address_validation.send_probe,
+        handshake_is_in_progress = conn->initial != NULL || conn->handshake != NULL;
+    quicly_loss_update_alarm(&conn->egress.loss, now, conn->egress.last_retransmittable_sent_at, has_outstanding,
+                             scheduler_can_send(conn), handshake_is_in_progress, conn->egress.max_data.sent);
 }
 
 static int create_handshake_flow(quicly_conn_t *conn, size_t epoch)
@@ -2254,16 +2255,21 @@ static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, in
 {
     /* If address is unvalidated, limit sending to 3x bytes received */
     if (!conn->super.peer.address_validation.validated) {
-        uint64_t window = conn->super.stats.num_bytes.received * 3;
-        if (window <= conn->super.stats.num_bytes.sent)
-            return 0;
-        return window - conn->super.stats.num_bytes.sent;
+        uint64_t total = conn->super.stats.num_bytes.received * 3;
+        if (conn->super.stats.num_bytes.sent + MIN_SEND_WINDOW <= total)
+            return total - conn->super.stats.num_bytes.sent;
+        return 0;
     }
 
     /* Validated address. Ensure there's enough window to send minimum number of packets */
+    uint64_t window = 0;
     if (!restrict_sending && conn->egress.cc.cwnd > conn->egress.sentmap.bytes_in_flight + min_bytes_to_send)
-        return conn->egress.cc.cwnd - conn->egress.sentmap.bytes_in_flight;
-    return min_bytes_to_send;
+        window = conn->egress.cc.cwnd - conn->egress.sentmap.bytes_in_flight;
+    if (window < MIN_SEND_WINDOW)
+        window = 0;
+    if (window < min_bytes_to_send)
+        window = min_bytes_to_send;
+    return window;
 }
 
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
@@ -2289,6 +2295,14 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn)
         at = conn->idle_timeout.at;
 
     return at;
+}
+
+uint64_t quicly_get_next_expected_packet_number(quicly_conn_t *conn)
+{
+    if(!conn->application)
+         return UINT64_MAX;
+
+    return conn->application->super.next_expected_packet_number;
 }
 
 /* data structure that is used during one call through quicly_send()
@@ -2809,12 +2823,15 @@ UpdateState:
     return 0;
 }
 
+/**
+ * Returns the timeout for sentmap entries. This timeout is also used as the duration of CLOSING / DRAINING state, and therefore be
+ * longer than 3PTO. At the moment, the value is 4PTO.
+ */
 static int64_t get_sentmap_expiration_time(quicly_conn_t *conn)
 {
-    /* TODO reconsider this (maybe 3 PTO? also not sure why we need to add ack-delay twice) */
-    /* TODO (jri): The timeouts used here should be entirely the peer's */
-    return (conn->egress.loss.rtt.smoothed + conn->egress.loss.rtt.variance) * 4 + conn->super.peer.transport_params.max_ack_delay +
-           QUICLY_DELAYED_ACK_TIMEOUT;
+    return quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.peer.transport_params.max_ack_delay,
+                              conn->egress.loss.conf->min_pto) *
+           4;
 }
 
 static void init_acks_iter(quicly_conn_t *conn, quicly_sentmap_iter_t *iter)
@@ -3209,7 +3226,7 @@ Exit:
     return packet;
 }
 
-static int send_handshake_flow(quicly_conn_t *conn, size_t epoch, quicly_send_context_t *s, int send_probe)
+static int send_handshake_flow(quicly_conn_t *conn, size_t epoch, quicly_send_context_t *s, int ack_only, int send_probe)
 {
     struct st_quicly_pn_space_t *ack_space = NULL;
     int ret = 0;
@@ -3237,22 +3254,24 @@ static int send_handshake_flow(quicly_conn_t *conn, size_t epoch, quicly_send_co
         if ((ret = send_ack(conn, ack_space, s)) != 0)
             goto Exit;
 
-    /* send data */
-    while ((conn->pending.flows & (uint8_t)(1 << epoch)) != 0) {
-        quicly_stream_t *stream = quicly_get_stream(conn, -(quicly_stream_id_t)(1 + epoch));
-        assert(stream != NULL);
-        if ((ret = quicly_send_stream(stream, s)) != 0)
-            goto Exit;
-        resched_stream_data(stream);
-        send_probe = 0;
-    }
+    if (!ack_only) {
+        /* send data */
+        while ((conn->pending.flows & (uint8_t)(1 << epoch)) != 0) {
+            quicly_stream_t *stream = quicly_get_stream(conn, -(quicly_stream_id_t)(1 + epoch));
+            assert(stream != NULL);
+            if ((ret = quicly_send_stream(stream, s)) != 0)
+                goto Exit;
+            resched_stream_data(stream);
+            send_probe = 0;
+        }
 
-    /* send probe if requested */
-    if (send_probe) {
-        if ((ret = _do_allocate_frame(conn, s, 1, 1)) != 0)
-            goto Exit;
-        *s->dst++ = QUICLY_FRAME_TYPE_PING;
-        conn->egress.last_retransmittable_sent_at = now;
+        /* send probe if requested */
+        if (send_probe) {
+            if ((ret = _do_allocate_frame(conn, s, 1, 1)) != 0)
+                goto Exit;
+            *s->dst++ = QUICLY_FRAME_TYPE_PING;
+            conn->egress.last_retransmittable_sent_at = now;
+        }
     }
 
 Exit:
@@ -3382,7 +3401,7 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
 
 static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
 {
-    int restrict_sending = 0, ret;
+    int restrict_sending = 0, ack_only = 0, ret;
     size_t min_packets_to_send = 0;
 
     /* handle timeouts */
@@ -3415,103 +3434,101 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     }
 
     s->send_window = calc_send_window(conn, min_packets_to_send * conn->super.ctx->max_packet_size, restrict_sending);
-    if (s->send_window == 0) {
-        ret = 0;
-        goto Exit;
-    }
+    if (s->send_window == 0)
+        ack_only = 1;
 
     /* send handshake flows */
-    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s,
+    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s, ack_only,
                                    restrict_sending ||
                                        (conn->super.peer.address_validation.send_probe && conn->handshake == NULL))) != 0)
         goto Exit;
-    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s,
+    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only,
                                    restrict_sending || conn->super.peer.address_validation.send_probe)) != 0)
         goto Exit;
 
     /* send encrypted frames */
     if (conn->application != NULL && (s->current.cipher = &conn->application->cipher.egress.key)->header_protection != NULL) {
         s->current.first_byte = conn->application->one_rtt_writable ? QUICLY_QUIC_BIT : QUICLY_PACKET_TYPE_0RTT;
-        /* PTO, always send PING. This is the easiest thing to do in terms of timer control. */
-        if (restrict_sending) {
-            if ((ret = _do_allocate_frame(conn, s, 1, 1)) != 0)
+        /* acks */
+        if (conn->application->one_rtt_writable && conn->egress.send_ack_at <= now && conn->application->super.unacked_count != 0) {
+            if ((ret = send_ack(conn, &conn->application->super, s)) != 0)
                 goto Exit;
-            *s->dst++ = QUICLY_FRAME_TYPE_PING;
         }
-        /* take actions only permitted for short header packets */
-        if (conn->application->one_rtt_writable) {
-            /* send HANDSHAKE_DONE */
-            if ((conn->pending.flows & QUICLY_PENDING_FLOW_HANDSHAKE_DONE_BIT) != 0 && (ret = send_handshake_done(conn, s)) != 0)
-                goto Exit;
-            /* acks */
-            if (conn->egress.send_ack_at <= now && conn->application->super.unacked_count != 0) {
-                if ((ret = send_ack(conn, &conn->application->super, s)) != 0)
+        if (!ack_only) {
+            /* PTO, always send PING. This is the easiest thing to do in terms of timer control. */
+            if (restrict_sending) {
+                if ((ret = _do_allocate_frame(conn, s, 1, 1)) != 0)
                     goto Exit;
+                *s->dst++ = QUICLY_FRAME_TYPE_PING;
             }
-            /* post-handshake messages */
-            if ((conn->pending.flows & (uint8_t)(1 << QUICLY_EPOCH_1RTT)) != 0) {
-                quicly_stream_t *stream = quicly_get_stream(conn, -(1 + QUICLY_EPOCH_1RTT));
-                assert(stream != NULL);
-                if ((ret = quicly_send_stream(stream, s)) != 0)
+            /* take actions only permitted for short header packets */
+            if (conn->application->one_rtt_writable) {
+                /* send HANDSHAKE_DONE */
+                if ((conn->pending.flows & QUICLY_PENDING_FLOW_HANDSHAKE_DONE_BIT) != 0 && (ret = send_handshake_done(conn, s)) != 0)
                     goto Exit;
-                resched_stream_data(stream);
-            }
-            /* respond to all pending received PATH_CHALLENGE frames */
-            if (conn->egress.path_challenge.head != NULL) {
-                do {
-                    struct st_quicly_pending_path_challenge_t *c = conn->egress.path_challenge.head;
-                    if ((ret = allocate_frame(conn, s, QUICLY_PATH_CHALLENGE_FRAME_CAPACITY)) != 0)
+                /* post-handshake messages */
+                if ((conn->pending.flows & (uint8_t)(1 << QUICLY_EPOCH_1RTT)) != 0) {
+                    quicly_stream_t *stream = quicly_get_stream(conn, -(1 + QUICLY_EPOCH_1RTT));
+                    assert(stream != NULL);
+                    if ((ret = quicly_send_stream(stream, s)) != 0)
                         goto Exit;
-                    s->dst = quicly_encode_path_challenge_frame(s->dst, c->is_response, c->data);
-                    conn->egress.path_challenge.head = c->next;
-                    free(c);
-                } while (conn->egress.path_challenge.head != NULL);
-                conn->egress.path_challenge.tail_ref = &conn->egress.path_challenge.head;
-            }
-            /* send max_streams frames */
-            if ((ret = send_max_streams(conn, 1, s)) != 0)
-                goto Exit;
-            if ((ret = send_max_streams(conn, 0, s)) != 0)
-                goto Exit;
-            /* send connection-level flow control frame */
-            if (should_send_max_data(conn)) {
-                quicly_sent_t *sent;
-                if ((ret = allocate_ack_eliciting_frame(conn, s, QUICLY_MAX_DATA_FRAME_CAPACITY, &sent, on_ack_max_data)) != 0)
+                    resched_stream_data(stream);
+                }
+                /* respond to all pending received PATH_CHALLENGE frames */
+                if (conn->egress.path_challenge.head != NULL) {
+                    do {
+                        struct st_quicly_pending_path_challenge_t *c = conn->egress.path_challenge.head;
+                        if ((ret = allocate_frame(conn, s, QUICLY_PATH_CHALLENGE_FRAME_CAPACITY)) != 0)
+                            goto Exit;
+                        s->dst = quicly_encode_path_challenge_frame(s->dst, c->is_response, c->data);
+                        conn->egress.path_challenge.head = c->next;
+                        free(c);
+                    } while (conn->egress.path_challenge.head != NULL);
+                    conn->egress.path_challenge.tail_ref = &conn->egress.path_challenge.head;
+                }
+                /* send max_streams frames */
+                if ((ret = send_max_streams(conn, 1, s)) != 0)
                     goto Exit;
-                uint64_t new_value = conn->ingress.max_data.bytes_consumed + conn->super.ctx->transport_params.max_data;
-                s->dst = quicly_encode_max_data_frame(s->dst, new_value);
-                quicly_maxsender_record(&conn->ingress.max_data.sender, new_value, &sent->data.max_data.args);
-                QUICLY_PROBE(MAX_DATA_SEND, conn, probe_now(), new_value);
+                if ((ret = send_max_streams(conn, 0, s)) != 0)
+                    goto Exit;
+                /* send connection-level flow control frame */
+                if (should_send_max_data(conn)) {
+                    quicly_sent_t *sent;
+                    if ((ret = allocate_ack_eliciting_frame(conn, s, QUICLY_MAX_DATA_FRAME_CAPACITY, &sent, on_ack_max_data)) != 0)
+                        goto Exit;
+                    uint64_t new_value = conn->ingress.max_data.bytes_consumed + conn->super.ctx->transport_params.max_data;
+                    s->dst = quicly_encode_max_data_frame(s->dst, new_value);
+                    quicly_maxsender_record(&conn->ingress.max_data.sender, new_value, &sent->data.max_data.args);
+                    QUICLY_PROBE(MAX_DATA_SEND, conn, probe_now(), new_value);
+                }
+                /* send streams_blocked frames */
+                if ((ret = send_streams_blocked(conn, 1, s)) != 0)
+                    goto Exit;
+                if ((ret = send_streams_blocked(conn, 0, s)) != 0)
+                    goto Exit;
+                /* send NEW_TOKEN */
+                if ((conn->pending.flows & QUICLY_PENDING_FLOW_NEW_TOKEN_BIT) != 0 && (ret = send_resumption_token(conn, s)) != 0)
+                    goto Exit;
             }
-            /* send streams_blocked frames */
-            if ((ret = send_streams_blocked(conn, 1, s)) != 0)
-                goto Exit;
-            if ((ret = send_streams_blocked(conn, 0, s)) != 0)
-                goto Exit;
-            /* send NEW_TOKEN */
-            if ((conn->pending.flows & QUICLY_PENDING_FLOW_NEW_TOKEN_BIT) != 0 && (ret = send_resumption_token(conn, s)) != 0)
+            /* send stream-level control frames */
+            while (s->num_packets != s->max_packets && quicly_linklist_is_linked(&conn->pending.streams.control)) {
+                quicly_stream_t *stream =
+                    (void *)((char *)conn->pending.streams.control.next - offsetof(quicly_stream_t, _send_aux.pending_link.control));
+                if ((ret = send_stream_control_frames(stream, s)) != 0)
+                    goto Exit;
+                quicly_linklist_unlink(&stream->_send_aux.pending_link.control);
+            }
+            /* send STREAM frames */
+            if ((ret = conn->super.ctx->stream_scheduler->do_send(conn->super.ctx->stream_scheduler, conn, s)) != 0)
                 goto Exit;
         }
-        /* send stream-level control frames */
-        while (s->num_packets != s->max_packets && quicly_linklist_is_linked(&conn->pending.streams.control)) {
-            quicly_stream_t *stream =
-                (void *)((char *)conn->pending.streams.control.next - offsetof(quicly_stream_t, _send_aux.pending_link.control));
-            if ((ret = send_stream_control_frames(stream, s)) != 0)
-                goto Exit;
-            quicly_linklist_unlink(&stream->_send_aux.pending_link.control);
-        }
-        /* send STREAM frames */
-        if ((ret = conn->super.ctx->stream_scheduler->do_send(conn->super.ctx->stream_scheduler, conn, s)) != 0)
-            goto Exit;
     }
 
-    if (s->target.packet != NULL)
-        commit_send_packet(conn, s, 0);
-
-    ret = 0;
 Exit:
     if (ret == QUICLY_ERROR_SENDBUF_FULL)
         ret = 0;
+    if (ret == 0 && s->target.packet != NULL)
+        commit_send_packet(conn, s, 0);
     if (ret == 0) {
         if (conn->application == NULL || conn->application->super.unacked_count == 0)
             conn->egress.send_ack_at = INT64_MAX; /* we have sent ACKs for every epoch (or before address validation) */
@@ -3819,6 +3836,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     }
 
     init_acks_iter(conn, &iter);
+
+    /* TODO log PNs being ACKed too late */
 
     size_t gap_index = frame.num_gaps;
     while (1) {
@@ -4251,13 +4270,22 @@ static int handle_retire_connection_id_frame(quicly_conn_t *conn, struct st_quic
 
 static int handle_handshake_done_frame(quicly_conn_t *conn, struct st_quicly_handle_payload_state_t *state)
 {
+    int ret;
+
     QUICLY_PROBE(HANDSHAKE_DONE_RECEIVE, conn, probe_now());
+
     if (!quicly_is_client(conn))
         return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
+
     assert(conn->initial == NULL);
     if (conn->handshake == NULL)
         return 0;
-    return discard_handshake_context(conn, QUICLY_EPOCH_HANDSHAKE);
+
+    conn->super.peer.address_validation.send_probe = 0;
+    if ((ret = discard_handshake_context(conn, QUICLY_EPOCH_HANDSHAKE)) != 0)
+        return ret;
+    update_loss_alarm(conn);
+    return 0;
 }
 
 static int handle_payload(quicly_conn_t *conn, size_t epoch, const uint8_t *_src, size_t _len, uint64_t *offending_frame_type,
