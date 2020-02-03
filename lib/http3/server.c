@@ -830,26 +830,28 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
     stream->recvbuf.handle_input = handle_input_expect_data;
 
-    /* parse the headers */
+    /* parse the headers, and ack */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, NULL /* TODO cache-digests */, header_ack, &header_ack_len,
-                                       frame.payload, frame.length, err_desc)) != 0) {
-        /* send a 400 error when observing an invalid header character */
-        if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
-            if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
-                quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
-            h2o_probe_log_request(&stream->req, stream->quic->stream_id);
-            h2o_send_error_400(&stream->req, "Invalid Request", *err_desc, 0);
-            *err_desc = NULL;
-            return 0;
-        }
-    }
+                                       frame.payload, frame.length, err_desc)) != 0 &&
+        ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+        return ret;
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
 
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
+
+    /* send a 400 error when observing an invalid header character */
+    if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+            quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+        set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS);
+        h2o_send_error_400(&stream->req, "Invalid Request", *err_desc, 0);
+        *err_desc = NULL;
+        return 0;
+    }
 
     /* check if content-length is within the permitted bounds */
     if (stream->req.content_length != SIZE_MAX &&
