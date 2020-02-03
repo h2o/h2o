@@ -11,6 +11,8 @@ from collections import OrderedDict
 import binascii, getopt, json, sys
 
 bpf = """
+#include <stdio.h>
+
 #define MAX_STR_LEN 128
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
