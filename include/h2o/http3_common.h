@@ -26,19 +26,20 @@
 #include <sys/socket.h>
 #include "quicly.h"
 #include "quicly/defaults.h"
+#include "h2o/absprio.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/qpack.h"
 
 #define H2O_HTTP3_FRAME_TYPE_DATA 0
 #define H2O_HTTP3_FRAME_TYPE_HEADERS 1
-#define H2O_HTTP3_FRAME_TYPE_PRIORITY 2
 #define H2O_HTTP3_FRAME_TYPE_CANCEL_PUSH 3
 #define H2O_HTTP3_FRAME_TYPE_SETTINGS 4
 #define H2O_HTTP3_FRAME_TYPE_PUSH_PROMISE 5
 #define H2O_HTTP3_FRAME_TYPE_GOAWAY 7
 #define H2O_HTTP3_FRAME_TYPE_MAX_PUSH_ID 13
 #define H2O_HTTP3_FRAME_TYPE_DUPLICATE_PUSH 14
+#define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE 15
 
 #define H2O_HTTP3_STREAM_TYPE_CONTROL 0
 #define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 1
@@ -49,12 +50,9 @@
 #define H2O_HTTP3_SETTINGS_HEADER_TABLE_SIZE 1
 #define H2O_HTTP3_SETTINGS_MAX_HEADER_LIST_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
-#define H2O_HTTP3_SETTINGS_NUM_PLACEHOLDERS 9
 
 #define H2O_HTTP3_DEFAULT_HEADER_TABLE_SIZE 4096
 #define H2O_HTTP3_MAX_HEADER_TABLE_SIZE ((1 << 30) + 1)
-#define H2O_HTTP3_MAX_PLACEHOLDERS 10
-#define H2O_HTTP3_DEFAULT_WEIGHT 16
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
@@ -98,18 +96,16 @@ typedef enum en_h2o_http3_priority_element_type_t {
     H2O_HTTP3_PRIORITY_ELEMENT_TYPE_ROOT
 } h2o_http3_priority_element_type_t;
 
-typedef struct st_h2o_http3_priority_frame_t {
-    struct {
-        h2o_http3_priority_element_type_t type;
-        int64_t id_;
-    } prioritized, dependency;
-    uint8_t exclusive : 1;
-    uint8_t weight_m1;
-} h2o_http3_priority_frame_t;
+typedef struct st_h2o_http3_priority_update_frame_t {
+    uint64_t element_is_push : 1;
+    uint64_t element : 63;
+    h2o_absprio_t priority;
+} h2o_http3_priority_update_frame_t;
 
-#define H2O_HTTP3_PRIORITY_FRAME_CAPACITY (1 /* len */ + 1 /* frame type */ + 1 + 8 + 8 + 1)
-uint8_t *h2o_http3_encode_priority_frame(uint8_t *dst, const h2o_http3_priority_frame_t *frame);
-int h2o_http3_decode_priority_frame(h2o_http3_priority_frame_t *frame, const uint8_t *payload, size_t len, const char **err_desc);
+#define H2O_HTTP3_PRIORITY_UPDATE_FRAME_CAPACITY (1 /* len */ + 1 /* frame type */ + 8 + sizeof("u=1,i=?0") - 1)
+uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame);
+int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, const uint8_t *payload, size_t len,
+                                           const char **err_desc);
 
 typedef h2o_http3_conn_t *(*h2o_http3_accept_cb)(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                                  quicly_decoded_packet_t *packet);
@@ -219,7 +215,6 @@ struct st_h2o_http3_conn_t {
      *
      */
     struct {
-        uint64_t num_placeholders;
         uint64_t max_header_list_size;
     } peer_settings;
     /**
