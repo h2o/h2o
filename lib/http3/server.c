@@ -186,6 +186,7 @@ static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *strea
                                       const char **err_desc);
 static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
                                     const char **err_desc);
+static void req_scheduler_activate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream);
 static void req_scheduler_deactivate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_stream_t *stream);
 
 static struct st_h2o_http3_server_conn_t *get_conn(struct st_h2o_http3_server_stream_t *stream)
@@ -961,9 +962,25 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
         if ((ret = h2o_http3_handle_settings_frame(&conn->h3, payload, len, err_desc)) != 0)
             return ret;
         break;
-    case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE:
-        /* TODO */
-        break;
+    case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE: {
+        h2o_http3_priority_update_frame_t frame;
+        if ((ret = h2o_http3_decode_priority_update_frame(&frame, payload, len, err_desc)) != 0)
+            return ret;
+        if (frame.element_is_push)
+            return H2O_HTTP3_ERROR_FRAME;
+        quicly_stream_t *qs;
+        if ((qs = quicly_get_stream(conn->h3.quic, frame.element)) != NULL) {
+            struct st_h2o_http3_server_stream_t *stream = qs->data;
+            assert(stream != NULL);
+            if (h2o_linklist_is_linked(&stream->scheduler.link)) {
+                req_scheduler_deactivate(conn, stream);
+                stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
+                req_scheduler_activate(conn, stream);
+            } else {
+                stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
+            }
+        }
+    } break;
     default:
         break;
     }

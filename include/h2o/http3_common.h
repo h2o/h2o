@@ -97,7 +97,8 @@ typedef enum en_h2o_http3_priority_element_type_t {
 } h2o_http3_priority_element_type_t;
 
 typedef struct st_h2o_http3_priority_update_frame_t {
-    uint64_t stream_id;
+    uint64_t element_is_push : 1;
+    uint64_t element : 63;
     h2o_absprio_t priority;
 } h2o_http3_priority_update_frame_t;
 
