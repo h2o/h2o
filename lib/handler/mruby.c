@@ -650,6 +650,8 @@ int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o
                                      int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_header_t *, void *),
                                      void *cb_data)
 {
+    if (headers->size == 0)
+        return 0;
     h2o_header_t **sorted = alloca(sizeof(*sorted) * headers->size);
     size_t i, num_sorted = 0;
     for (i = 0; i != headers->size; ++i) {
