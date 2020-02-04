@@ -272,7 +272,7 @@ static mrb_value build_constants(mrb_state *mrb, const char *server_name, size_t
             mrb_ary_set(mrb, ary, i, lit);
         }
         for (; i != H2O_MAX_TOKENS * 2; ++i) {
-            const h2o_token_t *token = h2o__tokens + i - H2O_MAX_TOKENS;
+            const h2o_token_t *token = h2o__tokens + (i - H2O_MAX_TOKENS);
             mrb_value lit = mrb_nil_value();
             if (token == H2O_TOKEN_CONTENT_TYPE) {
                 lit = mrb_str_new_lit(mrb, "CONTENT_TYPE");
