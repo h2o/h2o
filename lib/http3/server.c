@@ -165,7 +165,6 @@ struct st_h2o_http3_server_stream_t {
         size_t min_index_to_addref;
         uint64_t final_size;
         uint8_t data_frame_header_buf[9];
-        uint8_t proceed_called : 1;
     } sendbuf;
     enum h2o_http3_server_stream_state state;
     h2o_linklist_t link;
@@ -179,6 +178,15 @@ struct st_h2o_http3_server_stream_t {
      * if read is blocked
      */
     uint8_t read_blocked : 1;
+    /**
+     * if h2o_proceed_response has been invoked, or if the invocation has been requesed
+     */
+    uint8_t proceed_requested : 1;
+    /**
+     * this flag is set by on_send_emit, triggers the invocation h2o_proceed_response in scheduler_do_send, used by do_send to
+     * take different actions based on if it has been called while scheduler_do_send is running.
+     */
+    uint8_t proceed_while_sending : 1;
     /**
      * buffer to hold the request body (or a chunk of, if in streaming mode)
      */
@@ -439,7 +447,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
-            assert(stream->sendbuf.proceed_called);
+            assert(stream->proceed_requested);
         } else {
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
         }
@@ -487,11 +495,11 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
 
     *len = dst - (uint8_t *)_dst;
 
-    if (*wrote_all && quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->sendbuf.proceed_called) {
+    if (*wrote_all && quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
         if (!retain_sendvecs(stream))
             goto Error;
-        stream->sendbuf.proceed_called = 1;
-        h2o_proceed_response_deferred(&stream->req);
+        stream->proceed_requested = 1;
+        stream->proceed_while_sending = 1;
     }
 
     return 0;
@@ -922,7 +930,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     assert(&stream->req == _req);
 
-    stream->sendbuf.proceed_called = 0;
+    stream->proceed_requested = 0;
 
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
         write_response(stream);
@@ -973,7 +981,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     }
 
     quicly_stream_sync_sendbuf(stream->quic, 1);
-    h2o_http3_schedule_timer(&get_conn(stream)->h3);
+    if (!stream->proceed_while_sending)
+        h2o_http3_schedule_timer(&get_conn(stream)->h3);
 }
 
 static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
@@ -1058,6 +1067,8 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->scheduler.call_cnt = 0;
 
     stream->read_blocked = 0;
+    stream->proceed_requested = 0;
+    stream->proceed_while_sending = 0;
     stream->req_body = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
@@ -1254,7 +1265,14 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             if ((ret = quicly_send_stream(stream->quic, s)) != 0)
                 goto Exit;
             ++stream->scheduler.call_cnt;
-            /* 4. prepare for next */
+            /* 4. invoke h2o_proceed_request synchronously, so that we could obtain additional data for the current (i.e. highest)
+             *    stream. */
+            if (stream->proceed_while_sending) {
+                assert(stream->proceed_requested);
+                h2o_proceed_response(&stream->req);
+                stream->proceed_while_sending = 0;
+            }
+            /* 5. prepare for next */
             if (quicly_sendstate_can_send(&stream->quic->sendstate, &stream->quic->_send_aux.max_stream_data)) {
                 if (quicly_is_flow_capped(conn->h3.quic) && !quicly_sendstate_can_send(&stream->quic->sendstate, NULL)) {
                     /* capped by connection-level flow control, move the stream to conn-blocked */
@@ -1311,6 +1329,8 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
         }
     } else {
         struct st_h2o_http3_server_stream_t *stream = qs->data;
+        if (stream->proceed_while_sending)
+            return 0;
         switch (new_state) {
         case DEACTIVATE:
             req_scheduler_deactivate(conn, stream);
