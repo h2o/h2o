@@ -405,6 +405,25 @@ int trace_streams_blocked_send(struct pt_regs *ctx) {
 
     return 0;
 }
+
+int trace_streams_blocked_receive(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "streams_blocked_receive");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.limit);
+    bpf_usdt_readarg(4, ctx, &event.is_unidirectional);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 def handle_req_line(cpu, data, size):
@@ -530,6 +549,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="new_token_acked", fn_name="trace_new_token_acked")
     u.enable_probe(probe="new_token_receive", fn_name="trace_new_token_receive")
     u.enable_probe(probe="streams_blocked_send", fn_name="trace_streams_blocked_send")
+    u.enable_probe(probe="streams_blocked_receive", fn_name="trace_streams_blocked_receive")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
