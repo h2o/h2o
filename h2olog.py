@@ -391,7 +391,7 @@ int trace_streams_blocked_send(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
     struct st_quicly_conn_t conn = {};
-    sprintf(event.type, "handshake_done_send");
+    sprintf(event.type, "streams_blocked_send");
 
     bpf_usdt_readarg(1, ctx, &pos);
     bpf_probe_read(&conn, sizeof(conn), pos);
