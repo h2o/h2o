@@ -519,6 +519,14 @@ def handle_quic_event(cpu, data, size):
         rv["token_preview"] = binascii.hexlify(rv["token_preview"])
     elif line.type == "new_token_acked":
         rv["token_generation"] = getattr(line, "token_generation")
+    elif line.type == "streams_blocked_send":
+        for k in ["limit", "is_unidirectional"]:
+            rv[k] = getattr(line, k)
+    elif line.type == "streams_blocked_receive":
+        for k in ["limit", "is_unidirectional"]:
+            rv[k] = getattr(line, k)
+    elif line.type == "data_blocked_receive":
+        rv["off"] = getattr(line, "off")
     elif line.type == "stream_data_blocked_receive":
         for k in ["stream_id", "limit"]:
             rv[k] = getattr(line, k)
