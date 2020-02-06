@@ -558,6 +558,7 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
     } else if (CHECK_KEY("rack.run_once")) {
     } else if (CHECK_KEY("rack.url_scheme")) {
         RETRIEVE_ENV_STR(data->env.scheme);
+    } else if (CHECK_KEY("rack.early_hints")) {
     } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
         mrb_value http_header = mrb_nil_value();
         RETRIEVE_ENV_STR(http_header);
