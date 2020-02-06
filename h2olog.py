@@ -484,6 +484,24 @@ int trace_quictrace_sent(struct pt_regs *ctx) {
 
     return 0;
 }
+
+int trace_quictrace_recv(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "quictrace_recv");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.packet_num);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 def handle_req_line(cpu, data, size):
@@ -553,6 +571,9 @@ def handle_quic_event(cpu, data, size):
             rv[k] = getattr(line, k)
     elif line.type == "quictrace_sent":
         for k in ["packet_num", "packet_len", "packet_type"]:
+            rv[k] = getattr(line, k)
+    elif line.type == "quictrace_recv":
+        for k in ["packet_num"]:
             rv[k] = getattr(line, k)
 
     print(json.dumps(rv))
@@ -627,6 +648,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="data_blocked_receive", fn_name="trace_data_blocked_receive")
     u.enable_probe(probe="stream_data_blocked_receive", fn_name="trace_stream_data_blocked_receive")
     u.enable_probe(probe="quictrace_sent", fn_name="trace_quictrace_sent")
+    u.enable_probe(probe="quictrace_recv", fn_name="trace_quictrace_recv")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
