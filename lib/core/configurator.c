@@ -329,20 +329,12 @@ static int on_config_paths(h2o_configurator_command_t *cmd, h2o_configurator_con
     }
     qsort(node->data.mapping.elements, node->data.mapping.size, sizeof(node->data.mapping.elements[0]),
           (int (*)(const void *, const void *))sort_from_longer_paths);
-    
-    /* At first regsiter all paths before configure, because hostconf->paths may be reallocated */
-    size_t prev_paths_size = ctx->hostconf->paths.size;
-    for (i = 0; i != node->data.mapping.size; ++i) {
-        yoml_t *key = node->data.mapping.elements[i].key;
-        h2o_config_register_path(ctx->hostconf, key->data.scalar, 0);
-    }
 
-    /* Then configure all paths with corresponding values */
     for (i = 0; i != node->data.mapping.size; ++i) {
-        yoml_t *value;
+        yoml_t *key = node->data.mapping.elements[i].key, *value;
         if ((value = convert_path_config_node(cmd, node->data.mapping.elements[i].value)) == NULL)
             return -1;
-        h2o_pathconf_t *pathconf = ctx->hostconf->paths.entries + prev_paths_size + i;
+        h2o_pathconf_t *pathconf = h2o_config_register_path(ctx->hostconf, key->data.scalar, 0);
         int cmd_ret = config_path(ctx, pathconf, value);
         yoml_free(value, NULL);
         if (cmd_ret != 0)

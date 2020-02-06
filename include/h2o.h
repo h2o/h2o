@@ -266,7 +266,7 @@ struct st_h2o_hostconf_t {
     /**
      * list of path configurations
      */
-    H2O_VECTOR(h2o_pathconf_t) paths;
+    H2O_VECTOR(h2o_pathconf_t *) paths;
     /**
      * catch-all path configuration
      */

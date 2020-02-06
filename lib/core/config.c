@@ -50,8 +50,9 @@ static void destroy_hostconf(h2o_hostconf_t *hostconf)
         free(hostconf->authority.hostport.base);
     free(hostconf->authority.host.base);
     for (i = 0; i != hostconf->paths.size; ++i) {
-        h2o_pathconf_t *pathconf = hostconf->paths.entries + i;
+        h2o_pathconf_t *pathconf = hostconf->paths.entries[i];
         h2o_config_dispose_pathconf(pathconf);
+        free(pathconf);
     }
     free(hostconf->paths.entries);
     h2o_config_dispose_pathconf(&hostconf->fallback_path);
@@ -204,12 +205,11 @@ void h2o_config_init(h2o_globalconf_t *config)
 
 h2o_pathconf_t *h2o_config_register_path(h2o_hostconf_t *hostconf, const char *path, int flags)
 {
-    h2o_pathconf_t *pathconf;
+    h2o_pathconf_t *pathconf = h2o_mem_alloc(sizeof(*pathconf));
+    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
 
     h2o_vector_reserve(NULL, &hostconf->paths, hostconf->paths.size + 1);
-    pathconf = hostconf->paths.entries + hostconf->paths.size++;
-
-    h2o_config_init_pathconf(pathconf, hostconf->global, path, hostconf->mimemap);
+    hostconf->paths.entries[hostconf->paths.size++] = pathconf;
 
     return pathconf;
 }
