@@ -46,24 +46,11 @@ static void on_dispose(h2o_handler_t *_self)
 static void redirect_internally(h2o_redirect_handler_t *self, h2o_req_t *req, h2o_iovec_t dest)
 {
     h2o_iovec_t method;
-    h2o_url_t input, resolved;
-
-    /* resolve the URL */
-    if (h2o_url_parse_relative(dest.base, dest.len, &input) != 0) {
-        h2o_req_log_error(req, MODULE_NAME, "invalid destination:%.*s", (int)dest.len, dest.base);
-        goto SendInternalError;
-    }
-    if (input.scheme != NULL && input.authority.base != NULL) {
-        resolved = input;
-    } else {
-        h2o_url_t base;
-        /* we MUST to set authority to that of hostconf, or internal redirect might create a TCP connection */
-        if (h2o_url_init(&base, req->scheme, req->hostconf->authority.hostport, req->path) != 0) {
-            h2o_req_log_error(req, MODULE_NAME, "failed to parse current authority:%.*s", (int)req->authority.len,
-                              req->authority.base);
-            goto SendInternalError;
-        }
-        h2o_url_resolve(&req->pool, &base, &input, &resolved);
+    h2o_url_t resolved;
+    if (h2o_req_resolve_internal_redirect_url(req, dest, &resolved) != 0) {\
+        h2o_req_log_error(req, MODULE_NAME, "failed to resolve internal redirect url for dest:%.*s", (int)dest.len, dest.base);
+        h2o_send_error_503(req, "Internal Server Error", "internal server error", 0);
+        return;
     }
 
     /* determine the method */
@@ -79,10 +66,6 @@ static void redirect_internally(h2o_redirect_handler_t *self, h2o_req_t *req, h2
     }
 
     h2o_reprocess_request_deferred(req, method, resolved.scheme, resolved.authority, resolved.path, NULL, 1);
-    return;
-
-SendInternalError:
-    h2o_send_error_503(req, "Internal Server Error", "internal server error", 0);
 }
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)

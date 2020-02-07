@@ -840,4 +840,32 @@ EOT
     is scalar(my @v = $headers->get_all('x-foo')), 1;
 };
 
+subtest 'H2O.reprocess prefers internal reprocess' => sub {
+    # internal reprocess preserves original env while external (i.e. proxying) reprocess doesn't
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  default:
+    paths:
+      /from:
+        - setenv:
+            "foo": "bar"
+        - mruby.handler: |
+            proc {|env|
+              env['SCRIPT_NAME'] = '/to'
+              H2O.reprocess.call(env)
+            }
+      /to:
+        - mruby.handler: |
+            proc {|env|
+              [200, {}, [env["foo"]]]
+            }
+EOT
+    });
+    my ($status, $headers, $body);
+    ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/from');
+    is $body, 'bar';
+};
+
 done_testing();
