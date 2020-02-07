@@ -840,4 +840,68 @@ EOT
     is scalar(my @v = $headers->get_all('x-foo')), 1;
 };
 
+subtest 'H2O.reprocess prefers internal reprocess' => sub {
+    # internal reprocess preserves original env while external (i.e. proxying) reprocess doesn't
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  default:
+    paths:
+      /from:
+        - setenv:
+            "foo": "bar"
+        - mruby.handler: |
+            proc {|env|
+              env['SCRIPT_NAME'] = '/to'
+              H2O.reprocess.call(env)
+            }
+      /to:
+        - mruby.handler: |
+            proc {|env|
+              [200, {}, [env["foo"]]]
+            }
+EOT
+    });
+    my ($status, $headers, $body);
+    ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/from');
+    is $body, 'bar';
+};
+
+subtest 'both H2O.next and H2O.reprocess preserve content-type header' => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << "EOT";
+hosts:
+  default:
+    paths:
+      /1:
+        - mruby.handler: |
+            proc {|env|
+              H2O.next.call(env)
+            }
+        - mruby.handler: |
+            proc {|env|
+              next_ct = "#{env['CONTENT_TYPE']}1"
+              env['NEXT_CT'] = next_ct
+              env['SCRIPT_NAME'] = "/2"
+              H2O.reprocess.call(env)
+            }
+      /2:
+        # there was a bug that CONTENT_TYPE is unexpectedly added to env, not headers
+        # so unset env here to check that the header is correctly forwarded as a header
+        - unsetenv:
+          - CONTENT_TYPE
+        - mruby.handler: |
+            proc {|env|
+              reprocess_ct = "#{env['CONTENT_TYPE']}2"
+              [200, {}, [env['NEXT_CT'], reprocess_ct]]
+            }
+EOT
+    });
+    my ($status, $headers, $body);
+    ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/1', +{ headers => ['content-type: OK'] });
+    is $body, 'OK1OK2';
+};
+
 done_testing();

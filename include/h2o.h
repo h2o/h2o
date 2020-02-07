@@ -1629,6 +1629,10 @@ void h2o_send_informational(h2o_req_t *req);
  */
 static int h2o_req_can_stream_request(h2o_req_t *req);
 /**
+ * resolves internal redirect url for dest regarding req's hostconf
+ */
+int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_url_t *resolved);
+/**
  * logs an error
  */
 void h2o_req_log_error(h2o_req_t *req, const char *module, const char *fmt, ...) __attribute__((format(printf, 3, 4)));

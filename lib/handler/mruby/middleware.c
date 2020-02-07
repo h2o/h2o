@@ -119,21 +119,23 @@ static void on_gc_dispose_app_input_stream(mrb_state *mrb, void *_subreq)
 const static struct mrb_data_type app_request_type = {"app_request_type", on_gc_dispose_app_request};
 const static struct mrb_data_type app_input_stream_type = {"app_input_stream", on_gc_dispose_app_input_stream};
 
-static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *name, size_t len)
+static h2o_iovec_t convert_env_key_to_header_name(h2o_mem_pool_t *pool, const char *name, size_t len, int has_key_prefix)
 {
 #define KEY_PREFIX "HTTP_"
 #define KEY_PREFIX_LEN (sizeof(KEY_PREFIX) - 1)
-    if (len < KEY_PREFIX_LEN || !h2o_memis(name, KEY_PREFIX_LEN, KEY_PREFIX, KEY_PREFIX_LEN)) {
+    if (has_key_prefix && (len < KEY_PREFIX_LEN || !h2o_memis(name, KEY_PREFIX_LEN, KEY_PREFIX, KEY_PREFIX_LEN))) {
         return h2o_iovec_init(NULL, 0);
     }
 
     h2o_iovec_t ret;
 
-    ret.len = len - KEY_PREFIX_LEN;
+    ret.len = has_key_prefix ? len - KEY_PREFIX_LEN : len;
     ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
 
-    name += KEY_PREFIX_LEN;
-    len -= KEY_PREFIX_LEN;
+    if (has_key_prefix) {
+        name += KEY_PREFIX_LEN;
+        len -= KEY_PREFIX_LEN;
+    }
 
     char *d = ret.base;
     for (; len != 0; ++name, --len)
@@ -398,19 +400,35 @@ static int skip_tracing(h2o_conn_t *conn)
     return 1;
 }
 
+static int handle_header_raw_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *raw_key, h2o_iovec_t value, void *_req)
+{
+    h2o_req_t *req = _req;
+    const h2o_token_t *token;
+
+    h2o_iovec_t name = convert_env_key_to_header_name(&req->pool, raw_key->base, raw_key->len, 0);
+    if (name.base == NULL)
+        return 0;
+
+    value = h2o_strdup(&req->pool, value.base, value.len);
+    h2o_add_header_by_str(&req->pool, &req->headers, name.base, name.len, 1, NULL, value.base, value.len);
+
+    return 0;
+}
+
 static int handle_header_env_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *env_key, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
 
-    /* convert env key to header name (lower case) */
-    h2o_iovec_t name = convert_env_to_header_name(&req->pool, env_key->base, env_key->len);
+    h2o_iovec_t name = convert_env_key_to_header_name(&req->pool, env_key->base, env_key->len, 1);
     if (name.base == NULL)
         return 0;
 
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
         if (token == H2O_TOKEN_CONTENT_LENGTH) {
             /* skip. use CONTENT_LENGTH instead of HTTP_CONTENT_LENGTH */
+        } else if (token == H2O_TOKEN_CONTENT_TYPE) {
+            /* ditto */
         } else {
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->headers, token, NULL, value.base, value.len);
@@ -521,6 +539,11 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
         RETRIEVE_ENV_NUM(content_length);
         if (!mrb_nil_p(content_length))
             data->subreq->super.content_length = mrb_fixnum(content_length);
+    } else if (CHECK_KEY("CONTENT_TYPE")) {
+        mrb_value content_type = mrb_nil_value();
+        RETRIEVE_ENV_STR(content_type);
+        if (!mrb_nil_p(content_type))
+            h2o_mruby_iterate_header_values(data->ctx->shared, key, content_type, handle_header_raw_key, &data->subreq->super);
     } else if (CHECK_KEY("HTTP_HOST")) {
         RETRIEVE_ENV_STR(data->env.http_host);
     } else if (CHECK_KEY("PATH_INFO")) {
@@ -558,6 +581,7 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
     } else if (CHECK_KEY("rack.run_once")) {
     } else if (CHECK_KEY("rack.url_scheme")) {
         RETRIEVE_ENV_STR(data->env.scheme);
+    } else if (CHECK_KEY("rack.early_hints")) {
     } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
         mrb_value http_header = mrb_nil_value();
         RETRIEVE_ENV_STR(http_header);
@@ -836,7 +860,11 @@ static mrb_value middleware_request_method(mrb_state *mrb, mrb_value self)
 
     h2o_req_t *super = &subreq->super;
     if (mrb_bool(reprocess)) {
-        h2o_reprocess_request_deferred(super, super->method, super->scheme, super->authority, super->path, super->overrides, 1);
+        h2o_url_t resolved;
+        if (h2o_req_resolve_internal_redirect_url(super, super->path, &resolved) != 0) {
+            mrb_exc_raise(mrb, mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "failed to resolve reprocess uri"));
+        }
+        h2o_reprocess_request_deferred(super, super->method, resolved.scheme, resolved.authority, resolved.path, super->overrides, 1);
     } else {
         h2o_delegate_request_deferred(super);
     }

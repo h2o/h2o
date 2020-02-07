@@ -839,3 +839,25 @@ Clear:
     req->res.status = 0;
     req->res.headers = (h2o_headers_t){NULL, 0, 0};
 }
+
+int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_url_t *resolved)
+{
+    h2o_url_t input;
+
+    /* resolve the URL */
+    if (h2o_url_parse_relative(dest.base, dest.len, &input) != 0) {
+        return -1;
+    }
+    if (input.scheme != NULL && input.authority.base != NULL) {
+        *resolved = input;
+    } else {
+        h2o_url_t base;
+        /* we MUST to set authority to that of hostconf, or internal redirect might create a TCP connection */
+        if (h2o_url_init(&base, req->scheme, req->hostconf->authority.hostport, req->path) != 0) {
+            return -1;
+        }
+        h2o_url_resolve(&req->pool, &base, &input, resolved);
+    }
+
+    return 0;
+}
