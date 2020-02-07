@@ -409,13 +409,8 @@ static int handle_header_raw_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
     if (name.base == NULL)
         return 0;
 
-    if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        value = h2o_strdup(&req->pool, value.base, value.len);
-        h2o_add_header(&req->pool, &req->headers, token, NULL, value.base, value.len);
-    } else {
-        value = h2o_strdup(&req->pool, value.base, value.len);
-        h2o_add_header_by_str(&req->pool, &req->headers, name.base, name.len, 0, NULL, value.base, value.len);
-    }
+    value = h2o_strdup(&req->pool, value.base, value.len);
+    h2o_add_header_by_str(&req->pool, &req->headers, name.base, name.len, 1, NULL, value.base, value.len);
 
     return 0;
 }
