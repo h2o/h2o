@@ -120,7 +120,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
-            h2o_pathconf_t *pathconf = hostconf->paths.entries + j;
+            h2o_pathconf_t *pathconf = hostconf->paths.entries[j];
             h2o_context_init_pathconf_context(ctx, pathconf);
         }
         h2o_context_init_pathconf_context(ctx, &hostconf->fallback_path);
@@ -139,7 +139,7 @@ void h2o_context_dispose(h2o_context_t *ctx)
     for (i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
         for (j = 0; j != hostconf->paths.size; ++j) {
-            h2o_pathconf_t *pathconf = hostconf->paths.entries + j;
+            h2o_pathconf_t *pathconf = hostconf->paths.entries[j];
             h2o_context_dispose_pathconf_context(ctx, pathconf);
         }
         h2o_context_dispose_pathconf_context(ctx, &hostconf->fallback_path);
