@@ -15,6 +15,7 @@ $ sudo h2olog -p $(pgrep -o h2o)
 888 1 RxHeader   :method GET
 888 1 RxHeader   :path /
 888 1 RxHeader   :scheme https
+888 1 TxStatus   200
 ... and more ...
 ```
 
