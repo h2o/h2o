@@ -88,6 +88,8 @@ quic_bpf = """
 #define MAX_STR_LEN 32
 #define TOKEN_PREVIEW_LEN 8
 
+int sprintf(char * restrict str, const char * restrict format, ...);
+
 struct st_quicly_conn_t {
     u32 dummy[4];
     u32 master_id;
