@@ -118,6 +118,7 @@ struct quic_event_t {
     u64 limit;
     u64 off;
     u32 is_unidirectional;
+    u32 ret;
 };
 
 BPF_PERF_OUTPUT(events);
@@ -230,6 +231,22 @@ int trace_crypto_decrypt(struct pt_regs *ctx) {
     return 0;
 }
 
+int trace_crypto_handshake(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "crypto_handshake");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.ret);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 
 int trace_packet_prepare(struct pt_regs *ctx) {
     void *pos = NULL;
@@ -601,6 +618,8 @@ def handle_quic_event(cpu, data, size):
         build_quic_trace_result(res, ev, ["new_version"])
     elif ev.type == "crypto_decrypt":
         build_quic_trace_result(res, ev, ["packet_num", "len"])
+    elif ev.type == "crypto_handshake":
+        build_quic_trace_result(res, ev, ["ret"])
     elif ev.type == "packet_prepare":
         build_quic_trace_result(res, ev, ["first_octet", "dcid"])
     elif ev.type == "packet_commit":
@@ -693,6 +712,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="idle_timeout", fn_name="trace_idle_timeout")
     u.enable_probe(probe="stateless_reset_receive", fn_name="trace_stateless_reset_receive")
     u.enable_probe(probe="crypto_decrypt", fn_name="trace_crypto_decrypt")
+    u.enable_probe(probe="crypto_handshake", fn_name="trace_crypto_handshake")
     u.enable_probe(probe="packet_prepare", fn_name="trace_packet_prepare")
     u.enable_probe(probe="packet_commit", fn_name="trace_packet_commit")
     u.enable_probe(probe="packet_acked", fn_name="trace_packet_acked")
