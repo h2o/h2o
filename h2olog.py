@@ -563,51 +563,51 @@ def build_quic_trace_result(event, fields):
     return rv
 
 def handle_quic_event(cpu, data, size):
-    line = b["events"].event(data)
+    ev = b["events"].event(data)
     if allowed_quic_event and line.type != allowed_quic_event:
         return
 
-    if line.type == "accept":
-        ret = build_quic_trace_result(line, ["dcid"])
-    elif line.type == "receive":
-        ret = build_quic_trace_result(line, ["dcid"])
-    elif line.type == "version_switch":
-        ret = build_quic_trace_result(line, ["new_version"])
-    elif line.type == "packet_prepare":
-        ret = build_quic_trace_result(line, ["first_octet", "dcid"])
-    elif line.type == "packet_commit":
-        ret = build_quic_trace_result(line, ["packet_num", "packet_len", "ack_only"])
-    elif line.type == "packet_acked":
-        ret = build_quic_trace_result(line, ["packet_num", "newly_acked"])
-    elif line.type == "packet_lost":
-        ret = build_quic_trace_result(line, ["packet_num"])
-    elif line.type == "cc_ack_received":
-        ret = build_quic_trace_result(line, ["largest_acked", "bytes_acked", "cwnd", "inflight"])
-    elif line.type == "cc_congestion":
-        ret = build_quic_trace_result(line, ["max_lost_pn", "inflight", "cwnd"])
-    elif line.type == "new_token_send":
-        ret = build_quic_trace_result(line, ["token_preview", "len", "token_generation"])
-        ret["token_preview"] = binascii.hexlify(ret["token_preview"])
-    elif line.type == "new_token_acked":
-        ret = build_quic_trace_result(line, ["token_generation"])
-    elif line.type == "streams_blocked_send":
-        ret = build_quic_trace_result(line, ["limit", "is_unidirectional"])
-    elif line.type == "streams_blocked_receive":
-        ret = build_quic_trace_result(line, ["limit", "is_unidirectional"])
-    elif line.type == "data_blocked_receive":
-        ret = build_quic_trace_result(line, ["off"])
-    elif line.type == "stream_data_blocked_receive":
-        ret = build_quic_trace_result(line, ["stream_id", "limit"])
-    elif line.type == "quictrace_sent":
-        ret = build_quic_trace_result(line, ["packet_num", "packet_len", "packet_type"])
-    elif line.type == "quictrace_recv":
-        ret = build_quic_trace_result(line, ["packet_num"])
-    elif line.type == "quictrace_recv_ack_delay":
-        ret = build_quic_trace_result(line, ["ack_delay"])
-    elif line.type == "quictrace_lost":
-        ret = build_quic_trace_result(line, ["packet_num"])
+    if ev.type == "accept":
+        res = build_quic_trace_result(ev, ["dcid"])
+    elif ev.type == "receive":
+        res = build_quic_trace_result(ev, ["dcid"])
+    elif ev.type == "version_switch":
+        res = build_quic_trace_result(ev, ["new_version"])
+    elif ev.type == "packet_prepare":
+        res = build_quic_trace_result(ev, ["first_octet", "dcid"])
+    elif ev.type == "packet_commit":
+        res = build_quic_trace_result(ev, ["packet_num", "packet_len", "ack_only"])
+    elif ev.type == "packet_acked":
+        res = build_quic_trace_result(ev, ["packet_num", "newly_acked"])
+    elif ev.type == "packet_lost":
+        res = build_quic_trace_result(ev, ["packet_num"])
+    elif ev.type == "cc_ack_received":
+        res = build_quic_trace_result(ev, ["largest_acked", "bytes_acked", "cwnd", "inflight"])
+    elif ev.type == "cc_congestion":
+        res = build_quic_trace_result(ev, ["max_lost_pn", "inflight", "cwnd"])
+    elif ev.type == "new_token_send":
+        res = build_quic_trace_result(ev, ["token_preview", "len", "token_generation"])
+        res["token_preview"] = binascii.hexlify(res["token_preview"])
+    elif ev.type == "new_token_acked":
+        res = build_quic_trace_result(ev, ["token_generation"])
+    elif ev.type == "streams_blocked_send":
+        res = build_quic_trace_result(ev, ["limit", "is_unidirectional"])
+    elif ev.type == "streams_blocked_receive":
+        res = build_quic_trace_result(ev, ["limit", "is_unidirectional"])
+    elif ev.type == "data_blocked_receive":
+        res = build_quic_trace_result(ev, ["off"])
+    elif ev.type == "stream_data_blocked_receive":
+        res = build_quic_trace_result(ev, ["stream_id", "limit"])
+    elif ev.type == "quictrace_sent":
+        res = build_quic_trace_result(ev, ["packet_num", "packet_len", "packet_type"])
+    elif ev.type == "quictrace_recv":
+        res = build_quic_trace_result(ev, ["packet_num"])
+    elif ev.type == "quictrace_recv_ack_delay":
+        res = build_quic_trace_result(ev, ["ack_delay"])
+    elif ev.type == "quictrace_lost":
+        res = build_quic_trace_result(ev, ["packet_num"])
 
-    print(json.dumps(ret))
+    print(json.dumps(res))
 
 def usage():
     print ("USAGE: h2olog -p PID")
