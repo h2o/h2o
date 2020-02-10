@@ -560,11 +560,13 @@ def build_quic_trace_result(event, fields):
     load_common_fields(rv, event)
     for k in fields:
         rv[k] = getattr(event, k)
+        if k == "token_preview":
+            rv[k] = binascii.hexlify(rv[k])
     return rv
 
 def handle_quic_event(cpu, data, size):
     ev = b["events"].event(data)
-    if allowed_quic_event and line.type != allowed_quic_event:
+    if allowed_quic_event and ev.type != allowed_quic_event:
         return
 
     if ev.type == "accept":
@@ -587,7 +589,6 @@ def handle_quic_event(cpu, data, size):
         res = build_quic_trace_result(ev, ["max_lost_pn", "inflight", "cwnd"])
     elif ev.type == "new_token_send":
         res = build_quic_trace_result(ev, ["token_preview", "len", "token_generation"])
-        res["token_preview"] = binascii.hexlify(res["token_preview"])
     elif ev.type == "new_token_acked":
         res = build_quic_trace_result(ev, ["token_generation"])
     elif ev.type == "streams_blocked_send":
