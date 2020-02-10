@@ -23,7 +23,10 @@ $ sudo h2olog -p $(pgrep -o h2o)
 
 - H2O server built after [53e1db42](https://github.com/h2o/h2o/commit/53e1db428772460534191d1c35c79a6dd94e021f)
 - [BCC](https://iovisor.github.io/bcc/) (BPF Compiler Collection) [installed](https://github.com/iovisor/bcc/blob/master/INSTALL.md) on your system
+  - BCC v0.11.0 or later is required
 - Root privilege to execute the program
+
+Note that the bcc module on PyPi is unrelated to BPF.
 
 ## Tracing QUIC events
 
