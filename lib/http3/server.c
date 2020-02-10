@@ -461,37 +461,40 @@ static int on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len
     assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
     uint8_t *dst = _dst, *dst_end = dst + *len;
-    size_t vec_index = 0, off_within_vec = stream->sendbuf.off_within_first_vec;
+    size_t vec_index = 0;
 
-    /* find the start position */
+    /* find the start position identified by vec_index and off */
+    off += stream->sendbuf.off_within_first_vec;
     while (off != 0) {
         assert(vec_index < stream->sendbuf.vecs.size);
-        if (off < stream->sendbuf.vecs.entries[vec_index].len - off_within_vec)
+        if (off < stream->sendbuf.vecs.entries[vec_index].len)
             break;
-        off -= stream->sendbuf.vecs.entries[vec_index].len - off_within_vec;
-        off_within_vec = 0;
+        off -= stream->sendbuf.vecs.entries[vec_index].len;
         ++vec_index;
     }
+    assert(vec_index < stream->sendbuf.vecs.size);
 
     /* write */
     *wrote_all = 0;
-    while (dst != dst_end) {
-        if (vec_index == stream->sendbuf.vecs.size) {
-            *wrote_all = 1;
-            break;
-        }
-        size_t sz = stream->sendbuf.vecs.entries[vec_index].len - (off + off_within_vec);
+    do {
+        size_t sz = stream->sendbuf.vecs.entries[vec_index].len - off;
         if (dst_end - dst < sz)
             sz = dst_end - dst;
         if (!(stream->sendbuf.vecs.entries[vec_index].callbacks->flatten)(stream->sendbuf.vecs.entries + vec_index, &stream->req,
-                                                                          h2o_iovec_init(dst, sz), off + off_within_vec))
+                                                                          h2o_iovec_init(dst, sz), off))
             goto Error;
         dst += sz;
-        /* prepare to write next */
-        off = 0;
-        off_within_vec = 0;
-        ++vec_index;
-    }
+        off += sz;
+        /* when reaching the end of the current vector, update vec_index, wrote_all */
+        if (off == stream->sendbuf.vecs.entries[vec_index].len) {
+            off = 0;
+            ++vec_index;
+            if (vec_index == stream->sendbuf.vecs.size) {
+                *wrote_all = 1;
+                break;
+            }
+        }
+    } while (dst != dst_end);
 
     *len = dst - (uint8_t *)_dst;
 
