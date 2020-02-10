@@ -555,69 +555,59 @@ def load_common_fields(hsh, line):
     for k in ['at', 'type', 'master_conn_id']:
         hsh[k] = getattr(line, k)
 
+def build_quic_trace_result(event, fields):
+    rv = OrderedDict()
+    load_common_fields(rv, event)
+    for k in fields:
+        rv[k] = getattr(event, k)
+    return rv
+
 def handle_quic_event(cpu, data, size):
     line = b["events"].event(data)
     if allowed_quic_event and line.type != allowed_quic_event:
         return
 
-    rv = OrderedDict()
-    load_common_fields(rv, line)
-
     if line.type == "accept":
-        rv["dcid"] = getattr(line, "dcid")
+        ret = build_quic_trace_result(line, ["dcid"])
     elif line.type == "receive":
-        rv["dcid"] = getattr(line, "dcid")
+        ret = build_quic_trace_result(line, ["dcid"])
     elif line.type == "version_switch":
-        rv["new_version"] = getattr(line, "new_version")
+        ret = build_quic_trace_result(line, ["new_version"])
     elif line.type == "packet_prepare":
-        for k in ["first_octet", "dcid"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["first_octet", "dcid"])
     elif line.type == "packet_commit":
-        for k in ["packet_num", "packet_len", "ack_only"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["packet_num", "packet_len", "ack_only"])
     elif line.type == "packet_acked":
-        for k in ["packet_num", "newly_acked"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["packet_num", "newly_acked"])
     elif line.type == "packet_lost":
-        for k in ["packet_num"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["packet_num"])
     elif line.type == "cc_ack_received":
-        for k in ["largest_acked", "bytes_acked", "cwnd", "inflight"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["largest_acked", "bytes_acked", "cwnd", "inflight"])
     elif line.type == "cc_congestion":
-        for k in ["max_lost_pn", "inflight", "cwnd"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["max_lost_pn", "inflight", "cwnd"])
     elif line.type == "new_token_send":
-        for k in ["token_preview", "len", "token_generation"]:
-            rv[k] = getattr(line, k)
-        rv["token_preview"] = binascii.hexlify(rv["token_preview"])
+        ret = build_quic_trace_result(line, ["token_preview", "len", "token_generation"])
+        ret["token_preview"] = binascii.hexlify(ret["token_preview"])
     elif line.type == "new_token_acked":
-        rv["token_generation"] = getattr(line, "token_generation")
+        ret = build_quic_trace_result(line, ["token_generation"])
     elif line.type == "streams_blocked_send":
-        for k in ["limit", "is_unidirectional"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["limit", "is_unidirectional"])
     elif line.type == "streams_blocked_receive":
-        for k in ["limit", "is_unidirectional"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["limit", "is_unidirectional"])
     elif line.type == "data_blocked_receive":
-        rv["off"] = getattr(line, "off")
+        ret = build_quic_trace_result(line, ["off"])
     elif line.type == "stream_data_blocked_receive":
-        for k in ["stream_id", "limit"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["stream_id", "limit"])
     elif line.type == "quictrace_sent":
-        for k in ["packet_num", "packet_len", "packet_type"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["packet_num", "packet_len", "packet_type"])
     elif line.type == "quictrace_recv":
-        for k in ["packet_num"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["packet_num"])
     elif line.type == "quictrace_recv_ack_delay":
-        for k in ["ack_delay"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["ack_delay"])
     elif line.type == "quictrace_lost":
-        for k in ["packet_num"]:
-            rv[k] = getattr(line, k)
+        ret = build_quic_trace_result(line, ["packet_num"])
 
-    print(json.dumps(rv))
+    print(json.dumps(ret))
 
 def usage():
     print ("USAGE: h2olog -p PID")
