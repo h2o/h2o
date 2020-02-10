@@ -555,58 +555,59 @@ def load_common_fields(hsh, line):
     for k in ['at', 'type', 'master_conn_id']:
         hsh[k] = getattr(line, k)
 
-def build_quic_trace_result(event, fields):
-    rv = OrderedDict()
-    load_common_fields(rv, event)
+def build_quic_trace_result(res, event, fields):
     for k in fields:
-        rv[k] = getattr(event, k)
+        res[k] = getattr(event, k)
         if k == "token_preview":
-            rv[k] = binascii.hexlify(rv[k])
-    return rv
+            res[k] = binascii.hexlify(res[k])
+    return res
 
 def handle_quic_event(cpu, data, size):
     ev = b["events"].event(data)
     if allowed_quic_event and ev.type != allowed_quic_event:
         return
 
+    res = OrderedDict()
+    load_common_fields(res, ev)
+
     if ev.type == "accept":
-        res = build_quic_trace_result(ev, ["dcid"])
+        build_quic_trace_result(res, ev, ["dcid"])
     elif ev.type == "receive":
-        res = build_quic_trace_result(ev, ["dcid"])
+        build_quic_trace_result(res, ev, ["dcid"])
     elif ev.type == "version_switch":
-        res = build_quic_trace_result(ev, ["new_version"])
+        build_quic_trace_result(res, ev, ["new_version"])
     elif ev.type == "packet_prepare":
-        res = build_quic_trace_result(ev, ["first_octet", "dcid"])
+        build_quic_trace_result(res, ev, ["first_octet", "dcid"])
     elif ev.type == "packet_commit":
-        res = build_quic_trace_result(ev, ["packet_num", "packet_len", "ack_only"])
+        build_quic_trace_result(res, ev, ["packet_num", "packet_len", "ack_only"])
     elif ev.type == "packet_acked":
-        res = build_quic_trace_result(ev, ["packet_num", "newly_acked"])
+        build_quic_trace_result(res, ev, ["packet_num", "newly_acked"])
     elif ev.type == "packet_lost":
-        res = build_quic_trace_result(ev, ["packet_num"])
+        build_quic_trace_result(res, ev, ["packet_num"])
     elif ev.type == "cc_ack_received":
-        res = build_quic_trace_result(ev, ["largest_acked", "bytes_acked", "cwnd", "inflight"])
+        build_quic_trace_result(res, ev, ["largest_acked", "bytes_acked", "cwnd", "inflight"])
     elif ev.type == "cc_congestion":
-        res = build_quic_trace_result(ev, ["max_lost_pn", "inflight", "cwnd"])
+        build_quic_trace_result(res, ev, ["max_lost_pn", "inflight", "cwnd"])
     elif ev.type == "new_token_send":
-        res = build_quic_trace_result(ev, ["token_preview", "len", "token_generation"])
+        build_quic_trace_result(res, ev, ["token_preview", "len", "token_generation"])
     elif ev.type == "new_token_acked":
-        res = build_quic_trace_result(ev, ["token_generation"])
+        build_quic_trace_result(res, ev, ["token_generation"])
     elif ev.type == "streams_blocked_send":
-        res = build_quic_trace_result(ev, ["limit", "is_unidirectional"])
+        build_quic_trace_result(res, ev, ["limit", "is_unidirectional"])
     elif ev.type == "streams_blocked_receive":
-        res = build_quic_trace_result(ev, ["limit", "is_unidirectional"])
+        build_quic_trace_result(res, ev, ["limit", "is_unidirectional"])
     elif ev.type == "data_blocked_receive":
-        res = build_quic_trace_result(ev, ["off"])
+        build_quic_trace_result(res, ev, ["off"])
     elif ev.type == "stream_data_blocked_receive":
-        res = build_quic_trace_result(ev, ["stream_id", "limit"])
+        build_quic_trace_result(res, ev, ["stream_id", "limit"])
     elif ev.type == "quictrace_sent":
-        res = build_quic_trace_result(ev, ["packet_num", "packet_len", "packet_type"])
+        build_quic_trace_result(res, ev, ["packet_num", "packet_len", "packet_type"])
     elif ev.type == "quictrace_recv":
-        res = build_quic_trace_result(ev, ["packet_num"])
+        build_quic_trace_result(res, ev, ["packet_num"])
     elif ev.type == "quictrace_recv_ack_delay":
-        res = build_quic_trace_result(ev, ["ack_delay"])
+        build_quic_trace_result(res, ev, ["ack_delay"])
     elif ev.type == "quictrace_lost":
-        res = build_quic_trace_result(ev, ["packet_num"])
+        build_quic_trace_result(res, ev, ["packet_num"])
 
     print(json.dumps(res))
 
