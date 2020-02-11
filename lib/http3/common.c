@@ -134,7 +134,15 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
 
         /* Temporary failure to send a packet is not a permanent error fo the connection. (TODO do we want do something more
          * specific?) */
-        perror("sendmsg failed");
+        static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+        static time_t last_reported = 0;
+        time_t now = time(NULL);
+        pthread_mutex_lock(&lock);
+        if (last_reported + 60 < now) {
+            last_reported = now;
+            perror("sendmsg failed");
+        }
+        pthread_mutex_unlock(&lock);
     }
 
     return 1;
