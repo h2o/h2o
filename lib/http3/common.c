@@ -33,6 +33,8 @@
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
 #include "h2o/multithread.h"
+#include "h2o.h"
+#include "../probes_.h"
 
 struct st_h2o_http3_ingress_unistream_t {
     /**
@@ -634,6 +636,8 @@ void h2o_http3_read_socket(h2o_http3_ctx_t *ctx, h2o_socket_t *sock, h2o_http3_p
                                                    dgrams[dgram_index].vec.iov_len - off);
                 if (plen == SIZE_MAX)
                     break;
+                H2O_PROBE(H3_PACKET_RECEIVE, &dgrams[dgram_index].destaddr.sa, &dgrams[dgram_index].srcaddr.sa,
+                          packets[packet_index].octets.base, packets[packet_index].octets.len);
                 off += plen;
                 if (packet_index == sizeof(packets) / sizeof(packets[0]) - 1 ||
                     !(packet_index == 0 ||

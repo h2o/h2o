@@ -72,6 +72,7 @@
 #include "h2o/mruby_.h"
 #endif
 #include "standalone.h"
+#include "../lib/probes_.h"
 
 #ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
@@ -2023,6 +2024,13 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
     for (i = 0; i != num_packets; ++i) {
         struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
         writev(conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id], vec, 2);
+    }
+
+    if (H2O_H3_PACKET_FORWARD_ENABLED()) {
+        size_t i, num_bytes = 0;
+        for (i = 0; i != num_packets; ++i)
+            num_bytes += packets[i].octets.len;
+        H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes);
     }
 
     return 1;
