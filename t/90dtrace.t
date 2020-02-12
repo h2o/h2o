@@ -51,10 +51,16 @@ if ($tracer_pid == 0) {
         or die "failed to create temporary file:$tempdir/trace.out:$!";
     if ($^O eq 'linux') {
         exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
+struct st_h2o_http2_frame_t {uint32_t length; uint8_t type; uint8_t flags; uint32_t stream_id;};
 usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 usdt::h2o:send_response {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
 usdt::h2o:send_response_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
+usdt::h2o:h2_unknown_frame_type {
+    printf("Unknown HTTP/2 frame type: %d stream_id: %d\n",
+        arg1,
+        ((struct st_h2o_http2_frame_t *)arg2)->stream_id)
+}
 EOT
         die "failed to spawn bpftrace:$!";
     } else {
@@ -85,6 +91,19 @@ EOT
     value = (char *)copyin(arg4, arg5);
     value[arg5] = '\0';
     printf("\nXXXX%s: %s\n", stringof(name), stringof(value));
+}
+EOT
+            "-n", <<'EOT'
+struct st_h2o_http2_frame_t {
+    uint32_t length;
+    uint8_t type;
+    uint8_t flags;
+    uint32_t stream_id;
+};
+:h2o::h2_unknown_frame_type {
+    printf("\nXXXXUnknown HTTP/2 frame type: %d stream_id: %d\n",
+        arg1,
+        ((struct st_h2o_http2_frame_t *) copyin(arg2, sizeof(struct st_h2o_http2_frame_t)))->stream_id);
 }
 EOT
         );
@@ -152,6 +171,51 @@ run_with_curl($server, sub {
     like $trace, qr{content-type: text/plain}m;
     like $trace, qr{accept-ranges: bytes}m;
 });
+
+subtest "http/2 unknown frames" => sub {
+    my ($output, $stderr) = run_with_h2get($server, <<"EOR");
+    begin
+        h2g = H2.new
+        host = "https://#{ARGV[0]}"
+        h2g.connect(host)
+        h2g.send_prefix()
+        h2g.send_settings([[2,0]])
+        # Ack settings
+        settings_exch = 0
+        while settings_exch < 2 do
+            f = h2g.read(-1)
+            puts f.to_s()
+            if f.type == "SETTINGS" and (f.flags & 1 == 1) then
+                settings_exch += 1
+                next
+            elsif f.type == "SETTINGS" then
+                h2g.send_settings_ack()
+                settings_exch += 1
+                next
+            end
+        end
+        h2g.send_raw_frame(1, 101)
+        h2g.send_raw_frame(3, 103)
+        h2g.send_raw_frame(5, 105)
+        f = h2g.read(500) # Wait for a while to allow above frames to sent out before closing the connection
+        h2g.close()
+        h2g.destroy()
+    rescue Exception => e
+        h2g.close()
+        puts e.message
+        puts e.backtrace.inspect
+    end
+EOR
+
+    my $trace;
+    do {
+        sleep 1;
+    } while (($trace = $read_trace->()) eq '');
+
+    like $trace, qr{Unknown HTTP/2 frame type: 101 stream_id: 1}s;
+    like $trace, qr{Unknown HTTP/2 frame type: 103 stream_id: 3}s;
+    like $trace, qr{Unknown HTTP/2 frame type: 105 stream_id: 5}s;
+};
 
 # wait until the server and the tracer exits
 undef $server;
