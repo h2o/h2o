@@ -1367,14 +1367,29 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s", &retry_node) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s", &retry_node, &sndbuf,
+                                                       &rcvbuf) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
                         if (on == -1)
                             return -1;
                         listener->quic.send_retry = (unsigned)on;
+                    }
+                    if (sndbuf != NULL) {
+                        unsigned sz;
+                        if (h2o_configurator_scanf(cmd, *sndbuf, "%u", &sz) != 0)
+                            return -1;
+                        if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sz, sizeof(sz)) != 0)
+                            h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_SNDBUF) failed:%s", strerror(errno));
+                    }
+                    if (rcvbuf != NULL) {
+                        unsigned sz;
+                        if (h2o_configurator_scanf(cmd, *rcvbuf, "%u", &sz) != 0)
+                            return -1;
+                        if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &sz, sizeof(sz)) != 0)
+                            h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_RCVBUF) failed:%s", strerror(errno));
                     }
                 }
                 listener_is_new = 1;
