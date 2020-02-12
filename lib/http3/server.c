@@ -1002,37 +1002,43 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, _conn);
     int ret;
 
-    switch (type) {
-    case H2O_HTTP3_FRAME_TYPE_SETTINGS:
+    if (!h2o_http3_has_received_settings(&conn->h3)) {
+        if (type != H2O_HTTP3_FRAME_TYPE_SETTINGS)
+            return H2O_HTTP3_ERROR_MISSING_SETTINGS;
         if ((ret = h2o_http3_handle_settings_frame(&conn->h3, payload, len, err_desc)) != 0)
             return ret;
-        break;
-    case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE: {
-        h2o_http3_priority_update_frame_t frame;
-        if ((ret = h2o_http3_decode_priority_update_frame(&frame, payload, len, err_desc)) != 0)
-            return ret;
-        if (frame.element_is_push)
-            return H2O_HTTP3_ERROR_FRAME;
-        quicly_stream_t *qs;
-        if ((qs = quicly_get_stream(conn->h3.quic, frame.element)) != NULL) {
-            struct st_h2o_http3_server_stream_t *stream = qs->data;
-            assert(stream != NULL);
-            if (h2o_linklist_is_linked(&stream->scheduler.link)) {
-                req_scheduler_deactivate(conn, stream);
-                stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
-                req_scheduler_activate(conn, stream);
+        assert(h2o_http3_has_received_settings(&conn->h3));
+    } else {
+    switch (type) {
+        case H2O_HTTP3_FRAME_TYPE_SETTINGS:
+            return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
+        case H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE: {
+            h2o_http3_priority_update_frame_t frame;
+            if ((ret = h2o_http3_decode_priority_update_frame(&frame, payload, len, err_desc)) != 0)
+                return ret;
+            if (frame.element_is_push)
+                return H2O_HTTP3_ERROR_FRAME;
+            quicly_stream_t *qs;
+            if ((qs = quicly_get_stream(conn->h3.quic, frame.element)) != NULL) {
+                struct st_h2o_http3_server_stream_t *stream = qs->data;
+                assert(stream != NULL);
+                if (h2o_linklist_is_linked(&stream->scheduler.link)) {
+                    req_scheduler_deactivate(conn, stream);
+                    stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
+                    req_scheduler_activate(conn, stream);
+                } else {
+                    stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
+                }
             } else {
-                stream->scheduler.priority = frame.priority; /* TODO apply only the delta? */
+                memmove(conn->scheduler.reqs.reorder_cache + 1, conn->scheduler.reqs.reorder_cache,
+                        sizeof(conn->scheduler.reqs.reorder_cache) - sizeof(conn->scheduler.reqs.reorder_cache[0]));
+                conn->scheduler.reqs.reorder_cache[0].stream_id = frame.element;
+                conn->scheduler.reqs.reorder_cache[0].priority = frame.priority;
             }
-        } else {
-            memmove(conn->scheduler.reqs.reorder_cache + 1, conn->scheduler.reqs.reorder_cache,
-                    sizeof(conn->scheduler.reqs.reorder_cache) - sizeof(conn->scheduler.reqs.reorder_cache[0]));
-            conn->scheduler.reqs.reorder_cache[0].stream_id = frame.element;
-            conn->scheduler.reqs.reorder_cache[0].priority = frame.priority;
+        } break;
+        default:
+            break;
         }
-    } break;
-    default:
-        break;
     }
 
     return 0;
