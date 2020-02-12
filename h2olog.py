@@ -104,6 +104,7 @@ struct quic_event_t {
     u64 stream_id;
     u64 packet_num;
     u64 packet_len;
+    u64 frame_type;
     u8 packet_type;
     u32 ack_only;
     u64 largest_acked;
@@ -364,6 +365,21 @@ int trace_cc_congestion(struct pt_regs *ctx) {
 
     if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
+
+int trace_transport_close_send(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "transport_close_send");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.frame_type);
 
     return 0;
 }
@@ -721,6 +737,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="packet_lost", fn_name="trace_packet_lost")
     u.enable_probe(probe="cc_ack_received", fn_name="trace_cc_ack_received")
     u.enable_probe(probe="cc_congestion", fn_name="trace_cc_congestion")
+    u.enable_probe(probe="transport_close_send", fn_name="trace_transport_close_send")
     u.enable_probe(probe="new_token_send", fn_name="trace_new_token_send")
     u.enable_probe(probe="new_token_acked", fn_name="trace_new_token_acked")
     u.enable_probe(probe="new_token_receive", fn_name="trace_new_token_receive")
