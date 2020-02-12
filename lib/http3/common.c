@@ -57,6 +57,51 @@ struct st_h2o_http3_ingress_unistream_t {
 
 const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-25")}};
 
+static struct {
+    pthread_mutex_t lock;
+    time_t last_reported;
+    size_t failures;
+    size_t successes;
+    int last_errno;
+} track_sendmsg = {
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+};
+
+static void track_sendmsg_failure(void)
+{
+    __sync_fetch_and_add(&track_sendmsg.failures, 1);
+    track_sendmsg.last_errno = errno;
+}
+
+static void track_sendmsg_success(void)
+{
+    __sync_fetch_and_add(&track_sendmsg.successes, 1);
+}
+
+static void track_sendmsg_flush(h2o_loop_t *loop)
+{
+    uint64_t now = h2o_now(loop);
+    if (track_sendmsg.last_reported + 60000 < now) {
+        /* this is racy, and might under report successes when there is a
+           failure, but allows to avoid taking the lock in the happy path */
+        if (track_sendmsg.failures == 0) {
+            track_sendmsg.last_reported = now;
+            track_sendmsg.successes = 0;
+            return;
+        }
+        pthread_mutex_lock(&track_sendmsg.lock);
+        if (track_sendmsg.last_reported + 60000 < now) {
+            fprintf(stderr, "sendmsg failed %zu time%s, succeeded: %zu time%s, over the last minute: %s\n", track_sendmsg.failures,
+                    track_sendmsg.failures > 1 ? "s" : "", track_sendmsg.successes, track_sendmsg.successes > 1 ? "s" : "",
+                    strerror(track_sendmsg.last_errno));
+            track_sendmsg.failures = 0;
+            track_sendmsg.successes = 0;
+            track_sendmsg.last_errno = 0;
+            track_sendmsg.last_reported = now;
+        }
+        pthread_mutex_unlock(&track_sendmsg.lock);
+    }
+}
 /**
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
  * designated source address).
@@ -134,16 +179,11 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
 
         /* Temporary failure to send a packet is not a permanent error fo the connection. (TODO do we want do something more
          * specific?) */
-        static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-        static time_t last_reported = 0;
-        time_t now = time(NULL);
-        pthread_mutex_lock(&lock);
-        if (last_reported + 60 < now) {
-            last_reported = now;
-            perror("sendmsg failed");
-        }
-        pthread_mutex_unlock(&lock);
+        track_sendmsg_failure();
+    } else {
+        track_sendmsg_success();
     }
+    track_sendmsg_flush(ctx->loop);
 
     return 1;
 }
