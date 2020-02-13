@@ -71,9 +71,9 @@ static void on_track_sendmsg_timer(h2o_timer_t *timeout)
         track_sendmsg.successes = 0;
         return;
     }
-    fprintf(stderr, "sendmsg failed %zu time%s, succeeded: %zu time%s, over the last minute: %s\n", track_sendmsg.failures,
-            track_sendmsg.failures > 1 ? "s" : "", track_sendmsg.successes, track_sendmsg.successes > 1 ? "s" : "",
-            strerror(track_sendmsg.last_errno));
+    fprintf(stderr, "sendmsg failed %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute: %s\n",
+            track_sendmsg.failures, track_sendmsg.failures > 1 ? "s" : "", track_sendmsg.successes,
+            track_sendmsg.successes > 1 ? "s" : "", strerror(track_sendmsg.last_errno));
     track_sendmsg.failures = 0;
     track_sendmsg.successes = 0;
     track_sendmsg.last_errno = 0;
