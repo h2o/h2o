@@ -51,15 +51,11 @@ if ($tracer_pid == 0) {
         or die "failed to create temporary file:$tempdir/trace.out:$!";
     if ($^O eq 'linux') {
         exec qw(bpftrace -v -B none -p), $server->{pid}, "-e", <<'EOT';
-struct st_h2o_http2_frame_t {uint32_t length; uint8_t type; uint8_t flags; uint32_t stream_id;};
 usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg1, arg2 / 256, arg2 % 256)}
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 usdt::h2o:send_response {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
 usdt::h2o:send_response_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
-usdt::h2o:h2_unknown_frame_type {
-    printf("Unknown HTTP/2 frame type: %d stream_id: %d\n",
-        arg1,
-        ((struct st_h2o_http2_frame_t *)arg2)->stream_id)
+usdt::h2o:h2_unknown_frame_type {printf("Unknown HTTP/2 frame type: %d\n", arg1)
 }
 EOT
         die "failed to spawn bpftrace:$!";
@@ -94,16 +90,8 @@ EOT
 }
 EOT
             "-n", <<'EOT'
-struct st_h2o_http2_frame_t {
-    uint32_t length;
-    uint8_t type;
-    uint8_t flags;
-    uint32_t stream_id;
-};
 :h2o::h2_unknown_frame_type {
-    printf("\nXXXXUnknown HTTP/2 frame type: %d stream_id: %d\n",
-        arg1,
-        ((struct st_h2o_http2_frame_t *) copyin(arg2, sizeof(struct st_h2o_http2_frame_t)))->stream_id);
+    printf("\nXXXXUnknown HTTP/2 frame type: %d\n", arg1);
 }
 EOT
         );
@@ -180,7 +168,7 @@ subtest "http/2 unknown frames" => sub {
         h2g.connect(host)
         h2g.send_prefix()
         h2g.send_settings([[2,0]])
-        # Ack settings
+        # Complete SETTINGS-ACK exchange
         settings_exch = 0
         while settings_exch < 2 do
             f = h2g.read(-1)
@@ -194,6 +182,7 @@ subtest "http/2 unknown frames" => sub {
                 next
             end
         end
+        # Send frames with unknown types (101, 103, 105)
         h2g.send_raw_frame(1, 101)
         h2g.send_raw_frame(3, 103)
         h2g.send_raw_frame(5, 105)
@@ -212,9 +201,9 @@ EOR
         sleep 1;
     } while (($trace = $read_trace->()) eq '');
 
-    like $trace, qr{Unknown HTTP/2 frame type: 101 stream_id: 1}s;
-    like $trace, qr{Unknown HTTP/2 frame type: 103 stream_id: 3}s;
-    like $trace, qr{Unknown HTTP/2 frame type: 105 stream_id: 5}s;
+    like $trace, qr{Unknown HTTP/2 frame type: 101}s;
+    like $trace, qr{Unknown HTTP/2 frame type: 103}s;
+    like $trace, qr{Unknown HTTP/2 frame type: 105}s;
 };
 
 # wait until the server and the tracer exits
