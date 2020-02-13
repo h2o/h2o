@@ -81,14 +81,19 @@ void on_track_sendmsg_timer(h2o_timer_t *timeout)
     char errstr[256];
 
     pthread_mutex_lock(&track_sendmsg.locked.mutex);
+
     uint64_t total_successes = __sync_fetch_and_add(&track_sendmsg.total_successes, 0),
              cur_successes = total_successes - track_sendmsg.locked.prev_successes;
+
     fprintf(stderr, "sendmsg failed %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute: %s\n",
             track_sendmsg.locked.cur_failures, track_sendmsg.locked.cur_failures > 1 ? "s" : "", cur_successes,
             cur_successes > 1 ? "s" : "", h2o_strerror_r(track_sendmsg.locked.last_errno, errstr, sizeof(errstr)));
+
     track_sendmsg.locked.prev_successes = total_successes;
     track_sendmsg.locked.cur_failures = 0;
     track_sendmsg.locked.last_errno = 0;
+
+    pthread_mutex_unlock(&track_sendmsg.locked.mutex);
 }
 
 /**
