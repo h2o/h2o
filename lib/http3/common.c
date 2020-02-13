@@ -57,46 +57,43 @@ struct st_h2o_http3_ingress_unistream_t {
 
 const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-25")}};
 
+static void on_track_sendmsg_timer(h2o_timer_t *timeout);
+
 static struct {
-    uint64_t failures;
-    uint64_t successes;
-    int last_errno;
-    h2o_timer_t timer;
-    h2o_loop_t *loop;
-} track_sendmsg;
+    /**
+     * counts number of successful invocations of `sendmsg` since the process was launched
+     */
+    uint64_t total_successes;
+    /**
+     * struct that retains information since previous log emission. Needs locked access using `locked.mutex`.
+     */
+    struct {
+        pthread_mutex_t mutex;
+        uint64_t prev_successes;
+        uint64_t cur_failures;
+        int last_errno;
+        h2o_timer_t timer;
+    } locked;
+} track_sendmsg = {.locked = {PTHREAD_MUTEX_INITIALIZER, .timer = {.cb = on_track_sendmsg_timer}}};
 
-static void on_track_sendmsg_timer(h2o_timer_t *timeout)
+void on_track_sendmsg_timer(h2o_timer_t *timeout)
 {
-    if (track_sendmsg.failures == 0) {
-        track_sendmsg.successes = 0;
-        return;
-    }
-    fprintf(stderr, "sendmsg failed %zu time%s, succeeded: %zu time%s, over the last minute: %s\n", track_sendmsg.failures,
-            track_sendmsg.failures > 1 ? "s" : "", track_sendmsg.successes, track_sendmsg.successes > 1 ? "s" : "",
-            strerror(track_sendmsg.last_errno));
-    track_sendmsg.failures = 0;
-    track_sendmsg.successes = 0;
-    track_sendmsg.last_errno = 0;
-    h2o_timer_link(track_sendmsg.loop, 60000, &track_sendmsg.timer);
-}
+    char errstr[256];
 
-void h2o_http3_track_sendmsg_init(h2o_loop_t *loop)
-{
-    assert(track_sendmsg.loop == NULL);
-    track_sendmsg.loop = loop;
-    h2o_timer_init(&track_sendmsg.timer, on_track_sendmsg_timer);
-    h2o_timer_link(loop, 60000, &track_sendmsg.timer);
-}
+    pthread_mutex_lock(&track_sendmsg.locked.mutex);
 
-static void track_sendmsg_failure(void)
-{
-    __sync_fetch_and_add(&track_sendmsg.failures, 1);
-    track_sendmsg.last_errno = errno;
-}
+    uint64_t total_successes = __sync_fetch_and_add(&track_sendmsg.total_successes, 0),
+             cur_successes = total_successes - track_sendmsg.locked.prev_successes;
 
-static void track_sendmsg_success(void)
-{
-    __sync_fetch_and_add(&track_sendmsg.successes, 1);
+    fprintf(stderr, "sendmsg failed %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute: %s\n",
+            track_sendmsg.locked.cur_failures, track_sendmsg.locked.cur_failures > 1 ? "s" : "", cur_successes,
+            cur_successes > 1 ? "s" : "", h2o_strerror_r(track_sendmsg.locked.last_errno, errstr, sizeof(errstr)));
+
+    track_sendmsg.locked.prev_successes = total_successes;
+    track_sendmsg.locked.cur_failures = 0;
+    track_sendmsg.locked.last_errno = 0;
+
+    pthread_mutex_unlock(&track_sendmsg.locked.mutex);
 }
 
 /**
@@ -176,9 +173,16 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
 
         /* Temporary failure to send a packet is not a permanent error fo the connection. (TODO do we want do something more
          * specific?) */
-        track_sendmsg_failure();
+
+        /* Log the number of failed invocations once per minute, if there has been such a failure. */
+        pthread_mutex_lock(&track_sendmsg.locked.mutex);
+        ++track_sendmsg.locked.cur_failures;
+        track_sendmsg.locked.last_errno = errno;
+        if (!h2o_timer_is_linked(&track_sendmsg.locked.timer))
+            h2o_timer_link(ctx->loop, 60000, &track_sendmsg.locked.timer);
+        pthread_mutex_unlock(&track_sendmsg.locked.mutex);
     } else {
-        track_sendmsg_success();
+        __sync_fetch_and_add(&track_sendmsg.total_successes, 1);
     }
 
     return 1;

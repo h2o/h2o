@@ -370,6 +370,4 @@ inline int h2o_http3_has_received_settings(h2o_http3_conn_t *conn)
     return conn->qpack.enc != NULL;
 }
 
-void h2o_http3_track_sendmsg_init(h2o_loop_t *loop);
-
 #endif

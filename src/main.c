@@ -2244,8 +2244,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].sock->data = listeners + i;
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
-            if (thread_index == 0)
-                h2o_http3_track_sendmsg_init(conf.threads[0].ctx.loop);
             h2o_http3_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
                                    listener_config->quic.ctx, on_http3_accept, NULL);
             h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, (uint32_t)conf.quic.num_threads, (uint32_t)thread_index,
