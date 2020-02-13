@@ -76,7 +76,6 @@ As an example, <a href="https://en.wikipedia.org/wiki/AddressSanitizer">AddressS
 <dd>
 This option specifies the build type, <code>Release</code> or <code>Debug</code>.
 The default is <code>Release</code>.
-You'd like to add some more debugging flags to `CMAKE_C_FLAGS` on <code>Debug</code> build, for example <code>-DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS=-g3</code> if you use <code>gdb</code>.
 </dd>
 </p>
 
