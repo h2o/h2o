@@ -231,9 +231,7 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
         }
     }
 
-    ret = 0;
-Exit:
-    return ret;
+    return 0;
 }
 
 struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
