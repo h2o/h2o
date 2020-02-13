@@ -495,7 +495,6 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             if (pseudo_header_exists_map != NULL) {
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */
                 if (name == &H2O_TOKEN_AUTHORITY->buf) {
-                    /* FIXME should we perform this check? */
                     if (authority->base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     *authority = value;
@@ -539,7 +538,9 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                     /* reject headers as defined in draft-16 8.1.2.2 */
                     if (token->flags.http2_should_reject) {
                         if (token == H2O_TOKEN_HOST) {
-                            /* just skip (and :authority is used) */
+                            /* HTTP2 allows the use of host header (in place of :authority) */
+                            if (authority->base == NULL)
+                                *authority = value;
                             goto Next;
                         } else if (token == H2O_TOKEN_TE && h2o_lcstris(value.base, value.len, H2O_STRLIT("trailers"))) {
                             /* do not reject */

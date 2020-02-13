@@ -2338,6 +2338,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                 h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fds[0], H2O_SOCKET_FLAG_DONT_READ);
             listeners[i].http3.forwarded_sock->data = listeners + i;
             h2o_socket_read_start(listeners[i].http3.forwarded_sock, forwarded_quic_socket_on_read);
+            fcntl(fds[1], F_SETFL, O_NONBLOCK);
             conf.listeners[i]->quic.thread_fds[thread_index] = fds[1];
         }
     }

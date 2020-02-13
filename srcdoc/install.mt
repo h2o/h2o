@@ -12,7 +12,7 @@ Therefore you may try to at first install the software using your favorite packa
 At the time being, following packages are known to be actively maintained<?= $ctx->{note}->(q{Please open a new issue on <a href="https://github.com/h2o/h2o">Github</a> if you want a new package to get added.}) ?>:
 <ul>
 <li><a href="https://www.freshports.org/www/h2o">FreeBSD h2o release</a> and <a href="https://www.freshports.org/www/h2o-devel">h2o betas</a></li>
-<li><a href="http://brewformulas.org/H2o">Homebrew (OS X)</a></li>
+<li><a href="https://formulae.brew.sh/formula/h2o">Homebrew (macOS)</a></li>
 <li><a href="https://github.com/tatsushid/h2o-rpm">RPM (Fedora, RHEL/CentOS, OpenSUSE)</a></li>
 <li><a href="https://hub.docker.com/r/lkwg82/h2o-http2-server/">Docker Image</a></li>
 </ul>
@@ -71,6 +71,11 @@ It is turned on by default if the prerequisites (<a href="https://www.gnu.org/so
 <dd>
 This option can be used to add or override the compile options being passed to the C compiler.
 As an example, <a href="https://en.wikipedia.org/wiki/AddressSanitizer">AddressSanitizer (ASan)</a> can be enabled when using recent versions of GCC or Clang, by passing <code>-DCMAKE_C_FLAGS="-fsanitize=address -fno-stack-protector -fno-omit-frame-pointer"</code>.
+</dd>
+<dt><code>-DCMAKE_BUILD_TYPE=Release|Debug</code></dt>
+<dd>
+This option specifies the build type, <code>Release</code> or <code>Debug</code>.
+The default is <code>Release</code>.
 </dd>
 </p>
 

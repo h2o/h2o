@@ -209,10 +209,12 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
     struct st_h2o_http3client_conn_t *conn = (void *)_conn;
     int ret;
 
-    switch (type) {
-    case H2O_HTTP3_FRAME_TYPE_SETTINGS:
+    if (!h2o_http3_has_received_settings(&conn->super)) {
+        if (type != H2O_HTTP3_FRAME_TYPE_SETTINGS)
+            return H2O_HTTP3_ERROR_MISSING_SETTINGS;
         if ((ret = h2o_http3_handle_settings_frame(&conn->super, payload, len, err_desc)) != 0)
             return ret;
+        assert(h2o_http3_has_received_settings(&conn->super));
         /* issue requests */
         while (!h2o_linklist_is_empty(&conn->pending_requests)) {
             struct st_h2o_http3client_req_t *req =
@@ -220,14 +222,16 @@ static int handle_control_stream_frame(h2o_http3_conn_t *_conn, uint8_t type, co
             h2o_linklist_unlink(&req->link);
             start_request(req);
         }
-        break;
-    default:
-        break;
+    } else {
+        switch (type) {
+        case H2O_HTTP3_FRAME_TYPE_SETTINGS:
+            return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
+        default:
+            break;
+        }
     }
 
-    ret = 0;
-Exit:
-    return ret;
+    return 0;
 }
 
 struct st_h2o_http3client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_url_t *origin)
