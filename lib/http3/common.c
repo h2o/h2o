@@ -58,14 +58,35 @@ struct st_h2o_http3_ingress_unistream_t {
 const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-25")}};
 
 static struct {
-    pthread_mutex_t lock;
-    time_t last_reported;
-    size_t failures;
-    size_t successes;
+    uint64_t failures;
+    uint64_t successes;
     int last_errno;
-} track_sendmsg = {
-    .lock = PTHREAD_MUTEX_INITIALIZER,
-};
+    h2o_timer_t timer;
+    h2o_loop_t *loop;
+} track_sendmsg;
+
+static void on_track_sendmsg_timer(h2o_timer_t *timeout)
+{
+    if (track_sendmsg.failures == 0) {
+        track_sendmsg.successes = 0;
+        return;
+    }
+    fprintf(stderr, "sendmsg failed %zu time%s, succeeded: %zu time%s, over the last minute: %s\n", track_sendmsg.failures,
+            track_sendmsg.failures > 1 ? "s" : "", track_sendmsg.successes, track_sendmsg.successes > 1 ? "s" : "",
+            strerror(track_sendmsg.last_errno));
+    track_sendmsg.failures = 0;
+    track_sendmsg.successes = 0;
+    track_sendmsg.last_errno = 0;
+    h2o_timer_link(track_sendmsg.loop, 60000, &track_sendmsg.timer);
+}
+
+void h2o_http3_track_sendmsg_init(h2o_loop_t *loop)
+{
+    assert(track_sendmsg.loop == NULL);
+    track_sendmsg.loop = loop;
+    h2o_timer_init(&track_sendmsg.timer, on_track_sendmsg_timer);
+    h2o_timer_link(loop, 60000, &track_sendmsg.timer);
+}
 
 static void track_sendmsg_failure(void)
 {
@@ -78,30 +99,6 @@ static void track_sendmsg_success(void)
     __sync_fetch_and_add(&track_sendmsg.successes, 1);
 }
 
-static void track_sendmsg_flush(h2o_loop_t *loop)
-{
-    uint64_t now = h2o_now(loop);
-    if (track_sendmsg.last_reported + 60000 < now) {
-        /* this is racy, and might under report successes when there is a
-           failure, but allows to avoid taking the lock in the happy path */
-        if (track_sendmsg.failures == 0) {
-            track_sendmsg.last_reported = now;
-            track_sendmsg.successes = 0;
-            return;
-        }
-        pthread_mutex_lock(&track_sendmsg.lock);
-        if (track_sendmsg.last_reported + 60000 < now) {
-            fprintf(stderr, "sendmsg failed %zu time%s, succeeded: %zu time%s, over the last minute: %s\n", track_sendmsg.failures,
-                    track_sendmsg.failures > 1 ? "s" : "", track_sendmsg.successes, track_sendmsg.successes > 1 ? "s" : "",
-                    strerror(track_sendmsg.last_errno));
-            track_sendmsg.failures = 0;
-            track_sendmsg.successes = 0;
-            track_sendmsg.last_errno = 0;
-            track_sendmsg.last_reported = now;
-        }
-        pthread_mutex_unlock(&track_sendmsg.lock);
-    }
-}
 /**
  * Sends a packet, returns if the connection is still maintainable (false is returned when not being able to send a packet from the
  * designated source address).
@@ -183,7 +180,6 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
     } else {
         track_sendmsg_success();
     }
-    track_sendmsg_flush(ctx->loop);
 
     return 1;
 }
