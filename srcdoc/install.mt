@@ -72,6 +72,11 @@ It is turned on by default if the prerequisites (<a href="https://www.gnu.org/so
 This option can be used to add or override the compile options being passed to the C compiler.
 As an example, <a href="https://en.wikipedia.org/wiki/AddressSanitizer">AddressSanitizer (ASan)</a> can be enabled when using recent versions of GCC or Clang, by passing <code>-DCMAKE_C_FLAGS="-fsanitize=address -fno-stack-protector -fno-omit-frame-pointer"</code>.
 </dd>
+<dt><code>-DCMAKE_BUILD_TYPE=Release|Debug</code></dt>
+<dd>
+This option specifies the build type, <code>Release</code> or <code>Debug</code>.
+The default is <code>Release</code>.
+</dd>
 </p>
 
 <h3>Installing from Source, using OpenSSL</h3>
