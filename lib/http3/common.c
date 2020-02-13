@@ -165,7 +165,7 @@ int h2o_http3_send_datagram(h2o_http3_ctx_t *ctx, quicly_datagram_t *p)
     while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
         ;
 
-    if (ret != -1) {
+    if (ret == -1) {
         /* The UDP stack returns EINVAL (linux) or EADDRNOTAVAIL (darwin, and presumably other BSD) when it was unable to use the
          * designated source address.  We communicate that back to the caller so that the connection can be closed immediately. */
         if (p->src.sa.sa_family != AF_UNSPEC && (errno == EINVAL || errno == EADDRNOTAVAIL))
