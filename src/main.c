@@ -2026,12 +2026,14 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
         writev(conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id], vec, 2);
     }
 
+#if H2O_USE_DTRACE
     if (H2O_H3_PACKET_FORWARD_ENABLED()) {
         size_t i, num_bytes = 0;
         for (i = 0; i != num_packets; ++i)
             num_bytes += packets[i].octets.len;
         H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes);
     }
+#endif
 
     return 1;
 }
