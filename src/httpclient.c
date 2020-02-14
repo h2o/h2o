@@ -22,8 +22,10 @@
  * IN THE SOFTWARE.
  */
 #include <errno.h>
+#include <execinfo.h>
 #include <getopt.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -31,6 +33,7 @@
 #include "picotls/openssl.h"
 #include "quicly.h"
 #include "h2o.h"
+#include "h2o/serverutil.h"
 
 #ifndef MIN
 #define MIN(a, b) (((a) > (b)) ? (b) : (a))
@@ -352,8 +355,25 @@ static h2o_socket_t *create_quic_socket(h2o_loop_t *loop)
 }
 #endif
 
+static void on_sigfatal(int signo)
+{
+    fprintf(stderr, "received fatal signal %d\n", signo);
+
+    h2o_set_signal_handler(signo, SIG_DFL);
+
+    void *frames[128];
+    int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
+    backtrace_symbols_fd(frames, framecnt, 2);
+}
+
 int main(int argc, char **argv)
 {
+    h2o_set_signal_handler(SIGABRT, on_sigfatal);
+    h2o_set_signal_handler(SIGBUS, on_sigfatal);
+    h2o_set_signal_handler(SIGFPE, on_sigfatal);
+    h2o_set_signal_handler(SIGILL, on_sigfatal);
+    h2o_set_signal_handler(SIGSEGV, on_sigfatal);
+
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_httpclient_ctx_t ctx = {
