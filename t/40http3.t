@@ -34,26 +34,28 @@ hosts:
         file.dir: t/assets/doc_root
 EOT
     wait_port({port => $quic_port, proto => 'udp'});
-    subtest "hello world" => sub {
-        my $resp = `$client_prog -3 https://127.0.0.1:$quic_port 2>&1`;
-        like $resp, qr{^HTTP/.*\n\nhello\n$}s;
-    };
-    subtest "large file" => sub {
-        my $resp = `$client_prog -3 https://127.0.0.1:$quic_port/halfdome.jpg 2> $tempdir/log`;
-        is $?, 0;
-        diag do {
-            open my $fh, '<', "$tempdir/log"
-                or die "failed to open $tempdir/log:$!";
-            local $/;
-            <$fh>;
-        } if $? != 0;
-        is length($resp), (stat "t/assets/doc_root/halfdome.jpg")[7];
-        is md5_hex($resp), md5_file("t/assets/doc_root/halfdome.jpg");
-    };
-    subtest "more than stream-concurrency" => sub {
-        my $resp = `$client_prog -3 -t 1000 https://127.0.0.1:$quic_port 2> /dev/null`;
-        is $resp, "hello\n" x 1000;
-    };
+    for (1..100) {
+        subtest "hello world" => sub {
+            my $resp = `$client_prog -3 https://127.0.0.1:$quic_port 2>&1`;
+            like $resp, qr{^HTTP/.*\n\nhello\n$}s;
+        };
+        subtest "large file" => sub {
+            my $resp = `$client_prog -3 https://127.0.0.1:$quic_port/halfdome.jpg 2> $tempdir/log`;
+            is $?, 0;
+            diag do {
+                open my $fh, "-|", "/h2o/share/h2o/annotate-backtrace-symbols < $tempdir/log"
+                    or die "failed to open $tempdir/log:$!";
+                local $/;
+                <$fh>;
+            } if $? != 0;
+            is length($resp), (stat "t/assets/doc_root/halfdome.jpg")[7];
+            is md5_hex($resp), md5_file("t/assets/doc_root/halfdome.jpg");
+        };
+        subtest "more than stream-concurrency" => sub {
+            my $resp = `$client_prog -3 -t 1000 https://127.0.0.1:$quic_port 2> /dev/null`;
+            is $resp, "hello\n" x 1000;
+        };
+    }
 };
 
 subtest "single-thread" => sub {
