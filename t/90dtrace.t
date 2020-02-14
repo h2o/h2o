@@ -55,7 +55,9 @@ usdt::h2o:receive_request {printf("*** %llu:%llu version %d.%d ***\n", arg0, arg
 usdt::h2o:receive_request_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
 usdt::h2o:send_response {printf("%llu:%llu status:%u\n", arg0, arg1, arg2)}
 usdt::h2o:send_response_header {printf("%s: %s\n", str(arg2, arg3), str(arg4, arg5))}
-usdt::h2o:h2_unknown_frame_type {printf("Unknown HTTP/2 frame type: %d\n", arg1)
+/* &0xff: Workarond for an issue that bpftrace always grabs 64-bit integer from memory regardless of
+ * the datatype declared in h2o-probes.d. Ignore the upper 56 bits by masking with 0xff. */
+usdt::h2o:h2_unknown_frame_type {printf("Unknown HTTP/2 frame type: %d\n", (arg1 & 0xff))
 }
 EOT
         die "failed to spawn bpftrace:$!";
