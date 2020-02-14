@@ -552,6 +552,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
         } else {
             h2o_buffer_append(&req->recvbuf.partial_frame, src, src_end - src);
         }
+        ret = 0;
     }
 
     /* cleanup */
