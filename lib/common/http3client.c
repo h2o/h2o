@@ -510,7 +510,7 @@ static int on_receive_process_bytes(struct st_h2o_http3client_req_t *req, const 
     } while (ret == 0 && *src != src_end);
     if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
         if (is_eos)
-            return H2O_HTTP3_ERROR_FRAME; /* TODO communicate err_desc (or set one) */
+            return H2O_HTTP3_ERROR_FRAME;
         assert(*src < src_end);
         ret = 0;
     }
