@@ -1064,7 +1064,8 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
     if ((fd = socket(domain, type, protocol)) == -1)
         goto Error;
     set_cloexec(fd);
-    { /* set reuseaddr */
+    /* if the socket is TCP, set SO_REUSEADDR flag to avoid TIME_WAIT after shutdown */
+    if (type == SOCK_STREAM) {
         int flag = 1;
         if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag)) != 0)
             goto Error;
