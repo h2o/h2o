@@ -549,8 +549,8 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
         if (req->recvbuf.prev_bytes_available == bytes_available)
             return 0;
 
-        /* process the bytes that have newly become available, update stream-level buffer */
-        const uint8_t *src = (const uint8_t *)req->recvbuf.stream->bytes + req->recvbuf.prev_bytes_available;
+        /* process the bytes that have not been processed, update stream-level buffer */
+        const uint8_t *src = (const uint8_t *)req->recvbuf.stream->bytes;
         ret = on_receive_process_bytes(req, &src, (const uint8_t *)req->recvbuf.stream->bytes + bytes_available, &err_desc);
         bytes_consumed = src - (const uint8_t *)req->recvbuf.stream->bytes;
         h2o_buffer_consume(&req->recvbuf.stream, bytes_consumed);
