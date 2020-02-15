@@ -98,8 +98,20 @@ struct st_h2o_http3client_req_t {
      *
      */
     struct {
-        h2o_buffer_t *body, *partial_frame, *noncontiguous;
-        size_t bytes_contiguous;
+        /**
+         * HTTP-level buffer that contains (part of) response body received. Is the variable registered as `h2o_httpclient::buf`.
+         */
+        h2o_buffer_t *body;
+        /**
+         * QUIC stream-level buffer that contains bytes that have not yet been processed at the HTTP/3 framing decoding level. This
+         * buffer may have gaps. The beginning offset of `partial_frame` is equal to `recvstate.data_off`.
+         */
+        h2o_buffer_t *stream;
+        /**
+         * Retains the amount of stream-level data that was available in the previous call. This value is used to see if processing
+         * of new stream data is necessary.
+         */
+        size_t prev_bytes_available;
     } recvbuf;
     /**
      * called when new contigious data becomes available
@@ -264,8 +276,7 @@ static void destroy_request(struct st_h2o_http3client_req_t *req)
     assert(req->quic == NULL);
     h2o_buffer_dispose(&req->sendbuf);
     h2o_buffer_dispose(&req->recvbuf.body);
-    h2o_buffer_dispose(&req->recvbuf.partial_frame);
-    h2o_buffer_dispose(&req->recvbuf.noncontiguous);
+    h2o_buffer_dispose(&req->recvbuf.stream);
     if (h2o_timer_is_linked(&req->super._timeout))
         h2o_timer_unlink(&req->super._timeout);
     if (h2o_linklist_is_linked(&req->link))
@@ -488,75 +499,70 @@ static int on_send_stop(quicly_stream_t *qs, int err)
     return 0;
 }
 
-static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
+static int on_receive_process_bytes(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
+                                    const char **err_desc)
 {
-    struct st_h2o_http3client_req_t *req = qs->data;
-    const uint8_t *src, *src_end;
-    size_t bytes_available, bytes_from_noncontiguous;
-    int is_eos, ret;
-    const char *err_desc = NULL;
+    int ret, is_eos = quicly_recvstate_transfer_complete(&req->quic->recvstate);
+    assert(is_eos || *src != src_end);
 
-    assert(req->recvbuf.body->size + req->recvbuf.partial_frame->size == req->recvbuf.bytes_contiguous);
-
-    if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
-        bytes_available = (size_t)(req->quic->recvstate.eos - req->quic->recvstate.data_off);
-    } else {
-        bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
-    }
-
-    if (req->recvbuf.noncontiguous->size == 0 && bytes_available == off + len) {
-        /* fast path; there was no hole */
-        src = input;
-        src_end = src + len;
-        bytes_from_noncontiguous = 0;
-    } else {
-        /* slow path; copy data to noncontiguous buffer */
-        size_t size_required = off + len - req->recvbuf.bytes_contiguous;
-        if (req->recvbuf.noncontiguous->size < size_required) {
-            H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_reserve(&req->recvbuf.noncontiguous, size_required).base != NULL);
-            req->recvbuf.noncontiguous->size = size_required;
-        }
-        memcpy(req->recvbuf.noncontiguous->bytes + off - req->recvbuf.bytes_contiguous, input, len);
-        /* just return if no new data is available */
-        if (bytes_available == req->recvbuf.bytes_contiguous)
-            return 0;
-        /* update input, len, as well as record the number of bytes to retire from noncontiguous buffer */
-        assert(bytes_available > req->recvbuf.bytes_contiguous);
-        bytes_from_noncontiguous = bytes_available - req->recvbuf.bytes_contiguous;
-        src = (const uint8_t *)req->recvbuf.noncontiguous->bytes;
-        src_end = src + bytes_from_noncontiguous;
-    }
-
-    /* append data to partial buffer (if it's non-empty) */
-    if (req->recvbuf.partial_frame->size != 0) {
-        h2o_buffer_append(&req->recvbuf.partial_frame, src, src_end - src);
-        src = (const uint8_t *)req->recvbuf.partial_frame->bytes;
-        src_end = src + req->recvbuf.partial_frame->size;
-    }
-
-    /* process the contiguous input */
-    is_eos = quicly_recvstate_transfer_complete(&req->quic->recvstate);
-    assert(is_eos || src != src_end);
     do {
-        ret = req->handle_input(req, &src, src_end, is_eos ? H2O_HTTP3_ERROR_EOS : 0, &err_desc);
-    } while (ret == 0 && src != src_end);
-
-    /* save data to partial buffer (if necessary) */
+        ret = req->handle_input(req, src, src_end, is_eos ? H2O_HTTP3_ERROR_EOS : 0, err_desc);
+    } while (ret == 0 && *src != src_end);
     if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
         if (is_eos)
             return H2O_HTTP3_ERROR_FRAME; /* TODO communicate err_desc (or set one) */
-        assert(src < src_end);
-        if (req->recvbuf.partial_frame->size != 0) {
-            assert(src_end == (const uint8_t *)req->recvbuf.partial_frame->bytes + req->recvbuf.partial_frame->size);
-            h2o_buffer_consume(&req->recvbuf.partial_frame, src - (const uint8_t *)req->recvbuf.partial_frame->bytes);
-        } else {
-            h2o_buffer_append(&req->recvbuf.partial_frame, src, src_end - src);
-        }
+        assert(*src < src_end);
         ret = 0;
     }
 
+    return ret;
+}
+
+static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
+{
+    struct st_h2o_http3client_req_t *req = qs->data;
+    size_t bytes_consumed;
+    int ret = 0;
+    const char *err_desc = NULL;
+
+    /* process the input, update stream-level receive buffer */
+    if (req->recvbuf.stream->size == 0 && off == 0) {
+
+       /* fast path; process the input directly, save the remaining bytes */
+        const uint8_t *src = input;
+        ret = on_receive_process_bytes(req, &src, src + len, &err_desc);
+        bytes_consumed = src - (const uint8_t *)input;
+        if (bytes_consumed != len)
+            h2o_buffer_append(&req->recvbuf.stream, src, len - bytes_consumed);
+
+    } else {
+        /* slow path; copy data to partial_frame */
+        size_t size_required = off + len;
+        if (req->recvbuf.stream->size < size_required) {
+            H2O_HTTP3_CHECK_SUCCESS(h2o_buffer_reserve(&req->recvbuf.stream, size_required).base != NULL);
+            req->recvbuf.stream->size = size_required;
+        }
+        memcpy(req->recvbuf.stream->bytes + off, input, len);
+
+        /* just return if no new data is available */
+        size_t bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
+        if (req->recvbuf.prev_bytes_available == bytes_available)
+            return 0;
+
+        /* process the bytes that have newly become available, update stream-level buffer */
+        const uint8_t *src = (const uint8_t *)req->recvbuf.stream->bytes + req->recvbuf.prev_bytes_available;
+        ret = on_receive_process_bytes(req, &src, (const uint8_t *)req->recvbuf.stream->bytes + bytes_available, &err_desc);
+        bytes_consumed = src - (const uint8_t *)req->recvbuf.stream->bytes;
+        h2o_buffer_consume(&req->recvbuf.stream, bytes_consumed);
+    }
+
+    /* update QUIC stream-level state */
+    if (bytes_consumed != 0)
+        quicly_stream_sync_recvbuf(req->quic, bytes_consumed);
+    req->recvbuf.prev_bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
+
     /* cleanup */
-    if (is_eos) {
+    if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
         if (!quicly_sendstate_transfer_complete(&req->quic->sendstate))
             quicly_reset_stream(req->quic, H2O_HTTP3_ERROR_NONE);
         detach_stream(req);
@@ -565,15 +571,6 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
         /* FIXME consider how to send err_desc */
         close_stream(req, ret);
         destroy_request(req);
-    } else {
-        if (bytes_from_noncontiguous != 0)
-            h2o_buffer_consume(&req->recvbuf.noncontiguous, bytes_from_noncontiguous);
-        size_t contiguous_bytes_in_buffer = req->recvbuf.body->size + req->recvbuf.partial_frame->size;
-        if (bytes_available != contiguous_bytes_in_buffer) {
-            assert(contiguous_bytes_in_buffer < bytes_available);
-            quicly_stream_sync_recvbuf(req->quic, bytes_available - contiguous_bytes_in_buffer);
-            req->recvbuf.bytes_contiguous = contiguous_bytes_in_buffer;
-        }
     }
 
     return 0;
@@ -582,8 +579,6 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
 static int on_receive_reset(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3client_req_t *req = qs->data;
-
-    assert(req->recvbuf.body->size + req->recvbuf.partial_frame->size == req->recvbuf.bytes_contiguous);
 
     handle_input_error(req, err);
     close_stream(req, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
@@ -718,8 +713,7 @@ void h2o_httpclient_connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool,
     req->super._cb.on_connect = cb;
     h2o_buffer_init(&req->sendbuf, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.body, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&req->recvbuf.partial_frame, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&req->recvbuf.noncontiguous, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&req->recvbuf.stream, &h2o_socket_buffer_prototype);
 
     if (h2o_http3_has_received_settings(&conn->super)) {
         start_request(req);
