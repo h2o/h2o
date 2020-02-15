@@ -573,7 +573,7 @@ static int on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t
         destroy_request(req);
     }
 
-    return 0;
+    return ret;
 }
 
 static int on_receive_reset(quicly_stream_t *qs, int err)
