@@ -87,7 +87,7 @@ void quicly_sendbuf_shift(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t 
 /**
  * The concrete function for `quicly_stream_callbacks_t::on_send_emit`.
  */
-int quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t off, void *dst, size_t *len, int *wrote_all);
+void quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t off, void *dst, size_t *len, int *wrote_all);
 /**
  * Appends some bytes to the send buffer.  The data being appended is copied.
  */
@@ -124,12 +124,17 @@ typedef struct st_quicly_streambuf_t {
 int quicly_streambuf_create(quicly_stream_t *stream, size_t sz);
 void quicly_streambuf_destroy(quicly_stream_t *stream, int err);
 static void quicly_streambuf_egress_shift(quicly_stream_t *stream, size_t delta);
-int quicly_streambuf_egress_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+void quicly_streambuf_egress_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
 static int quicly_streambuf_egress_write(quicly_stream_t *stream, const void *src, size_t len);
 static int quicly_streambuf_egress_write_vec(quicly_stream_t *stream, quicly_sendbuf_vec_t *vec);
 int quicly_streambuf_egress_shutdown(quicly_stream_t *stream);
 static void quicly_streambuf_ingress_shift(quicly_stream_t *stream, size_t delta);
 static ptls_iovec_t quicly_streambuf_ingress_get(quicly_stream_t *stream);
+/**
+ * Writes given data into `quicly_stream_buf_t::ingress` and returns 0 if successful. Upon failure, `quicly_close` is called
+ * automatically, and a non-zero value is returned. Applications can ignore the returned value, or use it to find out if it can use
+ * the information stored in the ingress buffer.
+ */
 int quicly_streambuf_ingress_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
 
 /* inline definitions */
