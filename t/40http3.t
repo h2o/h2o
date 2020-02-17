@@ -17,9 +17,10 @@ my $quic_port = empty_port({
     proto => "udp",
 });
 
+
 sub doit {
     my $num_threads = shift;
-    my $guard = spawn_h2o(<< "EOT");
+    my $conf = << "EOT";
 listen:
   type: quic
   port: $quic_port
@@ -33,6 +34,16 @@ hosts:
       /:
         file.dir: t/assets/doc_root
 EOT
+    if (server_features()->{mruby}) {
+        $conf .= << 'EOT';
+      /echo:
+        mruby.handler: |
+          Proc.new do |env|
+            [200, {}, [env["rack.input"].read]]
+          end
+EOT
+    }
+    my $guard = spawn_h2o($conf);
     wait_port({port => $quic_port, proto => 'udp'});
     for (1..100) {
         subtest "hello world" => sub {
@@ -54,6 +65,14 @@ EOT
         subtest "more than stream-concurrency" => sub {
             my $resp = `$client_prog -3 -t 1000 https://127.0.0.1:$quic_port 2> /dev/null`;
             is $resp, "hello\n" x 1000;
+        };
+        subtest "post" => sub {
+            plan skip_all => 'mruby support is off'
+            unless server_features()->{mruby};
+            foreach my $cl (1, 100, 10000, 1000000) {
+                my $resp = `$client_prog -3 -b $cl https://127.0.0.1:$quic_port/echo 2> /dev/null`;
+                is $resp, "a" x $cl;
+            }
         };
     }
 };
