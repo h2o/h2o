@@ -528,22 +528,22 @@ typedef struct st_quicly_stream_callbacks_t {
      * As this callback is triggered by calling quicly_stream_sync_sendbuf (stream, 1) when tx data is present, it assumes data
      * to be available - that is `len` return value should be non-zero.
      */
-    int (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+    void (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
      * called when a STOP_SENDING frame is received.  Do not call `quicly_reset_stream` in response.  The stream will be
      * automatically reset by quicly.
      */
-    int (*on_send_stop)(quicly_stream_t *stream, int err);
+    void (*on_send_stop)(quicly_stream_t *stream, int err);
     /**
      * called when data is newly received.  `off` is the offset within the buffer (the beginning position changes as the application
      * calls `quicly_stream_sync_recvbuf`.  Applications should consult `quicly_stream_t::recvstate` to see if it has contiguous
      * input.
      */
-    int (*on_receive)(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+    void (*on_receive)(quicly_stream_t *stream, size_t off, const void *src, size_t len);
     /**
      * called when a RESET_STREAM frame is received
      */
-    int (*on_receive_reset)(quicly_stream_t *stream, int err);
+    void (*on_receive_reset)(quicly_stream_t *stream, int err);
 } quicly_stream_callbacks_t;
 
 struct st_quicly_stream_t {
@@ -978,19 +978,19 @@ void quicly_stream_noop_on_send_shift(quicly_stream_t *stream, size_t delta);
 /**
  *
  */
-int quicly_stream_noop_on_send_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+void quicly_stream_noop_on_send_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
 /**
  *
  */
-int quicly_stream_noop_on_send_stop(quicly_stream_t *stream, int err);
+void quicly_stream_noop_on_send_stop(quicly_stream_t *stream, int err);
 /**
  *
  */
-int quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+void quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
 /**
  *
  */
-int quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
+void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
 
 extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 

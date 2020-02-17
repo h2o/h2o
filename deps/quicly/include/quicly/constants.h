@@ -73,6 +73,7 @@ extern "C" {
 #define QUICLY_ERROR_FREE_CONNECTION 0xff03 /* returned by quicly_send when the connection is freeable */
 #define QUICLY_ERROR_RECEIVED_STATELESS_RESET 0xff04
 #define QUICLY_ERROR_NO_COMPATIBLE_VERSION 0xff05
+#define QUICLY_ERROR_IS_CLOSING 0xff06 /* indicates that the connection has already entered closing state */
 
 #define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 
