@@ -401,6 +401,21 @@ int trace_transport_close_receive(struct pt_regs *ctx) {
     return 0;
 }
 
+int trace_application_close_send(struct pt_regs *ctx) {
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    struct st_quicly_conn_t conn = {};
+    sprintf(event.type, "transport_close_receive");
+
+    bpf_usdt_readarg(1, ctx, &pos);
+    bpf_probe_read(&conn, sizeof(conn), pos);
+    event.master_conn_id = conn.master_id;
+    bpf_usdt_readarg(2, ctx, &event.at);
+    bpf_usdt_readarg(3, ctx, &event.error_code);
+
+    return 0;
+}
+
 int trace_new_token_send(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
@@ -671,6 +686,8 @@ def handle_quic_event(cpu, data, size):
         build_quic_trace_result(res, ev, ["frame_type"])
     elif ev.type == "transport_close_receive":
         build_quic_trace_result(res, ev, ["error_code", "frame_type"])
+    elif ev.type == "application_close_send":
+        build_quic_trace_result(res, ev, ["error_code"])
     elif ev.type == "new_token_send":
         build_quic_trace_result(res, ev, ["token_preview", "len", "token_generation"])
     elif ev.type == "new_token_acked":
@@ -760,6 +777,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="cc_congestion", fn_name="trace_cc_congestion")
     u.enable_probe(probe="transport_close_send", fn_name="trace_transport_close_send")
     u.enable_probe(probe="transport_close_receive", fn_name="trace_transport_close_receive")
+    u.enable_probe(probe="application_close_send", fn_name="trace_application_close_send")
     u.enable_probe(probe="new_token_send", fn_name="trace_new_token_send")
     u.enable_probe(probe="new_token_acked", fn_name="trace_new_token_acked")
     u.enable_probe(probe="new_token_receive", fn_name="trace_new_token_receive")
