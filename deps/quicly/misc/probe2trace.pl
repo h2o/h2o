@@ -114,7 +114,7 @@ for my $probe (@probes) {
             $name = 'time'
                 if $name eq 'at';
             $name = normalize_name($name);
-            if ($type =~ /^(?:unsigned\s|uint([0-9]+)_t|size_t)/) {
+            if ($type =~ /^(?:unsigned|uint([0-9]+)_t|size_t)$/) {
                 if ($arch eq 'linux') {
                     push @fmt, qq!"$name":\%@{[($1 && $1 == 64) || $type eq 'size_t' ? 'lu' : 'u']}!;
                     push @ap, "arg$i";
