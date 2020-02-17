@@ -365,7 +365,7 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
 static void egress_unistream_on_send_stop(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
-    quicly_close(conn->quic, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
+    h2o_http3_close_connection(conn, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
 }
 
 void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
