@@ -24,6 +24,20 @@
 #include <string.h>
 #include "quicly/streambuf.h"
 
+static void convert_error(quicly_stream_t *stream, int err)
+{
+    assert(err != 0);
+    if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
+        if (quicly_stream_has_send_side(quicly_is_client(stream->conn), stream->stream_id) &&
+            quicly_sendstate_is_open(&stream->sendstate))
+            quicly_reset_stream(stream, err);
+        if (quicly_stream_has_receive_side(quicly_is_client(stream->conn), stream->stream_id))
+            quicly_request_stop(stream, err);
+    } else {
+        quicly_close(stream->conn, QUICLY_ERROR_IS_QUIC_TRANSPORT(err) ? err : QUICLY_TRANSPORT_ERROR_INTERNAL, NULL);
+    }
+}
+
 void quicly_sendbuf_dispose(quicly_sendbuf_t *sb)
 {
     size_t i;
@@ -67,7 +81,7 @@ void quicly_sendbuf_shift(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t 
     quicly_stream_sync_sendbuf(stream, 0);
 }
 
-int quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t off, void *dst, size_t *len, int *wrote_all)
+void quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t off, void *dst, size_t *len, int *wrote_all)
 {
     size_t vec_index, capacity = *len;
     int ret;
@@ -82,8 +96,10 @@ int quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t of
                 bytes_flatten = capacity;
                 partial = 1;
             }
-            if ((ret = vec->cb->flatten_vec(vec, dst, off, bytes_flatten)) != 0)
-                return ret;
+            if ((ret = vec->cb->flatten_vec(vec, dst, off, bytes_flatten)) != 0) {
+                convert_error(stream, ret);
+                return;
+            }
             dst = (uint8_t *)dst + bytes_flatten;
             capacity -= bytes_flatten;
             off = 0;
@@ -100,8 +116,6 @@ int quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t of
         *len = *len - capacity;
         *wrote_all = 1;
     }
-
-    return 0;
 }
 
 static int flatten_raw(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
@@ -183,8 +197,10 @@ int quicly_recvbuf_receive(quicly_stream_t *stream, ptls_buffer_t *rb, size_t of
 {
     if (len != 0) {
         int ret;
-        if ((ret = ptls_buffer_reserve(rb, off + len - rb->off)) != 0)
-            return ret;
+        if ((ret = ptls_buffer_reserve(rb, off + len - rb->off)) != 0) {
+            convert_error(stream, ret);
+            return -1;
+        }
         memcpy(rb->base + off, src, len);
         if (rb->off < off + len)
             rb->off = off + len;
@@ -220,10 +236,10 @@ void quicly_streambuf_destroy(quicly_stream_t *stream, int err)
     stream->data = NULL;
 }
 
-int quicly_streambuf_egress_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all)
+void quicly_streambuf_egress_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all)
 {
     quicly_streambuf_t *sbuf = stream->data;
-    return quicly_sendbuf_emit(stream, &sbuf->egress, off, dst, len, wrote_all);
+    quicly_sendbuf_emit(stream, &sbuf->egress, off, dst, len, wrote_all);
 }
 
 int quicly_streambuf_egress_shutdown(quicly_stream_t *stream)

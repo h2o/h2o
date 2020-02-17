@@ -99,7 +99,7 @@ static void test_ack_decode(void)
         end = quicly_encodev(end, QUICLY_ACK_MAX_GAPS + 30); // with excess ranges
         end = quicly_encodev(end, 8);
         for (i = 0; i < QUICLY_ACK_MAX_GAPS + 30; ++i) {
-            end = quicly_encodev(end, i); // gap
+            end = quicly_encodev(end, i);      // gap
             end = quicly_encodev(end, i % 10); // ack-range
         }
 

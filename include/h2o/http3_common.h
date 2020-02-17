@@ -187,8 +187,7 @@ struct st_h2o_http3_ctx_t {
 
 typedef struct st_h2o_http3_conn_callbacks_t {
     void (*destroy_connection)(h2o_http3_conn_t *conn);
-    int (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len,
-                                       const char **err_desc);
+    void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint8_t type, const uint8_t *payload, size_t len);
 } h2o_http3_conn_callbacks_t;
 
 struct st_h2o_http3_conn_t {
@@ -340,7 +339,7 @@ int h2o_http3_send(h2o_http3_conn_t *conn);
 /**
  * updates receive buffer
  */
-int h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, size_t len);
+void h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, size_t len);
 /**
  * Schedules the transport timer. Application must call this function when it writes data to the connection (TODO better way to
  * handle this?). The function is automatically called when packets are sent or received.

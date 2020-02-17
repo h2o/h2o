@@ -84,14 +84,15 @@
     "-----END CERTIFICATE-----\n"
 
 static void on_destroy(quicly_stream_t *stream, int err);
-static int on_egress_stop(quicly_stream_t *stream, int err);
-static int on_ingress_reset(quicly_stream_t *stream, int err);
+static void on_egress_stop(quicly_stream_t *stream, int err);
+static void on_ingress_receive(quicly_stream_t *stream,  size_t off, const void *src, size_t len);
+static void on_ingress_reset(quicly_stream_t *stream, int err);
 
 quicly_address_t fake_address;
 int64_t quic_now;
 quicly_context_t quic_ctx;
 quicly_stream_callbacks_t stream_callbacks = {on_destroy,     quicly_streambuf_egress_shift,    quicly_streambuf_egress_emit,
-                                              on_egress_stop, quicly_streambuf_ingress_receive, on_ingress_reset};
+                                              on_egress_stop, on_ingress_receive, on_ingress_reset};
 size_t on_destroy_callcnt;
 
 static int64_t get_now_cb(quicly_now_t *self)
@@ -108,20 +109,23 @@ void on_destroy(quicly_stream_t *stream, int err)
     ++on_destroy_callcnt;
 }
 
-int on_egress_stop(quicly_stream_t *stream, int err)
+void on_egress_stop(quicly_stream_t *stream, int err)
 {
     assert(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
     test_streambuf_t *sbuf = stream->data;
     sbuf->error_received.stop_sending = err;
-    return 0;
 }
 
-int on_ingress_reset(quicly_stream_t *stream, int err)
+void on_ingress_receive(quicly_stream_t *stream,  size_t off, const void *src, size_t len)
+{
+    quicly_streambuf_ingress_receive(stream, off, src, len);
+}
+
+void on_ingress_reset(quicly_stream_t *stream, int err)
 {
     assert(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
     test_streambuf_t *sbuf = stream->data;
     sbuf->error_received.reset_stream = err;
-    return 0;
 }
 
 const quicly_cid_plaintext_t *new_master_id(void)
