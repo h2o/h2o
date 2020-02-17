@@ -509,11 +509,8 @@ static int on_receive_process_bytes(struct st_h2o_http3client_req_t *req, const 
 
     do {
         if ((ret = req->handle_input(req, src, src_end, is_eos ? H2O_HTTP3_ERROR_EOS : 0, err_desc)) != 0) {
-            if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
-                if (!is_eos)
-                    break;
-                ret = H2O_HTTP3_ERROR_FRAME;
-            }
+            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
+                ret = is_eos ? H2O_HTTP3_ERROR_FRAME : 0;
             break;
         }
     } while (*src != src_end);
