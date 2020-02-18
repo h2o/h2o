@@ -243,6 +243,7 @@ struct st_quicly_conn_t {
             uint64_t frame_type; /* UINT64_MAX if application close */
             const char *reason_phrase;
             unsigned long num_packets_received;
+            unsigned long num_sent;
         } connection_close;
         /**
          *
@@ -2028,10 +2029,9 @@ static int on_ack_ack(quicly_conn_t *conn, const quicly_sent_packet_t *packet, q
          * sure that the potential split would not lead to an error. */
         if (space->ack_queue.num_ranges == QUICLY_MAX_RANGES)
             quicly_ranges_drop_smallest_range(&space->ack_queue);
-        if (quicly_ranges_subtract(&space->ack_queue, sent->data.ack.range.start, sent->data.ack.range.end) != 0) {
-            /* FIXME log error */
-            return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
-        }
+        int ret;
+        if ((ret = quicly_ranges_subtract(&space->ack_queue, sent->data.ack.range.start, sent->data.ack.range.end)) != 0)
+            return ret;
         if (space->ack_queue.num_ranges == 0) {
             space->largest_pn_received_at = INT64_MAX;
             space->unacked_count = 0;
@@ -3308,6 +3308,8 @@ static int send_connection_close(quicly_conn_t *conn, quicly_send_context_t *s)
     memcpy(s->dst, conn->egress.connection_close.reason_phrase, reason_phrase_len);
     s->dst += reason_phrase_len;
 
+    ++conn->egress.connection_close.num_sent;
+
     if (conn->egress.connection_close.frame_type != UINT64_MAX) {
         QUICLY_PROBE(TRANSPORT_CLOSE_SEND, conn, probe_now(), conn->egress.connection_close.error_code,
                      conn->egress.connection_close.frame_type, conn->egress.connection_close.reason_phrase);
@@ -3564,11 +3566,13 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
                  QUICLY_PROBE_HEXDUMP(conn->super.peer.cid.cid, conn->super.peer.cid.len));
 
     if (conn->super.state >= QUICLY_STATE_CLOSING) {
-        /* check if the connection can be closed now (after 3 pto) */
         quicly_sentmap_iter_t iter;
         init_acks_iter(conn, &iter);
-        if (quicly_sentmap_get(&iter)->packet_number == UINT64_MAX)
-            return QUICLY_ERROR_FREE_CONNECTION;
+        /* check if the connection can be closed now (after 3 pto) */
+        if (conn->super.state == QUICLY_STATE_DRAINING || conn->egress.connection_close.num_sent != 0) {
+            if (quicly_sentmap_get(&iter)->packet_number == UINT64_MAX)
+                return QUICLY_ERROR_FREE_CONNECTION;
+        }
         if (conn->super.state == QUICLY_STATE_CLOSING && conn->egress.send_ack_at <= now) {
             destroy_all_streams(conn, 0, 0); /* delayed until the emission of CONNECTION_CLOSE frame to allow quicly_close to be
                                               * called from a stream handler */
@@ -3587,8 +3591,9 @@ int quicly_send(quicly_conn_t *conn, quicly_datagram_t **packets, size_t *num_pa
             if ((ret = commit_send_packet(conn, &s, 0)) != 0)
                 return ret;
         }
-        conn->egress.send_ack_at = quicly_sentmap_get(&iter)->sent_at + get_sentmap_expiration_time(conn);
-        assert(conn->egress.send_ack_at > now);
+        /* wait at least 1ms */
+        if ((conn->egress.send_ack_at = quicly_sentmap_get(&iter)->sent_at + get_sentmap_expiration_time(conn)) <= now)
+            conn->egress.send_ack_at = now + 1;
         *num_packets = s.num_packets;
         return 0;
     }
@@ -3693,7 +3698,10 @@ int initiate_close(quicly_conn_t *conn, int err, uint64_t frame_type, const char
         reason_phrase = "";
 
     /* convert error code to QUIC error codes */
-    if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
+    if (err == 0) {
+        quic_error_code = 0;
+        frame_type = QUICLY_FRAME_TYPE_PADDING;
+    } else if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
         quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(err);
     } else if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
         quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(err);
@@ -3702,7 +3710,6 @@ int initiate_close(quicly_conn_t *conn, int err, uint64_t frame_type, const char
         quic_error_code = QUICLY_TRANSPORT_ERROR_TLS_ALERT_BASE + PTLS_ERROR_TO_ALERT(err);
     } else {
         quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_INTERNAL);
-        frame_type = UINT64_MAX;
     }
 
     conn->egress.connection_close.error_code = quic_error_code;
@@ -3713,7 +3720,7 @@ int initiate_close(quicly_conn_t *conn, int err, uint64_t frame_type, const char
 
 int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase)
 {
-    assert(err == 0 || QUICLY_ERROR_IS_QUIC_APPLICATION(err));
+    assert(err == 0 || QUICLY_ERROR_IS_QUIC_APPLICATION(err) || QUICLY_ERROR_IS_CONCEALED(err));
     update_now(conn->super.ctx);
 
     return initiate_close(conn, err, QUICLY_FRAME_TYPE_PADDING /* used when err == 0 */, reason_phrase);
