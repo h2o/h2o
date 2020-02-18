@@ -709,7 +709,7 @@ def handle_quic_event(cpu, data, size):
     elif ev.type == "quictrace_lost":
         build_quic_trace_result(res, ev, ["packet_num"])
 
-    print(json.dumps(res))
+    print(json.dumps(res, separators = (',', ':')))
 
 def usage():
     print ("USAGE: h2olog -p PID")
