@@ -70,7 +70,7 @@ EOT
             plan skip_all => 'mruby support is off'
             unless server_features()->{mruby};
             foreach my $cl (1, 100, 10000, 1000000) {
-                my $resp = `$client_prog -3 -b $cl https://127.0.0.1:$quic_port/echo 2> /dev/null`;
+                my $resp = `$client_prog -3 -b $cl -c 100000 https://127.0.0.1:$quic_port/echo 2> /dev/null`;
                 is length($resp), $cl;
                 ok +($resp =~ /^a+$/s); # don't use of `like` to avoid excess amount of log lines on mismatch
             }
