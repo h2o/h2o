@@ -40,6 +40,11 @@ struct st_duration_stats_t {
      * average event loop latency per worker thread
      */
     H2O_VECTOR(uint64_t) evloop_latency_nanosec;
+
+    /**
+     * average kernel latency of received packets per worker thread
+     */
+    H2O_VECTOR(uint64_t) packet_kernel_latency_nanosec;
 };
 
 struct st_duration_agg_stats_t {
@@ -75,6 +80,12 @@ static void durations_status_per_thread(void *priv, h2o_context_t *ctx)
         agg_stats->stats.evloop_latency_nanosec.entries[agg_stats->stats.evloop_latency_nanosec.size] =
             h2o_evloop_get_execution_time_nanosec(ctx->loop);
         agg_stats->stats.evloop_latency_nanosec.size++;
+
+        h2o_vector_reserve(NULL, &agg_stats->stats.packet_kernel_latency_nanosec, agg_stats->stats.packet_kernel_latency_nanosec.size + 1);
+        agg_stats->stats.packet_kernel_latency_nanosec.entries[agg_stats->stats.packet_kernel_latency_nanosec.size] =
+            h2o_evloop_get_packet_kernel_latency_nanosec(ctx->loop);
+        agg_stats->stats.packet_kernel_latency_nanosec.size++;
+
 #endif
         pthread_mutex_unlock(&agg_stats->mutex);
     }
@@ -90,6 +101,7 @@ static void duration_stats_init(struct st_duration_stats_t *stats)
     stats->response_time = gkc_summary_alloc(GK_EPSILON);
     stats->total_time = gkc_summary_alloc(GK_EPSILON);
     memset(&stats->evloop_latency_nanosec, 0, sizeof(stats->evloop_latency_nanosec));
+    memset(&stats->packet_kernel_latency_nanosec, 0, sizeof(stats->packet_kernel_latency_nanosec));
 }
 
 static void *durations_status_init(void)
@@ -114,6 +126,7 @@ static void duration_stats_free(struct st_duration_stats_t *stats)
     gkc_summary_free(stats->response_time);
     gkc_summary_free(stats->total_time);
     free(stats->evloop_latency_nanosec.entries);
+    free(stats->packet_kernel_latency_nanosec.entries);
 }
 
 static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
@@ -154,6 +167,19 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
         delim = ",";
     }
     ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
+
+    delim = "";
+    ret.len += sprintf(ret.base + ret.len, ",\n\"kernel-packet-latency-nanosec\": [");
+    for(int i = 0; i < agg_stats->stats.packet_kernel_latency_nanosec.size; i++) {
+        size_t len = snprintf(NULL, 0, "%s%" PRIu64, delim, agg_stats->stats.packet_kernel_latency_nanosec.entries[i]);
+        if (ret.len + len + 1 >= BUFSIZE)
+            break;
+        ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "%s%" PRIu64,
+                delim, agg_stats->stats.packet_kernel_latency_nanosec.entries[i]);
+        delim = ",";
+    }
+    ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
+
 #undef BUFSIZE
     duration_stats_free(&agg_stats->stats);
     pthread_mutex_destroy(&agg_stats->mutex);
