@@ -22,6 +22,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include "picotls.h"
+#include "quicly/constants.h"
 #include "quicly/ranges.h"
 
 #define COPY(dst, src, n)                                                                                                          \
@@ -41,13 +43,13 @@ static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size
 {
     if (ranges->num_ranges == ranges->capacity) {
         if (ranges->num_ranges == QUICLY_MAX_RANGES)
-            return -1;
+            return QUICLY_ERROR_STATE_EXHAUSTION;
         size_t new_capacity = ranges->capacity < 4 ? 4 : ranges->capacity * 2;
         if (new_capacity > QUICLY_MAX_RANGES)
             new_capacity = QUICLY_MAX_RANGES;
         quicly_range_t *new_ranges = malloc(new_capacity * sizeof(*new_ranges));
         if (new_ranges == NULL)
-            return -1;
+            return PTLS_ERROR_NO_MEMORY;
         COPY(new_ranges, ranges->ranges, slot);
         COPY(new_ranges + slot + 1, ranges->ranges + slot, ranges->num_ranges - slot);
         if (ranges->ranges != &ranges->_initial)
@@ -167,8 +169,9 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
             ranges->ranges[slot].end = start;
         } else {
             /* split */
-            if (insert_at(ranges, end, ranges->ranges[slot].end, slot + 1) != 0)
-                return -1;
+            int ret;
+            if ((ret = insert_at(ranges, end, ranges->ranges[slot].end, slot + 1)) != 0)
+                return ret;
             ranges->ranges[slot].end = start;
             return 0;
         }

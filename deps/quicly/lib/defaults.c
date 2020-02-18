@@ -26,60 +26,56 @@
 #define DEFAULT_MAX_CRYPTO_BYTES 65536
 
 /* profile that employs IETF specified values */
-const quicly_context_t quicly_spec_context = {
-    NULL,                   /* tls */
-    QUICLY_MAX_PACKET_SIZE, /* max_packet_size */
-    QUICLY_LOSS_SPEC_CONF,  /* loss */
-    {
-        {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
-        16 * 1024 * 1024,                                    /* max_data */
-        30 * 1000,                                           /* idle_timeout (30 seconds) */
-        100,                                                 /* max_concurrent_streams_bidi */
-        0                                                    /* max_concurrent_streams_uni */
-    },
-    DEFAULT_MAX_PACKETS_PER_KEY,
-    DEFAULT_MAX_CRYPTO_BYTES,
-    0, /* enforce_version_negotiation */
-    0, /* is_clustered */
-    0, /* enlarge_client_hello */
-    &quicly_default_packet_allocator,
-    NULL,
-    NULL, /* on_stream_open */
-    &quicly_default_stream_scheduler,
-    NULL, /* on_conn_close */
-    &quicly_default_now,
-    NULL,
-    NULL,
-    &quicly_default_crypto_engine
-};
+const quicly_context_t quicly_spec_context = {NULL,                   /* tls */
+                                              QUICLY_MAX_PACKET_SIZE, /* max_packet_size */
+                                              QUICLY_LOSS_SPEC_CONF,  /* loss */
+                                              {
+                                                  {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
+                                                  16 * 1024 * 1024,                                    /* max_data */
+                                                  30 * 1000, /* idle_timeout (30 seconds) */
+                                                  100,       /* max_concurrent_streams_bidi */
+                                                  0          /* max_concurrent_streams_uni */
+                                              },
+                                              DEFAULT_MAX_PACKETS_PER_KEY,
+                                              DEFAULT_MAX_CRYPTO_BYTES,
+                                              0, /* enforce_version_negotiation */
+                                              0, /* is_clustered */
+                                              0, /* enlarge_client_hello */
+                                              &quicly_default_packet_allocator,
+                                              NULL,
+                                              NULL, /* on_stream_open */
+                                              &quicly_default_stream_scheduler,
+                                              NULL, /* on_conn_close */
+                                              &quicly_default_now,
+                                              NULL,
+                                              NULL,
+                                              &quicly_default_crypto_engine};
 
 /* profile with a focus on reducing latency for the HTTP use case */
-const quicly_context_t quicly_performant_context = {
-    NULL,                         /* tls */
-    QUICLY_MAX_PACKET_SIZE,       /* max_packet_size */
-    QUICLY_LOSS_PERFORMANT_CONF,  /* loss */
-    {
-        {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
-        16 * 1024 * 1024,                                    /* max_data */
-        30 * 1000,                                           /* idle_timeout (30 seconds) */
-        100,                                                 /* max_concurrent_streams_bidi */
-        0                                                    /* max_concurrent_streams_uni */
-    },
-    DEFAULT_MAX_PACKETS_PER_KEY,
-    DEFAULT_MAX_CRYPTO_BYTES,
-    0, /* enforce_version_negotiation */
-    0, /* is_clustered */
-    0, /* enlarge_client_hello */
-    &quicly_default_packet_allocator,
-    NULL,
-    NULL, /* on_stream_open */
-    &quicly_default_stream_scheduler,
-    NULL, /* on_conn_close */
-    &quicly_default_now,
-    NULL,
-    NULL,
-    &quicly_default_crypto_engine
-};
+const quicly_context_t quicly_performant_context = {NULL,                        /* tls */
+                                                    QUICLY_MAX_PACKET_SIZE,      /* max_packet_size */
+                                                    QUICLY_LOSS_PERFORMANT_CONF, /* loss */
+                                                    {
+                                                        {1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
+                                                        16 * 1024 * 1024,                                    /* max_data */
+                                                        30 * 1000, /* idle_timeout (30 seconds) */
+                                                        100,       /* max_concurrent_streams_bidi */
+                                                        0          /* max_concurrent_streams_uni */
+                                                    },
+                                                    DEFAULT_MAX_PACKETS_PER_KEY,
+                                                    DEFAULT_MAX_CRYPTO_BYTES,
+                                                    0, /* enforce_version_negotiation */
+                                                    0, /* is_clustered */
+                                                    0, /* enlarge_client_hello */
+                                                    &quicly_default_packet_allocator,
+                                                    NULL,
+                                                    NULL, /* on_stream_open */
+                                                    &quicly_default_stream_scheduler,
+                                                    NULL, /* on_conn_close */
+                                                    &quicly_default_now,
+                                                    NULL,
+                                                    NULL,
+                                                    &quicly_default_crypto_engine};
 
 static quicly_datagram_t *default_alloc_packet(quicly_packet_allocator_t *self, size_t payloadsize)
 {

@@ -115,27 +115,23 @@ static int forward_stdin(quicly_conn_t *conn)
     }
 }
 
-static int on_stop_sending(quicly_stream_t *stream, int err)
+static void on_stop_sending(quicly_stream_t *stream, int err)
 {
     fprintf(stderr, "received STOP_SENDING: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
-    return 0;
 }
 
-static int on_receive_reset(quicly_stream_t *stream, int err)
+static void on_receive_reset(quicly_stream_t *stream, int err)
 {
     fprintf(stderr, "received RESET_STREAM: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
-    return 0;
 }
 
-static int on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+static void on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
-    int ret;
-
     /* read input to receive buffer */
-    if ((ret = quicly_streambuf_ingress_receive(stream, off, src, len)) != 0)
-        return ret;
+    if (quicly_streambuf_ingress_receive(stream, off, src, len) != 0)
+        return;
 
     /* obtain contiguous bytes from the receive buffer */
     ptls_iovec_t input = quicly_streambuf_ingress_get(stream);
@@ -159,8 +155,6 @@ static int on_receive(quicly_stream_t *stream, size_t off, const void *src, size
 
     /* remove used bytes from receive buffer */
     quicly_streambuf_ingress_shift(stream, input.len);
-
-    return 0;
 }
 
 static void process_msg(int is_client, quicly_conn_t **conns, struct msghdr *msg, size_t dgram_len)

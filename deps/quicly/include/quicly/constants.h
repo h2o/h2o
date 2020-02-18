@@ -28,6 +28,7 @@ extern "C" {
 
 #include <stddef.h>
 #include <stdint.h>
+#include "picotls.h"
 
 #define QUICLY_NUM_PACKETS_BEFORE_ACK 2
 #define QUICLY_DELAYED_ACK_TIMEOUT 25   /* milliseconds */
@@ -52,6 +53,11 @@ extern "C" {
 #define QUICLY_ERROR_GET_ERROR_CODE(e) ((uint16_t)(e))
 #define QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(e) ((uint16_t)(e) + 0x20000)
 #define QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(e) ((uint16_t)(e) + 0x30000)
+/**
+ * PTLS_ERROR_NO_MEMORY and QUICLY_ERROR_STATE_EXHAUSTION are special error codes that are internal but can be passed to
+ * quicly_close. These are converted to QUICLY_TRANSPORT_ERROR_INTERNAL when sent over the wire.
+ */
+#define QUICLY_ERROR_IS_CONCEALED(err) ((err) == PTLS_ERROR_NO_MEMORY || (err) == QUICLY_ERROR_STATE_EXHAUSTION)
 
 /* transport error codes */
 #define QUICLY_TRANSPORT_ERROR_NONE QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x0)
@@ -73,6 +79,8 @@ extern "C" {
 #define QUICLY_ERROR_FREE_CONNECTION 0xff03 /* returned by quicly_send when the connection is freeable */
 #define QUICLY_ERROR_RECEIVED_STATELESS_RESET 0xff04
 #define QUICLY_ERROR_NO_COMPATIBLE_VERSION 0xff05
+#define QUICLY_ERROR_IS_CLOSING 0xff06 /* indicates that the connection has already entered closing state */
+#define QUICLY_ERROR_STATE_EXHAUSTION 0xff07
 
 #define QUICLY_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 

@@ -46,10 +46,12 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
 
     assert(ranges->num_ranges != 0);
 
+    /* number of bytes being emitted without space check are 1 + 8 + 8 + 1 bytes (as defined in QUICLY_ACK_FRAME_CAPACITY) */
     *dst++ = QUICLY_FRAME_TYPE_ACK;
     dst = quicly_encodev(dst, ranges->ranges[range_index].end - 1); /* largest acknowledged */
     dst = quicly_encodev(dst, ack_delay);                           /* ack delay */
-    dst = quicly_encodev(dst, ranges->num_ranges - 1);              /* ack blocks */
+    QUICLY_BUILD_ASSERT(QUICLY_MAX_RANGES - 1 <= 63);
+    *dst++ = (uint8_t)(ranges->num_ranges - 1); /* ack blocks */
 
     while (1) {
         WRITE_BLOCK(ranges->ranges[range_index].start, ranges->ranges[range_index].end); /* ACK block count */

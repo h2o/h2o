@@ -86,9 +86,9 @@ for my $probe (@probes) {
         if ($type eq 'struct st_quicly_conn_t *') {
             push @fmt, '"conn":%u';
             if ($arch eq 'linux') {
-                push @ap, 'arg ' . $i . ' != NULL ? ((struct st_quicly_conn_t *)arg' . $i . ')->master_id : 0';
+                push @ap, "arg$i" . ' != NULL ? ((struct st_quicly_conn_t *)arg' . $i . ')->master_id : 0';
             } elsif ($arch eq 'darwin') {
-                push @ap, 'arg ' . $i . ' != NULL ? *(uint32_t *)copyin(arg' . $i . ' + 16, 4) : 0';
+                push @ap, "arg$i" . ' != NULL ? *(uint32_t *)copyin(arg' . $i . ' + 16, 4) : 0';
             } else {
                 push @ap, "arg$i != NULL ? ((struct _st_quicly_conn_public_t *)arg$i)->master_id.master_id : 0";
             }
@@ -114,7 +114,7 @@ for my $probe (@probes) {
             $name = 'time'
                 if $name eq 'at';
             $name = normalize_name($name);
-            if ($type =~ /^(?:unsigned\s|uint([0-9]+)_t|size_t)/) {
+            if ($type =~ /^(?:unsigned|uint([0-9]+)_t|size_t)$/) {
                 if ($arch eq 'linux') {
                     push @fmt, qq!"$name":\%@{[($1 && $1 == 64) || $type eq 'size_t' ? 'lu' : 'u']}!;
                     push @ap, "arg$i";
