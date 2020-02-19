@@ -640,8 +640,8 @@ def handle_resp_line(cpu, data, size):
 def load_common_fields(hsh, line):
     for k in ['at', 'type', 'master_conn_id']:
         v = getattr(line, k)
+        # FIXME: This hack is no longer needed as of: https://github.com/h2o/quicly/pull/279
         if v == 0 and k == 'at':
-            # TODO: This is a synthetic hack
             v = int(time.time() * 1000)
         hsh[k] = v
 
