@@ -740,7 +740,7 @@ if len(sys.argv) < 1:
 
 tracer_func = trace_http
 optidx = 1
-if sys.argv[1] == "quic":
+if len(sys.argv) > 1 and sys.argv[1] == "quic":
     tracer_func = trace_quic
     optidx = 2
 
