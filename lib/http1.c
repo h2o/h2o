@@ -119,6 +119,8 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
         if (conn->req_body != NULL)
             h2o_buffer_dispose(&conn->req_body);
         h2o_dispose_request(&conn->req);
+        if (conn->_unconsumed_request_size)
+            h2o_buffer_consume(&conn->sock->input, conn->_unconsumed_request_size);
     }
     assert(conn->req_body == NULL);
     h2o_init_request(&conn->req, &conn->super, NULL);
@@ -161,8 +163,6 @@ static void cleanup_connection(struct st_h2o_http1_conn_t *conn)
     assert(conn->_req_entity_reader == NULL);
 
     /* handle next request */
-    if (conn->_unconsumed_request_size)
-        h2o_buffer_consume(&conn->sock->input, conn->_unconsumed_request_size);
     init_request(conn);
     conn->req.write_req.cb = NULL;
     conn->req.write_req.ctx = NULL;
