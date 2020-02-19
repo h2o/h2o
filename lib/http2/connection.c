@@ -675,6 +675,11 @@ static void set_priority(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, con
                      * This entire logic assumes Chromium-type dependency tree, thus guarded by
                      * `chromium_dependency_tree` */
                     parent_sched = h2o_http2_scheduler_find_parent_by_weight(&conn->scheduler, priority->weight);
+                    if (parent_sched == &stream->_scheduler.node) {
+                        /* h2o_http2_scheduler_find_parent_by_weight may return the current node itself.
+                         * In such a case, correct parent should be the parent of the current node. */
+                        parent_sched = &current_parent_stream->_scheduler.node;
+                    }
                 }
             }
         }
