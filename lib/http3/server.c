@@ -425,7 +425,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     }
     delta -= bytes_avail_in_first_vec;
     stream->sendbuf.off_within_first_vec = 0;
-    if (stream->sendbuf.min_index_to_addref != 0)
+    if (stream->sendbuf.vecs.entries[0].callbacks->update_refcnt != NULL)
         stream->sendbuf.vecs.entries[0].callbacks->update_refcnt(stream->sendbuf.vecs.entries, &stream->req, 0);
 
     for (i = 1; delta != 0; ++i) {
@@ -435,7 +435,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
             break;
         }
         delta -= stream->sendbuf.vecs.entries[i].len;
-        if (i < stream->sendbuf.min_index_to_addref)
+        if (stream->sendbuf.vecs.entries[i].callbacks->update_refcnt != NULL)
             stream->sendbuf.vecs.entries[i].callbacks->update_refcnt(stream->sendbuf.vecs.entries + i, &stream->req, 0);
     }
     memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
