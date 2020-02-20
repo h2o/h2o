@@ -2290,6 +2290,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     for (i = 0; i != conf.num_listeners; ++i) {
         if (conf.listeners[i]->quic.ctx == NULL)
             h2o_socket_read_stop(listeners[i].sock);
+        else
+            h2o_http3_close_all_connections(&listeners[i].http3.ctx.super);
     }
     h2o_evloop_run(conf.threads[thread_index].ctx.loop, 0);
     for (i = 0; i != conf.num_listeners; ++i) {
