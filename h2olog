@@ -8,7 +8,11 @@
 
 from bcc import BPF, USDT
 from collections import OrderedDict
-import binascii, getopt, json, sys, time
+import binascii, getopt, json, sys, time, os
+
+# sudo itself if it is not running as root
+if os.geteuid() != 0:
+    os.execvp("sudo", ["-E", sys.executable] + sys.argv)
 
 bpf = """
 #define MAX_STR_LEN 128
