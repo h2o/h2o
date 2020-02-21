@@ -644,6 +644,7 @@ int trace_send_response_header(struct pt_regs *ctx) {
     struct quic_event_t event = {};
     sprintf(event.type, "send_response_header");
 
+    event.master_conn_id = 0;
     bpf_usdt_readarg(1, ctx, &event.h2o_conn_id);
     bpf_usdt_readarg(2, ctx, &event.h2o_req_id);
 
@@ -677,9 +678,13 @@ def handle_resp_line(cpu, data, size):
 def load_common_fields(hsh, line):
     for k in ['at', 'type', 'master_conn_id']:
         v = getattr(line, k)
-        # FIXME: This hack is no longer needed as of: https://github.com/h2o/quicly/pull/279
+        # only quicly's probes have `at`
         if v == 0 and k == 'at':
             v = int(time.time() * 1000)
+
+        # h2o probes has no `master_conn_id`
+        if v == 0 and k == 'master_conn_id':
+            continue
         hsh[k] = v
 
 def build_quic_trace_result(res, event, fields):
