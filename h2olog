@@ -90,6 +90,7 @@ int trace_send_resp(struct pt_regs *ctx) {
 
 quic_bpf = """
 #define MAX_STR_LEN 32
+#define MAX_HEADER_VALUE_LEN 128
 #define TOKEN_PREVIEW_LEN 8
 
 int sprintf(char * restrict str, const char * restrict format, ...);
@@ -101,6 +102,8 @@ struct st_quicly_conn_t {
 
 struct quic_event_t {
     char type[MAX_STR_LEN];
+
+    // from quicly
     char dcid[MAX_STR_LEN];
     char token_preview[TOKEN_PREVIEW_LEN];
     u64 at;
@@ -127,6 +130,12 @@ struct quic_event_t {
     u64 off;
     u32 is_unidirectional;
     u32 ret;
+
+    // from h2o
+    u64 h2o_conn_id;
+    u64 h2o_req_id;
+    char h2o_header_name[MAX_STR_LEN];
+    char h2o_header_value[MAX_HEADER_VALUE_LEN];
 };
 
 BPF_PERF_OUTPUT(events);
@@ -627,6 +636,30 @@ int trace_quictrace_lost(struct pt_regs *ctx) {
 
     return 0;
 }
+
+// send_response_header(uint64_t conn_id, uint64_t req_id, const char *name, size_t name_len, const char *value, size_t value_len)
+int trace_send_response_header(struct pt_regs *ctx) {
+
+    void *pos = NULL;
+    struct quic_event_t event = {};
+    sprintf(event.type, "send_response_header");
+
+    bpf_usdt_readarg(1, ctx, &event.h2o_conn_id);
+    bpf_usdt_readarg(2, ctx, &event.h2o_req_id);
+
+    bpf_usdt_readarg(3, ctx, &pos);
+    // ignore arg 4 (name_len)
+    bpf_probe_read(&event.h2o_header_name, MAX_STR_LEN, pos);
+
+    bpf_usdt_readarg(5, ctx, &pos);
+    // ignore arg 6 (value_len)
+    bpf_probe_read(&event.h2o_header_value, MAX_HEADER_VALUE_LEN, pos);
+
+    if (events.perf_submit(ctx, &event, sizeof(event)) < 0)
+        bpf_trace_printk("failed to perf_submit\\n");
+
+    return 0;
+}
 """
 
 def handle_req_line(cpu, data, size):
@@ -712,6 +745,8 @@ def handle_quic_event(cpu, data, size):
         build_quic_trace_result(res, ev, ["ack_delay"])
     elif ev.type == "quictrace_lost":
         build_quic_trace_result(res, ev, ["packet_num"])
+    elif ev.type == "send_response_header":
+        build_quic_trace_result(res, ev, ["h2o_conn_id", "h2o_req_id", "h2o_header_name", "h2o_header_value"])
 
     print(json.dumps(res, separators = (',', ':')))
 
@@ -793,6 +828,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="quictrace_recv", fn_name="trace_quictrace_recv")
     u.enable_probe(probe="quictrace_recv_ack_delay", fn_name="trace_quictrace_recv_ack_delay")
     u.enable_probe(probe="quictrace_lost", fn_name="trace_quictrace_lost")
+    u.enable_probe(probe="send_response_header", fn_name="trace_send_response_header")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
