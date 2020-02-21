@@ -644,8 +644,8 @@ def handle_resp_line(cpu, data, size):
 def load_common_fields(hsh, line):
     for k in ['at', 'type', 'master_conn_id']:
         v = getattr(line, k)
+        # FIXME: This hack is no longer needed as of: https://github.com/h2o/quicly/pull/279
         if v == 0 and k == 'at':
-            # TODO: This is a synthetic hack
             v = int(time.time() * 1000)
         hsh[k] = v
 
@@ -713,7 +713,7 @@ def handle_quic_event(cpu, data, size):
     elif ev.type == "quictrace_lost":
         build_quic_trace_result(res, ev, ["packet_num"])
 
-    print(json.dumps(res))
+    print(json.dumps(res, separators = (',', ':')))
 
 def usage():
     print ("USAGE: h2olog -p PID")
@@ -744,7 +744,7 @@ if len(sys.argv) < 1:
 
 tracer_func = trace_http
 optidx = 1
-if sys.argv[1] == "quic":
+if len(sys.argv) > 1 and sys.argv[1] == "quic":
     tracer_func = trace_quic
     optidx = 2
 
