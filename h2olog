@@ -637,7 +637,6 @@ int trace_quictrace_lost(struct pt_regs *ctx) {
     return 0;
 }
 
-// send_response_header(uint64_t conn_id, uint64_t req_id, const char *name, size_t name_len, const char *value, size_t value_len)
 int trace_send_response_header(struct pt_regs *ctx) {
 
     void *pos = NULL;
