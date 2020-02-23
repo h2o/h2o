@@ -576,7 +576,7 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
             iter = kh_put_h2o_http3_acceptmap(conn->ctx->conns_accepting, accept_hashkey, &r);
             assert(iter != kh_end(conn->ctx->conns_accepting));
             kh_val(conn->ctx->conns_accepting, iter) = conn;
-            goto Respond;
+            goto UpdateConn;
         }
         conn = kh_val(ctx->conns_accepting, iter);
         assert(!quicly_is_client(conn->quic));
@@ -594,11 +594,10 @@ static void process_packets(h2o_http3_ctx_t *ctx, quicly_address_t *destaddr, qu
         }
     }
 
-Respond:
-    /* for locality, emit packets belonging to the same connection NOW! */
-    if (!h2o_http3_send(conn))
-        conn = NULL;
-    if (conn != NULL && ctx->notify_conn_update != NULL)
+UpdateConn:
+    assert(conn != NULL);
+    h2o_http3_schedule_timer(conn);
+    if (ctx->notify_conn_update != NULL)
         ctx->notify_conn_update(ctx, conn);
 }
 
