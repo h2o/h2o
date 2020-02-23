@@ -72,11 +72,22 @@
 #include "h2o/mruby_.h"
 #endif
 #include "standalone.h"
+#include "../lib/probes_.h"
 
 #ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
 #else
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 0
+#endif
+
+#if defined(__linux) && defined(SO_REUSEPORT)
+#define H2O_HTTP3_USE_REUSEPORT 1
+#define H2O_SO_REUSEPORT SO_REUSEPORT
+#elif defined(SO_REUSEPORT_LB) /* FreeBSD */
+#define H2O_HTTP3_USE_REUSEPORT 1
+#define H2O_SO_REUSEPORT SO_REUSEPORT_LB
+#else
+#define H2O_HTTP3_USE_REUSEPORT 0
 #endif
 
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
@@ -1056,8 +1067,7 @@ ErrorExit:
     return -1;
 }
 
-static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
 {
     int fd;
 
@@ -1078,6 +1088,13 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
             goto Error;
     }
 #endif
+    if (reuseport) {
+#if H2O_HTTP3_USE_REUSEPORT
+        int flag = 1;
+        if (setsockopt(fd, SOL_SOCKET, H2O_SO_REUSEPORT, &flag, sizeof(flag)) != 0)
+            fprintf(stderr, "[warning] setsockopt(SO_REUSEPORT) failed:%s\n", strerror(errno));
+#endif
+    }
     if (bind(fd, addr, addrlen) != 0)
         goto Error;
 
@@ -1116,9 +1133,41 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
 Error:
     if (fd != -1)
         close(fd);
-    h2o_configurator_errprintf(NULL, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
-                               hostname != NULL ? hostname : "ANY", servname, strerror(errno));
     return -1;
+}
+
+static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, int reuseport)
+{
+    int fd;
+
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen, reuseport)) == -1)
+        h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
+                                   hostname != NULL ? hostname : "ANY", servname, strerror(errno));
+
+    return fd;
+}
+
+static void setsockopt_recvpktinfo(int fd, int family)
+{
+    switch (family) {
+#ifdef IP_PKTINFO /* this is the de-facto API (that works on both linux, macOS) */
+    case AF_INET: {
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
+    } break;
+#endif
+#ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
+    case AF_INET6: {
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
+    } break;
+#endif
+    default:
+        break;
+    }
 }
 
 static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t *node, int socktype, int protocol,
@@ -1283,7 +1332,7 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                         }
                     } else {
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen, 0)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -1332,28 +1381,11 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, 1)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
-                    switch (ai->ai_family) {
-#ifdef IP_PKTINFO /* this is the de-facto API (that works on both linux, macOS) */
-                    case AF_INET: {
-                        int on = 1;
-                        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
-                            h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
-                    } break;
-#endif
-#ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
-                    case AF_INET6: {
-                        int on = 1;
-                        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
-                            h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
-                    } break;
-#endif
-                    default:
-                        break;
-                    }
+                    setsockopt_recvpktinfo(fd, ai->ai_family);
                     break;
                 default:
                     break;
@@ -1368,14 +1400,29 @@ static int on_config_listen(h2o_configurator_command_t *cmd, h2o_configurator_co
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s", &retry_node) != 0)
+                    yoml_t **retry_node, **sndbuf, **rcvbuf;
+                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL, "retry:s,sndbuf:s,rcvbuf:s", &retry_node, &sndbuf,
+                                                       &rcvbuf) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
                         if (on == -1)
                             return -1;
                         listener->quic.send_retry = (unsigned)on;
+                    }
+                    if (sndbuf != NULL) {
+                        unsigned sz;
+                        if (h2o_configurator_scanf(cmd, *sndbuf, "%u", &sz) != 0)
+                            return -1;
+                        if (setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sz, sizeof(sz)) != 0)
+                            h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_SNDBUF) failed:%s", strerror(errno));
+                    }
+                    if (rcvbuf != NULL) {
+                        unsigned sz;
+                        if (h2o_configurator_scanf(cmd, *rcvbuf, "%u", &sz) != 0)
+                            return -1;
+                        if (setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &sz, sizeof(sz)) != 0)
+                            h2o_configurator_errprintf(cmd, *quic_node, "setsockopt(SO_RCVBUF) failed:%s", strerror(errno));
                     }
                 }
                 listener_is_new = 1;
@@ -1980,6 +2027,15 @@ static int forward_quic_packets(h2o_http3_ctx_t *h3ctx, const uint64_t *node_id,
         writev(conf.listeners[ctx->listener_index]->quic.thread_fds[thread_id], vec, 2);
     }
 
+#if H2O_USE_DTRACE
+    if (H2O_H3_PACKET_FORWARD_ENABLED()) {
+        size_t i, num_bytes = 0;
+        for (i = 0; i != num_packets; ++i)
+            num_bytes += packets[i].octets.len;
+        H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes);
+    }
+#endif
+
     return 1;
 }
 
@@ -2223,17 +2279,40 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
-        int fd;
+        int fd = -1;
         /* dup the listener fd for other threads than the main thread */
         if (thread_index == 0) {
             fd = listener_config->fd;
         } else {
-            if ((fd = dup(listener_config->fd)) == -1) {
+            int reuseport = 0;
+#if H2O_HTTP3_USE_REUSEPORT
+            socklen_t reuseportlen = sizeof(reuseport);
+            if (getsockopt(listener_config->fd, SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
+                perror("gestockopt(SO_REUSEPORT) failed");
+                abort();
+            }
+            assert(reuseportlen == sizeof(reuseport));
+            if (reuseport) {
+                struct sockaddr_storage ss;
+                socklen_t sslen = sizeof(ss);
+                if (getsockname(listener_config->fd, (struct sockaddr *)&ss, &sslen) != 0) {
+                    perror("failed to obtain local address of the listening QUIC socket");
+                    abort();
+                }
+                if ((fd = open_listener(ss.ss_family, SOCK_DGRAM, 0, (struct sockaddr *)&ss, sslen, 1)) != -1) {
+                    setsockopt_recvpktinfo(fd, ss.ss_family);
+                } else {
+                    reuseport = 0;
+                }
+            }
+#endif
+            if (!reuseport && (fd = dup(listener_config->fd)) == -1) {
                 perror("failed to dup listening socket");
                 abort();
             }
             set_cloexec(fd);
         }
+        assert(fd != -1);
         listeners[i] = (struct listener_ctx_t){i,
                                                {&conf.threads[thread_index].ctx, listener_config->hosts, NULL, NULL,
                                                 listener_config->proxy_protocol, &conf.threads[thread_index].memcached}};
@@ -2247,8 +2326,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_init_context(&listeners[i].http3.ctx.super, conf.threads[thread_index].ctx.loop, listeners[i].sock,
                                    listener_config->quic.ctx, on_http3_accept, NULL);
-            h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, (uint32_t)conf.quic.num_threads, (uint32_t)thread_index,
-                                             0, 1, forward_quic_packets);
+            h2o_http3_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, 0, 1, forward_quic_packets);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             int fds[2];
