@@ -51,7 +51,12 @@ void quicly_recvstate_init_closed(quicly_recvstate_t *state);
 void quicly_recvstate_dispose(quicly_recvstate_t *state);
 static int quicly_recvstate_transfer_complete(quicly_recvstate_t *state);
 static size_t quicly_recvstate_bytes_available(quicly_recvstate_t *state);
-int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin);
+/**
+ * Records that the range identified by (off, *len) has been received. When 0 (success) is returned, *len contains the number of
+ * bytes that might have been newly received and therefore need to be written to the receive buffer (this number of bytes counts
+ * backward from the end of given range).
+ */
+int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin, size_t max_ranges);
 int quicly_recvstate_reset(quicly_recvstate_t *state, uint64_t eos_at, uint64_t *bytes_missing);
 
 /* inline definitions */

@@ -42,11 +42,7 @@
 static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size_t slot)
 {
     if (ranges->num_ranges == ranges->capacity) {
-        if (ranges->num_ranges == QUICLY_MAX_RANGES)
-            return QUICLY_ERROR_STATE_EXHAUSTION;
         size_t new_capacity = ranges->capacity < 4 ? 4 : ranges->capacity * 2;
-        if (new_capacity > QUICLY_MAX_RANGES)
-            new_capacity = QUICLY_MAX_RANGES;
         quicly_range_t *new_ranges = malloc(new_capacity * sizeof(*new_ranges));
         if (new_ranges == NULL)
             return PTLS_ERROR_NO_MEMORY;
@@ -64,7 +60,7 @@ static int insert_at(quicly_ranges_t *ranges, uint64_t start, uint64_t end, size
     return 0;
 }
 
-static void shrink_ranges(quicly_ranges_t *ranges, size_t begin_range_index, size_t end_range_index)
+void quicly_ranges_drop_by_range_indices(quicly_ranges_t *ranges, size_t begin_range_index, size_t end_range_index)
 {
     assert(begin_range_index < end_range_index);
 
@@ -87,7 +83,7 @@ static inline int merge_update(quicly_ranges_t *ranges, uint64_t start, uint64_t
     ranges->ranges[slot].end = end < ranges->ranges[end_slot].end ? ranges->ranges[end_slot].end : end;
 
     if (slot != end_slot)
-        shrink_ranges(ranges, slot + 1, end_slot + 1);
+        quicly_ranges_drop_by_range_indices(ranges, slot + 1, end_slot + 1);
 
     return 0;
 }
@@ -177,7 +173,7 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
         }
         /* remove the slot if the range has become empty */
         if (ranges->ranges[slot].start == ranges->ranges[slot].end)
-            shrink_ranges(ranges, slot, slot + 1);
+            quicly_ranges_drop_by_range_indices(ranges, slot, slot + 1);
         return 0;
     }
 
@@ -201,13 +197,7 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
 
     /* remove shrink_from..slot */
     if (shrink_from != slot)
-        shrink_ranges(ranges, shrink_from, slot);
+        quicly_ranges_drop_by_range_indices(ranges, shrink_from, slot);
 
     return 0;
-}
-
-void quicly_ranges_drop_smallest_range(quicly_ranges_t *ranges)
-{
-    assert(ranges->num_ranges != 0);
-    shrink_ranges(ranges, 0, 1);
 }
