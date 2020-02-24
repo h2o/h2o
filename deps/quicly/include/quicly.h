@@ -620,6 +620,10 @@ struct st_quicly_stream_t {
          * size of the receive window
          */
         uint32_t window;
+        /**
+         * maximum number of ranges (i.e. gaps + 1) permitted in `recvstate.ranges`
+         */
+        uint32_t max_ranges;
     } _recv_aux;
 };
 

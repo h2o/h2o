@@ -41,7 +41,7 @@ void quicly_recvstate_dispose(quicly_recvstate_t *state)
     quicly_ranges_clear(&state->received);
 }
 
-int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin)
+int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin, size_t max_ranges)
 {
     int ret;
 
@@ -75,9 +75,12 @@ int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len
     }
 
     /* update received range */
-    if (*len != 0)
+    if (*len != 0) {
         if ((ret = quicly_ranges_add(&state->received, off, off + *len)) != 0)
             return ret;
+        if (state->received.num_ranges > max_ranges)
+            return QUICLY_ERROR_STATE_EXHAUSTION;
+    }
     if (state->received.num_ranges == 1 && state->received.ranges[0].start == 0 && state->received.ranges[0].end == state->eos)
         goto Complete;
 

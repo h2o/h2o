@@ -667,12 +667,13 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
     assert(req->quic != NULL && quicly_sendstate_is_open(&req->quic->sendstate));
     assert(req->proceed_req.bytes_written == 0);
 
-    size_t bytes_sent = emit_data(req, chunk);
+    emit_data(req, chunk);
 
-    /* shutdown if we've written all request body.  Calculation of final_size relies on all the previous data being emitted on wire
-     * prior to this function being called (see on_send_emit) */
-    if (is_end_stream)
-        quicly_sendstate_shutdown(&req->quic->sendstate, req->quic->sendstate.size_inflight + bytes_sent);
+    /* shutdown if we've written all request body */
+    if (is_end_stream) {
+        assert(quicly_sendstate_is_open(&req->quic->sendstate));
+        quicly_sendstate_shutdown(&req->quic->sendstate, req->quic->sendstate.acked.ranges[0].end + req->sendbuf->size);
+    }
 
     req->proceed_req.bytes_written = chunk.len;
     quicly_stream_sync_sendbuf(req->quic, 1);
@@ -722,8 +723,10 @@ void h2o_httpclient_http3_notify_connection_update(h2o_http3_ctx_t *ctx, h2o_htt
 {
     struct st_h2o_http3client_conn_t *conn = (void *)_conn;
 
-    if (h2o_timer_is_linked(&conn->timeout) && conn->timeout.cb == on_connect_timeout)
+    if (h2o_timer_is_linked(&conn->timeout) && conn->timeout.cb == on_connect_timeout) {
+        /* TODO check connection state? */
         h2o_timer_unlink(&conn->timeout);
+    }
 }
 
 static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)

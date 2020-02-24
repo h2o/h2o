@@ -50,7 +50,7 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
     *dst++ = QUICLY_FRAME_TYPE_ACK;
     dst = quicly_encodev(dst, ranges->ranges[range_index].end - 1); /* largest acknowledged */
     dst = quicly_encodev(dst, ack_delay);                           /* ack delay */
-    QUICLY_BUILD_ASSERT(QUICLY_MAX_RANGES - 1 <= 63);
+    QUICLY_BUILD_ASSERT(QUICLY_MAX_ACK_BLOCKS - 1 <= 63);
     *dst++ = (uint8_t)(ranges->num_ranges - 1); /* ack blocks */
 
     while (1) {
