@@ -662,6 +662,18 @@ int trace_send_response_header(struct pt_regs *ctx) {
 }
 """
 
+# Hack to make it work both on python2 and python3
+if sys.version_info.major >= 3:
+    def s(thingy):
+        if isinstance(thingy, bytes):
+            return thingy.decode("utf-8")
+        else:
+            return thingy
+else:
+    def s(thingy):
+        return thingy
+
+
 def handle_req_line(cpu, data, size):
     line = b["rxbuf"].event(data)
     if line.http_version:
@@ -684,11 +696,11 @@ def load_common_fields(hsh, line):
         # h2o probes has no `master_conn_id`
         if v == 0 and k == 'master_conn_id':
             continue
-        hsh[k] = v
+        hsh[k] = s(v)
 
 def build_quic_trace_result(res, event, fields):
     for k in fields:
-        res[k] = getattr(event, k)
+        res[k] = s(getattr(event, k))
         if k == "token_preview":
             res[k] = binascii.hexlify(res[k])
     return res
