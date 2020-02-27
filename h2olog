@@ -680,7 +680,7 @@ def handle_req_line(cpu, data, size):
         v = "HTTP/%d.%d" % (line.http_version / 256, line.http_version % 256)
         print("%u %u RxProtocol %s" % (line.conn_id, line.req_id, v))
     else:
-        print("%u %u RxHeader   %s %s" % (line.conn_id, line.req_id, line.header_name, line.header_value))
+        print("%u %u RxHeader   %s %s" % (line.conn_id, line.req_id, s(line.header_name), s(line.header_value)))
 
 def handle_resp_line(cpu, data, size):
     line = b["txbuf"].event(data)
