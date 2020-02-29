@@ -363,6 +363,41 @@ static h2o_iovec_t log_session_id(h2o_req_t *_req)
     return h2o_iovec_init(NULL, 0);
 }
 
+static h2o_iovec_t log_stream_id(h2o_req_t *_req)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
+    char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+    return h2o_iovec_init(buf, sprintf(buf, "%" PRIu64, stream->quic->stream_id));
+}
+
+static h2o_iovec_t log_quic_stats(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    quicly_stats_t stats;
+
+    if (quicly_get_stats(conn->h3.quic, &stats) != 0)
+        return h2o_iovec_init(H2O_STRLIT("-"));
+
+    char *buf;
+    size_t len, bufsize = 256;
+Redo:
+    buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
+    len =
+        snprintf(buf, bufsize,
+                 "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64 ",packets-lost=%" PRIu64
+                 ",packets-ack-received=%" PRIu64 ",bytes-received=%" PRIu64 ",bytes-sent=%" PRIu64 ",rtt-minimum=%" PRIu32
+                 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32,
+                 stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
+                 stats.num_packets.ack_received, stats.num_bytes.received, stats.num_bytes.sent, stats.rtt.minimum,
+                 stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd);
+    if (len + 1 > bufsize) {
+        bufsize = len + 1;
+        goto Redo;
+    }
+
+    return h2o_iovec_init(buf, len);
+}
+
 void on_stream_destroy(quicly_stream_t *qs, int err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
@@ -1398,6 +1433,11 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .cipher = log_cipher,
                     .cipher_bits = log_cipher_bits,
                     .session_id = log_session_id,
+                },
+            .http3 =
+                {
+                    .stream_id = log_stream_id,
+                    .quic_stats = log_quic_stats,
                 },
         }},
     };
