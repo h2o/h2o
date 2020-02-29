@@ -182,6 +182,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
             h2o_mem_clear_pool(&pool);
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
             start_request(client->ctx);
+        } else {
+            exit(0);
         }
     }
 
@@ -385,7 +387,7 @@ int main(int argc, char **argv)
         IO_TIMEOUT,                              /* first_byte_timeout */
         NULL,                                    /* websocket_timeout */
         IO_TIMEOUT,                              /* keepalive_timeout */
-        H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2 /* max_buffer_size */
+        H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 16 /* max_buffer_size */
     };
     int opt;
 
@@ -396,6 +398,11 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
+    h3ctx.quic.transport_params.max_stream_data.bidi_local = 100 * 1024 * 1024;
+    h3ctx.quic.transport_params.max_stream_data.bidi_remote = 100 * 1024 * 1024;
+    h3ctx.quic.transport_params.max_stream_data.uni = 100 * 1024 * 1024;
+    h3ctx.quic.transport_params.max_data = 100 * 1024 * 1024;
+
     h3ctx.quic.tls = &h3ctx.tls;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
