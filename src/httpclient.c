@@ -329,6 +329,7 @@ static void usage(const char *progname)
             "  -m <method>  request method (default: GET)\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
+            "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -h           prints this help\n"
             "\n",
             progname);
@@ -411,7 +412,7 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-    while ((opt = getopt(argc, argv, "t:m:o:b:c:H:i:k2:3h")) != -1) {
+    while ((opt = getopt(argc, argv, "t:m:o:b:c:H:i:k2:3W:h")) != -1) {
         switch (opt) {
         case 't':
             cnt_left = atoi(optarg);
@@ -477,6 +478,16 @@ int main(int argc, char **argv)
             ctx.http3 = &h3ctx.h3;
 #endif
             break;
+        case 'W': {
+            uint64_t v;
+            if (sscanf(optarg, "%" PRIu64, &v) != 1) {
+                fprintf(stderr, "failed to parse HTTP/3 receive window size (-W)\n");
+                exit(EXIT_FAILURE);
+            }
+            h3ctx.quic.transport_params.max_stream_data.uni = v;
+            h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
+            h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;;
+        } break;
         case 'h':
             usage(argv[0]);
             exit(0);
