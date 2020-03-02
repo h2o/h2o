@@ -109,22 +109,3 @@ int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_
 Error:
     return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
 }
-
-int quicly_tls_push_varint(ptls_buffer_t *buf, uint64_t v)
-{
-    size_t capacity = quicly_encodev_capacity(v);
-    int ret;
-
-    if ((ret = ptls_buffer_reserve(buf, capacity)) != 0)
-        return ret;
-    buf->off = quicly_encodev(buf->base + buf->off, v) - buf->base;
-
-    return 0;
-}
-
-int quicly_tls_decode_varint(uint64_t *value, const uint8_t **src, const uint8_t *end)
-{
-    if ((*value = quicly_decodev(src, end)) == UINT64_MAX)
-        return QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER;
-    return 0;
-}
