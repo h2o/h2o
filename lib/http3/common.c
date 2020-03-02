@@ -57,7 +57,7 @@ struct st_h2o_http3_ingress_unistream_t {
  */
 #define MAX_FRAME_SIZE 16384
 
-const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-25")}};
+const ptls_iovec_t h2o_http3_alpn[1] = {{(void *)H2O_STRLIT("h3-27")}};
 
 static void on_track_sendmsg_timer(h2o_timer_t *timeout);
 
@@ -794,7 +794,6 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         FRAME( PUSH_PROMISE    ,    0 ,    1 ,    0 ,    0 );
         FRAME( GOAWAY          ,    0 ,    0 ,    1 ,    1 );
         FRAME( MAX_PUSH_ID     ,    0 ,    0 ,    1 ,    0 );
-        FRAME( DUPLICATE_PUSH  ,    0 ,    1 ,    0 ,    0 );
         FRAME( PRIORITY_UPDATE ,    0 ,    0 ,    1 ,    0 );
         /*   +-----------------+------+------+------+------+ */
         /* clang-format on */

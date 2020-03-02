@@ -825,11 +825,20 @@ int ptls_buffer__do_pushv(ptls_buffer_t *buf, const void *src, size_t len);
 /**
  * internal
  */
+int ptls_buffer__adjust_quic_blocksize(ptls_buffer_t *buf, size_t body_size);
+/**
+ * internal
+ */
 int ptls_buffer__adjust_asn1_blocksize(ptls_buffer_t *buf, size_t body_size);
 /**
  * pushes an unsigned bigint
  */
 int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t size);
+/**
+ * encodes a quic varint (maximum length is PTLS_ENCODE_QUICINT_CAPACITY)
+ */
+static uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v);
+#define PTLS_ENCODE_QUICINT_CAPACITY 8
 
 #define ptls_buffer_pushv(buf, src, len)                                                                                           \
     do {                                                                                                                           \
@@ -868,17 +877,30 @@ int ptls_buffer_push_asn1_ubigint(ptls_buffer_t *buf, const void *bignum, size_t
                          (uint8_t)(_v >> 24), (uint8_t)(_v >> 16), (uint8_t)(_v >> 8), (uint8_t)_v);                               \
     } while (0)
 
+#define ptls_buffer_push_quicint(buf, v)                                                                                           \
+    do {                                                                                                                           \
+        if ((ret = ptls_buffer_reserve((buf), PTLS_ENCODE_QUICINT_CAPACITY)) != 0)                                                 \
+            goto Exit;                                                                                                             \
+        uint8_t *d = ptls_encode_quicint((buf)->base + (buf)->off, (v));                                                           \
+        (buf)->off = d - (buf)->base;                                                                                              \
+    } while (0)
+
 #define ptls_buffer_push_block(buf, _capacity, block)                                                                              \
     do {                                                                                                                           \
         size_t capacity = (_capacity);                                                                                             \
-        ptls_buffer_pushv((buf), (uint8_t *)"\0\0\0\0\0\0\0", capacity);                                                           \
+        ptls_buffer_pushv((buf), (uint8_t *)"\0\0\0\0\0\0\0", capacity != -1 ? capacity : 1);                                      \
         size_t body_start = (buf)->off;                                                                                            \
         do {                                                                                                                       \
             block                                                                                                                  \
         } while (0);                                                                                                               \
         size_t body_size = (buf)->off - body_start;                                                                                \
-        for (; capacity != 0; --capacity)                                                                                          \
-            (buf)->base[body_start - capacity] = (uint8_t)(body_size >> (8 * (capacity - 1)));                                     \
+        if (capacity != -1) {                                                                                                      \
+            for (; capacity != 0; --capacity)                                                                                      \
+                (buf)->base[body_start - capacity] = (uint8_t)(body_size >> (8 * (capacity - 1)));                                 \
+        } else {                                                                                                                   \
+            if ((ret = ptls_buffer__adjust_quic_blocksize((buf), body_size)) != 0)                                                 \
+                goto Exit;                                                                                                         \
+        }                                                                                                                          \
     } while (0)
 
 #define ptls_buffer_push_asn1_block(buf, block)                                                                                    \
@@ -928,18 +950,32 @@ int ptls_decode16(uint16_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode24(uint32_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode32(uint32_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end);
+uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
 
 #define ptls_decode_open_block(src, end, capacity, block)                                                                          \
     do {                                                                                                                           \
         size_t _capacity = (capacity);                                                                                             \
-        if (_capacity > (size_t)(end - (src))) {                                                                                   \
-            ret = PTLS_ALERT_DECODE_ERROR;                                                                                         \
-            goto Exit;                                                                                                             \
+        size_t _block_size;                                                                                                        \
+        if (_capacity == -1) {                                                                                                     \
+            uint64_t _block_size64;                                                                                                \
+            const uint8_t *_src = (src);                                                                                           \
+            if ((_block_size64 = ptls_decode_quicint(&_src, end)) == UINT64_MAX ||                                                 \
+                (sizeof(size_t) < 8 && (_block_size64 >> (8 * sizeof(size_t))) != 0)) {                                            \
+                ret = PTLS_ALERT_DECODE_ERROR;                                                                                     \
+                goto Exit;                                                                                                         \
+            }                                                                                                                      \
+            (src) = _src;                                                                                                          \
+            _block_size = (size_t)_block_size64;                                                                                   \
+        } else {                                                                                                                   \
+            if (_capacity > (size_t)(end - (src))) {                                                                               \
+                ret = PTLS_ALERT_DECODE_ERROR;                                                                                     \
+                goto Exit;                                                                                                         \
+            }                                                                                                                      \
+            _block_size = 0;                                                                                                       \
+            do {                                                                                                                   \
+                _block_size = _block_size << 8 | *(src)++;                                                                         \
+            } while (--_capacity != 0);                                                                                            \
         }                                                                                                                          \
-        size_t _block_size = 0;                                                                                                    \
-        do {                                                                                                                       \
-            _block_size = _block_size << 8 | *(src)++;                                                                             \
-        } while (--_capacity != 0);                                                                                                \
         if (_block_size > (size_t)(end - (src))) {                                                                                 \
             ret = PTLS_ALERT_DECODE_ERROR;                                                                                         \
             goto Exit;                                                                                                             \
@@ -1279,6 +1315,30 @@ inline void ptls_buffer_dispose(ptls_buffer_t *buf)
 {
     ptls_buffer__release_memory(buf);
     *buf = (ptls_buffer_t){NULL};
+}
+
+inline uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v)
+{
+    if (PTLS_UNLIKELY(v > 63)) {
+        if (PTLS_UNLIKELY(v > 16383)) {
+            unsigned sb;
+            if (PTLS_UNLIKELY(v > 1073741823)) {
+                assert(v <= 4611686018427387903);
+                *p++ = 0xc0 | (uint8_t)(v >> 56);
+                sb = 6 * 8;
+            } else {
+                *p++ = 0x80 | (uint8_t)(v >> 24);
+                sb = 2 * 8;
+            }
+            do {
+                *p++ = (uint8_t)(v >> sb);
+            } while ((sb -= 8) != 0);
+        } else {
+            *p++ = 0x40 | (uint8_t)((uint16_t)v >> 8);
+        }
+    }
+    *p++ = (uint8_t)v;
+    return p;
 }
 
 inline void ptls_cipher_init(ptls_cipher_context_t *ctx, const void *iv)

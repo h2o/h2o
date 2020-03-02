@@ -84,11 +84,11 @@ static uint16_t quicly_decode16(const uint8_t **src);
 static uint32_t quicly_decode24(const uint8_t **src);
 static uint32_t quicly_decode32(const uint8_t **src);
 static uint64_t quicly_decode64(const uint8_t **src);
-static uint64_t quicly_decodev(const uint8_t **src, const uint8_t *end);
+#define quicly_decodev ptls_decode_quicint
 static uint8_t *quicly_encode16(uint8_t *p, uint16_t v);
 static uint8_t *quicly_encode32(uint8_t *p, uint32_t v);
 static uint8_t *quicly_encode64(uint8_t *p, uint64_t v);
-static uint8_t *quicly_encodev(uint8_t *p, uint64_t v);
+#define quicly_encodev ptls_encode_quicint
 static size_t quicly_encodev_capacity(uint64_t v);
 static unsigned quicly_clz32(uint32_t v);
 static unsigned quicly_clz64(uint64_t v);
@@ -226,9 +226,6 @@ typedef struct st_quicly_new_token_frame_t {
 
 static int quicly_decode_new_token_frame(const uint8_t **src, const uint8_t *end, quicly_new_token_frame_t *frame);
 
-int quicly_tls_push_varint(ptls_buffer_t *buf, uint64_t v);
-int quicly_tls_decode_varint(uint64_t *value, const uint8_t **src, const uint8_t *end);
-
 /* inline definitions */
 
 inline uint16_t quicly_decode16(const uint8_t **src)
@@ -260,25 +257,6 @@ inline uint64_t quicly_decode64(const uint8_t **src)
     return v;
 }
 
-inline uint64_t quicly_decodev(const uint8_t **src, const uint8_t *end)
-{
-    if (*src == end)
-        return UINT64_MAX;
-    if (**src >> 6 == 0)
-        return *(*src)++;
-
-    /* multi-byte */
-    size_t len = 1 << (**src >> 6);
-    if ((size_t)(end - *src) < len)
-        return UINT64_MAX;
-    uint64_t v = *(*src)++ & 0x3f;
-    --len;
-    do {
-        v = (v << 8) | *(*src)++;
-    } while (--len != 0);
-    return v;
-}
-
 inline uint8_t *quicly_encode16(uint8_t *p, uint16_t v)
 {
     *p++ = (uint8_t)(v >> 8);
@@ -304,30 +282,6 @@ inline uint8_t *quicly_encode64(uint8_t *p, uint64_t v)
     *p++ = (uint8_t)(v >> 24);
     *p++ = (uint8_t)(v >> 16);
     *p++ = (uint8_t)(v >> 8);
-    *p++ = (uint8_t)v;
-    return p;
-}
-
-inline uint8_t *quicly_encodev(uint8_t *p, uint64_t v)
-{
-    if (v > 63) {
-        if (v > 16383) {
-            if (v > 1073741823) {
-                assert(v <= 4611686018427387903);
-                *p++ = 0xc0 | (uint8_t)(v >> 56);
-                *p++ = (uint8_t)(v >> 48);
-                *p++ = (uint8_t)(v >> 40);
-                *p++ = (uint8_t)(v >> 32);
-                *p++ = (uint8_t)(v >> 24);
-            } else {
-                *p++ = 0x80 | (uint8_t)(v >> 24);
-            }
-            *p++ = (uint8_t)(v >> 16);
-            *p++ = (uint8_t)(v >> 8);
-        } else {
-            *p++ = 0x40 | (v >> 8);
-        }
-    }
     *p++ = (uint8_t)v;
     return p;
 }

@@ -381,6 +381,7 @@ int main(int argc, char **argv)
                                     NULL,
                                     0,
                                     0,
+                                    0,
                                     NULL,
                                     1};
     quic_ctx = quicly_spec_context;

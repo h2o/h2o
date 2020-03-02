@@ -61,7 +61,7 @@ extern "C" {
 
 #define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
 
-#define QUICLY_PROTOCOL_VERSION 0xff000019
+#define QUICLY_PROTOCOL_VERSION 0xff00001b
 
 #define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte)&0xf0) == 0xc0)
 
@@ -621,7 +621,10 @@ struct st_quicly_stream_t {
          */
         uint32_t window;
         /**
-         * maximum number of ranges (i.e. gaps + 1) permitted in `recvstate.ranges`
+         * Maximum number of ranges (i.e. gaps + 1) permitted in `recvstate.ranges`.
+         * As discussed in https://github.com/h2o/quicly/issues/278, this value should be propotional to the size of the receive
+         * window, so that the receive window can be maintained even in the worst case, where every one of the two packets being
+         * sent are received.
          */
         uint32_t max_ranges;
     } _recv_aux;

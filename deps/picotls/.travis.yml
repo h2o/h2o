@@ -17,6 +17,18 @@ matrix:
       os: linux
       compiler: clang
       before_install: *bs_linux
+    - name: Linux (OpenSSL 1.0.2)
+      os: linux
+      before_install:
+        - sudo apt-get install faketime libscope-guard-perl libtest-tcp-perl
+        - curl https://www.openssl.org/source/old/1.0.2/openssl-1.0.2u.tar.gz | tar xzf -
+        - cd openssl-1.0.2u
+        - ./config --prefix=/usr/local/openssl-1.0.2
+        - make
+        - sudo make install
+        - cd ..
+      env:
+        - PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig
     - name: macOS (Xcode)
       os: osx
       addons: &addons_macos
@@ -30,13 +42,6 @@ matrix:
         - curl -L https://cpanmin.us | sudo perl - App::cpanminus
         - sudo cpanm --notest Scope::Guard
         - sudo cpanm --notest Test::TCP
-    - name: macOS (Xcode 10.1/clang-10)
-      os: osx
-      osx_image: xcode10.1
-      addons: *addons_macos
-      env:
-        - CMAKE_OPTS=" -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl/"
-      before_install: *bs_macos
 
 script:
   - cmake ${CMAKE_OPTS} .
