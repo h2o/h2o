@@ -794,7 +794,6 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         FRAME( PUSH_PROMISE    ,    0 ,    1 ,    0 ,    0 );
         FRAME( GOAWAY          ,    0 ,    0 ,    1 ,    1 );
         FRAME( MAX_PUSH_ID     ,    0 ,    0 ,    1 ,    0 );
-        FRAME( DUPLICATE_PUSH  ,    0 ,    1 ,    0 ,    0 );
         FRAME( PRIORITY_UPDATE ,    0 ,    0 ,    1 ,    0 );
         /*   +-----------------+------+------+------+------+ */
         /* clang-format on */
