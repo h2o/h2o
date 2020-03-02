@@ -538,6 +538,26 @@ int ptls_buffer__do_pushv(ptls_buffer_t *buf, const void *src, size_t len)
     return 0;
 }
 
+int ptls_buffer__adjust_quic_blocksize(ptls_buffer_t *buf, size_t body_size)
+{
+    uint8_t sizebuf[PTLS_ENCODE_QUICINT_CAPACITY];
+    size_t sizelen = ptls_encode_quicint(sizebuf, body_size) - sizebuf;
+
+    /* adjust amount of space before body_size to `sizelen` bytes */
+    if (sizelen != 1) {
+        int ret;
+        if ((ret = ptls_buffer_reserve(buf, sizelen - 1)) != 0)
+            return ret;
+        memmove(buf->base + buf->off - body_size - 1 + sizelen, buf->base + buf->off - body_size, body_size);
+        buf->off += sizelen - 1;
+    }
+
+    /* write the size */
+    memcpy(buf->base + buf->off - body_size - sizelen, sizebuf, sizelen);
+
+    return 0;
+}
+
 int ptls_buffer__adjust_asn1_blocksize(ptls_buffer_t *buf, size_t body_size)
 {
     fprintf(stderr, "unimplemented\n");
@@ -793,6 +813,26 @@ int ptls_decode64(uint64_t *value, const uint8_t **src, const uint8_t *end)
     *value = ntoh64(*src);
     *src += 8;
     return 0;
+}
+
+uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end)
+{
+    if (PTLS_UNLIKELY(*src == end))
+        return UINT64_MAX;
+
+    uint8_t b = *(*src)++;
+
+    if (PTLS_LIKELY(b <= 0x3f))
+        return b;
+
+    uint64_t v = b & 0x3f;
+    unsigned bytes_left = (1 << (b >> 6)) - 1;
+    if (PTLS_UNLIKELY((size_t)(end - *src) < bytes_left))
+        return UINT64_MAX;
+    do {
+        v = (v << 8) | *(*src)++;
+    } while (--bytes_left != 0);
+    return v;
 }
 
 static void log_secret(ptls_t *tls, const char *type, ptls_iovec_t secret)
@@ -3577,7 +3617,6 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     enum { HANDSHAKE_MODE_FULL, HANDSHAKE_MODE_PSK, HANDSHAKE_MODE_PSK_DHE } mode;
     size_t psk_index = SIZE_MAX;
     ptls_iovec_t pubkey = {0}, ecdh_secret = {0};
-    uint8_t finished_key[PTLS_MAX_DIGEST_SIZE];
     int accept_early_data = 0, is_second_flight = tls->state == PTLS_STATE_SERVER_EXPECT_SECOND_CLIENT_HELLO, ret;
 
     /* decode ClientHello */
@@ -3931,7 +3970,8 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
         }
     }
 
-    send_finished(tls, emitter);
+    if ((ret = send_finished(tls, emitter)) != 0)
+        goto Exit;
 
     assert(tls->key_schedule->generation == 2);
     if ((ret = key_schedule_extract(tls->key_schedule, ptls_iovec_init(NULL, 0))) != 0)
@@ -3971,8 +4011,10 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
 
 Exit:
     free(pubkey.base);
-    free(ecdh_secret.base);
-    ptls_clear_memory(finished_key, sizeof(finished_key));
+    if (ecdh_secret.base != NULL) {
+        ptls_clear_memory(ecdh_secret.base, ecdh_secret.len);
+        free(ecdh_secret.base);
+    }
     return ret;
 
 #undef EMIT_SERVER_HELLO

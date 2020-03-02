@@ -511,13 +511,15 @@ static void test_fragmented_message(void)
 
     /* overflow (post-cb) */
     test_fragmented_message_queue.count = 0;
-    SET_RECORD("\x01\x00\x00\xff" "0123456789ab");
+    SET_RECORD("\x01\x00\x00\xff"
+               "0123456789ab");
     ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
     ok(ret == PTLS_ALERT_HANDSHAKE_FAILURE);
     ok(test_fragmented_message_queue.count == 0);
 
     /* overflow (pre-cb) */
-    SET_RECORD("\x01\x00\x00\xff" "0123456789");
+    SET_RECORD("\x01\x00\x00\xff"
+               "0123456789");
     ret = handle_handshake_record(&tls, test_fragmented_message_record, NULL, &rec, NULL);
     ok(ret == PTLS_ERROR_IN_PROGRESS);
     SET_RECORD("abcdef");
@@ -1457,6 +1459,91 @@ static void test_all_handshakes(void)
         ctx->sign_certificate = second_sc_orig;
 }
 
+static void test_quicint(void)
+{
+#define CHECK_PATTERN(output, ...)                                                                                                 \
+    do {                                                                                                                           \
+        const uint8_t pat[] = {__VA_ARGS__}, *p = pat;                                                                             \
+        ok(output == ptls_decode_quicint(&p, pat + sizeof(pat)));                                                                  \
+        ok(p == pat + sizeof(pat));                                                                                                \
+    } while (0)
+    CHECK_PATTERN(0, 0);
+    CHECK_PATTERN(0, 0x40, 0);
+    CHECK_PATTERN(0, 0x80, 0, 0, 0);
+    CHECK_PATTERN(0, 0xc0, 0, 0, 0, 0, 0, 0, 0);
+    CHECK_PATTERN(9, 9);
+    CHECK_PATTERN(9, 0x40, 9);
+    CHECK_PATTERN(9, 0x80, 0, 0, 9);
+    CHECK_PATTERN(9, 0xc0, 0, 0, 0, 0, 0, 0, 9);
+    CHECK_PATTERN(0x1234, 0x52, 0x34);
+    CHECK_PATTERN(0x1234, 0x80, 0, 0x12, 0x34);
+    CHECK_PATTERN(0x1234, 0xc0, 0, 0, 0, 0, 0, 0x12, 0x34);
+    CHECK_PATTERN(0x12345678, 0x92, 0x34, 0x56, 0x78);
+    CHECK_PATTERN(0x12345678, 0xc0, 0, 0, 0, 0x12, 0x34, 0x56, 0x78);
+    CHECK_PATTERN(0x123456789abcdef, 0xc1, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef);
+#undef CHECK_PATTERN
+
+    static uint64_t inputs[] = {0, 1, 63, 64, 16383, 16384, 1073741823, 1073741824, UINT64_MAX};
+    size_t i;
+
+    for (i = 0; inputs[i] != UINT64_MAX; ++i) {
+        uint8_t buf[PTLS_ENCODE_QUICINT_CAPACITY + 1];
+        memset(buf, 123, sizeof(buf));
+        uint8_t *enc_end = ptls_encode_quicint(buf, inputs[i]);
+        assert(enc_end - buf <= PTLS_ENCODE_QUICINT_CAPACITY);
+        const uint8_t *src = buf;
+        uint64_t decoded = ptls_decode_quicint(&src, buf + sizeof(buf));
+        ok(inputs[i] == decoded);
+        ok(src == enc_end);
+        ok(*src == 123);
+    }
+}
+
+static void test_quicblock(void)
+{
+    ptls_buffer_t buf;
+    const uint8_t *src, *end;
+    int ret;
+
+    ptls_buffer_init(&buf, "", 0);
+
+    ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, "abc", 3); });
+    src = buf.base;
+    end = buf.base + buf.off;
+    ptls_decode_block(src, end, -1, {
+        ok(end - src == 3);
+        ok(memcmp(src, "abc", 3) == 0);
+        src += 3;
+    });
+
+    buf.off = 0;
+    ptls_buffer_push_block(&buf, -1, {
+        if ((ret = ptls_buffer_reserve(&buf, 123)) != 0)
+            goto Exit;
+        memset(buf.base + buf.off, 0x55, 123);
+        buf.off += 123;
+    });
+    src = buf.base;
+    end = buf.base + buf.off;
+    ptls_decode_block(src, end, -1, {
+        ok(end - src == 123);
+        size_t i;
+        for (i = 0; i != 123; ++i)
+            ok(*src++ == 0x55);
+    });
+
+Exit:
+    if (ret != 0)
+        ok(!"fail");
+    ptls_buffer_dispose(&buf);
+}
+
+static void test_quic(void)
+{
+    subtest("varint", test_quicint);
+    subtest("block", test_quicblock);
+}
+
 void test_picotls(void)
 {
     subtest("is_ipaddr", test_is_ipaddr);
@@ -1475,6 +1562,7 @@ void test_picotls(void)
     subtest("base64-decode", test_base64_decode);
     subtest("fragmented-message", test_fragmented_message);
     subtest("handshake", test_all_handshakes);
+    subtest("quic", test_quic);
 }
 
 void test_picotls_esni(ptls_key_exchange_context_t **keys)
