@@ -83,7 +83,7 @@ static void HMAC_CTX_free(HMAC_CTX *ctx)
 
 static int EVP_CIPHER_CTX_reset(EVP_CIPHER_CTX *ctx)
 {
-    EVP_CIPHER_CTX_cleanup(ctx);
+    return EVP_CIPHER_CTX_cleanup(ctx);
 }
 
 #endif
