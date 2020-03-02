@@ -331,7 +331,7 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     default:
         quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_STREAM_CREATION);
         stream->handle_input = NULL;
-        h2o_buffer_consume(&stream->recvbuf, stream->recvbuf->size);
+        *src = src_end;
         return;
     }
 
