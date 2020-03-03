@@ -302,6 +302,12 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
     } while (*src != src_end);
 }
 
+static void discard_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
+                                 const uint8_t *src_end, int is_eos)
+{
+    *src = src_end;
+}
+
 static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
                                       const uint8_t *src_end, int is_eos)
 {
@@ -330,9 +336,8 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         break;
     default:
         quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_STREAM_CREATION);
-        stream->handle_input = NULL;
-        *src = src_end;
-        return;
+        stream->handle_input = discard_handle_input;
+        break;
     }
 
     return stream->handle_input(conn, stream, src, src_end, is_eos);
