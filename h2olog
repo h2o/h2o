@@ -710,6 +710,12 @@ def handle_quic_event(cpu, data, size):
     if allowed_quic_event and ev.type != allowed_quic_event:
         return
 
+    if ev.type == "send_response_header": # HTTP-level events
+        if not verbose:
+            return
+        if allowed_res_header_name and ev.h2o_header_name != allowed_res_header_name:
+            return
+
     res = OrderedDict()
     load_common_fields(res, ev)
 
@@ -767,9 +773,12 @@ def handle_quic_event(cpu, data, size):
     print(json.dumps(res, separators = (',', ':')))
 
 def usage():
-    print ("USAGE: h2olog -p PID")
-    print ("       h2olog quic -p PID")
-    print ("       h2olog quic -t event_type -p PID")
+    print("""
+USAGE: h2olog -p PID
+       h2olog quic -p PID
+       h2olog quic -t event_type -p PID
+       h2olog quic -v -s response_header_name -p PID
+""".strip())
     exit()
 
 def trace_http():
@@ -802,12 +811,18 @@ if len(sys.argv) > 1 and sys.argv[1] == "quic":
 try:
     h2o_pid = 0
     allowed_quic_event = None
-    opts, args = getopt.getopt(sys.argv[optidx:], 'p:t:')
+    allowed_res_header_name = None
+    verbose = False
+    opts, args = getopt.getopt(sys.argv[optidx:], 'vp:t:s:')
     for opt, arg in opts:
         if opt == "-p":
             h2o_pid = arg
-        if opt == "-t":
+        elif opt == "-t":
             allowed_quic_event = arg
+        elif opt == "-v":
+            verbose = True
+        elif opt == "-s": # reSponse
+            allowed_res_header_name = arg.lower()
 except getopt.error as msg:
     print(msg)
     sys.exit(2)
