@@ -43,9 +43,9 @@ $ sudo h2olog quic -p $(pgrep -o h2o)
 Here's an example trace.
 
 ```
-{"at": 1580154303455, "type": "quicly__accept", "master_conn_id": 1, "dcid": "4070a82916f79d71"}
-{"at": 1580154303457, "type": "quicly__packet_prepare", "master_conn_id": 1, "first_octet": 192, "dcid": "9e4605bc54ec8b9d"}
-{"at": 1580154303457, "type": "quicly__packet_commit", "master_conn_id": 1, "packet_num": 0, "packet_len": 176, "ack_only": 0}
+{"at": 1580154303455, "type": "quicly:accept", "master_conn_id": 1, "dcid": "4070a82916f79d71"}
+{"at": 1580154303457, "type": "quicly:packet_prepare", "master_conn_id": 1, "first_octet": 192, "dcid": "9e4605bc54ec8b9d"}
+{"at": 1580154303457, "type": "quicly:packet_commit", "master_conn_id": 1, "packet_num": 0, "packet_len": 176, "ack_only": 0}
 ... and more ...
 ```
 

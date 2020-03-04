@@ -690,16 +690,17 @@ def handle_resp_line(cpu, data, size):
     print("%u %u TxStatus   %d" % (line.conn_id, line.req_id, line.http_status))
 
 def load_common_fields(hsh, line):
-    for k in ['at', 'type', 'master_conn_id']:
-        v = getattr(line, k)
-        # only quicly's probes have `at`
-        if v == 0 and k == 'at':
-            v = int(time.time() * 1000)
+    at = line.at
+    if at == 0:
+        at = int(time.time() * 1000)
+    hsh["at"] = at
 
-        # h2o probes has no `master_conn_id`
-        if v == 0 and k == 'master_conn_id':
-            continue
-        hsh[k] = s(v)
+    fully_qualified_type = line.type.replace("__", ":", 1)
+    hsh["type"] = fully_qualified_type
+
+    master_conn_id = line.master_conn_id
+    if master_conn_id != 0:
+        hsh["master_conn_id"] = master_conn_id
 
 def build_quic_trace_result(res, event, fields):
     for k in fields:
