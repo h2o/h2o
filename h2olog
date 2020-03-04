@@ -710,8 +710,11 @@ def handle_quic_event(cpu, data, size):
     if allowed_quic_event and ev.type != allowed_quic_event:
         return
 
-    if allowed_res_header_name and ev.type == "send_response_header" and ev.h2o_header_name != allowed_res_header_name:
-        return
+    if ev.type == "send_response_header": # HTTP-level events
+        if not verbose:
+            return
+        if allowed_res_header_name and ev.h2o_header_name != allowed_res_header_name:
+            return
 
     res = OrderedDict()
     load_common_fields(res, ev)
@@ -820,7 +823,6 @@ try:
             verbose = True
         elif opt == "-s": # reSponse
             allowed_res_header_name = arg.lower()
-
 except getopt.error as msg:
     print(msg)
     sys.exit(2)
