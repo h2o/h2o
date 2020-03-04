@@ -714,7 +714,7 @@ def handle_quic_event(cpu, data, size):
     if allowed_quic_event and ev.type != allowed_quic_event:
         return
 
-    if ev.type == "send_response_header": # HTTP-level events
+    if ev.type == "h2o__send_response_header": # HTTP-level events
         if not verbose:
             return
         if allowed_res_header_name and ev.h2o_header_name != allowed_res_header_name:
