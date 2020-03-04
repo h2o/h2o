@@ -857,8 +857,7 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="quictrace_recv", fn_name="trace_quictrace_recv")
     u.enable_probe(probe="quictrace_recv_ack_delay", fn_name="trace_quictrace_recv_ack_delay")
     u.enable_probe(probe="quictrace_lost", fn_name="trace_quictrace_lost")
-    if verbose:
-        u.enable_probe(probe="send_response_header", fn_name="trace_send_response_header")
+    u.enable_probe(probe="send_response_header", fn_name="trace_send_response_header")
     b = BPF(text=quic_bpf, usdt_contexts=[u])
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
