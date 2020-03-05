@@ -93,7 +93,7 @@ quic_bpf = """
 #define MAX_HEADER_VALUE_LEN 128
 #define TOKEN_PREVIEW_LEN 8
 
-#include <linux/kernel.h> /* sprintf */
+#include <linux/kernel.h>
 
 #define INIT_EVENT_NAME(event) do { \\
         sprintf((event).type, __func__ + (sizeof("trace_") -1)); \\
@@ -837,8 +837,6 @@ if h2o_pid == 0:
 u = USDT(pid=int(h2o_pid))
 
 if sys.argv[1] == "quic":
-    # NOTE: fully-specified probe name (e.g. "quicly:accept") is NOT available yet.
-
     # provider qiucly:
     u.enable_probe(probe="accept", fn_name="trace_quicly__accept")
     u.enable_probe(probe="receive", fn_name="trace_quicly__receive")
