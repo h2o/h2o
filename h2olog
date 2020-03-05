@@ -6,15 +6,17 @@
 #
 # Copyright 2019 Fastly, Toru Maesaka
 
-from bcc import BPF, USDT
+from bcc import BPF, USDT, __version__ as bcc_version
 from collections import OrderedDict
-import binascii, getopt, json, sys, time, os
+import binascii, getopt, json, sys, time, os, platform
+
+version = "0.0.1"
 
 # sudo itself if it is not running as root
 if os.geteuid() != 0:
     os.execvp("sudo", ["-E", sys.executable] + sys.argv)
 
-bpf = """
+default_bpf = """
 #define MAX_STR_LEN 128
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -782,6 +784,7 @@ USAGE: h2olog -p PID
        h2olog quic -p PID
        h2olog quic -t event_type -p PID
        h2olog quic -v -s response_header_name -p PID
+       h2olog [-h] [-V] [-d] // help / version / debug
 """.strip())
     exit()
 
@@ -822,9 +825,17 @@ try:
     allowed_quic_event = set()
     allowed_res_header_name = set()
     verbose = False
-    opts, args = getopt.getopt(sys.argv[optidx:], 'vp:t:s:')
+    debug = False
+    opts, args = getopt.getopt(sys.argv[optidx:], 'hVvp:t:s:d')
     for opt, arg in opts:
-        if opt == "-p":
+        if opt == "-h":
+            usage()
+        elif opt == "-V":
+            print("h2olog version %s" % version)
+            print("Platform: %s" % platform.platform())
+            print("BCC: %s" % bcc_version)
+            sys.exit()
+        elif opt == "-p":
             h2o_pid = arg
         elif opt == "-t":
             allowed_quic_event.update(arg.replace(":", "__", 1).split(","))
@@ -832,6 +843,10 @@ try:
             verbose = True
         elif opt == "-s": # reSponse
             allowed_res_header_name.update(arg.lower().split(","))
+        elif opt == "-d": # Debug
+            debug = True
+
+
 except getopt.error as msg:
     print(msg)
     sys.exit(2)
@@ -875,11 +890,18 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
 
     cflags = ["-DMAX_EVENT_TYPE_LEN=%s" % get_event_type_len(u, ["h2o", "quicly"])]
-    b = BPF(text=quic_bpf, usdt_contexts=[u], cflags=cflags)
+    bpf = quic_bpf
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
     u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
     u.enable_probe(probe="send_response", fn_name="trace_send_resp")
-    b = BPF(text=bpf, usdt_contexts=[u])
+    cflags = []
+    bpf = default_bpf
+
+if debug:
+    print(quic_bpf)
+    sys.exit()
+
+b = BPF(text=bpf, usdt_contexts=[u], cflags=cflags)
 
 tracer_func()
