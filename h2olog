@@ -16,7 +16,6 @@ if os.geteuid() != 0:
 
 bpf = """
 #define MAX_STR_LEN 128
-#define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 /*
  * "trace_line_t" is a general structure to store the data emitted by
@@ -59,14 +58,12 @@ int trace_receive_req_header(struct pt_regs *ctx) {
     // Extract the Header Name
     bpf_usdt_readarg(3, ctx, &pos);
     bpf_usdt_readarg(4, ctx, &line.header_name_len);
-    line.header_name_len = MIN(MAX_STR_LEN, line.header_name_len);
-    bpf_probe_read(&line.header_name, line.header_name_len, pos);
+    bpf_probe_read(&line.header_name, MAX_STR_LEN, pos);
 
     // Extract the Header Value
     bpf_usdt_readarg(5, ctx, &pos);
     bpf_usdt_readarg(6, ctx, &line.header_value_len);
-    line.header_value_len = MIN(MAX_STR_LEN, line.header_value_len);
-    bpf_probe_read(&line.header_value, line.header_value_len, pos);
+    bpf_probe_read(&line.header_value, MAX_STR_LEN, pos);
 
     if (rxbuf.perf_submit(ctx, &line, sizeof(line)) < 0)
         bpf_trace_printk("failed to perf_submit\\n");
