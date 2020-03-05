@@ -643,9 +643,11 @@ int trace_quicly__quictrace_lost(struct pt_regs *ctx) {
     return 0;
 }
 
+#ifdef ENABLE_SEND_RESPONSE_HEADER
 int trace_h2o__send_response_header(struct pt_regs *ctx) {
     void *pos = NULL;
     struct quic_event_t event = {};
+    size_t name_len = 0;
     INIT_EVENT_NAME(event);
 
     event.master_conn_id = 0;
@@ -653,8 +655,14 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
     bpf_usdt_readarg(2, ctx, &event.h2o_req_id);
 
     bpf_usdt_readarg(3, ctx, &pos);
-    // ignore arg 4 (name_len)
+    bpf_usdt_readarg(4, ctx, &name_len);
     bpf_probe_read(&event.h2o_header_name, MAX_STR_LEN, pos);
+
+#ifdef CHECK_ALLOWED_RES_HEADER_NAME
+    if (!CHECK_ALLOWED_RES_HEADER_NAME(event.h2o_header_name, name_len)) {
+        return 0;
+    }
+#endif
 
     bpf_usdt_readarg(5, ctx, &pos);
     // ignore arg 6 (value_len)
@@ -665,6 +673,7 @@ int trace_h2o__send_response_header(struct pt_regs *ctx) {
 
     return 0;
 }
+#endif /* ENABLE_SEND_RESPONSE_HEADER */
 """
 
 # Hack to make it work both on python2 and python3
@@ -715,12 +724,6 @@ def handle_quic_event(cpu, data, size):
     ev = b["events"].event(data)
     if len(allowed_quic_event) > 0 and ev.type not in allowed_quic_event:
         return
-
-    if ev.type == "h2o__send_response_header": # HTTP-level events
-        if not verbose:
-            return
-        if len(allowed_res_header_name) > 0 and ev.h2o_header_name not in allowed_res_header_name:
-            return
 
     res = OrderedDict()
     load_common_fields(res, ev)
@@ -815,6 +818,17 @@ def get_event_type_len(usdt, providers):
     probes = filter(lambda probe: probe.provider in providers_set, usdt.enumerate_probes())
     return 1 + max(map(lambda probe: len("%s__%s" % (probe.provider, probe.name)), probes))
 
+def generate_filter_expr(candidates):
+    # where `s` is a macro argument, and `l` is its length (size_t)
+    conditions = []
+    for candidate in candidates:
+        exprs = ["/* %s */ (l) == %d" % (candidate, len(candidate))]
+        for i, c in enumerate(candidate):
+            exprs.append("(s)[%d] == '%s'" % (i, c))
+        conditions.append("(%s)" % " && ".join(exprs))
+
+    return "(%s)" % " || ".join(conditions)
+
 if len(sys.argv) < 1:
     usage()
 
@@ -885,10 +899,15 @@ if sys.argv[1] == "quic":
     u.enable_probe(probe="quictrace_recv_ack_delay", fn_name="trace_quicly__quictrace_recv_ack_delay")
     u.enable_probe(probe="quictrace_lost", fn_name="trace_quicly__quictrace_lost")
 
-    # provider h2o:
-    u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
-
     cflags = ["-DMAX_EVENT_TYPE_LEN=%s" % get_event_type_len(u, ["h2o", "quicly"])]
+
+    # provider h2o:
+    if verbose:
+        u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
+        cflags.append("-DENABLE_SEND_RESPONSE_HEADER")
+        if len(allowed_res_header_name):
+            cflags.append("-DCHECK_ALLOWED_RES_HEADER_NAME(s,l)=%s" % generate_filter_expr(allowed_res_header_name))
+
     bpf = quic_bpf
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
