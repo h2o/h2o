@@ -711,13 +711,13 @@ def build_quic_trace_result(res, event, fields):
 
 def handle_quic_event(cpu, data, size):
     ev = b["events"].event(data)
-    if allowed_quic_event and ev.type != allowed_quic_event:
+    if len(allowed_quic_event) > 0 and ev.type not in allowed_quic_event:
         return
 
     if ev.type == "h2o__send_response_header": # HTTP-level events
         if not verbose:
             return
-        if allowed_res_header_name and ev.h2o_header_name != allowed_res_header_name:
+        if len(allowed_res_header_name) > 0 and ev.h2o_header_name not in allowed_res_header_name:
             return
 
     res = OrderedDict()
@@ -814,19 +814,19 @@ if len(sys.argv) > 1 and sys.argv[1] == "quic":
 
 try:
     h2o_pid = 0
-    allowed_quic_event = None
-    allowed_res_header_name = None
+    allowed_quic_event = set()
+    allowed_res_header_name = set()
     verbose = False
     opts, args = getopt.getopt(sys.argv[optidx:], 'vp:t:s:')
     for opt, arg in opts:
         if opt == "-p":
             h2o_pid = arg
         elif opt == "-t":
-            allowed_quic_event = arg
+            allowed_quic_event.update(arg.replace(":", "__", 1).split(","))
         elif opt == "-v":
             verbose = True
         elif opt == "-s": # reSponse
-            allowed_res_header_name = arg.lower()
+            allowed_res_header_name.update(arg.lower().split(","))
 except getopt.error as msg:
     print(msg)
     sys.exit(2)
