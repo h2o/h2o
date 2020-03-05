@@ -105,7 +105,7 @@ struct st_quicly_conn_t {
 };
 
 struct quic_event_t {
-    char type[MAX_STR_LEN];
+    char type[MAX_EVENT_TYPE_LEN];
 
     // from quicly
     char dcid[MAX_STR_LEN];
@@ -803,6 +803,11 @@ def trace_quic():
         except KeyboardInterrupt:
             exit()
 
+def get_event_type_len(usdt, providers):
+    providers_set = set(providers)
+    probes = filter(lambda probe: probe.provider in providers_set, usdt.enumerate_probes())
+    return 1 + max(map(lambda probe: len("%s__%s" % (probe.provider, probe.name)), probes))
+
 if len(sys.argv) < 1:
     usage()
 
@@ -868,7 +873,9 @@ if sys.argv[1] == "quic":
 
     # provider h2o:
     u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
-    b = BPF(text=quic_bpf, usdt_contexts=[u])
+
+    cflags = ["-DMAX_EVENT_TYPE_LEN=%s" % get_event_type_len(u, ["h2o", "quicly"])]
+    b = BPF(text=quic_bpf, usdt_contexts=[u], cflags=cflags)
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
     u.enable_probe(probe="receive_request_header", fn_name="trace_receive_req_header")
