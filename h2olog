@@ -869,7 +869,9 @@ if sys.argv[1] == "quic":
     # provider h2o:
     u.enable_probe(probe="send_response_header", fn_name="trace_h2o__send_response_header")
 
-    cflags = ["-DMAX_EVENT_TYPE_LEN=%s" % (1+max(map(lambda probe: len("%s__%s" % (probe.provider, probe.name)), u.enumerate_probes())))]
+    probes = filter(lambda probe: probe.provider == "h2o" or probe.provider == "quicly", u.enumerate_probes())
+    max_event_type_len = 1 + max(map(lambda probe: len("%s__%s" % (probe.provider, probe.name)), probes))
+    cflags = ["-DMAX_EVENT_TYPE_LEN=%s" % max_event_type_len]
     b = BPF(text=quic_bpf, usdt_contexts=[u], cflags=cflags)
 else:
     u.enable_probe(probe="receive_request", fn_name="trace_receive_req")
